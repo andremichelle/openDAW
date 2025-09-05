@@ -3,7 +3,7 @@ import {assert, panic, Progress, UUID} from "@opendaw/lib-std"
 import {PPQN} from "@opendaw/lib-dsp"
 import {AnimationFrame, Browser} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
-import {AudioData, SampleMetaData} from "@opendaw/studio-adapters"
+import {AudioData, SampleMetaData, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {
     AudioWorklets,
     InstrumentFactories,
@@ -32,7 +32,6 @@ import WorkletsUrl from "@opendaw/studio-core/processors.js?url"
     WorkerAgents.install(WorkersUrl)
     const featureResult = await Promises.tryCatch(testFeatures())
     if (featureResult.status === "rejected") {
-        document.querySelector("#preloader")?.remove()
         alert(`Could not test features (${(featureResult.error)})`)
         return
     }
@@ -53,7 +52,7 @@ import WorkletsUrl from "@opendaw/studio-core/processors.js?url"
      * FROM HERE WE ACTUALLY SETUP THE STAGE.
      */
     const project = Project.new(env)
-    const {api, engine, editing, timelineBox} = project
+    const {api, engine, editing, boxAdapters, timelineBox} = project
     const {trackBox, audioUnitBox} = editing.modify(() => {
         timelineBox.loopArea.enabled.setValue(false)
         return api.createInstrument(InstrumentFactories.Vaporisateur)
@@ -67,14 +66,23 @@ import WorkletsUrl from "@opendaw/studio-core/processors.js?url"
     timeInfoElement.textContent = "1:1"
     document.body.append(timeInfoElement)
     worklet.connect(audioContext.destination)
-    window.addEventListener("click", () => {
-        AnimationFrame.add(() => {
-            const ppqn = worklet.position.getValue()
-            const {bars, beats} = PPQN.toParts(ppqn)
-            timeInfoElement.textContent = `${bars + 1}:${beats + 1}`
-            timeInfoElement.style.color = ppqn < 0 ? "red" : "white"
+    const trackBoxAdapter = boxAdapters.adapterFor(trackBox, TrackBoxAdapter)
+    AnimationFrame.add(() => {
+        const ppqn = worklet.position.getValue()
+        const {bars, beats} = PPQN.toParts(ppqn)
+        timeInfoElement.textContent = `${bars + 1}:${beats + 1}`
+        timeInfoElement.style.color = ppqn < 0 ? "red" : "white"
+
+        trackBoxAdapter.regions.collection.asArray().forEach(region => {
+            if(region.type !== "note-region") {return}
+            if(region.optCollection.isEmpty()) {return}
+            const collectionAdapter = region.optCollection.unwrap()
+            collectionAdapter.events.asArray().forEach(event => {
+                event.pitch
+            })
         })
-    }, {once: true})
+
+    })
     if (audioContext.state === "suspended") {
         window.addEventListener("click",
             async () => await audioContext.resume().then(() =>
