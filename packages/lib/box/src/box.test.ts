@@ -44,24 +44,28 @@ class FooBox extends Box<PointerType.C, FooBoxFields> {
                 parent: this,
                 fieldKey: 0,
                 fieldName: "0",
+                deprecated: false,
                 pointerRules: {accepts: [PointerType.A], mandatory: false}
             }),
             1: new FooObject({
                 parent: this,
                 fieldKey: 1,
                 fieldName: "1",
+                deprecated: false,
                 pointerRules: NoPointers
             }),
             2: PointerField.create({
                 parent: this,
                 fieldKey: 2,
                 fieldName: "2",
+                deprecated: false,
                 pointerRules: NoPointers
             }, PointerType.A, false),
             3: ArrayField.create({
                 parent: this,
                 fieldKey: 3,
                 fieldName: "3",
+                deprecated: false,
                 pointerRules: NoPointers
             }, construct => BooleanField.create({
                 ...construct,
@@ -71,12 +75,14 @@ class FooBox extends Box<PointerType.C, FooBoxFields> {
                 parent: this,
                 fieldKey: 4,
                 fieldName: "4",
+                deprecated: false,
                 pointerRules: NoPointers
             }, construct => new FooObject(construct), 9),
             5: ArrayField.create({
                 parent: this,
                 fieldKey: 5,
                 fieldName: "5",
+                deprecated: false,
                 pointerRules: NoPointers
             }, construct => PointerField.create(construct, PointerType.A, false), 9)
         }
@@ -144,6 +150,7 @@ class BarBox extends Box<UnreferenceableType, BarBoxFields> {
                 parent: this,
                 fieldKey: 2,
                 fieldName: "2",
+                deprecated: false,
                 pointerRules: NoPointers
             }, PointerType.C, false)
         }
@@ -175,30 +182,35 @@ class FooObject extends ObjectField<FooObjectFields> {
                 parent: this,
                 fieldKey: 0,
                 fieldName: "0",
+                deprecated: false,
                 pointerRules: {accepts: [PointerType.B], mandatory: true}
             }),
             1: StringField.create({
                 parent: this,
                 fieldKey: 1,
                 fieldName: "1",
+                deprecated: false,
                 pointerRules: {accepts: [PointerType.A], mandatory: true}
             }),
             2: Float32Field.create({
                 parent: this,
                 fieldKey: 2,
                 fieldName: "2",
+                deprecated: false,
                 pointerRules: {accepts: [], mandatory: true}
             }, Math.PI),
             3: Int32Field.create({
                 parent: this,
                 fieldKey: 3,
                 fieldName: "3",
+                deprecated: false,
                 pointerRules: {accepts: [PointerType.A, PointerType.B], mandatory: true}
             }),
             4: ByteArrayField.create({
                 parent: this,
                 fieldKey: 4,
                 fieldName: "4",
+                deprecated: false,
                 pointerRules: {accepts: [], mandatory: false}
             }, new Int8Array([1, 2, 3]))
         }
