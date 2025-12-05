@@ -9,5 +9,5 @@ if (window.crossOriginIsolated) {
     initializeColors(document.documentElement)
     boot({workersUrl, workletsUrl}).then(() => console.debug(`Booted in ${Math.ceil(Date.now() - now)}ms`))
 } else {
-    alert("crossOriginIsolated is enabled")
+    alert("crossOriginIsolated must be enabled")
 }
