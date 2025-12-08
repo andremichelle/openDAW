@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/studio-sdk",
-    "version": "0.0.64",
+    "version": "0.0.65",
     "license": "LGPL-3.0-or-later",
     "publishConfig": {
         "access": "public"
@@ -36,7 +36,7 @@
         "@opendaw/lib-xml": "^0.0.39",
         "@opendaw/studio-adapters": "^0.0.56",
         "@opendaw/studio-boxes": "^0.0.54",
-        "@opendaw/studio-core": "^0.0.64",
+        "@opendaw/studio-core": "^0.0.65",
         "@opendaw/studio-enums": "^0.0.45"
     },
     "gitHead": "bd520f2c650ed3cf9088201d7623438555ab4dd2"
