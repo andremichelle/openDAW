@@ -14,8 +14,8 @@ export class PitchVoice {
     readonly #data: AudioData
     readonly #fadeLength: number
 
-    #state: VoiceState = VoiceState.Fading
-    #fadeDirection: number = 1.0  // +1 = fading in, -1 = fading out
+    #state: VoiceState
+    #fadeDirection: number
     #readPosition: number
     #fadeProgress: number = 0.0
     #playbackRate: number
@@ -32,6 +32,13 @@ export class PitchVoice {
         this.#blockOffset = blockOffset
         if (this.#readPosition >= data.numberOfFrames) {
             this.#state = VoiceState.Done
+            this.#fadeDirection = 0.0
+        } else if (offset === 0) {
+            this.#state = VoiceState.Active
+            this.#fadeDirection = 0.0
+        } else {
+            this.#state = VoiceState.Fading
+            this.#fadeDirection = 1.0
         }
     }
 
