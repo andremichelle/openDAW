@@ -46,6 +46,10 @@ export class RepeatVoice implements Voice {
      * @param playbackRate Rate of playback (1.0 = original pitch)
      * @param blockOffset Sample offset within first block to start playback
      * @param sampleRate Current sample rate for converting seconds to samples
+     * @param initialReadPosition Optional: start at this position instead of segmentStart
+     *        Used when spawning mid-segment (e.g., BPM change requires looping).
+     *        The position should be computed by the sequencer to match where a looping
+     *        voice would have been if it had started from the beginning.
      */
     constructor(
         output: AudioBuffer,
@@ -54,7 +58,8 @@ export class RepeatVoice implements Voice {
         segmentEnd: number,
         playbackRate: number,
         blockOffset: int,
-        sampleRate: number
+        sampleRate: number,
+        initialReadPosition?: number
     ) {
         this.#output = output
         this.#data = data
@@ -73,15 +78,16 @@ export class RepeatVoice implements Voice {
         this.#loopFadeLengthSamples = Math.round(LOOP_FADE_DURATION * sampleRate)
         this.#loopFadeLengthInverse = 1.0 / this.#loopFadeLengthSamples
 
-        // Start at segment start (to include attack)
-        this.#readPosition = segmentStart
+        // Start at provided position or segment start
+        this.#readPosition = initialReadPosition ?? segmentStart
         this.#blockOffset = blockOffset
         this.#fadeOutBlockOffset = 0
         this.#loopCrossfadeProgress = 0.0
         this.#loopCrossfadePosition = 0.0
 
-        // D10: Fade-in only if not starting at position 0
-        if (segmentStart > 0) {
+        // Always fade-in when spawning mid-segment (initialReadPosition provided)
+        // Otherwise, fade-in only if not starting at position 0
+        if (initialReadPosition !== undefined || segmentStart > 0) {
             this.#state = VoiceState.Fading
             this.#fadeDirection = 1.0
             this.#fadeProgress = 0.0
@@ -99,6 +105,10 @@ export class RepeatVoice implements Voice {
 
     done(): boolean {
         return this.#state === VoiceState.Done
+    }
+
+    isFadingOut(): boolean {
+        return this.#state === VoiceState.Fading && this.#fadeDirection < 0
     }
 
     readPosition(): number {

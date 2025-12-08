@@ -19,6 +19,12 @@ export interface Voice {
     startFadeOut(blockOffset: int): void
 
     /**
+     * Returns true if the voice is currently fading out.
+     * Used by sequencer to avoid re-spawning replacement voices for voices already being replaced.
+     */
+    isFadingOut(): boolean
+
+    /**
      * Returns the current read position in samples.
      * Used by sequencer for drift detection.
      */

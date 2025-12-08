@@ -1061,4 +1061,503 @@ describe("TimeStretchSequencer", () => {
             expect(sequencer.voiceCount).toBeLessThanOrEqual(2)
         })
     })
+
+    // =========================================================================
+    // BUG: Gap when lowering BPM from ~95 to lower
+    // When BPM drops from close-to-original to significantly lower:
+    // - OnceVoice was created (closeToUnity was true at 95 BPM)
+    // - BPM drops, now needsLooping becomes true
+    // - System should immediately spawn a looping voice (no gap)
+    // =========================================================================
+    describe("Bug: Gap when lowering BPM from ~95 to lower", () => {
+        it("should immediately spawn looping voice when BPM drops and looping becomes needed (Repeat)", () => {
+            const data = createMockAudioData(4.0)
+            const transients = createTransients([0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5])
+            const warpMarkers = createWarpMarkers([
+                {ppqn: 0, seconds: 0},
+                {ppqn: 1920 * 4, seconds: 4.0}
+            ])
+            const config = new TestTimeStretchConfig(warpMarkers, TransientPlayMode.Repeat, 1.0)
+
+            const sampleRate = data.sampleRate
+            const blockSize = 128
+            let currentSample = 0
+            let currentPpqn = 0
+
+            // Start at 95 BPM (close to 100% - will use OnceVoice due to closeToUnity)
+            let bpm = 95
+            let ppqnPerSecond = 960 * bpm / 60
+            let ppqnPerSample = ppqnPerSecond / sampleRate
+
+            // Process 0.3 seconds at 95 BPM to get into mid-segment
+            const firstPhaseEnd = Math.round(sampleRate * 0.3)
+            while (currentSample < firstPhaseEnd) {
+                const samplesToProcess = Math.min(blockSize, firstPhaseEnd - currentSample)
+                const ppqnToProcess = samplesToProcess * ppqnPerSample
+
+                const block = createBlock(
+                    currentPpqn, currentPpqn + ppqnToProcess,
+                    currentSample, currentSample + samplesToProcess, bpm
+                )
+                const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+
+                currentSample += samplesToProcess
+                currentPpqn += ppqnToProcess
+            }
+
+            expect(sequencer.voiceCount).toBeGreaterThanOrEqual(1)
+
+            // Now DROP BPM to 60 - this should trigger looping
+            bpm = 60
+            ppqnPerSecond = 960 * bpm / 60
+            ppqnPerSample = ppqnPerSecond / sampleRate
+
+            // Track if we ever have 0 voices (gap) after BPM change
+            let sawZeroVoices = false
+            let zeroAtSample = -1
+
+            // Process 2 more seconds at 60 BPM
+            const secondPhaseEnd = currentSample + sampleRate * 2
+            while (currentSample < secondPhaseEnd) {
+                const samplesToProcess = Math.min(blockSize, secondPhaseEnd - currentSample)
+                const ppqnToProcess = samplesToProcess * ppqnPerSample
+
+                const block = createBlock(
+                    currentPpqn, currentPpqn + ppqnToProcess,
+                    currentSample, currentSample + samplesToProcess, bpm
+                )
+                const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+
+                if (sequencer.voiceCount === 0 && !sawZeroVoices) {
+                    sawZeroVoices = true
+                    zeroAtSample = currentSample
+                }
+
+                currentSample += samplesToProcess
+                currentPpqn += ppqnToProcess
+            }
+
+            // Should NEVER have 0 voices (no gap) with Repeat mode
+            if (sawZeroVoices) {
+                console.log(`Gap detected at sample ${zeroAtSample} after BPM drop from 95 to 60`)
+            }
+            expect(sawZeroVoices).toBe(false)
+        })
+
+        it("should immediately spawn looping voice when BPM drops and looping becomes needed (Pingpong)", () => {
+            const data = createMockAudioData(4.0)
+            const transients = createTransients([0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5])
+            const warpMarkers = createWarpMarkers([
+                {ppqn: 0, seconds: 0},
+                {ppqn: 1920 * 4, seconds: 4.0}
+            ])
+            const config = new TestTimeStretchConfig(warpMarkers, TransientPlayMode.Pingpong, 1.0)
+
+            const sampleRate = data.sampleRate
+            const blockSize = 128
+            let currentSample = 0
+            let currentPpqn = 0
+
+            // Start at 95 BPM
+            let bpm = 95
+            let ppqnPerSecond = 960 * bpm / 60
+            let ppqnPerSample = ppqnPerSecond / sampleRate
+
+            // Process 0.3 seconds at 95 BPM
+            const firstPhaseEnd = Math.round(sampleRate * 0.3)
+            while (currentSample < firstPhaseEnd) {
+                const samplesToProcess = Math.min(blockSize, firstPhaseEnd - currentSample)
+                const ppqnToProcess = samplesToProcess * ppqnPerSample
+
+                const block = createBlock(
+                    currentPpqn, currentPpqn + ppqnToProcess,
+                    currentSample, currentSample + samplesToProcess, bpm
+                )
+                const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+
+                currentSample += samplesToProcess
+                currentPpqn += ppqnToProcess
+            }
+
+            expect(sequencer.voiceCount).toBeGreaterThanOrEqual(1)
+
+            // Drop BPM to 60
+            bpm = 60
+            ppqnPerSecond = 960 * bpm / 60
+            ppqnPerSample = ppqnPerSecond / sampleRate
+
+            let sawZeroVoices = false
+
+            // Process 2 more seconds
+            const secondPhaseEnd = currentSample + sampleRate * 2
+            while (currentSample < secondPhaseEnd) {
+                const samplesToProcess = Math.min(blockSize, secondPhaseEnd - currentSample)
+                const ppqnToProcess = samplesToProcess * ppqnPerSample
+
+                const block = createBlock(
+                    currentPpqn, currentPpqn + ppqnToProcess,
+                    currentSample, currentSample + samplesToProcess, bpm
+                )
+                const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+
+                if (sequencer.voiceCount === 0) {
+                    sawZeroVoices = true
+                }
+
+                currentSample += samplesToProcess
+                currentPpqn += ppqnToProcess
+            }
+
+            // Should NEVER have 0 voices (no gap) with Pingpong mode
+            expect(sawZeroVoices).toBe(false)
+        })
+    })
+
+    // =========================================================================
+    // BUG: Amplitude spike during mid-segment voice transition
+    // When BPM drops and we spawn a looping voice to replace OnceVoice:
+    // - OnceVoice fades out (full -> 0)
+    // - Looping voice fades in (0 -> full)
+    // Combined amplitude should stay at ~1.0, not spike above or dip below
+    // =========================================================================
+    describe("Bug: Amplitude during mid-segment voice transition", () => {
+        it("should maintain consistent amplitude when transitioning from OnceVoice to looping voice", () => {
+            // Use constant amplitude 1.0 signal for easy measurement
+            const sampleRate = 44100
+            const durationSeconds = 4.0
+            const numberOfFrames = Math.round(durationSeconds * sampleRate)
+            const frames = [new Float32Array(numberOfFrames), new Float32Array(numberOfFrames)]
+            for (let i = 0; i < numberOfFrames; i++) {
+                frames[0][i] = 1.0
+                frames[1][i] = 1.0
+            }
+            const data = {sampleRate, numberOfFrames, numberOfChannels: 2, frames}
+
+            const transients = createTransients([0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5])
+            const warpMarkers = createWarpMarkers([
+                {ppqn: 0, seconds: 0},
+                {ppqn: 1920 * 4, seconds: 4.0}
+            ])
+            const config = new TestTimeStretchConfig(warpMarkers, TransientPlayMode.Repeat, 1.0)
+
+            const sequencer = new TimeStretchSequencer()
+            const output = new AudioBuffer(2)
+
+            const blockSize = 128
+            let currentPpqn = 0
+
+            // Start at 95 BPM (close to unity - OnceVoice)
+            let bpm = 95
+            let ppqnPerSecond = 960 * bpm / 60
+            let ppqnPerSample = ppqnPerSecond / sampleRate
+
+            // Process 0.3 seconds at 95 BPM
+            const firstPhaseSamples = Math.round(sampleRate * 0.3)
+            let samplesProcessed = 0
+            while (samplesProcessed < firstPhaseSamples) {
+                output.clear()
+                const samplesToProcess = Math.min(blockSize, firstPhaseSamples - samplesProcessed)
+                const ppqnToProcess = samplesToProcess * ppqnPerSample
+
+                // s0 and s1 are OUTPUT BUFFER indices (0 to blockSize), not absolute sample positions
+                const block = createBlock(
+                    currentPpqn, currentPpqn + ppqnToProcess,
+                    0, samplesToProcess, bpm
+                )
+                const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+
+                samplesProcessed += samplesToProcess
+                currentPpqn += ppqnToProcess
+            }
+
+            console.log(`After first phase: voiceCount=${sequencer.voiceCount}, ppqn=${currentPpqn.toFixed(2)}`)
+
+            // Drop BPM to 60 - this triggers looping voice spawn
+            bpm = 60
+            ppqnPerSecond = 960 * bpm / 60
+            ppqnPerSample = ppqnPerSecond / sampleRate
+
+            // Track amplitude during transition
+            let maxAmplitude = 0
+            let minAmplitude = Number.POSITIVE_INFINITY
+            let maxAmplitudeSample = 0
+            let minAmplitudeSample = 0
+            let totalSamplesChecked = 0
+
+            // Process 0.5 seconds at 60 BPM (covers the transition period)
+            const secondPhaseSamples = Math.round(sampleRate * 0.5)
+            let secondPhaseProcessed = 0
+            while (secondPhaseProcessed < secondPhaseSamples) {
+                output.clear()
+                const samplesToProcess = Math.min(blockSize, secondPhaseSamples - secondPhaseProcessed)
+                const ppqnToProcess = samplesToProcess * ppqnPerSample
+
+                const block = createBlock(
+                    currentPpqn, currentPpqn + ppqnToProcess,
+                    0, samplesToProcess, bpm
+                )
+                const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+
+                // Check output amplitude
+                const [outL] = output.channels()
+                for (let i = 0; i < samplesToProcess; i++) {
+                    const amp = Math.abs(outL[i])
+                    totalSamplesChecked++
+                    if (amp > maxAmplitude) {
+                        maxAmplitude = amp
+                        maxAmplitudeSample = samplesProcessed + secondPhaseProcessed + i
+                    }
+                    if (amp < minAmplitude && amp > 0) {
+                        minAmplitude = amp
+                        minAmplitudeSample = samplesProcessed + secondPhaseProcessed + i
+                    }
+                }
+
+                secondPhaseProcessed += samplesToProcess
+                currentPpqn += ppqnToProcess
+            }
+
+            // Log results for analysis
+            console.log(`Checked ${totalSamplesChecked} samples`)
+            console.log(`Max amplitude: ${maxAmplitude.toFixed(3)} at sample ${maxAmplitudeSample}`)
+            console.log(`Min amplitude: ${minAmplitude.toFixed(3)} at sample ${minAmplitudeSample}`)
+
+            // Amplitude should stay close to 1.0 during crossfade
+            // With identical audio and proper linear crossfade: (1-t)*1.0 + t*1.0 = 1.0
+            // Allow small tolerance for floating point and block boundary effects
+            const tolerance = 0.05 // 5% tolerance - should be very close to 1.0
+
+            // Should not have amplitude spikes (voices adding together instead of crossfading)
+            expect(maxAmplitude).toBeLessThanOrEqual(1.0 + tolerance)
+        })
+
+        it("should not have amplitude spike when voices play different audio positions", () => {
+            // Use a constant signal so we can detect if voices are adding together
+            // If both voices are at same position and crossfading correctly: output = 1.0
+            // If positions differ or no crossfade: output could be 2.0 (both adding)
+            const sampleRate = 44100
+            const durationSeconds = 4.0
+            const numberOfFrames = Math.round(durationSeconds * sampleRate)
+            const frames = [new Float32Array(numberOfFrames), new Float32Array(numberOfFrames)]
+            for (let i = 0; i < numberOfFrames; i++) {
+                frames[0][i] = 0.5  // Constant 0.5 so doubling would give 1.0
+                frames[1][i] = 0.5
+            }
+            const data = {sampleRate, numberOfFrames, numberOfChannels: 2, frames}
+
+            const transients = createTransients([0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5])
+            const warpMarkers = createWarpMarkers([
+                {ppqn: 0, seconds: 0},
+                {ppqn: 1920 * 4, seconds: 4.0}
+            ])
+            const config = new TestTimeStretchConfig(warpMarkers, TransientPlayMode.Repeat, 1.0)
+
+            const sequencer = new TimeStretchSequencer()
+            const output = new AudioBuffer(2)
+
+            const blockSize = 128
+            let currentPpqn = 0
+
+            // Start at 95 BPM
+            let bpm = 95
+            let ppqnPerSecond = 960 * bpm / 60
+            let ppqnPerSample = ppqnPerSecond / sampleRate
+
+            // Process 0.3 seconds at 95 BPM
+            const firstPhaseSamples = Math.round(sampleRate * 0.3)
+            let samplesProcessed = 0
+            while (samplesProcessed < firstPhaseSamples) {
+                output.clear()
+                const samplesToProcess = Math.min(blockSize, firstPhaseSamples - samplesProcessed)
+                const ppqnToProcess = samplesToProcess * ppqnPerSample
+
+                const block = createBlock(
+                    currentPpqn, currentPpqn + ppqnToProcess,
+                    0, samplesToProcess, bpm
+                )
+                const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+
+                samplesProcessed += samplesToProcess
+                currentPpqn += ppqnToProcess
+            }
+
+            console.log(`After first phase: voiceCount=${sequencer.voiceCount}`)
+
+            // Drop BPM to 60
+            bpm = 60
+            ppqnPerSecond = 960 * bpm / 60
+            ppqnPerSample = ppqnPerSecond / sampleRate
+
+            // Track amplitude during transition
+            let maxAmplitude = 0
+            let maxAmplitudeSample = 0
+
+            // Process 0.1 seconds at 60 BPM (covers the transition/crossfade period)
+            const secondPhaseSamples = Math.round(sampleRate * 0.1)
+            let secondPhaseProcessed = 0
+            while (secondPhaseProcessed < secondPhaseSamples) {
+                output.clear()
+                const samplesToProcess = Math.min(blockSize, secondPhaseSamples - secondPhaseProcessed)
+                const ppqnToProcess = samplesToProcess * ppqnPerSample
+
+                const block = createBlock(
+                    currentPpqn, currentPpqn + ppqnToProcess,
+                    0, samplesToProcess, bpm
+                )
+                const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+
+                const [outL] = output.channels()
+                for (let i = 0; i < samplesToProcess; i++) {
+                    const amp = Math.abs(outL[i])
+                    if (amp > maxAmplitude) {
+                        maxAmplitude = amp
+                        maxAmplitudeSample = samplesProcessed + secondPhaseProcessed + i
+                    }
+                }
+
+                secondPhaseProcessed += samplesToProcess
+                currentPpqn += ppqnToProcess
+            }
+
+            console.log(`Max amplitude after BPM change: ${maxAmplitude.toFixed(4)} at sample ${maxAmplitudeSample}`)
+
+            // With constant 0.5 audio:
+            // - Correct crossfade: fade-out (0.5 * (1-t)) + fade-in (0.5 * t) = 0.5
+            // - No crossfade (both at full): 0.5 + 0.5 = 1.0
+            // Allow 10% tolerance above 0.5
+            const expectedMax = 0.55
+            if (maxAmplitude > expectedMax) {
+                console.log(`AMPLITUDE SPIKE: Expected max ~0.50, got ${maxAmplitude.toFixed(4)} (voices not crossfading properly)`)
+            }
+            expect(maxAmplitude).toBeLessThanOrEqual(expectedMax)
+        })
+    })
+
+    // =========================================================================
+    // BUG: Gap detection during BPM change
+    // Check for actual zero output when there should be audio
+    // =========================================================================
+    describe("Bug: Gap detection during BPM change", () => {
+        it("should have no zero-amplitude samples when lowering BPM from 95 to 60", () => {
+            // Use constant amplitude signal so gaps are obvious
+            const sampleRate = 44100
+            const durationSeconds = 4.0
+            const numberOfFrames = Math.round(durationSeconds * sampleRate)
+            const frames = [new Float32Array(numberOfFrames), new Float32Array(numberOfFrames)]
+            for (let i = 0; i < numberOfFrames; i++) {
+                frames[0][i] = 1.0
+                frames[1][i] = 1.0
+            }
+            const data = {sampleRate, numberOfFrames, numberOfChannels: 2, frames}
+
+            const transients = createTransients([0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5])
+            const warpMarkers = createWarpMarkers([
+                {ppqn: 0, seconds: 0},
+                {ppqn: 1920 * 4, seconds: 4.0}
+            ])
+            const config = new TestTimeStretchConfig(warpMarkers, TransientPlayMode.Repeat, 1.0)
+
+            const sequencer = new TimeStretchSequencer()
+            const output = new AudioBuffer(2)
+
+            const blockSize = 128
+            let currentPpqn = 0
+            let absoluteSample = 0
+
+            // Start at 95 BPM
+            let bpm = 95
+            let ppqnPerSecond = 960 * bpm / 60
+            let ppqnPerSample = ppqnPerSecond / sampleRate
+
+            // Track gaps
+            const gaps: {sample: number, blockStart: number}[] = []
+
+            // Process 0.3 seconds at 95 BPM
+            const firstPhaseSamples = Math.round(sampleRate * 0.3)
+            let samplesProcessed = 0
+            while (samplesProcessed < firstPhaseSamples) {
+                output.clear()
+                const samplesToProcess = Math.min(blockSize, firstPhaseSamples - samplesProcessed)
+                const ppqnToProcess = samplesToProcess * ppqnPerSample
+
+                const block = createBlock(
+                    currentPpqn, currentPpqn + ppqnToProcess,
+                    0, samplesToProcess, bpm
+                )
+                const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+
+                // Check for gaps
+                const [outL] = output.channels()
+                for (let i = 0; i < samplesToProcess; i++) {
+                    if (outL[i] === 0) {
+                        gaps.push({sample: absoluteSample + i, blockStart: absoluteSample})
+                    }
+                }
+
+                samplesProcessed += samplesToProcess
+                currentPpqn += ppqnToProcess
+                absoluteSample += samplesToProcess
+            }
+
+            console.log(`After first phase (95 BPM): voiceCount=${sequencer.voiceCount}, gaps=${gaps.length}`)
+
+            // Drop BPM to 60 - this should trigger looping voice spawn
+            bpm = 60
+            ppqnPerSecond = 960 * bpm / 60
+            ppqnPerSample = ppqnPerSecond / sampleRate
+
+            // Process 1 second at 60 BPM
+            const secondPhaseSamples = Math.round(sampleRate * 1.0)
+            let secondPhaseProcessed = 0
+            while (secondPhaseProcessed < secondPhaseSamples) {
+                output.clear()
+                const samplesToProcess = Math.min(blockSize, secondPhaseSamples - secondPhaseProcessed)
+                const ppqnToProcess = samplesToProcess * ppqnPerSample
+
+                const block = createBlock(
+                    currentPpqn, currentPpqn + ppqnToProcess,
+                    0, samplesToProcess, bpm
+                )
+                const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+
+                // Check for gaps - but ALSO log voice count when gap occurs
+                const [outL] = output.channels()
+                for (let i = 0; i < samplesToProcess; i++) {
+                    if (outL[i] === 0) {
+                        gaps.push({sample: absoluteSample + i, blockStart: absoluteSample})
+                    }
+                }
+
+                secondPhaseProcessed += samplesToProcess
+                currentPpqn += ppqnToProcess
+                absoluteSample += samplesToProcess
+            }
+
+            // Report gaps
+            if (gaps.length > 0) {
+                console.log(`GAPS DETECTED: ${gaps.length} samples with zero output`)
+                // Show first 10 gaps
+                const firstGaps = gaps.slice(0, 10)
+                for (const gap of firstGaps) {
+                    console.log(`  Gap at absolute sample ${gap.sample} (block started at ${gap.blockStart})`)
+                }
+                if (gaps.length > 10) {
+                    console.log(`  ... and ${gaps.length - 10} more`)
+                }
+            }
+
+            // Should have no gaps
+            expect(gaps.length).toBe(0)
+        })
+    })
 })

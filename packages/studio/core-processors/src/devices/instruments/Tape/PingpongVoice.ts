@@ -48,6 +48,10 @@ export class PingpongVoice implements Voice {
      * @param playbackRate Rate of playback (1.0 = original pitch)
      * @param blockOffset Sample offset within first block to start playback
      * @param sampleRate Current sample rate for converting seconds to samples
+     * @param initialState Optional: start at this position/direction instead of segmentStart
+     *        Used when spawning mid-segment (e.g., BPM change requires looping).
+     *        The state should be computed by the sequencer to match where a pingpong
+     *        voice would have been if it had started from the beginning.
      */
     constructor(
         output: AudioBuffer,
@@ -56,7 +60,8 @@ export class PingpongVoice implements Voice {
         segmentEnd: number,
         playbackRate: number,
         blockOffset: int,
-        sampleRate: number
+        sampleRate: number,
+        initialState?: {position: number, direction: number}
     ) {
         this.#output = output
         this.#data = data
@@ -74,16 +79,17 @@ export class PingpongVoice implements Voice {
         this.#voiceFadeLengthInverse = 1.0 / this.#voiceFadeLengthSamples
         this.#bounceFadeLengthSamples = Math.round(LOOP_FADE_DURATION * sampleRate)
 
-        // Start at segment start (to include attack), moving forward
-        this.#readPosition = segmentStart
-        this.#direction = 1.0
+        // Start at provided state or segment start moving forward
+        this.#readPosition = initialState?.position ?? segmentStart
+        this.#direction = initialState?.direction ?? 1.0
         this.#blockOffset = blockOffset
         this.#fadeOutBlockOffset = 0
         this.#bounceProgress = 0.0
         this.#bouncePosition = 0.0
 
-        // D10: Fade-in only if not starting at position 0
-        if (segmentStart > 0) {
+        // Always fade-in when spawning mid-segment (initialState provided)
+        // Otherwise, fade-in only if not starting at position 0
+        if (initialState !== undefined || segmentStart > 0) {
             this.#state = VoiceState.Fading
             this.#fadeDirection = 1.0
             this.#fadeProgress = 0.0
@@ -101,6 +107,10 @@ export class PingpongVoice implements Voice {
 
     done(): boolean {
         return this.#state === VoiceState.Done
+    }
+
+    isFadingOut(): boolean {
+        return this.#state === VoiceState.Fading && this.#fadeDirection < 0
     }
 
     readPosition(): number {

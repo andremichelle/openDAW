@@ -75,6 +75,10 @@ export class OnceVoice implements Voice {
         return this.#state === VoiceState.Done
     }
 
+    isFadingOut(): boolean {
+        return this.#state === VoiceState.Fading && this.#fadeDirection < 0
+    }
+
     readPosition(): number {
         return this.#readPosition
     }

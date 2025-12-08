@@ -103,74 +103,81 @@ export class TimeStretchSequencer {
 
 
         // AFTER transient handling (which may extend segmentEnd via drift detection):
-        // Check if OnceVoice will exhaust its segment audio during this block
-        // If BPM changed and now needs looping, spawn a looping voice mid-segment
-        // Calculate sample-exact fade-out offset (sequencer decides, not voice, because BPM can change)
+        // Check OnceVoice status every block:
+        // 1. If BPM changed and now needs looping, spawn looping voice immediately (not when exhausted)
+        // 2. If voice will exhaust this block, fade out at exact sample
+        // Sequencer decides timing because BPM can change while playing
         for (const voice of this.#voices) {
-            if (voice instanceof OnceVoice && !voice.done()) {
+            // Skip voices that are already fading out - they've already been handled
+            if (voice instanceof OnceVoice && !voice.done() && !voice.isFadingOut()) {
                 const readPos = voice.readPosition()
                 const segEnd = voice.segmentEnd()
-                if (readPos < segEnd) {
-                    // Calculate how many samples until we hit segmentEnd
-                    const samplesToEnd = (segEnd - readPos) / playbackRate
-                    if (samplesToEnd < bufferCount) {
-                        // Will cross segmentEnd during this block
-                        // Check if we now need looping due to BPM change
-                        const segmentInfo = this.#getSegmentInfo(transients, this.#currentTransientIndex, data)
-                        if (segmentInfo !== null && transientPlayMode !== TransientPlayMode.Once) {
-                            const {startSamples, endSamples, hasNext, nextTransientFileSeconds} = segmentInfo
-                            const segmentLengthSamples = endSamples - startSamples
 
-                            // Calculate current needsLooping based on current BPM
-                            let outputSamplesUntilNext: number
-                            if (hasNext) {
-                                const currentTransient = transients.optAt(this.#currentTransientIndex)
-                                if (currentTransient !== null) {
-                                    const transientWarpSeconds = currentTransient.position - waveformOffset
-                                    const transientPpqn = this.#secondsToPpqn(transientWarpSeconds, warpMarkers)
-                                    const nextWarpSeconds = nextTransientFileSeconds - waveformOffset
-                                    const nextPpqn = this.#secondsToPpqn(nextWarpSeconds, warpMarkers)
-                                    const ppqnDelta = nextPpqn - transientPpqn
-                                    const secondsUntilNext = PPQN.pulsesToSeconds(ppqnDelta, bpm)
-                                    outputSamplesUntilNext = secondsUntilNext * sampleRate
-                                } else {
-                                    outputSamplesUntilNext = Number.POSITIVE_INFINITY
-                                }
+                if (readPos >= segEnd) {
+                    // Already past segmentEnd - fade out immediately
+                    voice.startFadeOut(0)
+                    continue
+                }
+
+                // Check if looping is now needed (BPM may have changed)
+                if (transientPlayMode !== TransientPlayMode.Once) {
+                    const segmentInfo = this.#getSegmentInfo(transients, this.#currentTransientIndex, data)
+                    if (segmentInfo !== null) {
+                        const {startSamples, endSamples, hasNext, nextTransientFileSeconds} = segmentInfo
+                        const segmentLengthSamples = endSamples - startSamples
+
+                        // Calculate needsLooping based on current BPM
+                        let outputSamplesUntilNext: number
+                        if (hasNext) {
+                            const currentTransient = transients.optAt(this.#currentTransientIndex)
+                            if (currentTransient !== null) {
+                                const transientWarpSeconds = currentTransient.position - waveformOffset
+                                const transientPpqn = this.#secondsToPpqn(transientWarpSeconds, warpMarkers)
+                                const nextWarpSeconds = nextTransientFileSeconds - waveformOffset
+                                const nextPpqn = this.#secondsToPpqn(nextWarpSeconds, warpMarkers)
+                                const ppqnDelta = nextPpqn - transientPpqn
+                                const secondsUntilNext = PPQN.pulsesToSeconds(ppqnDelta, bpm)
+                                outputSamplesUntilNext = secondsUntilNext * sampleRate
                             } else {
                                 outputSamplesUntilNext = Number.POSITIVE_INFINITY
                             }
-
-                            const audioSamplesNeeded = outputSamplesUntilNext * playbackRate
-                            const speedRatio = segmentLengthSamples / audioSamplesNeeded
-                            const closeToUnity = speedRatio >= 0.99 && speedRatio <= 1.01
-                            const needsLooping = !closeToUnity && audioSamplesNeeded > segmentLengthSamples
-
-                            if (needsLooping) {
-                                // BPM changed - now needs looping! Fade out OnceVoice and spawn looping voice
-                                const fadeOutOffset = Math.max(0, Math.floor(samplesToEnd))
-                                voice.startFadeOut(fadeOutOffset)
-
-                                // Spawn looping voice at the segment start, computing position as if started from beginning
-                                // The new voice will start at the position where OnceVoice currently is
-                                const newVoice = this.#createVoice(
-                                    output, data, startSamples, endSamples,
-                                    playbackRate, fadeOutOffset, sampleRate,
-                                    transientPlayMode, true // force looping
-                                )
-                                if (newVoice !== null) {
-                                    this.#voices.push(newVoice)
-                                }
-                                continue
-                            }
+                        } else {
+                            outputSamplesUntilNext = Number.POSITIVE_INFINITY
                         }
 
-                        // No looping needed - just fade out at exact sample
-                        const fadeOutOffset = Math.max(0, Math.floor(samplesToEnd))
-                        voice.startFadeOut(fadeOutOffset)
+                        const audioSamplesNeeded = outputSamplesUntilNext * playbackRate
+                        const speedRatio = segmentLengthSamples / audioSamplesNeeded
+                        const closeToUnity = speedRatio >= 0.99 && speedRatio <= 1.01
+                        const needsLooping = !closeToUnity && audioSamplesNeeded > segmentLengthSamples
+
+                        if (needsLooping) {
+                            // BPM changed - now needs looping! Fade out OnceVoice and spawn looping voice
+                            // Spawn immediately (blockOffset 0) to avoid gap
+                            voice.startFadeOut(0)
+
+                            // The new looping voice must start at the SAME position as OnceVoice
+                            // so they produce identical audio during crossfade.
+                            // Pass readPos directly as initialReadPosition.
+                            const newVoice = this.#createVoice(
+                                output, data, startSamples, endSamples,
+                                playbackRate, 0, sampleRate,
+                                transientPlayMode, true, // force looping
+                                readPos  // Start at OnceVoice's current position
+                            )
+                            if (newVoice !== null) {
+                                this.#voices.push(newVoice)
+                            }
+                            continue
+                        }
                     }
-                } else {
-                    // Already past segmentEnd - fade out immediately
-                    voice.startFadeOut(0)
+                }
+
+                // Check if voice will exhaust this block
+                const samplesToEnd = (segEnd - readPos) / playbackRate
+                if (samplesToEnd < bufferCount) {
+                    // Will cross segmentEnd during this block - fade out at exact sample
+                    const fadeOutOffset = Math.max(0, Math.floor(samplesToEnd))
+                    voice.startFadeOut(fadeOutOffset)
                 }
             }
         }
@@ -188,10 +195,6 @@ export class TimeStretchSequencer {
             }
         }
 
-        // Debug: warn if voice count is abnormal
-        if (this.#voices.length > 2) {
-            console.warn(`[SEQ] WARNING: ${this.#voices.length} voices active!`)
-        }
     }
 
     #handleTransientBoundary(
@@ -275,16 +278,12 @@ export class TimeStretchSequencer {
         }
 
         // Fade out ALL existing voices
-        const voicesToFadeOut = this.#voices.filter(v => !v.done()).length
         for (const voice of this.#voices) {
             if (!voice.done()) {
                 voice.startFadeOut(blockOffset)
             }
         }
 
-        if (voicesToFadeOut > 1) {
-            console.warn(`[SEQ] Fading out ${voicesToFadeOut} voices at transient ${transientIndex}`)
-        }
 
         // Determine if looping is needed based on current BPM
         const speedRatio = segmentLengthSamples / audioSamplesNeeded
@@ -355,15 +354,26 @@ export class TimeStretchSequencer {
         blockOffset: int,
         sampleRate: number,
         transientPlayMode: TransientPlayMode,
-        needsLooping: boolean
+        needsLooping: boolean,
+        initialReadPosition?: number  // Absolute read position for mid-segment spawn (must match outgoing voice)
     ): Nullable<Voice> {
         if (startSamples >= endSamples) return null
 
         if (transientPlayMode === TransientPlayMode.Once || !needsLooping) {
             return new OnceVoice(output, data, startSamples, endSamples, playbackRate, blockOffset, sampleRate)
         }
+
+        // For mid-segment spawn, the new looping voice must start at the SAME position
+        // as the outgoing OnceVoice so they produce identical audio during crossfade.
+        // The voice will then continue from that position and loop when it reaches the boundary.
         if (transientPlayMode === TransientPlayMode.Repeat) {
-            return new RepeatVoice(output, data, startSamples, endSamples, playbackRate, blockOffset, sampleRate)
+            return new RepeatVoice(output, data, startSamples, endSamples, playbackRate, blockOffset, sampleRate, initialReadPosition)
+        }
+
+        // Pingpong - for mid-segment spawn, start at given position going forward
+        // (same direction as OnceVoice was going)
+        if (initialReadPosition !== undefined) {
+            return new PingpongVoice(output, data, startSamples, endSamples, playbackRate, blockOffset, sampleRate, {position: initialReadPosition, direction: 1.0})
         }
         return new PingpongVoice(output, data, startSamples, endSamples, playbackRate, blockOffset, sampleRate)
     }

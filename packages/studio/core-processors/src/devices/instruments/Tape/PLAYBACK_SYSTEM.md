@@ -123,10 +123,18 @@ needsLooping = !closeToUnity && audioSamplesNeeded > segmentLength
 ### Rule 9: Mid-Segment BPM Change
 When BPM changes mid-segment and the looping requirement changes:
 - If OnceVoice is playing but now `needsLooping=true`: fade out OnceVoice, spawn looping voice
-- The new looping voice starts at segment start with correct timing
-- This ensures continuous playback without gaps when tempo drops
+- **CRITICAL**: The new looping voice must start at the **same read position** as the OnceVoice
+- This ensures both voices produce identical audio during crossfade (no amplitude spike)
+- The looping voice will continue from that position and loop when it reaches the boundary
 
-### Rule 10: Last Transient
+### Rule 10: No Amplitude Spikes During Crossfade
+When crossfading between voices (fade-out + fade-in):
+- Both voices must be at the **same read position** during the crossfade
+- With linear crossfade: `(audio * (1-t)) + (audio * t) = audio` (constant amplitude)
+- If positions differ, audio adds together causing amplitude spike (up to 2x)
+- This is why mid-segment voice spawning uses the outgoing voice's position directly
+
+### Rule 11: Last Transient
 - If no next transient exists, `outputSamplesUntilNext = INFINITY`
 - Repeat/Pingpong will loop forever until fade-out is triggered
 - Once will play once then silence
