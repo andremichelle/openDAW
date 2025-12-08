@@ -9,7 +9,7 @@
     "scripts": {
         "lint": "eslint \"**/*.ts\"",
         "build": "esbuild src/register.ts --bundle --format=esm --platform=browser --minify --sourcemap --outfile=../core/dist/processors.js",
-        "test": "echo \"No tests to run\""
+        "test": "vitest run"
     },
     "dependencies": {
         "@opendaw/lib-box": "^0.0.53",
@@ -23,6 +23,7 @@
     },
     "devDependencies": {
         "@opendaw/eslint-config": "^0.0.20",
-        "@opendaw/typescript-config": "^0.0.20"
+        "@opendaw/typescript-config": "^0.0.20",
+        "vitest": "^1.6.0"
     }
 }

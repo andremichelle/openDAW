@@ -31,7 +31,7 @@ type AnyVoice = Voice | PitchVoice
 type Lane = {
     adapter: TrackBoxAdapter
     voices: Array<AnyVoice>
-    lastTransientIndex: int
+    sequencer: TimeStretchSequencer
 }
 
 export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProcessor, AudioGenerator {
@@ -49,7 +49,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         this.#lanes = UUID.newSet<Lane>(({adapter: {uuid}}) => uuid)
         this.ownAll(
             this.#adapter.deviceHost().audioUnitBoxAdapter().tracks.catchupAndSubscribe({
-                onAdd: (adapter: TrackBoxAdapter) => this.#lanes.add({adapter, voices: [], lastTransientIndex: -1}),
+                onAdd: (adapter: TrackBoxAdapter) => this.#lanes.add({adapter, voices: [], sequencer: new TimeStretchSequencer()}),
                 onRemove: (adapter: TrackBoxAdapter) => this.#lanes.removeByKey(adapter.uuid),
                 onReorder: (_adapter: TrackBoxAdapter) => {}
             }),
@@ -71,7 +71,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         this.eventInput.clear()
         this.#lanes.forEach(lane => {
             lane.voices = []
-            lane.lastTransientIndex = -1
+            lane.sequencer.reset()
         })
     }
 
@@ -89,7 +89,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         const {adapter} = lane
         if (adapter.type !== TrackType.Audio || !adapter.enabled.getValue()) {
             lane.voices.forEach(voice => voice.startFadeOut(0))
-            lane.lastTransientIndex = -1
+            lane.sequencer.reset()
             return
         }
         const {p0, p1, flags} = block
@@ -172,7 +172,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         assert(s0 <= bp0 && bp1 <= s1, () => `Out of bounds ${bp0}, ${bp1}`)
         if (Bits.some(flags, BlockFlag.discontinuous)) {
             lane.voices.forEach(voice => voice.startFadeOut(0))
-            lane.lastTransientIndex = -1
+            lane.sequencer.reset()
         }
         const asPlayModePitch = adapter.asPlayModePitchStretch
         if (asPlayModePitch.isEmpty() || adapter.observableOptPlayMode.isEmpty()) {
@@ -248,7 +248,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         const isDiscontinuous = Bits.some(flags, BlockFlag.discontinuous)
 
         if (isDiscontinuous) {
-            lane.lastTransientIndex = -1
+            lane.sequencer.reset()
             lane.voices.forEach(voice => voice.startFadeOut(0))
         }
 
@@ -287,26 +287,19 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         const warpSecondsEnd = this.#ppqnToSeconds(contentPpqnEnd, cycle.resultEndValue, warpMarkers)
         const fileSecondsEnd = warpSecondsEnd + waveformOffset
 
-        // Create sequencer for this block
-        // Note: We create a new sequencer per call but transfer state via lane
-        const sequencer = new TimeStretchSequencer(
+        // Transfer voices to sequencer (filter out PitchVoice)
+        lane.sequencer.voices = lane.voices.filter((v): v is Voice => !(v instanceof PitchVoice))
+
+        // Process via sequencer
+        lane.sequencer.process(
             this.#audioOutput,
             data,
             transients,
             warpMarkers,
             transientPlayMode,
             playbackRate,
-            waveformOffset
-        )
-
-        // Transfer state from lane to sequencer
-        sequencer.currentTransientIndex = lane.lastTransientIndex
-        // Filter to only Voice types (not PitchVoice) for the sequencer
-        sequencer.voices = lane.voices.filter((v): v is Voice => !(v instanceof PitchVoice))
-
-        // Process via sequencer
-        sequencer.process(
-            fileSeconds,
+            waveformOffset,
+            this.context.tempoMap,
             fileSecondsEnd,
             contentPpqn,
             pn,
@@ -314,11 +307,9 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             bpn
         )
 
-        // Transfer state back from sequencer to lane
-        lane.lastTransientIndex = sequencer.currentTransientIndex
-        // Keep PitchVoice instances, replace Voice instances with sequencer's
+        // Transfer voices back from sequencer (keep PitchVoice instances)
         const pitchVoices = lane.voices.filter(v => v instanceof PitchVoice)
-        lane.voices = [...pitchVoices, ...sequencer.voices]
+        lane.voices = [...pitchVoices, ...lane.sequencer.voices]
 
         // Clean up done voices
         lane.voices = lane.voices.filter(voice => !voice.done())
