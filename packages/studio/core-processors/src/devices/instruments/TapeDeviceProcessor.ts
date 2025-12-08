@@ -1,4 +1,4 @@
-import {asDefined, assert, Bits, int, isInstanceOf, isNull, Nullable, Option, SortedSet, UUID} from "@opendaw/lib-std"
+import {asDefined, assert, Bits, int, isInstanceOf, Nullable, Option, SortedSet, UUID} from "@opendaw/lib-std"
 import {AudioBuffer, AudioData, EventCollection, LoopableRegion, RenderQuantum} from "@opendaw/lib-dsp"
 import {
     AudioClipBoxAdapter,
@@ -19,23 +19,18 @@ import {PeakBroadcaster} from "../../PeakBroadcaster"
 import {AutomatableParameter} from "../../AutomatableParameter"
 import {DeviceProcessor} from "../../DeviceProcessor"
 import {NoteEventTarget} from "../../NoteEventSource"
-import {Segment} from "./Tape/Segment"
-import {FADE_LENGTH, LOOP_END_MARGIN, LOOP_MIN_LENGTH_SAMPLES, LOOP_START_MARGIN} from "./Tape/constants"
-import {OnceVoice} from "./Tape/OnceVoice"
-import {RepeatVoice} from "./Tape/RepeatVoice"
-import {PingpongVoice} from "./Tape/PingpongVoice"
+import {VOICE_FADE_DURATION} from "./Tape/constants"
 import {PitchVoice} from "./Tape/PitchVoice"
 import {Voice} from "./Tape/Voice"
+import {TimeStretchSequencer} from "./Tape/TimeStretchSequencer"
 
-type SegmentInfo = {
-    segment: Segment
-    hasNext: boolean
-    nextTransientSeconds: number
-}
+// Union type for all voice types used in lanes
+// TODO: Simplify once PitchStretchSequencer is implemented
+type AnyVoice = Voice | PitchVoice
 
 type Lane = {
     adapter: TrackBoxAdapter
-    voices: Array<Voice>
+    voices: Array<AnyVoice>
     lastTransientIndex: int
 }
 
@@ -214,8 +209,9 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
     }
 
     #updateOrCreatePitchVoice(lane: Lane, data: AudioData, playbackRate: number, offset: number, blockOffset: int): void {
+        const fadeLengthSamples = Math.round(VOICE_FADE_DURATION * data.sampleRate)
         if (lane.voices.length === 0) {
-            lane.voices.push(new PitchVoice(this.#audioOutput, data, FADE_LENGTH, playbackRate, offset, blockOffset))
+            lane.voices.push(new PitchVoice(this.#audioOutput, data, fadeLengthSamples, playbackRate, offset, blockOffset))
         } else {
             let hasActiveVoice = false
             for (const voice of lane.voices) {
@@ -224,7 +220,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                         continue
                     }
                     const drift = Math.abs(voice.readPosition - offset)
-                    if (drift > FADE_LENGTH) {
+                    if (drift > fadeLengthSamples) {
                         voice.startFadeOut(blockOffset)
                     } else {
                         voice.setPlaybackRate(playbackRate)
@@ -236,7 +232,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                 }
             }
             if (!hasActiveVoice) {
-                lane.voices.push(new PitchVoice(this.#audioOutput, data, FADE_LENGTH, playbackRate, offset, blockOffset))
+                lane.voices.push(new PitchVoice(this.#audioOutput, data, fadeLengthSamples, playbackRate, offset, blockOffset))
             }
         }
     }
@@ -249,16 +245,20 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                             transients: EventCollection<TransientMarkerBoxAdapter>,
                             waveformOffset: number): void {
         const {p0, p1, s0, s1, flags} = block
-        if (Bits.some(flags, BlockFlag.discontinuous)) {
+        const isDiscontinuous = Bits.some(flags, BlockFlag.discontinuous)
+
+        if (isDiscontinuous) {
             lane.lastTransientIndex = -1
             lane.voices.forEach(voice => voice.startFadeOut(0))
         }
+
         // Fade out any PitchVoice when in timestretch mode
         for (const voice of lane.voices) {
             if (voice instanceof PitchVoice) {
                 voice.startFadeOut(0)
             }
         }
+
         const sn = s1 - s0
         const pn = p1 - p0
         const r0 = (cycle.resultStart - p0) / pn
@@ -267,88 +267,61 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         const bp1 = s0 + sn * r1
         const bpn = (bp1 - bp0) | 0
         const {warpMarkers, transientPlayMode, playbackRate} = timeStretch
+
         assert(s0 <= bp0 && bp1 <= s1, () => `Out of bounds ${bp0}, ${bp1}`)
+
         const firstWarp = asDefined(warpMarkers.first(), "missing first warp marker")
         const lastWarp = asDefined(warpMarkers.last(), "missing last warp marker")
         const contentPpqn = cycle.resultStart - cycle.rawStart
+
         if (contentPpqn < firstWarp.position || contentPpqn >= lastWarp.position) {return}
+
         const warpSeconds = this.#ppqnToSeconds(contentPpqn, cycle.resultStartValue, warpMarkers)
         const fileSeconds = warpSeconds + waveformOffset
+
         // Clamp to valid file range
         if (fileSeconds < 0.0 || fileSeconds >= data.numberOfFrames / data.sampleRate) {return}
-        // Check for transient boundaries within this block by looking at file position at block END
+
+        // Calculate file position at block END for transient detection
         const contentPpqnEnd = contentPpqn + pn
         const warpSecondsEnd = this.#ppqnToSeconds(contentPpqnEnd, cycle.resultEndValue, warpMarkers)
         const fileSecondsEnd = warpSecondsEnd + waveformOffset
-        const transientIndexAtEnd = transients.floorLastIndex(fileSecondsEnd)
 
-        // Detect loop restart: if we're now at a lower transient index than before, reset
-        if (transientIndexAtEnd < lane.lastTransientIndex) {
-            lane.lastTransientIndex = -1
-            lane.voices.forEach(voice => voice.startFadeOut(0))
-        }
+        // Create sequencer for this block
+        // Note: We create a new sequencer per call but transfer state via lane
+        const sequencer = new TimeStretchSequencer(
+            this.#audioOutput,
+            data,
+            transients,
+            warpMarkers,
+            transientPlayMode,
+            playbackRate,
+            waveformOffset
+        )
 
-        // Process if we'll cross into a new transient during this block
-        if (transientIndexAtEnd !== lane.lastTransientIndex) {
-            // Find the next transient boundary we'll cross
-            const nextTransientIndex = lane.lastTransientIndex === -1 ? transientIndexAtEnd : lane.lastTransientIndex + 1
-            const nextTransient = transients.optAt(nextTransientIndex)
+        // Transfer state from lane to sequencer
+        sequencer.currentTransientIndex = lane.lastTransientIndex
+        // Filter to only Voice types (not PitchVoice) for the sequencer
+        sequencer.voices = lane.voices.filter((v): v is Voice => !(v instanceof PitchVoice))
 
-            if (nextTransient !== null) {
-                const segmentInfo = this.#getSegmentInfo(nextTransientIndex, transients, data)
-                if (isNull(segmentInfo)) {return}
-                const {segment, hasNext, nextTransientSeconds} = segmentInfo
-                const segmentLength = segment.end - segment.start
+        // Process via sequencer
+        sequencer.process(
+            fileSeconds,
+            fileSecondsEnd,
+            contentPpqn,
+            pn,
+            bp0 | 0,
+            bpn
+        )
 
-                if (segmentLength >= FADE_LENGTH * 2) {
-                    // Calculate blockOffset: where in the output buffer does this transient start?
-                    const transientWarpSeconds = nextTransient.position - waveformOffset
-                    const transientPpqn = this.#secondsToPpqn(transientWarpSeconds, warpMarkers)
-                    const ppqnIntoBlock = transientPpqn - contentPpqn
-                    // Calculate block offset - transient should fall within [0, pn] range now
-                    const blockOffset = Math.max(0, Math.min(bpn - 1, ((ppqnIntoBlock / pn) * bpn) | 0))
-                    lane.voices.forEach(voice => voice.startFadeOut(blockOffset))
-                    let canLoop = false
-                    if (hasNext && transientPlayMode !== TransientPlayMode.Once) {
-                        const nextNextWarpSeconds = nextTransientSeconds - waveformOffset
-                        const nextNextPpqn = this.#secondsToPpqn(nextNextWarpSeconds, warpMarkers)
-                        // If nextNextPpqn is 0, the next transient is beyond warp markers - use lastWarp as endpoint
-                        const endPpqn = nextNextPpqn > transientPpqn ? nextNextPpqn : lastWarp.position
-                        const ppqnUntilNext = endPpqn - transientPpqn
-                        const samplesPerPpqn = bpn / pn
-                        const samplesNeeded = ppqnUntilNext * samplesPerPpqn
-                        const samplesAvailable = segmentLength
-                        const loopLength = samplesAvailable - (LOOP_START_MARGIN + LOOP_END_MARGIN)
-                        canLoop = samplesNeeded > samplesAvailable * 1.01 && loopLength >= LOOP_MIN_LENGTH_SAMPLES
-                    }
-                    if (transientPlayMode === TransientPlayMode.Once || !canLoop) {
-                        lane.voices.push(new OnceVoice(this.#audioOutput, data, segment, playbackRate, blockOffset))
-                    } else if (transientPlayMode === TransientPlayMode.Repeat) {
-                        lane.voices.push(new RepeatVoice(this.#audioOutput, data, segment, playbackRate, blockOffset))
-                    } else {
-                        lane.voices.push(new PingpongVoice(this.#audioOutput, data, segment, playbackRate, blockOffset))
-                    }
-                }
-                lane.lastTransientIndex = nextTransientIndex
-            }
-        }
-        for (const voice of lane.voices) {
-            voice.process(bp0 | 0, bpn)
-        }
+        // Transfer state back from sequencer to lane
+        lane.lastTransientIndex = sequencer.currentTransientIndex
+        // Keep PitchVoice instances, replace Voice instances with sequencer's
+        const pitchVoices = lane.voices.filter(v => v instanceof PitchVoice)
+        lane.voices = [...pitchVoices, ...sequencer.voices]
+
+        // Clean up done voices
         lane.voices = lane.voices.filter(voice => !voice.done())
-    }
-
-    #getSegmentInfo(index: int, transientMarkers: EventCollection<TransientMarkerBoxAdapter>, data: AudioData): Nullable<SegmentInfo> {
-        const current = transientMarkers.optAt(index)
-        if (current === null) {return null}
-        const next = transientMarkers.optAt(index + 1)
-        const start = current.position * data.sampleRate
-        const end = next !== null ? next.position * data.sampleRate : data.numberOfFrames
-        return {
-            segment: {start, end},
-            hasNext: next !== null,
-            nextTransientSeconds: next !== null ? next.position : Number.POSITIVE_INFINITY
-        }
     }
 
     #getPlaybackRateFromWarp(ppqn: number,
@@ -366,19 +339,6 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         const audioSamplesPerPpqn = samplesDelta / ppqnDelta
         const timelineSamplesPerPpqn = sn / pn
         return audioSamplesPerPpqn / timelineSamplesPerPpqn
-    }
-
-    #secondsToPpqn(seconds: number, warpMarkers: EventCollection<WarpMarkerBoxAdapter>): number {
-        for (let i = 0; i < warpMarkers.length() - 1; i++) {
-            const left = warpMarkers.optAt(i)
-            const right = warpMarkers.optAt(i + 1)
-            if (left === null || right === null) {continue}
-            if (seconds >= left.seconds && seconds < right.seconds) {
-                const alpha = (seconds - left.seconds) / (right.seconds - left.seconds)
-                return left.position + alpha * (right.position - left.position)
-            }
-        }
-        return 0.0
     }
 
     #ppqnToSeconds(ppqn: number, normalizedFallback: number, warpMarkers: EventCollection<WarpMarkerBoxAdapter>): number {

@@ -1,14 +1,21 @@
 import {int} from "@opendaw/lib-std"
 import {AudioBuffer, AudioData} from "@opendaw/lib-dsp"
 import {VoiceState} from "./VoiceState"
-import {Voice} from "./Voice"
 
-export class PitchVoice implements Voice {
+/**
+ * PitchVoice is used for pitch-stretch mode (warp marker based).
+ * It does NOT implement the Voice interface as it's managed differently
+ * by the TapeDeviceProcessor (not via TimeStretchSequencer).
+ *
+ * Uses fadeDirection to track fading in (+1) vs fading out (-1).
+ */
+export class PitchVoice {
     readonly #output: AudioBuffer
     readonly #data: AudioData
     readonly #fadeLength: number
 
-    #state: VoiceState = VoiceState.FadingIn
+    #state: VoiceState = VoiceState.Fading
+    #fadeDirection: number = 1.0  // +1 = fading in, -1 = fading out
     #readPosition: number
     #fadeProgress: number = 0.0
     #playbackRate: number
@@ -31,11 +38,12 @@ export class PitchVoice implements Voice {
     get readPosition(): number {return this.#readPosition}
 
     done(): boolean {return this.#state === VoiceState.Done}
-    isFadingOut(): boolean {return this.#state === VoiceState.FadingOut}
+    isFadingOut(): boolean {return this.#state === VoiceState.Fading && this.#fadeDirection < 0}
 
     startFadeOut(blockOffset: int): void {
-        if (this.#state !== VoiceState.Done && this.#state !== VoiceState.FadingOut) {
-            this.#state = VoiceState.FadingOut
+        if (this.#state !== VoiceState.Done && !(this.#state === VoiceState.Fading && this.#fadeDirection < 0)) {
+            this.#state = VoiceState.Fading
+            this.#fadeDirection = -1.0
             this.#fadeProgress = 0.0
             this.#fadeOutBlockOffset = blockOffset
         }
@@ -55,7 +63,8 @@ export class PitchVoice implements Voice {
         const fadeOutThreshold = numberOfFrames - fadeLength * playbackRate
         const blockOffset = this.#blockOffset
         const fadeOutBlockOffset = this.#fadeOutBlockOffset
-        let state = this.#state
+        let state = this.#state as VoiceState
+        let fadeDirection = this.#fadeDirection
         let readPosition = this.#readPosition
         let fadeProgress = this.#fadeProgress
         for (let i = 0; i < bufferCount; i++) {
@@ -64,14 +73,16 @@ export class PitchVoice implements Voice {
             if (i < blockOffset) {continue}
             const j = bufferStart + i
             let amplitude: number
-            if (state === VoiceState.FadingIn) {
+            if (state === VoiceState.Fading && fadeDirection > 0) {
+                // Fading in
                 amplitude = fadeProgress / fadeLength
                 if (++fadeProgress >= fadeLength) {
                     state = VoiceState.Active
                     fadeProgress = 0.0
+                    fadeDirection = 0.0
                 }
-            } else if (state === VoiceState.FadingOut) {
-                // Don't start fading until we reach the fadeout block offset
+            } else if (state === VoiceState.Fading && fadeDirection < 0) {
+                // Fading out - wait for fadeOutBlockOffset
                 if (i < fadeOutBlockOffset) {
                     amplitude = 1.0
                 } else {
@@ -94,11 +105,13 @@ export class PitchVoice implements Voice {
             }
             readPosition += playbackRate
             if (state === VoiceState.Active && readPosition >= fadeOutThreshold) {
-                state = VoiceState.FadingOut
+                state = VoiceState.Fading
+                fadeDirection = -1.0
                 fadeProgress = 0.0
             }
         }
         this.#state = state
+        this.#fadeDirection = fadeDirection
         this.#readPosition = readPosition
         this.#fadeProgress = fadeProgress
         this.#blockOffset = 0
