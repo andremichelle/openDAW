@@ -148,26 +148,25 @@ export class TimeStretchSequencer {
                                 voice.startFadeOut(blockOffset)
                             }
 
-                            // Calculate if looping is needed
-                            // At playbackRate != 1.0, we consume audio samples at a different rate
-                            // playbackRate < 1.0 (slower/lower pitch): consume fewer samples per output sample → more likely to need looping
-                            // playbackRate > 1.0 (faster/higher pitch): consume more samples per output sample → less likely to need looping
+                            // Calculate if looping is needed to fill time until next transient
+                            // Only applies to Repeat/Pingpong modes when we need more audio than segment provides
                             let canLoop = false
                             if (hasNext && this.#transientPlayMode !== TransientPlayMode.Once) {
-                                const nextNextWarpSeconds = nextTransientSeconds - waveformOffset
-                                const nextNextPpqn = this.#secondsToPpqn(nextNextWarpSeconds)
-                                const lastWarp = this.#warpMarkers.last()
-                                const endPpqn = nextNextPpqn > transientPpqn && lastWarp !== null
-                                    ? nextNextPpqn
-                                    : (lastWarp?.position ?? transientPpqn)
-                                const ppqnUntilNext = endPpqn - transientPpqn
-                                const samplesPerPpqn = bufferCount / pn
-                                const outputSamplesNeeded = ppqnUntilNext * samplesPerPpqn
-                                // Audio samples consumed = output samples * playbackRate
-                                const audioSamplesNeeded = outputSamplesNeeded * this.#playbackRate
                                 const loopRegionLength = segmentLength -
                                     (LOOP_MARGIN_START + LOOP_MARGIN_END) * data.sampleRate
-                                canLoop = audioSamplesNeeded > segmentLength * 1.01 && loopRegionLength > 0
+                                if (loopRegionLength > 0) {
+                                    // Calculate time in PPQN from current transient to next
+                                    const nextNextWarpSeconds = nextTransientSeconds - waveformOffset
+                                    const nextNextPpqn = this.#secondsToPpqn(nextNextWarpSeconds)
+                                    const ppqnUntilNext = nextNextPpqn - transientPpqn
+                                    // Convert PPQN duration to output samples
+                                    const samplesPerPpqn = bufferCount / pn
+                                    const outputSamplesUntilNext = ppqnUntilNext * samplesPerPpqn
+                                    // Audio samples consumed = output samples * playbackRate
+                                    const audioSamplesNeeded = outputSamplesUntilNext * this.#playbackRate
+                                    // Loop if we need more audio than the segment provides (with small margin)
+                                    canLoop = audioSamplesNeeded > segmentLength * 1.01
+                                }
                             }
 
                             // Spawn new voice based on TransientPlayMode (D15)
