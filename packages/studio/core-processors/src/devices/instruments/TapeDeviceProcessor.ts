@@ -11,7 +11,6 @@ import {
     TransientMarkerBoxAdapter,
     WarpMarkerBoxAdapter
 } from "@opendaw/studio-adapters"
-import {TransientPlayMode} from "@opendaw/studio-enums"
 import {EngineContext} from "../../EngineContext"
 import {AudioGenerator, Block, BlockFlag, ProcessInfo, Processor} from "../../processing"
 import {AbstractProcessor} from "../../AbstractProcessor"
@@ -49,7 +48,11 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         this.#lanes = UUID.newSet<Lane>(({adapter: {uuid}}) => uuid)
         this.ownAll(
             this.#adapter.deviceHost().audioUnitBoxAdapter().tracks.catchupAndSubscribe({
-                onAdd: (adapter: TrackBoxAdapter) => this.#lanes.add({adapter, voices: [], sequencer: new TimeStretchSequencer()}),
+                onAdd: (adapter: TrackBoxAdapter) => this.#lanes.add({
+                    adapter,
+                    voices: [],
+                    sequencer: new TimeStretchSequencer()
+                }),
                 onRemove: (adapter: TrackBoxAdapter) => this.#lanes.removeByKey(adapter.uuid),
                 onReorder: (_adapter: TrackBoxAdapter) => {}
             }),
@@ -244,14 +247,11 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                             timeStretch: AudioTimeStretchBoxAdapter,
                             transients: EventCollection<TransientMarkerBoxAdapter>,
                             waveformOffset: number): void {
-        // Fade out any PitchVoice when in timestretch mode
         for (const voice of lane.voices) {
             if (voice instanceof PitchVoice) {
                 voice.startFadeOut(0)
             }
         }
-
-        // All computation happens in sequencer
         lane.sequencer.process(
             this.#audioOutput,
             data,
@@ -261,9 +261,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             block,
             cycle
         )
-
-        // Clean up done PitchVoice instances
-        lane.voices = lane.voices.filter(v => v instanceof PitchVoice && !v.done())
+        lane.voices = lane.voices.filter(voice => voice instanceof PitchVoice && !voice.done())
     }
 
     #getPlaybackRateFromWarp(ppqn: number,
