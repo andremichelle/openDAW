@@ -64,26 +64,39 @@ This document captures all architectural decisions for the tape-based audio play
 
 ## Core Rules
 
-### Rule 1: Sequencer Controls Everything
+### Rule 1: Maximum Voice Count
+- At most 2 voices producing audio at any moment (during crossfade transitions only)
+- Outside of crossfades, exactly 1 voice
+
+### Rule 2: Transient Boundary Behavior
+At each transient boundary on the timeline:
+- **Matching BPM (drift within threshold)**: Voice continues without crossfade, segment end is updated
+- **Faster BPM (drift exceeds threshold)**: Current voice fades out, new OnceVoice starts for new segment
+- **Slower BPM with Once mode**: Current voice fades out, new OnceVoice starts (will have silence at end)
+- **Slower BPM with Repeat/Pingpong mode**: Current looping voice fades out, new looping voice starts for new segment
+
+### Rule 3: Sequencer Controls Everything
 - Voices are "dumb" - they only play audio and respond to `startFadeOut()`
 - Sequencer decides when to spawn voices, when to fade them out
+- **Voice NEVER decides its own end** - BPM can change while playing, which changes when segment should end
 - Voice never auto-stops based on segment boundaries
+- Only the sequencer knows the current BPM and can calculate when to fade out
 
-### Rule 2: Voice Exposes State for Sequencer Queries
+### Rule 4: Voice Exposes State for Sequencer Queries
 - `readPosition()` - where voice is currently reading in audio samples
 - `segmentEnd()` - where this voice's segment ends
 - `setSegmentEnd()` - sequencer can extend segment when voice continues through transients
 - `done()` - is voice finished?
 
-### Rule 3: Fade-In Rule
+### Rule 5: Fade-In Rule
 - Position = 0 (start of file): NO fade-in
 - Position > 0: fade-in required (cutting into existing audio)
 
-### Rule 4: No Clicks Ever
+### Rule 6: No Clicks Ever
 - All transitions use crossfades
 - Discontinuities (seek, loop) fade out current voices first
 
-### Rule 5: Drift Detection for Near-100% Playback
+### Rule 7: Drift Detection for Near-100% Playback
 When effective speed (playback-speed * playback-rate) is close to 100%:
 - Check if voice's read position is close to expected position for new transient
 - If close: continue voice, update segment end, NO crossfade
@@ -91,7 +104,7 @@ When effective speed (playback-speed * playback-rate) is close to 100%:
 - Small drifts accumulate until threshold exceeded, then resync with crossfade
 - Threshold = VOICE_FADE_DURATION in samples
 
-### Rule 6: Looping Decision (needsLooping)
+### Rule 8: Looping Decision (needsLooping)
 Determines if we need looping (for Repeat/Pingpong modes):
 
 ```
@@ -107,7 +120,13 @@ needsLooping = !closeToUnity && audioSamplesNeeded > segmentLength
 
 **Important**: When `speedRatio` is within 1% of 1.0, we do NOT loop even if `audioSamplesNeeded > segmentLength`. This prevents phase artifacts when playing at near-original speed.
 
-### Rule 7: Last Transient
+### Rule 9: Mid-Segment BPM Change
+When BPM changes mid-segment and the looping requirement changes:
+- If OnceVoice is playing but now `needsLooping=true`: fade out OnceVoice, spawn looping voice
+- The new looping voice starts at segment start with correct timing
+- This ensures continuous playback without gaps when tempo drops
+
+### Rule 10: Last Transient
 - If no next transient exists, `outputSamplesUntilNext = INFINITY`
 - Repeat/Pingpong will loop forever until fade-out is triggered
 - Once will play once then silence

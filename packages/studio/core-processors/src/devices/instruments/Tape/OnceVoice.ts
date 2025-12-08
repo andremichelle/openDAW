@@ -172,7 +172,8 @@ export class OnceVoice implements Voice {
             }
 
             // Output audio if within valid range
-            // Note: segmentEnd is not checked here - the sequencer controls when to fade out
+            // Voice never decides its own end - sequencer controls lifecycle
+            // (BPM can change while playing, which changes when segment should end)
             const readInt = readPosition | 0
             if (readInt >= 0 && readInt < numberOfFrames - 1) {
                 // Linear interpolation for sub-sample accuracy

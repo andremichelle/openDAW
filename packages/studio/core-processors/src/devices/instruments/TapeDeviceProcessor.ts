@@ -1,4 +1,4 @@
-import {asDefined, assert, Bits, int, isInstanceOf, Nullable, Option, SortedSet, UUID} from "@opendaw/lib-std"
+import {assert, Bits, int, isInstanceOf, Option, SortedSet, UUID} from "@opendaw/lib-std"
 import {AudioBuffer, AudioData, EventCollection, LoopableRegion, RenderQuantum} from "@opendaw/lib-dsp"
 import {
     AudioClipBoxAdapter,
@@ -244,14 +244,6 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                             timeStretch: AudioTimeStretchBoxAdapter,
                             transients: EventCollection<TransientMarkerBoxAdapter>,
                             waveformOffset: number): void {
-        const {p0, p1, s0, s1, flags} = block
-        const isDiscontinuous = Bits.some(flags, BlockFlag.discontinuous)
-
-        if (isDiscontinuous) {
-            lane.sequencer.reset()
-            lane.voices.forEach(voice => voice.startFadeOut(0))
-        }
-
         // Fade out any PitchVoice when in timestretch mode
         for (const voice of lane.voices) {
             if (voice instanceof PitchVoice) {
@@ -259,60 +251,19 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             }
         }
 
-        const sn = s1 - s0
-        const pn = p1 - p0
-        const r0 = (cycle.resultStart - p0) / pn
-        const r1 = (cycle.resultEnd - p0) / pn
-        const bp0 = s0 + sn * r0
-        const bp1 = s0 + sn * r1
-        const bpn = (bp1 - bp0) | 0
-        const {warpMarkers, transientPlayMode, playbackRate} = timeStretch
-
-        assert(s0 <= bp0 && bp1 <= s1, () => `Out of bounds ${bp0}, ${bp1}`)
-
-        const firstWarp = asDefined(warpMarkers.first(), "missing first warp marker")
-        const lastWarp = asDefined(warpMarkers.last(), "missing last warp marker")
-        const contentPpqn = cycle.resultStart - cycle.rawStart
-
-        if (contentPpqn < firstWarp.position || contentPpqn >= lastWarp.position) {return}
-
-        const warpSeconds = this.#ppqnToSeconds(contentPpqn, cycle.resultStartValue, warpMarkers)
-        const fileSeconds = warpSeconds + waveformOffset
-
-        // Clamp to valid file range
-        if (fileSeconds < 0.0 || fileSeconds >= data.numberOfFrames / data.sampleRate) {return}
-
-        // Calculate file position at block END for transient detection
-        const contentPpqnEnd = contentPpqn + pn
-        const warpSecondsEnd = this.#ppqnToSeconds(contentPpqnEnd, cycle.resultEndValue, warpMarkers)
-        const fileSecondsEnd = warpSecondsEnd + waveformOffset
-
-        // Transfer voices to sequencer (filter out PitchVoice)
-        lane.sequencer.voices = lane.voices.filter((v): v is Voice => !(v instanceof PitchVoice))
-
-        // Process via sequencer
+        // All computation happens in sequencer
         lane.sequencer.process(
             this.#audioOutput,
             data,
             transients,
-            warpMarkers,
-            transientPlayMode,
-            playbackRate,
+            timeStretch,
             waveformOffset,
-            this.context.tempoMap,
-            fileSecondsEnd,
-            contentPpqn,
-            pn,
-            bp0 | 0,
-            bpn
+            block,
+            cycle
         )
 
-        // Transfer voices back from sequencer (keep PitchVoice instances)
-        const pitchVoices = lane.voices.filter(v => v instanceof PitchVoice)
-        lane.voices = [...pitchVoices, ...lane.sequencer.voices]
-
-        // Clean up done voices
-        lane.voices = lane.voices.filter(voice => !voice.done())
+        // Clean up done PitchVoice instances
+        lane.voices = lane.voices.filter(v => v instanceof PitchVoice && !v.done())
     }
 
     #getPlaybackRateFromWarp(ppqn: number,

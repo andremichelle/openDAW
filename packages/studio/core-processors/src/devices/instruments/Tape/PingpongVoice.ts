@@ -194,6 +194,7 @@ export class PingpongVoice implements Voice {
                         amplitude = 1.0 - fadeProgress * voiceFadeLengthInverse
                         fadeProgress += 1.0
                         if (fadeProgress >= voiceFadeLengthSamples) {
+                            // console.log(`[PingpongVoice] Fade-out complete, marking done`)
                             state = VoiceState.Done
                             break
                         }
