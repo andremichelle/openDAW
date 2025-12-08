@@ -16,7 +16,7 @@ import {VOICE_FADE_DURATION, LOOP_FADE_DURATION, LOOP_MARGIN_START, LOOP_MARGIN_
  * - Fade-in only if start position > 0 (cutting into existing audio)
  * - Fade-out controlled by sequencer via startFadeOut()
  *
- * @see PLAYBACK_SYSTEM.md D8, D10, D11, D12
+ * @see README.md D8, D10, D11, D12
  */
 export class PingpongVoice implements Voice {
     readonly #output: AudioBuffer

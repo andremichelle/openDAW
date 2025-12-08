@@ -13,7 +13,7 @@ import {VOICE_FADE_DURATION} from "./constants"
  * - Fade-out controlled by sequencer via startFadeOut()
  * - If audio is exhausted before fade-out is called, outputs silence
  *
- * @see PLAYBACK_SYSTEM.md D9, D10
+ * @see README.md D9, D10
  */
 export class OnceVoice implements Voice {
     readonly #output: AudioBuffer

@@ -900,7 +900,7 @@ describe("TimeStretchSequencer", () => {
     })
 
     // =========================================================================
-    // SCENARIO TESTS (from PLAYBACK_SYSTEM.md)
+    // SCENARIO TESTS (from README.md)
     // =========================================================================
     describe("Scenario A: Matching BPM, playback-rate = 1.0", () => {
         it("should play through entire audio with single voice, no crossfades", () => {
