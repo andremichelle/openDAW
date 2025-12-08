@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/lib-fusion",
-    "version": "0.0.53",
+    "version": "0.0.54",
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "license": "LGPL-3.0-or-later",

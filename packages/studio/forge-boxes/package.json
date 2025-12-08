@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/studio-forge-boxes",
-    "version": "0.0.53",
+    "version": "0.0.54",
     "license": "LGPL-3.0-or-later",
     "private": true,
     "exports": {
@@ -18,7 +18,7 @@
         "@opendaw/lib-dsp": "^0.0.53",
         "@opendaw/lib-runtime": "^0.0.53",
         "@opendaw/lib-std": "^0.0.53",
-        "@opendaw/studio-enums": "^0.0.44"
+        "@opendaw/studio-enums": "^0.0.45"
     },
     "devDependencies": {
         "@opendaw/eslint-config": "^0.0.20",
