@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/lib-dawproject",
-    "version": "0.0.39",
+    "version": "0.0.40",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
@@ -23,14 +23,14 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@opendaw/lib-dsp": "^0.0.53",
-        "@opendaw/lib-runtime": "^0.0.53",
-        "@opendaw/lib-xml": "^0.0.39",
+        "@opendaw/lib-dsp": "^0.0.54",
+        "@opendaw/lib-runtime": "^0.0.54",
+        "@opendaw/lib-xml": "^0.0.40",
         "jszip": "^3.10.1"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.20",
-        "@opendaw/typescript-config": "^0.0.20",
+        "@opendaw/eslint-config": "^0.0.21",
+        "@opendaw/typescript-config": "^0.0.21",
         "jsdom": "^26.1.0"
     },
     "gitHead": "bd520f2c650ed3cf9088201d7623438555ab4dd2"
