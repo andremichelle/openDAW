@@ -1,7 +1,7 @@
 {
     "name": "@opendaw/app-headless",
     "private": true,
-    "version": "0.0.69",
+    "version": "0.0.70",
     "type": "module",
     "license": "LGPL-3.0-or-later",
     "scripts": {
@@ -11,7 +11,7 @@
         "lint": "eslint \"src/**/*.ts\""
     },
     "dependencies": {
-        "@opendaw/studio-sdk": "^0.0.69"
+        "@opendaw/studio-sdk": "^0.0.70"
     },
     "devDependencies": {
         "@opendaw/eslint-config": "^0.0.22",
