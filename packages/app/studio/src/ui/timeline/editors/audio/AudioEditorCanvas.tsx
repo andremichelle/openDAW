@@ -88,7 +88,8 @@ export const AudioEditorCanvas = ({lifecycle, project: {editing}, range, snappin
                     installEditorMainBody({element: canvas, range, reader}),
                     installCursor(canvas, capturing, {
                         get: (target) =>
-                            target?.type === "loop-duration" ? Cursor.ExpandWidth : null
+                            target?.type === "loop-duration" && target?.reader.audioContent.canResize
+                                ? Cursor.ExpandWidth : null
                     }),
                     reader.subscribeChange(painter.requestUpdate),
                     observableOptPlayMode.catchupAndSubscribe((optPlayMode) => {
@@ -99,9 +100,9 @@ export const AudioEditorCanvas = ({lifecycle, project: {editing}, range, snappin
                     Dragging.attach(canvas, event => {
                         const target = capturing.captureEvent(event)
                         if (target?.type !== "loop-duration") {return Option.None}
+                        if (!reader.audioContent.canResize) return Option.None
                         const startPPQN = range.xToUnit(event.clientX)
                         const beginPPQN = reader.loopDuration
-                        console.debug(startPPQN)
                         return Option.wrap({
                             update: (event: Dragging.Event) => {
                                 const delta = snapping.computeDelta(startPPQN, event.clientX, beginPPQN)

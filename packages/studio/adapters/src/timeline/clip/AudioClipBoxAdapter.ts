@@ -160,6 +160,7 @@ export class AudioClipBoxAdapter implements AudioContentBoxAdapter, ClipBoxAdapt
     }
     get isMirrowed(): boolean {return false}
     get canMirror(): boolean {return false}
+    get canResize(): boolean {return this.#playMode.nonEmpty()}
 
     terminate(): void {
         this.#fileSubscription.ifSome(subscription => subscription.terminate())

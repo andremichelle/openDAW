@@ -18,6 +18,7 @@ export interface AudioContentBoxAdapter extends BoxAdapter {
     get asPlayModePitchStretch(): Option<AudioPitchStretchBoxAdapter>
     get asPlayModeTimeStretch(): Option<AudioTimeStretchBoxAdapter>
     get optWarpMarkers(): Option<EventCollection<WarpMarkerBoxAdapter>>
+    get canResize(): boolean
     get gain(): MutableObservableValue<number>
     get box(): AudioClipBox | AudioRegionBox
 }
