@@ -57,7 +57,7 @@ export const AudioUnitBox: BoxSchema<Pointers> = {
                 pointerType: Pointers.Capture, mandatory: false
             }
         } as const
-    }, pointerRules: {accepts: [Pointers.Selection, Pointers.Automation], mandatory: false}
+    }, pointerRules: {accepts: [Pointers.Selection, Pointers.Automation, Pointers.MetaData], mandatory: false}
 }
 
 export const AudioBusBox: BoxSchema<Pointers> = {
