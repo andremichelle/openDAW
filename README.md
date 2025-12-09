@@ -106,8 +106,8 @@ Huge thanks to our [ambassadors](https://opendaw.org/ambassadors), whose dedicat
 
 #### Stock Plugins
 
-* Vaporisateur (simple synth with classical waveforms)
-* Playfield (sample player with individual effect chains)
+* Vaporisateur (subtractive synth with classical waveforms)
+* Playfield (drum sample computer with individual effect chains)
 * Nano (simple sampler pitching a single audio file)
 * Tape (playback device for audio regions and clips)
 * Soundfont (simple soundfont player)
