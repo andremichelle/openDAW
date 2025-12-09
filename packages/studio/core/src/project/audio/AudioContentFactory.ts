@@ -17,17 +17,18 @@ import {WarpMarkerTemplate} from "./WarpMarkerTemplate"
 
 export namespace AudioContentFactory {
     export type Props = {
-        boxGraph: BoxGraph,
-        targetTrack: TrackBox,
-        audioFileBox: AudioFileBox,
+        boxGraph: BoxGraph
+        targetTrack: TrackBox
+        audioFileBox: AudioFileBox
         sample: Sample
+        duration?: ppqn | number
         warpMarkers?: ReadonlyArray<WarpMarkerTemplate>
         waveformOffset?: number
         gainInDb?: number
     }
 
     export type Clip = Props & { index: int }
-    export type Region = Props & { position: ppqn, duration?: ppqn, name?: string }
+    export type Region = Props & { position: ppqn, name?: string }
 
     export type TimeStretchedProps = {
         transientPlayMode?: TransientPlayMode
@@ -110,7 +111,7 @@ export namespace AudioContentFactory {
             return panic("Cannot create audio-region on non-audio track")
         }
         const {name, duration: durationInSeconds, bpm} = sample
-        const durationInPPQN = quantizeRound(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
+        const durationInPPQN = props.duration ?? quantizeRound(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
         if (isDefined(props.warpMarkers)) {
             AudioContentHelpers.addWarpMarkers(boxGraph, playMode, props.warpMarkers)
         } else {
@@ -119,8 +120,8 @@ export namespace AudioContentFactory {
         const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
         return AudioRegionBox.create(boxGraph, UUID.generate(), box => {
             box.position.setValue(position)
-            box.duration.setValue(props.duration ?? durationInPPQN)
-            box.loopDuration.setValue(props.duration ?? durationInPPQN)
+            box.duration.setValue(durationInPPQN)
+            box.loopDuration.setValue(durationInPPQN)
             box.regions.refer(targetTrack.regions)
             box.waveformOffset.setValue(props.waveformOffset ?? 0.0)
             box.hue.setValue(ColorCodes.forTrackType(targetTrack.type.getValue()))
@@ -140,7 +141,7 @@ export namespace AudioContentFactory {
             return panic("Cannot create audio-region on non-audio track")
         }
         const {name, duration: durationInSeconds, bpm} = sample
-        const durationInPPQN = quantizeRound(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
+        const durationInPPQN = props.duration ?? quantizeRound(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
         if (isDefined(props.warpMarkers)) {
             AudioContentHelpers.addWarpMarkers(boxGraph, playMode, props.warpMarkers)
         } else {
