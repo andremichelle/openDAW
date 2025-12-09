@@ -120,7 +120,7 @@ export namespace AudioContentFactory {
         return AudioRegionBox.create(boxGraph, UUID.generate(), box => {
             box.position.setValue(position)
             box.duration.setValue(props.duration ?? durationInPPQN)
-            box.loopDuration.setValue(durationInPPQN)
+            box.loopDuration.setValue(props.duration ?? durationInPPQN)
             box.regions.refer(targetTrack.regions)
             box.waveformOffset.setValue(props.waveformOffset ?? 0.0)
             box.hue.setValue(ColorCodes.forTrackType(targetTrack.type.getValue()))
