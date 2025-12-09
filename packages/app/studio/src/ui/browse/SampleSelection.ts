@@ -23,7 +23,7 @@ export class SampleSelection {
         editing.modify(() => {
             const samples = this.#selected()
             samples.forEach(sample => {
-                const {uuid: uuidAsString, name, duration: durationInSeconds} = sample
+                const {uuid: uuidAsString, name, duration: durationInSeconds, bpm} = sample
                 const uuid = UUID.parse(uuidAsString)
                 const {trackBox} = project.api.createInstrument(InstrumentFactories.Tape)
                 const audioFileBox = boxGraph.findBox<AudioFileBox>(uuid)
@@ -32,13 +32,23 @@ export class SampleSelection {
                         box.startInSeconds.setValue(0)
                         box.endInSeconds.setValue(durationInSeconds)
                     }))
-                AudioContentFactory.createPitchStretchedRegion({
-                    boxGraph,
-                    sample,
-                    audioFileBox,
-                    position: 0,
-                    targetTrack: trackBox
-                })
+                if (bpm === 0) {
+                    AudioContentFactory.createNotStretchedRegion({
+                        boxGraph,
+                        sample,
+                        audioFileBox,
+                        position: 0,
+                        targetTrack: trackBox
+                    })
+                } else {
+                    AudioContentFactory.createPitchStretchedRegion({
+                        boxGraph,
+                        sample,
+                        audioFileBox,
+                        position: 0,
+                        targetTrack: trackBox
+                    })
+                }
             })
         })
     }
