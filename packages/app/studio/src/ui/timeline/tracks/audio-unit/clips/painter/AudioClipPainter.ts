@@ -7,13 +7,12 @@ import {dbToGain} from "@opendaw/lib-dsp"
 export const createAudioClipPainter = (adapter: AudioClipBoxAdapter): Procedure<CanvasPainter> => painter => {
     const {context, actualHeight: size} = painter
     const radius = size >> 1
-    const {file, gain, duration, optWarpMarkers, isPlayModeNoStretch} = adapter
+    const {file, gain, duration, optWarpMarkers, isPlayModeNoStretch, waveformOffset} = adapter
     if (file.peaks.isEmpty()) {return}
-    // TODO waveform-offset
     const numRays = 256
     const peaks = file.peaks.unwrap()
     const numFrames = peaks.numFrames
-    const durationInSeconds = file.endInSeconds
+    const durationInSeconds = file.endInSeconds - file.startInSeconds
     const scale = dbToGain(gain.getValue())
     const minRadius = 4 * devicePixelRatio
     const maxRadius = radius - 4 * devicePixelRatio
@@ -54,7 +53,7 @@ export const createAudioClipPainter = (adapter: AudioClipBoxAdapter): Procedure<
             for (let ray = rayStart; ray < rayEnd; ray++) {
                 const clipPosition = (ray / numRays) * duration
                 const t = (clipPosition - w0.position) / segmentPositionRange
-                const seconds = w0.seconds + t * segmentSecondsRange
+                const seconds = w0.seconds + t * segmentSecondsRange + waveformOffset.getValue()
                 const frameIndex = (seconds / durationInSeconds) * numFrames
                 const index = Math.min(Math.floor(frameIndex / unitsEachPeak), maxIndex)
                 if (index < 0) {continue}
@@ -72,8 +71,10 @@ export const createAudioClipPainter = (adapter: AudioClipBoxAdapter): Procedure<
         const unitsEachPeak = stage.unitsEachPeak()
         const peaksEachRay = unitsEachPixel / unitsEachPeak
         const data: Int32Array = peaks.data[0]
-        let from = 0
-        let indexFrom: int = 0 | 0
+        const sampleRate = numFrames / durationInSeconds
+        const offsetFrames = waveformOffset.getValue() * sampleRate
+        let from = offsetFrames / unitsEachPeak
+        let indexFrom: int = Math.floor(from)
         let min: number = 0.0
         let max: number = 0.0
         for (let i = 0; i < numRays; i++) {
@@ -81,9 +82,12 @@ export const createAudioClipPainter = (adapter: AudioClipBoxAdapter): Procedure<
             const indexTo = Math.floor(to)
             let swap = false
             while (indexFrom < indexTo) {
-                const bits = data[stage.dataOffset + indexFrom++]
-                min = Math.min(Peaks.unpack(bits, 0), min)
-                max = Math.max(Peaks.unpack(bits, 1), max)
+                if (indexFrom >= 0) {
+                    const bits = data[stage.dataOffset + indexFrom]
+                    min = Math.min(Peaks.unpack(bits, 0), min)
+                    max = Math.max(Peaks.unpack(bits, 1), max)
+                }
+                indexFrom++
                 swap = true
             }
             drawRay(i, min, max)
