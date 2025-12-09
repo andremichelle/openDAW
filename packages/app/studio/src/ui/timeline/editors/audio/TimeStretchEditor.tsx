@@ -1,5 +1,5 @@
 import css from "./TimeStretchEditor.sass?inline"
-import {Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@opendaw/lib-dom"
 import {DefaultObservableValue, Lifecycle, Nullable, StringMapping, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {IconSymbol, TransientPlayMode} from "@opendaw/studio-enums"
@@ -41,7 +41,15 @@ export const TimeStretchEditor = ({lifecycle, project, reader}: Construct) => {
                             )
                         }
                     })
-                    element.classList.toggle("disabled", transientPlayModeEnumValue.getValue() === null)
+                    const disabled = transientPlayModeEnumValue.getValue() === null
+                    element.classList.toggle("disabled", disabled)
+                    console.debug("disabled")
+                    if (disabled) {
+                        activeLifecycle.own(Events.subscribe(element, "click", event => {
+                            event.preventDefault()
+                            event.stopImmediatePropagation()
+                        }, {capture: true, passive: false}))
+                    }
                 }),
                 transientPlayModeEnumValue.subscribe(owner => audioContent.asPlayModeTimeStretch
                     .ifSome(adapter => editing.modify(() =>
