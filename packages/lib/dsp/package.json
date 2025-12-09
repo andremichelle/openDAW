@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/lib-dsp",
-    "version": "0.0.54",
+    "version": "0.0.55",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
@@ -27,11 +27,11 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@opendaw/lib-std": "^0.0.54"
+        "@opendaw/lib-std": "^0.0.55"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.21",
-        "@opendaw/typescript-config": "^0.0.21"
+        "@opendaw/eslint-config": "^0.0.22",
+        "@opendaw/typescript-config": "^0.0.22"
     },
     "gitHead": "bd520f2c650ed3cf9088201d7623438555ab4dd2"
 }
