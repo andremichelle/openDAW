@@ -216,6 +216,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
                 box.hue.setValue(this.hue)
                 box.label.setValue(this.label)
                 box.gain.setValue(this.gain.getValue())
+                box.waveformOffset.setValue(this.waveformOffset.getValue())
                 this.#box.playMode.ifVertex(vertex => box.playMode.refer(vertex.box))
             }), AudioRegionBoxAdapter)
         adapter.duration = params?.duration ?? this.duration
