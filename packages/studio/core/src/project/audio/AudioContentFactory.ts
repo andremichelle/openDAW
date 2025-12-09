@@ -22,6 +22,7 @@ export namespace AudioContentFactory {
         audioFileBox: AudioFileBox,
         sample: Sample
         warpMarkers?: ReadonlyArray<WarpMarkerTemplate>
+        waveformOffset?: number
         gainInDb?: number
     }
 
@@ -65,6 +66,7 @@ export namespace AudioContentFactory {
             box.events.refer(collectionBox.owners)
             box.timeBase.setValue(TimeBase.Seconds)
             box.gain.setValue(props.gainInDb ?? 0.0)
+            box.waveformOffset.setValue(props.waveformOffset ?? 0.0)
         })
     }
 
@@ -90,6 +92,7 @@ export namespace AudioContentFactory {
             box.duration.setValue(durationInSeconds)
             box.clips.refer(targetTrack.clips)
             box.hue.setValue(ColorCodes.forTrackType(targetTrack.type.getValue()))
+            box.waveformOffset.setValue(props.waveformOffset ?? 0.0)
             box.label.setValue(name)
             box.file.refer(audioFileBox)
             box.events.refer(collectionBox.owners)
@@ -119,6 +122,7 @@ export namespace AudioContentFactory {
             box.duration.setValue(props.duration ?? durationInPPQN)
             box.loopDuration.setValue(durationInPPQN)
             box.regions.refer(targetTrack.regions)
+            box.waveformOffset.setValue(props.waveformOffset ?? 0.0)
             box.hue.setValue(ColorCodes.forTrackType(targetTrack.type.getValue()))
             box.label.setValue(name)
             box.file.refer(audioFileBox)
@@ -147,6 +151,7 @@ export namespace AudioContentFactory {
             box.duration.setValue(durationInPPQN)
             box.clips.refer(targetTrack.clips)
             box.hue.setValue(ColorCodes.forTrackType(targetTrack.type.getValue()))
+            box.waveformOffset.setValue(props.waveformOffset ?? 0.0)
             box.label.setValue(name)
             box.file.refer(audioFileBox)
             box.events.refer(collectionBox.owners)
