@@ -26,6 +26,7 @@ export interface RegionBoxAdapter<CONTENT> extends BoxAdapter, Region, Selectabl
     get label(): string
     get isMirrowed(): boolean
     get canMirror(): boolean
+    get canResize(): boolean
     get trackBoxAdapter(): Option<TrackBoxAdapter>
     get hasCollection(): boolean
     get optCollection(): Option<CONTENT>

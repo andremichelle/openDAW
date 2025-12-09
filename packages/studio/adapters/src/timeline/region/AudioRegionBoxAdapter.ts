@@ -186,6 +186,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
     }
     get isMirrowed(): boolean {return this.optCollection.mapOr(adapter => adapter.numOwners > 1, false)}
     get canMirror(): boolean {return true}
+    get canResize(): boolean {return this.#playMode.nonEmpty()}
     get trackBoxAdapter(): Option<TrackBoxAdapter> {
         return this.#box.regions.targetVertex
             .map(vertex => this.#context.boxAdapters.adapterFor(vertex.box, TrackBoxAdapter))
@@ -196,9 +197,9 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
             .map(vertex => this.#context.boxAdapters.adapterFor(vertex.box, ValueEventCollectionBoxAdapter))
     }
     set position(value: ppqn) {this.#box.position.setValue(value)}
-    set duration(value: ppqn) {this.#durationConverter.fromPPQN(value)}
+    set duration(value: ppqn) {if (this.#playMode.nonEmpty()) {this.#durationConverter.fromPPQN(value)}}
     set loopOffset(value: ppqn) {this.#loopOffsetConverter.fromPPQN(value)}
-    set loopDuration(value: ppqn) {this.#loopDurationConverter.fromPPQN(value)}
+    set loopDuration(value: ppqn) {if (this.#playMode.nonEmpty()) {this.#loopDurationConverter.fromPPQN(value)}}
 
     copyTo(params?: CopyToParams): AudioRegionBoxAdapter {
         const eventCollection = this.optCollection.unwrap("Cannot make copy without event-collection")

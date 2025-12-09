@@ -20,6 +20,7 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
     readPosition(region: AnyRegionBoxAdapter): ppqn {return region.position}
     readDuration(region: AnyRegionBoxAdapter): ppqn {return this.readComplete(region) - this.readPosition(region)}
     readComplete(region: AnyRegionBoxAdapter): ppqn {
+        if (!region.canResize) {return region.complete}
         const duration = this.#tool.aligned
             ? (this.#tool.bounds[1] + this.#tool.deltaDuration) - region.position
             : region.duration + this.#tool.deltaDuration

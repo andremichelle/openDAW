@@ -156,6 +156,7 @@ export class ValueRegionBoxAdapter
     }
     get isMirrowed(): boolean {return this.optCollection.mapOr(adapter => adapter.numOwners > 1, false)}
     get canMirror(): boolean {return true}
+    get canResize(): boolean {return true}
 
     set position(value: ppqn) {this.#box.position.setValue(value)}
     set duration(value: ppqn) {this.#box.duration.setValue(value)}

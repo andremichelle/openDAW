@@ -30,6 +30,7 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
     }
 
     computeClampedDelta(region: AnyLoopableRegionBoxAdapter): int {
+        if (!region.canResize) {return 0}
         let position = (this.#tool.aligned ? this.#tool.reference.position : region.position) + this.#tool.deltaStart
         region.trackBoxAdapter.map(trackAdapter => trackAdapter.regions.collection
             .lowerEqual(region.position - 1, region => region.isSelected))

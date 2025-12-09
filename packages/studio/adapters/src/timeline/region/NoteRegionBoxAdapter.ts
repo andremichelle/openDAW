@@ -145,6 +145,7 @@ export class NoteRegionBoxAdapter
     }
     get isMirrowed(): boolean {return this.optCollection.mapOr(adapter => adapter.numOwners > 1, false)}
     get canMirror(): boolean {return true}
+    get canResize(): boolean {return true}
 
     copyTo(params?: CopyToParams): NoteRegionBoxAdapter {
         const eventCollection = this.optCollection.unwrap("Cannot make copy without event-collection")
