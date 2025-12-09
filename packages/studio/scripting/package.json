@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/studio-scripting",
-    "version": "0.0.12",
+    "version": "0.0.13",
     "license": "LGPL-3.0-or-later",
     "type": "module",
     "publishConfig": {
@@ -30,12 +30,12 @@
         "test": "echo \"No tests to run\""
     },
     "dependencies": {
-        "@opendaw/lib-box": "^0.0.55",
+        "@opendaw/lib-box": "^0.0.56",
         "@opendaw/lib-dsp": "^0.0.55",
         "@opendaw/lib-runtime": "^0.0.55",
         "@opendaw/lib-std": "^0.0.55",
-        "@opendaw/studio-adapters": "^0.0.59",
-        "@opendaw/studio-boxes": "^0.0.56",
+        "@opendaw/studio-adapters": "^0.0.60",
+        "@opendaw/studio-boxes": "^0.0.57",
         "@opendaw/studio-enums": "^0.0.47"
     },
     "devDependencies": {
