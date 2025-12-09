@@ -68,11 +68,11 @@ export class ProjectMigration {
         for (const box of boxGraph.boxes()) {
             await box.accept<BoxVisitor<Promise<unknown>>>({
                 visitAudioFileBox: async (box: AudioFileBox) => {
-                    const {startInSeconds, endInSeconds} = box
-                    if (isIntEncodedAsFloat(startInSeconds.getValue()) || isIntEncodedAsFloat(endInSeconds.getValue())) {
+                    const {startInSeconds, endInSeconds, fileName} = box
+                    if (isIntEncodedAsFloat(startInSeconds.getValue()) || isIntEncodedAsFloat(endInSeconds.getValue()) || endInSeconds.getValue() === 0) {
                         const audioData = await loadAudioData(box.address.uuid)
                         const seconds = audioData.numberOfFrames / audioData.sampleRate
-                        console.debug("Migrate 'AudioFileBox' to float sec", seconds.toFixed(3))
+                        console.debug(`Migrate 'AudioFileBox' to float sec (${fileName.getValue()})`, seconds.toFixed(3))
                         boxGraph.beginTransaction()
                         startInSeconds.setValue(0)
                         endInSeconds.setValue(seconds)
