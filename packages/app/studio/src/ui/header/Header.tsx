@@ -157,7 +157,7 @@ export const Header = ({lifecycle, service}: Construct) => {
                                     value: key,
                                     element: <Icon symbol={iconSymbol}/>,
                                     tooltip: name,
-                                    className: name === "Shadertoy" || name === "Modular"
+                                    className: name === "Modular"
                                         ? "experimental-section"
                                         : undefined
                                 }))}
