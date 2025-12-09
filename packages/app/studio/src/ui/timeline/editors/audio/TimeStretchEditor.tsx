@@ -43,7 +43,6 @@ export const TimeStretchEditor = ({lifecycle, project, reader}: Construct) => {
                     })
                     const disabled = transientPlayModeEnumValue.getValue() === null
                     element.classList.toggle("disabled", disabled)
-                    console.debug("disabled")
                     if (disabled) {
                         activeLifecycle.own(Events.subscribe(element, "click", event => {
                             event.preventDefault()
