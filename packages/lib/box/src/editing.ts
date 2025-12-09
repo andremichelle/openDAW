@@ -32,14 +32,25 @@ export class BoxEditing implements Editing {
 
     #modifying: boolean = false
     #disabled: boolean = false
-
     #historyIndex: int = 0
+    #savedHistoryIndex: int = 0 // -1 = saved state was spliced away, >= 0 = valid saved position
 
     constructor(graph: BoxGraph) {
         this.#graph = graph
     }
 
     get graph(): BoxGraph {return this.#graph}
+
+    markSaved(): void {
+        if (this.#pending.length > 0) {this.mark()}
+        this.#savedHistoryIndex = this.#historyIndex
+    }
+
+    hasUnsavedChanges(): boolean {
+        if (this.#pending.length > 0) {return true}
+        if (this.#savedHistoryIndex === -1) {return true}
+        return this.#historyIndex !== this.#savedHistoryIndex
+    }
 
     isEmpty(): boolean {return this.#marked.length === 0 && this.#pending.length === 0}
 
@@ -48,6 +59,7 @@ export class BoxEditing implements Editing {
         Arrays.clear(this.#pending)
         Arrays.clear(this.#marked)
         this.#historyIndex = 0
+        this.#savedHistoryIndex = 0
     }
 
     undo(): boolean {
@@ -128,7 +140,12 @@ export class BoxEditing implements Editing {
 
     mark(): void {
         if (this.#pending.length === 0) {return}
-        if (this.#marked.length - this.#historyIndex > 0) {this.#marked.splice(this.#historyIndex)}
+        if (this.#marked.length - this.#historyIndex > 0) {
+            if (this.#savedHistoryIndex > this.#historyIndex) {
+                this.#savedHistoryIndex = -1
+            }
+            this.#marked.splice(this.#historyIndex)
+        }
         this.#marked.push(this.#pending.splice(0))
         this.#historyIndex = this.#marked.length
     }

@@ -37,8 +37,12 @@ export class ProjectProfile {
 
     async save(): Promise<void> {
         this.updateModifyDate()
+        this.#project.editing.mark()
         return this.#saved
-            ? ProjectProfile.#writeFiles(this).then(() => {this.#hasChanges = false})
+            ? ProjectProfile.#writeFiles(this).then(() => {
+                this.#hasChanges = false
+                this.#project.editing.markSaved()
+            })
             : Promise.reject("Project has not been saved")
     }
 
@@ -54,9 +58,11 @@ export class ProjectProfile {
             await ProjectProfile.#writeFiles(profile)
             return Option.wrap(profile)
         } else {
+            this.#project.editing.mark()
             return ProjectProfile.#writeFiles(this).then(() => {
                 this.#saved = true
                 this.#hasChanges = false
+                this.#project.editing.markSaved()
                 this.#metaUpdated.notify(this.meta)
                 return Option.None
             })
@@ -64,7 +70,7 @@ export class ProjectProfile {
     }
 
     saved(): boolean {return this.#saved}
-    hasChanges(): boolean {return this.#hasChanges}
+    hasUnsavedChanges(): boolean {return this.#project.editing.hasUnsavedChanges() || this.#hasChanges}
 
     subscribeMetaData(observer: Observer<ProjectMeta>): Subscription {
         return this.#metaUpdated.subscribe(observer)
