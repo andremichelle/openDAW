@@ -36,8 +36,6 @@ export const AudioEditorCanvas = ({lifecycle, project: {editing}, range, snappin
 
                     renderTimeGrid(context, range, snapping, 0, actualHeight)
 
-                    // LOOP DURATION
-                    // TODO Make adjustable
                     const x0 = Math.floor(range.unitToX(reader.offset) * devicePixelRatio)
                     const x1 = Math.floor(range.unitToX(reader.offset + reader.loopDuration) * devicePixelRatio)
                     if (x0 > 0) {
@@ -115,9 +113,8 @@ export const AudioEditorCanvas = ({lifecycle, project: {editing}, range, snappin
                         const rect = canvas.getBoundingClientRect()
                         const startX = startEvent.clientX - rect.left
                         const startOffset = waveformOffset.getValue()
-                        const startPPQN = range.xToUnit(startX) - reader.offset  // clip-relative PPQN
+                        const startPPQN = range.xToUnit(startX) - reader.offset
                         const optWarping = observableOptPlayMode.map(optPlayMode => optPlayMode.warpMarkers)
-                        // Compute the audio-seconds position under the cursor at drag start
                         const startAudioSeconds = optWarping.match({
                             none: () => {
                                 // NoSync: linear mapping based on loop duration ratio
