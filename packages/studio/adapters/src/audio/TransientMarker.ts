@@ -1,1 +1,0 @@
-export type TransientMarker = { seconds: number, energy: number }

@@ -87,7 +87,9 @@ export const installRegionContextMenu =
                 MenuItem.default({label: "Convert to Clip"})
                     .setTriggerProcedure(() => editing.modify(() => {
                         service.timeline.clips.visible.setValue(true)
-                        vertexSelection.select(RegionTransformer.toClip(region))
+                        const clip = RegionTransformer.toClip(region)
+                        vertexSelection.select(clip)
+                        project.userEditingManager.timeline.edit(clip)
                     })),
                 MenuItem.default({
                     label: "Export to Midi-File",

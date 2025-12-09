@@ -117,6 +117,7 @@ export const installClipContextMenu = ({element, project, selection, capturing}:
                     const regions = trackBoxAdapter.regions
                     const lastRegion = regions.collection.lowerEqual(Number.POSITIVE_INFINITY)
                     const position = lastRegion?.complete ?? 0
+                    // TODO Move to ClipTransformer and put into edit mode
                     editing.modify(() => {
                         if (clip.type === "note-clip") {
                             NoteRegionBox.create(clip.box.graph, UUID.generate(), box => {

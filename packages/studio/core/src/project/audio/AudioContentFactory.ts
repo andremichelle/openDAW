@@ -1,6 +1,6 @@
 import {ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
 import {ColorCodes, Sample, TrackType} from "@opendaw/studio-adapters"
-import {int, panic, quantizeRound, UUID} from "@opendaw/lib-std"
+import {int, isDefined, panic, quantizeRound, UUID} from "@opendaw/lib-std"
 import {
     AudioClipBox,
     AudioFileBox,
@@ -13,6 +13,7 @@ import {
 import {TransientPlayMode} from "@opendaw/studio-enums"
 import {BoxGraph} from "@opendaw/lib-box"
 import {AudioContentHelpers} from "./AudioContentHelpers"
+import {WarpMarkerTemplate} from "./WarpMarkerTemplate"
 
 export namespace AudioContentFactory {
     export type Props = {
@@ -20,6 +21,7 @@ export namespace AudioContentFactory {
         targetTrack: TrackBox,
         audioFileBox: AudioFileBox,
         sample: Sample
+        warpMarkers?: ReadonlyArray<WarpMarkerTemplate>
         gainInDb?: number
     }
 
@@ -106,7 +108,11 @@ export namespace AudioContentFactory {
         }
         const {name, duration: durationInSeconds, bpm} = sample
         const durationInPPQN = quantizeRound(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
-        AudioContentHelpers.addDefaultWarpMarkers(boxGraph, playMode, durationInPPQN, durationInSeconds)
+        if (isDefined(props.warpMarkers)) {
+            AudioContentHelpers.addWarpMarkers(boxGraph, playMode, props.warpMarkers)
+        } else {
+            AudioContentHelpers.addDefaultWarpMarkers(boxGraph, playMode, durationInPPQN, durationInSeconds)
+        }
         const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
         return AudioRegionBox.create(boxGraph, UUID.generate(), box => {
             box.position.setValue(position)
@@ -131,7 +137,11 @@ export namespace AudioContentFactory {
         }
         const {name, duration: durationInSeconds, bpm} = sample
         const durationInPPQN = quantizeRound(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
-        AudioContentHelpers.addDefaultWarpMarkers(boxGraph, playMode, durationInPPQN, durationInSeconds)
+        if (isDefined(props.warpMarkers)) {
+            AudioContentHelpers.addWarpMarkers(boxGraph, playMode, props.warpMarkers)
+        } else {
+            AudioContentHelpers.addDefaultWarpMarkers(boxGraph, playMode, durationInPPQN, durationInSeconds)
+        }
         const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
         return AudioClipBox.create(boxGraph, UUID.generate(), box => {
             box.duration.setValue(durationInPPQN)
