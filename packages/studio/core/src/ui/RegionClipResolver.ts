@@ -188,16 +188,16 @@ export class RegionClipResolver {
                     case "start":
                         if (UnionAdapterTypes.isLoopableRegion(region)) {
                             const delta = task.position - region.position
-                            region.box.position.setValue(region.position + delta)
-                            region.box.duration.setValue(region.duration - delta)
-                            region.box.loopOffset.setValue(mod(region.loopOffset + delta, region.loopDuration))
+                            region.position = region.position + delta
+                            region.duration = region.duration - delta
+                            region.loopOffset = mod(region.loopOffset + delta, region.loopDuration)
                         } else {
                             return panic("Not yet implemented")
                         }
                         break
                     case "complete":
                         if (UnionAdapterTypes.isLoopableRegion(region)) {
-                            region.box.duration.setValue(task.position - task.region.position)
+                            region.duration = task.position - task.region.position
                         } else {
                             return panic("Not yet implemented")
                         }
