@@ -152,7 +152,7 @@ export const renderRegions = (context: CanvasRenderingContext2D,
             if (isEditing) {
                 context.fillStyle = labelBackground
                 context.fillRect(x1Int - dpr, labelHeight, dpr, height - labelHeight)
-                context.fillRect(x0Int, labelHeight, 1, height - labelHeight)
+                context.fillRect(x0Int, labelHeight, dpr, height - labelHeight)
                 context.fillRect(x0Int, height - dpr, xnInt, height - dpr)
             }
         }
