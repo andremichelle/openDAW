@@ -100,10 +100,6 @@ Huge thanks to our [ambassadors](https://opendaw.org/ambassadors), whose dedicat
 - fork-kun
 - Martin Eigel
 
-### openDAW Custom Pledge
-
-- lokomotywa ($2.47)
-
 ---
 
 ### openDAW Devices
@@ -268,6 +264,7 @@ participate, visit our [Contribute](https://opendaw.org/contribute) page.
   from [Noun Project](https://thenounproject.com/browse/icons/term/compress/) (CC BY 3.0)
 * "Waveforms" by [Austin Andrews](https://github.com/Templarian/MaterialDesign)
 * "futurism" by Martin Königsmann from [Noun Project](https://thenounproject.com/icon/futurism-4565401/)
+* "tape reel" by Evgeny Filatov from [thenounproject](https://thenounproject.com/icon/tape-reel-2216293/)
 
 ## Dual-Licensing Model
 
