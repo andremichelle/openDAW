@@ -65,6 +65,7 @@ import {AudioUnitType} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
 import {Mixdowns} from "@/service/Mixdowns"
+import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 
 /**
  * I am just piling stuff after stuff in here to boot the environment.
@@ -331,6 +332,7 @@ export class StudioService implements ProjectEnv {
                 const loopEnabled = timelineBox.loopArea.enabled
                 loopState.setValue(loopEnabled.getValue())
                 range.showUnitInterval(0, PPQN.fromSignature(16, 1))
+                lifeTime.own(ShadertoyState.initialize(project))
 
                 // -------------------------------
                 // Show views if content available

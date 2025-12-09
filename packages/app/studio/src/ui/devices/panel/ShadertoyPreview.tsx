@@ -60,7 +60,7 @@ export const ShadertoyPreview = ({lifecycle, service}: Construct) => {
                                                 return
                                             }
                                             element.removeAttribute("data-status")
-                                            shaderLifecycle.ownAll(setupShadertoyRunner(runner, canvas, service, highres))
+                                            shaderLifecycle.ownAll(setupShadertoyRunner(runner, canvas, highres))
                                         })
                                     }
                                 })

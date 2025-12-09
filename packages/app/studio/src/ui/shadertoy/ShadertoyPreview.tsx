@@ -24,7 +24,8 @@ export const ShadertoyPreview = ({lifecycle, service}: Construct) => {
                 Write GLSL shaders to create visuals for your music. The editor supports <a
                 href="https://shadertoy.com/" target="shadertoy">Shadertoy</a> compatible syntax.<br/>
                 MIDI data is passed to the shader if you route a MIDI output to the <span
-                style={{color: Colors.cream.toString()}}>Shadertoy</span> MIDI device. Read the <LocalLink href="/manuals/shadertoy">manual</LocalLink>.
+                style={{color: Colors.cream.toString()}}>Shadertoy</span> MIDI device. Read the <LocalLink
+                href="/manuals/shadertoy">manual</LocalLink>.
             </p>
             <div className="canvas-wrapper">
                 <canvas onInit={canvas => {
@@ -55,7 +56,7 @@ export const ShadertoyPreview = ({lifecycle, service}: Construct) => {
                                             return
                                         }
                                         output.textContent = "Running"
-                                        shaderLifecycle.own(setupShadertoyRunner(runner, canvas, service, highres))
+                                        shaderLifecycle.own(setupShadertoyRunner(runner, canvas, highres))
                                     })
                                 }
                             })
