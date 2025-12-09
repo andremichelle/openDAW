@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/studio-scripting",
-    "version": "0.0.9",
+    "version": "0.0.10",
     "license": "LGPL-3.0-or-later",
     "type": "module",
     "publishConfig": {
@@ -34,7 +34,7 @@
         "@opendaw/lib-dsp": "^0.0.53",
         "@opendaw/lib-runtime": "^0.0.53",
         "@opendaw/lib-std": "^0.0.53",
-        "@opendaw/studio-adapters": "^0.0.56",
+        "@opendaw/studio-adapters": "^0.0.57",
         "@opendaw/studio-boxes": "^0.0.54",
         "@opendaw/studio-enums": "^0.0.45"
     },
