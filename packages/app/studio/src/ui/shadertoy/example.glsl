@@ -13,7 +13,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec3 blue = vec3(0.46, 0.72, 1.0);
 
     // Striped background
-    float stripe = fract((uv.x + uv.y * 0.25) * 30.0);
+    float stripe = fract((uv.x + uv.y * 0.25) * 30.0 + iBeat);
     vec3 col = stripe < 0.5 ? vec3(0.04) : vec3(0.08);
 
     // Waveform (top: 0.78 - 0.98)
