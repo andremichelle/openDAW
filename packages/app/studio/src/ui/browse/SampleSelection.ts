@@ -25,7 +25,8 @@ export class SampleSelection {
             samples.forEach(sample => {
                 const {uuid: uuidAsString, name, duration: durationInSeconds, bpm} = sample
                 const uuid = UUID.parse(uuidAsString)
-                const {trackBox} = project.api.createInstrument(InstrumentFactories.Tape)
+                const {trackBox, instrumentBox} = project.api.createInstrument(InstrumentFactories.Tape)
+                instrumentBox.label.setValue(name)
                 const audioFileBox = boxGraph.findBox<AudioFileBox>(uuid)
                     .unwrapOrElse(() => AudioFileBox.create(boxGraph, uuid, box => {
                         box.fileName.setValue(name)
