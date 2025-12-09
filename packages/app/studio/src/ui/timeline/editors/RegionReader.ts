@@ -14,7 +14,7 @@ import {
     NoteEventOwnerReader,
     ValueEventOwnerReader
 } from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {ppqn} from "@opendaw/lib-dsp"
+import {PPQN, ppqn} from "@opendaw/lib-dsp"
 import {mod, Observer, Option, Subscription} from "@opendaw/lib-std"
 import {Propagation} from "@opendaw/lib-box"
 import {TimelineRange} from "@opendaw/studio-core"
@@ -45,7 +45,7 @@ export class RegionReader<REGION extends LoopableRegionBoxAdapter<CONTENT>, CONT
     get loopOffset(): number {return this.region.loopOffset}
     get loopDuration(): number {return this.region.loopDuration}
     get contentDuration(): ppqn {return this.region.loopDuration}
-    set contentDuration(value: ppqn) {this.region.box.loopDuration.setValue(value)}
+    set contentDuration(value: ppqn) {this.region.box.loopDuration.setValue(Math.max(PPQN.Quarter, value))}
     get hue(): number {return this.region.hue}
     get mute(): boolean {return this.region.mute}
     get offset(): number {return this.region.offset}

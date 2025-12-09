@@ -11,6 +11,9 @@ import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {installEditorMainBody} from "../EditorBody"
 import {Dragging, Html} from "@opendaw/lib-dom"
 import {WarpMarkerBoxAdapter} from "@opendaw/studio-adapters"
+import {createAudioCapturing} from "@/ui/timeline/editors/audio/AudioCapturing"
+import {installCursor} from "@/ui/hooks/cursor"
+import {Cursor} from "@/ui/Cursors"
 
 const className = Html.adoptStyleSheet(css, "AudioEditorCanvas")
 
@@ -27,6 +30,7 @@ export const AudioEditorCanvas = ({lifecycle, project: {editing}, range, snappin
     return (
         <div className={className}>
             <canvas tabIndex={-1} onInit={canvas => {
+                const capturing = createAudioCapturing(canvas, range, reader)
                 const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
                     const {context, actualHeight, devicePixelRatio} = painter
 
@@ -82,12 +86,30 @@ export const AudioEditorCanvas = ({lifecycle, project: {editing}, range, snappin
                 }
                 lifecycle.ownAll(
                     installEditorMainBody({element: canvas, range, reader}),
+                    installCursor(canvas, capturing, {
+                        get: (target) =>
+                            target?.type === "loop-duration" ? Cursor.ExpandWidth : null
+                    }),
                     reader.subscribeChange(painter.requestUpdate),
                     observableOptPlayMode.catchupAndSubscribe((optPlayMode) => {
                         playModeTerminator.terminate()
                         optPlayMode.ifSome(playMode => playModeTerminator.own(playMode.subscribe(painter.requestUpdate)))
                     }),
                     range.subscribe(painter.requestUpdate),
+                    Dragging.attach(canvas, event => {
+                        const target = capturing.captureEvent(event)
+                        if (target?.type !== "loop-duration") {return Option.None}
+                        const startPPQN = range.xToUnit(event.clientX)
+                        const beginPPQN = reader.loopDuration
+                        console.debug(startPPQN)
+                        return Option.wrap({
+                            update: (event: Dragging.Event) => {
+                                const delta = snapping.computeDelta(startPPQN, event.clientX, beginPPQN)
+                                editing.modify(() => reader.contentDuration = beginPPQN + delta)
+                            },
+                            approve: () => editing.mark()
+                        })
+                    }, {permanentUpdates: true}),
                     Dragging.attach(canvas, startEvent => {
                         const rect = canvas.getBoundingClientRect()
                         const startX = startEvent.clientX - rect.left
