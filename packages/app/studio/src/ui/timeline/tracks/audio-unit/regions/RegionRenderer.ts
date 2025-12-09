@@ -119,7 +119,7 @@ export const renderRegions = (context: CanvasRenderingContext2D,
                 visitValueRegionBoxAdapter: (region: ValueRegionBoxAdapter) => {
                     const padding = dpr
                     const top = labelHeight + padding
-                    const bottom = height - padding
+                    const bottom = height - padding * 2
                     context.save()
                     context.beginPath()
                     context.rect(x0Int + padding, top, x1Int - x0Int - padding, bottom - top + padding)
