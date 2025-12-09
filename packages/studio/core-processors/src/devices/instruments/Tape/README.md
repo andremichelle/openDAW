@@ -92,6 +92,36 @@ At each transient boundary on the timeline:
 - Position = 0 (start of file): NO fade-in
 - Position > 0: fade-in required (cutting into existing audio)
 
+### Rule 5b: Shifted Transient Boundaries (Early Fade-In)
+To preserve transient attacks, we **shift the trigger point earlier** by `VOICE_FADE_DURATION`:
+
+```
+Timeline (output time):
+
+Real transient:     |-------- actual attack --------|
+Shifted trigger:  |--fade--|-------- actual attack --------|
+                  ^         ^
+                  Start     Full amplitude
+                  voice     (fade complete = real transient)
+```
+
+**How it works**:
+1. Lookahead: Add `VOICE_FADE_DURATION` to the current file position when searching for transients
+2. When lookahead sees an upcoming transient, calculate where to start the voice:
+   - Convert `VOICE_FADE_DURATION` to PPQN at current BPM
+   - Subtract that from the transient's PPQN position
+   - Start the voice at this shifted position
+3. The voice fades in during those samples
+4. Fade completes exactly when the real transient occurs
+
+**Exception**: First transient (index 0) is NOT shifted - no fade-in needed at file start.
+
+**Why this is simpler than multi-block lookahead**:
+- No need to buffer or predict across multiple blocks
+- The sequencer still processes one block at a time
+- The "lookahead" is just a shifted search position, not actual future processing
+- Works correctly at any tempo because the shift is calculated in PPQN at current BPM
+
 ### Rule 6: No Clicks Ever
 - All transitions use crossfades
 - Discontinuities (seek, loop) fade out current voices first

@@ -325,7 +325,6 @@ describe("TimeStretchSequencer", () => {
                     sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
                 }
             }
-
             // At matching BPM, should maintain single voice throughout
             expect(sequencer.voiceCount).toBe(1)
         })
@@ -1438,6 +1437,243 @@ describe("TimeStretchSequencer", () => {
                 console.log(`AMPLITUDE SPIKE: Expected max ~0.50, got ${maxAmplitude.toFixed(4)} (voices not crossfading properly)`)
             }
             expect(maxAmplitude).toBeLessThanOrEqual(expectedMax)
+        })
+    })
+
+    // =========================================================================
+    // RULE 5b: Early Fade-In for Transient Preservation
+    // Voice should reach full amplitude exactly when transient occurs
+    // =========================================================================
+    describe("Rule 5b: Early Fade-In for Transient Preservation", () => {
+        it("should reach full amplitude at the transient, not after", () => {
+            // Use constant amplitude signal so we can measure fade progress
+            const sampleRate = 44100
+            const durationSeconds = 2.0
+            const numberOfFrames = Math.round(durationSeconds * sampleRate)
+            const frames = [new Float32Array(numberOfFrames), new Float32Array(numberOfFrames)]
+            for (let i = 0; i < numberOfFrames; i++) {
+                frames[0][i] = 1.0
+                frames[1][i] = 1.0
+            }
+            const data = {sampleRate, numberOfFrames, numberOfChannels: 2, frames}
+
+            // Transient at 0.5 seconds
+            const transients = createTransients([0, 0.5, 1.0])
+            const warpMarkers = createWarpMarkers([
+                {ppqn: 0, seconds: 0},
+                {ppqn: 1920, seconds: 1.0}  // 120 BPM sample
+            ])
+            // Force crossfade at transient boundaries by using faster BPM
+            const config = new TestTimeStretchConfig(warpMarkers, TransientPlayMode.Once, 1.0)
+
+            const sequencer = new TimeStretchSequencer()
+            const output = new AudioBuffer(2)
+
+            // At 180 BPM (1.5x faster than sample), we'll hit transient 0.5s
+            // sooner than the audio reaches that point, forcing a crossfade
+            const bpm = 180
+            const ppqnPerSecond = 960 * bpm / 60
+            const ppqnPerSample = ppqnPerSecond / sampleRate
+
+            const blockSize = 128
+            let currentPpqn = 0
+            let absoluteSample = 0
+
+            // Process until we're past the second transient (0.5s in file time)
+            // At 180 BPM, 0.5s file time = 0.5 * (180/120) = 0.333s wall time
+            const totalSamples = Math.round(sampleRate * 0.5)
+
+            // Track amplitude around the transient boundary
+            const amplitudesAroundTransient: {sample: number, amplitude: number}[] = []
+            let transientOccurred = false
+            let samplesAroundTransient = 0
+
+            // Calculate when transient 0.5s should occur in PPQN
+            // At 120 BPM sample: 0.5s = 960 PPQN
+            // We're playing at 180 BPM, so we reach 960 PPQN after 960/(180*960/60) = 0.333s
+            const transientPpqn = 960  // transient at 0.5s in 120 BPM = 960 PPQN
+
+            while (absoluteSample < totalSamples) {
+                output.clear()
+                const samplesToProcess = Math.min(blockSize, totalSamples - absoluteSample)
+                const ppqnToProcess = samplesToProcess * ppqnPerSample
+
+                const block = createBlock(
+                    currentPpqn, currentPpqn + ppqnToProcess,
+                    0, samplesToProcess, bpm
+                )
+                const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+
+                // Check if this block contains the transient
+                const blockContainsTransient = currentPpqn <= transientPpqn && currentPpqn + ppqnToProcess > transientPpqn
+                if (blockContainsTransient) {
+                    transientOccurred = true
+                }
+
+                // Record amplitudes around the transient
+                if (transientOccurred && samplesAroundTransient < sampleRate * 0.05) { // 50ms after transient
+                    const [outL] = output.channels()
+                    for (let i = 0; i < samplesToProcess; i++) {
+                        amplitudesAroundTransient.push({
+                            sample: absoluteSample + i,
+                            amplitude: outL[i]
+                        })
+                        samplesAroundTransient++
+                    }
+                }
+
+                absoluteSample += samplesToProcess
+                currentPpqn += ppqnToProcess
+            }
+
+            expect(transientOccurred).toBe(true)
+            expect(amplitudesAroundTransient.length).toBeGreaterThan(0)
+
+            // The NEW voice should be at full amplitude (1.0) right when the transient occurs
+            // Not ramping up from 0 during the transient
+            // Check the first few samples after transient - they should be close to 1.0
+            const firstSamples = amplitudesAroundTransient.slice(0, 10)
+            const avgAmplitude = firstSamples.reduce((sum, s) => sum + s.amplitude, 0) / firstSamples.length
+
+            console.log(`First 10 samples after transient: avg amplitude = ${avgAmplitude.toFixed(3)}`)
+            console.log(`Sample amplitudes: ${firstSamples.map(s => s.amplitude.toFixed(2)).join(', ')}`)
+
+            // With early fade-in, amplitude should be close to 1.0 at transient
+            // (allowing for crossfade overlap where outgoing + incoming ≈ 1.0)
+            expect(avgAmplitude).toBeGreaterThan(0.9)
+        })
+
+        it("should start fade-in BEFORE the transient so it completes at the transient", () => {
+            // Test that the new voice reaches full amplitude exactly when transient hits
+            // Use distinct audio content for each segment to identify which voice is active
+            const sampleRate = 44100
+            const durationSeconds = 2.0
+            const numberOfFrames = Math.round(durationSeconds * sampleRate)
+            const frames = [new Float32Array(numberOfFrames), new Float32Array(numberOfFrames)]
+
+            // Segment 1 (0-0.5s): value = 0.3
+            // Segment 2 (0.5-1.0s): value = 0.7
+            const transientAtSamples = 0.5 * sampleRate
+            for (let i = 0; i < numberOfFrames; i++) {
+                const value = i < transientAtSamples ? 0.3 : 0.7
+                frames[0][i] = value
+                frames[1][i] = value
+            }
+            const data = {sampleRate, numberOfFrames, numberOfChannels: 2, frames}
+
+            const transients = createTransients([0, 0.5, 1.0])
+            const warpMarkers = createWarpMarkers([
+                {ppqn: 0, seconds: 0},
+                {ppqn: 1920, seconds: 1.0}
+            ])
+            // Use Once mode to avoid looping complexity
+            const config = new TestTimeStretchConfig(warpMarkers, TransientPlayMode.Once, 1.0)
+
+            const sequencer = new TimeStretchSequencer()
+            const output = new AudioBuffer(2)
+
+            // At 180 BPM (1.5x faster), we hit transients before audio naturally reaches them
+            const bpm = 180
+            const ppqnPerSecond = 960 * bpm / 60
+            const ppqnPerSample = ppqnPerSecond / sampleRate
+            const fadeLengthSamples = Math.round(0.020 * sampleRate) // 882 samples
+
+            const blockSize = 128
+            let currentPpqn = 0
+            let absoluteSample = 0
+
+            // Process past the second transient
+            const totalSamples = Math.round(sampleRate * 0.5)
+
+            // Track output right around the transient
+            const transientPpqn = 960
+            const transientSample = Math.round(transientPpqn / ppqnPerSample) // ~14700 samples
+
+            // Record samples around transient boundary
+            const samplesAroundTransient: {sample: number, value: number, ppqn: number}[] = []
+
+            while (absoluteSample < totalSamples) {
+                output.clear()
+                const samplesToProcess = Math.min(blockSize, totalSamples - absoluteSample)
+                const ppqnToProcess = samplesToProcess * ppqnPerSample
+
+                const block = createBlock(
+                    currentPpqn, currentPpqn + ppqnToProcess,
+                    0, samplesToProcess, bpm
+                )
+                const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
+
+                const voicesBefore = sequencer.voiceCount
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                const voicesAfter = sequencer.voiceCount
+
+                // Debug around crossfade region
+                if (currentPpqn > 850 && currentPpqn < 1000 && (voicesBefore !== voicesAfter || voicesAfter > 1)) {
+                    console.log(`Block PPQN ${currentPpqn.toFixed(0)}-${(currentPpqn + ppqnToProcess).toFixed(0)}: voices ${voicesBefore} -> ${voicesAfter}`)
+                }
+
+                // Record samples in the vicinity of transient
+                const [outL] = output.channels()
+                for (let i = 0; i < samplesToProcess; i++) {
+                    const sampleNum = absoluteSample + i
+                    const samplePpqn = currentPpqn + (i * ppqnPerSample)
+                    // Record samples from 30ms before to 30ms after transient
+                    if (Math.abs(sampleNum - transientSample) < sampleRate * 0.030) {
+                        samplesAroundTransient.push({
+                            sample: sampleNum,
+                            value: outL[i],
+                            ppqn: samplePpqn
+                        })
+                    }
+                }
+
+                absoluteSample += samplesToProcess
+                currentPpqn += ppqnToProcess
+            }
+
+            // Find the sample exactly at transient (closest to transientPpqn)
+            const atTransient = samplesAroundTransient.find(s => s.ppqn >= transientPpqn)
+
+            // With proper early fade-in:
+            // - New voice (segment 2, value=0.7) should be at FULL AMPLITUDE (gain=1.0) at transient
+            // - Old voice (segment 1, value=0.3) should have FADED OUT completely by transient
+            // - Output at transient = 0.7 × 1.0 = 0.7 (new segment at full amplitude)
+            // - The transient attack is fully preserved without any fade-in softening
+            //
+            // Without early fade-in (broken behavior):
+            // - New voice starts fade-in AT the transient (gain ramping from 0)
+            // - Old voice starts fade-out AT the transient (gain ramping to 0)
+            // - Output at transient is crossfade mix: 0.3 × 0.5 + 0.7 × 0.5 = 0.5
+            // - The transient attack is softened by the fade-in ramp
+
+            // Debug: print samples around crossfade
+            const beforeTransient = samplesAroundTransient.filter(s => s.ppqn < transientPpqn - 50)
+            if (beforeTransient.length > 5) {
+                const last5Before = beforeTransient.slice(-5)
+                console.log(`5 samples before crossfade region: ${last5Before.map(s => `${s.value.toFixed(2)}@${s.ppqn.toFixed(0)}`).join(', ')}`)
+            }
+            const duringCrossfade = samplesAroundTransient.filter(s => s.ppqn >= transientPpqn - 50 && s.ppqn < transientPpqn)
+            if (duringCrossfade.length > 0) {
+                console.log(`During expected crossfade (${duringCrossfade.length} samples): first=${duringCrossfade[0]?.value.toFixed(3)}, last=${duringCrossfade[duringCrossfade.length-1]?.value.toFixed(3)}`)
+            }
+
+            if (atTransient) {
+                console.log(`At transient (PPQN ${atTransient.ppqn.toFixed(2)}): value = ${atTransient.value.toFixed(3)}`)
+
+                // With early fade-in, value should be exactly 0.7 (new segment at full amplitude)
+                // This proves the entire transient attack is preserved
+                // If value is around 0.5, it means crossfade is happening AT the transient (broken)
+                expect(atTransient.value).toBeGreaterThan(0.6) // Should be close to 0.7
+            }
+
+            // Also check a few samples after transient - should be solidly at 0.7
+            const afterTransient = samplesAroundTransient.filter(s => s.ppqn > transientPpqn + 100)
+            if (afterTransient.length > 0) {
+                const avgAfter = afterTransient.slice(0, 10).reduce((sum, s) => sum + s.value, 0) / 10
+                console.log(`Average after transient: ${avgAfter.toFixed(3)}`)
+                expect(avgAfter).toBeGreaterThan(0.65)
+            }
         })
     })
 

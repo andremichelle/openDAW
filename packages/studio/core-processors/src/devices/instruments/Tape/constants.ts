@@ -1,4 +1,4 @@
-export const VOICE_FADE_DURATION: number = 0.005
-export const LOOP_FADE_DURATION: number = 0.005
+export const VOICE_FADE_DURATION: number = 0.015
+export const LOOP_FADE_DURATION: number = 0.010
 export const LOOP_MARGIN_START: number = 0.010
-export const LOOP_MARGIN_END: number = 0.006
+export const LOOP_MARGIN_END: number = 0.003
