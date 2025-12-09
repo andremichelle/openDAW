@@ -138,6 +138,12 @@ export class ProjectMigration {
                     box.events.refer(ValueEventCollectionBox.create(boxGraph, UUID.generate()).owners)
                     boxGraph.endTransaction()
                 }
+                if (isIntEncodedAsFloat(box.duration.getValue())) {
+                    console.debug("Migrate 'AudioClipBox' to float")
+                    boxGraph.beginTransaction()
+                    box.duration.setValue(Float.floatToIntBits(box.duration.getValue()))
+                    boxGraph.endTransaction()
+                }
                 if (box.playback.getValue() === AudioPlayback.Pitch) {
                     console.debug("Migrate 'AudioClipBox' to new PitchStretchBox")
                     boxGraph.beginTransaction()

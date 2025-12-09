@@ -14,12 +14,22 @@ export class ClipSampleDragAndDrop extends TimelineDragAndDrop<ClipCaptureTarget
         const x = event.clientX - this.capturing.element.getBoundingClientRect().left
         const index = Math.floor(x / ClipWidth)
         const {boxGraph} = this.project
-        AudioContentFactory.createTimeStretchedClip({
-            boxGraph,
-            targetTrack: trackBoxAdapter.box,
-            sample,
-            audioFileBox,
-            index
-        })
+        if (sample.bpm === 0) {
+            AudioContentFactory.createNotStretchedClip({
+                boxGraph,
+                targetTrack: trackBoxAdapter.box,
+                sample,
+                audioFileBox,
+                index
+            })
+        } else {
+            AudioContentFactory.createTimeStretchedClip({
+                boxGraph,
+                targetTrack: trackBoxAdapter.box,
+                sample,
+                audioFileBox,
+                index
+            })
+        }
     }
 }

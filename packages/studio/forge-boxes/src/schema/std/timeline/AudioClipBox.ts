@@ -17,7 +17,7 @@ export const AudioClipBox: BoxSchema<Pointers> = {
             6: {type: "pointer", name: "warping", pointerType: Pointers.Deprecated, mandatory: false, deprecated},
             7: {type: "float32", name: "waveform-offset", constraints: "any", unit: "seconds"},
             8: {type: "pointer", name: "play-mode", pointerType: Pointers.AudioPlayMode, mandatory: false},
-            10: {type: "int32", name: "duration", constraints: "any", unit: "ppqn"},
+            10: {type: "float32", name: "duration", constraints: "any", unit: "ppqn"},
             11: {type: "boolean", name: "mute"},
             12: {type: "string", name: "label"},
             13: {type: "int32", name: "hue", ...HueConstraints},

@@ -90,6 +90,7 @@ export namespace AudioContentFactory {
         const {boxGraph, targetTrack, index, audioFileBox, sample: {name, duration: durationInSeconds}} = props
         const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
         return AudioClipBox.create(boxGraph, UUID.generate(), box => {
+            box.timeBase.setValue(TimeBase.Seconds)
             box.duration.setValue(durationInSeconds)
             box.clips.refer(targetTrack.clips)
             box.hue.setValue(ColorCodes.forTrackType(targetTrack.type.getValue()))
@@ -97,7 +98,6 @@ export namespace AudioContentFactory {
             box.label.setValue(name)
             box.file.refer(audioFileBox)
             box.events.refer(collectionBox.owners)
-            box.timeBase.setValue(TimeBase.Seconds)
             box.index.setValue(index)
         })
     }

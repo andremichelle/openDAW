@@ -24,15 +24,25 @@ export class RegionSampleDragAndDrop extends TimelineDragAndDrop<RegionCaptureTa
         const duration = quantizeRound(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
         const solver = RegionClipResolver.fromRange(trackBoxAdapter, pointerPulse, pointerPulse + duration)
         const boxGraph = this.project.boxGraph
-        AudioContentFactory.createTimeStretchedRegion({
-            boxGraph,
-            targetTrack: trackBoxAdapter.box,
-            audioFileBox,
-            sample,
-            position: pointerPulse,
-            playbackRate: 1.0,
-            transientPlayMode: TransientPlayMode.Pingpong
-        })
+        if (sample.bpm === 0) {
+            AudioContentFactory.createNotStretchedRegion({
+                boxGraph,
+                targetTrack: trackBoxAdapter.box,
+                audioFileBox,
+                sample,
+                position: pointerPulse
+            })
+        } else {
+            AudioContentFactory.createTimeStretchedRegion({
+                boxGraph,
+                targetTrack: trackBoxAdapter.box,
+                audioFileBox,
+                sample,
+                position: pointerPulse,
+                playbackRate: 1.0,
+                transientPlayMode: TransientPlayMode.Pingpong
+            })
+        }
         solver()
     }
 }
