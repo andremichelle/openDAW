@@ -100,6 +100,7 @@ export class AudioClipBoxAdapter implements AudioContentBoxAdapter, ClipBoxAdapt
 
     consolidate(): void {}
     clone(_mirrored: boolean): void {
+        const clonedPlayMode = this.observableOptPlayMode.map(mode => mode.clone())
         AudioClipBox.create(this.#context.boxGraph, UUID.generate(), box => {
             box.index.setValue(this.indexField.getValue())
             box.gain.setValue(this.gain.getValue())
@@ -111,7 +112,7 @@ export class AudioClipBoxAdapter implements AudioContentBoxAdapter, ClipBoxAdapt
             box.clips.refer(this.#box.clips.targetVertex.unwrap())
             box.file.refer(this.#box.file.targetVertex.unwrap())
             box.events.refer(this.#box.events.targetVertex.unwrap())
-            this.#box.playMode.ifVertex(vertex => box.playMode.refer(vertex.box))
+            clonedPlayMode.ifSome(mode => box.playMode.refer(mode))
         })
     }
 

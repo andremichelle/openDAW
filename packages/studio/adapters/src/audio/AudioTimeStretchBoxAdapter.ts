@@ -4,7 +4,7 @@ import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {BoxAdapter} from "../BoxAdapter"
 import {EventCollection} from "@opendaw/lib-dsp"
 import {WarpMarkerBoxAdapter} from "./WarpMarkerBoxAdapter"
-import {AudioTimeStretchBox} from "@opendaw/studio-boxes"
+import {AudioTimeStretchBox, WarpMarkerBox} from "@opendaw/studio-boxes"
 import {MarkerComparator} from "./MarkerComparator"
 import {TransientPlayMode} from "@opendaw/studio-enums"
 
@@ -51,6 +51,20 @@ export class AudioTimeStretchBoxAdapter implements BoxAdapter {
     set cents(value: number) {this.#box.playbackRate.setValue(clamp(2.0 ** (value / 1200.0), 0.5, 2.0))}
     get transientPlayMode(): TransientPlayMode {
         return asEnumValue(this.#box.transientPlayMode.getValue(), TransientPlayMode)
+    }
+
+    clone(): AudioTimeStretchBox {
+        const stretchBox = AudioTimeStretchBox.create(this.#box.graph, UUID.generate(), box => {
+            box.transientPlayMode.setValue(this.transientPlayMode)
+            box.playbackRate.setValue(this.playbackRate)
+            box.warpMarkers
+        })
+        this.warpMarkers.asArray().forEach(marker => WarpMarkerBox.create(stretchBox.graph, UUID.generate(), box => {
+            box.position.setValue(marker.position)
+            box.seconds.setValue(marker.seconds)
+            box.owner.refer(stretchBox.warpMarkers)
+        }))
+        return stretchBox
     }
 
     subscribe(observer: Observer<void>): Subscription {return this.#notifer.subscribe(observer)}

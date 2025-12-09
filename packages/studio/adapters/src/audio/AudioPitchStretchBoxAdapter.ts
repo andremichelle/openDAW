@@ -4,7 +4,7 @@ import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {BoxAdapter} from "../BoxAdapter"
 import {EventCollection} from "@opendaw/lib-dsp"
 import {WarpMarkerBoxAdapter} from "./WarpMarkerBoxAdapter"
-import {AudioPitchStretchBox} from "@opendaw/studio-boxes"
+import {AudioPitchStretchBox, WarpMarkerBox} from "@opendaw/studio-boxes"
 import {MarkerComparator} from "./MarkerComparator"
 
 export class AudioPitchStretchBoxAdapter implements BoxAdapter {
@@ -45,6 +45,16 @@ export class AudioPitchStretchBoxAdapter implements BoxAdapter {
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get warpMarkers(): EventCollection<WarpMarkerBoxAdapter> {return this.#warpMarkers}
+
+    clone(): AudioPitchStretchBox {
+        const stretchBox = AudioPitchStretchBox.create(this.#box.graph, UUID.generate())
+        this.warpMarkers.asArray().forEach(marker => WarpMarkerBox.create(stretchBox.graph, UUID.generate(), box => {
+            box.position.setValue(marker.position)
+            box.seconds.setValue(marker.seconds)
+            box.owner.refer(stretchBox.warpMarkers)
+        }))
+        return stretchBox
+    }
 
     subscribe(observer: Observer<void>): Subscription {return this.#notifer.subscribe(observer)}
     onChanged(): void {this.#notifer.notify()}

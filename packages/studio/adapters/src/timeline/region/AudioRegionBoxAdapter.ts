@@ -205,6 +205,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
         const eventTarget = params?.consolidate === true
             ? eventCollection.copy().box.owners
             : eventCollection.box.owners
+        const clonedPlayMode = this.observableOptPlayMode.map(mode => mode.clone())
         const adapter = this.#context.boxAdapters.adapterFor(
             AudioRegionBox.create(this.#context.boxGraph, UUID.generate(), box => {
                 box.timeBase.setValue(this.#box.timeBase.getValue())
@@ -217,7 +218,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
                 box.label.setValue(this.label)
                 box.gain.setValue(this.gain.getValue())
                 box.waveformOffset.setValue(this.waveformOffset.getValue())
-                this.#box.playMode.ifVertex(vertex => box.playMode.refer(vertex.box))
+                clonedPlayMode.ifSome(mode => box.playMode.refer(mode))
             }), AudioRegionBoxAdapter)
         adapter.duration = params?.duration ?? this.duration
         adapter.loopOffset = params?.loopOffset ?? this.loopOffset
