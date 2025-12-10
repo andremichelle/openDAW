@@ -73,10 +73,15 @@ RewriteRule ^(.*)$ ${mainReleaseDir}/$1 [L]
     console.log("extracting on server via PHP...")
     const extractUrl = `https://${domain}/extract.php?file=${encodeURIComponent(remoteTarball)}`
     const extractResponse = await fetch(extractUrl)
+    const extractText = await extractResponse.text()
+    console.log(extractText)
     if (!extractResponse.ok) {
-        throw new Error(`Extraction failed: ${extractResponse.status} - ${await extractResponse.text()}`)
+        throw new Error(`Extraction failed: ${extractResponse.status} - ${extractText}`)
     }
-    console.log(await extractResponse.text())
+    // Verify extraction was fully successful (must start with ✅, not ⚠️)
+    if (!extractText.startsWith("✅")) {
+        throw new Error(`Extraction incomplete: ${extractText}`)
+    }
 
     // Clean up local tarball
     fs.unlinkSync(tarballPath)
