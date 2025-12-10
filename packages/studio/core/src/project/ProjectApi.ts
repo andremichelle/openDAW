@@ -6,6 +6,7 @@ import {
     clamp,
     float,
     int,
+    isAbsent,
     isDefined,
     isInstanceOf,
     Observer,
@@ -212,6 +213,10 @@ export class ProjectApi {
 
     quantiseNotes(collection: NoteEventCollectionBox,
                   {positionQuantisation, durationQuantisation}: QuantiseNotesOptions): void {
+        if (isAbsent(positionQuantisation) && isAbsent(durationQuantisation)) {
+            console.warn("Nothing to quantise: both quantisation parameters are absent")
+            return
+        }
         collection.events.pointerHub.incoming().forEach(({box}) => {
             const event = asInstanceOf(box, NoteEventBox)
             let position = event.position.getValue()
@@ -220,11 +225,9 @@ export class ProjectApi {
                 position = quantizeRound(position, positionQuantisation)
             }
             if (isDefined(durationQuantisation)) {
-                duration = quantizeRound(duration, durationQuantisation)
+                duration = Math.max(quantizeRound(duration, durationQuantisation), durationQuantisation)
             }
-            position = Math.max(position, 0)
-            duration = Math.max(duration, durationQuantisation ?? PPQN.SemiQuaver)
-            event.position.setValue(position)
+            event.position.setValue(Math.max(position, 0))
             event.duration.setValue(duration)
         })
     }
