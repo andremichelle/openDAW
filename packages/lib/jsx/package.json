@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/lib-jsx",
-    "version": "0.0.58",
+    "version": "0.0.59",
     "license": "LGPL-3.0-or-later",
     "sideEffects": false,
     "main": "./dist/index.js",
@@ -23,12 +23,12 @@
         "test": "echo \"No tests to run\""
     },
     "dependencies": {
-        "@opendaw/lib-dom": "^0.0.58",
-        "@opendaw/lib-std": "^0.0.57"
+        "@opendaw/lib-dom": "^0.0.59",
+        "@opendaw/lib-std": "^0.0.58"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.24",
-        "@opendaw/typescript-config": "^0.0.24"
+        "@opendaw/eslint-config": "^0.0.25",
+        "@opendaw/typescript-config": "^0.0.25"
     },
-    "gitHead": "f5748f1fd8e74ab3cc45dc26d8825cb30f841e08"
+    "gitHead": "e74baa11e42c9b30434c0777d8f28f64ead59d66"
 }
