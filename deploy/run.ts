@@ -79,7 +79,7 @@ RewriteRule ^(.*)$ ${mainReleaseDir}/$1 [L]
         throw new Error(`Extraction failed: ${extractResponse.status} - ${extractText}`)
     }
     // Verify extraction was fully successful (must start with ✅, not ⚠️)
-    if (!extractText.startsWith("✅")) {
+    if (!extractText.trim().startsWith("✅")) {
         throw new Error(`Extraction incomplete: ${extractText}`)
     }
 
