@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/studio-adapters",
-    "version": "0.0.60",
+    "version": "0.0.61",
     "license": "LGPL-3.0-or-later",
     "publishConfig": {
         "access": "public"
