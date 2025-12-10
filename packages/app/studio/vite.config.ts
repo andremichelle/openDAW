@@ -14,7 +14,15 @@ export default defineConfig(({command}) => {
     const date = Date.now()
     const certsExist = existsSync(resolve(__dirname, "../../../certs/localhost-key.pem"))
 
+    // Determine base path for production CI builds
+    const isCI = process.env.CI === "true"
+    const branchName = process.env.BRANCH_NAME || "main"
+    const isMainBranch = branchName === "main"
+    const envFolder = isMainBranch ? "main" : "dev"
+    const base = (command === "build" && isCI) ? `/${envFolder}/releases/${uuid}/` : "/"
+
     return {
+        base,
         resolve: {
             alias: {
                 "@": resolve(__dirname, "./src")

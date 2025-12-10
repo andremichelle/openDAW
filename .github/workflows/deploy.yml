@@ -26,6 +26,9 @@ jobs:
 
       - name: 🏗️ Build project
         shell: bash
+        env:
+          CI: true
+          BRANCH_NAME: ${{ github.ref_name }}
         run: |
           npm run build
 

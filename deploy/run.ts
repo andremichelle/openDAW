@@ -33,7 +33,12 @@ RewriteBase /
 # Allow extract.php to execute (don't redirect it)
 RewriteRule ^extract\\.php$ - [L]
 
-# Route based on hostname
+# Pass through requests that already target a release folder
+# This allows existing sessions to continue fetching from their version
+RewriteCond %{REQUEST_URI} ^/(main|dev)/releases/ [NC]
+RewriteRule ^ - [L]
+
+# Route entry points based on hostname (only non-release paths reach here)
 RewriteCond %{HTTP_HOST} ^dev\\.opendaw\\.studio$ [NC]
 RewriteRule ^(.*)$ ${devReleaseDir}/$1 [L]
 
