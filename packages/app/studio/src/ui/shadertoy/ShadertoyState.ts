@@ -49,7 +49,7 @@ export class ShadertoyState {
     setWaveform(data: Float32Array): void {
         const length = Math.min(data.length, 512)
         for (let i = 0; i < length; i++) {
-            this.#audioData[512 + i] = Math.floor(128.0 * (1.0 + clamp(data[i], -1.0, 1.0)))
+            this.#audioData[512 + i] = Math.round((clamp(data[i], -1.0, 1.0) + 1.0) * 127.5)
         }
     }
 
