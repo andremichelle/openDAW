@@ -111,7 +111,6 @@ export class StudioService implements ProjectEnv {
     readonly #projectProfileService: ProjectProfileService
     readonly #sampleService: SampleService
     readonly #soundfontService: SoundfontService
-    readonly #dawProjectService: DawProjectService
 
     #factoryFooterLabel: Option<Provider<FooterLabel>> = Option.None
 
@@ -127,7 +126,6 @@ export class StudioService implements ProjectEnv {
         this.#soundfontService = new SoundfontService(
             soundfont => this.#signals.notify({type: "import-soundfont", soundfont}))
         this.samplePlayback = new SamplePlayback()
-        this.#dawProjectService = new DawProjectService(this.#sampleService)
         this.#projectProfileService = new ProjectProfileService({
             env: this,
             sampleService: this.#sampleService, sampleManager: this.sampleManager,
@@ -233,13 +231,13 @@ export class StudioService implements ProjectEnv {
     }
 
     async importDawproject() {
-        (await this.#dawProjectService.importDawproject())
+        (await DawProjectService.importDawproject(this.sampleService))
             .ifSome(skeleton => this.#projectProfileService
                 .setProject(Project.fromSkeleton(this, skeleton), "Dawproject"))
     }
 
     async exportDawproject() {
-        return this.#projectProfileService.getValue().ifSome(profile => this.#dawProjectService.exportDawproject(profile))
+        return this.#projectProfileService.getValue().ifSome(profile => DawProjectService.exportDawproject(profile))
     }
 
     async importPreset() {

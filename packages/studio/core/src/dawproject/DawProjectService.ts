@@ -11,9 +11,7 @@ import {ProjectProfile} from "../project"
 import {SampleService} from "../samples"
 
 export class DawProjectService {
-    constructor(readonly sampleService: SampleService) {}
-
-    async importDawproject(): Promise<Option<ProjectSkeleton>> {
+    static async importDawproject(sampleService: SampleService): Promise<Option<ProjectSkeleton>> {
         const {status, value, error} =
             await Promises.tryCatch(Files.open({types: [FilePickerAcceptTypes.DawprojectFileType]}))
         if (status === "rejected") {
@@ -32,7 +30,7 @@ export class DawProjectService {
         const {skeleton, audioIds} = importResult.value
         await Promise.all(audioIds
             .map(uuid => resources.fromUUID(uuid))
-            .map(resource => this.sampleService.importFile({
+            .map(resource => sampleService.importFile({
                 uuid: resource.uuid,
                 name: resource.name,
                 arrayBuffer: resource.buffer
@@ -40,7 +38,7 @@ export class DawProjectService {
         return Option.wrap(skeleton)
     }
 
-    async exportDawproject(profile: ProjectProfile): Promise<void> {
+    static async exportDawproject(profile: ProjectProfile): Promise<void> {
         const dialog = RuntimeNotifier.progress({headline: "Exporting DawProject..."})
         const {project, meta} = profile
         const {status, error, value: zip} = await Promises.tryCatch(
