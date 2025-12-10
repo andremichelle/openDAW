@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.26](https://github.com/andremichelle/openDAW/compare/@opendaw/eslint-config@0.0.25...@opendaw/eslint-config@0.0.26) (2025-12-10)
+
+**Note:** Version bump only for package @opendaw/eslint-config
+
 ## [0.0.25](https://github.com/andremichelle/openDAW/compare/@opendaw/eslint-config@0.0.24...@opendaw/eslint-config@0.0.25) (2025-12-10)
 
 **Note:** Version bump only for package @opendaw/eslint-config
