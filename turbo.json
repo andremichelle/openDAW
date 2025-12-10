@@ -1,5 +1,9 @@
 {
   "$schema": "https://turborepo.com/schema.json",
+  "globalEnv": [
+    "CI",
+    "BRANCH_NAME"
+  ],
   "tasks": {
     "build": {
       "dependsOn": [
