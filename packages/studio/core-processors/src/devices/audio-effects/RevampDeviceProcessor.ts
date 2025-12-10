@@ -109,6 +109,7 @@ export class RevampDeviceProcessor extends AudioProcessor implements AudioEffect
             context.registerProcessor(this),
             context.broadcaster.broadcastFloats(adapter.spectrum, this.#spectrum, (hasSubscribers) => {
                 this.#needsSpectrum = hasSubscribers
+                if (!hasSubscribers) {return}
                 this.#spectrum.set(this.#audioAnalyser.bins())
                 this.#audioAnalyser.decay = true
             })
