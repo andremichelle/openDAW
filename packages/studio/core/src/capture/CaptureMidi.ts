@@ -19,7 +19,6 @@ import {MidiDevices} from "../midi"
 import {Capture} from "./Capture"
 import {CaptureDevices} from "./CaptureDevices"
 import {RecordMidi} from "./RecordMidi"
-import warn = Errors.warn
 
 export class CaptureMidi extends Capture<CaptureMidiBox> {
     readonly #streamGenerator: Func<void, Promise<void>>
@@ -101,7 +100,7 @@ export class CaptureMidi extends Capture<CaptureMidiBox> {
         if (option.nonEmpty()) {
             const deviceId = option.unwrap()
             if (isUndefined(inputs.find(device => deviceId === device.id))) {
-                return warn(`Could not find MIDI device with id: '${deviceId}'`)
+                return Errors.warn(`Could not find MIDI device with id: '${deviceId}'`)
             }
         }
     }

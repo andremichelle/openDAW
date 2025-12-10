@@ -16,10 +16,9 @@ export namespace RecordMidi {
     const MIN_NOTE_DURATION = PPQN.fromSignature(1, 128)
 
     export const start = ({notifier, project, capture}: RecordMidiContext): Terminable => {
-        console.debug("RecordMidi.start")
         const beats = PPQN.fromSignature(1, project.timelineBox.signature.denominator.getValue())
         const {editing, boxGraph, engine, env: {audioContext}, timelineBox: {bpm}} = project
-        const {position, isRecording} = engine
+        const {position} = engine
         const trackBox: TrackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Notes)
         const terminator = new Terminator()
         const activeNotes = new Map<byte, NoteEventBox>()
