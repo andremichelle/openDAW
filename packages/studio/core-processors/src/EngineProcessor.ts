@@ -181,12 +181,13 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#analyser = new AudioAnalyser()
         const spectrum = new Float32Array(this.#analyser.numBins())
         const waveform = new Float32Array(this.#analyser.numBins())
-        this.#terminator.own(this.#liveStreamBroadcaster.broadcastFloats(EngineAddresses.SPECTRUM, spectrum, () => {
-            spectrum.set(this.#analyser.bins())
-            this.#analyser.decay = true
-        }))
+        this.#terminator.own(this.#liveStreamBroadcaster.broadcastFloats(EngineAddresses.SPECTRUM, spectrum,
+            (_hasSubscribers) => {
+                spectrum.set(this.#analyser.bins())
+                this.#analyser.decay = true
+            }))
         this.#terminator.own(this.#liveStreamBroadcaster.broadcastFloats(EngineAddresses.WAVEFORM, waveform,
-            () => waveform.set(this.#analyser.waveform())))
+            (_hasSubscribers) => {waveform.set(this.#analyser.waveform())}))
         this.#clipSequencing = this.#terminator.own(new ClipSequencingAudioContext(this.#boxGraph))
         this.#terminator.ownAll(
             createSyncTarget(this.#boxGraph, this.#messenger.channel("engine-sync")),

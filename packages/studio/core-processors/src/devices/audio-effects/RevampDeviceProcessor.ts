@@ -1,10 +1,9 @@
 import {Arrays, int, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioBuffer, BiquadCoeff, BiquadMono, BiquadProcessor, BiquadStack} from "@opendaw/lib-dsp"
+import {AudioAnalyser, AudioBuffer, BiquadCoeff, BiquadMono, BiquadProcessor, BiquadStack} from "@opendaw/lib-dsp"
 import {AudioEffectDeviceAdapter, RevampDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {EngineContext} from "../../EngineContext"
 import {Block, Processor} from "../../processing"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
-import {AudioAnalyser} from "@opendaw/lib-dsp"
 import {AudioProcessor} from "../../AudioProcessor"
 import {AutomatableParameter} from "../../AutomatableParameter"
 import {AudioEffectDeviceProcessor} from "../../AudioEffectDeviceProcessor"
@@ -17,7 +16,7 @@ export class RevampDeviceProcessor extends AudioProcessor implements AudioEffect
     readonly #adapter: RevampDeviceBoxAdapter
     readonly #output: AudioBuffer
     readonly #peaks: PeakBroadcaster
-    readonly #spectrumAnalyser: AudioAnalyser
+    readonly #audioAnalyser: AudioAnalyser
     readonly #spectrum: Float32Array
 
     readonly #biquadCoeff: ReadonlyArray<BiquadCoeff>
@@ -53,6 +52,7 @@ export class RevampDeviceProcessor extends AudioProcessor implements AudioEffect
     readonly #parameterLowPassOrder: AutomatableParameter<number>
 
     #source: Option<AudioBuffer> = Option.None
+    #needsSpectrum: boolean = false
 
     constructor(context: EngineContext, adapter: RevampDeviceBoxAdapter) {
         super(context)
@@ -60,8 +60,8 @@ export class RevampDeviceProcessor extends AudioProcessor implements AudioEffect
         this.#adapter = adapter
         this.#output = new AudioBuffer()
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
-        this.#spectrumAnalyser = new AudioAnalyser()
-        this.#spectrum = new Float32Array(this.#spectrumAnalyser.numBins())
+        this.#audioAnalyser = new AudioAnalyser()
+        this.#spectrum = new Float32Array(this.#audioAnalyser.numBins())
 
         this.#biquadCoeff = Arrays.create(() => new BiquadCoeff(), 7)
         this.#biquadLowPassProcessors = [new BiquadStack(4), new BiquadStack(4)]
@@ -107,9 +107,10 @@ export class RevampDeviceProcessor extends AudioProcessor implements AudioEffect
 
         this.ownAll(
             context.registerProcessor(this),
-            context.broadcaster.broadcastFloats(adapter.spectrum, this.#spectrum, () => {
-                this.#spectrum.set(this.#spectrumAnalyser.bins())
-                this.#spectrumAnalyser.decay = true
+            context.broadcaster.broadcastFloats(adapter.spectrum, this.#spectrum, (hasSubscribers) => {
+                this.#needsSpectrum = hasSubscribers
+                this.#spectrum.set(this.#audioAnalyser.bins())
+                this.#audioAnalyser.decay = true
             })
         )
         this.readAllParameters()
@@ -159,7 +160,9 @@ export class RevampDeviceProcessor extends AudioProcessor implements AudioEffect
             }
         }
         this.#peaks.process(outL, outR, fromIndex, toIndex)
-        this.#spectrumAnalyser.process(outL, outR, fromIndex, toIndex)
+        if (this.#needsSpectrum) {
+            this.#audioAnalyser.process(outL, outR, fromIndex, toIndex)
+        }
     }
 
     parameterChanged(parameter: AutomatableParameter): void {

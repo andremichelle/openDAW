@@ -1,6 +1,6 @@
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {Address} from "@opendaw/lib-box"
-import {Bits, EmptyExec, int, Terminable, Terminator} from "@opendaw/lib-std"
+import {Bits, int, Terminable, Terminator} from "@opendaw/lib-std"
 
 export class NoteBroadcaster implements Terminable {
     readonly #terminator = new Terminator()
@@ -15,7 +15,7 @@ export class NoteBroadcaster implements Terminable {
 
         this.#bits = new Bits(128)
         this.#terminator.own(
-            this.#broadcaster.broadcastIntegers(this.#address, new Int32Array(this.#bits.buffer), EmptyExec)
+            this.#broadcaster.broadcastIntegers(this.#address, new Int32Array(this.#bits.buffer), (_hasSubscribers) => {})
         )
     }
 

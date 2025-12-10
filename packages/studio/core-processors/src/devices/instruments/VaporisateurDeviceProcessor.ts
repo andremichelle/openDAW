@@ -126,7 +126,8 @@ export class VaporisateurDeviceProcessor extends AudioProcessor
 
         const envValues = new Float32Array(32)
         this.ownAll(
-            context.broadcaster.broadcastFloats(adapter.address.append(0), envValues, () => {
+            context.broadcaster.broadcastFloats(adapter.address.append(0), envValues, (hasSubscribers) => {
+                if (!hasSubscribers) {return}
                 let index = 0
                 this.#voicing.strategy.processing().forEach(voice => {
                     const unisono = asInstanceOf(voice, VoiceUnison)

@@ -2,13 +2,12 @@ import {
     Arrays,
     assert,
     ByteArrayOutput,
-    Exec,
     float,
     int,
     nextPowOf2,
     Option,
+    Procedure,
     Provider,
-    safeExecute,
     Terminable
 } from "@opendaw/lib-std"
 import {Address} from "@opendaw/lib-box"
@@ -22,7 +21,7 @@ interface Package {
     readonly address: Address
     readonly type: PackageType
     readonly capacity: int
-    put(output: ByteArrayOutput): void
+    put(output: ByteArrayOutput, hasSubscribers: boolean): void
 }
 
 export class LiveStreamBroadcaster {
@@ -36,13 +35,15 @@ export class LiveStreamBroadcaster {
     readonly #sender: Protocol
 
     #output: ByteArrayOutput = ByteArrayOutput.create(0)
-    #sabOption: Option<ArrayBufferLike> = Option.None
+    #sabOption: Option<SharedArrayBuffer> = Option.None
+    #subscriptionFlags: Option<Uint8Array> = Option.None
     #availableUpdate: Option<ArrayBufferLike> = Option.None
 
     #version: int = -1
     #capacity: int = -1
     #invalid: boolean = false
     #lockShared = false
+    #lastNumPackages: int = 0
 
     private constructor(messenger: Messenger) {
         this.#sender = Communicator.sender<Protocol>(messenger, ({dispatchAndForget}) =>
@@ -61,13 +62,25 @@ export class LiveStreamBroadcaster {
                 this.#lockShared = true
             }
             this.#sender.sendUpdateStructure(update.unwrap())
-            let capacity = this.#computeCapacity()
-            if (this.#output.remaining < capacity) {
-                const size = nextPowOf2(capacity)
-                const data = new SharedArrayBuffer(size)
-                this.#output = ByteArrayOutput.use(data)
-                this.#sabOption = Option.wrap(data)
-                this.#sender.sendUpdateData(data)
+            const numPackages = this.#packages.length
+            const capacity = this.#computeCapacity()
+            // SAB layout: [subscription flags (numPackages bytes)][data]
+            // Must create new SAB if:
+            // 1. No SAB exists yet
+            // 2. SAB too small
+            // 3. numPackages changed (offset changes even if capacity is sufficient)
+            const requiredSize = numPackages + capacity
+            const needsNewSab = this.#sabOption.isEmpty()
+                || this.#sabOption.unwrap().byteLength < requiredSize
+                || numPackages !== this.#lastNumPackages
+            if (needsNewSab) {
+                const size = nextPowOf2(requiredSize)
+                const sab = new SharedArrayBuffer(size)
+                this.#subscriptionFlags = Option.wrap(new Uint8Array(sab, 0, numPackages))
+                this.#output = ByteArrayOutput.use(sab, numPackages)
+                this.#sabOption = Option.wrap(sab)
+                this.#lastNumPackages = numPackages
+                this.#sender.sendUpdateData(sab)
             }
         }
         if (this.#sabOption.isEmpty()) {return}
@@ -75,7 +88,7 @@ export class LiveStreamBroadcaster {
         // No lock is necessary since the other side skips reading until we set the lock to CAN_READ.
         if (Atomics.load(this.#lockArray, 0) === Lock.WRITE) {
             this.#flushData(this.#output)
-            this.#output.position = 0
+            this.#output.position = 0 // Reset to start of data view (view is already offset past flags)
             Atomics.store(this.#lockArray, 0, Lock.READ)
         }
     }
@@ -85,7 +98,7 @@ export class LiveStreamBroadcaster {
             readonly type: PackageType = PackageType.Float
             readonly address: Address = address
             readonly capacity: number = 8
-            put(output: ByteArrayOutput): void {output.writeFloat(provider())}
+            put(output: ByteArrayOutput, _hasSubscribers: boolean): void {output.writeFloat(provider())}
         })
     }
 
@@ -94,44 +107,43 @@ export class LiveStreamBroadcaster {
             readonly type: PackageType = PackageType.Integer
             readonly address: Address = address
             readonly capacity: number = 8
-            put(output: ByteArrayOutput): void {output.writeInt(provider())}
+            put(output: ByteArrayOutput, _hasSubscribers: boolean): void {output.writeInt(provider())}
         })
     }
 
-    broadcastFloats(address: Address, values: Float32Array, before?: Exec, after?: Exec): Terminable {
+    broadcastFloats(address: Address, values: Float32Array, before?: Procedure<boolean>): Terminable {
         return this.#storeChunk(new class implements Package {
             readonly type: PackageType = PackageType.FloatArray
             readonly address: Address = address
             readonly capacity: number = 4 + (values.byteLength << 2)
-            put(output: ByteArrayOutput): void {
-                safeExecute(before)
+            put(output: ByteArrayOutput, hasSubscribers: boolean): void {
+                before?.(hasSubscribers)
                 output.writeInt(values.length)
                 for (const value of values) {output.writeFloat(value)}
-                safeExecute(after)
             }
         })
     }
 
-    broadcastIntegers(address: Address, values: Int32Array, update: Exec): Terminable {
+    broadcastIntegers(address: Address, values: Int32Array, update: Procedure<boolean>): Terminable {
         return this.#storeChunk(new class implements Package {
             readonly type: PackageType = PackageType.IntegerArray
             readonly address: Address = address
             readonly capacity: number = 4 + (values.byteLength << 2)
-            put(output: ByteArrayOutput): void {
-                update()
+            put(output: ByteArrayOutput, hasSubscribers: boolean): void {
+                update(hasSubscribers)
                 output.writeInt(values.length)
                 values.forEach(value => output.writeInt(value))
             }
         })
     }
 
-    broadcastByteArray(address: Address, values: Int8Array, update: Exec): Terminable {
+    broadcastByteArray(address: Address, values: Int8Array, update: Procedure<boolean>): Terminable {
         return this.#storeChunk(new class implements Package {
             readonly type: PackageType = PackageType.ByteArray
             readonly address: Address = address
             readonly capacity: number = 4 + values.byteLength
-            put(output: ByteArrayOutput): void {
-                update()
+            put(output: ByteArrayOutput, hasSubscribers: boolean): void {
+                update(hasSubscribers)
                 output.writeInt(values.byteLength)
                 output.writeBytes(values)
             }
@@ -169,11 +181,15 @@ export class LiveStreamBroadcaster {
 
     #flushData(output: ByteArrayOutput): void {
         assert(!this.#invalid && this.#availableUpdate.isEmpty(), "Cannot flush while update is available")
-        let requiredCapacity = this.#computeCapacity()
+        const requiredCapacity = this.#computeCapacity()
         assert(output.remaining >= requiredCapacity, "Insufficient data")
         output.writeInt(this.#version)
         output.writeInt(Flags.START)
-        for (const pack of this.#packages) {pack.put(output)}
+        const flags = this.#subscriptionFlags
+        for (let i = 0; i < this.#packages.length; i++) {
+            const hasSubscribers = flags.nonEmpty() && flags.unwrap()[i] !== 0
+            this.#packages[i].put(output, hasSubscribers)
+        }
         output.writeInt(Flags.END)
     }
 

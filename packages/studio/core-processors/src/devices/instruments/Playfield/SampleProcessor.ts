@@ -50,7 +50,8 @@ export class SampleProcessor extends AudioProcessor implements DeviceProcessor, 
         const positions = new Float32Array(16) // we just assume that 16 voices per channels are enough to visualize
         this.ownAll(
             InsertReturnAudioChain.create(context, adapter.audioEffects, this, mixProcessor),
-            context.broadcaster.broadcastFloats(adapter.address, positions, () => {
+            context.broadcaster.broadcastFloats(adapter.address, positions, (hasSubscribers) => {
+                if (!hasSubscribers) {return}
                 const slices = this.#voices.length < positions.length ? this.#voices : this.#voices.slice(0, positions.length)
                 slices.forEach(({position}, index) => positions[index] = position)
                 positions[slices.length] = -1.0 // close stream

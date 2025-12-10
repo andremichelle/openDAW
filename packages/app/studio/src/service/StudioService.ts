@@ -409,7 +409,7 @@ export class StudioService implements ProjectEnv {
     }
 
     #configBeforeUnload(): void {
-        if (!Browser.isLocalHost() || true) {
+        if (!Browser.isLocalHost()) {
             window.addEventListener("beforeunload", (event: Event) => {
                 if (!navigator.onLine) {event.preventDefault()}
                 if (this.hasProfile && this.profile.hasUnsavedChanges()) {

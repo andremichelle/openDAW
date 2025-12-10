@@ -34,7 +34,7 @@ export class VelocityDeviceProcessor extends EventProcessor implements MidiEffec
             this.bindParameter(randomAmount),
             this.bindParameter(offset),
             this.bindParameter(mix),
-            context.broadcaster.broadcastIntegers(adapter.address.append(0), this.#velocities, () => {
+            context.broadcaster.broadcastIntegers(adapter.address.append(0), this.#velocities, (_hasSubscribers) => {
                 this.#velocities[this.#velocityIndex] = 0
                 this.#velocityIndex = 0
             }),

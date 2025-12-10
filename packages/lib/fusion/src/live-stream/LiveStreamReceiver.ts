@@ -24,6 +24,7 @@ import {Flags} from "./Flags"
 interface Package<T> extends Terminable {
     dispatch(address: Address, input: ByteArrayInput): void
     subscribe(address: Address, procedure: Procedure<T>): Subscription
+    hasSubscribers(address: Address): boolean
 }
 
 class FloatPackage implements Package<float> {
@@ -36,6 +37,7 @@ class FloatPackage implements Package<float> {
     subscribe(address: Address, procedure: Procedure<float>): Subscription {
         return this.subscribers.subscribe(address, procedure)
     }
+    hasSubscribers(address: Address): boolean {return !this.subscribers.isEmpty(address)}
     terminate(): void {this.subscribers.terminate()}
 }
 
@@ -49,6 +51,7 @@ class IntegerPackage implements Package<int> {
     subscribe(address: Address, procedure: Procedure<int>): Subscription {
         return this.subscribers.subscribe(address, procedure)
     }
+    hasSubscribers(address: Address): boolean {return !this.subscribers.isEmpty(address)}
     terminate(): void {this.subscribers.terminate()}
 }
 
@@ -89,6 +92,7 @@ abstract class ArrayPackage<T extends ArrayTypes> implements Package<T> {
         }
     }
 
+    hasSubscribers(address: Address): boolean {return !this.subscribers.isEmpty(address)}
     terminate(): void {this.subscribers.terminate()}
 }
 
@@ -113,6 +117,8 @@ class ByteArrayPackage extends ArrayPackage<Int8Array> {
     }
 }
 
+type StructureEntry = { address: Address, package: Package<unknown> }
+
 export class LiveStreamReceiver implements Terminable {
     static ID: int = 0 | 0
 
@@ -123,10 +129,14 @@ export class LiveStreamReceiver implements Terminable {
     readonly #bytes = new ByteArrayPackage()
     readonly #packages: Array<Package<unknown>> = []
     readonly #procedures: Array<Procedure<ByteArrayInput>> = []
+    readonly #structure: Array<StructureEntry> = []
     readonly #id: int
 
     #optLock: Option<Int8Array> = Option.None
+    #sab: Option<ArrayBufferLike> = Option.None
     #memory: Option<ByteArrayInput> = Option.None
+    #subscriptionFlags: Option<Uint8Array> = Option.None
+    #numPackages: int = 0
 
     #structureVersion = -1
     #connected = false
@@ -147,19 +157,42 @@ export class LiveStreamReceiver implements Terminable {
             {terminate: () => {this.#disconnect()}},
             Communicator.executor<Protocol>(messenger, {
                 sendShareLock: (lock: SharedArrayBuffer) => this.#optLock = Option.wrap(new Int8Array(lock)),
-                sendUpdateData: (data: ArrayBufferLike) => this.#memory = Option.wrap(new ByteArrayInput(data)),
-                sendUpdateStructure: (structure: ArrayBufferLike) => this.#updateStructure(new ByteArrayInput(structure))
+                sendUpdateData: (data: ArrayBufferLike) => {
+                    // SAB layout: [subscription flags (numPackages bytes)][data]
+                    // Store the raw SAB, views will be created in #updateDataViews after structure is known
+                    this.#sab = Option.wrap(data)
+                    this.#updateDataViews()
+                },
+                sendUpdateStructure: (structure: ArrayBufferLike) => {
+                    this.#updateStructure(new ByteArrayInput(structure))
+                    // Always recreate views after structure update
+                    // This handles both cases:
+                    // 1. Structure arrives before SAB: #sab might be empty or old, views won't work but that's ok
+                    // 2. SAB arrives before structure: #sab is new, now create correct views with new numPackages
+                    this.#updateDataViews()
+                }
             }),
             AnimationFrame.add(() => this.#dispatch())
         )
     }
 
+    #updateDataViews(): void {
+        if (this.#sab.isEmpty() || this.#numPackages === 0) {return}
+        const data = this.#sab.unwrap()
+        this.#subscriptionFlags = Option.wrap(new Uint8Array(data, 0, this.#numPackages))
+        this.#memory = Option.wrap(new ByteArrayInput(data, this.#numPackages))
+    }
+
     #disconnect(): void {
         this.#memory = Option.None
         this.#optLock = Option.None
+        this.#sab = Option.None
+        this.#subscriptionFlags = Option.None
+        this.#numPackages = 0
         this.#structureVersion = -1
         this.#connected = false
         Arrays.clear(this.#procedures)
+        Arrays.clear(this.#structure)
         this.#float.terminate()
         this.#floats.terminate()
         this.#integer.terminate()
@@ -195,13 +228,24 @@ export class LiveStreamReceiver implements Terminable {
         if (Atomics.load(lock, 0) === Lock.READ) {
             const byteArrayInput = this.#memory.unwrap()
             this.#dispatchData(byteArrayInput)
-            byteArrayInput.position = 0
+            byteArrayInput.position = 0 // Reset to start of data view (view is already offset past flags)
+            this.#writeSubscriptionFlags()
             Atomics.store(lock, 0, Lock.WRITE)
+        }
+    }
+
+    #writeSubscriptionFlags(): void {
+        if (this.#subscriptionFlags.isEmpty()) {return}
+        const flags = this.#subscriptionFlags.unwrap()
+        for (let i = 0; i < this.#structure.length; i++) {
+            const {address, package: pkg} = this.#structure[i]
+            flags[i] = pkg.hasSubscribers(address) ? 1 : 0
         }
     }
 
     #updateStructure(input: ByteArrayInput): void {
         Arrays.clear(this.#procedures)
+        Arrays.clear(this.#structure)
         this.#parseStructure(input)
     }
 
@@ -224,11 +268,12 @@ export class LiveStreamReceiver implements Terminable {
             return panic("Invalid version. new: " + version + `, was: ${this.#structureVersion}, id: ${this.#id}`)
         }
         this.#structureVersion = version
-        const n = input.readInt()
-        for (let i = 0; i < n; i++) {
+        this.#numPackages = input.readInt()
+        for (let i = 0; i < this.#numPackages; i++) {
             const address = Address.read(input)
-            const chunk = this.#packages[input.readByte() as PackageType]
-            this.#procedures.push(input => chunk.dispatch(address, input))
+            const pkg = this.#packages[input.readByte() as PackageType]
+            this.#structure.push({address, package: pkg})
+            this.#procedures.push(input => pkg.dispatch(address, input))
         }
     }
 }

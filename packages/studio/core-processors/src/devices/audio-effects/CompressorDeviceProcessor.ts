@@ -122,7 +122,7 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
         this.ownAll(
             context.registerProcessor(this),
             context.broadcaster.broadcastFloats(adapter.address.append(0),
-                this.#editorValues, () => {
+                this.#editorValues, (_hasSubscribers) => {
                     this.#editorValues[0] = gainToDb(this.#inpMax)
                     this.#editorValues[1] = this.#redMin
                     this.#editorValues[2] = gainToDb(this.#outMax)

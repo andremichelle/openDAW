@@ -25,7 +25,7 @@ export class PeakBroadcaster implements Terminable {
 
         this.#values = new Float32Array(4)
         this.#rms = Arrays.create(() => new RMS(PeakBroadcaster.RMS_WINDOW), 2)
-        this.#terminable = this.#broadcaster.broadcastFloats(this.#address, this.#values, () => {
+        this.#terminable = this.#broadcaster.broadcastFloats(this.#address, this.#values, (_hasSubscribers) => {
             this.#values[0] = this.#peakL
             this.#values[1] = this.#peakR
             this.#values[2] = this.#rmsL
