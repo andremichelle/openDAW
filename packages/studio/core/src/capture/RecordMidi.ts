@@ -1,4 +1,4 @@
-import {byte, Notifier, Option, quantizeCeil, quantizeFloor, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {byte, Notifier, Option, quantizeCeil, quantizeRound, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {PPQN} from "@opendaw/lib-dsp"
 import {NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
 import {ColorCodes, NoteSignal, TrackType} from "@opendaw/studio-adapters"
@@ -13,18 +13,21 @@ export namespace RecordMidi {
         capture: Capture
     }
 
+    const MIN_NOTE_DURATION = PPQN.fromSignature(1, 128)
+
     export const start = ({notifier, project, capture}: RecordMidiContext): Terminable => {
         console.debug("RecordMidi.start")
         const beats = PPQN.fromSignature(1, project.timelineBox.signature.denominator.getValue())
-        const {editing, boxGraph, engine} = project
+        const {editing, boxGraph, engine, env: {audioContext}, timelineBox: {bpm}} = project
         const {position, isRecording} = engine
         const trackBox: TrackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Notes)
         const terminator = new Terminator()
         const activeNotes = new Map<byte, NoteEventBox>()
+        const latency = PPQN.secondsToPulses(audioContext.outputLatency ?? 10.0, bpm.getValue())
         let writing: Option<{ region: NoteRegionBox, collection: NoteEventCollectionBox }> = Option.None
         terminator.own(position.catchupAndSubscribe(owner => {
             if (writing.isEmpty()) {return}
-            const writePosition = owner.getValue()
+            const writePosition = owner.getValue() + latency
             const {region, collection} = writing.unwrap()
             editing.modify(() => {
                 if (region.isAttached() && collection.isAttached()) {
@@ -34,7 +37,7 @@ export namespace RecordMidi {
                     loopDuration.setValue(newDuration)
                     for (const event of activeNotes.values()) {
                         if (event.isAttached()) {
-                            event.duration.setValue(writePosition - region.position.getValue() - event.position.getValue())
+                            event.duration.setValue(Math.max(MIN_NOTE_DURATION, writePosition - region.position.getValue() - event.position.getValue()))
                         } else {
                             activeNotes.delete(event.pitch.getValue())
                         }
@@ -46,8 +49,7 @@ export namespace RecordMidi {
             }, false)
         }))
         terminator.ownAll(notifier.subscribe((signal: NoteSignal) => {
-            if (!isRecording.getValue()) {return}
-            const ppqn = position.getValue()
+            const writePosition = position.getValue() + latency
             if (NoteSignal.isOn(signal)) {
                 const {pitch, velocity} = signal
                 if (writing.isEmpty()) {
@@ -56,7 +58,7 @@ export namespace RecordMidi {
                         const region = NoteRegionBox.create(boxGraph, UUID.generate(), box => {
                             box.regions.refer(trackBox.regions)
                             box.events.refer(collection.owners)
-                            box.position.setValue(quantizeFloor(ppqn, beats))
+                            box.position.setValue(Math.max(quantizeRound(writePosition, beats), 0))
                             box.hue.setValue(ColorCodes.forTrackType(TrackType.Notes))
                         })
                         engine.ignoreNoteRegion(region.address.uuid)
@@ -65,9 +67,11 @@ export namespace RecordMidi {
                 }
                 const {region, collection} = writing.unwrap()
                 editing.modify(() => {
+                    const position = writePosition - region.position.getValue()
+                    if (position < -PPQN.SemiQuaver) {return}
                     activeNotes.set(pitch, NoteEventBox.create(boxGraph, UUID.generate(), box => {
-                        box.position.setValue(ppqn - region.position.getValue())
-                        box.duration.setValue(1.0)
+                        box.position.setValue(Math.max(0, position))
+                        box.duration.setValue(MIN_NOTE_DURATION)
                         box.pitch.setValue(pitch)
                         box.velocity.setValue(velocity)
                         box.events.refer(collection.events)
