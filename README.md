@@ -67,6 +67,7 @@ Huge thanks to our [ambassadors](https://opendaw.org/ambassadors), whose dedicat
 - Thad Guidry
 - Pathfinder
 - One Sound Every Day (santino)
+- Oli Larkin
 
 ### openDAW Supporter — $5.00
 
