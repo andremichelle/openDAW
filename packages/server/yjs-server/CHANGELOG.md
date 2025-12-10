@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.32](https://github.com/andremichelle/openDAW/compare/yjs-server@1.0.31...yjs-server@1.0.32) (2025-12-10)
+
+**Note:** Version bump only for package yjs-server
+
 ## [1.0.31](https://github.com/andremichelle/openDAW/compare/yjs-server@1.0.30...yjs-server@1.0.31) (2025-12-10)
 
 **Note:** Version bump only for package yjs-server

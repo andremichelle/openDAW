@@ -1,7 +1,7 @@
 {
     "name": "@opendaw/soundfont",
     "private": true,
-    "version": "0.0.80",
+    "version": "0.0.81",
     "type": "module",
     "license": "LGPL-3.0-or-later",
     "scripts": {
@@ -11,11 +11,11 @@
         "lint": "eslint \"src/**/*.ts\""
     },
     "dependencies": {
-        "@opendaw/studio-sdk": "^0.0.80"
+        "@opendaw/studio-sdk": "^0.0.81"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.26",
-        "@opendaw/typescript-config": "^0.0.26",
+        "@opendaw/eslint-config": "^0.0.27",
+        "@opendaw/typescript-config": "^0.0.27",
         "@types/node": "^22.15.18",
         "eslint": "^8.57.0",
         "sass": "^1.88.0",

@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/lib-std",
-    "version": "0.0.59",
+    "version": "0.0.60",
     "license": "LGPL-3.0-or-later",
     "sideEffects": false,
     "publishConfig": {
@@ -23,9 +23,9 @@
         "test": "vitest run"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.26",
-        "@opendaw/typescript-config": "^0.0.26",
+        "@opendaw/eslint-config": "^0.0.27",
+        "@opendaw/typescript-config": "^0.0.27",
         "zod": "^4.1.12"
     },
-    "gitHead": "6220d177cc26003ff9268d889b2ecf7ac995a367"
+    "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }
