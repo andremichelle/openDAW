@@ -6,10 +6,12 @@ import {
     clamp,
     float,
     int,
+    isDefined,
     isInstanceOf,
     Observer,
     Option,
     panic,
+    quantizeRound,
     Strings,
     Subscription,
     UUID
@@ -77,6 +79,11 @@ export type NoteRegionParams = {
     mute?: boolean
     name?: string
     hue?: number
+}
+
+export type QuantiseNotesOptions = {
+    positionQuantisation?: ppqn
+    durationQuantisation?: ppqn
 }
 
 // noinspection JSUnusedGlobalSymbols
@@ -200,6 +207,25 @@ export class ProjectApi {
             box.duration.setValue(PPQN.Bar)
             box.clips.refer(trackBox.clips)
             box.events.refer(events.owners)
+        })
+    }
+
+    quantiseNotes(collection: NoteEventCollectionBox,
+                  {positionQuantisation, durationQuantisation}: QuantiseNotesOptions): void {
+        collection.events.pointerHub.incoming().forEach(({box}) => {
+            const event = asInstanceOf(box, NoteEventBox)
+            let position = event.position.getValue()
+            let duration = event.duration.getValue()
+            if (isDefined(positionQuantisation)) {
+                position = quantizeRound(position, positionQuantisation)
+            }
+            if (isDefined(durationQuantisation)) {
+                duration = quantizeRound(duration, durationQuantisation)
+            }
+            position = Math.max(position, 0)
+            duration = Math.max(duration, durationQuantisation ?? PPQN.SemiQuaver)
+            event.position.setValue(position)
+            event.duration.setValue(duration)
         })
     }
 
