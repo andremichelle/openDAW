@@ -39,7 +39,6 @@ export class ShadertoyState {
     get audioData(): Uint8Array<ArrayBuffer> {return this.#audioData}
     get midiCCData(): Uint8Array<ArrayBuffer> {return this.#midiCCData}
     get midiNoteData(): Uint8Array<ArrayBuffer> {return this.#midiNoteData}
-    get noteVelocities(): Array<Array<number>> {return this.#noteVelocities}
     get peaks(): Float32Array<ArrayBuffer> {return this.#peaks}
     get beat(): number {return this.#beat}
     /**
