@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/lib-box-forge",
-    "version": "0.0.58",
+    "version": "0.0.59",
     "private": true,
     "sideEffects": false,
     "license": "LGPL-3.0-or-later",
@@ -16,15 +16,15 @@
         "test": "npm run gen && vitest run"
     },
     "dependencies": {
-        "@opendaw/lib-box": "^0.0.57",
-        "@opendaw/lib-dom": "^0.0.57",
-        "@opendaw/lib-runtime": "^0.0.56",
-        "@opendaw/lib-std": "^0.0.56",
+        "@opendaw/lib-box": "^0.0.58",
+        "@opendaw/lib-dom": "^0.0.58",
+        "@opendaw/lib-runtime": "^0.0.57",
+        "@opendaw/lib-std": "^0.0.57",
         "ts-morph": "^25.0.1",
         "tsx": "^4.20.3"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.23",
-        "@opendaw/typescript-config": "^0.0.23"
+        "@opendaw/eslint-config": "^0.0.24",
+        "@opendaw/typescript-config": "^0.0.24"
     }
 }

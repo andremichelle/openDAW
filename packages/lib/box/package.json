@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/lib-box",
-    "version": "0.0.57",
+    "version": "0.0.58",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
@@ -23,12 +23,12 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@opendaw/lib-runtime": "^0.0.56",
-        "@opendaw/lib-std": "^0.0.56"
+        "@opendaw/lib-runtime": "^0.0.57",
+        "@opendaw/lib-std": "^0.0.57"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.23",
-        "@opendaw/typescript-config": "^0.0.23"
+        "@opendaw/eslint-config": "^0.0.24",
+        "@opendaw/typescript-config": "^0.0.24"
     },
-    "gitHead": "bd520f2c650ed3cf9088201d7623438555ab4dd2"
+    "gitHead": "f5748f1fd8e74ab3cc45dc26d8825cb30f841e08"
 }

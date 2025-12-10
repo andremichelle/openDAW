@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/studio-core-workers",
-    "version": "0.0.60",
+    "version": "0.0.61",
     "license": "LGPL-3.0-or-later",
     "private": true,
     "exports": {
@@ -12,16 +12,16 @@
         "test": "echo \"No tests to run\""
     },
     "dependencies": {
-        "@opendaw/lib-box": "^0.0.57",
-        "@opendaw/lib-dsp": "^0.0.56",
-        "@opendaw/lib-runtime": "^0.0.56",
-        "@opendaw/lib-std": "^0.0.56",
-        "@opendaw/studio-adapters": "^0.0.65",
-        "@opendaw/studio-boxes": "^0.0.58",
-        "@opendaw/studio-enums": "^0.0.48"
+        "@opendaw/lib-box": "^0.0.58",
+        "@opendaw/lib-dsp": "^0.0.57",
+        "@opendaw/lib-runtime": "^0.0.57",
+        "@opendaw/lib-std": "^0.0.57",
+        "@opendaw/studio-adapters": "^0.0.66",
+        "@opendaw/studio-boxes": "^0.0.59",
+        "@opendaw/studio-enums": "^0.0.49"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.23",
-        "@opendaw/typescript-config": "^0.0.23"
+        "@opendaw/eslint-config": "^0.0.24",
+        "@opendaw/typescript-config": "^0.0.24"
     }
 }
