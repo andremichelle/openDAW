@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/studio-core-processors",
-    "version": "0.0.65",
+    "version": "0.0.66",
     "license": "LGPL-3.0-or-later",
     "private": true,
     "exports": {
@@ -16,7 +16,7 @@
         "@opendaw/lib-dsp": "^0.0.55",
         "@opendaw/lib-runtime": "^0.0.55",
         "@opendaw/lib-std": "^0.0.55",
-        "@opendaw/studio-adapters": "^0.0.63",
+        "@opendaw/studio-adapters": "^0.0.64",
         "@opendaw/studio-boxes": "^0.0.57",
         "@opendaw/studio-enums": "^0.0.47",
         "@types/audioworklet": "^0.0.77"
