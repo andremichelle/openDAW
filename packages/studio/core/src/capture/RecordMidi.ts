@@ -18,14 +18,30 @@ export namespace RecordMidi {
     export const start = ({notifier, project, capture}: RecordMidiContext): Terminable => {
         const beats = PPQN.fromSignature(1, project.timelineBox.signature.denominator.getValue())
         const {editing, boxGraph, engine, env: {audioContext}, timelineBox: {bpm}} = project
-        const {position} = engine
+        const {position, isRecording} = engine
         const trackBox: TrackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Notes)
         const terminator = new Terminator()
         const activeNotes = new Map<byte, NoteEventBox>()
         const latency = PPQN.secondsToPulses(audioContext.outputLatency ?? 10.0, bpm.getValue())
         let writing: Option<{ region: NoteRegionBox, collection: NoteEventCollectionBox }> = Option.None
+        const createRegion = () => {
+            const writePosition = position.getValue() + latency
+            editing.modify(() => {
+                const collection = NoteEventCollectionBox.create(boxGraph, UUID.generate())
+                const region = NoteRegionBox.create(boxGraph, UUID.generate(), box => {
+                    box.regions.refer(trackBox.regions)
+                    box.events.refer(collection.owners)
+                    box.position.setValue(Math.max(quantizeRound(writePosition, beats), 0))
+                    box.hue.setValue(ColorCodes.forTrackType(TrackType.Notes))
+                })
+                engine.ignoreNoteRegion(region.address.uuid)
+                writing = Option.wrap({region, collection})
+            }, false)
+        }
         terminator.own(position.catchupAndSubscribe(owner => {
-            if (writing.isEmpty()) {return}
+            if (writing.isEmpty()) {
+                if (isRecording.getValue()) {createRegion()} else {return}
+            }
             const writePosition = owner.getValue() + latency
             const {region, collection} = writing.unwrap()
             editing.modify(() => {
@@ -36,7 +52,8 @@ export namespace RecordMidi {
                     loopDuration.setValue(newDuration)
                     for (const event of activeNotes.values()) {
                         if (event.isAttached()) {
-                            event.duration.setValue(Math.max(MIN_NOTE_DURATION, writePosition - region.position.getValue() - event.position.getValue()))
+                            event.duration.setValue(Math.max(MIN_NOTE_DURATION,
+                                writePosition - region.position.getValue() - event.position.getValue()))
                         } else {
                             activeNotes.delete(event.pitch.getValue())
                         }
@@ -51,19 +68,7 @@ export namespace RecordMidi {
             const writePosition = position.getValue() + latency
             if (NoteSignal.isOn(signal)) {
                 const {pitch, velocity} = signal
-                if (writing.isEmpty()) {
-                    editing.modify(() => {
-                        const collection = NoteEventCollectionBox.create(boxGraph, UUID.generate())
-                        const region = NoteRegionBox.create(boxGraph, UUID.generate(), box => {
-                            box.regions.refer(trackBox.regions)
-                            box.events.refer(collection.owners)
-                            box.position.setValue(Math.max(quantizeRound(writePosition, beats), 0))
-                            box.hue.setValue(ColorCodes.forTrackType(TrackType.Notes))
-                        })
-                        engine.ignoreNoteRegion(region.address.uuid)
-                        writing = Option.wrap({region, collection})
-                    }, false)
-                }
+                if (writing.isEmpty()) {createRegion()}
                 const {region, collection} = writing.unwrap()
                 editing.modify(() => {
                     const position = writePosition - region.position.getValue()
