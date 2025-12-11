@@ -23,6 +23,7 @@ export const installValueInput = <T>({element, selection, getter, setter}: Const
                 const resolvers = Promise.withResolvers<string>()
                 const surface = Surface.get(element)
                 surface.flyout.appendChild(FloatingTextInput({
+                    numeric: true,
                     position: Point.add(surface.pointer, {x: 0, y: 16}),
                     value: getter(lastSelected),
                     resolvers

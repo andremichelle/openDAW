@@ -10,9 +10,10 @@ type Construct = {
     position?: Point
     value?: boolean | number | string
     unit?: string
+    numeric?: boolean
 }
 
-export const FloatingTextInput = ({resolvers, position, value, unit}: Construct) => {
+export const FloatingTextInput = ({resolvers, position, value, unit, numeric}: Construct) => {
     const inputField: HTMLInputElement = (<input type="text" value={isDefined(value) ? String(value) : ""}/>)
     requestAnimationFrame(() => {
         inputField.select()
@@ -31,7 +32,7 @@ export const FloatingTextInput = ({resolvers, position, value, unit}: Construct)
         }
         inputField.onkeydown = (event: KeyboardEvent) => {
             if (event.key.toLowerCase() === "enter") {
-                const value = inputField.value
+                const value = numeric ? inputField.value.replace(",", ".") : inputField.value
                 remove()
                 resolve(value)
             }

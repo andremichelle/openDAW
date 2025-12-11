@@ -6,12 +6,14 @@ type Construct = {
     resolversFactory: Provider<PromiseWithResolvers<string>>
     provider: Provider<PrintValue>
     location?: Provider<Point>
+    numeric?: boolean
 }
 
 export const DblClckTextInput = ({
                                      resolversFactory,
                                      provider,
-                                     location
+                                     location,
+                                     numeric
                                  }: Construct, [element]: ReadonlyArray<JsxValue>) => {
     assertInstanceOf(element, Element)
     element.ondblclick = () => {
@@ -24,6 +26,7 @@ export const DblClckTextInput = ({
             <FloatingTextInput position={point}
                                value={value}
                                unit={unit}
+                               numeric={numeric}
                                resolvers={resolversFactory()}/>
         )
     }

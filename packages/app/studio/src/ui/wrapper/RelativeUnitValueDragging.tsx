@@ -56,6 +56,7 @@ export const RelativeUnitValueDragging = ({
                 <FloatingTextInput position={{x: rect.left, y: rect.top + (rect.height >> 1)}}
                                    value={printValue.value}
                                    unit={printValue.unit}
+                                   numeric
                                    resolvers={resolvers}/>
             )
         }),

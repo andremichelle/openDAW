@@ -119,7 +119,7 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
     const element: HTMLElement = (
         <div className={className}>
             {timeUnitElements}
-            <DblClckTextInput resolversFactory={() => {
+            <DblClckTextInput numeric resolversFactory={() => {
                 const resolvers = Promise.withResolvers<string>()
                 resolvers.promise.then((value: string) => {
                     const bpmValue = parseFloat(value)
@@ -128,9 +128,10 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
                         editing.modify(() => bpm.setValue(Validator.clampBpm(bpmValue))))
                 }, EmptyExec)
                 return resolvers
-            }} provider={() => ({unit: "bpm", value: bpmDigit.value})}>
-                {bpmDisplay}
-            </DblClckTextInput>
+            }} provider={() => profileService.getValue().match({
+                none: () => ({unit: "bpm", value: bpmDigit.value}),
+                some: ({project: {timelineBox: {bpm}}}) => ({unit: "bpm", value: bpm.getValue().toString()})
+            })}>{bpmDisplay}</DblClckTextInput>
             <TapButton service={service}/>
             <FlexSpacer pixels={3}/>
             <DblClckTextInput resolversFactory={() => {
@@ -154,7 +155,7 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
                     <div>METER</div>
                 </div>
             </DblClckTextInput>
-            <DblClckTextInput resolversFactory={() => {
+            <DblClckTextInput numeric resolversFactory={() => {
                 const resolvers = Promise.withResolvers<string>()
                 resolvers.promise.then((value: string) => {
                     const amount = parseFloat(value)
