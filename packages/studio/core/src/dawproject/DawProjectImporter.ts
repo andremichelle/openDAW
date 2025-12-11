@@ -70,14 +70,12 @@ import {
     AudioUnitOrdering,
     CaptureBox,
     ColorCodes,
-    DeviceBoxUtils,
     InstrumentBox,
     InstrumentFactories,
     ProjectSkeleton,
     TrackType
 } from "@opendaw/studio-adapters"
 import {DawProject} from "./DawProject"
-import {DeviceIO} from "./DeviceIO"
 import {BuiltinDevices} from "./BuiltinDevices"
 import {AudioContentHelpers} from "../project/audio/AudioContentHelpers"
 
@@ -148,7 +146,9 @@ export namespace DawProjectImport {
                               index: int): unknown => {
             const {deviceRole, deviceVendor, deviceID, deviceName, state} = device
             assert(deviceRole === DeviceRole.NOTE_FX || deviceRole === DeviceRole.AUDIO_FX, "Device is not an effect")
-            if (deviceVendor === "openDAW") {
+            /*
+             TODO There is a bug in this if branch, which results in an invalid host pointer
+             if (deviceVendor === "openDAW") {
                 console.debug(`Recreate openDAW effect device '${deviceName}' with id '${deviceID}'`)
                 const resource = ifDefined(state?.path, path => resources.fromPath(path))
                 if (isDefined(resource)) {
@@ -158,7 +158,7 @@ export namespace DawProjectImport {
                     DeviceBoxUtils.lookupIndexField(device).setValue(index)
                     return
                 }
-            }
+            }*/
             if (isInstanceOf(device, EqualizerSchema)) {
                 return BuiltinDevices.equalizer(boxGraph, device, field, index)
             }
@@ -203,6 +203,8 @@ export namespace DawProjectImport {
         const createInstrumentBox = (audioUnitBox: AudioUnitBox,
                                      track: TrackSchema,
                                      device: Maybe<DeviceSchema>): InstrumentBox => {
+            /*
+            TODO There is a bug in this if branch, which results in an invalid host pointer
             if (isDefined(device)) {
                 const {deviceName, deviceVendor, deviceID, state} = device
                 if (deviceVendor === "openDAW") {
@@ -216,7 +218,7 @@ export namespace DawProjectImport {
                         return device as InstrumentBox
                     }
                 }
-            }
+            }*/
             if (track.contentType === "notes") {
                 return InstrumentFactories.Vaporisateur
                     .create(boxGraph, audioUnitBox.input, track.name ?? "", IconSymbol.Piano)
