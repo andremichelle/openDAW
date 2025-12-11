@@ -82,10 +82,13 @@ export const RelativeUnitValueDragging = ({
         }), element, options),
         Events.subscribe(element, "wheel", event => {
             if (!Preferences.values["modifying-controls-wheel"]) {return}
-            const value = parameter.getUnitValue() - Math.sign(event.deltaY) * 0.01
+            const ratio = parameter.valueMapping.floating() ? 0.01 : 0.5
+            const value = parameter.getUnitValue() - Math.sign(event.deltaY) * ratio
             editing.modify(() => parameter.setUnitValue(value), false)
             Runtime.debounce(() => editing.mark())
-        }, {passive: true})
+            event.preventDefault()
+            event.stopImmediatePropagation()
+        })
     )
     return element
 }
