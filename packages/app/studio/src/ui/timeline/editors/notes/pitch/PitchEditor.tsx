@@ -73,10 +73,10 @@ export const PitchEditor = ({
     const locator = createPitchSelectionLocator(reader, range, positioner.valueAxis, capturing)
     const renderer = lifecycle.own(new CanvasPainter(canvas, createNotePitchPainter(
         {canvas, modifyContext, positioner, scale, range, snapping, reader})))
-    const playNote = (pitch: byte, duration: ppqn) => {
+    const auditionNote = (pitch: byte, duration: ppqn) => {
         if (!Preferences.values["note-audition-while-dragging"]) {return}
         project.engine.noteSignal({
-            type: "note-auto",
+            type: "note-audition",
             uuid: reader.trackBoxAdapter.unwrap().audioUnit.address.uuid, pitch, duration, velocity: 1.0
         })
     }
@@ -123,7 +123,7 @@ export const PitchEditor = ({
         if (adapters.length === 0) {return}
         const first = adapters[0]
         editing.modify(() => adapters.forEach(procedure))
-        playNote(first.pitch, first.duration)
+        auditionNote(first.pitch, first.duration)
     }
     lifecycle.ownAll(
         attachShortcuts(canvas, editing, selection, locator),
@@ -161,7 +161,7 @@ export const PitchEditor = ({
             if (target.type === "note-position") {
                 const noteEventBoxAdapter = target.event
                 const {pitch, duration} = noteEventBoxAdapter
-                playNote(pitch, duration)
+                auditionNote(pitch, duration)
                 const modifier = NoteMoveModifier.create({
                     element: canvas,
                     selection,
@@ -171,12 +171,12 @@ export const PitchEditor = ({
                     snapping,
                     reference: noteEventBoxAdapter
                 })
-                modifier.subscribePitchChanged(pitch => playNote(pitch, duration))
+                modifier.subscribePitchChanged(pitch => auditionNote(pitch, duration))
                 return modifyContext.startModifier(modifier)
             } else if (target.type === "note-end") {
                 const noteEventBoxAdapter = target.event
                 const {pitch, duration} = noteEventBoxAdapter
-                playNote(pitch, duration)
+                auditionNote(pitch, duration)
                 return modifyContext.startModifier(NoteDurationModifier.create({
                     element: canvas,
                     selection,

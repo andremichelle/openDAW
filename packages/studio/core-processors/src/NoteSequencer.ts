@@ -47,8 +47,8 @@ export class NoteSequencer implements NoteEventSource, Terminable {
 
     readonly #random: Random
     readonly #rawNotes: Set<RawNote>
-    readonly #scheduledNotes: Array<ScheduledNote>
-    readonly #scheduledRetainer: EventSpanRetainer<Id<NoteEvent>>
+    readonly #auditionNotes: Array<ScheduledNote>
+    readonly #auditionRetainer: EventSpanRetainer<Id<NoteEvent>>
     readonly #retainer: EventSpanRetainer<Id<NoteEvent>>
 
     constructor(context: EngineContext, adapter: AudioUnitBoxAdapter) {
@@ -57,8 +57,8 @@ export class NoteSequencer implements NoteEventSource, Terminable {
 
         this.#random = Random.create(0xFFFF123)
         this.#rawNotes = new Set<RawNote>()
-        this.#scheduledNotes = []
-        this.#scheduledRetainer = new EventSpanRetainer<Id<NoteEvent>>()
+        this.#auditionNotes = []
+        this.#auditionRetainer = new EventSpanRetainer<Id<NoteEvent>>()
         this.#retainer = new EventSpanRetainer<Id<NoteEvent>>()
 
         this.#terminator.ownAll(
@@ -92,8 +92,8 @@ export class NoteSequencer implements NoteEventSource, Terminable {
         }
     }
 
-    pushScheduledNote(pitch: byte, duration: ppqn, velocity: unitValue): void {
-        this.#scheduledNotes.push({pitch, duration, velocity})
+    auditionNote(pitch: byte, duration: ppqn, velocity: unitValue): void {
+        this.#auditionNotes.push({pitch, duration, velocity})
     }
 
     * processNotes(from: ppqn, to: ppqn, flags: int): Generator<NoteLifecycleEvent> {
@@ -107,13 +107,13 @@ export class NoteSequencer implements NoteEventSource, Terminable {
                 yield* this.#releaseCompleted(from, to)
             }
         }
-        if (this.#scheduledRetainer.nonEmpty()) {
+        if (this.#auditionRetainer.nonEmpty()) {
             if (discontinuous) {
-                for (const event of this.#scheduledRetainer.releaseAll()) {
+                for (const event of this.#auditionRetainer.releaseAll()) {
                     yield NoteLifecycleEvent.stop(event, from)
                 }
             } else {
-                for (const event of this.#scheduledRetainer.releaseLinearCompleted(to)) {
+                for (const event of this.#auditionRetainer.releaseLinearCompleted(to)) {
                     yield NoteLifecycleEvent.stop(event, event.position + event.duration)
                 }
             }
@@ -133,16 +133,16 @@ export class NoteSequencer implements NoteEventSource, Terminable {
                 }
             }
         }
-        if (this.#scheduledNotes.length > 0) {
-            for (const removed of this.#scheduledRetainer.releaseAll()) {
+        if (this.#auditionNotes.length > 0) {
+            for (const removed of this.#auditionRetainer.releaseAll()) {
                 yield NoteLifecycleEvent.stop(removed, from)
             }
-            for (const {pitch, duration, velocity} of this.#scheduledNotes) {
+            for (const {pitch, duration, velocity} of this.#auditionNotes) {
                 const event = NoteLifecycleEvent.start(from, duration, pitch, velocity)
-                this.#scheduledRetainer.addAndRetain({...event})
+                this.#auditionRetainer.addAndRetain({...event})
                 yield event
             }
-            this.#scheduledNotes.length = 0
+            this.#auditionNotes.length = 0
         }
         if (read) {
             const tracks = this.#adapter.tracks.collection.adapters()
@@ -174,7 +174,7 @@ export class NoteSequencer implements NoteEventSource, Terminable {
                 }
             }
         }
-        yield* this.#scheduledRetainer.overlapping(position, NoteEvent.Comparator)
+        yield* this.#auditionRetainer.overlapping(position, NoteEvent.Comparator)
         if (onlyEnternal) {return}
         yield* this.#retainer.overlapping(position, NoteEvent.Comparator)
     }
@@ -182,8 +182,8 @@ export class NoteSequencer implements NoteEventSource, Terminable {
     reset(): void {
         this.#rawNotes.clear()
         this.#retainer.clear()
-        this.#scheduledNotes.length = 0
-        this.#scheduledRetainer.clear()
+        this.#auditionNotes.length = 0
+        this.#auditionRetainer.clear()
     }
 
     toString(): string {return `{${this.constructor.name}}`}
