@@ -16,6 +16,7 @@ import {GraphPage} from "@/ui/pages/GraphPage"
 import {CodeEditorPage} from "@/ui/pages/CodeEditorPage"
 import {OpenBundlePage} from "@/ui/pages/OpenBundlePage"
 import {UsersPage} from "@/ui/pages/UsersPage"
+import {PrivacyPage} from "@/ui/pages/PrivacyPage"
 
 export const App = (service: StudioService) => {
     const terminator = new Terminator()
@@ -34,6 +35,7 @@ export const App = (service: StudioService) => {
                     {path: "/", factory: WorkspacePage},
                     {path: "/manuals/*", factory: ManualPage},
                     {path: "/imprint", factory: ImprintPage},
+                    {path: "/privacy", factory: PrivacyPage},
                     {path: "/icons", factory: IconsPage},
                     {path: "/code", factory: CodeEditorPage},
                     {path: "/scripting", factory: CodeEditorPage},

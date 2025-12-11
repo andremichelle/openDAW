@@ -1,6 +1,6 @@
 import css from "./Dashboard.sass?inline"
 import {DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
-import {createElement, HTML, replaceChildren} from "@opendaw/lib-jsx"
+import {createElement, HTML, LocalLink, replaceChildren} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Html} from "@opendaw/lib-dom"
 import {ProjectBrowser} from "@/project/ProjectBrowser"
@@ -24,10 +24,12 @@ export const Dashboard = ({lifecycle, service}: Construct) => {
             <article>
                 <h1>Welcome to openDAW</h1>
                 <h2>A new holistic exploration of music creation inside your browser</h2>
-                <p style={{margin: "1em 0 0 0"}}>
-                    This is an <span className="highlight">early prototype</span> giving you an early glimpse of the
-                    development
-                    state.
+                <p style={{margin: "0.5em 0 0 0"}}>
+                    openDAW is an open source web based music studio with a clear focus on <a
+                    href="https://opendaw.org/education" target="education">education</a> and <LocalLink
+                    href="/privacy">data privacy</LocalLink>,
+                    open to everyone with no login required so you can start creating music right away. The studio is still
+                    evolving and not production ready yet.
                 </p>
                 <div className="columns">
                     <div>
@@ -50,7 +52,8 @@ export const Dashboard = ({lifecycle, service}: Construct) => {
                                 {name: "Release", click: () => service.loadTemplate("Release")},
                                 {name: "Dub Techno", click: () => service.loadTemplate("Dub-Techno")}
                             ].map(({name, click}, index) => {
-                                const svgSource = `viscious-speed/${String(index + 1).padStart(2, "0")}.svg`
+                                const svgSource = `viscious-speed/${String(index + 1)
+                                    .padStart(2, "0")}.svg`
                                 return (
                                     <div onclick={click}>
                                         <HTML src={fetch(svgSource)} className="icon"/>
@@ -103,12 +106,11 @@ export const Dashboard = ({lifecycle, service}: Construct) => {
                         </div>
                     </div>
                 </div>
-                <p style={{marginTop: "2em", fontSize: "12px", textAlign: "center"}}>
-                    Join our <a href="https://discord.opendaw.studio" target="discord" style={{color: Colors.blue}}>discord
-                    community</a> to stay updated! · source-code available at <a
-                    href="https://github.com/andremichelle/opendaw"
-                    target="github"
-                    style={{color: Colors.blue}}>github</a> · Built with ❤️
+                <p style={{marginTop: "3em", fontSize: "11px", textAlign: "center"}}>
+                    Visit <a
+                    href="https://discord.opendaw.studio/" target="discord">Discord</a> and <a
+                    href="https://github.com/andremichelle/opendaw" target="github">GitHub</a> for more information.
+                    Built with ❤️
                 </p>
             </article>
         </div>
