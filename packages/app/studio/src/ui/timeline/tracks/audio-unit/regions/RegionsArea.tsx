@@ -35,7 +35,7 @@ import {RegionDurationModifier} from "@/ui/timeline/tracks/audio-unit/regions/Re
 import {RegionMoveModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionMoveModifier.ts"
 import {RegionLoopDurationModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionLoopDurationModifier.ts"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
-import {RegionSampleDragAndDrop} from "@/ui/timeline/tracks/audio-unit/regions/RegionSampleDragAndDrop.ts"
+import {RegionDragAndDrop} from "@/ui/timeline/tracks/audio-unit/regions/RegionDragAndDrop.ts"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
 import {CssUtils, Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {DragAndDrop} from "@/ui/DragAndDrop"
@@ -79,7 +79,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
     )
     const capturing: ElementCapturing<RegionCaptureTarget> = RegionCapturing.create(element, manager, range)
     const regionLocator = createRegionLocator(manager, regionSelection)
-    const dragAndDrop = new RegionSampleDragAndDrop(service, capturing, timeline.snapping)
+    const dragAndDrop = new RegionDragAndDrop(service, capturing, timeline.snapping)
     lifecycle.ownAll(
         regionSelection.catchupAndSubscribe({
             onSelected: (selectable: AnyRegionBoxAdapter) => selectable.onSelected(),

@@ -28,7 +28,7 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
     get project(): Project {return this.#service.project}
     get capturing(): ElementCapturing<T> {return this.#capturing}
 
-    canDrop(event: DragEvent, data: AnyDragData): Option<T | false> {
+    canDrop(event: DragEvent, data: AnyDragData): Option<T | "instrument"> {
         const target: Nullable<T> = this.#capturing.captureEvent(event)
         if (target?.type === "track" && target.track.trackBoxAdapter.type !== TrackType.Audio) {
             return Option.None
@@ -42,7 +42,7 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
         if (data.type !== "sample" && data.type !== "instrument" && data.type !== "file") {
             return Option.None
         }
-        return Option.wrap(target ?? false)
+        return Option.wrap(target ?? "instrument")
     }
 
     async drop(event: DragEvent, data: AnyDragData) {
@@ -76,7 +76,7 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
             .createModifier(Workers.Transients, boxGraph, audioData, uuid, name)
         editing.modify(() => {
             let trackBoxAdapter: TrackBoxAdapter
-            if (drop === false) {
+            if (drop === "instrument") {
                 trackBoxAdapter = boxAdapters
                     .adapterFor(this.project.api.createInstrument(InstrumentFactories.Tape).trackBox, TrackBoxAdapter)
             } else if (drop?.type === "track") {

@@ -5,7 +5,7 @@ import {ClipWidth} from "@/ui/timeline/tracks/audio-unit/clips/constants"
 import {StudioService} from "@/service/StudioService"
 import {AudioContentFactory} from "@opendaw/studio-core"
 
-export class ClipSampleDragAndDrop extends TimelineDragAndDrop<ClipCaptureTarget> {
+export class ClipDragAndDrop extends TimelineDragAndDrop<ClipCaptureTarget> {
     constructor(service: StudioService, capturing: ElementCapturing<ClipCaptureTarget>) {
         super(service, capturing)
     }

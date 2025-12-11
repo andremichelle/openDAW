@@ -7,6 +7,8 @@ import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {Html} from "@opendaw/lib-dom"
 import {DragAndDrop} from "@/ui/DragAndDrop.ts"
 import {AnyDragData} from "@/ui/AnyDragData"
+import {InstrumentFactories} from "@opendaw/studio-adapters"
+import {DefaultInstrumentFactory} from "@/ui/defaults/DefaultInstrumentFactory"
 
 const className = Html.adoptStyleSheet(css, "HeaderArea")
 
@@ -16,24 +18,27 @@ type Construct = {
     scrollModel: ScrollModel
 }
 
-export const HeadersArea = ({lifecycle, service, scrollModel}: Construct) => {
-    const {project} = service
-    const {} = project
-    const element: HTMLElement = (<div className={className} tabIndex={-1}/>)
-
-    lifecycle.ownAll(
-        DragAndDrop.installTarget(element, {
-            drag: (event: DragEvent, data: AnyDragData): boolean => {
-                console.debug(event, data)
-                return data.type === "instrument" || data.type === "sample"
-            },
-            drop: (_event: DragEvent, data: AnyDragData) => {
-                console.debug("drop", data)
-            },
-            enter: (_allowDrop: boolean) => {},
-            leave: () => {}
-        }),
-        installAutoScroll(element, (_deltaX, deltaY) => {if (deltaY !== 0) {scrollModel.moveBy(deltaY)}})
-    )
-    return element
-}
+export const HeadersArea = ({lifecycle, service, scrollModel}: Construct) => (
+    <div className={className}
+         tabIndex={-1}
+         onInit={element => {
+             const {project} = service
+             const {api, editing} = project
+             lifecycle.ownAll(
+                 DragAndDrop.installTarget(element, {
+                     drag: (_event: DragEvent, data: AnyDragData): boolean => {
+                         return data.type === "instrument"
+                     },
+                     drop: (_event: DragEvent, data: AnyDragData) => {
+                         if (data.type === "instrument") {
+                             const factory = InstrumentFactories[data.device]
+                             editing.modify(() => DefaultInstrumentFactory.create(api, factory))
+                         }
+                     },
+                     enter: (_allowDrop: boolean) => {},
+                     leave: () => {}
+                 }),
+                 installAutoScroll(element, (_deltaX, deltaY) => {if (deltaY !== 0) {scrollModel.moveBy(deltaY)}})
+             )
+         }}/>
+)

@@ -8,7 +8,7 @@ import {StudioService} from "@/service/StudioService"
 import {TransientPlayMode} from "@opendaw/studio-enums"
 import {quantizeRound} from "@opendaw/lib-std"
 
-export class RegionSampleDragAndDrop extends TimelineDragAndDrop<RegionCaptureTarget> {
+export class RegionDragAndDrop extends TimelineDragAndDrop<RegionCaptureTarget> {
     readonly #snapping: Snapping
 
     constructor(service: StudioService, capturing: ElementCapturing<RegionCaptureTarget>, snapping: Snapping) {

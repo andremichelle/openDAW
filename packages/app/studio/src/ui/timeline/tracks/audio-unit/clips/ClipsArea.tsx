@@ -15,7 +15,7 @@ import {installAutoScroll} from "@/ui/AutoScroll.ts"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {installClipContextMenu} from "@/ui/timeline/tracks/audio-unit/clips/ClipContextMenu.ts"
 import {PanelType} from "@/ui/workspace/PanelType"
-import {ClipSampleDragAndDrop} from "./ClipSampleDragAndDrop.ts"
+import {ClipDragAndDrop} from "./ClipDragAndDrop.ts"
 import {Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {DragAndDrop} from "@/ui/DragAndDrop.ts"
 import {AnyDragData} from "@/ui/AnyDragData"
@@ -43,7 +43,7 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
 
     const capturing: ElementCapturing<ClipCaptureTarget> = ClipCapturing.create(element, manager)
     const locator: TimelineSelectableLocator<AnyClipBoxAdapter> = createClipSelectableLocator(capturing, manager)
-    const dragAndDrop = new ClipSampleDragAndDrop(service, capturing)
+    const dragAndDrop = new ClipDragAndDrop(service, capturing)
     element.appendChild(
         <SelectionRectangle
             editing={editing}
