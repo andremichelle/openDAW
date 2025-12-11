@@ -11,8 +11,6 @@
     "clean": "bash ./scripts/clean.sh",
     "build": "turbo build",
     "dev:studio": "turbo run dev --filter=@opendaw/app-studio",
-    "dev:headless": "turbo run dev --filter=@opendaw/app-headless",
-    "dev:example-import-sample": "turbo run dev --filter=@opendaw/example-import-sample",
     "dev:lab": "turbo run dev --filter=@opendaw/lab",
     "dev:yjs-server": "turbo run dev --filter=yjs-server",
     "test": "turbo run test --concurrency=1",
