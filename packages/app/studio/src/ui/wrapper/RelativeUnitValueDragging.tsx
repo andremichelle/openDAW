@@ -85,7 +85,6 @@ export const RelativeUnitValueDragging = ({
             const value = parameter.getUnitValue() - Math.sign(event.deltaY) * 0.01
             editing.modify(() => parameter.setUnitValue(value), false)
             Runtime.debounce(() => editing.mark())
-            event.preventDefault()
         }, {passive: true})
     )
     return element
