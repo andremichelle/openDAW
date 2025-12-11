@@ -1,6 +1,8 @@
 import css from "./PitchEditor.sass?inline"
 import {
     byte,
+    isNotNull,
+    isNull,
     Lifecycle,
     MutableObservableValue,
     Nullable,
@@ -8,6 +10,7 @@ import {
     panic,
     Procedure,
     Selection,
+    unitValue,
     UUID
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
@@ -39,6 +42,7 @@ import {BoxEditing} from "@opendaw/lib-box"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {CssUtils, Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {PPQN, ppqn} from "@opendaw/lib-dsp"
+import {Surface} from "@/ui/surface/Surface"
 
 const className = Html.adoptStyleSheet(css, "PitchEditor")
 
@@ -68,11 +72,26 @@ export const PitchEditor = ({
                                 lifecycle, project, boxAdapters, range, editing, snapping,
                                 positioner, scale, selection, modifyContext, reader, stepRecording
                             }: Construct) => {
+    let previewNote: Nullable<{ pitch: byte, position: ppqn, duration: ppqn, velocity: unitValue }> = null
     const canvas: HTMLCanvasElement = <canvas tabIndex={-1}/>
     const capturing = createPitchEventCapturing(canvas, positioner, range, reader)
     const locator = createPitchSelectionLocator(reader, range, positioner.valueAxis, capturing)
-    const renderer = lifecycle.own(new CanvasPainter(canvas, createNotePitchPainter(
-        {canvas, modifyContext, positioner, scale, range, snapping, reader})))
+    const pitchPainter = createNotePitchPainter(
+        {canvas, modifyContext, positioner, scale, range, snapping, reader})
+    const renderer = lifecycle.own(new CanvasPainter(canvas, painter => {
+        if (isNotNull(previewNote)) {
+            const position = previewNote.position
+            const complete = position + previewNote.duration
+            const {context} = painter
+            const x0 = Math.floor(range.unitToX(position + reader.offset) * devicePixelRatio)
+            const x1 = Math.floor(range.unitToX(complete + reader.offset) * devicePixelRatio)
+            const y0 = positioner.pitchToY(previewNote.pitch) * devicePixelRatio
+            const y1 = y0 + positioner.noteHeight * devicePixelRatio
+            context.fillStyle = "rgba(255, 255, 255, 0.08)"
+            context.fillRect(x0, y0, x1 - x0, y1 - y0)
+        }
+        pitchPainter(painter)
+    }))
     const auditionNote = (pitch: byte, duration: ppqn) => {
         if (!Preferences.values["note-audition-while-dragging"]) {return}
         project.engine.noteSignal({
@@ -126,6 +145,31 @@ export const PitchEditor = ({
         const first = adapters[0]
         editing.modify(() => adapters.forEach(procedure))
         auditionNote(first.pitch, first.duration)
+    }
+    const updatePreview = (): void => {
+        const point = Surface.get(canvas).pointer
+        const captureEvent = capturing.captureEvent({clientX: point.x, clientY: point.y})
+        if (isNull(captureEvent)) {
+            const rect = canvas.getBoundingClientRect()
+            const pitch = positioner.yToPitch(point.y - rect.top)
+            const position = snapping.xToUnitFloor(point.x - rect.left) - reader.offset
+            // TODO #58
+            const duration = snapping.value
+            const velocity = 1.0
+            if (isNotNull(previewNote)) {
+                if (previewNote.pitch === pitch
+                    && previewNote.position === position
+                    && previewNote.duration === duration
+                    && previewNote.velocity === velocity) {
+                    return
+                }
+            }
+            // check if equal > return
+            previewNote = {pitch, position, duration, velocity}
+        } else {
+            previewNote = null
+        }
+        renderer.requestUpdate()
     }
     lifecycle.ownAll(
         attachShortcuts(canvas, editing, selection, locator),
@@ -205,13 +249,31 @@ export const PitchEditor = ({
         scale.subscribe(renderer.requestUpdate),
         reader.subscribeChange(renderer.requestUpdate),
         modifyContext.subscribeUpdate(renderer.requestUpdate),
+        Events.subscribe(canvas, "pointermove", event => {
+            canvas.focus({preventScroll: true})
+            if (Keyboard.isControlKey(event) && event.buttons === 0) {
+                updatePreview()
+            }
+        }),
+        Events.subscribe(canvas, "pointerleave", () => {
+            previewNote = null
+            renderer.requestUpdate()
+        }),
         installCursor(canvas, capturing, {
             get: (target, event) =>
                 target === null ? Keyboard.isControlKey(event) && event.buttons === 0
                     ? Cursor.Pencil
                     : null : CursorMap[target.type]
         }),
+        Events.subscribe(canvas, "keyup", () => {
+            previewNote = null
+            renderer.requestUpdate()
+        }),
         Events.subscribe(canvas, "keydown", event => {
+            if (Keyboard.isControlKey(event)) {
+                updatePreview()
+                return
+            }
             if (event.altKey || Keyboard.isControlKey(event) || Events.isTextInput(event.target)) {return}
             event.preventDefault()
             switch (event.key) {
