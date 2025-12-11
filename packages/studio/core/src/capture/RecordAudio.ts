@@ -54,6 +54,7 @@ export namespace RecordAudio {
                 box.hue.setValue(ColorCodes.forTrackType(TrackType.Audio))
                 box.label.setValue("Recording")
             })
+            project.selection.select(regionBox)
             return {fileBox, regionBox}
         })
         const {tempoMap, env: {audioContext: {sampleRate}}} = project

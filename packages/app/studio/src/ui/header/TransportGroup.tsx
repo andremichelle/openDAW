@@ -32,6 +32,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                         service.engine.stopRecording()
                     } else {
                         service.runIfProject(project => project.startRecording(!event.shiftKey))
+                        document.querySelector<HTMLElement>("[data-scope=\"regions\"]")?.focus()
                     }
                 }}><Icon symbol={IconSymbol.Record}/></Button>)
     const playButton: HTMLElement = (

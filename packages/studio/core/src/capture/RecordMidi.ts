@@ -28,14 +28,15 @@ export namespace RecordMidi {
             const writePosition = position.getValue() + latency
             editing.modify(() => {
                 const collection = NoteEventCollectionBox.create(boxGraph, UUID.generate())
-                const region = NoteRegionBox.create(boxGraph, UUID.generate(), box => {
+                const regionBox = NoteRegionBox.create(boxGraph, UUID.generate(), box => {
                     box.regions.refer(trackBox.regions)
                     box.events.refer(collection.owners)
                     box.position.setValue(Math.max(quantizeRound(writePosition, beats), 0))
                     box.hue.setValue(ColorCodes.forTrackType(TrackType.Notes))
                 })
-                engine.ignoreNoteRegion(region.address.uuid)
-                writing = Option.wrap({region, collection})
+                project.selection.select(regionBox)
+                engine.ignoreNoteRegion(regionBox.address.uuid)
+                writing = Option.wrap({region: regionBox, collection})
             }, false)
         }
         terminator.own(position.catchupAndSubscribe(owner => {

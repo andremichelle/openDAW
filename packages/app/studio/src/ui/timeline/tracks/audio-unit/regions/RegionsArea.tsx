@@ -73,7 +73,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             fy: vertex => RegionAdapters.for(boxAdapters, vertex.box)
         }))
     const element: HTMLElement = (
-        <div className={className} tabIndex={-1}>
+        <div className={className} tabIndex={-1} data-scope="regions">
             <CutCursor lifecycle={lifecycle} position={markerPosition} range={range}/>
         </div>
     )
