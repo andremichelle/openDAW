@@ -1,7 +1,17 @@
 import css from "./PitchEditor.sass?inline"
-import {Lifecycle, MutableObservableValue, Nullable, Option, panic, Selection, UUID} from "@opendaw/lib-std"
+import {
+    byte,
+    Lifecycle,
+    MutableObservableValue,
+    Nullable,
+    Option,
+    panic,
+    Procedure,
+    Selection,
+    UUID
+} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {CaptureMidi, TimelineRange} from "@opendaw/studio-core"
+import {CaptureMidi, Preferences, Project, TimelineRange} from "@opendaw/studio-core"
 import {PitchPositioner} from "./PitchPositioner.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {Scroller} from "@/ui/components/Scroller.tsx"
@@ -25,9 +35,10 @@ import {installContextMenu} from "@/ui/timeline/editors/notes/pitch/PitchContext
 import {NoteEventBox} from "@opendaw/studio-boxes"
 import {NoteCreateModifier} from "@/ui/timeline/editors/notes/NoteCreateModifier.ts"
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
-import {BoxEditing, BoxGraph} from "@opendaw/lib-box"
+import {BoxEditing} from "@opendaw/lib-box"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {CssUtils, Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
+import {ppqn} from "@opendaw/lib-dsp"
 
 const className = Html.adoptStyleSheet(css, "PitchEditor")
 
@@ -39,7 +50,7 @@ const CursorMap = {
 
 type Construct = {
     lifecycle: Lifecycle
-    graph: BoxGraph
+    project: Project
     boxAdapters: BoxAdapters
     range: TimelineRange
     editing: BoxEditing
@@ -54,7 +65,7 @@ type Construct = {
 }
 
 export const PitchEditor = ({
-                                lifecycle, graph, boxAdapters, range, editing, snapping,
+                                lifecycle, project, boxAdapters, range, editing, snapping,
                                 positioner, scale, selection, modifyContext, reader, stepRecording
                             }: Construct) => {
     const canvas: HTMLCanvasElement = <canvas tabIndex={-1}/>
@@ -62,8 +73,16 @@ export const PitchEditor = ({
     const locator = createPitchSelectionLocator(reader, range, positioner.valueAxis, capturing)
     const renderer = lifecycle.own(new CanvasPainter(canvas, createNotePitchPainter(
         {canvas, modifyContext, positioner, scale, range, snapping, reader})))
+    const playNote = (pitch: byte, duration: ppqn) => {
+        if (!Preferences.values["note-audition-while-dragging"]) {return}
+        project.engine.noteSignal({
+            type: "note-auto",
+            uuid: reader.trackBoxAdapter.unwrap().audioUnit.address.uuid, pitch, duration, velocity: 1.0
+        })
+    }
     // before selection
-    lifecycle.ownAll(installAutoScroll(canvas, (_deltaX, deltaY) => {
+    lifecycle.ownAll(
+        installAutoScroll(canvas, (_deltaX, deltaY) => {
             if (deltaY !== 0) {positioner.moveBy(deltaY * 0.05)}
         }, {padding: Config.AutoScrollPadding}),
         Dragging.attach(canvas, event => {
@@ -99,6 +118,13 @@ export const PitchEditor = ({
                             xAxis={range.valueAxis}
                             yAxis={positioner.valueAxis}/>
     )
+    const modifySelection = (procedure: Procedure<NoteEventBoxAdapter>): void => {
+        const adapters = selection.selected()
+        if (adapters.length === 0) {return}
+        const first = adapters[0]
+        editing.modify(() => adapters.forEach(procedure))
+        playNote(first.pitch, first.duration)
+    }
     lifecycle.ownAll(
         attachShortcuts(canvas, editing, selection, locator),
         Html.watchResize(canvas, () => range.width = canvas.clientWidth),
@@ -114,13 +140,12 @@ export const PitchEditor = ({
                 const clientY = event.clientY - rect.top
                 const pulse = snapping.floor(range.xToUnit(clientX)) - reader.offset
                 const pitch = positioner.yToPitch(clientY)
-                const boxOpt = editing.modify(() =>
-                    NoteEventBox.create(graph, UUID.generate(), box => {
-                        box.position.setValue(pulse)
-                        box.pitch.setValue(pitch)
-                        box.duration.setValue(snapping.value)
-                        box.events.refer(reader.content.box.events)
-                    }))
+                const boxOpt = editing.modify(() => NoteEventBox.create(project.boxGraph, UUID.generate(), box => {
+                    box.position.setValue(pulse)
+                    box.pitch.setValue(pitch)
+                    box.duration.setValue(snapping.value)
+                    box.events.refer(reader.content.box.events)
+                }))
                 if (boxOpt.nonEmpty()) {
                     selection.deselectAll()
                     selection.select(boxAdapters.adapterFor(boxOpt.unwrap(), NoteEventBoxAdapter))
@@ -134,16 +159,24 @@ export const PitchEditor = ({
             if (target === null || selection.isEmpty()) {return Option.None}
             const clientRect = canvas.getBoundingClientRect()
             if (target.type === "note-position") {
-                return modifyContext.startModifier(NoteMoveModifier.create({
+                const noteEventBoxAdapter = target.event
+                const {pitch, duration} = noteEventBoxAdapter
+                playNote(pitch, duration)
+                const modifier = NoteMoveModifier.create({
                     element: canvas,
                     selection,
                     positioner,
                     pointerPulse: range.xToUnit(event.clientX - clientRect.left),
                     pointerPitch: positioner.yToPitch(event.clientY - clientRect.top),
                     snapping,
-                    reference: target.event
-                }))
+                    reference: noteEventBoxAdapter
+                })
+                modifier.subscribePitchChanged(pitch => playNote(pitch, duration))
+                return modifyContext.startModifier(modifier)
             } else if (target.type === "note-end") {
+                const noteEventBoxAdapter = target.event
+                const {pitch, duration} = noteEventBoxAdapter
+                playNote(pitch, duration)
                 return modifyContext.startModifier(NoteDurationModifier.create({
                     element: canvas,
                     selection,
@@ -174,6 +207,56 @@ export const PitchEditor = ({
                 target === null ? Keyboard.isControlKey(event) && event.buttons === 0
                     ? Cursor.Pencil
                     : null : CursorMap[target.type]
+        }),
+        Events.subscribe(canvas, "keydown", event => {
+            if (event.altKey || Keyboard.isControlKey(event) || Events.isTextInput(event.target)) {return}
+            event.preventDefault()
+            switch (event.key) {
+                case "ArrowUp": {
+                    if (event.shiftKey) {
+                        modifySelection(({box, pitch}: NoteEventBoxAdapter) => {
+                            if (pitch + 12 <= 127) {box.pitch.setValue(pitch + 12)}
+                        })
+                    } else {
+                        modifySelection(({box, pitch}: NoteEventBoxAdapter) =>
+                            box.pitch.setValue(Math.max(pitch + 1, 0)))
+                    }
+                    event.stopPropagation()
+                    break
+                }
+                case "ArrowDown": {
+                    if (event.shiftKey) {
+                        modifySelection(({box, pitch}: NoteEventBoxAdapter) => {
+                            if (pitch - 12 >= 0) {box.pitch.setValue(pitch - 12)}
+                        })
+                    } else {
+                        modifySelection(({box, pitch}: NoteEventBoxAdapter) =>
+                            box.pitch.setValue(Math.max(pitch - 1, 0)))
+                    }
+                    event.stopPropagation()
+                    break
+                }
+                case "ArrowLeft": {
+                    if (selection.nonEmpty()) {
+                        if (!event.shiftKey) {
+                            modifySelection(({box, position}: NoteEventBoxAdapter) =>
+                                box.position.setValue(position - snapping.value))
+                            event.stopPropagation()
+                        }
+                    }
+                    break
+                }
+                case "ArrowRight": {
+                    if (selection.nonEmpty()) {
+                        if (!event.shiftKey) {
+                            modifySelection(({box, position}: NoteEventBoxAdapter) =>
+                                box.position.setValue(position + snapping.value))
+                            event.stopPropagation()
+                        }
+                    }
+                    break
+                }
+            }
         })
     )
     return (

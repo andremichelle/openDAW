@@ -222,6 +222,10 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                         const {uuid, pitch} = signal
                         this.optAudioUnit(uuid)
                             .ifSome(unit => unit.midiDeviceChain.noteSequencer.pushRawNoteOff(pitch))
+                    } else if (NoteSignal.isAuto(signal)) {
+                        const {uuid, pitch, duration, velocity} = signal
+                        this.optAudioUnit(uuid)
+                            .ifSome(unit => unit.midiDeviceChain.noteSequencer.pushScheduledNote(pitch, duration, velocity))
                     }
                 },
                 ignoreNoteRegion: (uuid: UUID.Bytes) => this.#ignoredRegions.add(uuid),

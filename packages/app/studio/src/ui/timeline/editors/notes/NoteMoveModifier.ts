@@ -1,4 +1,15 @@
-import {clamp, int, Notifier, Observer, Option, Selection, Terminable, unitValue} from "@opendaw/lib-std"
+import {
+    byte,
+    clamp,
+    int,
+    Notifier,
+    Observer,
+    Option,
+    Selection,
+    Subscription,
+    Terminable,
+    unitValue
+} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {BoxEditing} from "@opendaw/lib-box"
 import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
@@ -49,6 +60,7 @@ export class NoteMoveModifier implements NoteModifier {
     readonly #reference: NoteEventBoxAdapter
 
     readonly #notifier: Notifier<void>
+    readonly #pitchChanged: Notifier<byte>
     readonly #selectedModifyStrategy: NoteModifyStrategy
 
     #copy: boolean
@@ -66,6 +78,7 @@ export class NoteMoveModifier implements NoteModifier {
         this.#reference = reference
 
         this.#notifier = new Notifier<void>()
+        this.#pitchChanged = new Notifier<byte>()
         this.#selectedModifyStrategy = new SelectedModifyStrategy(this)
 
         this.#copy = false
@@ -74,6 +87,7 @@ export class NoteMoveModifier implements NoteModifier {
         this.#deltaPosition = 0
     }
 
+    subscribePitchChanged(observer: Observer<byte>): Subscription {return this.#pitchChanged.subscribe(observer)}
     subscribeUpdate(observer: Observer<void>): Terminable {return this.#notifier.subscribe(observer)}
 
     get copy(): boolean {return this.#copy}
@@ -100,6 +114,7 @@ export class NoteMoveModifier implements NoteModifier {
         }
         if (this.#deltaPitch !== deltaPitch) {
             this.#deltaPitch = deltaPitch
+            this.#pitchChanged.notify(this.#reference.pitch + deltaPitch)
             change = true
         }
         if (this.#copy !== altKey) {
@@ -145,12 +160,14 @@ export class NoteMoveModifier implements NoteModifier {
                 })
             }
         })
+        this.#pitchChanged.terminate()
     }
 
     cancel(): void {
         this.#deltaPitch = 0
         this.#deltaPosition = 0
         this.#dispatchChange()
+        this.#pitchChanged.terminate()
     }
 
     #dispatchChange(): void {this.#notifier.notify()}

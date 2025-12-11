@@ -1,6 +1,6 @@
 import css from "./NoteEditor.sass?inline"
-import {Events, Html, Keyboard} from "@opendaw/lib-dom"
-import {DefaultObservableValue, int, isInstanceOf, Lifecycle, Procedure, Terminable, UUID} from "@opendaw/lib-std"
+import {Html} from "@opendaw/lib-dom"
+import {DefaultObservableValue, int, isInstanceOf, Lifecycle, Terminable, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {PitchEditor} from "@/ui/timeline/editors/notes/pitch/PitchEditor.tsx"
@@ -71,7 +71,7 @@ export const NoteEditor =
         const pitchBody: HTMLElement = (
             <div className="pitch-body">
                 <PitchEditor lifecycle={lifecycle}
-                             graph={boxGraph}
+                             project={project}
                              boxAdapters={boxAdapters}
                              range={range}
                              editing={editing}
@@ -129,62 +129,7 @@ export const NoteEditor =
                                 reader={reader}/>
             </div>
         )
-        const modifySelection = (procedure: Procedure<NoteEventBoxAdapter>): void => {
-            const adapters = selection.selected()
-            if (adapters.length === 0) {return}
-            editing.modify(() => adapters.forEach(procedure))
-        }
         lifecycle.ownAll(
-            Events.subscribe(element, "keydown", event => {
-                if (event.altKey || Keyboard.isControlKey(event) || Events.isTextInput(event.target)) {return}
-                event.preventDefault()
-                switch (event.key) {
-                    case "ArrowUp": {
-                        if (event.shiftKey) {
-                            modifySelection(({box, pitch}: NoteEventBoxAdapter) => {
-                                if (pitch + 12 <= 127) {box.pitch.setValue(pitch + 12)}
-                            })
-                        } else {
-                            modifySelection(({box, pitch}: NoteEventBoxAdapter) =>
-                                box.pitch.setValue(Math.max(pitch + 1, 0)))
-                        }
-                        event.stopPropagation()
-                        break
-                    }
-                    case "ArrowDown": {
-                        if (event.shiftKey) {
-                            modifySelection(({box, pitch}: NoteEventBoxAdapter) => {
-                                if (pitch - 12 >= 0) {box.pitch.setValue(pitch - 12)}
-                            })
-                        } else {
-                            modifySelection(({box, pitch}: NoteEventBoxAdapter) =>
-                                box.pitch.setValue(Math.max(pitch - 1, 0)))
-                        }
-                        event.stopPropagation()
-                        break
-                    }
-                    case "ArrowLeft": {
-                        if (selection.nonEmpty()) {
-                            if (!event.shiftKey) {
-                                modifySelection(({box, position}: NoteEventBoxAdapter) =>
-                                    box.position.setValue(position - snapping.value))
-                                event.stopPropagation()
-                            }
-                        }
-                        break
-                    }
-                    case "ArrowRight": {
-                        if (selection.nonEmpty()) {
-                            if (!event.shiftKey) {
-                                modifySelection(({box, position}: NoteEventBoxAdapter) =>
-                                    box.position.setValue(position + snapping.value))
-                                event.stopPropagation()
-                            }
-                        }
-                        break
-                    }
-                }
-            }),
             capture.subscribeNotes(signal => {
                 if (engine.isPlaying.getValue() || !stepRecording.getValue()) {return}
                 if (NoteSignal.isOn(signal)) {

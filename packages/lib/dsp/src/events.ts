@@ -277,6 +277,17 @@ export class EventSpanRetainer<E extends EventSpan> {
         }
     }
 
+    * release(predicate: Predicate<E>): Generator<E> {
+        if (this.#array.length === 0) {return}
+        for (let lastIndex = this.#array.length - 1; lastIndex >= 0; lastIndex--) {
+            const event = this.#array[lastIndex]
+            if (predicate(event)) {
+                this.#array.splice(lastIndex, 1)
+                yield event
+            }
+        }
+    }
+
     * releaseAll(): Generator<E, void, void> {
         if (this.#array.length === 0) {return}
         for (let lastIndex = this.#array.length - 1; lastIndex >= 0; lastIndex--) {

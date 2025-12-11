@@ -3,12 +3,13 @@ import {isDefined, Notifier, Observer, Subscription, tryCatch} from "@opendaw/li
 
 const PreferencesSchema = z.object({
     "visible-help-hints": z.boolean().default(true),
+    "note-audition-while-dragging": z.boolean().default(true),
     "auto-open-clips": z.boolean().default(false),
     "auto-create-output-compressor": z.boolean().default(true),
     "footer-show-fps-meter": z.boolean().default(false),
     "footer-show-build-infos": z.boolean().default(false),
     "dragging-use-pointer-lock": z.boolean().default(false),
-    "enable-beta-features": z.boolean().default(false),
+    "enable-beta-features": z.boolean().default(false)
 })
 
 export type Preferences = z.infer<typeof PreferencesSchema>

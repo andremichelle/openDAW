@@ -13,7 +13,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {Address, Addressable, BoxGraph, BoxEditing, Field, PointerField} from "@opendaw/lib-box"
+import {Address, Addressable, BoxEditing, BoxGraph, Field, PointerField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {SelectionBox} from "@opendaw/studio-boxes"
 import {SelectableVertex} from "./SelectableVertex"
@@ -104,6 +104,7 @@ export class VertexSelection implements Selection<SelectableVertex> {
     }
 
     isEmpty(): boolean {return this.#selectableMap.size() === 0}
+    nonEmpty(): boolean {return this.#selectableMap.size() > 0}
 
     count(): int {return this.#selectableMap.size()}
 

@@ -1,7 +1,7 @@
-import {int, Iterables, Option, quantizeFloor, unitValue} from "@opendaw/lib-std"
+import {int, Iterables, Option, unitValue} from "@opendaw/lib-std"
 import {LoopableRegion, ValueEvent} from "@opendaw/lib-dsp"
 import {AudioRegionBoxAdapter, NoteRegionBoxAdapter, ValueRegionBoxAdapter} from "@opendaw/studio-adapters"
-import {RegionModifyStrategies, RegionModifyStrategy, TimelineRange} from "@opendaw/studio-core"
+import {RegionModifyStrategies, RegionModifyStrategy, TimeGrid, TimelineRange} from "@opendaw/studio-core"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {renderNotes} from "@/ui/timeline/renderer/notes.ts"
 import {RegionBound} from "@/ui/timeline/renderer/env.ts"
@@ -33,12 +33,12 @@ export const renderRegions = (context: CanvasRenderingContext2D,
 
     const grid = true
     if (grid) {
-        const {signatureDuration} = tracks.service.project
+        const {timelineBox: {signature: {nominator, denominator}}} = tracks.service.project
         context.fillStyle = "rgba(0, 0, 0, 0.3)"
-        for (let p = quantizeFloor(unitMin, signatureDuration); p < unitMax; p += signatureDuration) {
-            const x0 = Math.floor(range.unitToX(p) * devicePixelRatio)
+        TimeGrid.fragment([nominator.getValue(), denominator.getValue()], range, ({pulse}) => {
+            const x0 = Math.floor(range.unitToX(pulse) * devicePixelRatio)
             context.fillRect(x0, 0, devicePixelRatio, height)
-        }
+        }, {minLength: 32})
     }
     const renderRegions = (strategy: RegionModifyStrategy, filterSelected: boolean, hideSelected: boolean): void => {
         const optTrack = tracks.getByIndex(strategy.translateTrackIndex(index))

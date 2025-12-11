@@ -19,6 +19,7 @@ export interface Selection<SELECTABLE> {
     deselectAll(): void
     isSelected(selectable: SELECTABLE): boolean
     isEmpty(): boolean
+    nonEmpty(): boolean
     count(): int
     selected(): ReadonlyArray<SELECTABLE>
     distance(inventory: ReadonlyArray<SELECTABLE>): ReadonlyArray<SELECTABLE>
