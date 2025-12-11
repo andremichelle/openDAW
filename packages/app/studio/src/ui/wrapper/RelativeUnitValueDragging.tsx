@@ -17,6 +17,8 @@ import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 import {ValueTooltip} from "@/ui/surface/ValueTooltip.tsx"
 import {Surface} from "../surface/Surface"
 import {Events} from "@opendaw/lib-dom"
+import {Runtime} from "@opendaw/lib-runtime"
+import {Preferences} from "@opendaw/studio-core"
 
 type Construct = {
     lifecycle: Lifecycle
@@ -77,7 +79,14 @@ export const RelativeUnitValueDragging = ({
             cancel: (prevValue: unitValue) => editing.modify(() => parameter.setUnitValue(prevValue), false),
             finalise: (_prevValue: unitValue, _newValue: unitValue): void => editing.mark(),
             finally: (): void => element.classList.remove("modifying")
-        }), element, options)
+        }), element, options),
+        Events.subscribe(element, "wheel", event => {
+            if (!Preferences.values["modifying-controls-wheel"]) {return}
+            const value = parameter.getUnitValue() - Math.sign(event.deltaY) * 0.01
+            editing.modify(() => parameter.setUnitValue(value), false)
+            Runtime.debounce(() => editing.mark())
+            event.preventDefault()
+        }, {passive: true})
     )
     return element
 }

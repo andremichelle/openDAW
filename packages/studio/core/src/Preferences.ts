@@ -3,7 +3,8 @@ import {isDefined, Notifier, Observer, Subscription, tryCatch} from "@opendaw/li
 
 const PreferencesSchema = z.object({
     "visible-help-hints": z.boolean().default(true),
-    "note-audition-while-dragging": z.boolean().default(true),
+    "note-audition-while-editing": z.boolean().default(true),
+    "modifying-controls-wheel": z.boolean().default(false),
     "auto-open-clips": z.boolean().default(false),
     "auto-create-output-compressor": z.boolean().default(true),
     "footer-show-fps-meter": z.boolean().default(false),
