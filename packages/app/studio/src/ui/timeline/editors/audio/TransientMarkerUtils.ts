@@ -28,7 +28,7 @@ export namespace TransientMarkerUtils {
                     if (seconds < first.seconds) {
                         return first.position + (seconds - first.seconds) * firstRate
                     }
-                    if (seconds > last.seconds) {
+                    if (seconds >= last.seconds) {
                         return last.position + (seconds - last.seconds) * lastRate
                     }
                     const index = Math.min(markers.length - 2,
@@ -42,10 +42,10 @@ export namespace TransientMarkerUtils {
                     if (localUnit < first.position) {
                         return first.seconds + (localUnit - first.position) / firstRate
                     }
-                    if (localUnit > last.position) {
+                    if (localUnit >= last.position) {
                         return last.seconds + (localUnit - last.position) / lastRate
                     }
-                    const index = warpMarkers.floorLastIndex(localUnit)
+                    const index = Math.min(markers.length - 2, Math.max(0, warpMarkers.floorLastIndex(localUnit)))
                     const left = markers[index]
                     const right = markers[index + 1]
                     const t = (localUnit - left.position) / (right.position - left.position)
