@@ -1,7 +1,6 @@
 import css from "./SelectionRectangle.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
 import {EmptyExec, Lifecycle, Option, Selection, SortedSet, UUID, ValueAxis} from "@opendaw/lib-std"
-import {BoxEditing} from "@opendaw/lib-box"
 import {TimelineSelectableLocator} from "@/ui/timeline/TimelineSelectableLocator.ts"
 import {Dragging, Html, PointerCaptureTarget} from "@opendaw/lib-dom"
 import {BoxAdapter} from "@opendaw/studio-adapters"
@@ -12,7 +11,6 @@ const className = Html.adoptStyleSheet(css, "SelectionRectangle")
 type Construct<T extends BoxAdapter> = {
     lifecycle: Lifecycle
     target: PointerCaptureTarget
-    editing: BoxEditing
     selection: Selection<T>
     locator: TimelineSelectableLocator<T>
     xAxis: ValueAxis
@@ -20,7 +18,7 @@ type Construct<T extends BoxAdapter> = {
 }
 
 export const SelectionRectangle =
-    <T extends BoxAdapter, >({lifecycle, target, editing, selection, locator, xAxis, yAxis}: Construct<T>) => {
+    <T extends BoxAdapter, >({lifecycle, target, selection, locator, xAxis, yAxis}: Construct<T>) => {
         const svgRect: SVGRectElement = (
             <rect x="0" y="0" width="0" height="0"
                   stroke={Colors.cream}
@@ -38,6 +36,7 @@ export const SelectionRectangle =
         const svg: SVGSVGElement = <svg classList={className}>{svgRect}</svg>
         lifecycle.ownAll(
             Dragging.attach(target, (event: PointerEvent) => {
+                if (event.defaultPrevented) {return Option.None}
                 const clientRect = svg.getBoundingClientRect()
                 const u0 = xAxis.axisToValue(event.clientX - clientRect.left)
                 const v0 = yAxis.axisToValue(event.clientY - clientRect.top)
@@ -67,7 +66,7 @@ export const SelectionRectangle =
                 }
                 selection.deselectAll()
                 const enclosed: Array<T> = []
-                const selected: SortedSet<UUID.Bytes, T> = UUID.newSet<T>(adapter => adapter.uuid)
+                const selectedAdapters: SortedSet<UUID.Bytes, T> = UUID.newSet<T>(adapter => adapter.uuid)
                 return Option.wrap({
                     update: (event: Dragging.Event) => {
                         const clientRect = svg.getBoundingClientRect()
@@ -81,7 +80,7 @@ export const SelectionRectangle =
                         enclosed.splice(0, enclosed.length, ...locator.selectablesBetween(
                             {u: uMin, v: vMin},
                             {u: uMax, v: vMax}))
-                        selected.clear()
+                        selectedAdapters.clear()
                         if (event.shiftKey) {
                             const invertedSelection = new Set<T>(before)
                             for (const selectable of enclosed) {
@@ -89,22 +88,20 @@ export const SelectionRectangle =
                                     invertedSelection.add(selectable)
                                 }
                             }
-                            selected.addMany(invertedSelection)
+                            selectedAdapters.addMany(invertedSelection)
                         } else {
-                            selected.addMany(enclosed)
+                            selectedAdapters.addMany(enclosed)
                         }
-                        editing.modify(() => {
-                            for (const adapter of selection.selected()) {
-                                if (!selected.hasValue(adapter)) {
-                                    selection.deselect(adapter)
-                                }
+                        for (const adapter of selection.selected()) {
+                            if (!selectedAdapters.hasValue(adapter)) {
+                                selection.deselect(adapter)
                             }
-                            for (const adapter of selected.values()) {
-                                if (!selection.isSelected(adapter)) {
-                                    selection.select(adapter)
-                                }
+                        }
+                        for (const adapter of selectedAdapters.values()) {
+                            if (!selection.isSelected(adapter)) {
+                                selection.select(adapter)
                             }
-                        }, false)
+                        }
                     },
                     cancel: () => {
                         selection.deselectAll()

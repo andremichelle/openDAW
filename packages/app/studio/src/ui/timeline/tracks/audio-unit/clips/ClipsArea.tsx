@@ -46,7 +46,6 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
     const dragAndDrop = new ClipDragAndDrop(service, capturing)
     element.appendChild(
         <SelectionRectangle
-            editing={editing}
             lifecycle={lifecycle}
             locator={locator}
             selection={clipSelection}

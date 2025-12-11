@@ -88,7 +88,6 @@ export const PropertyEditor =
         const selectionRectangle = (
             <SelectionRectangle lifecycle={lifecycle}
                                 target={canvas}
-                                editing={editing}
                                 selection={selection}
                                 locator={locator}
                                 xAxis={range.valueAxis}

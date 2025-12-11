@@ -114,8 +114,8 @@ export const ValueEditor = ({lifecycle, service, range, snapping, reader, contex
                         < SnapValueThresholdInPixels
                             ? formatValue
                             : valueMapping.x(valueMapping.y(clickValue))
-                        return editing.modify(() => ValueEventEditing
-                            .createOrMoveEvent(reader.content, snapping, position, value,
+                        return editing.modify(() =>
+                            ValueEventEditing.createOrMoveEvent(reader.content, snapping, position, value,
                                 valueMapping.floating() ? Interpolation.Linear : Interpolation.None))
                             .match({
                                 none: () => Option.None,
@@ -180,7 +180,6 @@ export const ValueEditor = ({lifecycle, service, range, snapping, reader, contex
     const selectionRectangle = (
         <SelectionRectangle lifecycle={lifecycle}
                             target={canvas}
-                            editing={editing}
                             selection={selection}
                             locator={selectableLocator}
                             xAxis={range.valueAxis}

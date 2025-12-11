@@ -25,7 +25,7 @@ import {installContextMenu} from "@/ui/timeline/editors/notes/pitch/PitchContext
 import {NoteEventBox} from "@opendaw/studio-boxes"
 import {NoteCreateModifier} from "@/ui/timeline/editors/notes/NoteCreateModifier.ts"
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
-import {BoxGraph, BoxEditing} from "@opendaw/lib-box"
+import {BoxEditing, BoxGraph} from "@opendaw/lib-box"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {CssUtils, Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
 
@@ -94,7 +94,6 @@ export const PitchEditor = ({
     const selectionRectangle = (
         <SelectionRectangle lifecycle={lifecycle}
                             target={canvas}
-                            editing={editing}
                             selection={selection}
                             locator={locator}
                             xAxis={range.valueAxis}

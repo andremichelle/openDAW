@@ -145,7 +145,6 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
     element.appendChild(
         <SelectionRectangle target={element}
                             lifecycle={lifecycle}
-                            editing={editing}
                             selection={regionSelection}
                             locator={regionLocator}
                             xAxis={range.valueAxis}

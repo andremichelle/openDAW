@@ -48,33 +48,22 @@ export const createValueEventCapturing = (element: Element,
                 return {type: "event", event: first}
             }
         } else if (index === events.length() - 1) {
-            const last = Arrays.getLast(array, "Internal Error")
-            if (Math.abs(valueToY(last.value) - y) < PointerRadiusDistance) {
-                return {type: "event", event: last}
-            }
+            return null
         } else {
             const n0 = array[index]
-            const n1 = array[index + 1]
-            const y0 = valueToY(n0.value)
-            const y1 = valueToY(n1.value)
             const interpolation = n0.interpolation
             if (interpolation.type === "none") {
-                if (Math.abs(valueToY(n0.value) - y) < PointerRadiusDistance) {
-                    return {type: "event", event: n0}
-                } else {
-                    return null
-                }
+                return null
             }
-            const x0 = range.unitToX(n0.position + offset)
-            const x1 = range.unitToX(n1.position + offset)
             if (interpolation.type === "linear") {
-                const numerator = Math.abs((y1 - y0) * x - (x1 - x0) * y + x1 * y0 - y1 * x0)
-                const denominator = Math.sqrt((y1 - y0) ** 2 + (x1 - x0) ** 2)
-                if (n0.interpolation.type === "curve" && numerator / denominator < PointerRadiusDistance) {
-                    return {type: "curve", event: n0}
-                }
+                return null
             } else if (interpolation.type === "curve") {
-                // TODO This is not the 2d distance, just the y-distance
+                const n1 = array[index + 1]
+                const x0 = range.unitToX(n0.position + offset)
+                const x1 = range.unitToX(n1.position + offset)
+                const y0 = valueToY(n0.value)
+                const y1 = valueToY(n1.value)
+                // This is not the 2d distance, just the y-distance (good enough for our purposes)
                 const dy = Curve.valueAt({slope: interpolation.slope, steps: x1 - x0, y0, y1}, x - x0) - y
                 if (Math.abs(dy) < PointerRadiusDistance) {
                     return {type: "curve", event: n0}
