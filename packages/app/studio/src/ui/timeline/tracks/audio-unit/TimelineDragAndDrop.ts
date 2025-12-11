@@ -42,7 +42,7 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
         if (data.type !== "sample" && data.type !== "instrument" && data.type !== "file") {
             return Option.None
         }
-        return Option.wrap(isDefined(target) ? target : false)
+        return Option.wrap(target ?? false)
     }
 
     async drop(event: DragEvent, data: AnyDragData) {

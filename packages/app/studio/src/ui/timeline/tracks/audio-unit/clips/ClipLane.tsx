@@ -11,7 +11,7 @@ import {
     Option,
     Terminator
 } from "@opendaw/lib-std"
-import {createElement, Group} from "@opendaw/lib-jsx"
+import {createElement} from "@opendaw/lib-jsx"
 import {AnyClipBoxAdapter, NoteClipBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {ClipPlaceholder} from "@/ui/timeline/tracks/audio-unit/clips/ClipPlaceholder.tsx"
@@ -36,8 +36,7 @@ type Construct = {
 
 export const ClipLane = ({lifecycle, service, trackManager, adapter}: Construct) => {
     const {project, timeline: {clips}} = service
-    const placeholderContainer: HTMLElement = <Group/>
-    const container: HTMLElement = (<div className={className}>{placeholderContainer}</div>)
+    const container: HTMLElement = (<div className={className}/>)
     const runtime = lifecycle.own(new Terminator())
     const cells: Array<Cell> = []
     const restockPlaceholders = (count: int): void => {
@@ -50,7 +49,7 @@ export const ClipLane = ({lifecycle, service, trackManager, adapter}: Construct)
                                  adapter={adapter}
                                  gridColumn={`${index + 1} / ${index + 2}`}/>
             )
-            placeholderContainer.appendChild(placeholder)
+            container.appendChild(placeholder)
             assert(!isDefined(cells[index]), "Cannot restock busy placeholder.")
             cells[index] = {terminator, placeholder, adapter}
         }

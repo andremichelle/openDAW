@@ -11,6 +11,7 @@ import {ClipsArea} from "./clips/ClipsArea.tsx"
 import {AudioUnitBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
 import {ExtraSpace} from "./Constants.ts"
+import {HeadersArea} from "@/ui/timeline/tracks/audio-unit/HeadersArea"
 
 const className = Html.adoptStyleSheet(css, "AudioUnitsTimeline")
 
@@ -41,22 +42,23 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
         )
     }
     const manager: TracksManager = lifecycle.own(new TracksManager(service, scrollContainer, factory))
-    const clipArea: HTMLElement = <ClipsArea lifecycle={lifecycle}
-                                             service={service}
-                                             manager={manager}
-                                             scrollModel={scrollModel}
-                                             scrollContainer={scrollContainer}/>
-    const regionArea: HTMLElement = <RegionsArea lifecycle={lifecycle}
-                                                 service={service}
-                                                 manager={manager}
-                                                 scrollModel={scrollModel}
-                                                 scrollContainer={scrollContainer}
-                                                 range={range}/>
     const element: HTMLElement = (
         <div className={className}>
+            <HeadersArea lifecycle={lifecycle}
+                         service={service}
+                         scrollModel={scrollModel}/>
+            <ClipsArea lifecycle={lifecycle}
+                       service={service}
+                       manager={manager}
+                       scrollModel={scrollModel}
+                       scrollContainer={scrollContainer}/>
+            <RegionsArea lifecycle={lifecycle}
+                         service={service}
+                         manager={manager}
+                         scrollModel={scrollModel}
+                         scrollContainer={scrollContainer}
+                         range={range}/>
             {scrollContainer}
-            {clipArea}
-            {regionArea}
             <Scroller lifecycle={lifecycle} model={scrollModel} floating/>
         </div>
     )
