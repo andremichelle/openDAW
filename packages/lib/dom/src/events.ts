@@ -34,6 +34,19 @@ export class Events {
         }, {capture: true})
     }
 
+    static subscribeDblUp = (eventTarget: EventTarget, listener: (event: PointerEvent) => void): Subscription => {
+        let lastDownTime: number = 0.0
+        return this.subscribe(eventTarget, "pointerup", event => {
+            const now = performance.now()
+            if (now - lastDownTime < this.DOUBLE_DOWN_THRESHOLD) {
+                event.preventDefault()
+                event.stopImmediatePropagation()
+                listener(event)
+            }
+            lastDownTime = now
+        }, {capture: true})
+    }
+
     static readonly PreventDefault: Procedure<Event> = event => event.preventDefault()
 
     static readonly isTextInput = (target: Nullable<EventTarget>): boolean => target instanceof HTMLInputElement

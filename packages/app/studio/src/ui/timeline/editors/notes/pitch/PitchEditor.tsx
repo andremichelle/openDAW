@@ -38,7 +38,7 @@ import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {BoxEditing} from "@opendaw/lib-box"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {CssUtils, Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
-import {ppqn} from "@opendaw/lib-dsp"
+import {PPQN, ppqn} from "@opendaw/lib-dsp"
 
 const className = Html.adoptStyleSheet(css, "PitchEditor")
 
@@ -101,10 +101,12 @@ export const PitchEditor = ({
             const target = capturing.captureEvent(event)
             if (target !== null) {return Option.None}
             const clientRect = canvas.getBoundingClientRect()
+            const pitch = positioner.yToPitch(event.clientY - clientRect.top)
+            auditionNote(pitch, PPQN.SemiQuaver)
             return modifyContext.startModifier(NoteCreateModifier.create({
                 element: canvas,
                 pointerPulse: range.xToUnit(event.clientX - clientRect.left) - reader.offset,
-                pointerPitch: positioner.yToPitch(event.clientY - clientRect.top),
+                pointerPitch: pitch,
                 selection,
                 snapping,
                 reference: reader
@@ -149,6 +151,7 @@ export const PitchEditor = ({
                 if (boxOpt.nonEmpty()) {
                     selection.deselectAll()
                     selection.select(boxAdapters.adapterFor(boxOpt.unwrap(), NoteEventBoxAdapter))
+                    auditionNote(pitch, snapping.value)
                 }
             } else if (target.type !== "loop-duration") {
                 editing.modify(() => target.event.box.delete())

@@ -59,7 +59,10 @@ export class NoteCreateModifier implements NoteModifier {
         }
     }
 
-    subscribeUpdate(observer: Observer<void>): Terminable {return this.#notifier.subscribe(observer)}
+    subscribeUpdate(observer: Observer<void>): Terminable {
+        observer()
+        return this.#notifier.subscribe(observer)
+    }
 
     showOrigin(): boolean {return false}
     showCreation(): Option<UINoteEvent> {return Option.wrap(this.#creation)}
