@@ -21,20 +21,22 @@ export namespace ProjectValidation {
             visitNoteRegionBox: (box: NoteRegionBox) => validateRegion(box),
             visitValueRegionBox: (box: ValueRegionBox) => validateRegion(box),
             visitAudioRegionBox: (box: AudioRegionBox) => validateRegion(box),
-            visitTrackBox: (box: TrackBox): void => Arrays.iterateAdjacent(box.regions.pointerHub.incoming()
-                .map(({box}) => asDefined(box.accept<BoxVisitor<AudioRegionBox | ValueRegionBox | NoteRegionBox>>({
-                    visitNoteRegionBox: (box: NoteRegionBox) => box,
-                    visitValueRegionBox: (box: ValueRegionBox) => box,
-                    visitAudioRegionBox: (box: AudioRegionBox) => box
-                }), "Box must be a NoteRegionBox, ValueRegionBox or AudioRegionBox"))
-                .sort((a, b) => a.position.getValue() - b.position.getValue()))
-                .forEach(([left, right]) => {
+            visitTrackBox: (box: TrackBox): void => {
+                const regions = box.regions.pointerHub.incoming()
+                    .map(({box}) => asDefined(box.accept<BoxVisitor<AudioRegionBox | ValueRegionBox | NoteRegionBox>>({
+                        visitNoteRegionBox: (box: NoteRegionBox) => box,
+                        visitValueRegionBox: (box: ValueRegionBox) => box,
+                        visitAudioRegionBox: (box: AudioRegionBox) => box
+                    }), "Box must be a NoteRegionBox, ValueRegionBox or AudioRegionBox"))
+                    .sort((a, b) => a.position.getValue() - b.position.getValue())
+                for (const [left, right] of Arrays.iterateAdjacent(regions)) {
                     if (right.position.getValue() < left.position.getValue() + left.duration.getValue()) {
                         console.warn(left, right, "Overlapping regions")
                         invalidBoxes.add(left)
                         invalidBoxes.add(right)
                     }
-                })
+                }
+            }
         }))
         if (invalidBoxes.size === 0) {return}
         console.warn(`Deleting ${invalidBoxes.size} invalid boxes:`)
