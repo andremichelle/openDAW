@@ -78,7 +78,7 @@ export namespace Promises {
                 return await factory()
             } catch (reason) {
                 if (retryIf(reason, ++count)) {
-                    console.debug("retrying after failure:", reason)
+                    console.debug(`retry after failure (online: ${navigator.onLine}):`, reason)
                     await Wait.timeSpan(TimeSpan.seconds(1))
                     return attempt(count)
                 }

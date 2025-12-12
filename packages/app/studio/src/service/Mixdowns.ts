@@ -170,7 +170,7 @@ export namespace Mixdowns {
 
     const loadFFmepg = async (): Promise<FFmpegWorker> => {
         const {FFmpegWorker} = await Promises.guardedRetry(() =>
-            import("@opendaw/studio-core/FFmpegWorker"), (_, count) => count < 10)
+            import("@opendaw/studio-core/FFmpegWorker"), (_, count) => count < 60)
         const progress = new DefaultObservableValue(0.0)
         const progressDialog = RuntimeNotifier.progress({headline: "Loading FFmpeg...", progress})
         const {status, value, error} = await Promises.tryCatch(FFmpegWorker.load(value => progress.setValue(value)))
