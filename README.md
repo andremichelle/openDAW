@@ -15,7 +15,7 @@ a strong focus on **education** and data-privacy. Please consider supporting thi
 on [Patreon](https://www.patreon.com/join/openDAW) or [ko-fi](https://ko-fi.com/opendaw).
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/andremichelle/openDAW/refs/heads/main/assets/studio-teaser.png"/>
+<img src="https://raw.githubusercontent.com/andremichelle/openDAW/main/assets/studio-teaser.png"/>
 </p>
 
 ---
