@@ -28,7 +28,8 @@ export const Dashboard = ({lifecycle, service}: Construct) => {
                     openDAW is an open source web based music studio with a clear focus on <a
                     href="https://opendaw.org/education" target="education">education</a> and <LocalLink
                     href="/privacy">data privacy</LocalLink>,
-                    open to everyone with no login required so you can start creating music right away. The studio is still
+                    open to everyone with no login required so you can start creating <a
+                    href="https://music.opendaw.studio/" target="music">music</a> right away. The studio is still
                     evolving and not production ready yet.
                 </p>
                 <div className="columns">

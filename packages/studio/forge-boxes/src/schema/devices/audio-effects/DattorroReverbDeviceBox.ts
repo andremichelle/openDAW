@@ -23,7 +23,7 @@ export const DattorroReverbDeviceBox: BoxSchema<Pointers> =
         },
         14: {
             type: "float32", name: "decay", pointerRules: ParameterPointerRules,
-            value: 0.5, ...UnipolarConstraints
+            value: 0.75, ...UnipolarConstraints
         },
         15: {
             type: "float32", name: "decayDiffusion1", pointerRules: ParameterPointerRules,
