@@ -8,6 +8,7 @@ import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo"
 
 const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://"]
+const IgnoredErrors = ["ResizeObserver loop completed with undelivered notifications."]
 
 export class ErrorHandler {
     readonly #terminator = new Terminator()
@@ -27,6 +28,11 @@ export class ErrorHandler {
     }
 
     #tryIgnore(event: Event): boolean {
+        if (event instanceof ErrorEvent && IgnoredErrors.includes(event.message)) {
+            console.warn(event.message)
+            event.preventDefault()
+            return true
+        }
         if (!(event instanceof PromiseRejectionEvent)) {return false}
         const {reason} = event
         if (Errors.isAbort(reason)) {
