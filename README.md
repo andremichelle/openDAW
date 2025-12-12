@@ -61,45 +61,11 @@ Huge thanks to our [ambassadors](https://opendaw.org/ambassadors), whose dedicat
 
 ### openDAW Visionary — $25.00
 
-- Polarity
-- kanaris
-- Stephen Tai
-- Thad Guidry
-- Pathfinder
-- One Sound Every Day (santino)
-- Oli Larkin
+Stephen Tai, Pathfinder, One Sound Every Day (santino), kanaris, Oli Larkin
 
 ### openDAW Supporter — $5.00
 
-- Cal Lycus
-- Jetdarc
-- Truls Enstad
-- p07a
-- Ynot Etluhcs
-- Mats Gisselson
-- Dado
-- centomila
-- Ola
-- SKYENCE
-- BeatMax_Prediction
-- Kim T
-- Nyenoidz
-- Bruce Hunter
-- Steve Meiers
-- 4ohm
-- Yito
-- Shawn Lukas
-- Tommes
-- David Thompson
-- Harry Gillich
-- OxVolt
-- Wojciech Miłkowski
-- Client
-- skyboundzoo
-- JHINZ
-- Mark Dammer
-- fork-kun
-- Martin Eigel
+Cal Lycus, Jetdarc, Truls Enstad, Polarity, Ynot Etluhcs, Mats Gisselson, Ola, SKYENCE, BeatMax_Prediction, Kim T, Nyenoidz, Steve Meiers, 4ohm, Yito, Shawn Lukas, Tommes, David Thompson, Harry Gillich, OxVolt, Wojciech Miłkowski, skyboundzoo, JHINZ, Mark Dammer, fork-kun, Martin Eigel
 
 ---
 
