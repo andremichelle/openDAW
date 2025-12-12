@@ -17,7 +17,7 @@ import {
     VaporisateurDeviceBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
-import {asDefined, asInstanceOf, clamp, Float, UUID, ValueOwner} from "@opendaw/lib-std"
+import {asDefined, asInstanceOf, clamp, Float, Subscription, UUID, ValueOwner} from "@opendaw/lib-std"
 import {AudioPlayback, AudioUnitType} from "@opendaw/studio-enums"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {Field} from "@opendaw/lib-box"
@@ -52,12 +52,13 @@ export class ProjectMigration {
         const loadAudioData = (uuid: UUID.Bytes): Promise<AudioData> => {
             const {promise, resolve, reject} = Promise.withResolvers<AudioData>()
             const loader = env.sampleManager.getOrCreate(uuid)
-            const subscription = loader.subscribe(state => {
+            let subscription: Subscription
+            subscription = loader.subscribe(state => {
                 if (state.type === "loaded") {
-                    subscription.terminate()
+                    queueMicrotask(() => subscription.terminate())
                     resolve(loader.data.unwrap("State mismatch"))
                 } else if (state.type === "error") {
-                    subscription.terminate()
+                    queueMicrotask(() => subscription.terminate())
                     reject(state.reason)
                 }
             })

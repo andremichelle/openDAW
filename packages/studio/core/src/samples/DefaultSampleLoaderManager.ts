@@ -1,4 +1,4 @@
-import {Progress, SortedSet, UUID} from "@opendaw/lib-std"
+import {Progress, SortedSet, Subscription, UUID} from "@opendaw/lib-std"
 import {DefaultSampleLoader} from "./DefaultSampleLoader"
 import {SampleProvider} from "./SampleProvider"
 import {SampleLoader, SampleLoaderManager, SampleMetaData} from "@opendaw/studio-adapters"
@@ -29,10 +29,13 @@ export class DefaultSampleLoaderManager implements SampleLoaderManager, SamplePr
     async getAudioData(uuid: UUID.Bytes): Promise<AudioData> {
         const {promise, resolve, reject} = Promise.withResolvers<AudioData>()
         const loader = this.getOrCreate(uuid)
-        loader.subscribe(state => {
+        let subscription: Subscription
+        subscription = loader.subscribe(state => {
             if (state.type === "error") {
+                queueMicrotask(() => subscription.terminate())
                 reject(state.reason)
             } else if (loader.data.nonEmpty()) {
+                queueMicrotask(() => subscription.terminate())
                 resolve(loader.data.unwrap())
             }
         })
