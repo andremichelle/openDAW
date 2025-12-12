@@ -7,7 +7,7 @@ import {Surface} from "@/ui/surface/Surface.tsx"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo"
 
-const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://"]
+const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP"]
 const IgnoredErrors = ["ResizeObserver loop completed with undelivered notifications."]
 
 export class ErrorHandler {
