@@ -36,7 +36,7 @@ export const TimeStretchEditor = ({lifecycle, project, reader}: Construct) => {
                                     transientPlayModeEnumValue.setValue(transientPlayMode.getValue())),
                                 adapter.box.playbackRate
                                     .catchupAndSubscribe(() => observableCents.setValue(adapter.cents)),
-                                observableCents.catchupAndSubscribe(owner =>
+                                observableCents.subscribe(owner =>
                                     editing.modify(() => adapter.cents = owner.getValue()))
                             )
                         }
