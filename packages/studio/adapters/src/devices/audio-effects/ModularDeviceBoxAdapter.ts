@@ -1,5 +1,5 @@
 import {ModularDeviceBox} from "@opendaw/studio-boxes"
-import {panic, Terminable, UUID} from "@opendaw/lib-std"
+import {Option, panic, Terminable, UUID} from "@opendaw/lib-std"
 import {Pointers} from "@opendaw/studio-enums"
 import {Address, BooleanField, FieldKeys, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../DeviceAdapter"
@@ -21,7 +21,7 @@ export class ModularDeviceBoxAdapter implements AudioEffectDeviceAdapter {
         this.#context = context
         this.#box = box
         this.#outputRegistration = context.isMainThread
-            ? context.audioOutputInfoRegistry.register({address: box.address, path: () => [box.label.getValue()]})
+            ? context.audioOutputInfoRegistry.register({address: box.address, owner: Option.None, label: () => box.label.getValue()})
             : Terminable.Empty
     }
 

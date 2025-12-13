@@ -72,23 +72,51 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
                                               root={MenuItem.root().setRuntimeChildrenProcedure(parent => {
                                                   const currentTarget = sideChain.targetAddress
                                                       .flatMap(address => audioOutputInfoRegistry.query(address))
-                                                      .mapOr(info => info.path()[0], "")
+                                                      .mapOr(info => info.label(), "")
                                                   parent.addMenuItem(MenuItem.default({
                                                       label: `Remove ${currentTarget}`,
                                                       hidden: currentTarget === ""
                                                   }).setTriggerProcedure(() => editing.modify(() =>
                                                       sideChain.targetAddress = Option.None)))
-                                                  project.audioOutputInfoRegistry.list()
-                                                      .map(({address, path}) => parent.addMenuItem(
-                                                          MenuItem.default({
-                                                              label: path().join(", "),
-                                                              checked: sideChain.targetAddress
-                                                                  .mapOr(other => other.equals(address), false)
-                                                          }).setTriggerProcedure(() => {
-                                                              editing.modify(() =>
-                                                                  sideChain.targetAddress = Option.wrap(address))
-                                                          })
-                                                      ))
+                                                  const allOutputs = project.audioOutputInfoRegistry.list()
+                                                  // Build owner-to-children map
+                                                  const childrenByOwner = new Map<string, Array<typeof allOutputs[0]>>()
+                                                  for (const info of allOutputs) {
+                                                      info.owner.ifSome(ownerAddress => {
+                                                          const key = ownerAddress.uuid.toString()
+                                                          const existing = childrenByOwner.get(key) ?? []
+                                                          existing.push(info)
+                                                          childrenByOwner.set(key, existing)
+                                                      })
+                                                  }
+                                                  // Helper to create a selectable menu item
+                                                  const createMenuItem = (info: typeof allOutputs[0]) =>
+                                                      MenuItem.default({
+                                                          label: info.label(),
+                                                          checked: sideChain.targetAddress
+                                                              .mapOr(other => other.equals(info.address), false)
+                                                      }).setTriggerProcedure(() => {
+                                                          editing.modify(() =>
+                                                              sideChain.targetAddress = Option.wrap(info.address))
+                                                      })
+                                                  // Add top-level items (those without an owner)
+                                                  for (const info of allOutputs.filter(i => i.owner.isEmpty())) {
+                                                      const key = info.address.uuid.toString()
+                                                      const children = childrenByOwner.get(key)
+                                                      if (children !== undefined && children.length > 0) {
+                                                          // Has children - create submenu
+                                                          parent.addMenuItem(MenuItem.default({
+                                                              label: info.label()
+                                                          }).setRuntimeChildrenProcedure(subParent => {
+                                                              subParent.addMenuItem(createMenuItem(info))
+                                                              for (const child of children) {
+                                                                  subParent.addMenuItem(createMenuItem(child))
+                                                              }
+                                                          }))
+                                                      } else {
+                                                          parent.addMenuItem(createMenuItem(info))
+                                                      }
+                                                  }
                                               })}
                                   >→ Sidechain</MenuButton>
                               </div>

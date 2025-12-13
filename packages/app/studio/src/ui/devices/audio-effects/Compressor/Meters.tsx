@@ -35,7 +35,7 @@ export const Meters = ({lifecycle, values}: Construct) => {
     return (
         <svg classList={className} viewBox={`0 0 ${width} ${height}`} width={36} height={height}>
             <g transform={`translate(0, ${padding})`}>
-                {[0, 3, 6, 9, 12, 15, 18, 21].map(db => (
+                {[0, 3, 6, 9, 12, 15, 18, 21, 24, 27].map(db => (
                     <text x="0"
                           y={(scale.unitToNorm(db) * innerHeight).toString()}
                           font-size="8px"

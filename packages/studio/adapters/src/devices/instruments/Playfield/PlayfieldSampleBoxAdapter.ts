@@ -58,7 +58,8 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
             context.isMainThread
                 ? context.audioOutputInfoRegistry.register({
                     address: box.address,
-                    path: () => [this.device().labelField.getValue(), this.fileLabel]
+                    owner: box.device.targetAddress,
+                    label: () => this.fileLabel
                 })
                 : Terminable.Empty
         )

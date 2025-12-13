@@ -1,5 +1,5 @@
 import {TapeDeviceBox} from "@opendaw/studio-boxes"
-import {StringMapping, Terminable, UUID, ValueMapping} from "@opendaw/lib-std"
+import {Option, StringMapping, Terminable, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
@@ -24,7 +24,7 @@ export class TapeDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         this.#parametric = new ParameterAdapterSet(this.#context)
         this.namedParameter = this.#wrapParameters(box)
         this.#outputRegistration = context.isMainThread
-            ? context.audioOutputInfoRegistry.register({address: box.address, path: () => [box.label.getValue()]})
+            ? context.audioOutputInfoRegistry.register({address: box.address, owner: Option.None, label: () => box.label.getValue()})
             : Terminable.Empty
     }
 

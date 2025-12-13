@@ -1,4 +1,4 @@
-import {Terminable, UUID} from "@opendaw/lib-std"
+import {Option, Terminable, UUID} from "@opendaw/lib-std"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {UnknownAudioEffectDeviceBox} from "@opendaw/studio-boxes"
@@ -18,7 +18,7 @@ export class UnknownAudioEffectDeviceBoxAdapter implements AudioEffectDeviceAdap
         this.#context = context
         this.#box = box
         this.#outputRegistration = context.isMainThread
-            ? context.audioOutputInfoRegistry.register({address: box.address, path: () => [box.label.getValue()]})
+            ? context.audioOutputInfoRegistry.register({address: box.address, owner: Option.None, label: () => box.label.getValue()})
             : Terminable.Empty
     }
 

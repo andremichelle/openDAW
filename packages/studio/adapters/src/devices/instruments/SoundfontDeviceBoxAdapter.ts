@@ -56,7 +56,7 @@ export class SoundfontDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
                 some: soundfont => this.#preset.wrap(soundfont.presets[owner.getValue()] ?? soundfont.presets[0])
             })),
             context.isMainThread
-                ? context.audioOutputInfoRegistry.register({address: box.address, path: () => [box.label.getValue()]})
+                ? context.audioOutputInfoRegistry.register({address: box.address, owner: Option.None, label: () => box.label.getValue()})
                 : Terminable.Empty
         )
     }

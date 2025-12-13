@@ -1,5 +1,5 @@
 import {TidalDeviceBox} from "@opendaw/studio-boxes"
-import {StringMapping, Terminable, UUID, ValueMapping} from "@opendaw/lib-std"
+import {Option, StringMapping, Terminable, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {Fraction} from "@opendaw/lib-dsp"
@@ -35,7 +35,7 @@ export class TidalDeviceBoxAdapter implements AudioEffectDeviceAdapter {
         this.#parametric = new ParameterAdapterSet(this.#context)
         this.namedParameter = this.#wrapParameters(box)
         this.#outputRegistration = context.isMainThread
-            ? context.audioOutputInfoRegistry.register({address: box.address, path: () => [box.label.getValue()]})
+            ? context.audioOutputInfoRegistry.register({address: box.address, owner: Option.None, label: () => box.label.getValue()})
             : Terminable.Empty
     }
 

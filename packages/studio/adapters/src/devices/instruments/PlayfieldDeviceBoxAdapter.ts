@@ -1,7 +1,7 @@
 import {PlayfieldDeviceBox} from "@opendaw/studio-boxes"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {Terminable, UUID} from "@opendaw/lib-std"
+import {Option, Terminable, UUID} from "@opendaw/lib-std"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {IndexedBoxAdapterCollection} from "../../IndexedBoxAdapterCollection"
@@ -29,7 +29,7 @@ export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
             box.samples, box => context.boxAdapters.adapterFor(box, PlayfieldSampleBoxAdapter), Pointers.Sample)
         this.#parametric = new ParameterAdapterSet(this.#context)
         this.#outputRegistration = context.isMainThread
-            ? context.audioOutputInfoRegistry.register({address: box.address, path: () => [box.label.getValue()]})
+            ? context.audioOutputInfoRegistry.register({address: box.address, owner: Option.None, label: () => box.label.getValue()})
             : Terminable.Empty
     }
 
