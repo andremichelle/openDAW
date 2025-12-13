@@ -57,7 +57,7 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
     readonly #editorValues: Float32Array
     readonly #smoothInputGain: Ramp<number>
 
-    readonly #sideChainConnection: Terminator
+    readonly #sideChainConnection: Terminator = new Terminator()
 
     #source: Option<AudioBuffer> = Option.None
     #sideChain: Option<AudioBuffer> = Option.None
@@ -91,7 +91,6 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
         this.#editorValues = new Float32Array([Number.NEGATIVE_INFINITY, 0.0, Number.NEGATIVE_INFINITY])
         this.#smoothInputGain = Ramp.linear(sampleRate)
-        this.#sideChainConnection = this.own(new Terminator())
 
         const {
             lookahead, automakeup, autoattack, autorelease,
@@ -134,7 +133,6 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
                     this.#editorValues[2] = gainToDb(this.#outMax)
                 }),
             adapter.sideChain.catchupAndSubscribe(() => {
-                this.#sideChainConnection.terminate()
                 this.#sideChain = Option.None
                 this.#needsSideChainResolution = true
             }),
@@ -148,7 +146,8 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
                         })
                     })
                 }
-            })
+            }),
+            this.#sideChainConnection
         )
         this.readAllParameters()
     }
