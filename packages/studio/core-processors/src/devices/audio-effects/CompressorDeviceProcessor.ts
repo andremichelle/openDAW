@@ -133,6 +133,7 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
                     this.#editorValues[2] = gainToDb(this.#outMax)
                 }),
             adapter.sideChain.catchupAndSubscribe(() => {
+                this.#sideChainConnection.terminate()
                 this.#sideChain = Option.None
                 this.#needsSideChainResolution = true
             }),
