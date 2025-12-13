@@ -58,6 +58,7 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
     readonly #smoothInputGain: Ramp<number>
 
     #source: Option<AudioBuffer> = Option.None
+    #sideChain: Option<AudioBuffer> = Option.None
 
     #lookahead: boolean = false
     #automakeup: boolean = false
@@ -156,6 +157,11 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
         return {terminate: () => this.#source = Option.None}
     }
 
+    setSideChainSource(source: AudioBuffer): Terminable {
+        this.#sideChain = Option.wrap(source)
+        return {terminate: () => this.#sideChain = Option.None}
+    }
+
     index(): int {return this.#adapter.indexField.getValue()}
     adapter(): AudioEffectDeviceAdapter {return this.#adapter}
 
@@ -181,6 +187,8 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
                 this.#inpMax *= CompressorDeviceProcessor.PEAK_DECAY_PER_SAMPLE
             }
         }
+
+        // TODO If sideChain is connected use that to run the envelope follower instead of the input signal
 
         // Clear sidechain and original signal buffers
         this.#sidechainSignal.fill(0.0, from, to)

@@ -1,7 +1,7 @@
 import {PlayfieldDeviceBox} from "@opendaw/studio-boxes"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {UUID} from "@opendaw/lib-std"
+import {Terminable, UUID} from "@opendaw/lib-std"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {IndexedBoxAdapterCollection} from "../../IndexedBoxAdapterCollection"
@@ -19,6 +19,7 @@ export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     readonly #samples: IndexedBoxAdapterCollection<PlayfieldSampleBoxAdapter, Pointers.Sample>
     readonly #parametric: ParameterAdapterSet
+    readonly #outputRegistration: Terminable
 
     constructor(context: BoxAdaptersContext, box: PlayfieldDeviceBox) {
         this.#context = context
@@ -27,6 +28,9 @@ export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         this.#samples = IndexedBoxAdapterCollection.create(
             box.samples, box => context.boxAdapters.adapterFor(box, PlayfieldSampleBoxAdapter), Pointers.Sample)
         this.#parametric = new ParameterAdapterSet(this.#context)
+        this.#outputRegistration = context.isMainThread
+            ? context.audioOutputInfoRegistry.register({address: box.address, path: () => [box.label.getValue()]})
+            : Terminable.Empty
     }
 
     reset(): void {this.#samples.adapters().forEach(adapter => adapter.box.delete())}
@@ -50,5 +54,8 @@ export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
-    terminate(): void {this.#parametric.terminate()}
+    terminate(): void {
+        this.#parametric.terminate()
+        this.#outputRegistration.terminate()
+    }
 }

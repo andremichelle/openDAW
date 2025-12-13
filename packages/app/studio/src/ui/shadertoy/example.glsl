@@ -4,17 +4,16 @@
  * iBeat               - returns normalized beat position (ppqn / PPQN.Quaver)
  * iPeaks              - returns vec4(leftPeak, rightPeak, leftRMS, rightRMS)
  */
-
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = fragCoord / iResolution.xy;
     float aspect = iResolution.x / iResolution.y;
     vec3 green = vec3(0.3, 0.7, 0.4);
-    vec3 gray = vec3(0.2);
+    vec3 gray = vec3(0.1);
     vec3 blue = vec3(0.46, 0.72, 1.0);
 
     // Striped background
     float stripe = fract((uv.x + uv.y * 0.25) * 30.0 + iBeat);
-    vec3 col = stripe < 0.5 ? vec3(0.04) : vec3(0.08);
+    vec3 col = stripe < 0.5 ? vec3(0.02) : vec3(0.04);
 
     // Waveform (top: 0.78 - 0.98)
     if (uv.y > 0.78 && uv.y < 0.98) {
@@ -32,8 +31,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         float fft = texture(iChannel0, vec2((float(bx) + 0.5) / 32.0, 0.25)).r;
         float blockY = (float(by) + 0.5) / 16.0;
         vec2 blockUV = vec2(fract(specX * 32.0), fract(specY * 16.0));
-        if (blockY < fft && blockUV.x > 0.1 && blockUV.x < 0.9 && blockUV.y > 0.15 && blockUV.y < 0.85) {
-            vec3 specCol = mix(green, blue, specX);
+        if (blockUV.x > 0.1 && blockUV.x < 0.9 && blockUV.y > 0.15 && blockUV.y < 0.85) {
+            vec3 specCol = blockY < fft ? green * (blockUV.y * 0.5 + 0.5) : gray;
             col = specCol * (0.5 + 0.5 * blockY);
         }
     }

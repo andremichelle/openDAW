@@ -40,6 +40,7 @@ export enum Pointers {
     Sample,
     Selection,
     Shadertoy,
+    SideChain,
     SoundfontFile,
     StepAutomation,
     Timeline,

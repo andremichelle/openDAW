@@ -1,5 +1,5 @@
 import {TidalDeviceBox} from "@opendaw/studio-boxes"
-import {StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
+import {StringMapping, Terminable, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {Fraction} from "@opendaw/lib-dsp"
@@ -26,6 +26,7 @@ export class TidalDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly #box: TidalDeviceBox
 
     readonly #parametric: ParameterAdapterSet
+    readonly #outputRegistration: Terminable
     readonly namedParameter // let typescript infer the type
 
     constructor(context: BoxAdaptersContext, box: TidalDeviceBox) {
@@ -33,6 +34,9 @@ export class TidalDeviceBoxAdapter implements AudioEffectDeviceAdapter {
         this.#box = box
         this.#parametric = new ParameterAdapterSet(this.#context)
         this.namedParameter = this.#wrapParameters(box)
+        this.#outputRegistration = context.isMainThread
+            ? context.audioOutputInfoRegistry.register({address: box.address, path: () => [box.label.getValue()]})
+            : Terminable.Empty
     }
 
     get box(): TidalDeviceBox {return this.#box}
@@ -51,7 +55,10 @@ export class TidalDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
-    terminate(): void {this.#parametric.terminate()}
+    terminate(): void {
+        this.#parametric.terminate()
+        this.#outputRegistration.terminate()
+    }
 
     #wrapParameters(box: TidalDeviceBox) {
         const {RateFractions, RateStringMapping} = TidalDeviceBoxAdapter

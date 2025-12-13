@@ -1,5 +1,5 @@
 import {NanoDeviceBox} from "@opendaw/studio-boxes"
-import {StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
+import {StringMapping, Terminable, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
@@ -15,6 +15,7 @@ export class NanoDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly #box: NanoDeviceBox
 
     readonly #parametric: ParameterAdapterSet
+    readonly #outputRegistration: Terminable
     readonly namedParameter // let typescript infer the type
 
     constructor(context: BoxAdaptersContext, box: NanoDeviceBox) {
@@ -22,6 +23,9 @@ export class NanoDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         this.#box = box
         this.#parametric = new ParameterAdapterSet(this.#context)
         this.namedParameter = this.#wrapParameters(box)
+        this.#outputRegistration = context.isMainThread
+            ? context.audioOutputInfoRegistry.register({address: box.address, path: () => [box.label.getValue()]})
+            : Terminable.Empty
     }
 
     get box(): NanoDeviceBox {return this.#box}
@@ -41,7 +45,10 @@ export class NanoDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
-    terminate(): void {this.#parametric.terminate()}
+    terminate(): void {
+        this.#parametric.terminate()
+        this.#outputRegistration.terminate()
+    }
 
     #wrapParameters(box: NanoDeviceBox) {
         return {

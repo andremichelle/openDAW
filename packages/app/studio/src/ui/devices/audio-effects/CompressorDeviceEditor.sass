@@ -8,13 +8,24 @@ component
   @include mixins.Control
 
   > div.toggle-buttons
-    display: contents
+    display: grid
+    grid-template-columns: repeat(5, 1fr)
+    grid-column: 1 / -1
+    column-gap: 0.25em
 
-    > *
-      grid-column: span 2
+    button
+      height: 15px
+      font-size: 9px
+      white-space: nowrap
+      color: var(--color-shadow)
+      background-color: rgba(black, 0.33)
+
+      &.active, &.has-source
+        color: var(--color-background)
+        background-color: var(--color-orange)
 
   > div.control-section
-    padding: 4px 0
+    padding: 4px 0 0 0
     grid-column: span 3
     display: flex
     flex-direction: column

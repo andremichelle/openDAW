@@ -1,5 +1,5 @@
 import {RevampBell, RevampDeviceBox, RevampPass, RevampShelf} from "@opendaw/studio-boxes"
-import {int, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
+import {int, StringMapping, Terminable, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../DeviceAdapter"
@@ -15,6 +15,7 @@ export class RevampDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly #context: BoxAdaptersContext
     readonly #box: RevampDeviceBox
     readonly #parametric: ParameterAdapterSet
+    readonly #outputRegistration: Terminable
     readonly namedParameter // let typescript infer the type
 
     constructor(context: BoxAdaptersContext, box: RevampDeviceBox) {
@@ -22,6 +23,9 @@ export class RevampDeviceBoxAdapter implements AudioEffectDeviceAdapter {
         this.#box = box
         this.#parametric = new ParameterAdapterSet(this.#context)
         this.namedParameter = this.#wrapParameters(box)
+        this.#outputRegistration = context.isMainThread
+            ? context.audioOutputInfoRegistry.register({address: box.address, path: () => [box.label.getValue()]})
+            : Terminable.Empty
     }
 
     get box(): RevampDeviceBox {return this.#box}
@@ -41,7 +45,10 @@ export class RevampDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
-    terminate(): void {this.#parametric.terminate()}
+    terminate(): void {
+        this.#parametric.terminate()
+        this.#outputRegistration.terminate()
+    }
 
     #wrapParameters(box: RevampDeviceBox) {
         return {

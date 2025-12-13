@@ -3,6 +3,7 @@ import {Pointers} from "@opendaw/studio-enums"
 import {Objects} from "@opendaw/lib-std"
 
 const DefaultPointers = [Pointers.Device, Pointers.Selection, Pointers.MetaData]
+const DefaultAudioPointers = [...DefaultPointers, Pointers.SideChain]
 
 const MidiEffectDeviceAttributes = {
     1: {type: "pointer", name: "host", pointerType: Pointers.MidiEffectHost, mandatory: true},
@@ -53,7 +54,7 @@ export namespace DeviceFactory {
         return {
             type: "box",
             class: {name, fields: mergeFields(InstrumentDeviceAttributes, fields as DisjointFields)},
-            pointerRules: {accepts: DefaultPointers.concat(pointers), mandatory: false}
+            pointerRules: {accepts: DefaultAudioPointers.concat(pointers), mandatory: false}
         }
     }
 
@@ -65,7 +66,7 @@ export namespace DeviceFactory {
         return {
             type: "box",
             class: {name, fields: mergeFields(AudioEffectDeviceAttributes, fields as DisjointFields)},
-            pointerRules: {accepts: DefaultPointers, mandatory: false}
+            pointerRules: {accepts: DefaultAudioPointers, mandatory: false}
         }
     }
 }

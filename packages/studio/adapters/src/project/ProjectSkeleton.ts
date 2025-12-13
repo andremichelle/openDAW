@@ -62,7 +62,7 @@ export namespace ProjectSkeleton {
         })
         if (options.createOutputCompressor) {
             CompressorDeviceBox.create(boxGraph, UUID.generate(), box => {
-                box.label.setValue("Compressor")
+                box.label.setValue("Master Compressor")
                 box.index.setValue(0)
                 box.host.refer(primaryAudioOutputUnit.audioEffects)
                 box.threshold.setValue(0)

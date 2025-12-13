@@ -1,5 +1,5 @@
 import {ModularDeviceBox} from "@opendaw/studio-boxes"
-import {panic, UUID} from "@opendaw/lib-std"
+import {panic, Terminable, UUID} from "@opendaw/lib-std"
 import {Pointers} from "@opendaw/studio-enums"
 import {Address, BooleanField, FieldKeys, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../DeviceAdapter"
@@ -15,10 +15,14 @@ export class ModularDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 
     readonly #context: BoxAdaptersContext
     readonly #box: ModularDeviceBox
+    readonly #outputRegistration: Terminable
 
     constructor(context: BoxAdaptersContext, box: ModularDeviceBox) {
         this.#context = context
         this.#box = box
+        this.#outputRegistration = context.isMainThread
+            ? context.audioOutputInfoRegistry.register({address: box.address, path: () => [box.label.getValue()]})
+            : Terminable.Empty
     }
 
     get box(): ModularDeviceBox {return this.#box}
@@ -49,5 +53,5 @@ export class ModularDeviceBoxAdapter implements AudioEffectDeviceAdapter {
             .map(pointer => this.#context.boxAdapters.adapterFor(pointer.box, DeviceInterfaceKnobAdapter))
     }
 
-    terminate(): void {}
+    terminate(): void {this.#outputRegistration.terminate()}
 }

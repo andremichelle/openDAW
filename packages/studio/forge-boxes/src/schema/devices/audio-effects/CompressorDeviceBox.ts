@@ -41,5 +41,8 @@ export const CompressorDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudi
     21: {
         type: "float32", name: "mix", pointerRules: ParameterPointerRules,
         value: 1.0, constraints: "unipolar", unit: "%"
+    },
+    30: {
+        type: "pointer", name: "side-chain", pointerType: Pointers.SideChain, mandatory: false
     }
 })
