@@ -81,7 +81,7 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
                                                   project.audioOutputInfoRegistry.list()
                                                       .map(({address, path}) => parent.addMenuItem(
                                                           MenuItem.default({
-                                                              label: path()[0],
+                                                              label: path().join(", "),
                                                               checked: sideChain.targetAddress
                                                                   .mapOr(other => other.equals(address), false)
                                                           }).setTriggerProcedure(() => {

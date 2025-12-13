@@ -1,9 +1,8 @@
 import {AudioEffectDeviceAdapter, CompressorDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {int, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {AudioBuffer, dbToGain, Event, gainToDb, Ramp, RenderQuantum} from "@opendaw/lib-dsp"
-import {Address} from "@opendaw/lib-box"
 import {EngineContext} from "../../EngineContext"
-import {Block, ProcessPhase, Processor} from "../../processing"
+import {Block, Processor, ProcessPhase} from "../../processing"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
 import {AudioProcessor} from "../../AudioProcessor"
 import {AutomatableParameter} from "../../AutomatableParameter"
@@ -62,7 +61,6 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
 
     #source: Option<AudioBuffer> = Option.None
     #sideChain: Option<AudioBuffer> = Option.None
-    #pendingSideChainAddress: Option<Address> = Option.None
     #needsSideChainResolution: boolean = false
 
     #lookahead: boolean = false
@@ -135,16 +133,15 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
                     this.#editorValues[1] = this.#redMin
                     this.#editorValues[2] = gainToDb(this.#outMax)
                 }),
-            adapter.box.sideChain.catchupAndSubscribe(pointer => {
+            adapter.sideChain.catchupAndSubscribe(() => {
                 this.#sideChainConnection.terminate()
                 this.#sideChain = Option.None
-                this.#pendingSideChainAddress = pointer.targetVertex.map(({box}) => box.address)
                 this.#needsSideChainResolution = true
             }),
             context.subscribeProcessPhase(phase => {
                 if (phase === ProcessPhase.Before && this.#needsSideChainResolution) {
                     this.#needsSideChainResolution = false
-                    this.#pendingSideChainAddress.ifSome(address => {
+                    adapter.sideChain.targetVertex.map(({box}) => box.address).ifSome(address => {
                         context.audioOutputBufferRegistry.resolve(address).ifSome(output => {
                             this.#sideChain = Option.wrap(output.buffer)
                             this.#sideChainConnection.own(context.registerEdge(output.processor, this.incoming))

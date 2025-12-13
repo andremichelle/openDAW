@@ -58,5 +58,5 @@ export const PlayfieldSampleBox: BoxSchema<Pointers> = {
                 value: 0.020, constraints: {min: 0.001, max: 5.0, scaling: "exponential"}, unit: "s"
             }
         }
-    }, pointerRules: {accepts: [Pointers.Editing], mandatory: false}
+    }, pointerRules: {accepts: [Pointers.Editing, Pointers.SideChain], mandatory: false}
 }

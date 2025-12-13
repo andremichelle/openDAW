@@ -1,6 +1,6 @@
 import {Pointers} from "@opendaw/studio-enums"
 import {PlayfieldSampleBox} from "@opendaw/studio-boxes"
-import {int, Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {int, Option, StringMapping, Terminable, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Field, Int32Field, StringField} from "@opendaw/lib-box"
 import {
     AudioEffectDeviceAdapter,
@@ -50,10 +50,18 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
         this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
         this.namedParameter = this.#wrapParameters(box)
 
-        this.#terminator.own(this.#box.file.catchupAndSubscribe(pointer => {
-            this.#file = pointer.targetVertex.map(({box}) => this.#context.boxAdapters.adapterFor(box, AudioFileBoxAdapter))
-            this.#file.unwrapOrNull()?.getOrCreateLoader() // triggers preloading file if available
-        }))
+        this.#terminator.ownAll(
+            this.#box.file.catchupAndSubscribe(pointer => {
+                this.#file = pointer.targetVertex.map(({box}) => this.#context.boxAdapters.adapterFor(box, AudioFileBoxAdapter))
+                this.#file.unwrapOrNull()?.getOrCreateLoader() // triggers preloading file if available
+            }),
+            context.isMainThread
+                ? context.audioOutputInfoRegistry.register({
+                    address: box.address,
+                    path: () => [this.device().labelField.getValue(), this.fileLabel]
+                })
+                : Terminable.Empty
+        )
     }
 
     get box(): PlayfieldSampleBox {return this.#box}
@@ -67,7 +75,7 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
     get label(): string {
         return `${this.device().labelField.getValue()} > ${this.#file.mapOr(file => file.box.fileName.getValue(), "No file")}`
     }
-
+    get fileLabel(): string {return `${this.#file.mapOr(file => file.box.fileName.getValue(), "No file")}`}
     get iconField(): StringField {return this.#box.icon}
     get defaultTrackType(): TrackType {return TrackType.Notes}
     get acceptsMidiEvents(): boolean {return true}

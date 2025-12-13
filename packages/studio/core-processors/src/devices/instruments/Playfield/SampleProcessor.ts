@@ -56,6 +56,7 @@ export class SampleProcessor extends AudioProcessor implements DeviceProcessor, 
                 slices.forEach(({position}, index) => positions[index] = position)
                 positions[slices.length] = -1.0 // close stream
             }),
+            context.audioOutputBufferRegistry.register(adapter.address, this.#audioOutput, this.outgoing),
             context.registerProcessor(this)
         )
         this.readAllParameters()

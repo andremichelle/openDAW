@@ -32,7 +32,7 @@ export const CompressorDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudi
     },
     19: {
         type: "float32", name: "release", pointerRules: ParameterPointerRules,
-        value: 5.0, constraints: {min: 5.0, max: 1500.0, scaling: "linear"}, unit: "ms"
+        value: 25.0, constraints: {min: 5.0, max: 1500.0, scaling: "linear"}, unit: "ms"
     },
     20: {
         type: "float32", name: "makeup", pointerRules: ParameterPointerRules,
