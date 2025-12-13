@@ -26,7 +26,10 @@ export class MixProcessor extends AudioProcessor implements AudioDeviceProcessor
         this.#sources = []
         this.#eventBuffer = new EventBuffer()
 
-        this.own(context.registerProcessor(this))
+        this.ownAll(
+            context.registerProcessor(this),
+            context.audioOutputBufferRegistry.register(device.adapter.address, this.#audioOutput, this.outgoing)
+        )
         this.readAllParameters()
     }
 

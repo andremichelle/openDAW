@@ -39,7 +39,10 @@ export class CrusherDeviceProcessor extends AudioProcessor implements AudioEffec
         this.parameterBoost = this.own(this.bindParameter(boost))
         this.parameterMix = this.own(this.bindParameter(mix))
 
-        this.own(context.registerProcessor(this))
+        this.ownAll(
+            context.registerProcessor(this),
+            context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing)
+        )
         this.readAllParameters()
     }
 

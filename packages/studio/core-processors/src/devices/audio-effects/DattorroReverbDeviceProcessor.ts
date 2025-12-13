@@ -62,7 +62,10 @@ export class DattorroReverbDeviceProcessor extends AudioProcessor implements Aud
         this.parameterWet = this.own(this.bindParameter(wet))
         this.parameterDry = this.own(this.bindParameter(dry))
 
-        this.own(context.registerProcessor(this))
+        this.ownAll(
+            context.registerProcessor(this),
+            context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing)
+        )
         this.readAllParameters()
     }
 

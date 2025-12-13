@@ -26,7 +26,10 @@ export class NopDeviceProcessor extends AbstractProcessor implements AudioEffect
         this.#output = new AudioBuffer()
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
 
-        this.own(context.registerProcessor(this))
+        this.ownAll(
+            context.registerProcessor(this),
+            context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing)
+        )
     }
 
     get incoming(): Processor {return this}

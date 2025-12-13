@@ -52,7 +52,8 @@ export class TidalDeviceProcessor extends AudioProcessor implements AudioEffectD
 
         this.ownAll(
             context.broadcaster.broadcastFloat(adapter.address.append(0), () => this.#phase),
-            context.registerProcessor(this)
+            context.registerProcessor(this),
+            context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing)
         )
         this.readAllParameters()
     }

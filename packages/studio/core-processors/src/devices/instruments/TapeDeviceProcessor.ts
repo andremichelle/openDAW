@@ -56,7 +56,8 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                 onRemove: (adapter: TrackBoxAdapter) => this.#lanes.removeByKey(adapter.uuid),
                 onReorder: (_adapter: TrackBoxAdapter) => {}
             }),
-            context.registerProcessor(this)
+            context.registerProcessor(this),
+            context.audioOutputBufferRegistry.register(adapter.address, this.#audioOutput, this.outgoing)
         )
     }
 

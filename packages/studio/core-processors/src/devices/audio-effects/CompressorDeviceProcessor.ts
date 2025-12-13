@@ -1,8 +1,9 @@
 import {AudioEffectDeviceAdapter, CompressorDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {int, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {int, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {AudioBuffer, dbToGain, Event, gainToDb, Ramp, RenderQuantum} from "@opendaw/lib-dsp"
+import {Address} from "@opendaw/lib-box"
 import {EngineContext} from "../../EngineContext"
-import {Block, Processor} from "../../processing"
+import {Block, ProcessPhase, Processor} from "../../processing"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
 import {AudioProcessor} from "../../AudioProcessor"
 import {AutomatableParameter} from "../../AutomatableParameter"
@@ -57,8 +58,12 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
     readonly #editorValues: Float32Array
     readonly #smoothInputGain: Ramp<number>
 
+    readonly #sideChainConnection: Terminator
+
     #source: Option<AudioBuffer> = Option.None
     #sideChain: Option<AudioBuffer> = Option.None
+    #pendingSideChainAddress: Option<Address> = Option.None
+    #needsSideChainResolution: boolean = false
 
     #lookahead: boolean = false
     #automakeup: boolean = false
@@ -88,6 +93,7 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
         this.#editorValues = new Float32Array([Number.NEGATIVE_INFINITY, 0.0, Number.NEGATIVE_INFINITY])
         this.#smoothInputGain = Ramp.linear(sampleRate)
+        this.#sideChainConnection = this.own(new Terminator())
 
         const {
             lookahead, automakeup, autoattack, autorelease,
@@ -122,12 +128,30 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
 
         this.ownAll(
             context.registerProcessor(this),
+            context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing),
             context.broadcaster.broadcastFloats(adapter.address.append(0),
                 this.#editorValues, (_hasSubscribers) => {
                     this.#editorValues[0] = gainToDb(this.#inpMax)
                     this.#editorValues[1] = this.#redMin
                     this.#editorValues[2] = gainToDb(this.#outMax)
-                })
+                }),
+            adapter.box.sideChain.catchupAndSubscribe(pointer => {
+                this.#sideChainConnection.terminate()
+                this.#sideChain = Option.None
+                this.#pendingSideChainAddress = pointer.targetVertex.map(({box}) => box.address)
+                this.#needsSideChainResolution = true
+            }),
+            context.subscribeProcessPhase(phase => {
+                if (phase === ProcessPhase.Before && this.#needsSideChainResolution) {
+                    this.#needsSideChainResolution = false
+                    this.#pendingSideChainAddress.ifSome(address => {
+                        context.audioOutputBufferRegistry.resolve(address).ifSome(output => {
+                            this.#sideChain = Option.wrap(output.buffer)
+                            this.#sideChainConnection.own(context.registerEdge(output.processor, this.incoming))
+                        })
+                    })
+                }
+            })
         )
         this.readAllParameters()
     }
@@ -157,11 +181,6 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
         return {terminate: () => this.#source = Option.None}
     }
 
-    setSideChainSource(source: AudioBuffer): Terminable {
-        this.#sideChain = Option.wrap(source)
-        return {terminate: () => this.#sideChain = Option.None}
-    }
-
     index(): int {return this.#adapter.indexField.getValue()}
     adapter(): AudioEffectDeviceAdapter {return this.#adapter}
 
@@ -188,14 +207,22 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
             }
         }
 
-        // TODO If sideChain is connected use that to run the envelope follower instead of the input signal
-
-        // Clear sidechain and original signal buffers
+        // Clear sidechain signal buffer
         this.#sidechainSignal.fill(0.0, from, to)
 
-        // Get max L/R amplitude values and fill sidechain signal
-        for (let i = from; i < to; i++) {
-            this.#sidechainSignal[i] = Math.max(Math.abs(outL[i]), Math.abs(outR[i]))
+        // Get max L/R amplitude values for envelope follower
+        // Use external side-chain buffer if connected, otherwise use input signal
+        if (this.#sideChain.nonEmpty()) {
+            const sc = this.#sideChain.unwrap()
+            const scL = sc.getChannel(0)
+            const scR = sc.getChannel(1)
+            for (let i = from; i < to; i++) {
+                this.#sidechainSignal[i] = Math.max(Math.abs(scL[i]), Math.abs(scR[i]))
+            }
+        } else {
+            for (let i = from; i < to; i++) {
+                this.#sidechainSignal[i] = Math.max(Math.abs(outL[i]), Math.abs(outR[i]))
+            }
         }
 
         // Calculate crest factor on max amplitude values

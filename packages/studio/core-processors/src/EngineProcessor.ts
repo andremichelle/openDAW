@@ -50,6 +50,7 @@ import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {UpdateClock} from "./UpdateClock"
 import {PeakBroadcaster} from "./PeakBroadcaster"
 import {Metronome} from "./Metronome"
+import {AudioOutputBufferRegistry} from "./AudioOutputBufferRegistry"
 import {BlockRenderer} from "./BlockRenderer"
 import {
     AudioAnalyser,
@@ -99,6 +100,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     readonly #analyser: AudioAnalyser
     readonly #metronome: Metronome
     readonly #midiTransportClock: MIDITransportClock
+    readonly #audioOutputBufferRegistry: AudioOutputBufferRegistry
 
     readonly #renderer: BlockRenderer
     readonly #stateSender: SyncStream.Writer
@@ -165,6 +167,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#mixer = new Mixer()
         this.#metronome = new Metronome(this.#timelineBoxAdapter, this.#timeInfo)
         this.#midiTransportClock = new MIDITransportClock(this, this.#rootBoxAdapter)
+        this.#audioOutputBufferRegistry = new AudioOutputBufferRegistry()
         this.#renderer = new BlockRenderer(this, options)
         this.#ignoredRegions = UUID.newSet<UUID.Bytes>(uuid => uuid)
         this.#stateSender = SyncStream.writer(EngineStateSchema(), syncStreamBuffer, x => {
@@ -399,6 +402,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     get isMainThread(): boolean {return false}
     get isAudioContext(): boolean {return true}
     get audioOutputInfoRegistry(): AudioOutputInfoRegistry {return panic("Only available in main thread")}
+    get audioOutputBufferRegistry(): AudioOutputBufferRegistry {return this.#audioOutputBufferRegistry}
 
     sendMIDIData(midiDeviceId: string, data: Uint8Array, relativeTimeInMs: number): void {
         this.#midiSender.ifSome(sender => sender.send(midiDeviceId, data, relativeTimeInMs))

@@ -139,7 +139,8 @@ export class VaporisateurDeviceProcessor extends AudioProcessor
                 })
                 envValues[index] = -1
             }),
-            context.registerProcessor(this)
+            context.registerProcessor(this),
+            context.audioOutputBufferRegistry.register(adapter.address, this.#audioOutput, this.outgoing)
         )
         this.readAllParameters()
     }

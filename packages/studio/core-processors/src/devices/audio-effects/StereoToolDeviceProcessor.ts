@@ -53,7 +53,8 @@ export class StereoToolDeviceProcessor extends AudioProcessor implements AudioEf
                 this.#mixing = owner.getValue()
                 this.#needsUpdate = true
             }),
-            context.registerProcessor(this)
+            context.registerProcessor(this),
+            context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing)
         )
         this.readAllParameters()
     }

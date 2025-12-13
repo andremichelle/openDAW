@@ -49,6 +49,7 @@ export class FoldDeviceProcessor extends AudioProcessor implements AudioEffectDe
 
         this.ownAll(
             context.registerProcessor(this),
+            context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing),
             adapter.box.overSampling.catchupAndSubscribe(owner => {
                 const factor = oversamplingValues[owner.getValue()]
                 this.#resampler = new ResamplerStereo(factor)

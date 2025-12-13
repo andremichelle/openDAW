@@ -36,6 +36,7 @@ export class CompressorDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     get enabledField(): BooleanField {return this.#box.enabled}
     get minimizedField(): BooleanField {return this.#box.minimized}
     get host(): PointerField<Pointers.AudioEffectHost> {return this.#box.host}
+    get sideChain(): PointerField<Pointers.SideChain> {return this.#box.sideChain}
 
     deviceHost(): DeviceHost {
         return this.#context.boxAdapters

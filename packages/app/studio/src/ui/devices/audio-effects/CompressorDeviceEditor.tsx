@@ -52,7 +52,7 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
             </RelativeUnitValueDragging>
         </Frag>
     )
-    const sideChain = adapter.box.sideChain
+    const sideChain = adapter.sideChain
     return (
         <DeviceEditor lifecycle={lifecycle}
                       project={project}
@@ -82,7 +82,8 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
                                                       .map(({address, path}) => parent.addMenuItem(
                                                           MenuItem.default({
                                                               label: path()[0],
-                                                              checked: sideChain.targetAddress.contains(address)
+                                                              checked: sideChain.targetAddress
+                                                                  .mapOr(other => other.equals(address), false)
                                                           }).setTriggerProcedure(() => {
                                                               editing.modify(() =>
                                                                   sideChain.targetAddress = Option.wrap(address))

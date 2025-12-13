@@ -6,6 +6,7 @@ import {TimeInfo} from "./TimeInfo"
 import {AudioUnit} from "./AudioUnit"
 import {Mixer} from "./Mixer"
 import {BoxAdaptersContext, EngineToClient} from "@opendaw/studio-adapters"
+import {AudioOutputBufferRegistry} from "./AudioOutputBufferRegistry"
 
 export interface EngineContext extends BoxAdaptersContext, Terminable {
     get broadcaster(): LiveStreamBroadcaster
@@ -13,6 +14,7 @@ export interface EngineContext extends BoxAdaptersContext, Terminable {
     get timeInfo(): TimeInfo
     get mixer(): Mixer
     get engineToClient(): EngineToClient
+    get audioOutputBufferRegistry(): AudioOutputBufferRegistry
 
     getAudioUnit(uuid: UUID.Bytes): AudioUnit
     registerProcessor(processor: Processor): Terminable
