@@ -1,4 +1,4 @@
-import {Address, BooleanField, Box, Field, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
+import {BooleanField, Box, Field, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {Arrays, assert, AssertType, int, Option, panic, UUID} from "@opendaw/lib-std"
 import {Pointers} from "@opendaw/studio-enums"
 import {TrackType} from "./timeline/TrackType"
@@ -7,6 +7,7 @@ import {BoxAdapter} from "./BoxAdapter"
 import {AudioUnitInputAdapter} from "./audio-unit/AudioUnitInputAdapter"
 import {AudioUnitBoxAdapter} from "./audio-unit/AudioUnitBoxAdapter"
 import {DeviceBoxUtils} from "./DeviceBox"
+import {LabeledAudioOutputsOwner} from "./LabeledAudioOutputsOwner"
 
 export type DeviceType = "midi-effect" | "bus" | "instrument" | "audio-effect"
 export type DeviceAccepts = "midi" | "audio" | false
@@ -29,7 +30,7 @@ export interface MidiEffectDeviceAdapter extends EffectDeviceBoxAdapter<Pointers
     readonly accepts: "midi"
 }
 
-export interface AudioEffectDeviceAdapter extends EffectDeviceBoxAdapter<Pointers.AudioEffectHost> {
+export interface AudioEffectDeviceAdapter extends EffectDeviceBoxAdapter<Pointers.AudioEffectHost>, LabeledAudioOutputsOwner {
     readonly type: "audio-effect"
     readonly accepts: "audio"
 }
@@ -45,7 +46,7 @@ export interface EffectDeviceBoxAdapter<P extends EffectPointerType = EffectPoin
     get host(): PointerField<P>
 }
 
-export interface InstrumentDeviceBoxAdapter extends DeviceBoxAdapter {
+export interface InstrumentDeviceBoxAdapter extends DeviceBoxAdapter, LabeledAudioOutputsOwner {
     readonly type: "instrument"
 
     get iconField(): StringField
@@ -53,18 +54,7 @@ export interface InstrumentDeviceBoxAdapter extends DeviceBoxAdapter {
     get acceptsMidiEvents(): boolean
 }
 
-export type LabeledAudioOutput = { readonly address: Address, readonly label: string }
-
-export interface LabeledAudioOutputs {
-    labeledAudioOutputs(): Iterable<LabeledAudioOutput>
-}
-
-export namespace LabeledAudioOutputs {
-    export const is = (value: unknown): value is LabeledAudioOutputs =>
-        value !== null && typeof value === "object" && "labeledAudioOutputs" in value
-}
-
-export interface DeviceHost extends BoxAdapter {
+export interface DeviceHost extends BoxAdapter, LabeledAudioOutputsOwner {
     readonly class: "device-host"
 
     get midiEffects(): IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MidiEffectHost>

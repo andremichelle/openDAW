@@ -3,6 +3,7 @@ import {panic, UUID} from "@opendaw/lib-std"
 import {Pointers} from "@opendaw/studio-enums"
 import {Address, BooleanField, FieldKeys, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../DeviceAdapter"
+import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {AutomatableParameterFieldAdapter} from "../../AutomatableParameterFieldAdapter"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
@@ -47,6 +48,10 @@ export class ModularDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     elements(): ReadonlyArray<DeviceInterfaceKnobAdapter> {
         return this.#box.userInterface.elements.pointerHub.filter(Pointers.DeviceUserInterface)
             .map(pointer => this.#context.boxAdapters.adapterFor(pointer.box, DeviceInterfaceKnobAdapter))
+    }
+
+    *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
+        yield {address: this.address, label: this.labelField.getValue()}
     }
 
     terminate(): void {}

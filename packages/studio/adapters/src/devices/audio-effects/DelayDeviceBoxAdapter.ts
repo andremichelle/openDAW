@@ -4,6 +4,7 @@ import {Address, BooleanField, Int32Field, PointerField, StringField} from "@ope
 import {Pointers} from "@opendaw/studio-enums"
 import {Fraction} from "@opendaw/lib-dsp"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../DeviceAdapter"
+import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
@@ -50,6 +51,10 @@ export class DelayDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     }
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
+
+    *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
+        yield {address: this.address, label: this.labelField.getValue()}
+    }
 
     terminate(): void {
         this.#parametric.terminate()

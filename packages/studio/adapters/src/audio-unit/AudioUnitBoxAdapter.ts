@@ -3,6 +3,7 @@ import {assert, int, Option, StringMapping, Terminator, UUID, ValueMapping} from
 import {Address, BooleanField, Field, Int32Field} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices, MidiEffectDeviceAdapter} from "../DeviceAdapter"
+import {LabeledAudioOutput} from "../LabeledAudioOutputsOwner"
 import {AudioUnitTracks} from "./AudioUnitTracks"
 import {AudioUnitInput} from "./AudioUnitInput"
 import {IndexedBoxAdapterCollection} from "../IndexedBoxAdapterCollection"
@@ -79,6 +80,10 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
     get label(): string {return this.#input.getValue().mapOr(input => input.labelField.getValue(), "")}
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this}
+
+    *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
+        yield {address: this.address, label: this.label}
+    }
 
     indicesLimit(): [int, int] {
         const adapters = this.#context.rootBoxAdapter.audioUnits.adapters()

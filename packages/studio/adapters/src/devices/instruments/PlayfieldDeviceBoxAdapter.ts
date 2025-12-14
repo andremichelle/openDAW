@@ -2,15 +2,16 @@ import {PlayfieldDeviceBox} from "@opendaw/studio-boxes"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {UUID} from "@opendaw/lib-std"
-import {DeviceHost, Devices, InstrumentDeviceBoxAdapter, LabeledAudioOutput, LabeledAudioOutputs} from "../../DeviceAdapter"
+import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {IndexedBoxAdapterCollection} from "../../IndexedBoxAdapterCollection"
 import {PlayfieldSampleBoxAdapter} from "./Playfield/PlayfieldSampleBoxAdapter"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
+import {LabeledAudioOutput, LabeledAudioOutputsOwner} from "../../LabeledAudioOutputsOwner"
 
-export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter, LabeledAudioOutputs {
+export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter, LabeledAudioOutputsOwner {
     readonly type = "instrument"
     readonly accepts = "midi"
 

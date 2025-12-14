@@ -2,6 +2,7 @@ import {StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {VaporisateurDeviceBox} from "@opendaw/studio-boxes"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
+import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
@@ -42,6 +43,10 @@ export class VaporisateurDeviceBoxAdapter implements InstrumentDeviceBoxAdapter 
     }
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
+
+    *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
+        yield {address: this.address, label: this.labelField.getValue()}
+    }
 
     terminate(): void {
         this.#parametric.terminate()

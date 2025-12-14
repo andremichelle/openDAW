@@ -10,6 +10,7 @@ import {
     InstrumentDeviceBoxAdapter,
     MidiEffectDeviceAdapter
 } from "../../../DeviceAdapter"
+import {LabeledAudioOutput} from "../../../LabeledAudioOutputsOwner"
 import {IndexedBoxAdapter, IndexedBoxAdapterCollection} from "../../../IndexedBoxAdapterCollection"
 import {BoxAdaptersContext} from "../../../BoxAdaptersContext"
 import {ParameterAdapterSet} from "../../../ParameterAdapterSet"
@@ -134,6 +135,10 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
 
     deviceHost(): DeviceHost {return this.device().deviceHost()}
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
+
+    *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
+        yield {address: this.address, label: this.fileLabel}
+    }
 
     terminate(): void {this.#terminator.terminate()}
 

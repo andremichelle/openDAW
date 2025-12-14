@@ -5,6 +5,7 @@ import {UnknownAudioEffectDeviceBox} from "@opendaw/studio-boxes"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../DeviceAdapter"
+import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 
 export class UnknownAudioEffectDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly type = "audio-effect"
@@ -34,6 +35,10 @@ export class UnknownAudioEffectDeviceBoxAdapter implements AudioEffectDeviceAdap
     }
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
+
+    *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
+        yield {address: this.address, label: this.labelField.getValue()}
+    }
 
     terminate(): void {}
 }

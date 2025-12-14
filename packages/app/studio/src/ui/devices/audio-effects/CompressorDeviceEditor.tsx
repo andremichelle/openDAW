@@ -2,8 +2,7 @@ import css from "./CompressorDeviceEditor.sass?inline"
 import {
     AutomatableParameterFieldAdapter,
     CompressorDeviceBoxAdapter,
-    DeviceHost,
-    LabeledAudioOutputs
+    DeviceHost
 } from "@opendaw/studio-adapters"
 import {Address} from "@opendaw/lib-box"
 import {Lifecycle, Option} from "@opendaw/lib-std"
@@ -78,27 +77,18 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
                     label: input.labelField.getValue()
                 }).setRuntimeChildrenProcedure(subParent => {
                     // Input device (instrument or bus)
-                    subParent.addMenuItem(createSelectableItem(
-                        input.address, input.labelField.getValue(), false))
-                    let separatorBefore = true
-                    if (LabeledAudioOutputs.is(input)) {
-                        for (const output of input.labeledAudioOutputs()) {
-                            subParent.addMenuItem(createSelectableItem(
-                                output.address, output.label, separatorBefore))
-                            separatorBefore = false
-                        }
+                    let separatorBefore = false
+                    for (const output of input.labeledAudioOutputs()) {
+                        subParent.addMenuItem(createSelectableItem(
+                            output.address, output.label, separatorBefore))
                     }
                     // Audio effects
                     separatorBefore = true
                     for (const effect of audioUnit.audioEffects.adapters()) {
-                        subParent.addMenuItem(createSelectableItem(
-                            effect.address, effect.labelField.getValue(), separatorBefore))
-                        separatorBefore = false
-                        if (LabeledAudioOutputs.is(effect)) {
-                            for (const output of effect.labeledAudioOutputs()) {
-                                subParent.addMenuItem(createSelectableItem(
-                                    output.address, output.label, false))
-                            }
+                        for (const output of effect.labeledAudioOutputs()) {
+                            subParent.addMenuItem(createSelectableItem(
+                                output.address, output.label, separatorBefore))
+                            separatorBefore = false
                         }
                     }
                     subParent.addMenuItem(createSelectableItem(
