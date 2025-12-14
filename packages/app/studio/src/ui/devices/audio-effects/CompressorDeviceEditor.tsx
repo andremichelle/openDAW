@@ -74,7 +74,7 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
                                                       .flatMap(address => audioOutputInfoRegistry.query(address))
                                                       .mapOr(info => info.label(), "")
                                                   parent.addMenuItem(MenuItem.default({
-                                                      label: `Remove ${currentTarget}`,
+                                                      label: `Remove Sidechain '${currentTarget}'`,
                                                       hidden: currentTarget === ""
                                                   }).setTriggerProcedure(() => editing.modify(() =>
                                                       sideChain.targetAddress = Option.None)))
@@ -118,7 +118,7 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
                                                       }
                                                   }
                                               })}
-                                  >→ Sidechain</MenuButton>
+                                              appearance={{tinyTriangle: true}}>Sidechain</MenuButton>
                               </div>
                               <div className="control-section">
                                   <div className="controls">

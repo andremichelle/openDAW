@@ -9,15 +9,17 @@ component
 
   > div.toggle-buttons
     display: grid
-    grid-template-columns: repeat(5, 1fr)
+    grid-template-columns: repeat(4, 1fr) auto
     grid-column: 1 / -1
     column-gap: 0.25em
 
     button
+      padding: 0 2px 0 4px
       height: 15px
       font-size: 9px
       white-space: nowrap
       color: var(--color-orange)
+      border-radius: 1px
       background-color: rgba(black, 0.33)
 
       &.active, &.has-source
