@@ -1,5 +1,5 @@
 import {DelayDeviceBox} from "@opendaw/studio-boxes"
-import {Option, StringMapping, Terminable, UUID, ValueMapping} from "@opendaw/lib-std"
+import {StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {Fraction} from "@opendaw/lib-dsp"
@@ -26,7 +26,6 @@ export class DelayDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly #box: DelayDeviceBox
 
     readonly #parametric: ParameterAdapterSet
-    readonly #outputRegistration: Terminable
     readonly namedParameter // let typescript infer the type
 
     constructor(context: BoxAdaptersContext, box: DelayDeviceBox) {
@@ -34,9 +33,6 @@ export class DelayDeviceBoxAdapter implements AudioEffectDeviceAdapter {
         this.#box = box
         this.#parametric = new ParameterAdapterSet(this.#context)
         this.namedParameter = this.#wrapParameters(box)
-        this.#outputRegistration = context.isMainThread
-            ? context.audioOutputInfoRegistry.register({address: box.address, owner: Option.None, label: () => box.label.getValue()})
-            : Terminable.Empty
     }
 
     get box(): DelayDeviceBox {return this.#box}
@@ -57,7 +53,6 @@ export class DelayDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 
     terminate(): void {
         this.#parametric.terminate()
-        this.#outputRegistration.terminate()
     }
 
     #wrapParameters(box: DelayDeviceBox) {

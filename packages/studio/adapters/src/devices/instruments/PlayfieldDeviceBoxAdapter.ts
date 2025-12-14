@@ -1,8 +1,8 @@
 import {PlayfieldDeviceBox} from "@opendaw/studio-boxes"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {Option, Terminable, UUID} from "@opendaw/lib-std"
-import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
+import {UUID} from "@opendaw/lib-std"
+import {DeviceHost, Devices, InstrumentDeviceBoxAdapter, LabeledAudioOutput, LabeledAudioOutputs} from "../../DeviceAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {IndexedBoxAdapterCollection} from "../../IndexedBoxAdapterCollection"
 import {PlayfieldSampleBoxAdapter} from "./Playfield/PlayfieldSampleBoxAdapter"
@@ -10,7 +10,7 @@ import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 
-export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
+export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter, LabeledAudioOutputs {
     readonly type = "instrument"
     readonly accepts = "midi"
 
@@ -19,7 +19,6 @@ export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     readonly #samples: IndexedBoxAdapterCollection<PlayfieldSampleBoxAdapter, Pointers.Sample>
     readonly #parametric: ParameterAdapterSet
-    readonly #outputRegistration: Terminable
 
     constructor(context: BoxAdaptersContext, box: PlayfieldDeviceBox) {
         this.#context = context
@@ -28,9 +27,6 @@ export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         this.#samples = IndexedBoxAdapterCollection.create(
             box.samples, box => context.boxAdapters.adapterFor(box, PlayfieldSampleBoxAdapter), Pointers.Sample)
         this.#parametric = new ParameterAdapterSet(this.#context)
-        this.#outputRegistration = context.isMainThread
-            ? context.audioOutputInfoRegistry.register({address: box.address, owner: Option.None, label: () => box.label.getValue()})
-            : Terminable.Empty
     }
 
     reset(): void {this.#samples.adapters().forEach(adapter => adapter.box.delete())}
@@ -54,8 +50,13 @@ export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
+    *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
+        for (const sample of this.#samples.adapters()) {
+            yield {address: sample.address, label: sample.fileLabel}
+        }
+    }
+
     terminate(): void {
         this.#parametric.terminate()
-        this.#outputRegistration.terminate()
     }
 }

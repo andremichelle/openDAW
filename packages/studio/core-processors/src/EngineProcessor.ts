@@ -23,7 +23,6 @@ import {EngineContext} from "./EngineContext"
 import {TimeInfo} from "./TimeInfo"
 import {
     AnyClipBoxAdapter,
-    AudioOutputInfoRegistry,
     AudioUnitBoxAdapter,
     BoxAdapters,
     ClipAdapters,
@@ -401,7 +400,6 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     get engineToClient(): EngineToClient {return this.#engineToClient}
     get isMainThread(): boolean {return false}
     get isAudioContext(): boolean {return true}
-    get audioOutputInfoRegistry(): AudioOutputInfoRegistry {return panic("Only available in main thread")}
     get audioOutputBufferRegistry(): AudioOutputBufferRegistry {return this.#audioOutputBufferRegistry}
 
     sendMIDIData(midiDeviceId: string, data: Uint8Array, relativeTimeInMs: number): void {

@@ -1,4 +1,4 @@
-import {BooleanField, Box, Field, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
+import {Address, BooleanField, Box, Field, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {Arrays, assert, AssertType, int, Option, panic, UUID} from "@opendaw/lib-std"
 import {Pointers} from "@opendaw/studio-enums"
 import {TrackType} from "./timeline/TrackType"
@@ -51,6 +51,17 @@ export interface InstrumentDeviceBoxAdapter extends DeviceBoxAdapter {
     get iconField(): StringField
     get defaultTrackType(): TrackType
     get acceptsMidiEvents(): boolean
+}
+
+export type LabeledAudioOutput = { readonly address: Address, readonly label: string }
+
+export interface LabeledAudioOutputs {
+    labeledAudioOutputs(): Iterable<LabeledAudioOutput>
+}
+
+export namespace LabeledAudioOutputs {
+    export const is = (value: unknown): value is LabeledAudioOutputs =>
+        value !== null && typeof value === "object" && "labeledAudioOutputs" in value
 }
 
 export interface DeviceHost extends BoxAdapter {

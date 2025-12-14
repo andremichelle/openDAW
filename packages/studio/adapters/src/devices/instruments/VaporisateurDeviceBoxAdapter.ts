@@ -1,4 +1,4 @@
-import {Option, StringMapping, Terminable, UUID, ValueMapping} from "@opendaw/lib-std"
+import {StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {VaporisateurDeviceBox} from "@opendaw/studio-boxes"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
@@ -17,7 +17,6 @@ export class VaporisateurDeviceBoxAdapter implements InstrumentDeviceBoxAdapter 
     readonly #box: VaporisateurDeviceBox
 
     readonly #parametric: ParameterAdapterSet
-    readonly #outputRegistration: Terminable
     readonly namedParameter // let typescript infer the type
 
     constructor(context: BoxAdaptersContext, box: VaporisateurDeviceBox) {
@@ -25,9 +24,6 @@ export class VaporisateurDeviceBoxAdapter implements InstrumentDeviceBoxAdapter 
         this.#box = box
         this.#parametric = new ParameterAdapterSet(this.#context)
         this.namedParameter = this.#wrapParameters(box)
-        this.#outputRegistration = context.isMainThread
-            ? context.audioOutputInfoRegistry.register({address: box.address, owner: Option.None, label: () => box.label.getValue()})
-            : Terminable.Empty
     }
 
     get box(): VaporisateurDeviceBox {return this.#box}
@@ -49,7 +45,6 @@ export class VaporisateurDeviceBoxAdapter implements InstrumentDeviceBoxAdapter 
 
     terminate(): void {
         this.#parametric.terminate()
-        this.#outputRegistration.terminate()
     }
 
     #wrapParameters(box: VaporisateurDeviceBox) {

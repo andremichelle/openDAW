@@ -1,5 +1,11 @@
 import css from "./CompressorDeviceEditor.sass?inline"
-import {AutomatableParameterFieldAdapter, CompressorDeviceBoxAdapter, DeviceHost} from "@opendaw/studio-adapters"
+import {
+    AutomatableParameterFieldAdapter,
+    CompressorDeviceBoxAdapter,
+    DeviceHost,
+    LabeledAudioOutputs
+} from "@opendaw/studio-adapters"
+import {Address} from "@opendaw/lib-box"
 import {Lifecycle, Option} from "@opendaw/lib-std"
 import {createElement, Frag} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
@@ -27,7 +33,7 @@ type Construct = {
 
 export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
-    const {audioOutputInfoRegistry, editing, midiLearning} = project
+    const {editing, midiLearning} = project
     const {
         lookahead, automakeup, autoattack, autorelease,
         threshold, ratio, knee, makeup,
@@ -53,6 +59,54 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
         </Frag>
     )
     const sideChain = adapter.sideChain
+    const createSideChainMenu = (parent: MenuItem) => {
+        const isSelected = (address: Address) =>
+            sideChain.targetAddress.mapOr(a => a.equals(address), false)
+        const createSelectableItem = (address: Address, label: string, separatorBefore: boolean) =>
+            MenuItem.default({label, separatorBefore, checked: isSelected(address)})
+                .setTriggerProcedure(() => editing.modify(() =>
+                    sideChain.targetAddress = Option.wrap(address)))
+        // Remove current sidechain
+        sideChain.targetAddress.ifSome(() =>
+            parent.addMenuItem(MenuItem.default({label: "Remove Sidechain"})
+                .setTriggerProcedure(() => editing.modify(() =>
+                    sideChain.targetAddress = Option.None))))
+        // Iterate over all audio units
+        for (const audioUnit of project.rootBoxAdapter.audioUnits.adapters()) {
+            audioUnit.input.getValue().ifSome(input => {
+                parent.addMenuItem(MenuItem.default({
+                    label: input.labelField.getValue()
+                }).setRuntimeChildrenProcedure(subParent => {
+                    // Input device (instrument or bus)
+                    subParent.addMenuItem(createSelectableItem(
+                        input.address, input.labelField.getValue(), false))
+                    let separatorBefore = true
+                    if (LabeledAudioOutputs.is(input)) {
+                        for (const output of input.labeledAudioOutputs()) {
+                            subParent.addMenuItem(createSelectableItem(
+                                output.address, output.label, separatorBefore))
+                            separatorBefore = false
+                        }
+                    }
+                    // Audio effects
+                    separatorBefore = true
+                    for (const effect of audioUnit.audioEffects.adapters()) {
+                        subParent.addMenuItem(createSelectableItem(
+                            effect.address, effect.labelField.getValue(), separatorBefore))
+                        separatorBefore = false
+                        if (LabeledAudioOutputs.is(effect)) {
+                            for (const output of effect.labeledAudioOutputs()) {
+                                subParent.addMenuItem(createSelectableItem(
+                                    output.address, output.label, false))
+                            }
+                        }
+                    }
+                    subParent.addMenuItem(createSelectableItem(
+                        audioUnit.address, "Channelstrip", true))
+                }))
+            })
+        }
+    }
     return (
         <DeviceEditor lifecycle={lifecycle}
                       project={project}
@@ -69,55 +123,7 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
                                       ))}
                                   <MenuButton onInit={button => sideChain.catchupAndSubscribe(pointer =>
                                       button.classList.toggle("has-source", pointer.nonEmpty()))}
-                                              root={MenuItem.root().setRuntimeChildrenProcedure(parent => {
-                                                  const currentTarget = sideChain.targetAddress
-                                                      .flatMap(address => audioOutputInfoRegistry.query(address))
-                                                      .mapOr(info => info.label(), "")
-                                                  parent.addMenuItem(MenuItem.default({
-                                                      label: `Remove Sidechain '${currentTarget}'`,
-                                                      hidden: currentTarget === ""
-                                                  }).setTriggerProcedure(() => editing.modify(() =>
-                                                      sideChain.targetAddress = Option.None)))
-                                                  const allOutputs = project.audioOutputInfoRegistry.list()
-                                                  // Build owner-to-children map
-                                                  const childrenByOwner = new Map<string, Array<typeof allOutputs[0]>>()
-                                                  for (const info of allOutputs) {
-                                                      info.owner.ifSome(ownerAddress => {
-                                                          const key = ownerAddress.uuid.toString()
-                                                          const existing = childrenByOwner.get(key) ?? []
-                                                          existing.push(info)
-                                                          childrenByOwner.set(key, existing)
-                                                      })
-                                                  }
-                                                  // Helper to create a selectable menu item
-                                                  const createMenuItem = (info: typeof allOutputs[0]) =>
-                                                      MenuItem.default({
-                                                          label: info.label(),
-                                                          checked: sideChain.targetAddress
-                                                              .mapOr(other => other.equals(info.address), false)
-                                                      }).setTriggerProcedure(() => {
-                                                          editing.modify(() =>
-                                                              sideChain.targetAddress = Option.wrap(info.address))
-                                                      })
-                                                  // Add top-level items (those without an owner)
-                                                  for (const info of allOutputs.filter(i => i.owner.isEmpty())) {
-                                                      const key = info.address.uuid.toString()
-                                                      const children = childrenByOwner.get(key)
-                                                      if (children !== undefined && children.length > 0) {
-                                                          // Has children - create submenu
-                                                          parent.addMenuItem(MenuItem.default({
-                                                              label: info.label()
-                                                          }).setRuntimeChildrenProcedure(subParent => {
-                                                              subParent.addMenuItem(createMenuItem(info))
-                                                              for (const child of children) {
-                                                                  subParent.addMenuItem(createMenuItem(child))
-                                                              }
-                                                          }))
-                                                      } else {
-                                                          parent.addMenuItem(createMenuItem(info))
-                                                      }
-                                                  }
-                                              })}
+                                              root={MenuItem.root().setRuntimeChildrenProcedure(createSideChainMenu)}
                                               appearance={{tinyTriangle: true}}>Sidechain</MenuButton>
                               </div>
                               <div className="control-section">

@@ -1,6 +1,6 @@
 import {Pointers} from "@opendaw/studio-enums"
 import {PlayfieldSampleBox} from "@opendaw/studio-boxes"
-import {int, Option, StringMapping, Terminable, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {int, Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Field, Int32Field, StringField} from "@opendaw/lib-box"
 import {
     AudioEffectDeviceAdapter,
@@ -50,18 +50,11 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
         this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
         this.namedParameter = this.#wrapParameters(box)
 
-        this.#terminator.ownAll(
+        this.#terminator.own(
             this.#box.file.catchupAndSubscribe(pointer => {
                 this.#file = pointer.targetVertex.map(({box}) => this.#context.boxAdapters.adapterFor(box, AudioFileBoxAdapter))
                 this.#file.unwrapOrNull()?.getOrCreateLoader() // triggers preloading file if available
-            }),
-            context.isMainThread
-                ? context.audioOutputInfoRegistry.register({
-                    address: box.address,
-                    owner: box.device.targetAddress,
-                    label: () => this.fileLabel
-                })
-                : Terminable.Empty
+            })
         )
     }
 

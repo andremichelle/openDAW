@@ -9,7 +9,6 @@ import {BoxAdapters} from "./BoxAdapters"
 import {SampleLoaderManager} from "./sample/SampleLoaderManager"
 import {SoundfontLoaderManager} from "./soundfont/SoundfontLoaderManager"
 import {ppqn, TempoMap} from "@opendaw/lib-dsp"
-import {AudioOutputInfoRegistry} from "./AudioOutputInfoRegistry"
 
 export interface BoxAdaptersContext extends Terminable {
     get boxGraph(): BoxGraph
@@ -26,5 +25,4 @@ export interface BoxAdaptersContext extends Terminable {
     get tempoMap(): TempoMap
     get isMainThread(): boolean
     get isAudioContext(): boolean
-    get audioOutputInfoRegistry(): AudioOutputInfoRegistry
 }

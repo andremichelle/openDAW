@@ -23,7 +23,6 @@ import {
     UserInterfaceBox
 } from "@opendaw/studio-boxes"
 import {
-    AudioOutputInfoRegistry,
     BoxAdapters,
     BoxAdaptersContext,
     ClipSequencing,
@@ -107,7 +106,6 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly editing: BoxEditing
     readonly selection: VertexSelection
     readonly boxAdapters: BoxAdapters
-    readonly audioOutputInfoRegistry: AudioOutputInfoRegistry
     readonly userEditingManager: UserEditingManager
     readonly parameterFieldAdapters: ParameterFieldAdapters
     readonly liveStreamReceiver: LiveStreamReceiver
@@ -134,7 +132,6 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.api = new ProjectApi(this)
         this.editing = new BoxEditing(this.boxGraph)
         this.selection = new VertexSelection(this.editing, this.boxGraph)
-        this.audioOutputInfoRegistry = new AudioOutputInfoRegistry()
         this.parameterFieldAdapters = new ParameterFieldAdapters()
         this.tempoMap = new ConstantTempoMap(this.timelineBox.bpm)
         this.boxAdapters = this.#terminator.own(new BoxAdapters(this))
