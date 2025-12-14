@@ -1,4 +1,4 @@
-import {UUID} from "@opendaw/lib-std"
+import {Option, UUID} from "@opendaw/lib-std"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {UnknownAudioEffectDeviceBox} from "@opendaw/studio-boxes"
@@ -37,7 +37,7 @@ export class UnknownAudioEffectDeviceBoxAdapter implements AudioEffectDeviceAdap
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
     *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
-        yield {address: this.address, label: this.labelField.getValue()}
+        yield {address: this.address, label: this.labelField.getValue(), children: () => Option.None}
     }
 
     terminate(): void {}

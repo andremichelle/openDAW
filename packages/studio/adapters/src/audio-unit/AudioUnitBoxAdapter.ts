@@ -82,7 +82,7 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this}
 
     *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
-        yield {address: this.address, label: this.label}
+        yield {address: this.address, label: this.label, children: () => Option.None}
     }
 
     indicesLimit(): [int, int] {

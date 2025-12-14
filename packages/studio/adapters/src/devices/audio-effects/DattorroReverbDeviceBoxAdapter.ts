@@ -1,4 +1,4 @@
-import {StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
+import {Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {DattorroReverbDeviceBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
@@ -42,7 +42,7 @@ export class DattorroReverbDeviceBoxAdapter implements AudioEffectDeviceAdapter 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
     *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
-        yield {address: this.address, label: this.labelField.getValue()}
+        yield {address: this.address, label: this.labelField.getValue(), children: () => Option.None}
     }
 
     terminate(): void {

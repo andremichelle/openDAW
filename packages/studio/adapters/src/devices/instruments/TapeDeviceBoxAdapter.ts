@@ -1,5 +1,5 @@
 import {TapeDeviceBox} from "@opendaw/studio-boxes"
-import {StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
+import {Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
@@ -43,7 +43,7 @@ export class TapeDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
     *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
-        yield {address: this.address, label: this.labelField.getValue()}
+        yield {address: this.address, label: this.labelField.getValue(), children: () => Option.None}
     }
 
     terminate(): void {

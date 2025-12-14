@@ -2,6 +2,7 @@ import {
     asInstanceOf,
     MutableObservableOption,
     ObservableOption,
+    Option,
     StringMapping,
     Terminator,
     UUID,
@@ -69,7 +70,7 @@ export class MIDIOutputDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
     *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
-        yield {address: this.address, label: this.labelField.getValue()}
+        yield {address: this.address, label: this.labelField.getValue(), children: () => Option.None}
     }
 
     terminate(): void {this.#terminator.terminate()}

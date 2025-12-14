@@ -1,5 +1,5 @@
 import {Address, BooleanField, Propagation, StringField} from "@opendaw/lib-box"
-import {Observer, Subscription, UUID} from "@opendaw/lib-std"
+import {Observer, Option, Subscription, UUID} from "@opendaw/lib-std"
 import {AudioBusBox} from "@opendaw/studio-boxes"
 import {DeviceBoxAdapter, DeviceHost, Devices} from "../DeviceAdapter"
 import {LabeledAudioOutput, LabeledAudioOutputsOwner} from "../LabeledAudioOutputsOwner"
@@ -42,7 +42,7 @@ export class AudioBusBoxAdapter implements DeviceBoxAdapter, LabeledAudioOutputs
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
     *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
-        yield {address: this.address, label: this.labelField.getValue()}
+        yield {address: this.address, label: this.labelField.getValue(), children: () => Option.None}
     }
 
     terminate(): void {}

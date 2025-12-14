@@ -2,7 +2,8 @@ import css from "./CompressorDeviceEditor.sass?inline"
 import {
     AutomatableParameterFieldAdapter,
     CompressorDeviceBoxAdapter,
-    DeviceHost
+    DeviceHost,
+    LabeledAudioOutput
 } from "@opendaw/studio-adapters"
 import {Address} from "@opendaw/lib-box"
 import {Lifecycle, Option} from "@opendaw/lib-std"
@@ -61,38 +62,47 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
     const createSideChainMenu = (parent: MenuItem) => {
         const isSelected = (address: Address) =>
             sideChain.targetAddress.mapOr(a => a.equals(address), false)
-        const createSelectableItem = (address: Address, label: string, separatorBefore: boolean) =>
-            MenuItem.default({label, separatorBefore, checked: isSelected(address)})
-                .setTriggerProcedure(() => editing.modify(() =>
-                    sideChain.targetAddress = Option.wrap(address)))
-        // Remove current sidechain
+        const createSelectableItem = (output: LabeledAudioOutput, separatorBefore: boolean): MenuItem => {
+            if (output.children().nonEmpty()) {
+                return MenuItem.default({
+                    label: output.label,
+                    separatorBefore
+                }).setRuntimeChildrenProcedure(subParent => {
+                    output.children().ifSome(children => {
+                        for (const child of children) {
+                            subParent.addMenuItem(createSelectableItem(child, false))
+                        }
+                    })
+                })
+            } else {
+                return MenuItem.default({
+                    label: output.label,
+                    separatorBefore,
+                    checked: isSelected(output.address)
+                }).setTriggerProcedure(() => editing.modify(() => sideChain.targetAddress = Option.wrap(output.address)))
+            }
+        }
         sideChain.targetAddress.ifSome(() =>
             parent.addMenuItem(MenuItem.default({label: "Remove Sidechain"})
                 .setTriggerProcedure(() => editing.modify(() =>
                     sideChain.targetAddress = Option.None))))
-        // Iterate over all audio units
         for (const audioUnit of project.rootBoxAdapter.audioUnits.adapters()) {
             audioUnit.input.getValue().ifSome(input => {
                 parent.addMenuItem(MenuItem.default({
                     label: input.labelField.getValue()
                 }).setRuntimeChildrenProcedure(subParent => {
-                    // Input device (instrument or bus)
-                    let separatorBefore = false
                     for (const output of input.labeledAudioOutputs()) {
-                        subParent.addMenuItem(createSelectableItem(
-                            output.address, output.label, separatorBefore))
+                        subParent.addMenuItem(createSelectableItem(output, false))
                     }
-                    // Audio effects
-                    separatorBefore = true
+                    let separatorBefore = true
                     for (const effect of audioUnit.audioEffects.adapters()) {
                         for (const output of effect.labeledAudioOutputs()) {
-                            subParent.addMenuItem(createSelectableItem(
-                                output.address, output.label, separatorBefore))
+                            subParent.addMenuItem(createSelectableItem(output, separatorBefore))
                             separatorBefore = false
                         }
                     }
                     subParent.addMenuItem(createSelectableItem(
-                        audioUnit.address, "Channelstrip", true))
+                        {address: audioUnit.address, label: "Channelstrip", children: () => Option.None}, true))
                 }))
             })
         }

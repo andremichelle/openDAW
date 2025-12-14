@@ -1,7 +1,7 @@
 import {PlayfieldDeviceBox} from "@opendaw/studio-boxes"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {UUID} from "@opendaw/lib-std"
+import {Option, UUID} from "@opendaw/lib-std"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {IndexedBoxAdapterCollection} from "../../IndexedBoxAdapterCollection"
@@ -52,8 +52,13 @@ export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter, La
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
     *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
+        yield {address: this.address, label: this.labelField.getValue(), children: () => Option.None}
         for (const sample of this.#samples.adapters()) {
-            yield {address: sample.address, label: sample.fileLabel}
+            yield {
+                address: sample.address,
+                label: sample.fileLabel,
+                children: () => Option.wrap(sample.labeledAudioOutputsChain())
+            }
         }
     }
 

@@ -1,5 +1,5 @@
 import {ModularDeviceBox} from "@opendaw/studio-boxes"
-import {panic, UUID} from "@opendaw/lib-std"
+import {Option, panic, UUID} from "@opendaw/lib-std"
 import {Pointers} from "@opendaw/studio-enums"
 import {Address, BooleanField, FieldKeys, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../DeviceAdapter"
@@ -51,7 +51,7 @@ export class ModularDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     }
 
     *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
-        yield {address: this.address, label: this.labelField.getValue()}
+        yield {address: this.address, label: this.labelField.getValue(), children: () => Option.None}
     }
 
     terminate(): void {}
