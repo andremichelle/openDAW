@@ -81,8 +81,19 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this}
 
-    *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
-        yield {address: this.address, label: this.label, children: () => Option.None}
+    * labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
+        const optInput = this.input.getValue()
+        if (optInput.nonEmpty()) {
+            yield* optInput.unwrap().labeledAudioOutputs()
+        }
+        for (const effect of this.#audioEffects.adapters()) {
+            yield* effect.labeledAudioOutputs()
+        }
+        yield {
+            address: this.address,
+            label: "Channelstrip",
+            children: () => Option.None
+        }
     }
 
     indicesLimit(): [int, int] {

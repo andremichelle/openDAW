@@ -136,12 +136,12 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
     deviceHost(): DeviceHost {return this.device().deviceHost()}
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
-    *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
-        yield {address: this.address, label: this.fileLabel, children: () => Option.None}
-    }
-
-    *labeledAudioOutputsChain(): Iterable<LabeledAudioOutput> {
-        yield {address: this.address, label: this.fileLabel, children: () => Option.None}
+    * labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
+        yield {
+            address: this.address,
+            label: this.fileLabel,
+            children: () => Option.None
+        }
         for (const effect of this.#audioEffects.adapters()) {
             yield* effect.labeledAudioOutputs()
         }

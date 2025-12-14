@@ -62,7 +62,7 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
     const sideChain = adapter.sideChain
     const createSideChainMenu = (parent: MenuItem) => {
         const isSelected = (address: Address) =>
-            sideChain.targetAddress.mapOr(a => a.equals(address), false)
+            sideChain.targetAddress.mapOr(other => other.equals(address), false)
         const createSelectableItem = (output: LabeledAudioOutput): MenuItem => {
             if (output.children().nonEmpty()) {
                 return MenuItem.default({label: output.label})
@@ -72,41 +72,20 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
                                 subParent.addMenuItem(createSelectableItem(child))
                             }
                         }))
-            } else {
-                return MenuItem.default({
-                    label: output.label,
-                    checked: isSelected(output.address)
-                }).setTriggerProcedure(() => editing.modify(() =>
-                    sideChain.targetAddress = Option.wrap(output.address)))
             }
+            return MenuItem.default({
+                label: output.label,
+                checked: isSelected(output.address)
+            }).setTriggerProcedure(() => editing.modify(() =>
+                sideChain.targetAddress = Option.wrap(output.address)))
         }
         sideChain.targetAddress.ifSome(() =>
             parent.addMenuItem(MenuItem.default({label: "Remove Sidechain"})
                 .setTriggerProcedure(() => editing.modify(() =>
                     sideChain.targetAddress = Option.None))))
         parent.addMenuItem(MenuItem.header({label: "Tracks", icon: IconSymbol.OpenDAW, color: Colors.orange}))
-        for (const audioUnit of project.rootBoxAdapter.audioUnits.adapters()) {
-            audioUnit.input.getValue().ifSome(input => {
-                parent.addMenuItem(MenuItem.default({
-                    label: input.labelField.getValue()
-                }).setRuntimeChildrenProcedure(subParent => {
-                    subParent.addMenuItem(MenuItem.header({
-                        label: "Devices",
-                        icon: IconSymbol.SpeakerHeadphone,
-                        color: Colors.blue
-                    }))
-                    for (const output of input.labeledAudioOutputs()) {
-                        subParent.addMenuItem(createSelectableItem(output))
-                    }
-                    for (const effect of audioUnit.audioEffects.adapters()) {
-                        for (const output of effect.labeledAudioOutputs()) {
-                            subParent.addMenuItem(createSelectableItem(output))
-                        }
-                    }
-                    subParent.addMenuItem(createSelectableItem(
-                        {address: audioUnit.address, label: "Channelstrip", children: () => Option.None}))
-                }))
-            })
+        for (const output of project.rootBoxAdapter.labeledAudioOutputs()) {
+            parent.addMenuItem(createSelectableItem(output))
         }
     }
     return (
