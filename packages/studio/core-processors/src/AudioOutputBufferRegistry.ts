@@ -17,7 +17,6 @@ export class AudioOutputBufferRegistry {
     }
 
     register(address: Address, buffer: AudioBuffer, processor: Processor): Terminable {
-        console.debug("register", address.toString(), processor)
         this.#outputs.add({address, buffer, processor})
         return {terminate: () => this.#outputs.removeByKey(address)}
     }
