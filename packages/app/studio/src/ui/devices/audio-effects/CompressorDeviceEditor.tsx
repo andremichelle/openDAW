@@ -21,6 +21,7 @@ import {Meters} from "@/ui/devices/audio-effects/Compressor/Meters"
 import {CompressionCurve} from "@/ui/devices/audio-effects/Compressor/CompressionCurve"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {MenuItem} from "@/ui/model/menu-item"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "CompressorDeviceEditor")
 
@@ -62,47 +63,48 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
     const createSideChainMenu = (parent: MenuItem) => {
         const isSelected = (address: Address) =>
             sideChain.targetAddress.mapOr(a => a.equals(address), false)
-        const createSelectableItem = (output: LabeledAudioOutput, separatorBefore: boolean): MenuItem => {
+        const createSelectableItem = (output: LabeledAudioOutput): MenuItem => {
             if (output.children().nonEmpty()) {
-                return MenuItem.default({
-                    label: output.label,
-                    separatorBefore
-                }).setRuntimeChildrenProcedure(subParent => {
-                    output.children().ifSome(children => {
-                        for (const child of children) {
-                            subParent.addMenuItem(createSelectableItem(child, false))
-                        }
-                    })
-                })
+                return MenuItem.default({label: output.label})
+                    .setRuntimeChildrenProcedure(subParent =>
+                        output.children().ifSome(children => {
+                            for (const child of children) {
+                                subParent.addMenuItem(createSelectableItem(child))
+                            }
+                        }))
             } else {
                 return MenuItem.default({
                     label: output.label,
-                    separatorBefore,
                     checked: isSelected(output.address)
-                }).setTriggerProcedure(() => editing.modify(() => sideChain.targetAddress = Option.wrap(output.address)))
+                }).setTriggerProcedure(() => editing.modify(() =>
+                    sideChain.targetAddress = Option.wrap(output.address)))
             }
         }
         sideChain.targetAddress.ifSome(() =>
             parent.addMenuItem(MenuItem.default({label: "Remove Sidechain"})
                 .setTriggerProcedure(() => editing.modify(() =>
                     sideChain.targetAddress = Option.None))))
+        parent.addMenuItem(MenuItem.header({label: "Tracks", icon: IconSymbol.OpenDAW, color: Colors.orange}))
         for (const audioUnit of project.rootBoxAdapter.audioUnits.adapters()) {
             audioUnit.input.getValue().ifSome(input => {
                 parent.addMenuItem(MenuItem.default({
                     label: input.labelField.getValue()
                 }).setRuntimeChildrenProcedure(subParent => {
+                    subParent.addMenuItem(MenuItem.header({
+                        label: "Devices",
+                        icon: IconSymbol.SpeakerHeadphone,
+                        color: Colors.blue
+                    }))
                     for (const output of input.labeledAudioOutputs()) {
-                        subParent.addMenuItem(createSelectableItem(output, false))
+                        subParent.addMenuItem(createSelectableItem(output))
                     }
-                    let separatorBefore = true
                     for (const effect of audioUnit.audioEffects.adapters()) {
                         for (const output of effect.labeledAudioOutputs()) {
-                            subParent.addMenuItem(createSelectableItem(output, separatorBefore))
-                            separatorBefore = false
+                            subParent.addMenuItem(createSelectableItem(output))
                         }
                     }
                     subParent.addMenuItem(createSelectableItem(
-                        {address: audioUnit.address, label: "Channelstrip", children: () => Option.None}, true))
+                        {address: audioUnit.address, label: "Channelstrip", children: () => Option.None}))
                 }))
             })
         }
