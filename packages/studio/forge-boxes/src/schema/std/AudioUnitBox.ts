@@ -57,7 +57,11 @@ export const AudioUnitBox: BoxSchema<Pointers> = {
                 pointerType: Pointers.Capture, mandatory: false
             }
         } as const
-    }, pointerRules: {accepts: [Pointers.Selection, Pointers.Automation, Pointers.MetaData], mandatory: false}
+    },
+    pointerRules: {
+        accepts: [Pointers.Selection, Pointers.Automation, Pointers.MetaData, Pointers.SideChain],
+        mandatory: false
+    }
 }
 
 export const AudioBusBox: BoxSchema<Pointers> = {
@@ -78,7 +82,7 @@ export const AudioBusBox: BoxSchema<Pointers> = {
             7: {type: "string", name: "color", value: "red"},
             8: {type: "boolean", name: "minimized"}
         }
-    }
+    }, pointerRules: {accepts: [Pointers.SideChain], mandatory: false}
 }
 
 export const AuxSendBox: BoxSchema<Pointers> = {
@@ -104,5 +108,5 @@ export const AuxSendBox: BoxSchema<Pointers> = {
                 constraints: "decibel", unit: "dB"
             }
         }
-    }
+    }, pointerRules: {accepts: [Pointers.SideChain], mandatory: false}
 }

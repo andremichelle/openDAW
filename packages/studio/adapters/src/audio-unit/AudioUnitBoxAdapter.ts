@@ -1,5 +1,5 @@
 import {AudioUnitBox, CaptureAudioBox, CaptureMidiBox} from "@opendaw/studio-boxes"
-import {assert, int, Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {assert, int, Option, StringMapping, Terminable, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Field, Int32Field} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices, MidiEffectDeviceAdapter} from "../DeviceAdapter"
@@ -46,6 +46,13 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
             box => this.#context.boxAdapters.adapterFor(box, AuxSendBoxAdapter), Pointers.AuxSend))
         this.#output = this.#terminator.own(new AudioUnitOutput(this.#box.output, this.#context.boxAdapters))
         this.namedParameter = this.#wrapParameters(box)
+        this.#terminator.own(context.isMainThread
+            ? context.audioOutputInfoRegistry.register({
+                address: box.address,
+                owner: Option.None,
+                label: () => this.input.getValue().mapOr(input => `ChannelStrip ${input.labelField.getValue()}`, "No Source")
+            })
+            : Terminable.Empty)
 
         this.#sanityCheck()
     }

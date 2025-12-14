@@ -44,7 +44,8 @@ export class ChannelStripProcessor extends AudioProcessor implements Processor, 
 
         this.ownAll(
             context.registerProcessor(this),
-            context.mixer.attachChannelStrip(this)
+            context.mixer.attachChannelStrip(this),
+            context.audioOutputBufferRegistry.register(adapter.address, this.#audioOutput, this)
         )
         this.readAllParameters()
     }
