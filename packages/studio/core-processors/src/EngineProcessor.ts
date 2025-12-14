@@ -109,7 +109,6 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
 
     #processQueue: Option<ReadonlyArray<Processor>> = Option.None
     #primaryOutput: Option<AudioUnit> = Option.None
-    #needsAnalyser: boolean = false
 
     #context: Option<EngineContext> = Option.None
     #midiSender: Option<MIDISender> = Option.None
@@ -187,14 +186,12 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         const waveform = new Float32Array(this.#analyser.numBins())
         this.#terminator.own(this.#liveStreamBroadcaster.broadcastFloats(EngineAddresses.SPECTRUM, spectrum,
             (hasSubscribers) => {
-                this.#needsAnalyser ||= hasSubscribers
                 if (!hasSubscribers) {return}
                 spectrum.set(this.#analyser.bins())
                 this.#analyser.decay = true
             }))
         this.#terminator.own(this.#liveStreamBroadcaster.broadcastFloats(EngineAddresses.WAVEFORM, waveform,
             (hasSubscribers) => {
-                this.#needsAnalyser ||= hasSubscribers
                 if (!hasSubscribers) {return}
                 waveform.set(this.#analyser.waveform())
             }))
@@ -336,9 +333,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
             this.#primaryOutput.unwrap().audioOutput().replaceInto(output)
             if (metronomeEnabled) {this.#metronome.output.mixInto(output)}
             this.#peaks.process(output[0], output[1])
-            if (this.#needsAnalyser) {
-                this.#analyser.process(output[0], output[1], 0, RenderQuantum)
-            }
+            this.#analyser.process(output[0], output[1], 0, RenderQuantum)
         } else {
             this.#stemExports.forEach((unit: AudioUnit, index: int) => {
                 const [l, r] = unit.audioOutput().channels()
@@ -349,7 +344,6 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#notifier.notify(ProcessPhase.After)
         this.#clipSequencing.changes().ifSome(changes => this.#engineToClient.notifyClipSequenceChanges(changes))
         this.#stateSender.tryWrite()
-        this.#needsAnalyser = false // Reset before flush; callbacks will set if subscribers exist
         this.#liveStreamBroadcaster.flush()
         return true
     }

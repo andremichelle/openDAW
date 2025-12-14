@@ -36,6 +36,10 @@ export class AudioAnalyser {
         this.#index = 0
     }
 
+    reset(): void {
+        this.#index = 0
+    }
+
     numBins(): int {return this.#numBins}
     bins(): Float32Array {return this.#bins}
     waveform(): Float32Array {return this.#waveform}
