@@ -194,14 +194,8 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
 
         for (let i = from; i < to; i++) {
             const g = this.#smoothInputGain.moveAndGet()
-            const l = outL[i] = srcL[i] * g
-            const r = outR[i] = srcR[i] * g
-            const peak = Math.max(Math.abs(l), Math.abs(r))
-            if (this.#inpMax <= peak) {
-                this.#inpMax = peak
-            } else {
-                this.#inpMax *= CompressorDeviceProcessor.PEAK_DECAY_PER_SAMPLE
-            }
+            outL[i] = srcL[i] * g
+            outR[i] = srcR[i] * g
         }
 
         // Clear sidechain signal buffer
@@ -219,6 +213,16 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
         } else {
             for (let i = from; i < to; i++) {
                 this.#sidechainSignal[i] = Math.max(Math.abs(outL[i]), Math.abs(outR[i]))
+            }
+        }
+
+        // Track detection signal peak for editor curve display
+        for (let i = from; i < to; i++) {
+            const peak = this.#sidechainSignal[i]
+            if (this.#inpMax <= peak) {
+                this.#inpMax = peak
+            } else {
+                this.#inpMax *= CompressorDeviceProcessor.PEAK_DECAY_PER_SAMPLE
             }
         }
 
