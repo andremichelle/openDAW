@@ -29,13 +29,14 @@ export class Graph<V> {
     vertices(): ReadonlyArray<V> {return this.#vertices}
 
     addEdge([source, target]: Edge<V>): void {
-        const vertexPredecessors = asDefined(this.#predecessors.get(target), `[add] Edge has unannounced vertex. (${target})`)
-        assert(!vertexPredecessors.includes(source), `${source} is already marked.`)
+        const vertexPredecessors = asDefined(this.#predecessors.get(target),
+            `[add] Edge has unannounced vertex. (${target})`)
         vertexPredecessors.push(source)
     }
 
     removeEdge([source, target]: Edge<V>): void {
-        const vertexPredecessors = asDefined(this.#predecessors.get(target), `[remove] Edge has unannounced vertex. (${target})`)
+        const vertexPredecessors = asDefined(this.#predecessors.get(target),
+            `[remove] Edge has unannounced vertex. (${target})`)
         assert(vertexPredecessors.includes(source), `${source} is not marked.`)
         Arrays.remove(vertexPredecessors, source)
     }
