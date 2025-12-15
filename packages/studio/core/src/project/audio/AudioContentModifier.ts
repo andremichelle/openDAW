@@ -102,7 +102,6 @@ export namespace AudioContentModifier {
         box.duration.setValue(file.endInSeconds)
         box.accept({
             visitAudioRegionBox: (box: AudioRegionBox) => {
-                console.debug("RESET")
                 box.loopOffset.setValue(0)
                 box.loopDuration.setValue(file.endInSeconds)
             }
