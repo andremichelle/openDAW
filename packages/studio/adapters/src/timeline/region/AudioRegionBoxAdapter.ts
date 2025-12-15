@@ -197,9 +197,9 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
             .map(vertex => this.#context.boxAdapters.adapterFor(vertex.box, ValueEventCollectionBoxAdapter))
     }
     set position(value: ppqn) {this.#box.position.setValue(value)}
-    set duration(value: ppqn) {if (this.#playMode.nonEmpty()) {this.#durationConverter.fromPPQN(value)}}
+    set duration(value: ppqn) {this.#durationConverter.fromPPQN(value)}
     set loopOffset(value: ppqn) {this.#loopOffsetConverter.fromPPQN(value)}
-    set loopDuration(value: ppqn) {if (this.#playMode.nonEmpty()) {this.#loopDurationConverter.fromPPQN(value)}}
+    set loopDuration(value: ppqn) {this.#loopDurationConverter.fromPPQN(value)}
 
     copyTo(params?: CopyToParams): AudioRegionBoxAdapter {
         const eventCollection = this.optCollection.unwrap("Cannot make copy without event-collection")
@@ -221,6 +221,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
                 box.waveformOffset.setValue(this.waveformOffset.getValue())
                 clonedPlayMode.ifSome(mode => box.playMode.refer(mode))
             }), AudioRegionBoxAdapter)
+        console.debug("new duration", params?.duration, this.duration)
         adapter.duration = params?.duration ?? this.duration
         adapter.loopOffset = params?.loopOffset ?? this.loopOffset
         adapter.loopDuration = params?.loopDuration ?? this.loopDuration
