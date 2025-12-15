@@ -13,7 +13,7 @@
     "dev:studio": "turbo run dev --filter=@opendaw/app-studio",
     "dev:lab": "turbo run dev --filter=@opendaw/lab",
     "dev:yjs-server": "turbo run dev --filter=yjs-server",
-    "dev:electron": "concurrently \"npm run dev:studio\" \"wait-on https://localhost:8080 && cross-env NODE_ENV=development electron packages/app/electron/dist/main.js\"",
+    "dev:electron": "concurrently \"npm run dev:studio\" \"npm run build --filter=@opendaw/electron-app && wait-on http://localhost:8080 && cross-env NODE_ENV=development electron packages/app/electron/dist/main.js\"",
     "build:electron": "npm run build --filter=@opendaw/electron-app && npm run build --filter=@opendaw/app-studio",
     "test": "turbo run test --concurrency=1",
     "lint": "turbo run lint",

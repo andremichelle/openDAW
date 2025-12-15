@@ -40,7 +40,7 @@ function createWindow() {
 
   // In development, load from Vite server
   if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL('https://localhost:8080/index_standalone.html');
+    mainWindow.loadURL('http://localhost:8080/index_standalone.html');
     mainWindow.webContents.openDevTools();
   } else {
     // In production, load the built file

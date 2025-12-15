@@ -56,7 +56,7 @@ export default defineConfig(({command}) => {
         server: {
             port: 8080,
             host: "localhost",
-            https: command === "serve" ? {
+            https: (command === "serve" && certsExist) ? {
                 key: readFileSync(resolve(__dirname, "../../../certs/localhost-key.pem")),
                 cert: readFileSync(resolve(__dirname, "../../../certs/localhost.pem"))
             } : undefined,
