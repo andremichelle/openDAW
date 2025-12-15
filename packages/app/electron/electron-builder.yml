@@ -1,0 +1,15 @@
+appId: org.opendaw.stagetraxx
+productName: StageTraxx Tools
+files:
+  - "dist/**/*"
+  - "node_modules/**/*"
+  - "package.json"
+directories:
+  output: "release"
+  app: "."
+win:
+  target: nsis
+mac:
+  target: dmg
+linux:
+  target: AppImage

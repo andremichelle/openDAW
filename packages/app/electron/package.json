@@ -4,11 +4,13 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc",
-    "watch": "tsc -w"
+    "watch": "tsc -w",
+    "package": "electron-builder build --config electron-builder.yml"
   },
   "devDependencies": {
     "electron": "^29.1.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "electron-builder": "^24.13.3"
   },
   "dependencies": {
     "electron-store": "^8.1.0",
