@@ -37,6 +37,10 @@ export default defineConfig(({command}) => {
             sourcemap: true,
             modulePreload: false, // Disable modulepreload polyfill injection
             rollupOptions: {
+                input: {
+                    main: resolve(__dirname, "index.html"),
+                    standalone: resolve(__dirname, "index_standalone.html")
+                },
                 output: {
                     format: "es",
                     entryFileNames: `[name].${uuid}.js`,
