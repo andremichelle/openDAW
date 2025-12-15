@@ -8,9 +8,10 @@
     "package": "electron-builder build --config electron-builder.yml"
   },
   "devDependencies": {
+    "@types/uuid": "^10.0.0",
     "electron": "^29.1.0",
-    "typescript": "^5.3.3",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "typescript": "^5.3.3"
   },
   "dependencies": {
     "electron-store": "^8.1.0",

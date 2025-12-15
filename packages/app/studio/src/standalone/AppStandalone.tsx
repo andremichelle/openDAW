@@ -1,67 +1,74 @@
-import React, {useState} from "react"
+import {createElement} from "@opendaw/lib-jsx"
+import {Terminator, DefaultObservableValue} from "@opendaw/lib-std"
 import {LibrarianView} from "./LibrarianView"
 import {WorkbenchView} from "./WorkbenchView"
-import {AppProvider, useApp} from "./AppContext"
+import {appState} from "./AppState"
+import {Html} from "@opendaw/lib-dom"
 
-const AppContent = () => {
-    const [view, setView] = useState<"librarian" | "workbench">("librarian")
-    const { currentSongPath } = useApp()
+export const AppStandalone = () => {
+    const lifecycle = new Terminator()
+    const view = new DefaultObservableValue<"librarian" | "workbench">("librarian")
 
-    const handleNavigate = (v: "librarian" | "workbench") => {
-        setView(v)
+    // Auto-switch to workbench when song loaded
+    lifecycle.own(appState.currentSongPath.subscribe(owner => {
+        const path = owner.getValue()
+        if (path) view.setValue("workbench")
+    }))
+
+    const contentContainer = <div style={{flex: "1", overflow: "hidden", position: "relative"}}/>
+
+    const renderContent = () => {
+        const v = view.getValue()
+        Html.empty(contentContainer)
+        if (v === "librarian") {
+            contentContainer.appendChild(LibrarianView(lifecycle))
+        } else {
+            contentContainer.appendChild(WorkbenchView(lifecycle))
+        }
     }
 
-    // Auto-switch to workbench when a song is loaded
-    React.useEffect(() => {
-        if (currentSongPath) {
-            setView("workbench")
-        }
-    }, [currentSongPath])
+    lifecycle.own(view.subscribe(renderContent))
+    renderContent()
+
+    const btnStyle = (active: boolean) => ({
+        background: active ? "#3e3e42" : "transparent",
+        border: "none",
+        color: "white",
+        padding: "8px 16px",
+        cursor: "pointer",
+        borderRadius: "4px",
+        marginLeft: "8px"
+    })
+
+    const navBtnLibrarian = <button style={btnStyle(true)}>Librarian</button>
+    navBtnLibrarian.onclick = () => view.setValue("librarian")
+
+    const navBtnWorkbench = <button style={btnStyle(false)}>Workbench</button>
+    navBtnWorkbench.onclick = () => view.setValue("workbench")
+
+    lifecycle.own(view.subscribe(owner => {
+        const v = owner.getValue()
+        Object.assign(navBtnLibrarian.style, btnStyle(v === "librarian"))
+        Object.assign(navBtnWorkbench.style, btnStyle(v === "workbench"))
+        const path = appState.currentSongPath.getValue()
+        navBtnWorkbench.disabled = !path
+        navBtnWorkbench.style.color = navBtnWorkbench.disabled ? "#666" : "white"
+    }))
+
+    lifecycle.own(appState.currentSongPath.subscribe(owner => {
+         const p = owner.getValue()
+         navBtnWorkbench.disabled = !p
+         navBtnWorkbench.style.color = navBtnWorkbench.disabled ? "#666" : "white"
+    }))
 
     return (
         <div style={{display: "flex", flexDirection: "column", height: "100vh", background: "#1e1e1e", color: "white", fontFamily: "sans-serif"}}>
-            <div style={{height: 48, borderBottom: "1px solid #333", display: "flex", alignItems: "center", padding: "0 16px", background: "#252526"}}>
-                <div style={{fontWeight: "bold", marginRight: 20}}>StageTraxx Tools</div>
-                <button
-                    onClick={() => handleNavigate("librarian")}
-                    style={{
-                        background: view === "librarian" ? "#3e3e42" : "transparent",
-                        border: "none",
-                        color: "white",
-                        padding: "8px 16px",
-                        cursor: "pointer",
-                        borderRadius: 4
-                    }}
-                >
-                    Librarian
-                </button>
-                <button
-                    onClick={() => handleNavigate("workbench")}
-                    disabled={!currentSongPath}
-                    style={{
-                        background: view === "workbench" ? "#3e3e42" : "transparent",
-                        border: "none",
-                        color: currentSongPath ? "white" : "#666",
-                        padding: "8px 16px",
-                        cursor: "pointer",
-                        borderRadius: 4,
-                        marginLeft: 8
-                    }}
-                >
-                    Workbench
-                </button>
+            <div style={{height: "48px", borderBottom: "1px solid #333", display: "flex", alignItems: "center", padding: "0 16px", background: "#252526"}}>
+                <div style={{fontWeight: "bold", marginRight: "20px"}}>StageTraxx Tools</div>
+                {navBtnLibrarian}
+                {navBtnWorkbench}
             </div>
-            <div style={{flex: 1, overflow: "hidden", position: "relative"}}>
-                {view === "librarian" ? <LibrarianView /> : <WorkbenchView />}
-            </div>
+            {contentContainer}
         </div>
-    )
-}
-
-export const AppStandalone = () => {
-    return (
-        <AppProvider>
-            <AppContent/>
-        </AppProvider>
     )
 }

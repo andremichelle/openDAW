@@ -1,113 +1,103 @@
-import React, { useEffect, useRef, useState } from "react"
-import { CanvasPainter } from "@/ui/canvas/painter"
-import { createSimpleAudioPainter } from "./SimpleAudioPainter"
-import { AudioLoader } from "./AudioLoader"
-import { Peaks } from "@opendaw/lib-fusion"
-import { TrackData, TrackRole } from "./types"
-import { Lifecycle } from "@opendaw/lib-std"
+import {createElement} from "@opendaw/lib-jsx"
+import {CanvasPainter} from "@/ui/canvas/painter"
+import {createSimpleAudioPainter} from "./SimpleAudioPainter"
+import {AudioLoader} from "./AudioLoader"
+import {Peaks} from "@opendaw/lib-fusion"
+import {TrackData, TrackRole} from "./types"
+import {Lifecycle, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue} from "@opendaw/lib-std"
 
 interface Props {
     track: TrackData;
-    samplesPerPixel: number;
+    samplesPerPixel: DefaultObservableValue<number>;
     height: number;
-    scrollX: number; // In pixels
 }
 
-export const SimpleTrack = ({ track, samplesPerPixel, height, scrollX }: Props) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null)
-    const [peaks, setPeaks] = useState<Peaks | null>(null)
-    const [duration, setDuration] = useState(0)
-    const [error, setError] = useState(false)
-    const lifecycleRef = useRef<Lifecycle>(new Lifecycle())
-    const painterRef = useRef<CanvasPainter | null>(null)
+export const SimpleTrack = (lifecycle: Lifecycle, { track, samplesPerPixel, height }: Props) => {
+    const canvas = <canvas style={{width: "100%", height: "100%"}} /> as HTMLCanvasElement
+    const errorMsg = <div style={{color: "red", padding: "10px", display: "none"}}>Load Failed</div>
+    const loadingMsg = <div style={{color: "#888", padding: "10px"}}>Loading...</div>
 
-    useEffect(() => {
-        let active = true
-        setError(false)
+    const wrapper = (
+        <div style={{
+            height: `${height}px`,
+            display: "flex",
+            background: "#252526",
+            marginBottom: "2px",
+            alignItems: "center",
+            position: "relative"
+        }}>
+            <div style={{
+                position: "absolute",
+                left: "0px",
+                top: "0px",
+                width: "0px", // Updated dynamically
+                height: "100%"
+            }}>
+                {canvas}
+            </div>
+            {errorMsg}
+            {loadingMsg}
+        </div>
+    )
 
-        AudioLoader.loadAudio(track.filepath)
-            .then(({ buffer, peaks }) => {
-                if (active) {
-                    setPeaks(peaks)
-                    setDuration(buffer.duration)
-                }
-            })
-            .catch(e => {
-                console.error("Failed to load audio for track", track.filename, e)
-                if (active) setError(true)
-            })
+    let peaks: Peaks | null = null
+    let duration = 0
+    let currentPainter: Terminator | null = null
 
-        return () => { active = false }
-    }, [track.filepath])
+    const updateLayout = () => {
+        const spp = samplesPerPixel.getValue()
+        const div = canvas.parentElement
+        if (!div) return
 
-    useEffect(() => {
-        if (!canvasRef.current || !peaks) return
+        if (peaks) {
+             const width = peaks.numFrames / spp
+             div.style.width = `${width}px`
+             div.style.left = `${(track.initialOffsetMs / 1000 * 44100) / spp}px` // LOCAL offset
+        }
+    }
 
-        const painter = new CanvasPainter(canvasRef.current, createSimpleAudioPainter({
+    const initPainter = () => {
+        if (currentPainter) currentPainter.terminate()
+        if (!peaks) return
+
+        const painter = new CanvasPainter(canvas, createSimpleAudioPainter({
             peaks,
             durationSeconds: duration,
             gain: 0,
             hue: getHueForRole(track.role)
         }))
-        painterRef.current = painter
 
-        lifecycleRef.current.own(painter)
+        // Listen to zoom
+        const sub = samplesPerPixel.subscribe(() => {
+            updateLayout()
+            painter.requestUpdate()
+        })
 
-        return () => {
-            lifecycleRef.current.clear()
-            painterRef.current = null
-        }
-    }, [peaks, duration, track.role])
+        const term = new Terminator()
+        term.own(painter)
+        term.own(sub)
 
-    // Update painter on scroll/zoom if needed (though canvas size change triggers update)
-    useEffect(() => {
-        painterRef.current?.requestUpdate()
-    }, [samplesPerPixel])
+        lifecycle.own(term)
+        currentPainter = term
 
-    // We render the FULL width canvas for now (simple), inside a scrolling container in parent.
-    // Or we optimize?
-    // Optimization: The parent (Workbench) has a scrollable div. We just place the track content inside it.
+        updateLayout()
+    }
 
-    // Width calculation
-    const width = peaks ? (peaks.unwrap().numFrames / samplesPerPixel) : 0
-    const offsetPixels = (track.initialOffsetMs / 1000 * 44100) / samplesPerPixel
+    AudioLoader.loadAudio(track.filepath)
+        .then(({ buffer, peaks: p }) => {
+            peaks = p
+            duration = buffer.duration
+            loadingMsg.style.display = "none"
+            initPainter()
+        })
+        .catch(e => {
+            console.error("Failed to load audio", track.filename, e)
+            loadingMsg.style.display = "none"
+            errorMsg.style.display = "block"
+        })
 
-    return (
-        <div style={{
-            height,
-            display: "flex",
-            background: "#252526",
-            marginBottom: 2,
-            alignItems: "center",
-            position: "relative"
-        }}>
-            {/* Header - Fixed Position using sticky if possible, or just absolute in parent */}
-            {/* Wait, the header should stay visible while scrolling horizontally.
-                The common way is a flex layout where the headers are in a separate column
-                and the tracks are in a scrollable area.
-                Let's assume the parent handles the layout split.
-                This component will just render the LANE (waveform).
-            */}
-
-            <div style={{
-                position: "absolute",
-                left: offsetPixels,
-                top: 0,
-                width: width,
-                height: "100%"
-            }}>
-                {peaks && (
-                    <canvas
-                        ref={canvasRef}
-                        style={{width: "100%", height: "100%"}}
-                    />
-                )}
-            </div>
-
-             {error && <div style={{color: "red", padding: 10}}>Load Failed</div>}
-             {!peaks && !error && <div style={{color: "#888", padding: 10}}>Loading...</div>}
-        </div>
-    )
+    return wrapper
 }
 
 export const TrackHeader = ({ track, height, onMute, onSolo, isMuted, isSolo }: {
@@ -115,35 +105,35 @@ export const TrackHeader = ({ track, height, onMute, onSolo, isMuted, isSolo }: 
     onMute: () => void, onSolo: () => void,
     isMuted: boolean, isSolo: boolean
 }) => {
+    const btnStyle = (active: boolean, color: string) => ({
+        background: active ? color : "#444",
+        border: "none", color: "white", width: "24px", height: "24px",
+        marginRight: "4px", cursor: "pointer"
+    })
+
+    const muteBtn = <button style={btnStyle(isMuted, "#cc3333")}>M</button>
+    muteBtn.onclick = onMute
+
+    const soloBtn = <button style={btnStyle(isSolo, "#cccc33")}>S</button>
+    soloBtn.onclick = onSolo
+
     return (
         <div style={{
-            height,
+            height: `${height}px`,
             borderBottom: "2px solid #1e1e1e",
             display: "flex",
             alignItems: "center",
             padding: "0 10px",
             background: "#2d2d30",
             color: "#ccc",
-            fontSize: 12,
+            fontSize: "12px",
             boxSizing: "border-box"
         }}>
-            <div style={{flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 10}}>
+            <div style={{flex: "1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: "10px"}}>
                 {track.filename}
             </div>
-            <button
-                onClick={onMute}
-                style={{
-                    background: isMuted ? "#cc3333" : "#444",
-                    border: "none", color: "white", width: 24, height: 24, marginRight: 4, cursor: "pointer"
-                }}
-            >M</button>
-            <button
-                onClick={onSolo}
-                style={{
-                    background: isSolo ? "#cccc33" : "#444",
-                    border: "none", color: "white", width: 24, height: 24, cursor: "pointer"
-                }}
-            >S</button>
+            {muteBtn}
+            {soloBtn}
         </div>
     )
 }

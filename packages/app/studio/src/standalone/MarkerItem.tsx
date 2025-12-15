@@ -1,5 +1,5 @@
-import React from "react"
-import { MarkerData } from "./types"
+import {createElement} from "@opendaw/lib-jsx"
+import {MarkerData} from "./types"
 
 interface Props {
     marker: MarkerData;
@@ -9,66 +9,51 @@ interface Props {
 }
 
 export const MarkerItem = ({ marker, height, onDelete, onToggleAlign }: Props) => {
-    // Position is handled by parent
-    const color = marker.isLoading ? "#666" : (marker.isEndAligned ? "#dcb43c" : "#3cba3c"); // Yellow/Green
+    const color = marker.isLoading ? "#666" : (marker.isEndAligned ? "#dcb43c" : "#3cba3c");
 
-    return (
+    const element = (
         <div
             style={{
                 position: "absolute",
-                left: 0,
-                top: 0,
-                height: height,
-                width: 20, // Hit area
+                left: "0px",
+                top: "0px",
+                height: `${height}px`,
+                width: "20px",
                 cursor: "pointer",
-                zIndex: 100
-            }}
-            onContextMenu={(e) => {
-                e.preventDefault();
-                // Simple custom context menu or just confirm dialog for now?
-                // Let's implement a simple browser confirm for speed/robustness
-                // Or better, a small popup.
-                // For this MVP: Toggle Align on Left Click, Delete on Right Click (with confirm)?
-                // No, standard is Right Click -> Menu.
-                // Let's do: Shift+Click to delete, Click to toggle align?
-                // User said "context menu".
-                // I'll stick to a simple overlay menu if I have time, otherwise simple interaction.
-                const action = confirm(`Marker: ${marker.text}\n\nOK to Toggle Alignment\nCancel to Delete`);
-                if (action) {
-                    onToggleAlign();
-                } else {
-                    // confirm cancel logic usually implies 'do nothing', but here I'm hacking it.
-                    // Better:
-                    // Shift+Click = Delete
-                    // Click = Toggle Align
-                }
-            }}
-            onClick={(e) => {
-                if (e.shiftKey) {
-                    if(confirm("Delete marker?")) onDelete();
-                } else {
-                    onToggleAlign();
-                }
+                zIndex: "100"
             }}
             title={`${marker.text} (Shift+Click to Delete)`}
         >
-            {/* Line */}
-            <div style={{width: 2, height: "100%", background: color, margin: "0 auto"}}></div>
-
-            {/* Label */}
+            <div style={{width: "2px", height: "100%", background: color, margin: "0 auto"}}></div>
             <div style={{
                 position: "absolute",
-                top: 25,
-                left: 5,
+                top: "25px",
+                left: "5px",
                 background: color,
                 color: "black",
-                fontSize: 10,
+                fontSize: "10px",
                 padding: "2px 4px",
-                borderRadius: 3,
+                borderRadius: "3px",
                 whiteSpace: "nowrap"
             }}>
                 {marker.text} {marker.isLoading ? "..." : ""}
             </div>
         </div>
     )
+
+    element.oncontextmenu = (e: any) => {
+        e.preventDefault();
+        const action = confirm(`Marker: ${marker.text}\n\nOK to Toggle Alignment\nCancel to Delete`);
+        if (action) onToggleAlign();
+    }
+
+    element.onclick = (e: any) => {
+        if (e.shiftKey) {
+            if(confirm("Delete marker?")) onDelete();
+        } else {
+            onToggleAlign();
+        }
+    }
+
+    return element
 }

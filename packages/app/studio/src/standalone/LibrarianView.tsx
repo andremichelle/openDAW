@@ -1,5 +1,8 @@
-import React, { useEffect, useState } from "react"
-import { useApp } from "./AppContext"
+import {createElement} from "@opendaw/lib-jsx"
+import {Lifecycle} from "@opendaw/lib-std"
+import {appState} from "./AppState"
+import {Html} from "@opendaw/lib-dom"
+
 const { ipcRenderer } = window.require('electron')
 
 interface SongEntry {
@@ -8,114 +11,126 @@ interface SongEntry {
     id: string;
 }
 
-export const LibrarianView = () => {
-    const { settings, updateSettings, setCurrentSongPath } = useApp()
-    const [songs, setSongs] = useState<SongEntry[]>([])
-    const [loading, setLoading] = useState(false)
-    const [filter, setFilter] = useState("")
+export const LibrarianView = (parentLifecycle: Lifecycle) => {
+    const tableBody = <tbody/>
+    const loadingRow = <tr><td colSpan={4} style={{padding: "20px", textAlign: "center"}}>Loading...</td></tr>
 
-    const handleSelectRoot = async () => {
-        const path = await ipcRenderer.invoke('select-directory')
-        if (path) {
-            updateSettings({ projectRoot: path })
-        }
+    let currentSongs: SongEntry[] = []
+    let currentFilter = ""
+
+    const renderTable = () => {
+        Html.empty(tableBody)
+        const filtered = currentSongs.filter(s =>
+            s.title.toLowerCase().includes(currentFilter.toLowerCase()) ||
+            s.id.includes(currentFilter)
+        )
+
+        filtered.forEach((song, i) => {
+            const row = (
+                <tr style={{borderBottom: "1px solid #2d2d30", cursor: "pointer"}} className="hover-row">
+                    <td style={{padding: "10px"}}>{String(i + 1)}</td>
+                    <td style={{padding: "10px"}}>{song.title}</td>
+                    <td style={{padding: "10px", fontFamily: "monospace", color: "#888"}}>{song.id}</td>
+                    <td style={{padding: "10px"}}>
+                        <button onclick={(e) => {
+                            e.stopPropagation()
+                            appState.currentSongPath.setValue(song.path)
+                        }}>Load</button>
+                    </td>
+                </tr>
+            )
+            row.onclick = () => appState.currentSongPath.setValue(song.path)
+            row.onmouseenter = () => row.style.background = "#3e3e42"
+            row.onmouseleave = () => row.style.background = "transparent"
+            tableBody.appendChild(row)
+        })
     }
 
     const refreshSongs = async () => {
-        if (!settings.projectRoot) return
-        setLoading(true)
+        const root = appState.projectRoot.getValue()
+        if (!root) return
+
+        Html.empty(tableBody)
+        tableBody.appendChild(loadingRow)
+
         try {
-            const list: SongEntry[] = await ipcRenderer.invoke('scan-projects')
-            setSongs(list)
+            currentSongs = await ipcRenderer.invoke('scan-projects')
+            renderTable()
         } catch (e) {
             console.error(e)
             alert("Failed to scan projects")
-        } finally {
-            setLoading(false)
+            Html.empty(tableBody)
         }
     }
 
-    useEffect(() => {
-        if (settings.projectRoot) {
-            refreshSongs()
-        }
-    }, [settings.projectRoot])
+    const rootInput = <input
+        type="text"
+        readOnly
+        style={{flex: "1", background: "#1e1e1e", border: "1px solid #3e3e42", color: "white", padding: "5px"}}
+    />
 
-    const filteredSongs = songs.filter(s =>
-        s.title.toLowerCase().includes(filter.toLowerCase()) ||
-        s.id.includes(filter)
-    )
+    const sub = appState.projectRoot.subscribe(val => {
+        rootInput.value = val
+        refreshSongs()
+    })
+
+    parentLifecycle.own(sub)
+
+    const keyInput = <input
+        type="password"
+        style={{width: "150px", background: "#1e1e1e", border: "1px solid #3e3e42", color: "white", padding: "5px"}}
+    />
+    parentLifecycle.own(appState.elevenLabsKey.subscribe(val => keyInput.value = val))
+    keyInput.onchange = (e: any) => appState.updateSettings({elevenLabsKey: e.target.value})
+
+    const filterInput = <input
+        placeholder="Filter songs..."
+        style={{flex: "1", padding: "8px", background: "#252526", border: "1px solid #3e3e42", color: "white"}}
+    />
+    filterInput.oninput = (e: any) => {
+        currentFilter = e.target.value
+        renderTable()
+    }
 
     return (
-        <div style={{padding: 20, height: "100%", display: "flex", flexDirection: "column", boxSizing: "border-box"}}>
-            {/* Settings / Toolbar */}
-            <div style={{display: "flex", gap: 10, marginBottom: 20, alignItems: "center", background: "#2d2d30", padding: 15, borderRadius: 8}}>
-                <div style={{flex: 1}}>
-                    <label style={{display: "block", marginBottom: 5, fontSize: 12, color: "#aaa"}}>Project Root</label>
-                    <div style={{display: "flex", gap: 5}}>
-                        <input
-                            type="text"
-                            value={settings.projectRoot}
-                            readOnly
-                            style={{flex: 1, background: "#1e1e1e", border: "1px solid #3e3e42", color: "white", padding: 5}}
-                        />
-                        <button onClick={handleSelectRoot} style={{padding: "5px 10px"}}>Browse...</button>
+        <div style={{padding: "20px", height: "100%", display: "flex", flexDirection: "column", boxSizing: "border-box"}}>
+            {/* Settings */}
+            <div style={{display: "flex", gap: "10px", marginBottom: "20px", alignItems: "center", background: "#2d2d30", padding: "15px", borderRadius: "8px"}}>
+                <div style={{flex: "1"}}>
+                    <label style={{display: "block", marginBottom: "5px", fontSize: "12px", color: "#aaa"}}>Project Root</label>
+                    <div style={{display: "flex", gap: "5px"}}>
+                        {rootInput}
+                        <button style={{padding: "5px 10px"}} onclick={async () => {
+                            const path = await ipcRenderer.invoke('select-directory')
+                            if (path) appState.updateSettings({ projectRoot: path })
+                        }}>Browse...</button>
                     </div>
                 </div>
                 <div>
-                     <label style={{display: "block", marginBottom: 5, fontSize: 12, color: "#aaa"}}>ElevenLabs Key</label>
-                     <input
-                        type="password"
-                        value={settings.elevenLabsKey}
-                        onChange={e => updateSettings({elevenLabsKey: e.target.value})}
-                        style={{width: 150, background: "#1e1e1e", border: "1px solid #3e3e42", color: "white", padding: 5}}
-                    />
+                     <label style={{display: "block", marginBottom: "5px", fontSize: "12px", color: "#aaa"}}>ElevenLabs Key</label>
+                     {keyInput}
                 </div>
-                <button onClick={refreshSongs} style={{padding: "8px 16px", height: 36, marginTop: 18}}>Refresh Library</button>
+                <button style={{padding: "8px 16px", height: "36px", marginTop: "18px"}} onclick={refreshSongs}>Refresh Library</button>
             </div>
 
-            {/* Song List */}
-            <div style={{display: "flex", gap: 10, marginBottom: 10}}>
-                <input
-                    placeholder="Filter songs..."
-                    value={filter}
-                    onChange={e => setFilter(e.target.value)}
-                    style={{flex: 1, padding: 8, background: "#252526", border: "1px solid #3e3e42", color: "white"}}
-                />
+            {/* List */}
+            <div style={{display: "flex", gap: "10px", marginBottom: "10px"}}>
+                {filterInput}
             </div>
 
-            <div style={{flex: 1, overflow: "auto", border: "1px solid #3e3e42", borderRadius: 4}}>
+            <div style={{flex: "1", overflow: "auto", border: "1px solid #3e3e42", borderRadius: "4px"}}>
                 <table style={{width: "100%", borderCollapse: "collapse", textAlign: "left"}}>
-                    <thead style={{position: "sticky", top: 0, background: "#2d2d30"}}>
+                    <thead style={{position: "sticky", top: "0", background: "#2d2d30"}}>
                         <tr>
-                            <th style={{padding: 10, borderBottom: "1px solid #3e3e42", width: 50}}>#</th>
-                            <th style={{padding: 10, borderBottom: "1px solid #3e3e42"}}>Title</th>
-                            <th style={{padding: 10, borderBottom: "1px solid #3e3e42"}}>ID</th>
-                            <th style={{padding: 10, borderBottom: "1px solid #3e3e42", width: 100}}>Action</th>
+                            <th style={{padding: "10px", borderBottom: "1px solid #3e3e42", width: "50px"}}>#</th>
+                            <th style={{padding: "10px", borderBottom: "1px solid #3e3e42"}}>Title</th>
+                            <th style={{padding: "10px", borderBottom: "1px solid #3e3e42"}}>ID</th>
+                            <th style={{padding: "10px", borderBottom: "1px solid #3e3e42", width: "100px"}}>Action</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {loading && <tr><td colSpan={4} style={{padding: 20, textAlign: "center"}}>Loading...</td></tr>}
-                        {!loading && filteredSongs.map((song, i) => (
-                            <tr key={song.path} style={{borderBottom: "1px solid #2d2d30", cursor: "pointer"}}
-                                onDoubleClick={() => setCurrentSongPath(song.path)}
-                                className="hover-row"
-                            >
-                                <td style={{padding: 10}}>{i + 1}</td>
-                                <td style={{padding: 10}}>{song.title}</td>
-                                <td style={{padding: 10, fontFamily: "monospace", color: "#888"}}>{song.id}</td>
-                                <td style={{padding: 10}}>
-                                    <button onClick={() => setCurrentSongPath(song.path)}>Load</button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
+                    {tableBody}
                 </table>
             </div>
-
-            <style>{`
-                .hover-row:hover { background: #3e3e42; }
-            `}</style>
         </div>
     )
 }
