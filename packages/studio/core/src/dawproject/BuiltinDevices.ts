@@ -8,7 +8,7 @@ import {EffectParameterDefaults} from "../EffectParameterDefaults"
 export namespace BuiltinDevices {
     export const equalizer = (boxGraph: BoxGraph,
                               equalizer: EqualizerSchema,
-                              field: Field<Pointers.MidiEffectHost> | Field<Pointers.AudioEffectHost>,
+                              field: Field<Pointers.MIDIEffectHost> | Field<Pointers.AudioEffectHost>,
                               index: int): RevampDeviceBox => {
         const mapOrder = (order?: int) => {
             switch (order) {

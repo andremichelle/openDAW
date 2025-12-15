@@ -32,6 +32,11 @@ export const UserInterfaceBox: BoxSchema<Pointers> = {
             23: {
                 type: "pointer",
                 name: "editing-modular-system", pointerType: Pointers.Editing, mandatory: false
+            },
+            30: {
+                type: "field",
+                name: "midi-controllers",
+                pointerRules: {accepts: [Pointers.MIDIControllers], mandatory: false}
             }
         },
         name: "UserInterfaceBox"

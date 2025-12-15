@@ -129,7 +129,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
     }))
 
     const subscribeChain = ({midiEffects, instrument, audioEffects, host}: {
-        midiEffects: IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MidiEffectHost>,
+        midiEffects: IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>,
         instrument: ObservableValue<Option<AudioUnitInputAdapter>>,
         audioEffects: IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost>,
         host: DeviceHost

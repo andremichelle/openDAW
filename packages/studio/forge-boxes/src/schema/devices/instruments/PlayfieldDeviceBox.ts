@@ -17,7 +17,7 @@ export const PlayfieldSampleBox: BoxSchema<Pointers> = {
             12: {
                 type: "field",
                 name: "midi-effects",
-                pointerRules: {accepts: [Pointers.MidiEffectHost], mandatory: false}
+                pointerRules: {accepts: [Pointers.MIDIEffectHost], mandatory: false}
             },
             13: {
                 type: "field",

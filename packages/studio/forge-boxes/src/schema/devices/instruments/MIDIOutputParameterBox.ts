@@ -14,7 +14,7 @@ export const MIDIOutputParameterBox: BoxSchema<Pointers> = {
             },
             4: {
                 type: "float32", name: "value", constraints: "unipolar", unit: "%", pointerRules: {
-                    accepts: [Pointers.Modulation, Pointers.Automation, Pointers.MidiControl],
+                    accepts: [Pointers.Modulation, Pointers.Automation, Pointers.MIDIControl],
                     mandatory: true
                 }
             }

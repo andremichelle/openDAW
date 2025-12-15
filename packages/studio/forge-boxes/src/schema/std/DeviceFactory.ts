@@ -6,7 +6,7 @@ const DefaultPointers = [Pointers.Device, Pointers.Selection, Pointers.MetaData]
 const DefaultAudioPointers = [...DefaultPointers, Pointers.SideChain]
 
 const MidiEffectDeviceAttributes = {
-    1: {type: "pointer", name: "host", pointerType: Pointers.MidiEffectHost, mandatory: true},
+    1: {type: "pointer", name: "host", pointerType: Pointers.MIDIEffectHost, mandatory: true},
     2: {type: "int32", name: "index", constraints: "index", unit: ""},
     3: {type: "string", name: "label"},
     4: {type: "boolean", name: "enabled", value: true},

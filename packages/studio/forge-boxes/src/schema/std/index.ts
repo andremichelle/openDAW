@@ -28,10 +28,11 @@ import {WarpMarkerBox} from "./WarpMarkerBox"
 import {AudioPitchStretchBox} from "./timeline/AudioPitchStretchBox"
 import {AudioTimeStretchBox} from "./timeline/AudioTimeStretchBox"
 import {MetaDataBox} from "./MetaDataBox"
+import {MIDIControllerBox} from "./MIDIControllerBox"
 
 export const Definitions = [
     MetaDataBox,
-    RootBox, SelectionBox, UserInterfaceBox, UploadFileBox, ShadertoyBox,
+    RootBox, SelectionBox, UserInterfaceBox, UploadFileBox, ShadertoyBox, MIDIControllerBox,
     TimelineBox, TrackBox,
     NoteEventBox, NoteEventRepeatBox, NoteEventCollectionBox, NoteRegionBox, NoteClipBox,
     ValueEventBox, ValueEventCollectionBox, ValueEventCurveBox, ValueRegionBox, ValueClipBox,

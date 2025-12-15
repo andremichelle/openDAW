@@ -29,7 +29,7 @@ export const AudioUnitBox: BoxSchema<Pointers> = {
             21: {
                 type: "field",
                 name: "midi-effects",
-                pointerRules: {accepts: [Pointers.MidiEffectHost], mandatory: false}
+                pointerRules: {accepts: [Pointers.MIDIEffectHost], mandatory: false}
             },
             22: {
                 type: "field",

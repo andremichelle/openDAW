@@ -25,7 +25,7 @@ export namespace DeviceAccepts {
     }
 }
 
-export interface MidiEffectDeviceAdapter extends EffectDeviceBoxAdapter<Pointers.MidiEffectHost> {
+export interface MidiEffectDeviceAdapter extends EffectDeviceBoxAdapter<Pointers.MIDIEffectHost> {
     readonly type: "midi-effect"
     readonly accepts: "midi"
 }
@@ -35,7 +35,7 @@ export interface AudioEffectDeviceAdapter extends EffectDeviceBoxAdapter<Pointer
     readonly accepts: "audio"
 }
 
-export type EffectPointerType = Pointers.AudioEffectHost | Pointers.MidiEffectHost
+export type EffectPointerType = Pointers.AudioEffectHost | Pointers.MIDIEffectHost
 
 export interface EffectDeviceBoxAdapter<P extends EffectPointerType = EffectPointerType> extends DeviceBoxAdapter {
     readonly type: "audio-effect" | "midi-effect"
@@ -57,7 +57,7 @@ export interface InstrumentDeviceBoxAdapter extends DeviceBoxAdapter, LabeledAud
 export interface DeviceHost extends BoxAdapter, LabeledAudioOutputsOwner {
     readonly class: "device-host"
 
-    get midiEffects(): IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MidiEffectHost>
+    get midiEffects(): IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>
     get inputAdapter(): Option<AudioUnitInputAdapter>
     get audioEffects(): IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost>
     get inputField(): Field<Pointers.InstrumentHost | Pointers.AudioOutput>
@@ -107,7 +107,7 @@ export namespace Devices {
         const targets = device.accepts === "audio"
             ? device.deviceHost().audioEffects.field().pointerHub.filter(Pointers.AudioEffectHost)
             : device.accepts === "midi"
-                ? device.deviceHost().midiEffects.field().pointerHub.filter(Pointers.MidiEffectHost)
+                ? device.deviceHost().midiEffects.field().pointerHub.filter(Pointers.MIDIEffectHost)
                 : panic("unknown type")
         targets.map(({box}) => DeviceBoxUtils.lookupIndexField(box))
             .filter(index => devices.some(device => UUID.Comparator(device.uuid, index.address.uuid) !== 0))

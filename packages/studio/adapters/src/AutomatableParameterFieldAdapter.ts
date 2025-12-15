@@ -28,7 +28,7 @@ import {BoxAdaptersContext} from "./BoxAdaptersContext"
 const ExternalControlTypes = [
     Pointers.Automation,
     Pointers.Modulation,
-    Pointers.MidiControl,
+    Pointers.MIDIControl,
     Pointers.ParameterController] as const
 
 export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> implements Parameter<T>, Terminable {
@@ -189,7 +189,7 @@ const mapPointerToControlSource = (pointer: PointerTypes): ControlSource => {
             return "automated"
         case Pointers.Modulation:
             return "modulated"
-        case Pointers.MidiControl:
+        case Pointers.MIDIControl:
             return "midi"
         case Pointers.ParameterController:
             return "external"

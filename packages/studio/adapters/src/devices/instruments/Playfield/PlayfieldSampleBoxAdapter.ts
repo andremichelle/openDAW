@@ -31,7 +31,7 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
     readonly #context: BoxAdaptersContext
     readonly #box: PlayfieldSampleBox
 
-    readonly #midiEffects: IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MidiEffectHost>
+    readonly #midiEffects: IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>
     readonly #audioEffects: IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost>
 
     readonly #parametric: ParameterAdapterSet
@@ -44,7 +44,7 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
         this.#box = box
 
         this.#midiEffects = this.#terminator.own(IndexedBoxAdapterCollection.create(this.#box.midiEffects,
-            box => this.#context.boxAdapters.adapterFor(box, Devices.isMidiEffect), Pointers.MidiEffectHost))
+            box => this.#context.boxAdapters.adapterFor(box, Devices.isMidiEffect), Pointers.MIDIEffectHost))
         this.#audioEffects = this.#terminator.own(IndexedBoxAdapterCollection.create(this.#box.audioEffects,
             box => this.#context.boxAdapters.adapterFor(box, Devices.isAudioEffect), Pointers.AudioEffectHost))
 
@@ -74,7 +74,7 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
     get iconField(): StringField {return this.#box.icon}
     get defaultTrackType(): TrackType {return TrackType.Notes}
     get acceptsMidiEvents(): boolean {return true}
-    get midiEffectsField(): Field<Pointers.MidiEffectHost> {return this.#box.midiEffects}
+    get midiEffectsField(): Field<Pointers.MIDIEffectHost> {return this.#box.midiEffects}
     get inputField(): Field<Pointers.InstrumentHost | Pointers.AudioOutput> {return this.audioUnitBoxAdapter().box.input}
     get audioEffectsField(): Field<Pointers.AudioEffectHost> {return this.#box.audioEffects}
     get tracksField(): Field<Pointers.TrackCollection> {return this.audioUnitBoxAdapter().box.tracks}
@@ -114,7 +114,7 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
         })
     }
 
-    get midiEffects(): IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MidiEffectHost> {
+    get midiEffects(): IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost> {
         return this.#midiEffects
     }
     get inputAdapter(): Option<AudioUnitInputAdapter> {

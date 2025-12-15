@@ -11,7 +11,7 @@ export const IndexConstraints = {constraints: "index", unit: ""} as const
 export const MidiNoteConstraints = {constraints: {min: 0, max: 127}, unit: ""} as const
 
 export const ParameterPointerRules = {
-    accepts: [Pointers.Modulation, Pointers.Automation, Pointers.MidiControl],
+    accepts: [Pointers.Modulation, Pointers.Automation, Pointers.MIDIControl],
     mandatory: false
 } satisfies PointerRules<Pointers>
 

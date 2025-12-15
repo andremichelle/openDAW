@@ -14,7 +14,7 @@ export type InstrumentDeviceBox = {
 } & DeviceBox
 
 export type EffectDeviceBox = {
-    host: PointerField<Pointers.AudioEffectHost | Pointers.MidiEffectHost>
+    host: PointerField<Pointers.AudioEffectHost | Pointers.MIDIEffectHost>
     index: Int32Field
 } & DeviceBox
 
@@ -30,7 +30,7 @@ export namespace DeviceBoxUtils {
 
     export const isEffectDeviceBox = (box: Box): box is EffectDeviceBox =>
         isDeviceBox(box) && "index" in box && isInstanceOf(box.index, Int32Field) &&
-        (box.host.pointerType === Pointers.MidiEffectHost || box.host.pointerType === Pointers.AudioEffectHost)
+        (box.host.pointerType === Pointers.MIDIEffectHost || box.host.pointerType === Pointers.AudioEffectHost)
 
     export const lookupHostField = (box: Maybe<Box>): PointerField =>
         isDefined(box) && "host" in box && isInstanceOf(box.host, PointerField)

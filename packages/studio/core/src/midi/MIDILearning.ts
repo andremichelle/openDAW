@@ -1,36 +1,32 @@
 import {
-    byte,
+    asDefined,
+    asInstanceOf,
+    EmptyExec,
     Errors,
-    isDefined,
     isNotNull,
-    JSONValue,
     Nullable,
-    Observer,
-    Provider,
+    Option,
+    Procedure,
     RuntimeNotifier,
     SortedSet,
+    Subscription,
     Terminable,
-    Terminator
+    Terminator,
+    UUID
 } from "@opendaw/lib-std"
-import {Address, AddressJSON, PrimitiveField, PrimitiveValues} from "@opendaw/lib-box"
+import {Address, Field, PrimitiveField, PrimitiveValues} from "@opendaw/lib-box"
 import {MidiData} from "@opendaw/lib-midi"
 import {Pointers} from "@opendaw/studio-enums"
-import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
 import {Project} from "../project"
 import {MidiDevices} from "./MidiDevices"
 import {AnimationFrame} from "@opendaw/lib-dom"
+import {MIDIControllerBox} from "@opendaw/studio-boxes"
 
-export type MIDIConnectionJSON = ({ type: "control", controlId: byte })
-    & { address: AddressJSON, channel: byte }
-    & JSONValue
-
-export interface MIDIConnection extends Terminable {
-    address: Address
-    label: Provider<string>
-    toJSON(): MIDIConnectionJSON
+interface MIDIConnection {
+    box: MIDIControllerBox
+    handleEvent: Procedure<MIDIMessageEvent>
+    subscription: Subscription
 }
-
-interface MIDIObserver extends Terminable {observer: Observer<MIDIMessageEvent>}
 
 export class MIDILearning implements Terminable {
     readonly #terminator = new Terminator()
@@ -38,15 +34,48 @@ export class MIDILearning implements Terminable {
     readonly #project: Project
     readonly #connections: SortedSet<Address, MIDIConnection>
 
+    #optMIDIContollers: Option<Field<Pointers.MIDIControllers>> = Option.None
+    #optFieldSubscription: Option<Subscription> = Option.None
+
     constructor(project: Project) {
         this.#project = project
-        this.#connections = Address.newSet<MIDIConnection>(connection => connection.address)
+        this.#connections = Address.newSet<MIDIConnection>(connection => connection.box.address)
     }
 
-    hasMidiConnection(address: Address): boolean {return this.#connections.hasKey(address)}
-    forgetMidiConnection(address: Address) {this.#connections.removeByKey(address).terminate()}
+    followUser(field: Field<Pointers.MIDIControllers>): void {
+        this.#killAllConnections()
+        this.#optFieldSubscription.ifSome(subscription => subscription.terminate())
+        this.#optFieldSubscription = Option.None
+        this.#optMIDIContollers = Option.wrap(field)
+        this.#optFieldSubscription = Option.wrap(field.pointerHub.catchupAndSubscribe({
+            onAdded: ({box: anyBox}) => {
+                if (MidiDevices.get().isEmpty() && MidiDevices.canRequestMidiAccess()) {
+                    MidiDevices.requestPermission().then(EmptyExec, EmptyExec)
+                }
+                const box = asInstanceOf(anyBox, MIDIControllerBox)
+                const {subscription, handleEvent} = this.#registerMIDIControllerBox(box)
+                this.#connections.add({box, subscription, handleEvent})
+            },
+            onRemoved: ({box: {address}}) => this.#connections.removeByKey(address).subscription.terminate()
+        }))
+    }
 
-    async learnMIDIControls(field: PrimitiveField<PrimitiveValues, Pointers.MidiControl | Pointers>) {
+    hasMidiConnection(address: Address): boolean {
+        return this.#findConnectionByParameterAddress(address).nonEmpty()
+    }
+
+    forgetMidiConnection(address: Address) {
+        const connection = this.#findConnectionByParameterAddress(address).unwrap("No connection to forget")
+        this.#project.editing.modify(() => asDefined(connection).box.delete())
+    }
+
+    async learnMIDIControls(field: PrimitiveField<PrimitiveValues, Pointers.MIDIControl>) {
+        if (this.#optMIDIContollers.isEmpty()) {
+            return RuntimeNotifier.info({
+                headline: "Learn Midi Controller...",
+                message: "No user accepting midi controls."
+            })
+        }
         if (!MidiDevices.canRequestMidiAccess()) {return}
         await MidiDevices.requestPermission()
         const learnLifecycle = this.#terminator.spawn()
@@ -54,22 +83,28 @@ export class MIDILearning implements Terminable {
         learnLifecycle.own(MidiDevices.subscribeMessageEvents((event: MIDIMessageEvent) => {
             const data = event.data
             if (data === null) {return}
+            const deviceId = event.target instanceof MIDIInput ? event.target.id : ""
             if (MidiData.isController(data)) {
                 learnLifecycle.terminate()
                 abortController.abort(Errors.AbortError)
-                return this.#startListeningControl(field, MidiData.readChannel(data), MidiData.readParam1(data), event)
+                const midiControllersField = this.#optMIDIContollers.unwrap()
+                const {editing} = this.#project
+                const optBox = editing.modify(() => MIDIControllerBox.create(this.#project.boxGraph, UUID.generate(), box => {
+                    box.controllers.refer(midiControllersField)
+                    box.parameter.refer(field)
+                    box.deviceId.setValue(deviceId)
+                    box.deviceChannel.setValue(MidiData.readChannel(data))
+                    box.controlId.setValue(MidiData.readParam1(data))
+                }))
+                this.#connections.get(optBox.unwrap("Could not create MIDIControllerBox").address).handleEvent(event)
             }
         }))
         return RuntimeNotifier.info({
-            headline: "Learn Midi Keys...",
-            message: "Hit a key on your midi-device to learn a connection.",
+            headline: "Learn Midi Controller...",
+            message: "Turn a controller on your midi-device...",
             okText: "Cancel",
             abortSignal: abortController.signal
         }).then(() => learnLifecycle.terminate(), Errors.CatchAbort)
-    }
-
-    toJSON(): ReadonlyArray<MIDIConnectionJSON> {
-        return this.#connections.values().map(connection => connection.toJSON())
     }
 
     terminate(): void {
@@ -77,64 +112,61 @@ export class MIDILearning implements Terminable {
         this.#terminator.terminate()
     }
 
-    #startListeningControl(field: PrimitiveField<PrimitiveValues, Pointers.MidiControl | Pointers>,
-                           channel: byte,
-                           controlId: byte,
-                           event?: MIDIMessageEvent): void {
-        console.debug(`startListeningControl channel: ${channel}, controlId: ${controlId}`)
-        const {observer, terminate} =
-            this.#createMidiControlObserver(this.#project, this.#project.parameterFieldAdapters.get(field.address), controlId)
-        if (isDefined(event)) {observer(event)}
-        const subscription = MidiDevices.subscribeMessageEvents(observer, channel)
-        this.#connections.add({
-            address: field.address,
-            toJSON: (): MIDIConnectionJSON => ({
-                type: "control",
-                address: field.address.toJSON(),
-                channel,
-                controlId
-            }),
-            label: () => this.#project.parameterFieldAdapters.get(field.address).name,
-            terminate: () => {
-                terminate()
-                subscription.terminate()
+    #registerMIDIControllerBox({
+                                   parameter: {targetAddress},
+                                   controlId,
+                                   deviceId,
+                                   deviceChannel
+                               }: MIDIControllerBox): {
+        subscription: Subscription,
+        handleEvent: Procedure<MIDIMessageEvent>
+    } {
+        const address = targetAddress.unwrap("No parameter address")
+        const adapter = this.#project.parameterFieldAdapters.get(address)
+        const {editing} = this.#project
+        const registration = adapter.registerMidiControl()
+        let pendingValue: Nullable<number> = null
+        const update = (value: number) => editing.modify(() => adapter.setUnitValue(value), false)
+        const handleEvent = (event: MIDIMessageEvent) => {
+            const data = event.data
+            if (data === null) {return}
+            const id = event.target instanceof MIDIInput ? event.target.id : ""
+            if (MidiData.isController(data)
+                && MidiData.readParam1(data) === controlId.getValue() && id === deviceId.getValue()) {
+                const value = MidiData.asValue(data)
+                if (pendingValue === null) {
+                    update(value)
+                    pendingValue = value
+                    AnimationFrame.once(() => {
+                        if (isNotNull(pendingValue)) {
+                            update(pendingValue)
+                            pendingValue = null
+                        }
+                    })
+                } else {
+                    pendingValue = value
+                }
             }
-        })
+        }
+        const channel = deviceChannel.getValue() === -1 ? undefined : deviceChannel.getValue()
+        const subscription = MidiDevices.subscribeMessageEvents(handleEvent, channel)
+        return {
+            subscription: {
+                terminate: () => {
+                    pendingValue = null
+                    subscription.terminate()
+                    registration.terminate()
+                }
+            }, handleEvent
+        }
     }
 
-    #killAllConnections() {
-        this.#connections.forEach(({terminate}) => terminate())
+    #killAllConnections(): void {
+        this.#connections.forEach(({subscription}) => subscription.terminate())
         this.#connections.clear()
     }
 
-    #createMidiControlObserver(project: Project, adapter: AutomatableParameterFieldAdapter, controlId: byte): MIDIObserver {
-        const registration = adapter.registerMidiControl()
-        let pendingValue: Nullable<number> = null
-        const update = (value: number) => project.editing.modify(() => adapter.setValue(adapter.valueMapping.y(value)), false)
-        return {
-            observer: (event: MIDIMessageEvent) => {
-                const data = event.data
-                if (data === null) {return}
-                if (MidiData.isController(data) && MidiData.readParam1(data) === controlId) {
-                    const value = MidiData.asValue(data)
-                    if (pendingValue === null) {
-                        update(value)
-                        pendingValue = value
-                        AnimationFrame.once(() => {
-                            if (isNotNull(pendingValue)) {
-                                update(pendingValue)
-                                pendingValue = null
-                            }
-                        })
-                    } else {
-                        pendingValue = value
-                    }
-                }
-            },
-            terminate: () => {
-                pendingValue = null
-                registration.terminate()
-            }
-        }
+    #findConnectionByParameterAddress(address: Address): Option<MIDIConnection> {
+        return Option.wrap(this.#connections.values().find(({box}) => box.parameter.targetAddress.unwrap() === address))
     }
 }

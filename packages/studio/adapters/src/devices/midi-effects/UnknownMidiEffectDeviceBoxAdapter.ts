@@ -25,7 +25,7 @@ export class UnknownMidiEffectDeviceBoxAdapter implements MidiEffectDeviceAdapte
     get labelField(): StringField {return this.#box.label}
     get enabledField(): BooleanField {return this.#box.enabled}
     get minimizedField(): BooleanField {return this.#box.minimized}
-    get host(): PointerField<Pointers.MidiEffectHost> {return this.#box.host}
+    get host(): PointerField<Pointers.MIDIEffectHost> {return this.#box.host}
     get commentField(): StringField {return this.#box.comment}
 
     deviceHost(): DeviceHost {

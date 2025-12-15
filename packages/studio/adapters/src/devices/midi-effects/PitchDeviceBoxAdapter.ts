@@ -30,7 +30,7 @@ export class PitchDeviceBoxAdapter implements MidiEffectDeviceAdapter {
     get labelField(): StringField {return this.#box.label}
     get enabledField(): BooleanField {return this.#box.enabled}
     get minimizedField(): BooleanField {return this.#box.minimized}
-    get host(): PointerField<Pointers.MidiEffectHost> {return this.#box.host}
+    get host(): PointerField<Pointers.MIDIEffectHost> {return this.#box.host}
 
     deviceHost(): DeviceHost {
         return this.#context.boxAdapters

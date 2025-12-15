@@ -26,7 +26,7 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
     readonly #parametric: ParameterAdapterSet
     readonly #tracks: AudioUnitTracks
     readonly #input: AudioUnitInput
-    readonly #midiEffects: IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MidiEffectHost>
+    readonly #midiEffects: IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>
     readonly #audioEffects: IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost>
     readonly #auxSends: IndexedBoxAdapterCollection<AuxSendBoxAdapter, Pointers.AuxSend>
     readonly #output: AudioUnitOutput
@@ -40,7 +40,7 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
         this.#tracks = this.#terminator.own(new AudioUnitTracks(this, this.#context.boxAdapters))
         this.#input = this.#terminator.own(new AudioUnitInput(this.#box.input.pointerHub, this.#context.boxAdapters))
         this.#midiEffects = this.#terminator.own(IndexedBoxAdapterCollection.create(this.#box.midiEffects,
-            box => this.#context.boxAdapters.adapterFor(box, Devices.isMidiEffect), Pointers.MidiEffectHost))
+            box => this.#context.boxAdapters.adapterFor(box, Devices.isMidiEffect), Pointers.MIDIEffectHost))
         this.#audioEffects = this.#terminator.own(IndexedBoxAdapterCollection.create(this.#box.audioEffects,
             box => this.#context.boxAdapters.adapterFor(box, Devices.isAudioEffect), Pointers.AudioEffectHost))
         this.#auxSends = this.#terminator.own(IndexedBoxAdapterCollection.create(this.#box.auxSends,
@@ -59,7 +59,7 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
     get captureBox(): Option<CaptureAudioBox | CaptureMidiBox> {return this.#box.capture.targetVertex as Option<CaptureAudioBox | CaptureMidiBox>}
     get tracks(): AudioUnitTracks {return this.#tracks}
     get input(): AudioUnitInput {return this.#input}
-    get midiEffects(): IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MidiEffectHost> {return this.#midiEffects}
+    get midiEffects(): IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost> {return this.#midiEffects}
     get audioEffects(): IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost> {return this.#audioEffects}
     get inputAdapter(): Option<AudioUnitInputAdapter> {return this.#input.getValue()}
     get auxSends(): IndexedBoxAdapterCollection<AuxSendBoxAdapter, Pointers.AuxSend> {return this.#auxSends}
@@ -71,7 +71,7 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
             output.box.address.equals(this.#context.rootBoxAdapter.address), false)
     }
 
-    get midiEffectsField(): Field<Pointers.MidiEffectHost> {return this.#box.midiEffects}
+    get midiEffectsField(): Field<Pointers.MIDIEffectHost> {return this.#box.midiEffects}
     get inputField(): Field<Pointers.InstrumentHost | Pointers.AudioOutput> {return this.#box.input}
     get audioEffectsField(): Field<Pointers.AudioEffectHost> {return this.#box.audioEffects}
     get tracksField(): Field<Pointers.TrackCollection> {return this.#box.tracks}

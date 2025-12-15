@@ -142,7 +142,7 @@ export namespace DawProjectImport {
         // Reading methods
         //
         const createEffect = (device: DeviceSchema,
-                              field: Field<Pointers.MidiEffectHost> | Field<Pointers.AudioEffectHost>,
+                              field: Field<Pointers.MIDIEffectHost> | Field<Pointers.AudioEffectHost>,
                               index: int): unknown => {
             const {deviceRole, deviceVendor, deviceID, deviceName, state} = device
             assert(deviceRole === DeviceRole.NOTE_FX || deviceRole === DeviceRole.AUDIO_FX, "Device is not an effect")

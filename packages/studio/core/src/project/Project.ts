@@ -177,6 +177,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     follow(box: UserInterfaceBox): void {
         this.userEditingManager.follow(box)
+        this.midiLearning.followUser(box.midiControllers)
         this.selection.switch(box.selection)
     }
 
