@@ -37,7 +37,7 @@ export class CaptureDevices implements Terminable {
             },
             onRemoved: ({box: {address: {uuid}}}) => {
                 this.#captures.removeByKeyIfExist(uuid)?.terminate()
-                this.#captureSubscriptions.get(uuid).subscription.terminate()
+                this.#captureSubscriptions.removeByKeyIfExist(uuid)?.subscription.terminate()
             }
         })
     }
