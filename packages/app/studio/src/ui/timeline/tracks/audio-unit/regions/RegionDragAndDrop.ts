@@ -1,4 +1,3 @@
-import {PPQN} from "@opendaw/lib-dsp"
 import {RegionCaptureTarget} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {AudioContentFactory, RegionClipResolver} from "@opendaw/studio-core"
@@ -6,7 +5,7 @@ import {CreateParameters, TimelineDragAndDrop} from "@/ui/timeline/tracks/audio-
 import {Snapping} from "@/ui/timeline/Snapping"
 import {StudioService} from "@/service/StudioService"
 import {TransientPlayMode} from "@opendaw/studio-enums"
-import {quantizeRound} from "@opendaw/lib-std"
+import {AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
 
 export class RegionDragAndDrop extends TimelineDragAndDrop<RegionCaptureTarget> {
     readonly #snapping: Snapping
@@ -20,19 +19,16 @@ export class RegionDragAndDrop extends TimelineDragAndDrop<RegionCaptureTarget> 
     handleSample({event, trackBoxAdapter, audioFileBox, sample}: CreateParameters): void {
         const pointerX = event.clientX - this.capturing.element.getBoundingClientRect().left
         const pointerPulse = Math.max(this.#snapping.xToUnitFloor(pointerX), 0)
-        const {duration: durationInSeconds, bpm} = sample
-        const duration = quantizeRound(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
-        const solver = RegionClipResolver.fromRange(trackBoxAdapter, pointerPulse, pointerPulse + duration)
         const boxGraph = this.project.boxGraph
-        if (sample.bpm === 0) {
-            AudioContentFactory.createNotStretchedRegion({
+        const regionBox = sample.bpm === 0
+            ? AudioContentFactory.createNotStretchedRegion({
                 boxGraph,
                 targetTrack: trackBoxAdapter.box,
                 audioFileBox,
                 sample,
                 position: pointerPulse
             })
-        } else {
+            :
             AudioContentFactory.createTimeStretchedRegion({
                 boxGraph,
                 targetTrack: trackBoxAdapter.box,
@@ -42,7 +38,7 @@ export class RegionDragAndDrop extends TimelineDragAndDrop<RegionCaptureTarget> 
                 playbackRate: 1.0,
                 transientPlayMode: TransientPlayMode.Pingpong
             })
-        }
-        solver()
+        const regionAdapter = this.project.boxAdapters.adapterFor(regionBox, AudioRegionBoxAdapter)
+        RegionClipResolver.fromRange(trackBoxAdapter, pointerPulse, pointerPulse + regionAdapter.duration)()
     }
 }

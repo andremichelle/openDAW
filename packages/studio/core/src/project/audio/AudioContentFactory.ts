@@ -1,6 +1,6 @@
 import {ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
 import {ColorCodes, Sample, TrackType} from "@opendaw/studio-adapters"
-import {int, isDefined, panic, quantizeRound, UUID} from "@opendaw/lib-std"
+import {int, isDefined, panic, quantizeCeil, UUID} from "@opendaw/lib-std"
 import {
     AudioClipBox,
     AudioFileBox,
@@ -111,7 +111,7 @@ export namespace AudioContentFactory {
             return panic("Cannot create audio-region on non-audio track")
         }
         const {name, duration: durationInSeconds, bpm} = sample
-        const durationInPPQN = props.duration ?? quantizeRound(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
+        const durationInPPQN = props.duration ?? quantizeCeil(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
         if (isDefined(props.warpMarkers)) {
             AudioContentHelpers.addWarpMarkers(boxGraph, playMode, props.warpMarkers)
         } else {
@@ -141,7 +141,7 @@ export namespace AudioContentFactory {
             return panic("Cannot create audio-region on non-audio track")
         }
         const {name, duration: durationInSeconds, bpm} = sample
-        const durationInPPQN = props.duration ?? quantizeRound(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
+        const durationInPPQN = props.duration ?? quantizeCeil(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
         if (isDefined(props.warpMarkers)) {
             AudioContentHelpers.addWarpMarkers(boxGraph, playMode, props.warpMarkers)
         } else {
