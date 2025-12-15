@@ -69,7 +69,7 @@ export class MIDILearning implements Terminable {
         this.#project.editing.modify(() => asDefined(connection).box.delete())
     }
 
-    async learnMIDIControls(field: PrimitiveField<PrimitiveValues, Pointers.MIDIControl>) {
+    async learnMIDIControls(field: PrimitiveField<PrimitiveValues, Pointers.MIDIControl | Pointers>) {
         if (this.#optMIDIContollers.isEmpty()) {
             return RuntimeNotifier.info({
                 headline: "Learn Midi Controller...",
