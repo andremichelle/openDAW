@@ -1,4 +1,4 @@
-import {int, Option, quantizeCeil, quantizeFloor, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {int, Option, quantizeFloor, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {dbToGain, ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
 import {
     AudioFileBox,
@@ -98,11 +98,11 @@ export namespace RecordAudio {
                 editing.modify(() => {
                     if (regionBox.isAttached()) {
                         const {duration, loopDuration} = regionBox
-                        const newDuration = quantizeCeil(engine.position.getValue(), beats) - regionBox.position.getValue()
-                        duration.setValue(newDuration)
-                        loopDuration.setValue(newDuration)
-                        warpMarkerBox.position.setValue(newDuration)
-                        const seconds = tempoMap.intervalToSeconds(0, newDuration)
+                        const distanceInPPQN = Math.floor(engine.position.getValue() - regionBox.position.getValue())
+                        duration.setValue(distanceInPPQN)
+                        loopDuration.setValue(distanceInPPQN)
+                        warpMarkerBox.position.setValue(distanceInPPQN)
+                        const seconds = tempoMap.intervalToSeconds(0, distanceInPPQN)
                         const totalSamples: int = Math.ceil(seconds * sampleRate)
                         recordingWorklet.setFillLength(totalSamples)
                         warpMarkerBox.seconds.setValue(seconds)
