@@ -132,10 +132,17 @@ export namespace Mixdowns {
     }
 
     const saveZipFile = async (buffer: AudioBuffer, meta: ProjectMeta, trackNames: ReadonlyArray<string>) => {
-        const JSZip = await ExternalLib.JSZip()
+        const libResult = await ExternalLib.JSZip()
+        if (libResult.status === "rejected") {
+            await RuntimeNotifier.info({
+                headline: "Error",
+                message: `Could not load JSZip: ${String(libResult.error)}`
+            })
+            return Promise.reject(libResult.error)
+        }
         const dialog = RuntimeNotifier.progress({headline: "Creating Zip File..."})
         const numStems = buffer.numberOfChannels >> 1
-        const zip = new JSZip()
+        const zip = new libResult.value()
         for (let stemIndex = 0; stemIndex < numStems; stemIndex++) {
             const l = buffer.getChannelData(stemIndex * 2)
             const r = buffer.getChannelData(stemIndex * 2 + 1)

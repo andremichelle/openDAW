@@ -7,8 +7,8 @@ export namespace ExternalLib {
         return count < 10
     }
 
-    export const JSZip = async () => await Promises.guardedRetry(() =>
-        import("jszip").then(({default: JSZip}) => JSZip), callback)
+    export const JSZip = async () => await Promises.tryCatch(Promises.guardedRetry(() =>
+        import("jszip").then(({default: JSZip}) => JSZip), callback))
 
     export const SoundFont2 = async () => await Promises.guardedRetry(() =>
         import("soundfont2").then(({SoundFont2}) => SoundFont2), callback)

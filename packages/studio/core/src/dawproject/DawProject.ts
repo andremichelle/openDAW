@@ -1,4 +1,4 @@
-import {asDefined, isDefined, panic, UUID} from "@opendaw/lib-std"
+import {asDefined, isDefined, panic, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Xml} from "@opendaw/lib-xml"
 import {FileReferenceSchema, MetaDataSchema, ProjectSchema} from "@opendaw/lib-dawproject"
 import {ProjectSkeleton, SampleLoaderManager} from "@opendaw/studio-adapters"
@@ -18,7 +18,14 @@ export namespace DawProject {
         project: ProjectSchema,
         resources: ResourceProvider
     }> => {
-        const JSZip = await ExternalLib.JSZip()
+        const {status, value: JSZip, error} = await ExternalLib.JSZip()
+        if (status === "rejected") {
+            await RuntimeNotifier.info({
+                headline: "Error",
+                message: `Could not load JSZip: ${String(error)}`
+            })
+            return Promise.reject(error)
+        }
         const zip = await JSZip.loadAsync(buffer)
         const metaDataXml = await zip.file("metadata.xml")?.async("string")
         const metaData = isDefined(metaDataXml) ? Xml.parse(metaDataXml, MetaDataSchema) : Xml.element({}, MetaDataSchema)
@@ -47,7 +54,14 @@ export namespace DawProject {
     export const encode = async (skeleton: ProjectSkeleton,
                                  sampleManager: SampleLoaderManager,
                                  metaData: MetaDataSchema): Promise<ArrayBuffer> => {
-        const JSZip = await ExternalLib.JSZip()
+        const {status, value: JSZip, error} = await ExternalLib.JSZip()
+        if (status === "rejected") {
+            await RuntimeNotifier.info({
+                headline: "Error",
+                message: `Could not load JSZip: ${String(error)}`
+            })
+            return Promise.reject(error)
+        }
         const zip = new JSZip()
         const projectSchema = DawProjectExporter.write(skeleton, sampleManager, {
             write: (path: string, buffer: ArrayBuffer): FileReferenceSchema => {

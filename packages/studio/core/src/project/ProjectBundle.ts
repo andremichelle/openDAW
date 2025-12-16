@@ -1,4 +1,4 @@
-import {asDefined, Exec, isDefined, Option, panic, Progress, UUID} from "@opendaw/lib-std"
+import {asDefined, Exec, isDefined, Option, panic, Progress, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {AudioFileBox, SoundfontFileBox} from "@opendaw/studio-boxes"
 import {SampleLoader, SoundfontLoader} from "@opendaw/studio-adapters"
 import {Project} from "./Project"
@@ -14,7 +14,14 @@ import {ExternalLib} from "../ExternalLib"
 export namespace ProjectBundle {
     export const encode = async ({uuid, project, meta, cover}: ProjectProfile,
                                  progress: Progress.Handler): Promise<ArrayBuffer> => {
-        const JSZip = await ExternalLib.JSZip()
+        const {status, value: JSZip, error} = await ExternalLib.JSZip()
+        if (status === "rejected") {
+            await RuntimeNotifier.info({
+                headline: "Error",
+                message: `Could not load JSZip: ${String(error)}`
+            })
+            return Promise.reject(error)
+        }
         const zip = new JSZip()
         zip.file("version", "1")
         zip.file("uuid", uuid, {binary: true})
@@ -54,7 +61,14 @@ export namespace ProjectBundle {
     export const decode = async (env: ProjectEnv,
                                  arrayBuffer: ArrayBuffer,
                                  openProfileUUID?: UUID.Bytes): Promise<ProjectProfile> => {
-        const JSZip = await ExternalLib.JSZip()
+        const {status, value: JSZip, error} = await ExternalLib.JSZip()
+        if (status === "rejected") {
+            await RuntimeNotifier.info({
+                headline: "Error",
+                message: `Could not load JSZip: ${String(error)}`
+            })
+            return Promise.reject(error)
+        }
         const zip = await JSZip.loadAsync(arrayBuffer)
         if (await asDefined(zip.file("version")).async("text") !== "1") {
             return panic("Unknown bundle version")
