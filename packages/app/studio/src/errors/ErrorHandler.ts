@@ -33,6 +33,12 @@ export class ErrorHandler {
             event.preventDefault()
             return true
         }
+        if (event instanceof SecurityPolicyViolationEvent) {
+            // Log CSP violations but don't crash - often caused by browser extensions or specific browser configs
+            console.warn(`CSP violation: ${event.violatedDirective} blocked ${event.blockedURI}`)
+            event.preventDefault()
+            return true
+        }
         if (!(event instanceof PromiseRejectionEvent)) {return false}
         const {reason} = event
         if (Errors.isAbort(reason)) {
