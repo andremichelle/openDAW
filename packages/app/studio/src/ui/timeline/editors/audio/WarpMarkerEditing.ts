@@ -28,7 +28,8 @@ import {PPQN} from "@opendaw/lib-dsp"
 import {Snapping} from "@/ui/timeline/Snapping"
 
 export namespace WarpMarkerEditing {
-    const MIN_DISTANCE = PPQN.SemiQuaver
+    export const MIN_DISTANCE = PPQN.SemiQuaver
+
     const MARKER_RADIUS = 4
 
     export const install = (project: Project,

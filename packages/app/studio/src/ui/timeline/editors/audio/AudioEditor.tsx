@@ -12,6 +12,7 @@ import {TransientMarkerEditor} from "@/ui/timeline/editors/audio/TransientMarker
 import {WarpMarkerEditor} from "@/ui/timeline/editors/audio/WarpMarkerEditor"
 import {TransientMarkerBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioEditorHeader} from "@/ui/timeline/editors/audio/AudioEditorHeader"
+import {ppqn} from "@opendaw/lib-dsp"
 
 const className = Html.adoptStyleSheet(css, "AudioEditor")
 
@@ -26,6 +27,7 @@ type Construct = {
 
 export const AudioEditor = ({lifecycle, service, range, snapping, reader}: Construct) => {
     const hoverTransient = new DefaultObservableValue<Nullable<TransientMarkerBoxAdapter>>(null)
+    const cursorModel = new DefaultObservableValue<Nullable<ppqn>>(null)
     return (
         <div className={className}>
             <Frag>
@@ -47,12 +49,14 @@ export const AudioEditor = ({lifecycle, service, range, snapping, reader}: Const
                                   range={range}
                                   snapping={snapping}
                                   reader={reader}
-                                  hoverTransient={hoverTransient}/>
+                                  hoverTransient={hoverTransient}
+                                  cursorModel={cursorModel}/>
                 <AudioEditorCanvas lifecycle={lifecycle}
                                    project={service.project}
                                    range={range}
                                    snapping={snapping}
-                                   reader={reader}/>
+                                   reader={reader}
+                                   cursorModel={cursorModel}/>
             </Frag>
         </div>
     )

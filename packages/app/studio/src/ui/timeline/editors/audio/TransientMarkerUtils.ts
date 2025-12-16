@@ -1,12 +1,32 @@
 import {TimelineRange} from "@opendaw/studio-core"
 import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader"
-import {EventCollection} from "@opendaw/lib-dsp"
+import {EventCollection, ppqn} from "@opendaw/lib-dsp"
 import {TransientMarkerBoxAdapter, WarpMarkerBoxAdapter} from "@opendaw/studio-adapters"
 import {ElementCapturing} from "@/ui/canvas/capturing"
 import {BinarySearch, isNotNull, Nullable, NumberComparator} from "@opendaw/lib-std"
 
 export namespace TransientMarkerUtils {
     const MARKER_RADIUS = 4
+
+    export const secondsToUnits = (seconds: number,
+                                   warpMarkers: EventCollection<WarpMarkerBoxAdapter>): ppqn => {
+        const markers = warpMarkers.asArray()
+        if (markers.length < 2) {return 0.0}
+        const first = markers[0]
+        const second = markers[1]
+        const secondLast = markers[markers.length - 2]
+        const last = markers[markers.length - 1]
+        const firstRate = (second.position - first.position) / (second.seconds - first.seconds)
+        const lastRate = (last.position - secondLast.position) / (last.seconds - secondLast.seconds)
+        if (seconds < first.seconds) {return first.position + (seconds - first.seconds) * firstRate}
+        if (seconds >= last.seconds) {return last.position + (seconds - last.seconds) * lastRate}
+        const index = Math.min(markers.length - 2, BinarySearch
+            .rightMostMapped(markers, seconds, NumberComparator, ({seconds}) => seconds))
+        const left = markers[index]
+        const right = markers[index + 1]
+        const t = (seconds - left.seconds) / (right.seconds - left.seconds)
+        return left.position + t * (right.position - left.position)
+    }
 
     export const createCapturing = (element: Element,
                                     range: TimelineRange,
@@ -16,7 +36,6 @@ export namespace TransientMarkerUtils {
         new ElementCapturing<TransientMarkerBoxAdapter>(element, {
             capture: (x: number, _y: number): Nullable<TransientMarkerBoxAdapter> => {
                 const {audioContent} = reader
-                if (audioContent.asPlayModeTimeStretch.isEmpty()) {return null}
                 const waveformOffset = audioContent.waveformOffset.getValue()
                 const markers = warpMarkers.asArray()
                 if (markers.length < 2) {return null}
@@ -26,20 +45,6 @@ export namespace TransientMarkerUtils {
                 const last = markers[markers.length - 1]
                 const firstRate = (second.position - first.position) / (second.seconds - first.seconds)
                 const lastRate = (last.position - secondLast.position) / (last.seconds - secondLast.seconds)
-                const secondsToLocalUnit = (seconds: number): number => {
-                    if (seconds < first.seconds) {
-                        return first.position + (seconds - first.seconds) * firstRate
-                    }
-                    if (seconds >= last.seconds) {
-                        return last.position + (seconds - last.seconds) * lastRate
-                    }
-                    const index = Math.min(markers.length - 2,
-                        BinarySearch.rightMostMapped(markers, seconds, NumberComparator, ({seconds}) => seconds))
-                    const left = markers[index]
-                    const right = markers[index + 1]
-                    const t = (seconds - left.seconds) / (right.seconds - left.seconds)
-                    return left.position + t * (right.position - left.position)
-                }
                 const localUnitToSeconds = (localUnit: number): number => {
                     if (localUnit < first.position) {
                         return first.seconds + (localUnit - first.position) / firstRate
@@ -65,7 +70,7 @@ export namespace TransientMarkerUtils {
                 for (let i = Math.max(0, centerIndex - 1); i < transients.length; i++) {
                     const transient = transients[i]
                     const adjustedSeconds = transient.position - waveformOffset
-                    const transientLocalUnit = secondsToLocalUnit(adjustedSeconds)
+                    const transientLocalUnit = secondsToUnits(adjustedSeconds, warpMarkers)
                     const transientUnit = reader.offset + transientLocalUnit
                     const transientX = range.unitToX(transientUnit)
                     const distance = Math.abs(transientX - x)

@@ -1,9 +1,9 @@
 import css from "./AudioEditorCanvas.sass?inline"
-import {Lifecycle, Option, Terminator} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, Nullable, ObservableValue, Option, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Project, TimelineRange} from "@opendaw/studio-core"
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
-import {EventCollection, LoopableRegion} from "@opendaw/lib-dsp"
+import {EventCollection, LoopableRegion, ppqn} from "@opendaw/lib-dsp"
 import {renderAudio} from "@/ui/timeline/renderer/audio.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {renderTimeGrid} from "@/ui/timeline/editors/TimeGridRenderer.ts"
@@ -23,9 +23,10 @@ type Construct = {
     range: TimelineRange
     snapping: Snapping
     reader: AudioEventOwnerReader
+    cursorModel: ObservableValue<Nullable<ppqn>>
 }
 
-export const AudioEditorCanvas = ({lifecycle, project: {editing}, range, snapping, reader}: Construct) => {
+export const AudioEditorCanvas = ({lifecycle, project: {editing}, range, cursorModel, snapping, reader}: Construct) => {
     const {audioContent: {file, observableOptPlayMode, waveformOffset, gain}} = reader
     return (
         <div className={className}>
@@ -54,6 +55,13 @@ export const AudioEditorCanvas = ({lifecycle, project: {editing}, range, snappin
                     renderAudio(context, range, file, observableOptPlayMode, waveformOffset.getValue(),
                         gain.getValue(), {top: 0, bottom: actualHeight},
                         `hsl(${reader.hue}, ${60}%, 45%)`, pass.unwrap(), false)
+
+                    const cursor = cursorModel.getValue()
+                    if (isDefined(cursor)) {
+                        const x = Math.floor(range.unitToX(cursor + reader.offset) * devicePixelRatio)
+                        context.fillStyle = `rgba(255, 255, 255, 0.5)`
+                        context.fillRect(x, 0, devicePixelRatio, actualHeight)
+                    }
                 }))
                 const playModeTerminator = lifecycle.own(new Terminator())
                 const unitToSeconds = (ppqn: number, warpMarkers: EventCollection<WarpMarkerBoxAdapter>): number => {
@@ -89,6 +97,7 @@ export const AudioEditorCanvas = ({lifecycle, project: {editing}, range, snappin
                             target?.type === "loop-duration" && target?.reader.audioContent.canResize
                                 ? Cursor.ExpandWidth : null
                     }),
+                    cursorModel.subscribe(painter.requestUpdate),
                     reader.subscribeChange(painter.requestUpdate),
                     observableOptPlayMode.catchupAndSubscribe((optPlayMode) => {
                         playModeTerminator.terminate()
