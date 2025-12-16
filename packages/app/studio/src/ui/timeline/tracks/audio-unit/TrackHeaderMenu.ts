@@ -32,11 +32,13 @@ export const installTrackHeaderMenu = (service: StudioService,
                 box.target.refer(audioUnitBoxAdapter.box)
             })
         })),
-        MenuCapture.createItem(service, audioUnitBoxAdapter, trackBoxAdapter, editing, captureDevices.get(audioUnitBoxAdapter.uuid)),
+        MenuCapture.createItem(service, audioUnitBoxAdapter,
+            trackBoxAdapter, editing, captureDevices.get(audioUnitBoxAdapter.uuid)),
         MenuItem.default({
             label: "Copy AudioUnit"
         }).setTriggerProcedure(() => {
-            const copies = editing.modify(() => ProjectUtils.extractAudioUnits([trackBoxAdapter.audioUnit], project.skeleton)).unwrap()
+            const copies = editing.modify(() => ProjectUtils
+                .extractAudioUnits([trackBoxAdapter.audioUnit], project.skeleton), false).unwrap()
             userEditingManager.audioUnit.edit(copies[0].editing)
         }),
         MenuItem.default({

@@ -27,7 +27,7 @@ export class UserEditing implements Terminable {
     }
 
     edit(target: Vertex<Pointers.Editing | Pointers>): void {
-        this.#pointer.ifSome(pointer => this.#editing.modify(() => pointer.refer(target)))
+        this.#pointer.ifSome(pointer => this.#editing.modify(() => pointer.refer(target), false))
     }
 
     isEditing(vertex: Vertex<Pointers.Editing | Pointers>): boolean {

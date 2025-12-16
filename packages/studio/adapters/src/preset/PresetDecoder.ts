@@ -162,7 +162,7 @@ export namespace PresetDecoder {
                     }))
         ])
         // First, identify which file boxes already exist and should be skipped
-        const existingFileBoxUUIDs = new Set<UUID.Bytes>()
+        const existingFileBoxUUIDs = UUID.newSet<UUID.Bytes>(uuid => uuid)
         dependencies.forEach((source: Box) => {
             if (source instanceof AudioFileBox || source instanceof SoundfontFileBox) {
                 if (targetBoxGraph.findBox(source.address.uuid).nonEmpty()) {
@@ -181,7 +181,7 @@ export namespace PresetDecoder {
                 .forEach((source: Box) => {
                     if (source instanceof AudioFileBox || source instanceof SoundfontFileBox) {
                         // Those boxes keep their UUID. So if they are already in the graph, skip them.
-                        if (existingFileBoxUUIDs.has(source.address.uuid)) {
+                        if (existingFileBoxUUIDs.opt(source.address.uuid).nonEmpty()) {
                             return
                         }
                     }
