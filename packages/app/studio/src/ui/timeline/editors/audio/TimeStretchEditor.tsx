@@ -36,8 +36,14 @@ export const TimeStretchEditor = ({lifecycle, project, reader}: Construct) => {
                                     transientPlayModeEnumValue.setValue(transientPlayMode.getValue())),
                                 adapter.box.playbackRate
                                     .catchupAndSubscribe(() => observableCents.setValue(adapter.cents)),
-                                observableCents.subscribe(owner =>
-                                    editing.modify(() => adapter.cents = owner.getValue()))
+                                observableCents.subscribe(owner => {
+                                    const value = owner.getValue()
+                                    if (editing.mustModify()) {
+                                        editing.modify(() => adapter.cents = value)
+                                    } else {
+                                        adapter.cents = value
+                                    }
+                                })
                             )
                         }
                     })
@@ -51,8 +57,14 @@ export const TimeStretchEditor = ({lifecycle, project, reader}: Construct) => {
                     }
                 }),
                 transientPlayModeEnumValue.subscribe(owner => audioContent.asPlayModeTimeStretch
-                    .ifSome(adapter => editing.modify(() =>
-                        adapter.box.transientPlayMode.setValue(owner.getValue() ?? TransientPlayMode.Once))))
+                    .ifSome(adapter => {
+                        const value = owner.getValue() ?? TransientPlayMode.Once
+                        if (editing.mustModify()) {
+                            editing.modify(() => adapter.box.transientPlayMode.setValue(value))
+                        } else {
+                            adapter.box.transientPlayMode.setValue(value)
+                        }
+                    }))
             )
         }}>
             <RadioGroup lifecycle={lifecycle}
