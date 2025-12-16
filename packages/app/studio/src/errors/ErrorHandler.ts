@@ -52,6 +52,16 @@ export class ErrorHandler {
             Dialogs.info({headline: "Warning", message: reason.message}).then(EmptyExec)
             return true
         }
+        // Handle SecurityError from File System Access API (e.g., showDirectoryPicker denied)
+        if (reason instanceof DOMException && reason.name === "SecurityError") {
+            console.warn(`SecurityError: ${reason.message}`)
+            event.preventDefault()
+            Dialogs.info({
+                headline: "Access Denied",
+                message: "The browser blocked access to the file system."
+            }).then(EmptyExec)
+            return true
+        }
         return false
     }
 
