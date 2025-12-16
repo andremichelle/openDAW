@@ -4,6 +4,7 @@ import {
     Attempt,
     Attempts,
     ByteArrayInput,
+    isAbsent,
     isDefined,
     isInstanceOf,
     Option,
@@ -98,16 +99,17 @@ export namespace PresetDecoder {
         decode(arrayBuffer, skeleton)
         sourceBoxGraph.endTransaction()
 
-        const sourceAudioUnitBox = asDefined(skeleton.mandatoryBoxes.rootBox.audioUnits.pointerHub.incoming()
+        const sourceAudioUnitBox = skeleton.mandatoryBoxes.rootBox.audioUnits.pointerHub.incoming()
             .map(({box}) => asInstanceOf(box, AudioUnitBox))
-            .find((box) => box.type.getValue() !== AudioUnitType.Output), "Source has no audioUnitBox")
-
+            .find((box) => box.type.getValue() !== AudioUnitType.Output)
+        if (isAbsent(sourceAudioUnitBox)) {
+            return Attempts.err("Preset contains no valid audio unit. Please send the file to the developers.")
+        }
         const sourceCaptureBox = sourceAudioUnitBox.capture.targetVertex.mapOr(({box}) => box.name, "")
         const targetCaptureBox = targetAudioUnitBox.capture.targetVertex.mapOr(({box}) => box.name, "")
         if (sourceCaptureBox !== targetCaptureBox) {
             return Attempts.err("Cannot replace incompatible instruments")
         }
-
         const replaceMIDIEffects = options?.keepMIDIEffects !== true
         const replaceAudioEffects = options?.keepAudioEffects !== true
 
