@@ -161,6 +161,15 @@ export namespace PresetDecoder {
                             : UUID.generate()
                     }))
         ])
+        // First, identify which file boxes already exist and should be skipped
+        const existingFileBoxUUIDs = new Set<UUID.Bytes>()
+        dependencies.forEach((source: Box) => {
+            if (source instanceof AudioFileBox || source instanceof SoundfontFileBox) {
+                if (targetBoxGraph.findBox(source.address.uuid).nonEmpty()) {
+                    existingFileBoxUUIDs.add(source.address.uuid)
+                }
+            }
+        })
         PointerField.decodeWith({
             map: (_pointer: PointerField, newAddress: Option<Address>): Option<Address> =>
                 newAddress.map(address => uuidMap.opt(address.uuid).match({
@@ -170,16 +179,15 @@ export namespace PresetDecoder {
         }, () => {
             dependencies
                 .forEach((source: Box) => {
-                    const input = new ByteArrayInput(source.toArrayBuffer())
-                    const key = source.name as keyof BoxIO.TypeMap
-                    const uuid = uuidMap.get(source.address.uuid).target
                     if (source instanceof AudioFileBox || source instanceof SoundfontFileBox) {
-                        // Those boxes keep their UUID. So if they are already in the graph, we can just read them.
-                        if (targetBoxGraph.findBox(source.address.uuid).nonEmpty()) {
-                            source.read(input)
+                        // Those boxes keep their UUID. So if they are already in the graph, skip them.
+                        if (existingFileBoxUUIDs.has(source.address.uuid)) {
                             return
                         }
                     }
+                    const input = new ByteArrayInput(source.toArrayBuffer())
+                    const key = source.name as keyof BoxIO.TypeMap
+                    const uuid = uuidMap.get(source.address.uuid).target
                     targetBoxGraph.createBox(key, uuid, box => box.read(input))
                 })
         })
