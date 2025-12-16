@@ -153,10 +153,11 @@ export namespace WarpMarkerEditing {
                     update: (event: Dragging.Event) => {
                         const rect = canvas.getBoundingClientRect()
                         const x = event.clientX - rect.left
-                        const unit = snapping.xToUnitRound(x) - reader.offset
+                        const unit = event.shiftKey ? range.xToUnit(x) : snapping.xToUnitRound(x)
+                        const local = unit - reader.offset
                         const min = left?.position ?? Number.MIN_SAFE_INTEGER
                         const max = right?.position ?? Number.MAX_SAFE_INTEGER
-                        const clamped = clamp(unit, min + MIN_DISTANCE, max - MIN_DISTANCE)
+                        const clamped = clamp(local, min + MIN_DISTANCE, max - MIN_DISTANCE)
                         project.editing.modify(() => marker.box.position.setValue(clamped), false)
                     },
                     approve: () => project.editing.mark()
