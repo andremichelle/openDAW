@@ -5,3 +5,14 @@ component
   height: 100%
   position: absolute
   outline: none
+
+  > div.drop-target
+    display: none
+    position: absolute
+    border-radius: 2px
+    top: 1px
+    left: 1px
+    width: calc(var(--clips-width) - 2px)
+    height: calc(var(--clips-width) - 2px)
+    outline: 1px rgba(white, 0.3) dashed
+    z-index: 1000

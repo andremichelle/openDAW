@@ -13,6 +13,8 @@ export class ClipDragAndDrop extends TimelineDragAndDrop<ClipCaptureTarget> {
     handleSample({event, trackBoxAdapter, audioFileBox, sample}: CreateParameters): void {
         const x = event.clientX - this.capturing.element.getBoundingClientRect().left
         const index = Math.floor(x / ClipWidth)
+        trackBoxAdapter.clips.collection.getAdapterByIndex(index)
+            .ifSome(adapter => adapter.box.delete())
         const {boxGraph} = this.project
         if (sample.bpm === 0) {
             AudioContentFactory.createNotStretchedClip({

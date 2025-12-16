@@ -106,13 +106,12 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                     service.panelLayout.showIfAvailable(PanelType.ContentEditor)
                 })
             } else if (target.type === "track") {
-                const {audioUnitBoxAdapter, trackBoxAdapter} = target.track
-                const name = audioUnitBoxAdapter.input.label.unwrapOrElse("")
+                const {trackBoxAdapter} = target.track
                 const position = snapping.xToUnitFloor(event.clientX - element.getBoundingClientRect().left)
                 const duration = Math.min(project.signatureDuration,
                     (trackBoxAdapter.regions.collection
                         .greaterEqual(position + 1)?.position ?? Number.POSITIVE_INFINITY) - position)
-                editing.modify(() => project.api.createTrackRegion(trackBoxAdapter.box, position, duration, {name}))
+                editing.modify(() => project.api.createTrackRegion(trackBoxAdapter.box, position, duration))
             }
         }),
         Dragging.attach(element, (event: PointerEvent) => {

@@ -102,7 +102,7 @@ export class TracksManager implements Terminable {
     get service(): StudioService {return this.#service}
 
     localToIndex(position: number): int {
-        return position > this.#tracksLocalBottom()
+        return position > this.tracksLocalBottom()
             ? this.tracks().length
             : Math.max(0, BinarySearch
                 .rightMostMapped(this.tracks(), position, NumberComparator, track => track.position))
@@ -114,9 +114,9 @@ export class TracksManager implements Terminable {
 
     indexToGlobal(index: int): number {
         if (index < 0) {return 0}
-        const tracks = this.tracks
-        const offset = this.#tracksLocalBottom()
-        return asDefined(tracks().at(Math.min(index, tracks.length - 1))).position + offset
+        const tracks = this.tracks()
+        const offset = this.tracksLocalBottom()
+        return asDefined(tracks.at(Math.min(index, tracks.length - 1))).position + offset
     }
 
     get scrollableContainer(): Element {return this.#scrollContainer}
@@ -221,5 +221,5 @@ export class TracksManager implements Terminable {
     }
 
     #trackGlobalTop() {return this.#scrollContainer.getBoundingClientRect().top - this.#scrollContainer.scrollTop}
-    #tracksLocalBottom(): number {return this.#scrollContainer.scrollHeight - ExtraSpace}
+    tracksLocalBottom(): number {return this.#scrollContainer.scrollHeight - ExtraSpace}
 }

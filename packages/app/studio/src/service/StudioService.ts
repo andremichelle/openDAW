@@ -75,7 +75,7 @@ import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 const range = new TimelineRange({padding: 12})
 range.minimum = PPQN.fromSignature(3, 8)
 range.maxUnits = PPQN.fromSignature(128, 1)
-range.showUnitInterval(0, PPQN.fromSignature(16, 1))
+range.showUnitInterval(0, PPQN.fromSignature(9, 1))
 
 const snapping = new Snapping(range)
 
@@ -329,7 +329,7 @@ export class StudioService implements ProjectEnv {
                 const loopState = this.transport.loop
                 const loopEnabled = timelineBox.loopArea.enabled
                 loopState.setValue(loopEnabled.getValue())
-                range.showUnitInterval(0, PPQN.fromSignature(16, 1))
+                range.showUnitInterval(0, PPQN.fromSignature(9, 1))
                 lifeTime.own(ShadertoyState.initialize(project))
 
                 // -------------------------------
@@ -383,7 +383,7 @@ export class StudioService implements ProjectEnv {
             } else {
                 this.engine.releaseWorklet()
                 range.maxUnits = PPQN.fromSignature(128, 1)
-                range.showUnitInterval(0, PPQN.fromSignature(16, 1))
+                range.showUnitInterval(0, PPQN.fromSignature(9, 1))
                 this.layout.screen.setValue("dashboard")
             }
         }

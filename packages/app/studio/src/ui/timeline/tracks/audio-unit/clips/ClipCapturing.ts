@@ -7,7 +7,7 @@ import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
 
 export type ClipCaptureTarget =
-    | { type: "clip", clip: AnyClipBoxAdapter }
+    | { type: "clip", track: TrackContext, clip: AnyClipBoxAdapter }
     | { type: "track", track: TrackContext, clipIndex: int }
 
 export namespace ClipCapturing {
@@ -25,7 +25,7 @@ export namespace ClipCapturing {
                 return track.trackBoxAdapter.clips.collection.getAdapterByIndex(clipIndex)
                     .match<ClipCaptureTarget>({
                         none: () => ({type: "track", track, clipIndex}),
-                        some: clip => ({type: "clip", clip})
+                        some: clip => ({type: "clip", track, clip})
                     })
             }
         })

@@ -1,5 +1,5 @@
 import css from "./ClipsArea.sass?inline"
-import {clamp, int, Lifecycle, Option, Selection, ValueAxis} from "@opendaw/lib-std"
+import {clamp, int, isNotNull, Lifecycle, Option, quantizeFloor, Selection, ValueAxis} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {AnyClipBoxAdapter, ClipAdapters, isVertexOfBox, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
@@ -34,7 +34,8 @@ type Construct = {
 export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollContainer}: Construct) => {
     const {project} = service
     const {selection, boxAdapters, editing, userEditingManager} = project
-    const element: HTMLElement = (<div className={className} tabIndex={-1}/>)
+    const dropPreview: HTMLElement = (<div className="drop-target" tabIndex={-1}/>)
+    const element: HTMLElement = (<div className={className} tabIndex={-1}>{dropPreview}</div>)
     const clipSelection: Selection<AnyClipBoxAdapter> = lifecycle.own(selection
         .createFilteredSelection(isVertexOfBox(UnionBoxTypes.isClipBox), {
             fx: (adapter: AnyClipBoxAdapter) => adapter.box,
@@ -68,15 +69,48 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
         valueToAxis: (index: int): number => manager.indexToGlobal(index),
         axisToValue: (axis: number): int => manager.globalToIndex(axis)
     }
+    const {style} = dropPreview
     lifecycle.ownAll(
         DragAndDrop.installTarget(element, {
-            drag: (event: DragEvent, data: AnyDragData): boolean => dragAndDrop.canDrop(event, data).nonEmpty(),
+            drag: (event: DragEvent, data: AnyDragData): boolean => {
+                const option = dragAndDrop.canDrop(event, data)
+                if (option.isEmpty()) {
+                    style.display = "none"
+                    return false
+                }
+                const target = capturing.captureEvent(event)
+                if (isNotNull(target)) {
+                    if (target.type === "track") {
+                        const trackBoxAdapter = target.track.trackBoxAdapter
+                        const clipIndex = target.clipIndex
+                        const x = clipIndex * ClipWidth
+                        const y = trackBoxAdapter.listIndex * ClipWidth - scrollContainer.scrollTop
+                        style.transform = `translate(${x}px, ${y}px)`
+                        style.display = "block"
+                    } else if (target.type === "clip") {
+                        const trackBoxAdapter = target.track.trackBoxAdapter
+                        const clipIndex = target.clip.indexField.getValue()
+                        const x = clipIndex * ClipWidth
+                        const y = trackBoxAdapter.listIndex * ClipWidth - scrollContainer.scrollTop
+                        style.transform = `translate(${x}px, ${y}px)`
+                        style.display = "block"
+                    }
+                } else {
+                    const rect = element.getBoundingClientRect()
+                    const x = quantizeFloor(event.clientX - rect.left, ClipWidth)
+                    const y = manager.tracksLocalBottom() - scrollContainer.scrollTop
+                    style.transform = `translate(${x}px, ${y}px)`
+                    style.display = "block"
+                }
+                return true
+            },
             drop: (event: DragEvent, data: AnyDragData) => {
+                style.display = "none"
                 const dialog = Dialogs.processMonolog("Import Sample")
                 dragAndDrop.drop(event, data).finally(() => dialog.close())
             },
             enter: (_allowDrop: boolean) => {},
-            leave: () => {}
+            leave: () => style.display = "none"
         }),
         installAutoScroll(element, (_deltaX, deltaY) => {if (deltaY !== 0) {scrollModel.moveBy(deltaY)}}),
         clipSelection.catchupAndSubscribe({
@@ -90,15 +124,14 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
                 editing.modify(() => userEditingManager.timeline.edit(target.clip.box), false)
                 service.panelLayout.showIfAvailable(PanelType.ContentEditor)
             } else if (target.type === "track") {
-                const name = target.track.audioUnitBoxAdapter.input.label.unwrapOrElse("")
                 editing.modify(() => {
                     const trackBoxAdapter = target.track.trackBoxAdapter
                     const clipIndex = target.clipIndex
                     switch (trackBoxAdapter.type) {
                         case TrackType.Notes:
-                            return project.api.createNoteClip(trackBoxAdapter.box, clipIndex, {name})
+                            return project.api.createNoteClip(trackBoxAdapter.box, clipIndex)
                         case TrackType.Value:
-                            return project.api.createValueClip(trackBoxAdapter.box, clipIndex, {name})
+                            return project.api.createValueClip(trackBoxAdapter.box, clipIndex)
                         default:
                             return
                     }
