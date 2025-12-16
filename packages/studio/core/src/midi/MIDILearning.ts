@@ -28,6 +28,10 @@ interface MIDIConnection {
     subscription: Subscription
 }
 
+// will be part of MIDI preferences. Should not filter for the device-id
+// because it is different for the same hardware in different browsers.
+const respectDeviceID = false
+
 export class MIDILearning implements Terminable {
     readonly #terminator = new Terminator()
 
@@ -80,6 +84,7 @@ export class MIDILearning implements Terminable {
         await MidiDevices.requestPermission()
         const learnLifecycle = this.#terminator.spawn()
         const abortController = new AbortController()
+        // TODO subscribeMessageEvents is not really suffient, because it does not distinguish between midi devices.
         learnLifecycle.own(MidiDevices.subscribeMessageEvents((event: MIDIMessageEvent) => {
             const data = event.data
             if (data === null) {return}
@@ -132,7 +137,7 @@ export class MIDILearning implements Terminable {
             if (data === null) {return}
             const id = event.target instanceof MIDIInput ? event.target.id : ""
             if (MidiData.isController(data)
-                && MidiData.readParam1(data) === controlId.getValue() && id === deviceId.getValue()) {
+                && MidiData.readParam1(data) === controlId.getValue() && (!respectDeviceID || id === deviceId.getValue())) {
                 const value = MidiData.asValue(data)
                 if (pendingValue === null) {
                     update(value)
