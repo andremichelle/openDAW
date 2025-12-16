@@ -82,18 +82,19 @@ export namespace WarpMarkerEditing {
                     if (isNull(transient)) {
                         const rect = canvas.getBoundingClientRect()
                         const x = event.clientX - rect.left
-                        const unit = snapping.xToUnitRound(x) - reader.offset
-                        const adjacentWarpMarkers = WarpMarkerUtils.findAdjacent(unit, warpMarkers, true)
+                        const unit = event.shiftKey ? range.xToUnit(x) : snapping.xToUnitRound(x)
+                        const local = unit - reader.offset
+                        const adjacentWarpMarkers = WarpMarkerUtils.findAdjacent(local, warpMarkers, true)
                         if (isNull(adjacentWarpMarkers)) {return}
                         const [left, right] = adjacentWarpMarkers
                         if (isNull(left) || isNull(right)) {return}
-                        if (unit - left.position < MIN_DISTANCE || right.position - unit < MIN_DISTANCE) {return}
-                        const clamped = clamp(unit, left.position + MIN_DISTANCE, right.position - MIN_DISTANCE)
+                        if (local - left.position < MIN_DISTANCE || right.position - local < MIN_DISTANCE) {return}
+                        const clamped = clamp(local, left.position + MIN_DISTANCE, right.position - MIN_DISTANCE)
                         const alpha = (clamped - left.position) / (right.position - left.position)
                         const seconds = left.seconds + alpha * (right.seconds - left.seconds)
                         project.editing.modify(() => WarpMarkerBox.create(project.boxGraph, UUID.generate(), box => {
                             box.owner.refer(audioPlayMode.box.warpMarkers)
-                            box.position.setValue(unit)
+                            box.position.setValue(local)
                             box.seconds.setValue(seconds)
                         }))
                     } else {
