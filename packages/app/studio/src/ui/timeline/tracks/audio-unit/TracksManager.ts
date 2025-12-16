@@ -19,7 +19,7 @@ import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModi
 import {StudioService} from "@/service/StudioService.ts"
 import {AudioUnitTracks} from "@/ui/timeline/tracks/audio-unit/AudioUnitTracks.tsx"
 import {ClipModifier} from "./clips/ClipModifier"
-import {Dragging} from "@opendaw/lib-dom"
+import {AnimationFrame, Dragging} from "@opendaw/lib-dom"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
 
 export interface TrackFactory {
@@ -35,7 +35,7 @@ export class TracksManager implements Terminable {
     readonly #factory: TrackFactory
 
     readonly #terminator: Terminator
-    readonly #audioUnits: SortedSet<UUID.Bytes, { uuid: UUID.Bytes, lifecycle: Terminable }>
+    readonly #audioUnits: SortedSet<UUID.Bytes, { uuid: UUID.Bytes, unitTracks: HTMLElement, lifecycle: Terminable }>
     readonly #tracks: SortedSet<UUID.Bytes, TrackContext>
     readonly #maxClipsIndex: DefaultObservableValue<int>
 
@@ -140,60 +140,68 @@ export class TracksManager implements Terminable {
     }
 
     #subscribe(): Terminable {
-        const project = this.#service.project
-        return project.rootBoxAdapter.audioUnits.catchupAndSubscribe({
-            onAdd: (audioUnitBoxAdapter: AudioUnitBoxAdapter) => {
-                const audioUnitLifecycle = this.#terminator.spawn()
-                const unitTracks: HTMLElement = AudioUnitTracks({
-                    lifecycle: audioUnitLifecycle,
-                    project,
-                    adapter: audioUnitBoxAdapter
-                })
-                this.#scrollContainer.appendChild(unitTracks)
-                audioUnitLifecycle.ownAll(
-                    {
-                        terminate: () => {
-                            this.#tracks.values()
-                                .filter(scope => scope.audioUnitBoxAdapter === audioUnitBoxAdapter)
-                                .forEach(scope => this.#tracks.removeByKey(scope.trackBoxAdapter.uuid).lifecycle.terminate())
-                            unitTracks.remove()
-                            this.#invalidateOrder()
-                        }
-                    },
-                    audioUnitBoxAdapter.tracks.catchupAndSubscribe({
-                        onAdd: (trackBoxAdapter: TrackBoxAdapter) => {
-                            const trackLifecycle = audioUnitLifecycle.spawn()
-                            const element = this.#factory.create(this, trackLifecycle, audioUnitBoxAdapter, trackBoxAdapter)
-                            unitTracks.appendChild(element)
-                            const track = new TrackContext({
-                                audioUnitBoxAdapter,
-                                trackBoxAdapter,
-                                element,
-                                lifecycle: trackLifecycle
-                            })
-                            this.#tracks.add(track)
-                            trackLifecycle.own({terminate: () => element.remove()})
-                            this.#invalidateOrder()
-                        },
-                        onRemove: ({uuid}) => {
-                            this.#tracks.removeByKey(uuid).lifecycle.terminate()
-                            this.#invalidateOrder()
-                        },
-                        onReorder: () => this.#invalidateOrder()
+        const {project} = this.#service
+        const {rootBoxAdapter, userEditingManager} = project
+        return Terminable.many(
+            userEditingManager.audioUnit.catchupAndSubscribe(optVertex => optVertex
+                .ifSome(({box: {address: {uuid}}}) => this.#audioUnits.opt(uuid)
+                    .ifSome(({unitTracks}) => AnimationFrame.once(() =>
+                        unitTracks.scrollIntoView({behavior: "instant"}))))), // For smooth we need to respect natural order
+            rootBoxAdapter.audioUnits.catchupAndSubscribe({
+                onAdd: (audioUnitBoxAdapter: AudioUnitBoxAdapter) => {
+                    const audioUnitLifecycle = this.#terminator.spawn()
+                    const unitTracks: HTMLElement = AudioUnitTracks({
+                        lifecycle: audioUnitLifecycle,
+                        project,
+                        adapter: audioUnitBoxAdapter
                     })
-                )
-                this.#audioUnits.add({
-                    uuid: audioUnitBoxAdapter.uuid,
-                    lifecycle: audioUnitLifecycle
-                })
-                this.#invalidateOrder()
-            },
-            onRemove: (audioUnitBoxAdapter) => {
-                this.#audioUnits.removeByKey(audioUnitBoxAdapter.uuid).lifecycle.terminate()
-                this.#invalidateOrder()
-            },
-            onReorder: () => this.#invalidateOrder()
-        })
+                    this.#scrollContainer.appendChild(unitTracks)
+                    audioUnitLifecycle.ownAll(
+                        {
+                            terminate: () => {
+                                this.#tracks.values()
+                                    .filter(scope => scope.audioUnitBoxAdapter === audioUnitBoxAdapter)
+                                    .forEach(scope => this.#tracks.removeByKey(scope.trackBoxAdapter.uuid).lifecycle.terminate())
+                                unitTracks.remove()
+                                this.#invalidateOrder()
+                            }
+                        },
+                        audioUnitBoxAdapter.tracks.catchupAndSubscribe({
+                            onAdd: (trackBoxAdapter: TrackBoxAdapter) => {
+                                const trackLifecycle = audioUnitLifecycle.spawn()
+                                const element = this.#factory.create(this, trackLifecycle, audioUnitBoxAdapter, trackBoxAdapter)
+                                unitTracks.appendChild(element)
+                                const track = new TrackContext({
+                                    audioUnitBoxAdapter,
+                                    trackBoxAdapter,
+                                    element,
+                                    lifecycle: trackLifecycle
+                                })
+                                this.#tracks.add(track)
+                                trackLifecycle.own({terminate: () => element.remove()})
+                                this.#invalidateOrder()
+                            },
+                            onRemove: ({uuid}) => {
+                                this.#tracks.removeByKey(uuid).lifecycle.terminate()
+                                this.#invalidateOrder()
+                            },
+                            onReorder: () => this.#invalidateOrder()
+                        })
+                    )
+                    this.#audioUnits.add({
+                        uuid: audioUnitBoxAdapter.uuid,
+                        unitTracks,
+                        lifecycle: audioUnitLifecycle
+                    })
+                    this.#invalidateOrder()
+                },
+                onRemove: (audioUnitBoxAdapter) => {
+                    this.#audioUnits.removeByKey(audioUnitBoxAdapter.uuid).lifecycle.terminate()
+                    this.#invalidateOrder()
+                },
+                onReorder: () => this.#invalidateOrder()
+            })
+        )
     }
 
     #invalidateOrder(): void {
