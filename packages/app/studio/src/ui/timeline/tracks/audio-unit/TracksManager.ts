@@ -146,7 +146,7 @@ export class TracksManager implements Terminable {
             userEditingManager.audioUnit.catchupAndSubscribe(optVertex => optVertex
                 .ifSome(({box: {address: {uuid}}}) => this.#audioUnits.opt(uuid)
                     .ifSome(({unitTracks}) => AnimationFrame.once(() =>
-                        unitTracks.scrollIntoView({behavior: "instant"}))))), // For smooth we need to respect natural order
+                        unitTracks.scrollIntoView({behavior: "instant"}))))),
             rootBoxAdapter.audioUnits.catchupAndSubscribe({
                 onAdd: (audioUnitBoxAdapter: AudioUnitBoxAdapter) => {
                     const audioUnitLifecycle = this.#terminator.spawn()

@@ -74,7 +74,8 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
             element.style.setProperty("--rest-height", `${element.clientHeight - contentSize}px`)
         }),
         Events.subscribe(element, "wheel", (event: WheelEvent) => scrollModel.position += event.deltaY, {passive: false}),
-        scrollModel.subscribe(() => scrollContainer.scrollTop = scrollModel.position)
+        scrollModel.subscribe(() => scrollContainer.scrollTop = scrollModel.position),
+        Events.subscribe(scrollContainer, "scroll", () => scrollModel.position = scrollContainer.scrollTop)
     )
     element.style.setProperty("--extra-space", `${ExtraSpace}px`)
     return element
