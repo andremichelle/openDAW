@@ -2,9 +2,11 @@ import {StudioService} from "@/service/StudioService"
 import {PanelType} from "@/ui/workspace/PanelType"
 import {Events, Keyboard} from "@opendaw/lib-dom"
 import {DefaultWorkspace} from "@/ui/workspace/Default"
-import {Arrays, isNull} from "@opendaw/lib-std"
+import {Arrays, asInstanceOf, isNull} from "@opendaw/lib-std"
 import {Workspace} from "@/ui/workspace/Workspace"
 import {Surface} from "@/ui/surface/Surface"
+import {ProjectUtils} from "@opendaw/studio-adapters"
+import {AudioUnitBox} from "@opendaw/studio-boxes"
 
 export class Shortcuts {
     constructor(service: StudioService) {
@@ -43,7 +45,17 @@ export class Shortcuts {
                 service.panelLayout.getByType(PanelType.BrowserPanel).toggleMinimize()
                 event.preventDefault()
             } else if (code === "KeyD") {
-                service.panelLayout.getByType(PanelType.DevicePanel).toggleMinimize()
+                if (Keyboard.isControlKey(event)) {
+                    const {project: {editing, userEditingManager, skeleton}} = service
+                    userEditingManager.audioUnit.get().ifSome(({box}) => {
+                        const audioUnitBox = asInstanceOf(box, AudioUnitBox)
+                        const copies = editing.modify(() => ProjectUtils
+                            .extractAudioUnits([audioUnitBox], skeleton), false).unwrap()
+                        userEditingManager.audioUnit.edit(copies[0].editing)
+                    })
+                } else {
+                    service.panelLayout.getByType(PanelType.DevicePanel).toggleMinimize()
+                }
                 event.preventDefault()
             } else if (code === "KeyM") {
                 service.panelLayout.getByType(PanelType.Mixer).toggleMinimize()
