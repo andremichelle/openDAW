@@ -65,12 +65,15 @@ export namespace DevicePanelDragAndDrop {
                 if (editingDeviceChain.isEmpty()) {return}
                 const deviceHost = boxAdapters.adapterFor(editingDeviceChain.unwrap("editingDeviceChain isEmpty").box, Devices.isHost)
                 if (type === "instrument" && deviceHost instanceof AudioUnitBoxAdapter) {
-                    // unsafe cast, but will be handled in replaceMIDIInstrument
-                    const inputBox = deviceHost.inputField.pointerHub.incoming().at(0)?.box as InstrumentBox
+                    const inputBox = deviceHost.inputField.pointerHub.incoming().at(0)?.box
+                    if (inputBox === undefined) {
+                        console.warn("No instrument to replace")
+                        return
+                    }
                     const namedElement = InstrumentFactories.Named[dragData.device]
                     const factory = asDefined(namedElement, `Unknown: '${dragData.device}'`) as InstrumentFactory
                     editing.modify(() => {
-                        const attempt = project.api.replaceMIDIInstrument(inputBox, factory)
+                        const attempt = project.api.replaceMIDIInstrument(inputBox as InstrumentBox, factory)
                         if (attempt.isFailure()) {console.debug(attempt.failureReason())}
                     })
                     return
