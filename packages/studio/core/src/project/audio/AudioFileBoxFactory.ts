@@ -30,6 +30,11 @@ export namespace AudioFileBoxFactory {
             const transients = await transientProtocol.detect(audioData)
             const durationInSeconds = audioData.numberOfFrames / audioData.sampleRate
             return () => {
+                // Re-check in case another drop created it between createModifier and now
+                const existingBox = boxGraph.findBox<AudioFileBox>(uuid)
+                if (existingBox.nonEmpty()) {
+                    return existingBox.unwrap()
+                }
                 const audioFileBox = AudioFileBox.create(boxGraph, uuid, box => {
                     box.fileName.setValue(name)
                     box.startInSeconds.setValue(0)
