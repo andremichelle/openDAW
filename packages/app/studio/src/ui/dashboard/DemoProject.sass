@@ -1,0 +1,58 @@
+component
+  min-height: 40px
+  max-height: 40px
+  height: 40px
+  display: flex
+  column-gap: 1em
+  align-items: center
+  padding: 4px
+  position: relative
+  border-radius: 3px
+  cursor: pointer
+
+  &:hover
+    box-shadow: 0 0 1px 0 rgba(white, 0.2) inset
+    background-color: rgba(white, 0.04)
+
+  > *
+    pointer-events: none
+
+  > img
+    border-radius: 2px
+    height: 100%
+    aspect-ratio: 1/1
+    object-fit: cover
+
+  > div.meta
+    flex: 1
+    display: flex
+    height: 100%
+    flex-direction: column
+    justify-content: space-between
+    padding: 0 0 1px 0
+
+    > div.title
+      font-size: 11px
+
+      > span.name
+        color: var(--color-orange)
+
+      > span.artist
+        color: var(--color-green)
+
+    > div.tags
+      display: flex
+      flex-wrap: wrap
+      column-gap: 2px
+
+      > div
+        font-size: 9px
+        padding: 1px 3px
+        border-radius: 2px
+        color: rgba(white, 0.25)
+        background-color: var(--color-black)
+
+  > div.actions
+    display: flex
+    align-items: center
+    justify-content: center

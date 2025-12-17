@@ -1,3 +1,11 @@
+@import "./column"
+
 component
-  display: flex
-  flex-direction: column
+  @include column
+
+  div.projects
+    margin-top: 4px
+    display: flex
+    flex-direction: column
+    row-gap: 5px
+    overflow: hidden auto
