@@ -17,7 +17,7 @@ export const Colors = {
     background: new Color(197, 6, 7),
     panelBackground: new Color(197, 14, 10),
     panelBackgroundBright: new Color(197, 14, 13),
-    panelBackgroundDark: new Color(197, 14, 7)
+    panelBackgroundDark: new Color(197, 14, 10)
 }
 
 export const initializeColors = (root: { style: { setProperty: (name: string, value: string) => void } }) => {
