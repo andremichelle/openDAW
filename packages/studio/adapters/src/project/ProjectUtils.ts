@@ -50,18 +50,22 @@ export namespace ProjectUtils {
         // TODO Implement include options.
         assert(!options.includeAux && !options.includeBus, "Options are not yet implemented")
         const excludeBox = options?.excludeTimeline === true ? excludeTimelinePredicate : Predicates.alwaysFalse
-        // First pass: collect UUIDs of actual source dependencies (without following mandatory incoming pointers)
-        const sourceUUIDs = UUID.newSet<UUID.Bytes>(uuid => uuid)
-        audioUnitBoxes.forEach(box => sourceUUIDs.add(box.address.uuid))
-        audioUnitBoxes
+        // Get dependencies using outgoing pointers only (no mandatory incoming following)
+        // This avoids pulling in boxes from previous copies that point to shared AudioFileBox
+        const baseDeps = audioUnitBoxes
             .flatMap(box => Array.from(box.graph.dependenciesOf(box, {alwaysFollowMandatory: false, excludeBox}).boxes))
-            .forEach(box => sourceUUIDs.add(box.address.uuid))
-        // Second pass: get full dependencies with mandatory following, but filter to only source UUIDs
-        // This excludes boxes from previous copies that reference shared AudioFileBox
-        const dependencies = audioUnitBoxes
-            .flatMap(box => Array.from(box.graph.dependenciesOf(box, {alwaysFollowMandatory: true, excludeBox}).boxes))
+        // Explicitly add instruments (they have mandatory incoming pointer to AudioUnitBox.input)
+        const instruments = audioUnitBoxes
+            .flatMap(audioUnitBox => audioUnitBox.input.pointerHub.incoming().map(({box}) => box))
+        // Deduplicate by UUID
+        const seen = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        const dependencies = [...baseDeps, ...instruments]
             .filter(box => box.name !== SelectionBox.ClassName && box.name !== AuxSendBox.ClassName)
-            .filter(box => sourceUUIDs.opt(box.address.uuid).nonEmpty())
+            .filter(box => {
+                if (seen.opt(box.address.uuid).nonEmpty()) {return false}
+                seen.add(box.address.uuid)
+                return true
+            })
         const uuidMap = generateTransferMap(
             audioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBus.address.uuid)
         copy(uuidMap, boxGraph, audioUnitBoxes, dependencies)
@@ -165,12 +169,10 @@ export namespace ProjectUtils {
         dependencies.forEach((source: Box) => {
             if (source instanceof AudioFileBox || source instanceof SoundfontFileBox) {
                 if (boxGraph.findBox(source.address.uuid).nonEmpty()) {
-                    console.debug(`Skipping existing file box: ${source.name} ${UUID.toString(source.address.uuid)}`)
                     existingFileBoxUUIDs.add(source.address.uuid)
                 }
             }
         })
-        console.debug(`Dependencies to copy: ${dependencies.length}, existing file boxes: ${existingFileBoxUUIDs.size}`)
         PointerField.decodeWith({
             map: (_pointer: PointerField, newAddress: Option<Address>): Option<Address> =>
                 newAddress.map(address => uuidMap.opt(address.uuid).match({
@@ -190,7 +192,6 @@ export namespace ProjectUtils {
                     if (source instanceof AudioFileBox || source instanceof SoundfontFileBox) {
                         // Those boxes keep their UUID. So if they are already in the graph, skip them.
                         if (existingFileBoxUUIDs.opt(source.address.uuid).nonEmpty()) {
-                            console.debug(`  Skipping file box: ${source.name}`)
                             return
                         }
                     }
@@ -198,14 +199,12 @@ export namespace ProjectUtils {
                     if (source instanceof TransientMarkerBox) {
                         const ownerUUID = source.owner.targetAddress.unwrap().uuid
                         if (existingFileBoxUUIDs.opt(ownerUUID).nonEmpty()) {
-                            console.debug(`  Skipping TransientMarkerBox (owner exists)`)
                             return
                         }
                     }
                     const input = new ByteArrayInput(source.toArrayBuffer())
                     const key = source.name as keyof BoxIO.TypeMap
                     const uuid = uuidMap.get(source.address.uuid).target
-                    console.debug(`  Creating: ${key} ${UUID.toString(uuid)}`)
                     boxGraph.createBox(key, uuid, box => box.read(input))
                 })
         })
