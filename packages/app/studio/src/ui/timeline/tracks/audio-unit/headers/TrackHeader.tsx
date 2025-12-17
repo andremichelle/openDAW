@@ -6,12 +6,15 @@ import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {MenuItem} from "@/ui/model/menu-item.ts"
 import {AudioUnitBoxAdapter, ColorCodes, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {AudioUnitChannelControls} from "@/ui/timeline/tracks/audio-unit/AudioUnitChannelControls.tsx"
-import {installTrackHeaderMenu} from "@/ui/timeline/tracks/audio-unit/TrackHeaderMenu.ts"
+import {installTrackHeaderMenu} from "@/ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts"
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {Surface} from "@/ui/surface/Surface"
 import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {DragAndDrop} from "@/ui/DragAndDrop"
+import {AnyDragData} from "@/ui/AnyDragData"
+import {EffectFactories} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "TrackHeader")
 
@@ -96,6 +99,30 @@ export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAd
                     audioUnitBoxAdapter.deleteTrack(trackBoxAdapter)
                 }
             })
+        }),
+        DragAndDrop.installTarget(element, {
+            drag: (_event: DragEvent, data: AnyDragData): boolean =>
+                (data.type === "midi-effect" || data.type === "audio-effect") && data.start_index === null,
+            drop: (_event: DragEvent, data: AnyDragData) => {
+                if (data.type === "midi-effect") {
+                    if (data.start_index !== null) {return}
+                    const factory = EffectFactories.MidiNamed[data.device]
+                    if (factory.type !== audioUnitBoxAdapter.input.getValue().unwrapOrNull()?.accepts) {
+                        return
+                    }
+                    const effectField = audioUnitBoxAdapter.box.midiEffects
+                    project.editing.modify(() =>
+                        factory.create(project, effectField, effectField.pointerHub.incoming().length))
+                } else if (data.type === "audio-effect") {
+                    if (data.start_index !== null) {return}
+                    const factory = EffectFactories.AudioNamed[data.device]
+                    const effectField = audioUnitBoxAdapter.box.audioEffects
+                    project.editing.modify(() =>
+                        factory.create(project, effectField, effectField.pointerHub.incoming().length))
+                }
+            },
+            enter: (allowDrop: boolean) => element.classList.toggle("accept-drop", allowDrop),
+            leave: () => element.classList.remove("accept-drop")
         })
     )
     return element

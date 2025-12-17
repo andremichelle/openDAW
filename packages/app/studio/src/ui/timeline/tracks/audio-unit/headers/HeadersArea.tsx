@@ -9,12 +9,14 @@ import {DragAndDrop} from "@/ui/DragAndDrop.ts"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {InstrumentFactories} from "@opendaw/studio-adapters"
 import {DefaultInstrumentFactory} from "@/ui/defaults/DefaultInstrumentFactory"
+import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager"
 
 const className = Html.adoptStyleSheet(css, "HeaderArea")
 
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
+    manager: TracksManager
     scrollModel: ScrollModel
 }
 

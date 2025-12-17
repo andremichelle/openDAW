@@ -11,7 +11,7 @@ import {ClipsArea} from "./clips/ClipsArea.tsx"
 import {AudioUnitBoxAdapter, InstrumentFactories, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
 import {ExtraSpace} from "./Constants.ts"
-import {HeadersArea} from "@/ui/timeline/tracks/audio-unit/HeadersArea"
+import {HeadersArea} from "@/ui/timeline/tracks/audio-unit/headers/HeadersArea"
 import {Icon} from "@/ui/components/Icon"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {MenuButton} from "@/ui/components/MenuButton"
@@ -68,6 +68,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
         <div className={className}>
             <HeadersArea lifecycle={lifecycle}
                          service={service}
+                         manager={manager}
                          scrollModel={scrollModel}/>
             <ClipsArea lifecycle={lifecycle}
                        service={service}
