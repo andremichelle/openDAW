@@ -33,7 +33,7 @@ export const DemoProjects = ({service}: Construct) => {
                    success={(tracks) => (
                        <div className="projects">
                            <DemoProject json={{
-                               id: "NEW",
+                               id: "",
                                hasCover: false,
                                metadata: {
                                    name: "Empty",
@@ -42,7 +42,7 @@ export const DemoProjects = ({service}: Construct) => {
                                    tags: ["clean slate"],
                                    created: "",
                                    modified: "",
-                                   coverMimeType: "svg"
+                                   coverMimeType: ""
                                }
                            }} load={() => service.newProject()}/>
                            {tracks.map(json => (
