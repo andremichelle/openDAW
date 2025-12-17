@@ -26,9 +26,7 @@ export const SearchInput = ({lifecycle, model, placeholder, style}: Construct) =
                            model.setValue(event.target.value)
                        }
                    }}
-                   onInit={input => {
-                       lifecycle.own(model.subscribe(owner => input.value = owner.getValue()))
-                   }}/>
+                   onInit={input => lifecycle.own(model.subscribe(owner => input.value = owner.getValue()))}/>
         </div>
     )
 }

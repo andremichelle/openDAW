@@ -11,7 +11,7 @@ export const Colors = {
     purple: new Color(314, 100, 78),
     bright: new Color(197, 0, 100),
     gray: new Color(197, 31, 85),
-    dark: new Color(197, 15, 62),
+    dark: new Color(197, 15, 57),
     shadow: new Color(197, 10, 38),
     black: new Color(197, 10, 14),
     background: new Color(197, 6, 5),
