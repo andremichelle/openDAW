@@ -1,5 +1,16 @@
 import css from "./ClipsArea.sass?inline"
-import {clamp, int, isNotNull, Lifecycle, Option, quantizeFloor, Selection, ValueAxis} from "@opendaw/lib-std"
+import {
+    clamp,
+    int,
+    isNotNull,
+    Lifecycle,
+    Option,
+    quantizeFloor,
+    RuntimeNotifier,
+    Selection,
+    Unhandled,
+    ValueAxis
+} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {AnyClipBoxAdapter, ClipAdapters, isVertexOfBox, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
@@ -78,30 +89,33 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
                     style.display = "none"
                     return false
                 }
+                const type = option.unwrap()
+                if (type === "instrument") {
+                    style.display = "none"
+                    return true
+                }
+                let x: number
+                let y: number
                 const target = capturing.captureEvent(event)
                 if (isNotNull(target)) {
+                    const trackBoxAdapter = target.track.trackBoxAdapter
                     if (target.type === "track") {
-                        const trackBoxAdapter = target.track.trackBoxAdapter
                         const clipIndex = target.clipIndex
-                        const x = clipIndex * ClipWidth
-                        const y = trackBoxAdapter.listIndex * ClipWidth - scrollContainer.scrollTop
-                        style.transform = `translate(${x}px, ${y}px)`
-                        style.display = "block"
+                        x = clipIndex * ClipWidth
                     } else if (target.type === "clip") {
-                        const trackBoxAdapter = target.track.trackBoxAdapter
                         const clipIndex = target.clip.indexField.getValue()
-                        const x = clipIndex * ClipWidth
-                        const y = trackBoxAdapter.listIndex * ClipWidth - scrollContainer.scrollTop
-                        style.transform = `translate(${x}px, ${y}px)`
-                        style.display = "block"
+                        x = clipIndex * ClipWidth
+                    } else {
+                        return Unhandled(target)
                     }
+                    y = trackBoxAdapter.listIndex * ClipWidth - scrollContainer.scrollTop
                 } else {
                     const rect = element.getBoundingClientRect()
-                    const x = quantizeFloor(event.clientX - rect.left, ClipWidth)
-                    const y = manager.tracksLocalBottom() - scrollContainer.scrollTop
-                    style.transform = `translate(${x}px, ${y}px)`
-                    style.display = "block"
+                    x = quantizeFloor(event.clientX - rect.left, ClipWidth)
+                    y = manager.tracksLocalBottom() - scrollContainer.scrollTop
                 }
+                style.transform = `translate(${x}px, ${y}px)`
+                style.display = "block"
                 return true
             },
             drop: (event: DragEvent, data: AnyDragData) => {
@@ -128,6 +142,12 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
                     const trackBoxAdapter = target.track.trackBoxAdapter
                     const clipIndex = target.clipIndex
                     switch (trackBoxAdapter.type) {
+                        case TrackType.Audio:
+                            RuntimeNotifier.info({
+                                headline: "Cannot Create Audio Clip",
+                                message: "Drag a sample from the sample-library or your hard-drive instead."
+                            }).finally()
+                            return
                         case TrackType.Notes:
                             return project.api.createNoteClip(trackBoxAdapter.box, clipIndex)
                         case TrackType.Value:
