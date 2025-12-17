@@ -8,9 +8,10 @@ import {Colors} from "@opendaw/studio-enums"
 export const showStoragePersistDialog = (): Promise<void> => {
     const {resolve, promise} = Promise.withResolvers<void>()
     const dialog: HTMLDialogElement = (
-        <Dialog headline="Firefox Must Allow Storage Access"
+        <Dialog headline="Firefox Denies Storage Access"
                 icon={IconSymbol.System}
                 cancelable={false}
+                growWidth={true}
                 buttons={[{
                     text: "Allow",
                     primary: true,
