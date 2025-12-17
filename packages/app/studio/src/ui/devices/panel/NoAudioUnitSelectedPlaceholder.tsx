@@ -14,7 +14,7 @@ type Construct = {
 
 export const NoAudioUnitSelectedPlaceholder = ({service}: Construct) => {
     return (
-        <div className={className}>
+        <div className={Html.buildClassList(className, "help-section")}>
             Empty Device Chain (Click track in
             <TextButton onClick={() => service.switchScreen("default")}>timeline</TextButton>
             or channel-strip in

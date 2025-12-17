@@ -8,10 +8,15 @@ import {TrackFactory, TracksManager} from "@/ui/timeline/tracks/audio-unit/Track
 import {Track} from "./Track"
 import {RegionsArea} from "./regions/RegionsArea.tsx"
 import {ClipsArea} from "./clips/ClipsArea.tsx"
-import {AudioUnitBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, InstrumentFactories, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
 import {ExtraSpace} from "./Constants.ts"
 import {HeadersArea} from "@/ui/timeline/tracks/audio-unit/HeadersArea"
+import {Icon} from "@/ui/components/Icon"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {MenuButton} from "@/ui/components/MenuButton"
+import {MenuItem} from "@/ui/model/menu-item"
+import {DefaultInstrumentFactory} from "@/ui/defaults/DefaultInstrumentFactory"
 
 const className = Html.adoptStyleSheet(css, "AudioUnitsTimeline")
 
@@ -26,7 +31,24 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
     const scrollContainer: HTMLElement = (
         <div className="scrollable">
             <div className="fill"/>
-            <div className="extra"/>
+            <div className="extra">
+                <div className="create-instrument">
+                    <MenuButton root={MenuItem.root()
+                        .setRuntimeChildrenProcedure(parent => parent
+                            .addMenuItem(...Object.entries(InstrumentFactories.Named).map(([_key, factory]) =>
+                                MenuItem.default({
+                                    label: factory.defaultName,
+                                    icon: factory.defaultIcon
+                                }).setTriggerProcedure(() => {
+                                    const {project: {api, editing}} = service
+                                    editing.modify(() => DefaultInstrumentFactory.create(api, factory))
+                                }))))}
+                                appearance={{color: Colors.shadow}}>
+                        <span>Add instrument</span> <Icon symbol={IconSymbol.Add}/>
+                    </MenuButton>
+                </div>
+                <div className="region-area help-section">Drop instruments or samples here</div>
+            </div>
         </div>
     )
     const factory: TrackFactory = {
