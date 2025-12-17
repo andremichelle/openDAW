@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/studio-core",
-    "version": "0.0.83",
+    "version": "0.0.84",
     "license": "LGPL-3.0-or-later",
     "publishConfig": {
         "access": "public"
@@ -31,16 +31,16 @@
         "test": "vitest run --config vitest.config.ts"
     },
     "dependencies": {
-        "@opendaw/lib-box": "^0.0.61",
-        "@opendaw/lib-dawproject": "^0.0.46",
-        "@opendaw/lib-dom": "^0.0.61",
-        "@opendaw/lib-dsp": "^0.0.60",
-        "@opendaw/lib-fusion": "^0.0.64",
-        "@opendaw/lib-runtime": "^0.0.60",
-        "@opendaw/lib-std": "^0.0.60",
-        "@opendaw/studio-adapters": "^0.0.69",
-        "@opendaw/studio-boxes": "^0.0.62",
-        "@opendaw/studio-enums": "^0.0.52",
+        "@opendaw/lib-box": "^0.0.62",
+        "@opendaw/lib-dawproject": "^0.0.47",
+        "@opendaw/lib-dom": "^0.0.62",
+        "@opendaw/lib-dsp": "^0.0.61",
+        "@opendaw/lib-fusion": "^0.0.65",
+        "@opendaw/lib-runtime": "^0.0.61",
+        "@opendaw/lib-std": "^0.0.61",
+        "@opendaw/studio-adapters": "^0.0.70",
+        "@opendaw/studio-boxes": "^0.0.63",
+        "@opendaw/studio-enums": "^0.0.53",
         "dropbox": "^10.34.0",
         "y-websocket": "^1.4.5",
         "yjs": "^13.6.27",
@@ -54,9 +54,9 @@
         "@ffmpeg/ffmpeg": "^0.12.15",
         "@ffmpeg/util": "^0.12.2",
         "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/studio-core-processors": "^0.0.71",
-        "@opendaw/studio-core-workers": "^0.0.64",
-        "@opendaw/studio-forge-boxes": "^0.0.62",
+        "@opendaw/studio-core-processors": "^0.0.72",
+        "@opendaw/studio-core-workers": "^0.0.65",
+        "@opendaw/studio-forge-boxes": "^0.0.63",
         "@opendaw/typescript-config": "^0.0.27"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"

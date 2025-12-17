@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/lib-xml",
-    "version": "0.0.46",
+    "version": "0.0.47",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
@@ -23,7 +23,7 @@
         "test": "echo \"No tests to run\""
     },
     "dependencies": {
-        "@opendaw/lib-std": "^0.0.60"
+        "@opendaw/lib-std": "^0.0.61"
     },
     "devDependencies": {
         "@opendaw/eslint-config": "^0.0.27",

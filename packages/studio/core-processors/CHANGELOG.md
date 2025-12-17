@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.72](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.71...@opendaw/studio-core-processors@0.0.72) (2025-12-17)
+
+**Note:** Version bump only for package @opendaw/studio-core-processors
+
 ## [0.0.71](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.70...@opendaw/studio-core-processors@0.0.71) (2025-12-10)
 
 **Note:** Version bump only for package @opendaw/studio-core-processors
