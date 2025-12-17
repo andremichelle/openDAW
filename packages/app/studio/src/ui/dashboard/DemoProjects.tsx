@@ -1,12 +1,14 @@
 import css from "./DemoProjects.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {Lifecycle} from "@opendaw/lib-std"
-import {Await, createElement, RouteLocation} from "@opendaw/lib-jsx"
+import {Lifecycle, Option, RuntimeNotifier} from "@opendaw/lib-std"
+import {Await, createElement} from "@opendaw/lib-jsx"
 import {Colors} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {DemoProjectJson} from "@/ui/dashboard/DemoProjectJson"
 import {DemoProject} from "@/ui/dashboard/DemoProject"
+import {network, Promises} from "@opendaw/lib-runtime"
+import {ProjectBundle} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "DemoProjects")
 
@@ -19,39 +21,61 @@ type Construct = {
 
 const listUrl = "https://api.opendaw.studio/music/list.php"
 
-export const DemoProjects = ({service}: Construct) => {
-    return (
-        <div className={className}>
-            <h3 style={{color: Colors.orange.toString()}}>Demo Projects</h3>
-            <Await factory={() => fetch(listUrl)
-                .then(res => res.json())
-                .then(res => res as TracksList)
-                .then(list => list.tracks
-                    .sort(({metadata: {modified: a}}, {metadata: {modified: b}}) => b.localeCompare(a)))}
-                   loading={() => ThreeDots()}
-                   failure={({retry}) => <span onclick={retry}>Retry</span>}
-                   success={(tracks) => (
-                       <div className="projects">
-                           <DemoProject json={{
-                               id: "",
-                               hasCover: false,
-                               metadata: {
-                                   name: "Empty",
-                                   artist: "openDAW",
-                                   description: "",
-                                   tags: ["clean slate"],
-                                   created: "",
-                                   modified: "",
-                                   coverMimeType: ""
-                               }
-                           }} load={() => service.newProject()}/>
-                           {tracks.map(json => (
-                               <DemoProject json={json}
-                                            load={() => RouteLocation.get()
-                                                .navigateTo(`/open-bundle/${json.id}`)}/>
-                           ))}
-                       </div>
-                   )}/>
-        </div>
-    )
+const NewProjectJson: DemoProjectJson = {
+    id: "",
+    hasCover: false,
+    metadata: {
+        name: "Empty",
+        artist: "openDAW",
+        description: "",
+        tags: ["clean slate"],
+        created: "",
+        modified: "",
+        coverMimeType: ""
+    }
 }
+
+const loadDemoProject = async (service: StudioService, json: DemoProjectJson) => {
+    const dialog = RuntimeNotifier.progress({headline: "Loading demo project..."})
+    const folder = json.id
+    const {status, value: arrayBuffer, error} = await Promises.tryCatch(
+        fetch(`https://api.opendaw.studio/music/uploads/${folder}/project.odb`)
+            .then(network.progress(progress => dialog.message = `Downloading Bundle... (${(progress * 100).toFixed(1)}%)`))
+            .then(x => x.arrayBuffer()))
+    dialog.terminate()
+    if (status === "rejected") {
+        return RuntimeNotifier.info({headline: "Could not load bundle file", message: String(error)})
+    } else {
+        const {
+            status,
+            value: profile,
+            error
+        } = await Promises.tryCatch(ProjectBundle.decode(service, arrayBuffer))
+        if (status === "rejected") {
+            return RuntimeNotifier.info({headline: "Could not decode bundle file", message: String(error)})
+        }
+        service.projectProfileService.setValue(Option.wrap(profile))
+        service.switchScreen("default")
+    }
+}
+
+export const DemoProjects = ({service}: Construct) => (
+    <div className={className}>
+        <h3 style={{color: Colors.orange.toString()}}>Demo Projects</h3>
+        <Await factory={() => fetch(listUrl)
+            .then(res => res.json())
+            .then(res => res as TracksList)
+            .then(list => list.tracks
+                .sort(({metadata: {modified: a}}, {metadata: {modified: b}}) => b.localeCompare(a)))}
+               loading={() => ThreeDots()}
+               failure={({retry}) => <span onclick={retry}>Retry</span>}
+               success={(tracks) => (
+                   <div className="projects">
+                       <DemoProject json={NewProjectJson} load={() => service.newProject()}/>
+                       {tracks.map(json => (
+                           <DemoProject json={json} load={() => loadDemoProject(service, json)}/>
+                       ))}
+                   </div>
+               )}/>
+    </div>
+)

@@ -18,7 +18,7 @@ function findTsFiles(dir, baseDir = dir) {
 
         if (stat.isDirectory()) {
             files.push(...findTsFiles(fullPath, baseDir));
-        } else if (item.endsWith('.ts') && !item.endsWith('.d.ts') && item !== 'index.ts') {
+        } else if (item.endsWith('.ts') && !item.endsWith('.d.ts') && !item.endsWith('.test.ts') && item !== 'index.ts') {
             const relativePath = path.relative(baseDir, fullPath).replace(/\\/g, '/').replace('.ts', '');
             files.push(relativePath);
         }
