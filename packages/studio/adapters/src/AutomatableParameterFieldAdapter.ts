@@ -142,7 +142,9 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
         return this.getValue()
     }
 
-    subscribe(observer: Observer<AutomatableParameterFieldAdapter<T>>): Subscription {return this.#valueChangeNotifier.subscribe(observer)}
+    subscribe(observer: Observer<AutomatableParameterFieldAdapter<T>>): Subscription {
+        return this.#valueChangeNotifier.subscribe(observer)
+    }
 
     catchupAndSubscribe(observer: Observer<AutomatableParameterFieldAdapter<T>>): Subscription {
         observer(this)

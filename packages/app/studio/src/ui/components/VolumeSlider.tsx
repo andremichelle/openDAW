@@ -1,11 +1,13 @@
 import css from "./VolumeSlider.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
-import {Lifecycle, Option, Parameter, Terminator, unitValue} from "@opendaw/lib-std"
+import {EmptyExec, Lifecycle, Option, Parameter, Strings, Terminator, unitValue} from "@opendaw/lib-std"
 import {ValueDragging} from "@/ui/hooks/dragging.ts"
 import {ValueTooltip} from "@/ui/surface/ValueTooltip.tsx"
 import {BoxEditing} from "@opendaw/lib-box"
-import {CssUtils, Html} from "@opendaw/lib-dom"
+import {CssUtils, Events, Html} from "@opendaw/lib-dom"
 import {Colors} from "@opendaw/studio-enums"
+import {Surface} from "@/ui/surface/Surface"
+import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
 
 const className = Html.adoptStyleSheet(css, "vertical-slider")
 
@@ -83,58 +85,79 @@ export const VolumeSlider = ({lifecycle, editing, parameter}: Construct) => {
     const thumb: HTMLElement = (<div className="thumb"/>)
     const wrapper: HTMLDivElement = (<div className={className} data-class="vertical-slider">{svg}{thumb}</div>)
     const dragLifecycle = lifecycle.own(new Terminator())
-    lifecycle.own(Html.watchResize(wrapper, () => {
-        if (!wrapper.isConnected) {return}
-        lineContainer.setAttribute("stroke-width", String(strokeWidth))
+    lifecycle.ownAll(
+        Html.watchResize(wrapper, () => {
+            if (!wrapper.isConnected) {return}
+            lineContainer.setAttribute("stroke-width", String(strokeWidth))
 
-        const {baseVal: rect} = svg.viewBox
-        const {clientWidth, clientHeight} = wrapper
-        rect.width = clientWidth
-        rect.height = clientHeight
-        const em = parseFloat(getComputedStyle(wrapper).fontSize)
+            const {baseVal: rect} = svg.viewBox
+            const {clientWidth, clientHeight} = wrapper
+            rect.width = clientWidth
+            rect.height = clientHeight
+            const em = parseFloat(getComputedStyle(wrapper).fontSize)
 
-        guide.x.baseVal.value = CssUtils.calc("50% - 0.0625em", clientWidth, em)
-        guide.y.baseVal.value = CssUtils.calc("1em - 1px", clientHeight, em)
-        guide.height.baseVal.value = CssUtils.calc("100% - 2em + 1.5px", clientHeight, em)
-        lines.forEach(line => {line.x2.baseVal.value = CssUtils.calc("50% - 0.0625em - 1px", clientWidth, em)})
-        lineContainer.height.baseVal.value = CssUtils.calc("100% - 2em", clientHeight, em)
+            guide.x.baseVal.value = CssUtils.calc("50% - 0.0625em", clientWidth, em)
+            guide.y.baseVal.value = CssUtils.calc("1em - 1px", clientHeight, em)
+            guide.height.baseVal.value = CssUtils.calc("100% - 2em + 1.5px", clientHeight, em)
+            lines.forEach(line => {line.x2.baseVal.value = CssUtils.calc("50% - 0.0625em - 1px", clientWidth, em)})
+            lineContainer.height.baseVal.value = CssUtils.calc("100% - 2em", clientHeight, em)
 
-        // attach a new dragging function with updated options
-        //
-        const snapLength = 8
-        const guideBounds = guide.getBoundingClientRect()
-        const trackLength = guideBounds.height
-        dragLifecycle.terminate()
-        dragLifecycle.own(ValueDragging.installUnitValueRelativeDragging((event: PointerEvent) => Option.wrap({
-            start: (): unitValue => {
-                if (event.target === thumb) {
-                    return parameter.getUnitValue()
-                } else {
-                    const startValue: unitValue = 1.0 - (event.clientY - guideBounds.top) / guideBounds.height
-                    editing.modify(() => parameter.setUnitValue(startValue), false)
-                    return startValue
-                }
-            },
-            modify: (value: unitValue) => editing.modify(() => parameter.setUnitValue(value), false),
-            cancel: (prevValue: unitValue) => editing.modify(() => parameter.setUnitValue(prevValue), false),
-            finalise: (_prevValue: unitValue, _newValue: unitValue): void => editing.mark(),
-            finally: (): void => {}
-        }), wrapper, {
-            trackLength: trackLength - snapLength,
-            snap: {snapLength, threshold: parameter.valueMapping.x(0.0)}
+            // attach a new dragging function with updated options
+            //
+            const snapLength = 8
+            const guideBounds = guide.getBoundingClientRect()
+            const trackLength = guideBounds.height
+            dragLifecycle.terminate()
+            dragLifecycle.own(ValueDragging.installUnitValueRelativeDragging((event: PointerEvent) => Option.wrap({
+                start: (): unitValue => {
+                    if (event.target === thumb) {
+                        return parameter.getUnitValue()
+                    } else {
+                        const newValue: unitValue = 1.0 - (event.clientY - guideBounds.top) / guideBounds.height
+                        editing.modify(() => parameter.setUnitValue(newValue), false)
+                        return newValue
+                    }
+                },
+                modify: (value: unitValue) => editing.modify(() => parameter.setUnitValue(value), false),
+                cancel: (prevValue: unitValue) => editing.modify(() => parameter.setUnitValue(prevValue), false),
+                finalise: (_prevValue: unitValue, _newValue: unitValue): void => editing.mark(),
+                finally: (): void => {}
+            }), wrapper, {
+                trackLength: trackLength - snapLength,
+                snap: {snapLength, threshold: parameter.valueMapping.x(0.0)},
+                ratio: 1.0
+            }))
         }))
-    }))
     const observer = (parameter: Parameter<number>) =>
-        wrapper.style.setProperty("--value", parameter.getUnitValue().toString())
-    lifecycle.own(parameter.subscribe(observer))
-    lifecycle.own(ValueTooltip.default(wrapper, () => {
-        const clientRect = thumb.getBoundingClientRect()
-        return ({
-            clientX: clientRect.left + clientRect.width + 8,
-            clientY: clientRect.top + clientRect.height + 8,
-            ...parameter.getPrintValue()
+        wrapper.style.setProperty("--value", parameter.getControlledUnitValue().toString())
+    lifecycle.ownAll(
+        parameter.subscribe(observer),
+        ValueTooltip.default(wrapper, () => {
+            const clientRect = thumb.getBoundingClientRect()
+            return ({
+                clientX: clientRect.left + clientRect.width + 8,
+                clientY: clientRect.top + clientRect.height + 8,
+                ...parameter.getPrintValue()
+            })
+        }),
+        Events.subscribeDblDwn(thumb, () => {
+            const rect = thumb.getBoundingClientRect()
+            const printValue = parameter.getPrintValue()
+            const resolvers = Promise.withResolvers<string>()
+            resolvers.promise.then(value => {
+                const withUnit = Strings.endsWithDigit(value) ? `${value}${printValue.unit}` : value
+                editing.modify(() => parameter.setPrintValue(withUnit))
+                editing.mark()
+            }, EmptyExec)
+            Surface.get(thumb).flyout.appendChild(
+                <FloatingTextInput position={{x: rect.left, y: rect.top + (rect.height >> 1)}}
+                                   value={printValue.value}
+                                   unit={printValue.unit}
+                                   numeric
+                                   resolvers={resolvers}/>
+            )
         })
-    }))
+    )
     observer(parameter)
     return wrapper
 }
