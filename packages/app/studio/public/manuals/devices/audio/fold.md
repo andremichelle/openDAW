@@ -28,8 +28,8 @@ Processing quality selector: **2x**, **4x**, or **8x**.
 
 Oversampling reduces aliasing artifacts caused by the nonlinear wavefolding process:
 
-- **2x**: Light oversampling, lowest CPU usage
-- **4x**: Good balance of quality and performance (default)
+- **2x**: Light oversampling, lowest CPU usage (default)
+- **4x**: Good balance of quality and performance
 - **8x**: Highest quality, best for extreme drive settings
 
 Higher oversampling is recommended when using high Drive values, as wavefolding generates many high-frequency harmonics that can alias back into the audible range.
