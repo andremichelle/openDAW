@@ -111,7 +111,10 @@ export const ProjectProfileInfo = ({lifecycle, service}: Construct) => {
                                         message: `Ensure all samples, soundfonts, and images are cleared of copyright.
                                     Publishing makes your entire track visible to everyone.
                                     Prepare proper metadata and upload a cover before starting.
-                                    You are responsible for all content you share.`
+                                    
+                                    You are responsible for all content you share.
+                                    
+                                    All music is then published under CC BY-NC-SA 4.0`
                                     })
                                     if (!approved) {return}
                                     const saveResult = await Promises.tryCatch(profile.save())
