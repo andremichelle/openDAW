@@ -4,7 +4,7 @@ A MIDI effect for shaping **note velocity**. Use it to push crescendos and swell
 
 ---
 
-![screenshot](../../../images/devices/midi/velocity.png)
+![screenshot](velocity.png)
 
 ---
 

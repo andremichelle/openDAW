@@ -20,10 +20,21 @@ export const Manuals: ReadonlyArray<Manual> = [
     {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"},
     {type: "page", label: "Dev Log", path: "/manuals/dev-log"},
     {
-        type: "folder", label: "Devices", files: [{
-            type: "folder", label: "MIDI FX", files: [
-                {type: "page", label: "Velocity", path: "/manuals/devices/midi/velocity"}
-            ]
-        }]
+        type: "folder", label: "Devices", files: [
+            {
+                type: "folder", label: "Instruments", files: [
+                    {type: "page", label: "MIDIOutput", path: "/manuals/devices/instruments/midioutput"},
+                    {type: "page", label: "Nano", path: "/manuals/devices/instruments/nano"},
+                    {type: "page", label: "Playfield", path: "/manuals/devices/instruments/playfield"},
+                    {type: "page", label: "Tape", path: "/manuals/devices/instruments/tape"},
+                    {type: "page", label: "Vaporisateur", path: "/manuals/devices/instruments/vaporisateur"}
+                ]
+            },
+            {
+                type: "folder", label: "MIDI FX", files: [
+                    {type: "page", label: "Velocity", path: "/manuals/devices/midi/velocity"}
+                ]
+            }
+        ]
     }
 ]
