@@ -96,15 +96,15 @@ export class BoxEditing implements Editing {
             return Option.wrap(modifier())
         }
         if (mark && this.#pending.length > 0) {this.mark()}
-        this.#graph.beginTransaction()
         this.#modifying = true
         const updates: Array<Update> = []
         const subscription = this.#graph.subscribeToAllUpdates({
             onUpdate: (update: Update) => updates.push(update)
         })
+        this.#graph.beginTransaction()
         const result = modifier()
-        subscription.terminate()
         this.#graph.endTransaction()
+        subscription.terminate()
         if (updates.length > 0) {
             this.#pending.push(new Modification(updates))
         }
@@ -116,13 +116,13 @@ export class BoxEditing implements Editing {
 
     beginModification(): ModificationProcess {
         assert(!this.#modifying && !this.#inProcess, "Cannot begin modification while another is in progress")
-        this.#graph.beginTransaction()
         this.#modifying = true
         this.#inProcess = true
         const updates: Array<Update> = []
         const subscription = this.#graph.subscribeToAllUpdates({
             onUpdate: (update: Update) => updates.push(update)
         })
+        this.#graph.beginTransaction()
         return {
             approve: () => {
                 this.#graph.endTransaction()

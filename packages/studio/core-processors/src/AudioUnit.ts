@@ -52,7 +52,6 @@ export class AudioUnit implements Terminable {
     get adapter(): AudioUnitBoxAdapter {return this.#adapter}
 
     terminate(): void {
-        console.debug(`terminate ${this}`)
         this.#terminator.terminate()
         this.#input.ifSome(input => input.terminate())
         this.#input = Option.None
