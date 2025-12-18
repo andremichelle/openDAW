@@ -12,7 +12,9 @@ type Construct = {
 }
 
 export const DemoProject = ({json, load}: Construct) => {
-    const coverUrl = json.hasCover ? `https://api.opendaw.studio/music/cover.php?id=${json.id}` : "./empty.svg"
+    const coverUrl = json.hasCover
+        ? `https://api.opendaw.studio/music/cover.php?id=${json.id}&preview=true`
+        : "./empty.svg"
     return (
         <div className={className} onclick={load}>
             <img src={coverUrl} alt="cover" crossOrigin="anonymous"/>
