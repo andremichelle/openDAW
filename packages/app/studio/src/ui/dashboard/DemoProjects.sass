@@ -9,3 +9,11 @@ component
     flex-direction: column
     row-gap: 1px
     overflow: hidden auto
+
+    &:after
+      content: ""
+      width: 100%
+      min-height: 8px
+      bottom: 0
+      position: sticky
+      background: linear-gradient(to bottom, transparent, var(--color-panel-background))
