@@ -30,7 +30,7 @@ export const PropertyHeader = ({lifecycle, propertyOwner}: Construct) => {
                       mapping={property => (property.label)}
                       owner={propertyOwner}
                       provider={() => NotePropertyAccessors}
-                      width="3.5rem"/>
+                      width="48px"/>
             <div className="range-labels">
                 <span>{maxValue}</span>
                 <hr/>
