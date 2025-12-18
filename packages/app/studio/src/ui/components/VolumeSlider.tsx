@@ -113,9 +113,9 @@ export const VolumeSlider = ({lifecycle, editing, parameter}: Construct) => {
                     if (event.target === thumb) {
                         return parameter.getUnitValue()
                     } else {
-                        const startValue: unitValue = 1.0 - (event.clientY - guideBounds.top) / guideBounds.height
-                        editing.modify(() => parameter.setUnitValue(startValue), false)
-                        return startValue
+                        const newValue: unitValue = 1.0 - (event.clientY - guideBounds.top) / guideBounds.height
+                        editing.modify(() => parameter.setUnitValue(newValue), false)
+                        return newValue
                     }
                 },
                 modify: (value: unitValue) => editing.modify(() => parameter.setUnitValue(value), false),
@@ -124,7 +124,8 @@ export const VolumeSlider = ({lifecycle, editing, parameter}: Construct) => {
                 finally: (): void => {}
             }), wrapper, {
                 trackLength: trackLength - snapLength,
-                snap: {snapLength, threshold: parameter.valueMapping.x(0.0)}
+                snap: {snapLength, threshold: parameter.valueMapping.x(0.0)},
+                ratio: 1.0
             }))
         }))
     const observer = (parameter: Parameter<number>) =>
