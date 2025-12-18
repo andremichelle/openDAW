@@ -1,4 +1,4 @@
-# Reverb
+# Cheap Reverb
 
 A lightweight algorithmic reverb based on the classic Freeverb design.
 
