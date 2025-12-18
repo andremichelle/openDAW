@@ -125,7 +125,7 @@ export const VolumeSlider = ({lifecycle, editing, parameter}: Construct) => {
         }))
     }))
     const observer = (parameter: Parameter<number>) =>
-        wrapper.style.setProperty("--value", parameter.getUnitValue().toString())
+        wrapper.style.setProperty("--value", parameter.getControlledUnitValue().toString())
     lifecycle.own(parameter.subscribe(observer))
     lifecycle.own(ValueTooltip.default(wrapper, () => {
         const clientRect = thumb.getBoundingClientRect()
