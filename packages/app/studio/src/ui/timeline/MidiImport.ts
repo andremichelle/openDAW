@@ -28,15 +28,17 @@ export namespace MidiImport {
             if (!Errors.isAbort(fileResult.error)) {throw fileResult.error}
             return
         }
+        const progress = new DefaultObservableValue(0.0)
+        const dialog = RuntimeNotifier.progress({headline: "Import Midi", progress})
+        await Wait.frame()
         const formatResult = tryCatch(() => MidiFile.decoder(fileResult.value).decode())
         if (formatResult.status === "failure") {
+            dialog.terminate()
             Dialogs.info({message: String(formatResult.error)}).then()
             return
         }
         const {value: format} = formatResult
         const {boxGraph, editing} = project
-        const progress = new DefaultObservableValue(0.0)
-        const dialog = RuntimeNotifier.progress({headline: "Import Midi", progress})
         let reuseTrackBox: Maybe<TrackBox> = Arrays.peekLast(audioUnitBoxAdapter.tracks.collection.adapters())?.box
         let trackIndex: int = 0
         if (isDefined(reuseTrackBox)) {

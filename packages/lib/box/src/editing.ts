@@ -1,5 +1,5 @@
 import {BoxGraph} from "./graph"
-import {Arrays, assert, Editing, int, Maybe, Option, Provider, SyncProvider} from "@opendaw/lib-std"
+import {Arrays, assert, Editing, int, Maybe, Option, SyncProvider} from "@opendaw/lib-std"
 import {Update} from "./updates"
 
 class Modification {
@@ -31,6 +31,7 @@ export class BoxEditing implements Editing {
     readonly #marked: Array<ReadonlyArray<Modification>> = []
 
     #modifying: boolean = false
+    #inProcess: boolean = false
     #disabled: boolean = false
     #historyIndex: int = 0
     #savedHistoryIndex: int = 0 // -1 = saved state was spliced away, >= 0 = valid saved position
@@ -89,53 +90,62 @@ export class BoxEditing implements Editing {
     mustModify(): boolean {return !this.#graph.inTransaction()}
 
     modify<R>(modifier: SyncProvider<Maybe<R>>, mark: boolean = true): Option<R> {
+        assert(!this.#inProcess, "Cannot call modify while a modification process is running")
         if (this.#modifying) {
-            // we just keep adding new pending updates
+            // Nested modify call - just execute without separate recording
             return Option.wrap(modifier())
         }
         if (mark && this.#pending.length > 0) {this.mark()}
-        const result = Option.wrap(this.#modify(modifier))
-        if (mark) {this.mark()}
-        return result
-    }
-
-    beginModification(): ModificationProcess {
-        const alreadyIntransaction = this.#graph.inTransaction()
-        if (!alreadyIntransaction) {
-            this.#graph.beginTransaction()
-        }
-        this.#modifying = true
-        const complete = () => {
-            this.#modifying = false
-            if (!alreadyIntransaction) {
-                this.#graph.endTransaction()
-                this.#graph.edges().validateRequirements()
-            }
-        }
-        return {
-            approve: complete,
-            revert: () => {
-                this.clearPending()
-                complete()
-            }
-        }
-    }
-
-    #modify<R>(modifier: Provider<Maybe<R>>): Maybe<R> {
-        assert(!this.#modifying, "Already modifying")
+        this.#graph.beginTransaction()
         this.#modifying = true
         const updates: Array<Update> = []
-        const subscription = this.#graph.subscribeToAllUpdates({onUpdate: (update: Update) => {updates.push(update)}})
-        this.#graph.beginTransaction()
+        const subscription = this.#graph.subscribeToAllUpdates({
+            onUpdate: (update: Update) => updates.push(update)
+        })
         const result = modifier()
+        subscription.terminate()
         this.#graph.endTransaction()
         if (updates.length > 0) {
             this.#pending.push(new Modification(updates))
         }
-        subscription.terminate()
         this.#modifying = false
         this.#graph.edges().validateRequirements()
-        return result
+        if (mark) {this.mark()}
+        return Option.wrap(result)
+    }
+
+    beginModification(): ModificationProcess {
+        assert(!this.#modifying && !this.#inProcess, "Cannot begin modification while another is in progress")
+        this.#graph.beginTransaction()
+        this.#modifying = true
+        this.#inProcess = true
+        const updates: Array<Update> = []
+        const subscription = this.#graph.subscribeToAllUpdates({
+            onUpdate: (update: Update) => updates.push(update)
+        })
+        return {
+            approve: () => {
+                this.#graph.endTransaction()
+                subscription.terminate()
+                if (updates.length > 0) {
+                    this.#pending.push(new Modification(updates))
+                }
+                this.#modifying = false
+                this.#inProcess = false
+                this.#graph.edges().validateRequirements()
+                this.mark()
+            },
+            revert: () => {
+                this.#graph.endTransaction()
+                subscription.terminate()
+                this.#modifying = false
+                this.#inProcess = false
+                this.#graph.edges().validateRequirements()
+                if (updates.length > 0) {
+                    new Modification(updates).inverse(this.#graph)
+                }
+            }
+        }
     }
 
     mark(): void {

@@ -87,7 +87,7 @@ export const installTrackHeaderMenu = (service: StudioService,
             .setTriggerProcedure(() => trackBoxAdapter.regions.collection.asArray()
                 .forEach(region => selection.select(region.box))),
         MenuItem.default({
-            label: "Import Midi...",
+            label: "Import MIDI File...",
             hidden: !acceptMidi,
             separatorBefore: true
         }).setTriggerProcedure(() => MidiImport.toTracks(project, audioUnitBoxAdapter)),
