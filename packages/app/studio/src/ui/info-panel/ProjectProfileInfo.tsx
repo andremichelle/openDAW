@@ -101,6 +101,11 @@ export const ProjectProfileInfo = ({lifecycle, service}: Construct) => {
                     <div style={{display: "flex", columnGap: "1em"}}>
                         <Button lifecycle={lifecycle}
                                 onClick={async () => {
+                                    // Save current input values before dialog steals focus
+                                    profile.updateMetaData("name", inputName.value)
+                                    profile.updateMetaData("artist", inputArtist.value)
+                                    profile.updateMetaData("tags", inputTags.value.split(",").map(x => x.trim()))
+                                    profile.updateMetaData("description", inputDescription.value)
                                     const approved = await RuntimeNotifier.approve({
                                         headline: "Publish Your Music",
                                         message: `Ensure all samples, soundfonts, and images are cleared of copyright.
