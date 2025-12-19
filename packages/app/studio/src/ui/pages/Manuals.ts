@@ -12,6 +12,7 @@ export const Manuals: ReadonlyArray<Manual> = [
     {type: "page", label: "Browser Support", path: "/manuals/browser-support"},
     {type: "page", label: "Cloud Backup", path: "/manuals/cloud-backup"},
     {type: "page", label: "Recording", path: "/manuals/recording"},
+    {type: "page", label: "Mixer", path: "/manuals/mixer"},
     {type: "page", label: "Keyboard Shortcuts", path: "/manuals/keyboard-shortcuts"},
     {type: "page", label: "Private File System", path: "/manuals/private-file-system"},
     {type: "page", label: "Firefox Midi", path: "/manuals/firefox-midi"},
