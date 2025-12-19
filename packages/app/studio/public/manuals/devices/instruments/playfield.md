@@ -34,7 +34,8 @@ Each pad displays:
 - **Note**: MIDI note assignment (e.g., C3, D#4)
 - **M** (Mute): Silences the pad
 - **S** (Solo): Solos the pad, muting all others
-- **E** (Edit): Opens the sample editor. Highlighted orange when audio effects are applied.
+- **E** (Exclusive): Enables exclusive group mode. When active, triggering this pad stops other exclusive pads.
+- **Target icon**: Opens the sample editor. Highlighted orange when audio effects are applied.
 
 ### 1.2 Loading Samples
 
@@ -56,7 +57,7 @@ Use the octave selector to view different octave ranges. Each octave shows 12 pa
 
 ## 2. Sample Editor
 
-Click the **E** button on any pad to open the detailed sample editor.
+Click the **target icon** on any pad to open the detailed sample editor.
 
 ---
 
