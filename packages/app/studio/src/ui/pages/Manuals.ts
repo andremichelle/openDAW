@@ -1,4 +1,4 @@
-export type Manual = {
+export type Manual = ({
     type: "page"
     label: string
     path: string
@@ -6,20 +6,18 @@ export type Manual = {
     type: "folder"
     label: string
     files: ReadonlyArray<Manual>
-}
+}) & { separatorBefore?: boolean }
 
 export const Manuals: ReadonlyArray<Manual> = [
     {type: "page", label: "Browser Support", path: "/manuals/browser-support"},
+    {type: "page", label: "Keyboard Shortcuts", path: "/manuals/keyboard-shortcuts"},
     {type: "page", label: "Cloud Backup", path: "/manuals/cloud-backup"},
     {type: "page", label: "Recording", path: "/manuals/recording"},
     {type: "page", label: "Mixer", path: "/manuals/mixer"},
-    {type: "page", label: "Keyboard Shortcuts", path: "/manuals/keyboard-shortcuts"},
     {type: "page", label: "Private File System", path: "/manuals/private-file-system"},
     {type: "page", label: "Firefox Midi", path: "/manuals/firefox-midi"},
     {type: "page", label: "Permissions", path: "/manuals/permissions"},
-    {type: "page", label: "Tech Stack", path: "/manuals/tech-stack"},
     {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"},
-    {type: "page", label: "Dev Log", path: "/manuals/dev-log"},
     {
         type: "folder", label: "Devices", files: [
             {
@@ -54,5 +52,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                 ]
             }
         ]
-    }
+    },
+    {type: "page", label: "Tech Stack", path: "/manuals/tech-stack", separatorBefore: true},
+    {type: "page", label: "Dev Log", path: "/manuals/dev-log"}
 ]

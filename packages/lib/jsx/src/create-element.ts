@@ -89,7 +89,7 @@ const transferAttributes = (element: DomElement, attributes: Readonly<Record<str
             if (value instanceof Inject.ClassList) {
                 value.addTarget(element)
             } else {
-                element.classList.add(...(<string>value).split(" "))
+                element.classList.add(...(<string>value).split(" ").filter(x => x !== ""))
             }
         } else if (key === "style") {
             if (typeof value === "string") {

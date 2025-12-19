@@ -1,5 +1,5 @@
 import css from "./ManualPage.sass?inline"
-import {Await, createElement, LocalLink, PageContext, PageFactory} from "@opendaw/lib-jsx"
+import {Await, createElement, Frag, LocalLink, PageContext, PageFactory} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {BackButton} from "@/ui/pages/BackButton"
@@ -14,13 +14,21 @@ const className = Html.adoptStyleSheet(css, "ManualPage")
 
 const addManuals = (manuals: ReadonlyArray<Manual>): ReadonlyArray<MenuItem> => manuals.map(manual => {
     if (manual.type === "page") {
-        return <LocalLink href={manual.path}>{manual.label}</LocalLink>
+        return (
+            <Frag>
+                {manual.separatorBefore && <hr/>}
+                <LocalLink href={manual.path}>{manual.label}</LocalLink>
+            </Frag>
+        )
     } else if (manual.type === "folder") {
         return (
-            <details open>
-                <summary>{manual.label}</summary>
-                <nav>{...addManuals(manual.files)}</nav>
-            </details>
+            <Frag>
+                {manual.separatorBefore && <hr/>}
+                <details open>
+                    <summary>{manual.label}</summary>
+                    <nav>{...addManuals(manual.files)}</nav>
+                </details>
+            </Frag>
         )
     } else {
         return panic()

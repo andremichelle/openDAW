@@ -2,9 +2,10 @@ import {TerminatorUtils} from "@opendaw/lib-dom"
 import {createElement} from "../create-element"
 import {RouteLocation, RouteMatcher} from "../routes"
 
-export const LocalLink = ({href}: { href: string }) => TerminatorUtils
+export const LocalLink = ({href, className}: { href: string, className?: string }) => TerminatorUtils
     .watchWeak<HTMLAnchorElement>(
         <a href={href}
+           className={className}
            onclick={(event: Event) => {
                event.preventDefault()
                RouteLocation.get().navigateTo(href)
