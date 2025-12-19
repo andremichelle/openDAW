@@ -57,7 +57,7 @@ Use the octave selector to view different octave ranges. Each octave shows 12 pa
 
 ## 2. Sample Editor
 
-Click the **target icon** on any pad to open the detailed sample editor.
+Click the {icon:Focus} icon on any pad to open the detailed sample editor.
 
 ---
 

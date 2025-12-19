@@ -4,6 +4,8 @@ import {isDefined} from "@opendaw/lib-std"
 import {createElement, RouteLocation} from "@opendaw/lib-jsx"
 import markdownit from "markdown-it"
 import {markdownItTable} from "markdown-it-table"
+import {IconSymbol} from "@opendaw/studio-enums"
+import {Icon} from "@/ui/components/Icon"
 
 const className = Html.adoptStyleSheet(css, "Markdown")
 
@@ -43,6 +45,37 @@ export const renderMarkdown = (element: HTMLElement, text: string) => {
             }
         }
     })
+    // Replace {icon:Name} with Icon components
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    const iconPattern = /\{icon:(\w+)\}/g
+    const nodesToReplace: Array<{ node: Text, matches: Array<{ match: string, name: string, index: number }> }> = []
+    let node: Text | null
+    while ((node = walker.nextNode() as Text | null)) {
+        const matches: Array<{ match: string, name: string, index: number }> = []
+        let match: RegExpExecArray | null
+        while ((match = iconPattern.exec(node.textContent ?? "")) !== null) {
+            matches.push({match: match[0], name: match[1], index: match.index})
+        }
+        if (matches.length > 0) {nodesToReplace.push({node, matches})}
+    }
+    for (const {node, matches} of nodesToReplace) {
+        const parent = node.parentNode
+        if (!parent) {continue}
+        const text = node.textContent ?? ""
+        let lastIndex = 0
+        const fragment = document.createDocumentFragment()
+        for (const {match, name, index} of matches) {
+            if (index > lastIndex) {
+                fragment.appendChild(document.createTextNode(text.slice(lastIndex, index)))
+            }
+            fragment.appendChild(<Icon symbol={IconSymbol.fromName(name)} className="icon"/>)
+            lastIndex = index + match.length
+        }
+        if (lastIndex < text.length) {
+            fragment.appendChild(document.createTextNode(text.slice(lastIndex)))
+        }
+        parent.replaceChild(fragment, node)
+    }
 }
 
 export const Markdown = ({text}: Construct) => {
