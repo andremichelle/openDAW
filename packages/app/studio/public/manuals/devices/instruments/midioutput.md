@@ -52,7 +52,7 @@ MIDI channel for note and CC output (1-16). Set this to match the channel your e
 
 ## 3. CC Parameters
 
-Click the **+ CC** button to add Control Change parameters for automating external gear.
+Click the **{icon:Add} CC** button to add Control Change parameters for automating external gear.
 
 Each CC parameter displays:
 

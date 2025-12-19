@@ -29,13 +29,13 @@ The main interface showing all sample pads in a 4x3 grid (one octave).
 
 Each pad displays:
 
-- **Header**: Play icon and sample name (click to preview)
+- **Header**: {icon:Play} icon and sample name (click to preview)
 - **Waveform**: Visual representation of the sample with playback position
 - **Note**: MIDI note assignment (e.g., C3, D#4)
 - **M** (Mute): Silences the pad
 - **S** (Solo): Solos the pad, muting all others
 - **E** (Exclusive): Enables exclusive group mode. When active, triggering this pad stops other exclusive pads.
-- **Target icon**: Opens the sample editor. Highlighted orange when audio effects are applied.
+- {icon:Focus} Opens the sample editor. Highlighted orange when audio effects are applied.
 
 ### 1.2 Loading Samples
 
@@ -47,7 +47,7 @@ Each pad displays:
 
 ### 1.3 Previewing
 
-Click the header area (play icon + name) to trigger the sample. Release to stop (respects gate settings).
+Click the header area ({icon:Play} + name) to trigger the sample. Release to stop (respects gate settings).
 
 ### 1.4 Octave Navigation
 

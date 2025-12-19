@@ -35,7 +35,7 @@ Fade-out time after note-off. Longer values let the sample ring out; shorter val
 
 ## 2. Sample Zone
 
-The bottom area displays the loaded sample name and a waveform icon.
+The bottom area displays the loaded sample name and a {icon:Waveform} icon.
 
 - **Click**: Browse for a sample
 - **Drag & drop**: Drop an audio file directly onto the zone

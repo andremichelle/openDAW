@@ -26,7 +26,7 @@ Below are the **authoritative control descriptions**, merged from the latest UI 
 ## 1.1 Velocity Window
 Visualizes how programmed note velocity (from the piano roll) is transformed by this effect. The window spans MIDI **0–127** from left (soft) to right (hard). The **magnet** appears as a dot indicating the current target velocity.
 
-## 1.2 Magnetization (Magnet Icon)
+## 1.2 Magnetization {icon:Magnet}
 Controls that attract velocities toward a target value.
 
 ### 1.2.1 Position (Target Velocity)
@@ -38,7 +38,7 @@ Sets the target location for the magnet. Adjustable **0–100%** left→right, m
 - **100%** = velocities are overridden to the magnet’s position.  
 - Intermediate values pull proportionally toward the target.
 
-## 1.3 Humanization (Dice Icon)
+## 1.3 Humanization {icon:Random}
 Controls that introduce randomized, human-like variation.
 
 ### 1.3.1 Amount
@@ -47,7 +47,7 @@ Depth of randomization **0–100%** (higher = more per‑note variation around t
 ### 1.3.2 Seed
 Random generator seed.
 
-## 1.4 Offset (Plus Icon)
+## 1.4 Offset {icon:Add}
 Applies a fixed velocity shift **after** magnetization and before clamping.
 
 ### 1.4.1 Offset
