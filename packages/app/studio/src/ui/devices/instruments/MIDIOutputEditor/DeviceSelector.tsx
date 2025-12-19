@@ -22,7 +22,6 @@ import {Html} from "@opendaw/lib-dom"
 import {NumberInput} from "@/ui/components/NumberInput"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Icon} from "@/ui/components/Icon"
-import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 
 const className = Html.adoptStyleSheet(css, "DeviceSelector")
 
@@ -139,7 +138,7 @@ export const DeviceSelector = ({lifecycle, project, adapter}: Construct) => {
                 />
                 <div/>
                 <span>Send Transport:</span>
-                <Checkbox lifecycle={lifecycle} model={EditWrapper.forValue(editing, sendTransportMessages)}>
+                <Checkbox lifecycle={lifecycle} model={sendTransportMessages}>
                     <Icon symbol={IconSymbol.Checkbox}/>
                 </Checkbox>
             </div>
