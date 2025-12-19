@@ -28,10 +28,18 @@ export abstract class Storage<ITEM extends { uuid: UUID.String } & META, META, N
 
     async list(): Promise<ReadonlyArray<ITEM>> {
         return Workers.Opfs.list(this.folder)
-            .then(files => Promise.all(files.filter(file => file.kind === "directory")
-                .map(async ({name}) => {
-                    const array = await Workers.Opfs.read(`${this.folder}/${name}/meta.json`)
-                    return {uuid: name as UUID.String, ...JSON.parse(new TextDecoder().decode(array))}
-                })), () => [])
+            .then(async files => {
+                const results = await Promise.all(files.filter(file => file.kind === "directory")
+                    .map(async ({name}) => {
+                        try {
+                            const array = await Workers.Opfs.read(`${this.folder}/${name}/meta.json`)
+                            return {uuid: name as UUID.String, ...JSON.parse(new TextDecoder().decode(array))}
+                        } catch (e) {
+                            console.warn(`Skipping corrupted entry: ${this.folder}/${name}`, e)
+                            return null
+                        }
+                    }))
+                return results.filter((item): item is ITEM => item !== null)
+            }, () => [])
     }
 }
