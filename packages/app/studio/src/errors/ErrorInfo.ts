@@ -17,7 +17,24 @@ export namespace ErrorInfo {
 
     const fromUnknown = (value: unknown, name: string): ErrorInfo => {
         if (value instanceof Error) {return fromError(value, name)}
-        return {name, message: typeof value === "string" ? value : JSON.stringify(value)}
+        // Capture synthetic stack for non-Error rejections to help locate the source
+        const syntheticStack = new Error().stack?.split("\n").slice(3).join("\n")
+        const type = value === null ? "null" : typeof value
+        let message: string
+        if (value === undefined) {
+            message = "(rejected with undefined)"
+        } else if (value === null) {
+            message = "(rejected with null)"
+        } else if (typeof value === "string") {
+            message = value
+        } else {
+            try {
+                message = `(${type}) ${JSON.stringify(value)}`
+            } catch {
+                message = `(${type}) [unserializable]`
+            }
+        }
+        return {name, message, stack: syntheticStack}
     }
 
     export const extract = (event: Event): ErrorInfo => {
