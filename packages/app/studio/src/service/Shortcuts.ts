@@ -46,6 +46,7 @@ export class Shortcuts {
                 event.preventDefault()
             } else if (code === "KeyD") {
                 if (Keyboard.isControlKey(event)) {
+                    if (!service.hasProfile) {return}
                     const {project: {editing, userEditingManager, skeleton}} = service
                     userEditingManager.audioUnit.get().ifSome(({box}) => {
                         const audioUnitBox = asInstanceOf(box, AudioUnitBox)
