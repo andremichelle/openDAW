@@ -36,7 +36,8 @@ export const ZeitgeistDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                   editing,
                                   midiLearning,
                                   adapter,
-                                  parameter: amount
+                                  parameter: amount,
+                                  anchor: 0.5
                               })}
                               {ControlBuilder.createKnob({
                                   lifecycle,
