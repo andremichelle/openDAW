@@ -8,6 +8,7 @@ component
   grid-template-columns: auto 1fr
   column-gap: 1em
   overflow: hidden
+  line-height: 1em
   @include colors.panel-background
 
   > aside
@@ -17,23 +18,32 @@ component
     overflow: hidden auto
     padding-right: 3em
 
-    nav
+    > nav
       display: flex
       flex-direction: column
       row-gap: 0.25em
       font-size: 0.75rem
-      line-height: 1.375em
 
-      nav
-        color: var(--color-dark)
-        padding-bottom: 0.25em
+      details
+        summary
+          color: var(--color-dark)
+          list-style: none
 
-      nav nav, nav a
-        padding-left: 1.5em
+          &::before
+            content: "▸ "
+            display: inline-block
+            width: 1em
+
+        &[open] > summary::before
+          content: "▾ "
+
+        nav
+          padding: 0 1em
 
       a
         display: block
         color: var(--color-dark)
+        padding-left: 1em
 
         &:hover
           color: var(--color-bright)
@@ -57,6 +67,7 @@ component
       color: var(--color-cream)
 
     div.markdown
+      padding: 1em 0 0 0
       max-width: 50rem
       font-size: 0.875rem
 

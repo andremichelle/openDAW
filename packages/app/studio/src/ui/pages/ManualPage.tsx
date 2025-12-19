@@ -17,10 +17,10 @@ const addManuals = (manuals: ReadonlyArray<Manual>): ReadonlyArray<MenuItem> => 
         return <LocalLink href={manual.path}>{manual.label}</LocalLink>
     } else if (manual.type === "folder") {
         return (
-            <nav>
-                <div>• {manual.label}</div>
-                <div>{...addManuals(manual.files)}</div>
-            </nav>
+            <details open>
+                <summary>{manual.label}</summary>
+                <nav>{...addManuals(manual.files)}</nav>
+            </details>
         )
     } else {
         return panic()
