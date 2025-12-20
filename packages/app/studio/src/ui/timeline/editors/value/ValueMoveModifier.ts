@@ -2,7 +2,6 @@ import {
     Arrays,
     asDefined,
     assert,
-    clamp,
     int,
     Notifier,
     Nullable,
@@ -12,7 +11,8 @@ import {
     Selection,
     Terminable,
     unitValue,
-    ValueAxis
+    ValueAxis,
+    ValueMapping
 } from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {BoxEditing} from "@opendaw/lib-box"
@@ -31,6 +31,7 @@ type Construct = Readonly<{
     context: ValueContext
     selection: Selection<ValueEventBoxAdapter>
     valueAxis: ValueAxis
+    eventMapping: ValueMapping<number>
     snapping: Snapping
     pointerPulse: ppqn
     pointerValue: unitValue
@@ -39,7 +40,7 @@ type Construct = Readonly<{
 }>
 
 type SnapGuide = {
-    value: unitValue
+    value: number
     index: int
     position: number
 }
@@ -53,6 +54,7 @@ export class ValueMoveModifier implements ValueModifier {
     readonly #context: ValueContext
     readonly #selection: Selection<ValueEventBoxAdapter>
     readonly #valueAxis: ValueAxis
+    readonly #eventMapping: ValueMapping<number>
     readonly #snapping: Snapping
     readonly #pointerPulse: ppqn
     readonly #pointerValue: unitValue
@@ -61,22 +63,23 @@ export class ValueMoveModifier implements ValueModifier {
 
     readonly #notifier: Notifier<void>
     readonly #masks: ReadonlyArray<[ppqn, ppqn]>
-    readonly #snapValues: ReadonlyArray<unitValue>
+    readonly #snapValues: ReadonlyArray<number>
 
     #copy: boolean
     #freezeMode: boolean
     #deltaValue: number
     #deltaPosition: ppqn
-    #snapValue: Option<unitValue>
+    #snapValue: Option<number>
 
     private constructor({
-                            element, context, selection, valueAxis, snapping,
+                            element, context, selection, valueAxis, eventMapping, snapping,
                             pointerPulse, pointerValue, reference, collection
                         }: Construct) {
         this.#element = element
         this.#context = context
         this.#selection = selection
         this.#valueAxis = valueAxis
+        this.#eventMapping = eventMapping
         this.#snapping = snapping
         this.#pointerPulse = pointerPulse
         this.#pointerValue = pointerValue
@@ -97,7 +100,7 @@ export class ValueMoveModifier implements ValueModifier {
     subscribeUpdate(observer: Observer<void>): Terminable {return this.#notifier.subscribe(observer)}
 
     showOrigin(): boolean {return this.#copy}
-    snapValue(): Option<unitValue> {return this.#snapValue}
+    snapValue(): Option<number> {return this.#snapValue}
     translateSearch(value: ppqn): ppqn {return value - this.#deltaPosition}
     isVisible(event: ValueEvent): boolean {
         const deltaPosition = this.#deltaPosition
@@ -111,7 +114,9 @@ export class ValueMoveModifier implements ValueModifier {
         return true
     }
     readPosition(adapter: ValueEvent): ppqn {return adapter.position + this.#deltaPosition}
-    readValue(event: ValueEvent): unitValue {return clamp(event.value + this.#deltaValue, 0.0, 1.0)}
+    readValue(event: ValueEvent): number {
+        return this.#eventMapping.y(this.#eventMapping.x(event.value) + this.#deltaValue)
+    }
     readInterpolation(event: UIValueEvent): Interpolation {return event.interpolation}
     iterator(searchMin: ppqn, searchMax: ppqn): Generator<ValueEventDraft> {
         return new ValueEventDraft.Solver(this.#eventCollection(), this,
@@ -125,7 +130,7 @@ export class ValueMoveModifier implements ValueModifier {
         const localY = clientY - clientRect.top
         const pointerValue = this.#context.quantize(this.#valueAxis.axisToValue(localY))
         const closest: Nullable<SnapGuide> = shiftKey ? null : this.#snapValues
-            .map<SnapGuide>((value: unitValue, index: int) =>
+            .map<SnapGuide>((value: number, index: int) =>
                 ({value, index, position: this.#valueAxis.valueToAxis(value)}))
             .reduce((closest: Nullable<SnapGuide>, guide: SnapGuide) =>
                 Math.abs(guide.position - localY) <= (
@@ -137,8 +142,8 @@ export class ValueMoveModifier implements ValueModifier {
         const deltaValue: number = freezeMode
             ? 0.0
             : snapValue.match({
-                none: () => pointerValue - this.#pointerValue,
-                some: value => value - this.#reference.value
+                none: () => this.#eventMapping.x(pointerValue) - this.#eventMapping.x(this.#pointerValue),
+                some: value => this.#eventMapping.x(value) - this.#eventMapping.x(this.#reference.value)
             })
         const deltaPosition: int = this.#snapping.computeDelta(this.#pointerPulse, localX, this.#reference.position)
         let change = false
@@ -264,8 +269,8 @@ export class ValueMoveModifier implements ValueModifier {
         return masks
     }
 
-    #buildSnapValues(): ReadonlyArray<unitValue> {
-        const result = new Set<unitValue>([this.#context.currentValue])
+    #buildSnapValues(): ReadonlyArray<number> {
+        const result = new Set<number>([this.#context.currentValue])
         this.#eventCollection().asArray().forEach(event => result.add(event.value))
         return Array.from(result).sort(NumberComparator)
     }

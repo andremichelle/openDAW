@@ -139,6 +139,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                                         pointerValue: valueAxis.axisToValue(event.clientY - clientRect.top),
                                         pointerPulse: range.xToUnit(event.clientX - clientRect.left),
                                         valueAxis,
+                                        eventMapping,
                                         reference: adapter,
                                         collection: reader.content
                                     }))
@@ -207,6 +208,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                     pointerValue: valueAxis.axisToValue(event.clientY - clientRect.top),
                     pointerPulse: range.xToUnit(event.clientX - clientRect.left),
                     valueAxis,
+                    eventMapping,
                     reference: target.event,
                     collection: reader.content
                 }))
