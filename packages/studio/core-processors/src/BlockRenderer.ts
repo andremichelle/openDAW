@@ -1,13 +1,26 @@
-import {ppqn, PPQN, RenderQuantum} from "@opendaw/lib-dsp"
+import {bpm, ppqn, PPQN, RenderQuantum} from "@opendaw/lib-dsp"
 import {Block, BlockFlags, ProcessInfo} from "./processing"
 import {EngineContext} from "./EngineContext"
-import {Exec, int, isDefined, Iterables, Nullable, Procedure, SetMultimap, Terminable} from "@opendaw/lib-std"
-import {MarkerBoxAdapter} from "@opendaw/studio-adapters"
+import {
+    Exec,
+    int,
+    isDefined,
+    Iterables,
+    Nullable,
+    Procedure,
+    quantizeCeil,
+    SetMultimap,
+    Terminable
+} from "@opendaw/lib-std"
+import {MarkerBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
+
+const TEMPO_CHANGE_GRID = PPQN.fromSignature(1, 16)
 
 type Action = null
     | { type: "loop", target: ppqn }
     | { type: "marker", prev: MarkerBoxAdapter, next: MarkerBoxAdapter }
     | { type: "callback", position: ppqn, callbacks: ReadonlySet<Exec> }
+    | { type: "tempo", position: ppqn, bpm: bpm }
 
 export class BlockRenderer {
     readonly #context: EngineContext
@@ -19,15 +32,30 @@ export class BlockRenderer {
     #currentMarker: Nullable<[MarkerBoxAdapter, int]> = null
     #someMarkersChanged: boolean = false
     #freeRunningPosition: ppqn = 0.0 // synced with timeInfo when transporting
+    #tempoTrack: Nullable<ValueEventCollectionBoxAdapter> = null
+    #bpm: bpm
 
     constructor(context: EngineContext, options?: { pauseOnLoopDisabled?: boolean }) {
         this.#context = context
+        this.#bpm = this.#context.timelineBoxAdapter.box.bpm.getValue()
         this.#context.timelineBoxAdapter.markerTrack.subscribe(() => this.#someMarkersChanged = true)
-        this.#context.timelineBoxAdapter.box.bpm.subscribe(() => this.#tempoChanged = true)
+        this.#context.timelineBoxAdapter.box.bpm.subscribe(({getValue}) => {
+            // Only update from storage if there's no tempo automation
+            if (this.#tempoTrack === null) {
+                this.#bpm = getValue()
+            }
+            this.#tempoChanged = true
+        })
+        this.#context.timelineBoxAdapter.tempoTrack.catchupAndSubscribe(option => {
+            this.#tempoTrack = option.unwrapOrNull()
+            this.#tempoChanged = true
+        })
         this.#pauseOnLoopDisabled = options?.pauseOnLoopDisabled ?? false
 
         this.#callbacks = new SetMultimap()
     }
+
+    get bpm(): bpm {return this.#bpm}
 
     setCallback(position: ppqn, callback: Exec): Terminable {
         this.#callbacks.add(position, callback)
@@ -45,7 +73,6 @@ export class BlockRenderer {
         let markerChanged = false
 
         const {timeInfo, timelineBoxAdapter: {box: timelineBox, markerTrack}} = this.#context
-        const bpm = timelineBox.bpm.getValue()
         const transporting = timeInfo.transporting
         if (transporting) {
             const blocks: Array<Block> = []
@@ -63,7 +90,7 @@ export class BlockRenderer {
                     }
                 }
                 const sn: int = RenderQuantum - s0
-                const p1 = p0 + PPQN.samplesToPulses(sn, bpm, sampleRate)
+                const p1 = p0 + PPQN.samplesToPulses(sn, this.#bpm, sampleRate)
                 let action: Action = null
                 let actionPosition: ppqn = Number.POSITIVE_INFINITY
 
@@ -113,6 +140,17 @@ export class BlockRenderer {
                         }
                     }
                 }
+                // --- TEMPO AUTOMATION ---
+                if (this.#tempoTrack !== null && !this.#tempoTrack.events.isEmpty()) {
+                    const nextBoundary: ppqn = quantizeCeil(p0, TEMPO_CHANGE_GRID)
+                    if (nextBoundary > p0 && nextBoundary < p1 && nextBoundary < actionPosition) {
+                        const tempoAtBoundary = this.#tempoTrack.valueAt(nextBoundary, this.#bpm)
+                        if (tempoAtBoundary !== this.#bpm) {
+                            action = {type: "tempo", position: nextBoundary, bpm: tempoAtBoundary}
+                            actionPosition = nextBoundary
+                        }
+                    }
+                }
                 //
                 // handle action (if any)
                 //
@@ -120,7 +158,7 @@ export class BlockRenderer {
                 if (action === null) {
                     const s1 = s0 + sn
                     blocks.push({
-                        index: index++, p0, p1, s0, s1, bpm,
+                        index: index++, p0, p1, s0, s1, bpm: this.#bpm,
                         flags: BlockFlags.create(transporting, discontinuous, playing, this.#tempoChanged)
                     })
                     discontinuous = false
@@ -129,10 +167,10 @@ export class BlockRenderer {
                 } else {
                     const advanceToEvent = () => {
                         if (actionPosition > p0) {
-                            const s1 = s0 + PPQN.pulsesToSamples(actionPosition - p0, bpm, sampleRate) | 0
+                            const s1 = s0 + PPQN.pulsesToSamples(actionPosition - p0, this.#bpm, sampleRate) | 0
                             if (s1 > s0) {
                                 blocks.push({
-                                    index: index++, p0, p1: actionPosition, s0, s1, bpm,
+                                    index: index++, p0, p1: actionPosition, s0, s1, bpm: this.#bpm,
                                     flags: BlockFlags.create(transporting, discontinuous, playing, this.#tempoChanged)
                                 })
                                 discontinuous = false
@@ -143,9 +181,9 @@ export class BlockRenderer {
                     }
                     const releaseBlock = () => {
                         if (s0 < RenderQuantum) {
-                            const s1 = s0 + PPQN.pulsesToSamples(p1 - p0, bpm, sampleRate) | 0
+                            const s1 = s0 + PPQN.pulsesToSamples(p1 - p0, this.#bpm, sampleRate) | 0
                             blocks.push({
-                                index: index++, p0, p1: actionPosition, s0, s1, bpm,
+                                index: index++, p0, p1: actionPosition, s0, s1, bpm: this.#bpm,
                                 flags: BlockFlags.create(false, false, false, this.#tempoChanged)
                             })
                             s0 = s1
@@ -184,6 +222,11 @@ export class BlockRenderer {
                             action.callbacks.forEach(callback => callback())
                             break
                         }
+                        case "tempo": {
+                            advanceToEvent()
+                            this.#bpm = action.bpm
+                            break
+                        }
                     }
                 }
                 this.#tempoChanged = false
@@ -203,10 +246,10 @@ export class BlockRenderer {
                 }
             }
             const p0 = this.#freeRunningPosition
-            const p1 = p0 + PPQN.samplesToPulses(RenderQuantum, bpm, sampleRate)
+            const p1 = p0 + PPQN.samplesToPulses(RenderQuantum, this.#bpm, sampleRate)
             const processInfo: ProcessInfo = {
                 blocks: [{
-                    index: 0, p0, p1, s0: 0, s1: RenderQuantum, bpm,
+                    index: 0, p0, p1, s0: 0, s1: RenderQuantum, bpm: this.#bpm,
                     flags: BlockFlags.create(false, false, false, false)
                 }]
             }

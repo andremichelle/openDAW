@@ -8,7 +8,7 @@ import {
     Terminable,
     UUID
 } from "@opendaw/lib-std"
-import {ppqn} from "@opendaw/lib-dsp"
+import {bpm, ppqn} from "@opendaw/lib-dsp"
 import {ClipNotification, NoteSignal} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 
@@ -32,6 +32,7 @@ export interface Engine extends Terminable {
     subscribeClipNotification(observer: Observer<ClipNotification>): Subscription
 
     get position(): ObservableValue<ppqn>
+    get bpm(): ObservableValue<bpm>
     get isPlaying(): ObservableValue<boolean>
     get isRecording(): ObservableValue<boolean>
     get isCountingIn(): ObservableValue<boolean>

@@ -49,7 +49,7 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
         const optProfile = owner.getValue()
         if (optProfile.isEmpty()) {return}
         const {project} = optProfile.unwrap()
-        const {timelineBoxAdapter, rootBoxAdapter, boxGraph} = project
+        const {timelineBoxAdapter, rootBoxAdapter, boxGraph, engine} = project
         projectActiveLifeTime.own(service.engine.position.catchupAndSubscribe((owner: ObservableValue<number>) => {
             const position = owner.getValue()
             const {bars, beats, semiquavers, ticks} = PPQN.toParts(Math.abs(position))
@@ -59,8 +59,10 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
             ticksDigit.value = ticks.toString().padStart(3, "0")
             timeUnitElements.forEach((element) => element.classList.toggle("negative", position < 0))
         }))
-        timelineBoxAdapter.box.bpm.catchupAndSubscribe((owner: ObservableValue<float>) =>
-            bpmDigit.value = owner.getValue().toFixed(0).padStart(3, "0"))
+        engine.bpm.catchupAndSubscribe((owner: ObservableValue<float>) =>
+            bpmDigit.value = owner.getValue().toFixed(0))
+        // timelineBoxAdapter.box.bpm.catchupAndSubscribe((owner: ObservableValue<float>) =>
+        //     bpmDigit.value = owner.getValue().toFixed(0).padStart(3, "0"))
         const updateMeterLabel = () => {
             const {nominator, denominator} = timelineBoxAdapter.box.signature
             meterLabel.value = `${nominator.getValue()}/${denominator.getValue()}`

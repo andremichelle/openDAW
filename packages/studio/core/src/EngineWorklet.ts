@@ -13,7 +13,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {AudioData, ppqn} from "@opendaw/lib-dsp"
+import {AudioData, bpm, ppqn} from "@opendaw/lib-dsp"
 import {SyncSource} from "@opendaw/lib-box"
 import {AnimationFrame} from "@opendaw/lib-dom"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
@@ -46,6 +46,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #playbackTimestamp: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
     readonly #playbackTimestampEnabled: DefaultObservableValue<boolean> = new DefaultObservableValue(true)
     readonly #position: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
+    readonly #bpm: DefaultObservableValue<bpm> = new DefaultObservableValue(120.0)
     readonly #isPlaying: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #isRecording: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #isCountingIn: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
@@ -72,6 +73,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             this.#isCountingIn.setValue(state.isCountingIn)
             this.#countInBeatsRemaining.setValue(state.countInBeatsRemaining)
             this.#playbackTimestamp.setValue(state.playbackTimestamp)
+            this.#bpm.setValue(state.bpm)
             this.#position.setValue(state.position) // This must be the last to handle the state values before
         })
 
@@ -221,6 +223,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get countInBarsTotal(): MutableObservableValue<int> {return this.#countInBarsTotal}
     get countInBeatsRemaining(): ObservableValue<number> {return this.#countInBeatsRemaining}
     get position(): ObservableValue<ppqn> {return this.#position}
+    get bpm(): ObservableValue<bpm> {return this.#bpm}
     get playbackTimestamp(): MutableObservableValue<number> {return this.#playbackTimestamp}
     get playbackTimestampEnabled(): MutableObservableValue<boolean> {return this.#playbackTimestampEnabled}
     get metronomeEnabled(): MutableObservableValue<boolean> {return this.#metronomeEnabled}

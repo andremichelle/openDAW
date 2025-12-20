@@ -7,7 +7,7 @@ export class TempoValueContext implements ValueContext {
 
     readonly anchorModel: ObservableValue<number> = ObservableValue.seal(0)
     readonly stringMapping: StringMapping<number> = StringMapping.numeric({unit: "bpm", fractionDigits: 1})
-    readonly valueMapping: ValueMapping<number> = ValueMapping.linear(TempoRange.min, TempoRange.max)
+    readonly valueMapping: ValueMapping<number> = ValueMapping.exponential(TempoRange.min, TempoRange.max)
     readonly floating: boolean = true
 
     constructor(adapter: TimelineBoxAdapter) {

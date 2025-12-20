@@ -10,7 +10,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {ppqn} from "@opendaw/lib-dsp"
+import {bpm, ppqn} from "@opendaw/lib-dsp"
 import {ClipNotification, NoteSignal} from "@opendaw/studio-adapters"
 import {Engine} from "./Engine"
 import {EngineWorklet} from "./EngineWorklet"
@@ -24,6 +24,7 @@ export class EngineFacade implements Engine {
     readonly #countInBarsTotal: DefaultObservableValue<int> = new DefaultObservableValue(1)
     readonly #countInBeatsRemaining: DefaultObservableValue<int> = new DefaultObservableValue(0)
     readonly #position: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
+    readonly #bpm: DefaultObservableValue<bpm> = new DefaultObservableValue(12.0)
     readonly #isPlaying: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #isRecording: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #isCountingIn: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
@@ -44,6 +45,7 @@ export class EngineFacade implements Engine {
             worklet.countInBarsTotal.catchupAndSubscribe(owner => this.#countInBarsTotal.setValue(owner.getValue())),
             worklet.countInBeatsRemaining.catchupAndSubscribe(owner => this.#countInBeatsRemaining.setValue(owner.getValue())),
             worklet.position.catchupAndSubscribe(owner => this.#position.setValue(owner.getValue())),
+            worklet.bpm.catchupAndSubscribe(owner => this.#bpm.setValue(owner.getValue())),
             worklet.isPlaying.catchupAndSubscribe(owner => this.#isPlaying.setValue(owner.getValue())),
             worklet.isRecording.catchupAndSubscribe(owner => this.#isRecording.setValue(owner.getValue())),
             worklet.isCountingIn.catchupAndSubscribe(owner => this.#isCountingIn.setValue(owner.getValue())),
@@ -70,6 +72,7 @@ export class EngineFacade implements Engine {
     stopRecording(): void {this.#worklet.ifSome(worklet => worklet.stopRecording())}
 
     get position(): ObservableValue<ppqn> {return this.#position}
+    get bpm(): ObservableValue<bpm> {return this.#bpm}
     get isPlaying(): ObservableValue<boolean> {return this.#isPlaying}
     get isRecording(): ObservableValue<boolean> {return this.#isRecording}
     get isCountingIn(): ObservableValue<boolean> {return this.#isCountingIn}

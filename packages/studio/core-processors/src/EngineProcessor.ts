@@ -172,6 +172,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
             const {transporting, isCountingIn, isRecording, position} = this.#timeInfo
             const denominator = this.#timelineBoxAdapter.box.signature.denominator.getValue()
             x.position = position
+            x.bpm = this.#renderer.bpm
             x.playbackTimestamp = this.#playbackTimestamp
             x.countInBeatsRemaining = isCountingIn ? (this.#recordingStartTime - position) / PPQN.fromSignature(1, denominator) : 0
             x.isPlaying = transporting
