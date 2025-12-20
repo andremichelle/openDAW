@@ -148,12 +148,12 @@ export class StudioService implements ProjectEnv {
             timelineBox.tempoTrack.events.refer(collection.owners)
             ValueEventBox.create(boxGraph, UUID.generate(), box => {
                 box.position.setValue(0)
-                box.value.setValue(120.0)
+                box.value.setValue(0.0)
                 box.events.refer(collection.events)
             })
             ValueEventBox.create(boxGraph, UUID.generate(), box => {
                 box.position.setValue(PPQN.Bar)
-                box.value.setValue(160.0)
+                box.value.setValue(1.0)
                 box.events.refer(collection.events)
             })
 

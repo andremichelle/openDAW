@@ -1,5 +1,5 @@
 import css from "./ValueEventsEditor.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Lifecycle, ValueMapping} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService.ts"
 import {createElement} from "@opendaw/lib-jsx"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
@@ -20,10 +20,11 @@ type Construct = {
     menu: EditorMenuCollector
     range: TimelineRange
     snapping: Snapping
+    mapping: ValueMapping<number>
     reader: ValueEventOwnerReader
 }
 
-export const ValueEventsEditor = ({lifecycle, service, context, range, snapping, reader}: Construct) => {
+export const ValueEventsEditor = ({lifecycle, service, context, range, snapping, mapping, reader}: Construct) => {
     return (
         <div className={className}>
             <ValueEditorHeader lifecycle={lifecycle}
@@ -33,6 +34,7 @@ export const ValueEventsEditor = ({lifecycle, service, context, range, snapping,
                          service={service}
                          range={range}
                          snapping={snapping}
+                         mapping={mapping}
                          context={context}
                          reader={reader}/>
         </div>

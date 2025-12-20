@@ -1,5 +1,5 @@
 import css from "./ContentEditor.sass?inline"
-import {Lifecycle, Option, Terminator} from "@opendaw/lib-std"
+import {Lifecycle, Option, Terminator, ValueMapping} from "@opendaw/lib-std"
 import {createElement, Frag, replaceChildren} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {
@@ -154,6 +154,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                                menu={menu}
                                range={range}
                                snapping={snapping}
+                               mapping={ValueMapping.unipolar()}
                                reader={reader}/>
         )
     }

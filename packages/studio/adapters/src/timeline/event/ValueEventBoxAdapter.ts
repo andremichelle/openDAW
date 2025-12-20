@@ -117,7 +117,7 @@ export class ValueEventBoxAdapter implements ValueEvent, BoxAdapter, Selectable 
     get index(): int {return this.#box.index.getValue()}
     set interpolation(value: Interpolation) {InterpolationFieldAdapter.write(this.#box.interpolation, value)}
     get interpolation(): Interpolation {return this.#interpolation.get()}
-    get value(): int {return this.#box.value.getValue()}
+    get value(): number {return this.#box.value.getValue()}
     get isSelected(): boolean {return this.#isSelected}
     get collection(): Option<ValueEventCollectionBoxAdapter> {
         return this.#box.events.targetVertex

@@ -9,7 +9,8 @@ import {
     Option,
     Selection,
     unitValue,
-    ValueAxis
+    ValueAxis,
+    ValueMapping
 } from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService.ts"
 import {ValueEventBoxAdapter} from "@opendaw/studio-adapters"
@@ -50,6 +51,7 @@ type Construct = {
     service: StudioService
     range: TimelineRange
     snapping: Snapping
+    mapping: ValueMapping<number>
     reader: ValueEventOwnerReader
     context: ValueEditingContext
 }
@@ -57,7 +59,6 @@ type Construct = {
 export const ValueEditor = ({lifecycle, service, range, snapping, reader, context}: Construct) => {
     const {project} = service
     const {editing} = project
-
     const selection: Selection<ValueEventBoxAdapter> = lifecycle.own(project.selection
         .createFilteredSelection(box => box instanceof ValueEventBox, {
             fx: (adapter: ValueEventBoxAdapter) => adapter.box,
