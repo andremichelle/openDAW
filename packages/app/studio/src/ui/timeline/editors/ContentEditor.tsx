@@ -44,7 +44,7 @@ import {
 } from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {RegionReader} from "@/ui/timeline/editors/RegionReader.ts"
 import {Colors, Pointers} from "@opendaw/studio-enums"
-import {ParameterValueEditing} from "@/ui/timeline/editors/value/ValueEditingContext.ts"
+import {ParameterValueEditing} from "@/ui/timeline/editors/value/ParameterValueEditing.ts"
 import {AnimationFrame, deferNextFrame, Events, Html, Keyboard} from "@opendaw/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "ContentEditor")

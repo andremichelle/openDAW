@@ -142,22 +142,21 @@ export class StudioService implements ProjectEnv {
         // TODO Remove when done
         if (Browser.isLocalHost()) {
             this.newProject().then()
-            const {timelineBox, boxGraph} = this.project
-            boxGraph.beginTransaction()
-            const collection = ValueEventCollectionBox.create(boxGraph, UUID.generate())
-            timelineBox.tempoTrack.events.refer(collection.owners)
-            ValueEventBox.create(boxGraph, UUID.generate(), box => {
-                box.position.setValue(0)
-                box.value.setValue(0.0)
-                box.events.refer(collection.events)
+            const {timelineBox, editing, boxGraph} = this.project
+            editing.modify(() => {
+                const collection = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+                timelineBox.tempoTrack.events.refer(collection.owners)
+                ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                    box.position.setValue(0)
+                    box.value.setValue(0.0)
+                    box.events.refer(collection.events)
+                })
+                ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                    box.position.setValue(PPQN.Bar)
+                    box.value.setValue(1.0)
+                    box.events.refer(collection.events)
+                })
             })
-            ValueEventBox.create(boxGraph, UUID.generate(), box => {
-                box.position.setValue(PPQN.Bar)
-                box.value.setValue(1.0)
-                box.events.refer(collection.events)
-            })
-
-            boxGraph.endTransaction()
         }
     }
 

@@ -3,6 +3,7 @@ import {AudioRegionBox, BoxVisitor, TrackBox} from "@opendaw/studio-boxes"
 import {Arrays, Attempt, Attempts, clamp, int} from "@opendaw/lib-std"
 import {UnionBoxTypes} from "./unions"
 import {TimeBase} from "@opendaw/lib-dsp"
+import {TempoRange} from "./TempoRange"
 
 export namespace Validator {
     export const isTimeSignatureValid = (numerator: int, denominator: int): Attempt<[int, int], string> => {
@@ -15,10 +16,9 @@ export namespace Validator {
         return Attempts.ok([numerator, denominator])
     }
 
-    export const MIN_BPM = 30.0
-    export const MAX_BPM = 1000.0
-
-    export const clampBpm = (bpm: number): number => Number.isFinite(bpm) ? clamp(bpm, MIN_BPM, MAX_BPM) : 120.0
+    export const clampBpm = (bpm: number): number => Number.isFinite(bpm)
+        ? clamp(bpm, TempoRange.min, TempoRange.max)
+        : 120.0
 
     export const hasOverlappingRegions = (boxGraph: BoxGraph): boolean => boxGraph.boxes()
         .some(box => box.accept<BoxVisitor<boolean>>({

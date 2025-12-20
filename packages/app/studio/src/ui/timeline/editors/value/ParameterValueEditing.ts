@@ -55,8 +55,6 @@ export class ParameterValueEditing implements ValueContext, Terminable {
         return this.#assignment.catchupAndSubscribe(observer)
     }
 
-    get assignment(): MutableObservableOption<ValueAssignment> {return this.#assignment}
-
     get anchorModel(): ObservableValue<unitValue> {
         const scope = this
         return new class implements ObservableValue<unitValue> {

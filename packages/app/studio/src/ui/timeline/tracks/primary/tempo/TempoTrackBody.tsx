@@ -1,9 +1,11 @@
 import css from "./TempoTrackBody.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Lifecycle, ValueMapping} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
-import {CanvasPainter} from "@/ui/canvas/painter"
+import {ValueEditor} from "@/ui/timeline/editors/value/ValueEditor"
+import {TempoValueContext} from "@/ui/timeline/tracks/primary/tempo/TempoValueContext"
+import {TempoValueEventOwnerReader} from "@/ui/timeline/tracks/primary/tempo/TempoValueEventOwnerReader"
 
 const className = Html.adoptStyleSheet(css, "TempoTrackBody")
 
@@ -13,15 +15,16 @@ type Construct = {
 }
 
 export const TempoTrackBody = ({lifecycle, service}: Construct) => {
-    const {project} = service
+    const {project, timeline: {range, snapping}} = service
     return (
         <div className={className}>
-            <canvas onInit={canvas => {
-                const painter = new CanvasPainter(canvas, painter => {
-                    painter.context
-                })
-                lifecycle.ownAll(project.timelineBoxAdapter.tempoTrack.catchupAndSubscribe(painter.requestUpdate))
-            }}/>
+            <ValueEditor lifecycle={lifecycle}
+                         service={service}
+                         range={range}
+                         snapping={snapping}
+                         context={new TempoValueContext(project.timelineBoxAdapter)}
+                         mapping={ValueMapping.unipolar()}
+                         reader={new TempoValueEventOwnerReader(project.timelineBoxAdapter)}/>
         </div>
     )
 }

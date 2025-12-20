@@ -1,0 +1,1 @@
+export const TempoRange = {min: 30, max: 1000} as const
