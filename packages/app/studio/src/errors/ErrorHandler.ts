@@ -85,6 +85,14 @@ export class ErrorHandler {
         const error = ErrorInfo.extract(event)
         const foreignOrigin = this.#extractForeignOrigin(error)
         const looksLikeExtension = this.#looksLikeExtension(error) || foreignOrigin !== null
+        console.warn("[ErrorHandler]", {
+            scope,
+            error,
+            foreignOrigin,
+            looksLikeExtension,
+            scriptsCount: document.scripts.length,
+            locationOrigin: window.location.origin
+        })
         // Warn about extension errors but don't crash
         if (looksLikeExtension && !this.#errorThrown) {
             event.preventDefault()
@@ -109,12 +117,13 @@ export class ErrorHandler {
     #report(scope: string, error: ErrorInfo): void {
         console.error(scope, error.name, error.message, error.stack)
         if (!import.meta.env.PROD) {return}
+        const maxStackSize = 2000
         const body = JSON.stringify({
             date: new Date().toISOString(),
             agent: Browser.userAgent,
             build: this.#buildInfo,
             scripts: document.scripts.length,
-            error,
+            error: {...error, stack: error.stack?.slice(0, maxStackSize)},
             logs: LogBuffer.get()
         } satisfies ErrorLog)
         fetch("https://logs.opendaw.studio/log.php", {

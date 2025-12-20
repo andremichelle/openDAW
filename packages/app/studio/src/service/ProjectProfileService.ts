@@ -85,24 +85,6 @@ export class ProjectProfileService implements MutableObservableValue<Option<Proj
         this.#setProfile(uuid, project, meta, cover, true)
     }
 
-    async loadTemplate(name: string): Promise<unknown> {
-        console.debug(`load '${name}'`)
-        const handler = Dialogs.processMonolog("Loading Template...")
-        return fetch(`templates/${name}.od`)
-            .then(res => res.arrayBuffer())
-            .then(async arrayBuffer => {
-                const uuid = UUID.generate()
-                const project = await Project.loadAnyVersion(this.#env, arrayBuffer)
-                const meta = ProjectMeta.init(name)
-                this.#setProfile(uuid, project, meta, Option.None)
-            })
-            .catch(reason => {
-                console.warn("Could not load template", reason)
-                Dialogs.info({headline: "Could not load template", message: "Please try again."}).finally()
-            })
-            .finally(() => handler.close())
-    }
-
     async exportBundle() {
         return this.#profile.getValue().ifSome(async profile => {
             const progressValue = new DefaultObservableValue(0.0)

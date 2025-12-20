@@ -7,12 +7,10 @@ export type ErrorInfo = {
 }
 
 export namespace ErrorInfo {
-    const MAX_STACK_SIZE = 1000
-
     const fromError = (error: Error, fallbackName: string = "Error"): ErrorInfo => ({
         name: error.name || fallbackName,
         message: error.message,
-        stack: error.stack?.slice(0, MAX_STACK_SIZE)
+        stack: error.stack
     })
 
     const fromUnknown = (value: unknown, name: string): ErrorInfo => {

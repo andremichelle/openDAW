@@ -138,6 +138,8 @@ export class StudioService implements ProjectEnv {
         this.#configBeforeUnload()
         this.#checkRecovery()
         this.#listenPreferences()
+
+        if (Browser.isLocalHost()) {this.newProject().then()}
     }
 
     get sampleRate(): number {return this.audioContext.sampleRate}
@@ -184,7 +186,6 @@ export class StudioService implements ProjectEnv {
         }
     }
 
-    async loadTemplate(name: string): Promise<unknown> {return this.#projectProfileService.loadTemplate(name)}
     async exportBundle() {return this.#projectProfileService.exportBundle()}
     async importBundle() {return this.#projectProfileService.importBundle()}
     async deleteProject(uuid: UUID.Bytes, meta: ProjectMeta): Promise<void> {

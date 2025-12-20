@@ -11,8 +11,6 @@ import {SyncLogService} from "@/service/SyncLogService"
 import {PreferencePanel} from "@/ui/PreferencePanel"
 
 export const populateStudioMenu = (service: StudioService) => {
-    const isBeta = Browser.isLocalHost() || location.hash === "#beta"
-    console.debug("isBeta", isBeta)
     return MenuItem.root()
         .setRuntimeChildrenProcedure(parent => {
                 parent.addMenuItem(

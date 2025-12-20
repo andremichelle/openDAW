@@ -1,0 +1,16 @@
+@use "@/colors"
+@use "@/mixins"
+
+component
+  grid-column: -1
+  font-size: 0.5em
+  position: relative
+  @include colors.panel-background
+  @include mixins.clips-aware
+
+  > canvas
+    top: 0
+    left: 0
+    width: 100%
+    height: 100%
+    position: absolute

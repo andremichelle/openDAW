@@ -1,6 +1,6 @@
 import css from "./MarkerTrack.sass?inline"
-import {Lifecycle, ObservableValue} from "@opendaw/lib-std"
-import {createElement, Inject} from "@opendaw/lib-jsx"
+import {Lifecycle} from "@opendaw/lib-std"
+import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {MarkerTrackBody} from "@/ui/timeline/tracks/primary/marker/MarkerTrackBody.tsx"
 import {MarkerTrackHeader} from "@/ui/timeline/tracks/primary/marker/MarkerTrackHeader.tsx"
@@ -14,13 +14,8 @@ type Construct = {
 }
 
 export const MarkerTrack = ({lifecycle, service}: Construct) => {
-    const classList = Inject.classList(className)
-    const visibleObserver = (owner: ObservableValue<boolean>) => classList.toggle("hidden", !owner.getValue())
-    const {primaryVisible} = service.timeline
-    lifecycle.own(primaryVisible.subscribe(visibleObserver))
-    visibleObserver(primaryVisible)
     return (
-        <div className={classList}>
+        <div className={className}>
             <MarkerTrackHeader/>
             <div className="void"/>
             <MarkerTrackBody lifecycle={lifecycle} service={service}/>
