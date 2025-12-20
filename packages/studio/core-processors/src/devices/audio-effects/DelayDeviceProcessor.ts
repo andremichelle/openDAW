@@ -82,7 +82,7 @@ export class DelayDeviceProcessor extends AudioProcessor implements AudioEffectD
 
     processAudio({bpm, flags}: Block, from: number, to: number): void {
         if (this.#source.isEmpty()) {return}
-        if (this.#updateDelayTime || Bits.some(flags, BlockFlag.tempoChanged)) {
+        if (this.#updateDelayTime || Bits.some(flags, BlockFlag.bpmChanged)) {
             const offsetIndex = this.parameterDelay.getValue()
             const offsetInPulses = Fraction.toPPQN(DelayDeviceBoxAdapter.OffsetFractions[offsetIndex])
             this.#delayLines.offset = PPQN.pulsesToSamples(offsetInPulses, bpm, sampleRate)

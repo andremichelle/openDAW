@@ -98,9 +98,6 @@ export class DelayDeviceDsp {
             // the magic number prevents filter from getting unstable (beginner's fix)
             const dReadL = bL.processFrame(this.#biquadCoeff, dL[readPosition] * 0.96)
             const dReadR = bR.processFrame(this.#biquadCoeff, dR[readPosition] * 0.96)
-            // const crossL = this.cross * dReadR + (1.0 - this.cross) * dReadL
-            // const crossR = this.cross * dReadL + (1.0 - this.cross) * dReadR
-            // simplified to:
             const diff = this.cross * (dReadR - dReadL)
             const crossL = dReadL + diff
             const crossR = dReadR - diff
@@ -138,9 +135,11 @@ export class DelayDeviceDsp {
             const inpL = input[0][i]
             const inpR = input[1][i]
             const d00 = delayBuffer[0][readPositionInt]
-            const d10 = delayBuffer[0][readPositionInt]
-            const d0 = this.#biquad[0].processFrame(this.#biquadCoeff, d00 + alpha * (delayBuffer[0][(readPositionInt + 1) & delayMask] - d00))
-            const d1 = this.#biquad[1].processFrame(this.#biquadCoeff, d10 + alpha * (delayBuffer[1][(readPositionInt + 1) & delayMask] - d10))
+            const d10 = delayBuffer[1][readPositionInt]
+            const d0 = this.#biquad[0].processFrame(this.#biquadCoeff,
+                (d00 + alpha * (delayBuffer[0][(readPositionInt + 1) & delayMask] - d00)) * 0.96)
+            const d1 = this.#biquad[1].processFrame(this.#biquadCoeff,
+                (d10 + alpha * (delayBuffer[1][(readPositionInt + 1) & delayMask] - d10)) * 0.96)
             delayBuffer[0][writePosition] = inpL + d0 * feedback + 1.0e-18 - 1.0e-18
             delayBuffer[1][writePosition] = inpR + d0 * feedback + 1.0e-18 - 1.0e-18
             output[0][i] = d0 * pWetLevel + inpL * pDryLevel

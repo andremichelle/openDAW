@@ -6,7 +6,7 @@ export const enum BlockFlag {
     transporting = 1 << 0, // is true if the (main) timeline should not advance
     discontinuous = 1 << 1, // set, if the time has not been advanced naturally (release notes)
     playing = 1 << 2, // set, if arrangement should generate sound
-    tempoChanged = 1 << 3 // true if the tempo has been changed
+    bpmChanged = 1 << 3 // true if the bpm has been changed
 }
 
 export namespace BlockFlags {
@@ -17,7 +17,7 @@ export namespace BlockFlags {
         | (transporting ? BlockFlag.transporting : 0)
         | (discontinuous ? BlockFlag.discontinuous : 0)
         | (playing ? BlockFlag.playing : 0)
-        | (tempoChanged ? BlockFlag.tempoChanged : 0)
+        | (tempoChanged ? BlockFlag.bpmChanged : 0)
 }
 
 export type Block = Readonly<{
@@ -28,7 +28,7 @@ export type Block = Readonly<{
     // range in audio block
     s0: int
     s1: int
-    // tempo in this block
+    // bpm in this block
     bpm: number
     // BlockFlag
     flags: int

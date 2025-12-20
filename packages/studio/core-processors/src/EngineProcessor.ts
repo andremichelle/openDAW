@@ -166,7 +166,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#metronome = new Metronome(this.#timelineBoxAdapter, this.#timeInfo)
         this.#midiTransportClock = new MIDITransportClock(this, this.#rootBoxAdapter)
         this.#audioOutputBufferRegistry = new AudioOutputBufferRegistry()
-        this.#renderer = new BlockRenderer(this, options)
+        this.#renderer = this.#terminator.own(new BlockRenderer(this, options))
         this.#ignoredRegions = UUID.newSet<UUID.Bytes>(uuid => uuid)
         this.#stateSender = SyncStream.writer(EngineStateSchema(), syncStreamBuffer, x => {
             const {transporting, isCountingIn, isRecording, position} = this.#timeInfo

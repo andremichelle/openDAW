@@ -7,14 +7,16 @@ import {
     isDefined,
     Iterables,
     Nullable,
+    Option,
     Procedure,
     quantizeCeil,
     SetMultimap,
-    Terminable
+    Terminable,
+    Terminator
 } from "@opendaw/lib-std"
 import {MarkerBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 
-const TEMPO_CHANGE_GRID = PPQN.fromSignature(1, 16)
+const TEMPO_CHANGE_GRID = PPQN.fromSignature(1, 48) // make dynamic window 10ms
 
 type Action = null
     | { type: "loop", target: ppqn }
@@ -22,36 +24,42 @@ type Action = null
     | { type: "callback", position: ppqn, callbacks: ReadonlySet<Exec> }
     | { type: "tempo", position: ppqn, bpm: bpm }
 
-export class BlockRenderer {
+export class BlockRenderer implements Terminable {
+    readonly #terminator = new Terminator()
     readonly #context: EngineContext
 
     readonly #callbacks: SetMultimap<ppqn, Exec>
     readonly #pauseOnLoopDisabled: boolean = true
 
-    #tempoChanged: boolean = false
+    #bpmChanged: boolean = false
     #currentMarker: Nullable<[MarkerBoxAdapter, int]> = null
     #someMarkersChanged: boolean = false
     #freeRunningPosition: ppqn = 0.0 // synced with timeInfo when transporting
-    #tempoTrack: Nullable<ValueEventCollectionBoxAdapter> = null
+    #optTempoTrack: Option<ValueEventCollectionBoxAdapter> = Option.None
     #bpm: bpm
 
     constructor(context: EngineContext, options?: { pauseOnLoopDisabled?: boolean }) {
         this.#context = context
-        this.#bpm = this.#context.timelineBoxAdapter.box.bpm.getValue()
-        this.#context.timelineBoxAdapter.markerTrack.subscribe(() => this.#someMarkersChanged = true)
-        this.#context.timelineBoxAdapter.box.bpm.subscribe(({getValue}) => {
-            // Only update from storage if there's no tempo automation
-            if (this.#tempoTrack === null) {
-                this.#bpm = getValue()
-            }
-            this.#tempoChanged = true
-        })
-        this.#context.timelineBoxAdapter.tempoTrack.catchupAndSubscribe(option => {
-            this.#tempoTrack = option.unwrapOrNull()
-            this.#tempoChanged = true
-        })
-        this.#pauseOnLoopDisabled = options?.pauseOnLoopDisabled ?? false
+        const {timelineBoxAdapter: {box: {bpm}, markerTrack, tempoTrack}} = context
+        this.#bpm = bpm.getValue()
+        markerTrack.subscribe(() => this.#someMarkersChanged = true)
+        this.#terminator.ownAll(
+            bpm.subscribe((owner) => {
+                if (this.#optTempoTrack.isEmpty()) {
+                    this.#bpm = owner.getValue()
+                    this.#bpmChanged = true
+                }
+            }),
+            tempoTrack.catchupAndSubscribe(option => {
+                this.#optTempoTrack = option
+                if (option.isEmpty()) {
+                    this.#bpm = bpm.getValue()
+                    this.#bpmChanged = true
+                }
+            })
+        )
 
+        this.#pauseOnLoopDisabled = options?.pauseOnLoopDisabled ?? false
         this.#callbacks = new SetMultimap()
     }
 
@@ -63,7 +71,7 @@ export class BlockRenderer {
     }
 
     reset(): void {
-        this.#tempoChanged = false
+        this.#bpmChanged = false
         this.#someMarkersChanged = false
         this.#freeRunningPosition = 0.0
         this.#currentMarker = null
@@ -141,13 +149,15 @@ export class BlockRenderer {
                     }
                 }
                 // --- TEMPO AUTOMATION ---
-                if (this.#tempoTrack !== null && !this.#tempoTrack.events.isEmpty()) {
-                    const nextBoundary: ppqn = quantizeCeil(p0, TEMPO_CHANGE_GRID)
-                    if (nextBoundary > p0 && nextBoundary < p1 && nextBoundary < actionPosition) {
-                        const tempoAtBoundary = this.#tempoTrack.valueAt(nextBoundary, this.#bpm)
-                        if (tempoAtBoundary !== this.#bpm) {
-                            action = {type: "tempo", position: nextBoundary, bpm: tempoAtBoundary}
-                            actionPosition = nextBoundary
+                if (this.#optTempoTrack.nonEmpty()) {
+                    if (!this.#optTempoTrack.unwrap().events.isEmpty()) {
+                        const nextGrid: ppqn = quantizeCeil(p0, TEMPO_CHANGE_GRID)
+                        if (nextGrid >= p0 && nextGrid < p1 && nextGrid < actionPosition) {
+                            const tempoAtGrid = this.#optTempoTrack.unwrap().valueAt(nextGrid, this.#bpm)
+                            if (tempoAtGrid !== this.#bpm) {
+                                action = {type: "tempo", position: nextGrid, bpm: tempoAtGrid}
+                                actionPosition = nextGrid
+                            }
                         }
                     }
                 }
@@ -159,7 +169,7 @@ export class BlockRenderer {
                     const s1 = s0 + sn
                     blocks.push({
                         index: index++, p0, p1, s0, s1, bpm: this.#bpm,
-                        flags: BlockFlags.create(transporting, discontinuous, playing, this.#tempoChanged)
+                        flags: BlockFlags.create(transporting, discontinuous, playing, this.#bpmChanged)
                     })
                     discontinuous = false
                     p0 = p1
@@ -171,7 +181,7 @@ export class BlockRenderer {
                             if (s1 > s0) {
                                 blocks.push({
                                     index: index++, p0, p1: actionPosition, s0, s1, bpm: this.#bpm,
-                                    flags: BlockFlags.create(transporting, discontinuous, playing, this.#tempoChanged)
+                                    flags: BlockFlags.create(transporting, discontinuous, playing, this.#bpmChanged)
                                 })
                                 discontinuous = false
                             }
@@ -184,7 +194,7 @@ export class BlockRenderer {
                             const s1 = s0 + PPQN.pulsesToSamples(p1 - p0, this.#bpm, sampleRate) | 0
                             blocks.push({
                                 index: index++, p0, p1: actionPosition, s0, s1, bpm: this.#bpm,
-                                flags: BlockFlags.create(false, false, false, this.#tempoChanged)
+                                flags: BlockFlags.create(false, false, false, this.#bpmChanged)
                             })
                             s0 = s1
                         }
@@ -225,15 +235,16 @@ export class BlockRenderer {
                         case "tempo": {
                             advanceToEvent()
                             this.#bpm = action.bpm
+                            this.#bpmChanged = true
                             break
                         }
                     }
                 }
-                this.#tempoChanged = false
             }
             procedure({blocks})
             timeInfo.advanceTo(p0)
             this.#freeRunningPosition = p0
+            this.#bpmChanged = false
         } else {
             if (this.#someMarkersChanged || timeInfo.getLeapStateAndReset()) {
                 this.#someMarkersChanged = false
@@ -261,4 +272,6 @@ export class BlockRenderer {
                 ? [this.#currentMarker[0].uuid, this.#currentMarker[1]] : null)
         }
     }
+
+    terminate(): void {this.#terminator.terminate()}
 }
