@@ -256,14 +256,16 @@ export namespace Dialogs {
         dialog.showModal()
     }
 
-    export const error = ({name, message, probablyHasExtension, backupCommand = Option.None}: {
+    export const error = ({name, message, probablyHasExtension, foreignOrigin, backupCommand = Option.None}: {
         scope: string,
         name: string,
         message: string,
         probablyHasExtension: boolean,
+        foreignOrigin: string | null,
         backupCommand: Option<Provider<Promise<void>>>
     }): void => {
         console.debug(`Recovery enabled: ${backupCommand}`)
+        const foreignHostname = foreignOrigin !== null ? new URL(foreignOrigin).hostname : null
         const dialog: HTMLDialogElement = (
             <Dialog headline="You Found A Bug ❤️"
                     icon={IconSymbol.Bug}
@@ -292,7 +294,12 @@ export namespace Dialogs {
                 <div style={{padding: "1em 0", maxWidth: "50vw"}}>
                     <h3>{name}</h3>
                     <p>{message}</p>
-                    {probablyHasExtension && (
+                    {foreignHostname !== null ? (
+                        <p style={{color: Colors.red.toString()}}>
+                            This error originated from external code ({foreignHostname}), not openDAW.
+                            If you are using a proxy or have browser extensions installed, please disable them.
+                        </p>
+                    ) : probablyHasExtension && (
                         <p style={{color: Colors.red.toString()}}>
                             Something extra is running! A browser extension might be causing issues. Disable
                             extensions for this site.

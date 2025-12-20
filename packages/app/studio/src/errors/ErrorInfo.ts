@@ -16,10 +16,18 @@ export namespace ErrorInfo {
     })
 
     const fromUnknown = (value: unknown, name: string): ErrorInfo => {
-        if (value instanceof Error) {return fromError(value, name)}
+        if (value instanceof Error) {
+            const error = fromError(value, name)
+            // Add constructor name if it's a custom error class
+            const ctorName = value.constructor?.name
+            if (ctorName && ctorName !== "Error" && ctorName !== value.name) {
+                error.message = `[${ctorName}] ${error.message}`
+            }
+            return error
+        }
         // Capture synthetic stack for non-Error rejections to help locate the source
         const syntheticStack = new Error().stack?.split("\n").slice(3).join("\n")
-        const type = value === null ? "null" : typeof value
+        const internalType = Object.prototype.toString.call(value)
         let message: string
         if (value === undefined) {
             message = "(rejected with undefined)"
@@ -27,12 +35,23 @@ export namespace ErrorInfo {
             message = "(rejected with null)"
         } else if (typeof value === "string") {
             message = value
-        } else {
+        } else if (typeof value === "object") {
+            // Try to extract useful info from error-like objects
+            const obj = value as Record<string, unknown>
+            const keys = Object.keys(obj).slice(0, 10)
+            const parts: Array<string> = [`${internalType}`]
+            if ("message" in obj) {parts.push(`message: ${obj.message}`)}
+            if ("code" in obj) {parts.push(`code: ${obj.code}`)}
+            if ("name" in obj) {parts.push(`name: ${obj.name}`)}
+            if ("reason" in obj) {parts.push(`reason: ${obj.reason}`)}
+            if (keys.length > 0) {parts.push(`keys: [${keys.join(", ")}]`)}
             try {
-                message = `(${type}) ${JSON.stringify(value)}`
-            } catch {
-                message = `(${type}) [unserializable]`
-            }
+                const json = JSON.stringify(value)
+                if (json.length < 200) {parts.push(json)}
+            } catch { /* unserializable */ }
+            message = parts.join(" | ")
+        } else {
+            message = `(${typeof value}) ${String(value)}`
         }
         return {name, message, stack: syntheticStack}
     }

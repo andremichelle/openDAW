@@ -9,6 +9,7 @@ import {BuildInfo} from "@/BuildInfo"
 
 const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP"]
 const IgnoredErrors = ["ResizeObserver loop completed with undelivered notifications."]
+const UrlPattern = /https?:\/\/[^\s\)]+/g
 
 export class ErrorHandler {
     readonly #terminator = new Terminator()
@@ -25,6 +26,20 @@ export class ErrorHandler {
         return document.scripts.length > 1
             || ExtensionPatterns.some(pattern =>
                 error.message?.includes(pattern) || error.stack?.includes(pattern))
+    }
+
+    #extractForeignOrigin(error: ErrorInfo): string | null {
+        const stack = error.stack
+        if (stack === undefined) {return null}
+        const urls = stack.match(UrlPattern) ?? []
+        const expectedOrigin = window.location.origin
+        for (const url of urls) {
+            try {
+                const origin = new URL(url).origin
+                if (origin !== expectedOrigin) {return origin}
+            } catch { /* invalid URL */ }
+        }
+        return null
     }
 
     #tryIgnore(event: Event): boolean {
@@ -68,13 +83,17 @@ export class ErrorHandler {
     processError(scope: string, event: Event): boolean {
         if (this.#tryIgnore(event)) {return false}
         const error = ErrorInfo.extract(event)
-        const looksLikeExtension = this.#looksLikeExtension(error)
+        const foreignOrigin = this.#extractForeignOrigin(error)
+        const looksLikeExtension = this.#looksLikeExtension(error) || foreignOrigin !== null
         // Warn about extension errors but don't crash
         if (looksLikeExtension && !this.#errorThrown) {
             event.preventDefault()
+            const originInfo = foreignOrigin !== null
+                ? `This error originated from external code (${new URL(foreignOrigin).hostname}).`
+                : "A browser extension may have caused an error."
             Dialogs.info({
                 headline: "Warning",
-                message: "A browser extension may have caused an error. Consider disabling extensions for a more stable experience."
+                message: `${originInfo} Consider disabling extensions for a more stable experience.`
             }).then(EmptyExec)
             return false
         }
@@ -83,7 +102,7 @@ export class ErrorHandler {
         this.#errorThrown = true
         AnimationFrame.terminate()
         this.#report(scope, error)
-        this.#showDialog(scope, error, looksLikeExtension)
+        this.#showDialog(scope, error, looksLikeExtension, foreignOrigin)
         return true
     }
 
@@ -105,13 +124,14 @@ export class ErrorHandler {
         }).then(console.info, console.warn)
     }
 
-    #showDialog(scope: string, error: ErrorInfo, probablyHasExtension: boolean): void {
+    #showDialog(scope: string, error: ErrorInfo, probablyHasExtension: boolean, foreignOrigin: string | null): void {
         if (Surface.isAvailable()) {
             Dialogs.error({
                 scope,
                 name: error.name,
                 message: error.message ?? "no message",
                 probablyHasExtension,
+                foreignOrigin,
                 backupCommand: this.#recover()
             })
         } else {
