@@ -108,7 +108,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, reader, contex
                         const rect = canvas.getBoundingClientRect()
                         const position = snapping.xToUnitRound(event.clientX - rect.left) - reader.offset
                         const clickValue = clamp(valueAxis.axisToValue(event.clientY - rect.top), 0.0, 1.0)
-                        const parameter = context.assignment.getValue().unwrap().adapter
+                        const parameter = context.assignment.unwrap().adapter
                         const formatValue = parameter.getUnitValue()
                         const valueMapping = parameter.valueMapping
                         const value: unitValue = Math.abs(valueToPixel(clickValue) - valueToPixel(formatValue))
@@ -126,7 +126,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, reader, contex
                                     const clientRect = canvas.getBoundingClientRect()
                                     return modifyContext.startModifier(ValueMoveModifier.create({
                                         element: canvas,
-                                        parameter: context.assignment.getValue().unwrap().adapter,
+                                        parameter: context.assignment.unwrap().adapter,
                                         selection,
                                         snapping,
                                         pointerValue: valueAxis.axisToValue(event.clientY - clientRect.top),
@@ -194,7 +194,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, reader, contex
             if (target.type === "event") {
                 return modifyContext.startModifier(ValueMoveModifier.create({
                     element: canvas,
-                    parameter: context.assignment.getValue().unwrap().adapter,
+                    parameter: context.assignment.unwrap().adapter,
                     selection,
                     snapping,
                     pointerValue: valueAxis.axisToValue(event.clientY - clientRect.top),

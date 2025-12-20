@@ -27,8 +27,7 @@ export const ValueEditorHeader = ({lifecycle, context}: Construct) => {
             </p>
         </div>
     )
-    lifecycle.own(context.catchupAndSubscribeAssignment(owner => {
-        const optAssignment = owner.getValue()
+    lifecycle.own(context.catchupAndSubscribeValueAssignment(optAssignment => {
         if (optAssignment.isEmpty()) {
             name.textContent = "Unassigned"
         } else {

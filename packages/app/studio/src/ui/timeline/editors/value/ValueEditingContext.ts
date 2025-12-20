@@ -1,6 +1,7 @@
 import {
     assert,
     DefaultObservableValue,
+    MutableObservableOption,
     ObservableValue,
     Observer,
     Option,
@@ -17,30 +18,38 @@ import {TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {Pointers} from "@opendaw/studio-enums"
 import {Project} from "@opendaw/studio-core"
 
-export class ValueEditingContext implements Terminable {
+export interface ValueEditing {
+    readonly anchorModel: ObservableValue<unitValue>
+    readonly stringMapping: StringMapping<PrimitiveValues>
+    readonly currentValue: unitValue
+    readonly floating: boolean
+    quantize(value: unitValue): unitValue
+}
+
+export class ValueEditingContext implements ValueEditing, Terminable {
     static readonly FallbackStringMapping = StringMapping.percent()
 
     readonly #terminator = new Terminator()
 
     readonly #anchorValue: DefaultObservableValue<unitValue>
     readonly #assignmentLifecycle = new Terminator()
-    readonly #assignment: DefaultObservableValue<Option<ValueAssignment>>
+    readonly #assignment: MutableObservableOption<ValueAssignment>
 
     constructor(project: Project, collection: PointerField<Pointers.RegionCollection | Pointers.ClipCollection>) {
         this.#anchorValue = new DefaultObservableValue<unitValue>(0.0)
         this.#assignmentLifecycle = this.#terminator.own(new Terminator())
-        this.#assignment = this.#terminator.own(new DefaultObservableValue<Option<ValueAssignment>>(Option.None))
+        this.#assignment = this.#terminator.own(new MutableObservableOption<ValueAssignment>())
         this.#terminator.own(collection.catchupAndSubscribe(({targetVertex}) => {
             this.#assignmentLifecycle.terminate()
             if (targetVertex.isEmpty()) {
-                this.#assignment.setValue(Option.None)
+                this.#assignment.clear()
                 return // No track assigned
             }
             const boxAdapters = project.boxAdapters
             const trackBoxAdapter = boxAdapters.adapterFor(targetVertex.unwrap().box, TrackBoxAdapter)
             assert(trackBoxAdapter.type === TrackType.Value, "ValueEditorHeader only accepts value tracks")
             this.#assignmentLifecycle.own(trackBoxAdapter.target.catchupAndSubscribe((pointer) =>
-                this.#assignment.setValue(pointer.targetVertex.map(target => {
+                this.#assignment.wrapOption(pointer.targetVertex.map(target => {
                     const address = target.address
                     const adapter = project.parameterFieldAdapters.get(address)
                     this.#anchorValue.setValue(adapter.anchor)
@@ -49,16 +58,16 @@ export class ValueEditingContext implements Terminable {
         }))
     }
 
-    catchupAndSubscribeAssignment(observer: Observer<ObservableValue<Option<ValueAssignment>>>): Subscription {
+    catchupAndSubscribeValueAssignment(observer: Observer<Option<ValueAssignment>>): Subscription {
         return this.#assignment.catchupAndSubscribe(observer)
     }
 
-    get assignment(): DefaultObservableValue<Option<ValueAssignment>> {return this.#assignment}
+    get assignment(): MutableObservableOption<ValueAssignment> {return this.#assignment}
 
     get anchorModel(): ObservableValue<unitValue> {
         const scope = this
         return new class implements ObservableValue<unitValue> {
-            getValue(): unitValue {return scope.#assignment.getValue().mapOr(assignment => assignment.adapter.anchor, 0.0)}
+            getValue(): unitValue {return scope.#assignment.mapOr(assignment => assignment.adapter.anchor, 0.0)}
             subscribe(observer: Observer<ObservableValue<unitValue>>): Subscription {return scope.#anchorValue.subscribe(observer)}
             catchupAndSubscribe(observer: Observer<ObservableValue<unitValue>>): Subscription {
                 observer(this)
@@ -68,16 +77,34 @@ export class ValueEditingContext implements Terminable {
     }
 
     get valueMapping(): ValueMapping<PrimitiveValues> {
-        return this.#assignment.getValue().match({
+        return this.#assignment.match({
             none: () => ValueMapping.unipolar(),
             some: assignment => assignment.adapter.valueMapping
         })
     }
 
     get stringMapping(): StringMapping<PrimitiveValues> {
-        return this.#assignment.getValue().match({
+        return this.#assignment.match({
             none: () => ValueEditingContext.FallbackStringMapping,
             some: assignment => assignment.adapter.stringMapping
+        })
+    }
+
+    get currentValue(): unitValue {
+        return this.#assignment.mapOr(assignment => assignment.adapter.getUnitValue(), 0.0)
+    }
+
+    get floating(): boolean {
+        return this.#assignment.mapOr(assignment => assignment.adapter.valueMapping.floating(), false)
+    }
+
+    quantize(value: unitValue): unitValue {
+        return this.#assignment.match({
+            none: () => value,
+            some: assignment => {
+                const mapping = assignment.adapter.valueMapping
+                return mapping.x(mapping.y(value))
+            }
         })
     }
 

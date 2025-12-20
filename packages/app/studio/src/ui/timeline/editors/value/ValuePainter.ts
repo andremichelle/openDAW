@@ -59,7 +59,7 @@ export const createValuePainter =
         context.beginPath()
         context.moveTo(0, y0)
         context.lineTo(width, y0)
-        valueEditing.assignment.getValue().ifSome(x => {
+        valueEditing.assignment.ifSome(x => {
             const y = valueToPixel(x.adapter.getUnitValue())
             context.moveTo(0, y)
             context.lineTo(width, y)
