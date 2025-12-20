@@ -60,7 +60,7 @@ import {
     TimelineRange
 } from "@opendaw/studio-core"
 import {ProjectDialogs} from "@/project/ProjectDialogs"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
@@ -139,7 +139,25 @@ export class StudioService implements ProjectEnv {
         this.#checkRecovery()
         this.#listenPreferences()
 
-        if (Browser.isLocalHost()) {this.newProject().then()}
+        if (Browser.isLocalHost()) {
+            this.newProject().then()
+            const {timelineBox, boxGraph} = this.project
+            boxGraph.beginTransaction()
+            const collection = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+            timelineBox.tempoTrack.refer(collection.owners)
+            ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                box.position.setValue(0)
+                box.value.setValue(120.0)
+                box.events.refer(collection.events)
+            })
+            ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                box.position.setValue(PPQN.Bar)
+                box.value.setValue(160.0)
+                box.events.refer(collection.events)
+            })
+
+            boxGraph.endTransaction()
+        }
     }
 
     get sampleRate(): number {return this.audioContext.sampleRate}

@@ -13,6 +13,10 @@ type Construct = {
 
 export const TempoTrackBody = ({}: Construct) => {
     return (
-        <div className={className}></div>
+        <div className={className}>
+            <canvas onInit={_canvas => {
+
+            }}/>
+        </div>
     )
 }

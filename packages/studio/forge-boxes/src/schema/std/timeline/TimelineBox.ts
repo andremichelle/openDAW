@@ -55,13 +55,14 @@ export const TimelineBox: BoxSchema<Pointers> = {
                     }
                 }
             },
+            22: {type: "pointer", name: "tempo-track", mandatory: false, pointerType: Pointers.ValueEventCollection},
             30: {
                 type: "int32", name: "durationInPulses",
                 value: PPQN.fromSignature(128, 1), ...PPQNDurationConstraints
             },
             31: {
                 type: "float32", name: "bpm",
-                value: 120, constraints: {min: 30.0, max: 999.0, scaling: "exponential"}, unit: "bpm"
+                value: 120.0, constraints: {min: 30.0, max: 999.0, scaling: "exponential"}, unit: "bpm"
             }
         }
     }
