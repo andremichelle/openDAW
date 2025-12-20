@@ -47,6 +47,7 @@ export class ClipReader<CONTENT> implements EventOwnerReader<CONTENT> {
     get hue(): number {return this.clip.hue}
     get mute(): boolean {return this.clip.mute}
     get offset(): number {return 0}
+    get canLoop(): boolean {return true}
     get hasContent(): boolean {return this.clip.hasCollection}
     get isMirrored(): boolean {return this.clip.isMirrowed}
     get content(): CONTENT {return this.clip.optCollection.unwrap()}

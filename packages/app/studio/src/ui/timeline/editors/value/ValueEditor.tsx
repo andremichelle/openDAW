@@ -81,6 +81,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
     const paintValues = createValuePainter({
         range,
         valueToPixel,
+        eventMapping,
         modifyContext,
         snapping,
         valueEditing: context,

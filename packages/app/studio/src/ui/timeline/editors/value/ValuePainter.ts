@@ -1,4 +1,4 @@
-import {Arrays, Func, Option, Procedure, Provider, TAU, unitValue} from "@opendaw/lib-std"
+import {Arrays, Func, Option, Procedure, Provider, TAU, unitValue, ValueMapping} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {renderValueStream} from "@/ui/timeline/renderer/value.ts"
@@ -16,6 +16,7 @@ import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 export type Construct = {
     range: TimelineRange
     valueToPixel: Func<unitValue, number>
+    eventMapping: ValueMapping<number>
     modifyContext: ObservableModifyContext<ValueModifier>
     snapping: Snapping
     valueEditing: ValueContext
@@ -23,7 +24,7 @@ export type Construct = {
 }
 
 export const createValuePainter =
-    ({range, valueToPixel, modifyContext, snapping, valueEditing, reader}: Construct)
+    ({range, valueToPixel, eventMapping, modifyContext, snapping, valueEditing, reader}: Construct)
         : Procedure<CanvasPainter> => (painter: CanvasPainter) => {
         const modifier: Option<ValueModifyStrategy> = modifyContext.modifier
         const context = painter.context
@@ -33,25 +34,27 @@ export const createValuePainter =
         context.save()
         context.textBaseline = "hanging"
         context.font = `${em}px ${fontFamily}`
-        const y0 = Math.floor(valueToPixel(1.0))
-        const y1 = Math.floor(valueToPixel(0.0))
+        const y0 = Math.floor(valueToPixel(eventMapping.y(1.0)))
+        const y1 = Math.floor(valueToPixel(eventMapping.y(0.0)))
         renderTimeGrid(context, range, snapping, y0, y1)
-        // LOOP DURATION
         const offset = reader.offset
-        const x0 = Math.floor(range.unitToX(offset) * devicePixelRatio)
-        const x1 = Math.floor(range.unitToX(offset + modifier.match({
-            none: () => reader.contentDuration,
-            some: strategy => strategy.readContentDuration(reader)
-        })) * devicePixelRatio)
-        if (x0 > 0) {
-            context.fillStyle = `hsla(${reader.hue}, 60%, 60%, 0.30)`
-            context.fillRect(x0, 0, devicePixelRatio, height)
-        }
-        if (x1 > 0) {
-            context.fillStyle = `hsla(${reader.hue}, 60%, 60%, 0.03)`
-            context.fillRect(x0, 0, x1 - x0, height)
-            context.fillStyle = `hsla(${reader.hue}, 60%, 60%, 0.30)`
-            context.fillRect(x1, 0, devicePixelRatio, height)
+        // LOOP DURATION
+        if (reader.canLoop) {
+            const x0 = Math.floor(range.unitToX(offset) * devicePixelRatio)
+            const x1 = Math.floor(range.unitToX(offset + modifier.match({
+                none: () => reader.contentDuration,
+                some: strategy => strategy.readContentDuration(reader)
+            })) * devicePixelRatio)
+            if (x0 > 0) {
+                context.fillStyle = `hsla(${reader.hue}, 60%, 60%, 0.30)`
+                context.fillRect(x0, 0, devicePixelRatio, height)
+            }
+            if (x1 > 0) {
+                context.fillStyle = `hsla(${reader.hue}, 60%, 60%, 0.03)`
+                context.fillRect(x0, 0, x1 - x0, height)
+                context.fillStyle = `hsla(${reader.hue}, 60%, 60%, 0.30)`
+                context.fillRect(x1, 0, devicePixelRatio, height)
+            }
         }
         // min/max dashed lines
         context.strokeStyle = "rgba(255, 255, 255, 0.25)"

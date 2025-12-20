@@ -28,6 +28,7 @@ export interface EventOwnerReader<CONTENT> extends TimeAxisCursorMapper {
     get complete(): ppqn
     get hue(): int
     get mute(): boolean
+    get canLoop(): boolean
     get hasContent(): boolean
     get isMirrored(): boolean
     get content(): CONTENT

@@ -49,6 +49,7 @@ export class RegionReader<REGION extends LoopableRegionBoxAdapter<CONTENT>, CONT
     get hue(): number {return this.region.hue}
     get mute(): boolean {return this.region.mute}
     get offset(): number {return this.region.offset}
+    get canLoop(): boolean {return true}
     get hasContent(): boolean {return this.region.hasCollection}
     get isMirrored(): boolean {return this.region.isMirrowed}
     get content(): CONTENT {return this.region.optCollection.unwrap()}

@@ -27,6 +27,7 @@ export class TimelineBoxAdapter implements BoxAdapter {
         this.#markerTrack = new MarkerTrackAdapter(context, this.#box.markerTrack)
         this.#tempoTrack = new MutableObservableOption<ValueEventCollectionBoxAdapter>()
 
+        // TODO Listen if events exist and update tempoTrack accordingly
         this.#terminator.own(this.#box.tempoTrack.events.catchupAndSubscribe(({targetVertex}) => {
             targetVertex.match({
                 none: () => this.#tempoTrack.clear(),

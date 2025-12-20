@@ -1,5 +1,5 @@
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader"
-import {PPQN, ppqn} from "@opendaw/lib-dsp"
+import {ppqn} from "@opendaw/lib-dsp"
 import {TimelineBoxAdapter, TrackBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 import {int, Observer, Option, Subscription, Terminable} from "@opendaw/lib-std"
 import {TimelineRange} from "@opendaw/studio-core"
@@ -10,17 +10,18 @@ export class TempoValueEventOwnerReader implements ValueEventOwnerReader {
     constructor(adapter: TimelineBoxAdapter) {this.#adapter = adapter}
 
     get content(): ValueEventCollectionBoxAdapter {return this.#adapter.tempoTrack.unwrap()}
-    get contentDuration(): ppqn {return PPQN.Bar * 128}
+    get contentDuration(): ppqn {return Number.POSITIVE_INFINITY}
     get hasContent(): boolean {return this.#adapter.tempoTrack.nonEmpty()}
     get hue(): int {return 30}
     get isMirrored(): boolean {return false}
     get offset(): ppqn {return 0}
     get position(): ppqn {return 0}
-    get duration(): ppqn {return PPQN.Bar * 128}
-    get complete(): ppqn {return PPQN.Bar * 128}
-    get loopDuration(): ppqn {return PPQN.Bar * 128}
+    get duration(): ppqn {return Number.POSITIVE_INFINITY}
+    get complete(): ppqn {return Number.POSITIVE_INFINITY}
+    get loopDuration(): ppqn {return Number.POSITIVE_INFINITY}
     get loopOffset(): ppqn {return 0}
     get mute(): boolean {return false}
+    get canLoop(): boolean {return false}
     get trackBoxAdapter(): Option<TrackBoxAdapter> {return Option.None}
     keeoOverlapping(_range: TimelineRange): Subscription {
         return Terminable.Empty

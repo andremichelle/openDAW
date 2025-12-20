@@ -285,8 +285,11 @@ export class BlockRenderer implements Terminable {
             this.#freeRunningPosition = p1
         }
         if (markerChanged) {
-            this.#context.engineToClient.switchMarkerState(isDefined(this.#currentMarker)
-                ? [this.#currentMarker[0].uuid, this.#currentMarker[1]] : null)
+            this.#context.engineToClient.switchMarkerState(
+                isDefined(this.#currentMarker)
+                    ? [this.#currentMarker[0].uuid, this.#currentMarker[1]]
+                    : null
+            )
         }
     }
 
