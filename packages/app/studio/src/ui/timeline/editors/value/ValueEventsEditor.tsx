@@ -20,11 +20,11 @@ type Construct = {
     menu: EditorMenuCollector
     range: TimelineRange
     snapping: Snapping
-    mapping: ValueMapping<number>
+    eventMapping: ValueMapping<number>
     reader: ValueEventOwnerReader
 }
 
-export const ValueEventsEditor = ({lifecycle, service, context, range, snapping, mapping, reader}: Construct) => {
+export const ValueEventsEditor = ({lifecycle, service, context, range, snapping, eventMapping, reader}: Construct) => {
     return (
         <div className={className}>
             <ValueEditorHeader lifecycle={lifecycle}
@@ -34,7 +34,7 @@ export const ValueEventsEditor = ({lifecycle, service, context, range, snapping,
                          service={service}
                          range={range}
                          snapping={snapping}
-                         mapping={mapping}
+                         eventMapping={eventMapping}
                          context={context}
                          reader={reader}/>
         </div>

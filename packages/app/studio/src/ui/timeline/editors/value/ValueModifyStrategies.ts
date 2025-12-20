@@ -5,7 +5,7 @@ import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
 
 export interface ValueModifyStrategy {
     showOrigin(): boolean
-    snapValue(): Option<unitValue>
+    snapValue(): Option<number>
     readPosition(event: UIValueEvent): ppqn
     readValue(event: UIValueEvent): unitValue
     readInterpolation(event: UIValueEvent): Interpolation
@@ -20,7 +20,7 @@ export namespace ValueModifyStrategy {
         showOrigin: (): boolean => false,
         snapValue: (): Option<unitValue> => Option.None,
         readPosition: (event: UIValueEvent): ppqn => event.position,
-        readValue: (event: UIValueEvent): unitValue => event.value,
+        readValue: (event: UIValueEvent): number => event.value,
         readInterpolation: (event: UIValueEvent): Interpolation => event.interpolation,
         translateSearch: (value: ppqn): ppqn => value,
         isVisible: (_event: UIValueEvent): boolean => true,

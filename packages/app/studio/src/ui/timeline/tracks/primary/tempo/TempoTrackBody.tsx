@@ -1,6 +1,6 @@
 import css from "./TempoTrackBody.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {Lifecycle, Terminator, ValueMapping} from "@opendaw/lib-std"
+import {Lifecycle, Terminator} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {ValueEditor} from "@/ui/timeline/editors/value/ValueEditor"
@@ -23,15 +23,18 @@ export const TempoTrackBody = ({lifecycle, service}: Construct) => {
                 editorLifecycle.terminate()
                 option.match({
                     none: () => Html.empty(element),
-                    some: () => replaceChildren(element, (
-                        <ValueEditor lifecycle={editorLifecycle}
-                                     service={service}
-                                     range={range}
-                                     snapping={snapping}
-                                     context={new TempoValueContext(timelineBoxAdapter)}
-                                     mapping={ValueMapping.unipolar()}
-                                     reader={new TempoValueEventOwnerReader(timelineBoxAdapter)}/>
-                    ))
+                    some: () => {
+                        const tempoValueContext = new TempoValueContext(timelineBoxAdapter)
+                        return replaceChildren(element, (
+                            <ValueEditor lifecycle={editorLifecycle}
+                                         service={service}
+                                         range={range}
+                                         snapping={snapping}
+                                         context={tempoValueContext}
+                                         eventMapping={tempoValueContext.valueMapping}
+                                         reader={new TempoValueEventOwnerReader(timelineBoxAdapter)}/>
+                        ))
+                    }
                 })
             })
         }}/>

@@ -51,12 +51,12 @@ type Construct = {
     service: StudioService
     range: TimelineRange
     snapping: Snapping
-    mapping: ValueMapping<number>
+    eventMapping: ValueMapping<number>
     reader: ValueEventOwnerReader
     context: ValueContext
 }
 
-export const ValueEditor = ({lifecycle, service, range, snapping, reader, context}: Construct) => {
+export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, reader, context}: Construct) => {
     const {project} = service
     const {editing} = project
     const selection: Selection<ValueEventBoxAdapter> = lifecycle.own(project.selection
@@ -71,9 +71,9 @@ export const ValueEditor = ({lifecycle, service, range, snapping, reader, contex
     const canvas: HTMLCanvasElement = <canvas tabIndex={-1}/>
     const valueAxis: ValueAxis = {
         axisToValue: (pixel: number): unitValue =>
-            1.0 - (pixel - RangePadding - 0.5) / (canvas.clientHeight - RangePadding * 2.0 - 1.0),
+            eventMapping.y(1.0 - (pixel - RangePadding - 0.5) / (canvas.clientHeight - RangePadding * 2.0 - 1.0)),
         valueToAxis: (value: unitValue): number =>
-            (1.0 - value) * (canvas.clientHeight - 2.0 * RangePadding - 1.0) + RangePadding + 0.5
+            (1.0 - eventMapping.x(value)) * (canvas.clientHeight - 2.0 * RangePadding - 1.0) + RangePadding + 0.5
     }
     const valueToPixel: Func<unitValue, number> = value => valueAxis.valueToAxis(value) * devicePixelRatio
     const modifyContext = new ObservableModifyContext<ValueModifier>(service.project.editing)
@@ -94,7 +94,16 @@ export const ValueEditor = ({lifecycle, service, range, snapping, reader, contex
     //
     lifecycle.ownAll(
         installEditorBody({element: canvas, range, reader}),
-        ValueTooltip.install({element: canvas, capturing, range, valueAxis, reader, context, modifyContext}),
+        ValueTooltip.install({
+            element: canvas,
+            capturing,
+            range,
+            valueAxis,
+            reader,
+            eventMapping,
+            context,
+            modifyContext
+        }),
         Dragging.attach(canvas, (() => {
             let lastDownTime = 0
             return (event: PointerEvent) => {
@@ -107,9 +116,9 @@ export const ValueEditor = ({lifecycle, service, range, snapping, reader, contex
                     if (target === null || target.type === "loop-duration") {
                         const rect = canvas.getBoundingClientRect()
                         const position = snapping.xToUnitRound(event.clientX - rect.left) - reader.offset
-                        const clickValue = clamp(valueAxis.axisToValue(event.clientY - rect.top), 0.0, 1.0)
+                        const clickValue = valueAxis.axisToValue(event.clientY - rect.top)
                         const formatValue = context.currentValue
-                        const value: unitValue = Math.abs(valueToPixel(clickValue) - valueToPixel(formatValue))
+                        const value: number = Math.abs(valueToPixel(clickValue) - valueToPixel(formatValue))
                         < SnapValueThresholdInPixels
                             ? formatValue
                             : context.quantize(clickValue)

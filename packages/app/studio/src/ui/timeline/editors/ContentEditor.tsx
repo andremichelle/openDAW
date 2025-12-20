@@ -154,7 +154,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                                menu={menu}
                                range={range}
                                snapping={snapping}
-                               mapping={ValueMapping.unipolar()}
+                               eventMapping={ValueMapping.unipolar()}
                                reader={reader}/>
         )
     }

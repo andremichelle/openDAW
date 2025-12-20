@@ -1,4 +1,4 @@
-import {Nullable, Option, StringMapping, Terminable, ValueAxis} from "@opendaw/lib-std"
+import {Nullable, Option, StringMapping, Terminable, ValueAxis, ValueMapping} from "@opendaw/lib-std"
 import {ValueCaptureTarget} from "@/ui/timeline/editors/value/ValueEventCapturing"
 import {Surface} from "@/ui/surface/Surface"
 import {ValueModifyStrategy} from "@/ui/timeline/editors/value/ValueModifyStrategies"
@@ -19,11 +19,12 @@ export namespace ValueTooltip {
         valueAxis: ValueAxis
         reader: ValueEventOwnerReader
         context: ValueContext
+        eventMapping: ValueMapping<number>
         modifyContext: ObservableModifyContext<ValueModifier>
     }
 
     export const install = (
-        {element, capturing, range, valueAxis, reader, context, modifyContext}: Creation): Terminable =>
+        {element, capturing, range, valueAxis, reader, context, eventMapping, modifyContext}: Creation): Terminable =>
         Terminable.many(
             Events.subscribe(element, "pointermove", ({clientX, clientY, buttons}: PointerEvent) => {
                 if (buttons > 0) {return}
@@ -35,7 +36,7 @@ export namespace ValueTooltip {
                         const modifier: ValueModifyStrategy = strategy.unwrapOrElse(ValueModifyStrategy.Identity)
                         const clientRect = element.getBoundingClientRect()
                         const clientX = range.unitToX(modifier.readPosition(event) + reader.offset) + clientRect.left + 8
-                        const value = modifier.readValue(event)
+                        const value = eventMapping.x(modifier.readValue(event))
                         const clientY = valueAxis.valueToAxis(value) + clientRect.top + 8
                         return ({...context.stringMapping.x(context.valueMapping.y(value)), clientX, clientY})
                     })
