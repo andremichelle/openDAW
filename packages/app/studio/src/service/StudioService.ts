@@ -139,12 +139,13 @@ export class StudioService implements ProjectEnv {
         this.#checkRecovery()
         this.#listenPreferences()
 
+        // TODO Remove when done
         if (Browser.isLocalHost()) {
             this.newProject().then()
             const {timelineBox, boxGraph} = this.project
             boxGraph.beginTransaction()
             const collection = ValueEventCollectionBox.create(boxGraph, UUID.generate())
-            timelineBox.tempoTrack.refer(collection.owners)
+            timelineBox.tempoTrack.events.refer(collection.owners)
             ValueEventBox.create(boxGraph, UUID.generate(), box => {
                 box.position.setValue(0)
                 box.value.setValue(120.0)

@@ -48,7 +48,7 @@ export namespace ValueEvent {
      */
     export const valueAt = <E extends ValueEvent>(events: EventCollection<E>,
                                                   position: ppqn,
-                                                  fallback: unitValue): unitValue => {
+                                                  fallback: number): number => {
         if (events.isEmpty()) {return fallback} // no events, nothing to iterate
         const iterator = events.iterateFrom(position)
         const {done, value: prevEvent} = iterator.next()
@@ -76,7 +76,7 @@ export namespace ValueEvent {
                                                     duration: ppqn,
                                                     numSteps: number): IteratorObject<{
         position: ppqn,
-        value: unitValue
+        value: number
     }, void> {
         if (events.isEmpty()) {return} // no events, nothing to iterate
         const iterator = events.iterateFrom(position)
@@ -114,7 +114,7 @@ export namespace ValueEvent {
         }
     }
 
-    const interpolate = ({value, position, interpolation}: ValueEvent, b: ValueEvent, x: number): unitValue => {
+    const interpolate = ({value, position, interpolation}: ValueEvent, b: ValueEvent, x: number): number => {
         if (interpolation.type === "none") {
             return value
         } else if (interpolation.type === "linear") {

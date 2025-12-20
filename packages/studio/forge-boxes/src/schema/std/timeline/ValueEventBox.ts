@@ -1,6 +1,6 @@
 import {BoxSchema, deprecated} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
-import {IndexConstraints, PPQNPositionConstraints, UnipolarConstraints} from "../Defaults"
+import {IndexConstraints, PPQNPositionConstraints} from "../Defaults"
 
 export const ValueEventBox: BoxSchema<Pointers> = {
     type: "box",
@@ -15,8 +15,7 @@ export const ValueEventBox: BoxSchema<Pointers> = {
                 value: 1 /* default is linear */, constraints: {values: [0, 1]}, unit: "",
                 pointerRules: {accepts: [Pointers.ValueInterpolation], mandatory: false}
             },
-            13: {type: "float32", name: "value", ...UnipolarConstraints},
-            // TODO Remove slope. It is not used anymore but older project files
+            13: {type: "float32", name: "value", constraints: "any", unit: ""},
             14: {type: "float32", name: "slope", deprecated, constraints: "any", unit: "", value: NaN}
         }
     }, pointerRules: {accepts: [Pointers.Selection], mandatory: false}

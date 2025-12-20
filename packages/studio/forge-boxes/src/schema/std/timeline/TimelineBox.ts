@@ -55,7 +55,23 @@ export const TimelineBox: BoxSchema<Pointers> = {
                     }
                 }
             },
-            22: {type: "pointer", name: "tempo-track", mandatory: false, pointerType: Pointers.ValueEventCollection},
+            22: {
+                type: "object",
+                name: "tempo-track",
+                class: {
+                    name: "TempoTrack",
+                    fields: {
+                        1: {
+                            type: "pointer",
+                            name: "events",
+                            mandatory: false,
+                            pointerType: Pointers.ValueEventCollection
+                        },
+                        10: {type: "int32", name: "index", ...IndexConstraints},
+                        20: {type: "boolean", name: "enabled", value: true}
+                    }
+                }
+            },
             30: {
                 type: "int32", name: "durationInPulses",
                 value: PPQN.fromSignature(128, 1), ...PPQNDurationConstraints
