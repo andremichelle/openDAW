@@ -13,11 +13,11 @@ export namespace BlockFlags {
     export const create = (transporting: boolean,
                            discontinuous: boolean,
                            playing: boolean,
-                           tempoChanged: boolean): int => 0
+                           bpmChanged: boolean): int => 0
         | (transporting ? BlockFlag.transporting : 0)
         | (discontinuous ? BlockFlag.discontinuous : 0)
         | (playing ? BlockFlag.playing : 0)
-        | (tempoChanged ? BlockFlag.bpmChanged : 0)
+        | (bpmChanged ? BlockFlag.bpmChanged : 0)
 }
 
 export type Block = Readonly<{

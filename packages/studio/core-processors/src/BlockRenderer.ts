@@ -97,6 +97,13 @@ export class BlockRenderer implements Terminable {
                         markerChanged = true
                     }
                 }
+                if (discontinuous && this.#optTempoTrack.nonEmpty()) {
+                    const newBpm = this.#optTempoTrack.unwrap().valueAt(p0, this.#bpm)
+                    if (newBpm !== this.#bpm) {
+                        this.#bpm = newBpm
+                        this.#bpmChanged = true
+                    }
+                }
                 const sn: int = RenderQuantum - s0
                 const p1 = p0 + PPQN.samplesToPulses(sn, this.#bpm, sampleRate)
                 let action: Action = null
@@ -243,10 +250,19 @@ export class BlockRenderer implements Terminable {
             }
             procedure({blocks})
             timeInfo.advanceTo(p0)
+            discontinuous = false
             this.#freeRunningPosition = p0
             this.#bpmChanged = false
         } else {
-            if (this.#someMarkersChanged || timeInfo.getLeapStateAndReset()) {
+            const discontinuous = timeInfo.getLeapStateAndReset()
+            if (discontinuous && this.#optTempoTrack.nonEmpty()) {
+                const newBpm = this.#optTempoTrack.unwrap().valueAt(this.#context.timeInfo.position, this.#bpm)
+                if (newBpm !== this.#bpm) {
+                    this.#bpm = newBpm
+                    this.#bpmChanged = true
+                }
+            }
+            if (this.#someMarkersChanged || discontinuous) {
                 this.#someMarkersChanged = false
                 const marker = markerTrack.events.lowerEqual(timeInfo.position)
                 if (marker !== null) {
@@ -261,10 +277,11 @@ export class BlockRenderer implements Terminable {
             const processInfo: ProcessInfo = {
                 blocks: [{
                     index: 0, p0, p1, s0: 0, s1: RenderQuantum, bpm: this.#bpm,
-                    flags: BlockFlags.create(false, false, false, false)
+                    flags: BlockFlags.create(false, false, false, this.#bpmChanged)
                 }]
             }
             procedure(processInfo)
+            this.#bpmChanged = false
             this.#freeRunningPosition = p1
         }
         if (markerChanged) {
