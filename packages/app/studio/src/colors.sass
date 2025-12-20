@@ -16,7 +16,14 @@ $DARKENER: rgba(black, 0.04)
 @mixin panel-background-dark
   background-color: var(--color-panel-background-dark) !important
 
-@mixin panel-background-chess
+@mixin panel-background-stripes-dark
+  background-image: linear-gradient(45deg, var(--color-panel-background-dark) 25%, var(--color-panel-background) 25%, var(--color-panel-background) 50%, var(--color-panel-background-dark) 50%, var(--color-panel-background-dark) 75%, var(--color-panel-background) 75%, var(--color-panel-background) 100%)
+  background-size: 5.66px 5.66px
+  background-color: var(--color-panel-background-dark)
+  background-attachment: fixed
+
+@mixin panel-background-stripes-bright
   background-image: linear-gradient(45deg, var(--color-panel-background-bright) 25%, var(--color-panel-background) 25%, var(--color-panel-background) 50%, var(--color-panel-background-bright) 50%, var(--color-panel-background-bright) 75%, var(--color-panel-background) 75%, var(--color-panel-background) 100%)
   background-size: 5.66px 5.66px
   background-color: var(--color-panel-background-bright)
+  background-attachment: fixed
