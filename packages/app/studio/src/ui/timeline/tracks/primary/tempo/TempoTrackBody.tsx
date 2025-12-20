@@ -1,7 +1,7 @@
 import css from "./TempoTrackBody.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {Lifecycle, ValueMapping} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Lifecycle, Terminator, ValueMapping} from "@opendaw/lib-std"
+import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {ValueEditor} from "@/ui/timeline/editors/value/ValueEditor"
 import {TempoValueContext} from "@/ui/timeline/tracks/primary/tempo/TempoValueContext"
@@ -15,16 +15,25 @@ type Construct = {
 }
 
 export const TempoTrackBody = ({lifecycle, service}: Construct) => {
-    const {project, timeline: {range, snapping}} = service
+    const {project: {timelineBoxAdapter}, timeline: {range, snapping}} = service
+    const editorLifecycle = lifecycle.own(new Terminator())
     return (
-        <div className={className}>
-            <ValueEditor lifecycle={lifecycle}
-                         service={service}
-                         range={range}
-                         snapping={snapping}
-                         context={new TempoValueContext(project.timelineBoxAdapter)}
-                         mapping={ValueMapping.unipolar()}
-                         reader={new TempoValueEventOwnerReader(project.timelineBoxAdapter)}/>
-        </div>
+        <div className={className} onInit={element => {
+            timelineBoxAdapter.tempoTrack.catchupAndSubscribe(option => {
+                editorLifecycle.terminate()
+                option.match({
+                    none: () => Html.empty(element),
+                    some: () => replaceChildren(element, (
+                        <ValueEditor lifecycle={editorLifecycle}
+                                     service={service}
+                                     range={range}
+                                     snapping={snapping}
+                                     context={new TempoValueContext(timelineBoxAdapter)}
+                                     mapping={ValueMapping.unipolar()}
+                                     reader={new TempoValueEventOwnerReader(timelineBoxAdapter)}/>
+                    ))
+                })
+            })
+        }}/>
     )
 }
