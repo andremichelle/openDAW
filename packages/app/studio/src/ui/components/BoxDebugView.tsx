@@ -23,9 +23,11 @@ export const BoxDebugView = ({box}: Construct) => {
             </div>
             {Array.from(vertex.fields()).map(field => {
                 return (
-                    <div className="field">
+                    <div className={Html.buildClassList("field", field.deprecated && "deprecated")}>
                         <span className="key">{field.fieldKey}</span>
-                        <span className="name">{field.fieldName}</span>
+                        <span
+                            className="name">{field.deprecated ? `${field.fieldName} (deprecated)` : field.fieldName}
+                        </span>
                         {
                             field.accept<JsxValue>({
                                 visitPrimitiveField: (field: PrimitiveField): JsxValue => (
