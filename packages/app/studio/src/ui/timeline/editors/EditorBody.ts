@@ -1,10 +1,8 @@
 import {Terminable} from "@opendaw/lib-std"
-import {PPQN} from "@opendaw/lib-dsp"
 import {attachWheelScroll} from "@/ui/timeline/editors/WheelScroll.ts"
 import {installAutoScroll} from "@/ui/AutoScroll.ts"
 import {Config} from "@/ui/timeline/Config.ts"
 import {EventOwnerReader} from "./EventOwnerReader.ts"
-import {Html} from "@opendaw/lib-dom"
 import {TimelineRange} from "@opendaw/studio-core"
 
 export type Construct = {
@@ -13,22 +11,14 @@ export type Construct = {
     reader: EventOwnerReader<unknown>
 }
 
-export const installEditorMainBody = ({element, range, reader}: Construct): Terminable => {
-    let init = true
+export const installEditorBody = ({element, range, reader}: Construct): Terminable => {
     return Terminable.many(
-        Html.watchResize(element, () => {
-            range.width = element.clientWidth
-            if (init) {
-                init = false
-                range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16)
-            }
-        }),
         installEditorAuxBody(element, range),
         reader.keeoOverlapping(range)
     )
 }
 
-// This is for the extra editor that also needs swheel and auto-scroll support
+// This is for the extra editor that also needs wheel and auto-scroll support
 // Currently: PropertyEditor within NoteEditor
 export const installEditorAuxBody = (element: Element, range: TimelineRange): Terminable => {
     return Terminable.many(

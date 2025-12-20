@@ -199,7 +199,12 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                 return fallback(vertex.box)
             })()
             )
-            AnimationFrame.once(() => element.focus())
+            AnimationFrame.once(() => {
+                element.focus()
+                range.width = contentEditor.clientWidth
+                owner.ifSome(reader =>
+                    range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16))
+            })
         },
         none: () => {
             owner = Option.None
@@ -224,6 +229,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
         }),
         Html.watchResize(element, () =>
             element.style.setProperty("--cursor-height", `${(contentEditor.clientHeight + 1)}px`)),
+        Html.watchResize(contentEditor, () => range.width = contentEditor.clientWidth),
         range.subscribe((() => {
             // FIXME Tried it with a timeout, but it did not behave correctly
             const mainTimelineRange = service.timeline.range

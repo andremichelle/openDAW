@@ -15,7 +15,7 @@ import {FilteredSelection, NoteEventBoxAdapter, NoteSignal, NoteStreamReceiver} 
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {PropertyEditor} from "./property/PropertyEditor.tsx"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
-import {installEditorMainBody} from "@/ui/timeline/editors/EditorBody.ts"
+import {installEditorBody} from "@/ui/timeline/editors/EditorBody.ts"
 import {EditorMenuCollector} from "@/ui/timeline/editors/EditorMenuCollector.ts"
 import {installNoteViewMenu} from "@/ui/timeline/editors/notes/NoteViewMenu.ts"
 import {PropertyHeader} from "@/ui/timeline/editors/notes/property/PropertyHeader.tsx"
@@ -98,7 +98,7 @@ export const NoteEditor =
                 events: reader.content.events,
                 stepRecording
             })),
-            installEditorMainBody({element: pitchBody, range, reader}),
+            installEditorBody({element: pitchBody, range, reader}),
             Html.watchResize(pitchBody, (() => {
                 let init = true
                 let centerNote: int = 60

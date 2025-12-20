@@ -36,7 +36,7 @@ import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {CutCursor} from "@/ui/timeline/CutCursor.tsx"
 import {installValueInput} from "@/ui/timeline/editors/ValueInput.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {installEditorMainBody} from "../EditorBody"
+import {installEditorBody} from "../EditorBody"
 import {ValueContentDurationModifier} from "./ValueContentDurationModifier"
 import {Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {ValueTooltip} from "./ValueTooltip"
@@ -93,7 +93,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, reader, contex
     // Register events that must run before any select actions
     //
     lifecycle.ownAll(
-        installEditorMainBody({element: canvas, range, reader}),
+        installEditorBody({element: canvas, range, reader}),
         ValueTooltip.install({element: canvas, capturing, range, valueAxis, reader, context, modifyContext}),
         Dragging.attach(canvas, (() => {
             let lastDownTime = 0

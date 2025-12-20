@@ -8,7 +8,7 @@ import {renderAudio} from "@/ui/timeline/renderer/audio.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {renderTimeGrid} from "@/ui/timeline/editors/TimeGridRenderer.ts"
 import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {installEditorMainBody} from "../EditorBody"
+import {installEditorBody} from "../EditorBody"
 import {Dragging, Html} from "@opendaw/lib-dom"
 import {WarpMarkerBoxAdapter} from "@opendaw/studio-adapters"
 import {createAudioCapturing} from "@/ui/timeline/editors/audio/AudioCapturing"
@@ -91,7 +91,7 @@ export const AudioEditorCanvas = ({lifecycle, project: {editing}, range, cursorM
                     return w0.seconds + t * (w1.seconds - w0.seconds)
                 }
                 lifecycle.ownAll(
-                    installEditorMainBody({element: canvas, range, reader}),
+                    installEditorBody({element: canvas, range, reader}),
                     installCursor(canvas, capturing, {
                         get: (target) =>
                             target?.type === "loop-duration" && target?.reader.audioContent.canResize
