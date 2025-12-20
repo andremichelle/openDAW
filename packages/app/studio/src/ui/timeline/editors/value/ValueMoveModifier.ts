@@ -16,11 +16,7 @@ import {
 } from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {BoxEditing} from "@opendaw/lib-box"
-import {
-    AutomatableParameterFieldAdapter,
-    ValueEventBoxAdapter,
-    ValueEventCollectionBoxAdapter
-} from "@opendaw/studio-adapters"
+import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 import {EventCollection, Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
 import {ValueEventDraft} from "./ValueEventDraft.ts"
@@ -28,9 +24,11 @@ import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {Dragging} from "@opendaw/lib-dom"
 import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
 
+import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
+
 type Construct = Readonly<{
     element: Element
-    parameter: AutomatableParameterFieldAdapter
+    context: ValueContext
     selection: Selection<ValueEventBoxAdapter>
     valueAxis: ValueAxis
     snapping: Snapping
@@ -52,7 +50,7 @@ export class ValueMoveModifier implements ValueModifier {
     static create(construct: Construct): ValueMoveModifier {return new ValueMoveModifier(construct)}
 
     readonly #element: Element
-    readonly #parameter: AutomatableParameterFieldAdapter
+    readonly #context: ValueContext
     readonly #selection: Selection<ValueEventBoxAdapter>
     readonly #valueAxis: ValueAxis
     readonly #snapping: Snapping
@@ -72,11 +70,11 @@ export class ValueMoveModifier implements ValueModifier {
     #snapValue: Option<unitValue>
 
     private constructor({
-                            element, parameter, selection, valueAxis, snapping,
+                            element, context, selection, valueAxis, snapping,
                             pointerPulse, pointerValue, reference, collection
                         }: Construct) {
         this.#element = element
-        this.#parameter = parameter
+        this.#context = context
         this.#selection = selection
         this.#valueAxis = valueAxis
         this.#snapping = snapping
@@ -125,8 +123,7 @@ export class ValueMoveModifier implements ValueModifier {
         const clientRect = this.#element.getBoundingClientRect()
         const localX = clientX - clientRect.left
         const localY = clientY - clientRect.top
-        const valueMapping = this.#parameter.valueMapping
-        const pointerValue = valueMapping.x(valueMapping.y(this.#valueAxis.axisToValue(localY)))
+        const pointerValue = this.#context.quantize(this.#valueAxis.axisToValue(localY))
         const closest: Nullable<SnapGuide> = shiftKey ? null : this.#snapValues
             .map<SnapGuide>((value: unitValue, index: int) =>
                 ({value, index, position: this.#valueAxis.valueToAxis(value)}))
@@ -268,7 +265,7 @@ export class ValueMoveModifier implements ValueModifier {
     }
 
     #buildSnapValues(): ReadonlyArray<unitValue> {
-        const result = new Set<unitValue>([this.#parameter.getUnitValue()])
+        const result = new Set<unitValue>([this.#context.currentValue])
         this.#eventCollection().asArray().forEach(event => result.add(event.value))
         return Array.from(result).sort(NumberComparator)
     }

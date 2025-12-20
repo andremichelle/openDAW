@@ -17,16 +17,9 @@ import {PointerField, PrimitiveValues} from "@opendaw/lib-box"
 import {TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {Pointers} from "@opendaw/studio-enums"
 import {Project} from "@opendaw/studio-core"
+import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 
-export interface ValueEditing {
-    readonly anchorModel: ObservableValue<unitValue>
-    readonly stringMapping: StringMapping<PrimitiveValues>
-    readonly currentValue: unitValue
-    readonly floating: boolean
-    quantize(value: unitValue): unitValue
-}
-
-export class ValueEditingContext implements ValueEditing, Terminable {
+export class ParameterValueEditing implements ValueContext, Terminable {
     static readonly FallbackStringMapping = StringMapping.percent()
 
     readonly #terminator = new Terminator()
@@ -85,7 +78,7 @@ export class ValueEditingContext implements ValueEditing, Terminable {
 
     get stringMapping(): StringMapping<PrimitiveValues> {
         return this.#assignment.match({
-            none: () => ValueEditingContext.FallbackStringMapping,
+            none: () => ParameterValueEditing.FallbackStringMapping,
             some: assignment => assignment.adapter.stringMapping
         })
     }

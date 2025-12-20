@@ -7,7 +7,7 @@ import {ValueEditor} from "@/ui/timeline/editors/value/ValueEditor.tsx"
 import {ValueEditorHeader} from "@/ui/timeline/editors/value/ValueEditorHeader.tsx"
 import {EditorMenuCollector} from "@/ui/timeline/editors/EditorMenuCollector.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {ValueEditingContext} from "@/ui/timeline/editors/value/ValueEditingContext.ts"
+import {ParameterValueEditing} from "@/ui/timeline/editors/value/ValueEditingContext.ts"
 import {Html} from "@opendaw/lib-dom"
 import {TimelineRange} from "@opendaw/studio-core"
 
@@ -16,7 +16,7 @@ const className = Html.adoptStyleSheet(css, "ValueEventsEditor")
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
-    context: ValueEditingContext
+    context: ParameterValueEditing
     menu: EditorMenuCollector
     range: TimelineRange
     snapping: Snapping

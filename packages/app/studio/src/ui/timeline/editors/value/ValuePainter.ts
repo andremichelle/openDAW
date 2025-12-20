@@ -10,15 +10,15 @@ import {ValueModifier} from "./ValueModifier"
 import {ValueModifyStrategy} from "@/ui/timeline/editors/value/ValueModifyStrategies.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
-import {ValueEditingContext} from "@/ui/timeline/editors/value/ValueEditingContext"
 import {TimelineRange} from "@opendaw/studio-core"
+import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 
 export type Construct = {
     range: TimelineRange
     valueToPixel: Func<unitValue, number>
     modifyContext: ObservableModifyContext<ValueModifier>
     snapping: Snapping
-    valueEditing: ValueEditingContext
+    valueEditing: ValueContext
     reader: ValueEventOwnerReader
 }
 
@@ -59,11 +59,9 @@ export const createValuePainter =
         context.beginPath()
         context.moveTo(0, y0)
         context.lineTo(width, y0)
-        valueEditing.assignment.ifSome(x => {
-            const y = valueToPixel(x.adapter.getUnitValue())
-            context.moveTo(0, y)
-            context.lineTo(width, y)
-        })
+        const currentY = valueToPixel(valueEditing.currentValue)
+        context.moveTo(0, currentY)
+        context.lineTo(width, currentY)
         context.moveTo(0, y1)
         context.lineTo(width, y1)
         context.stroke()

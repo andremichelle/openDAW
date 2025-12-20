@@ -37,12 +37,12 @@ import {CutCursor} from "@/ui/timeline/CutCursor.tsx"
 import {installValueInput} from "@/ui/timeline/editors/ValueInput.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {installEditorMainBody} from "../EditorBody"
-import {ValueEditingContext} from "@/ui/timeline/editors/value/ValueEditingContext.ts"
 import {ValueContentDurationModifier} from "./ValueContentDurationModifier"
 import {Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {ValueTooltip} from "./ValueTooltip"
 import {ValueEventEditing} from "./ValueEventEditing"
 import {TimelineRange} from "@opendaw/studio-core"
+import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 
 const className = Html.adoptStyleSheet(css, "ValueEditor")
 
@@ -53,7 +53,7 @@ type Construct = {
     snapping: Snapping
     mapping: ValueMapping<number>
     reader: ValueEventOwnerReader
-    context: ValueEditingContext
+    context: ValueContext
 }
 
 export const ValueEditor = ({lifecycle, service, range, snapping, reader, context}: Construct) => {
@@ -108,16 +108,14 @@ export const ValueEditor = ({lifecycle, service, range, snapping, reader, contex
                         const rect = canvas.getBoundingClientRect()
                         const position = snapping.xToUnitRound(event.clientX - rect.left) - reader.offset
                         const clickValue = clamp(valueAxis.axisToValue(event.clientY - rect.top), 0.0, 1.0)
-                        const parameter = context.assignment.unwrap().adapter
-                        const formatValue = parameter.getUnitValue()
-                        const valueMapping = parameter.valueMapping
+                        const formatValue = context.currentValue
                         const value: unitValue = Math.abs(valueToPixel(clickValue) - valueToPixel(formatValue))
                         < SnapValueThresholdInPixels
                             ? formatValue
-                            : valueMapping.x(valueMapping.y(clickValue))
+                            : context.quantize(clickValue)
                         return editing.modify(() =>
                             ValueEventEditing.createOrMoveEvent(reader.content, snapping, position, value,
-                                valueMapping.floating() ? Interpolation.Linear : Interpolation.None))
+                                context.floating ? Interpolation.Linear : Interpolation.None))
                             .match({
                                 none: () => Option.None,
                                 some: adapter => {
@@ -126,7 +124,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, reader, contex
                                     const clientRect = canvas.getBoundingClientRect()
                                     return modifyContext.startModifier(ValueMoveModifier.create({
                                         element: canvas,
-                                        parameter: context.assignment.unwrap().adapter,
+                                        context,
                                         selection,
                                         snapping,
                                         pointerValue: valueAxis.axisToValue(event.clientY - clientRect.top),
@@ -194,7 +192,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, reader, contex
             if (target.type === "event") {
                 return modifyContext.startModifier(ValueMoveModifier.create({
                     element: canvas,
-                    parameter: context.assignment.unwrap().adapter,
+                    context,
                     selection,
                     snapping,
                     pointerValue: valueAxis.axisToValue(event.clientY - clientRect.top),

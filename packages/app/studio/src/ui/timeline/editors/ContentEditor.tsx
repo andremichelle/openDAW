@@ -44,7 +44,7 @@ import {
 } from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {RegionReader} from "@/ui/timeline/editors/RegionReader.ts"
 import {Colors, Pointers} from "@opendaw/studio-enums"
-import {ValueEditingContext} from "@/ui/timeline/editors/value/ValueEditingContext.ts"
+import {ParameterValueEditing} from "@/ui/timeline/editors/value/ValueEditingContext.ts"
 import {AnimationFrame, deferNextFrame, Events, Html, Keyboard} from "@opendaw/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "ContentEditor")
@@ -146,7 +146,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
 
     const createValueEditor = (reader: ValueEventOwnerReader,
                                collection: PointerField<Pointers.RegionCollection | Pointers.ClipCollection>) => {
-        const context = runtime.own(new ValueEditingContext(service.project, collection))
+        const context = runtime.own(new ParameterValueEditing(service.project, collection))
         return (
             <ValueEventsEditor lifecycle={runtime}
                                service={service}
