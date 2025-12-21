@@ -21,7 +21,10 @@ export class ObservableModifyContext<MODIFIER extends ObservableModifier> {
     startModifier(modifier: MODIFIER): Option<Dragging.Process> {
         const lifeTime = new Terminator()
         lifeTime.own(modifier.subscribeUpdate(() => this.#notifier.notify()))
-        lifeTime.own({terminate: () => this.#modifier = Option.None})
+        lifeTime.own({terminate: () => {
+            this.#modifier = Option.None
+            this.#notifier.notify()
+        }})
         this.#modifier = Option.wrap(modifier)
         return Option.wrap({
             update: (event: Dragging.Event): void => modifier.update(event),
