@@ -6,9 +6,10 @@ import {createElement} from "@opendaw/lib-jsx"
 import {FlexSpacer} from "@/ui/components/FlexSpacer.tsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {Checkbox} from "@/ui/components/Checkbox.tsx"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Html} from "@opendaw/lib-dom"
-import {Colors} from "@opendaw/studio-enums"
+import {MenuButton} from "@/ui/components/MenuButton"
+import {MenuItem} from "@/ui/model/menu-item"
 
 const className = Html.adoptStyleSheet(css, "TimelineHeader")
 
@@ -18,7 +19,7 @@ type Construct = {
 }
 
 export const TimelineHeader = ({lifecycle, service}: Construct) => {
-    const {snapping, followPlaybackCursor, primaryVisible, clips} = service.timeline
+    const {snapping, followPlaybackCursor, primaryVisibility: {markers, tempo}, clips} = service.timeline
     return (
         <div className={className}>
             <SnapSelector lifecycle={lifecycle} snapping={snapping}/>
@@ -30,11 +31,15 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                 <Icon symbol={IconSymbol.Run}/>
             </Checkbox>
             <hr/>
-            <Checkbox lifecycle={lifecycle}
-                      model={primaryVisible}
-                      appearance={{activeColor: Colors.yellow, tooltip: "Markers"}}>
+            <MenuButton appearance={{color: Colors.green}}
+                        root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                            MenuItem.default({label: "Markers", checked: markers.getValue()})
+                                .setTriggerProcedure(() => markers.setValue(!markers.getValue())),
+                            MenuItem.default({label: "Tempo", checked: tempo.getValue()})
+                                .setTriggerProcedure(() => tempo.setValue(!tempo.getValue()))
+                        ))}>
                 <Icon symbol={IconSymbol.Primary}/>
-            </Checkbox>
+            </MenuButton>
             <Checkbox lifecycle={lifecycle}
                       model={clips.visible}
                       appearance={{activeColor: Colors.yellow, tooltip: "Clips"}}>

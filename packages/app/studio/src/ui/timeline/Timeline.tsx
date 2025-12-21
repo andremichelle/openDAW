@@ -9,7 +9,7 @@ import {PrimaryTracks} from "./tracks/primary/PrimaryTracks"
 import {AudioUnitsTimeline} from "./tracks/audio-unit/AudioUnitsTimeline.tsx"
 import {ClipsHeader} from "@/ui/timeline/tracks/audio-unit/clips/ClipsHeader.tsx"
 import {ppqn} from "@opendaw/lib-dsp"
-import {Html} from "@opendaw/lib-dom"
+import {deferNextFrame, Html} from "@opendaw/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "Timeline")
 
@@ -21,7 +21,7 @@ type Construct = {
 export const Timeline = ({lifecycle, service}: Construct) => {
     const {project, timeline} = service
     const {engine} = project
-    const {snapping, clips, followPlaybackCursor, primaryVisible} = timeline
+    const {snapping, clips, followPlaybackCursor, primaryVisibility: {markers, tempo}} = timeline
     const snappingName = Inject.value(snapping.unit.name)
     lifecycle.own(snapping.subscribe(snapping => {snappingName.value = snapping.unit.name}))
     const timelineHeader = <TimelineHeader lifecycle={lifecycle} service={service}/>
@@ -38,6 +38,10 @@ export const Timeline = ({lifecycle, service}: Construct) => {
     )
     const updateRecordingState = () =>
         element.classList.toggle("recording", engine.isRecording.getValue() || engine.isCountingIn.getValue())
+    const {request} = lifecycle.own(deferNextFrame(() => {
+        console.debug(markers.getValue() || tempo.getValue())
+        element.classList.toggle("primary-tracks-visible", markers.getValue() || tempo.getValue())
+    }))
     lifecycle.ownAll(
         Html.watchResize(element, () => {
             const cursorHeight = element.clientHeight
@@ -63,7 +67,8 @@ export const Timeline = ({lifecycle, service}: Construct) => {
         })()),
         clips.visible.catchupAndSubscribe(owner => { return element.classList.toggle("clips-visible", owner.getValue()) }),
         clips.count.catchupAndSubscribe(owner => element.style.setProperty("--clips-count", String(owner.getValue()))),
-        primaryVisible.catchupAndSubscribe((owner) => element.classList.toggle("primary-tracks-visible", owner.getValue()))
+        markers.catchupAndSubscribe(request),
+        tempo.catchupAndSubscribe(request)
     )
     return element
 }

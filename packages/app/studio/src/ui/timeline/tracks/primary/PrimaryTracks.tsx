@@ -1,9 +1,9 @@
 import css from "./PrimaryTracks.sass?inline"
-import {Lifecycle, ObservableValue, Terminator} from "@opendaw/lib-std"
+import {Lifecycle, Terminator} from "@opendaw/lib-std"
 import {createElement, Frag, replaceChildren} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {MarkerTrack} from "./marker/MarkerTrack"
-import {Html} from "@opendaw/lib-dom"
+import {deferNextFrame, Html} from "@opendaw/lib-dom"
 import {TempoTrack} from "@/ui/timeline/tracks/primary/tempo/TempoTrack"
 
 const className = Html.adoptStyleSheet(css, "primary-tracks")
@@ -14,23 +14,27 @@ type Construct = {
 }
 
 export const PrimaryTracks = ({lifecycle, service}: Construct) => {
-    const {timeline: {primaryVisible}} = service
+    const {timeline: {primaryVisibility: {markers, tempo}}} = service
     const element: HTMLElement = (<div className={className}/>)
-    const terminator = lifecycle.own(new Terminator())
-    const visibleObserver = (owner: ObservableValue<boolean>) => {
-        terminator.terminate()
-        if (owner.getValue()) {
+    const trackTerminator = lifecycle.own(new Terminator())
+    const {request} = lifecycle.own(deferNextFrame(() => {
+        trackTerminator.terminate()
+        const isMarkerTrackVisible = markers.getValue()
+        const isTempoTrackVisible = tempo.getValue()
+        const anyPrimaryTrackVisible = isMarkerTrackVisible || isTempoTrackVisible
+        element.classList.toggle("hidden", !anyPrimaryTrackVisible)
+        if (anyPrimaryTrackVisible) {
             replaceChildren(element,
                 <Frag>
-                    <MarkerTrack lifecycle={terminator} service={service}/>
-                    <TempoTrack lifecycle={lifecycle} service={service}/>
+                    {isMarkerTrackVisible && <MarkerTrack lifecycle={trackTerminator} service={service}/>}
+                    {isTempoTrackVisible && <TempoTrack lifecycle={trackTerminator} service={service}/>}
                 </Frag>
             )
-        } else {
-            Html.empty(element)
         }
-    }
-    lifecycle.own(primaryVisible.subscribe(visibleObserver))
-    visibleObserver(primaryVisible)
+    }))
+    lifecycle.ownAll(
+        markers.catchupAndSubscribe(request),
+        tempo.catchupAndSubscribe(request)
+    )
     return element
 }

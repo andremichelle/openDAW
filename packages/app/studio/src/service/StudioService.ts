@@ -95,7 +95,10 @@ export class StudioService implements ProjectEnv {
             visible: new DefaultObservableValue(true)
         },
         followPlaybackCursor: new DefaultObservableValue(true),
-        primaryVisible: new DefaultObservableValue(true)
+        primaryVisibility: {
+            markers: new DefaultObservableValue(true),
+            tempo: new DefaultObservableValue(true)
+        }
     } as const
     readonly menu = populateStudioMenu(this)
     readonly panelLayout = new PanelContents(createPanelFactory(this))
@@ -357,7 +360,11 @@ export class StudioService implements ProjectEnv {
                 //
                 // Markers
                 if (timelineBox.markerTrack.markers.pointerHub.nonEmpty()) {
-                    this.timeline.primaryVisible.setValue(true)
+                    this.timeline.primaryVisibility.markers.setValue(true)
+                }
+                // Tempo
+                if (timelineBox.tempoTrack.events.nonEmpty()) {
+                    this.timeline.primaryVisibility.tempo.setValue(true)
                 }
                 // Clips
                 const maxClipIndex: int = project.rootBoxAdapter.audioUnits.adapters()

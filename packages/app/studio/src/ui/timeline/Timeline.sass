@@ -7,7 +7,7 @@ component
   height: 100%
   display: grid
   grid-template-columns: var(--timeline-header-width) 0 1fr
-  grid-template-rows: 2rem 1fr 14px
+  grid-template-rows: auto 1fr 14px
   gap: 1px
   overflow: hidden
   --clips-count: 1
@@ -22,4 +22,4 @@ component
     --clips-count: 0 !important
 
   &.primary-tracks-visible
-    grid-template-rows: 2rem auto auto 1fr 14px
+    grid-template-rows: auto auto 1fr 14px
