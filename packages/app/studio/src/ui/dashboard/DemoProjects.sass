@@ -5,16 +5,10 @@ component
   position: relative
 
   div.projects
+    flex: 1
     margin-top: 4px
     display: flex
     flex-direction: column
     row-gap: 1px
     overflow: hidden auto
-
-    &:after
-      content: ""
-      width: 100%
-      min-height: 8px
-      bottom: 0
-      position: sticky
-      background: linear-gradient(to bottom, transparent, var(--color-panel-background))
+    mask-image: linear-gradient(to bottom, black calc(100% - 8px), transparent)

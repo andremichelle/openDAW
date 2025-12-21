@@ -103,16 +103,10 @@ export namespace Promises {
         return attempt()
     }
 
-    // this is for testing the catch branch
-    export const fail = <T>(after: TimeSpan, thenUse: Provider<Promise<T>>): Provider<Promise<T>> => {
-        let use: Provider<Promise<T>> = () =>
-            new Promise<T>((_, reject) => setTimeout(() => reject("fails first"), after.millis()))
-        return () => {
-            const promise: Promise<T> = use()
-            use = thenUse
-            return promise
-        }
-    }
+    export const delay = <T>(promise: Promise<T>, timeSpan: TimeSpan): Promise<T> =>
+        Promise.all([promise, Wait.timeSpan(timeSpan)]).then(([value]) => value)
+
+    export const fail = <T>(_promise: Promise<T>, reason: any = "fail"): Promise<T> => Promise.reject<T>(reason)
 
     export const timeout = <T>(promise: Promise<T>, timeSpan: TimeSpan, fail?: string): Promise<T> => {
         return new Promise<T>((resolve, reject) => {

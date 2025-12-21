@@ -64,16 +64,25 @@ export const DemoProjects = ({service}: Construct) => (
         <h3 style={{color: Colors.orange.toString()}}>Demo Projects</h3>
         <div className="projects">
             <DemoProject json={NewProjectJson} load={() => service.newProject()}/>
-            <Await factory={() => fetch(listUrl)
-                .then(res => res.json())
-                .then(res => res as TracksList)
-                .then(list => list.tracks
-                    .sort(({metadata: {modified: a}}, {metadata: {modified: b}}) => b.localeCompare(a)))}
-                   loading={() => ThreeDots()}
-                   failure={({retry}) => <span onclick={retry}>Retry</span>}
-                   success={(tracks) => tracks.map(json => (
-                       <DemoProject json={json} load={() => loadDemoProject(service, json)}/>
-                   ))}/>
+            <Await
+                factory={() => fetch(listUrl)
+                    .then(res => res.json())
+                    .then(res => res as TracksList)
+                    .then(list => list.tracks
+                        .sort(({metadata: {modified: a}}, {metadata: {modified: b}}) => b.localeCompare(a)))}
+                loading={() => <div>{ThreeDots()}</div>}
+                failure={({retry, reason}) => (
+                    <div style={{margin: "8px 0 0 4px", justifySelf: "center"}}>
+                        <span>{reason}</span> <span onclick={retry}
+                                                    style={{
+                                                        color: Colors.orange.toString(),
+                                                        cursor: "pointer"
+                                                    }}>Click to retry.</span>
+                    </div>
+                )}
+                success={(tracks) => tracks.map(json => (
+                    <DemoProject json={json} load={() => loadDemoProject(service, json)}/>
+                ))}/>
         </div>
     </div>
 )

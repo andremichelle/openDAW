@@ -16,7 +16,10 @@ export const Await = <T, >({factory, loading, success, failure, repeat}: AwaitPr
         replaceChildren(contents, loading())
         factory().then(
             result => replaceChildren(contents, success(result)),
-            reason => replaceChildren(contents, failure({reason, retry: () => start()})))
+            reason => replaceChildren(contents, failure({
+                reason: reason instanceof Error ? `${reason.name} (${reason.message})` : reason,
+                retry: () => start()
+            })))
     }
     start()
     safeExecute(repeat, start)

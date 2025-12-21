@@ -21,12 +21,13 @@ const className = Html.adoptStyleSheet(css, "Samples")
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
+    background?: boolean
     fontSize?: string // em
 }
 
 const location = new DefaultObservableValue(AssetLocation.OpenDAW)
 
-export const SampleBrowser = ({lifecycle, service, fontSize}: Construct) => {
+export const SampleBrowser = ({lifecycle, service, background, fontSize}: Construct) => {
     const entries: HTMLElement = <div className="scrollable"/>
     const selection = lifecycle.own(new HTMLSelection(entries))
     const sampleSelection = new SampleSelection(service, selection)
@@ -36,7 +37,7 @@ export const SampleBrowser = ({lifecycle, service, fontSize}: Construct) => {
     const slider: HTMLInputElement = <input type="range" min="0.0" max="1.0" step="0.001"/>
     const linearVolume = service.samplePlayback.linearVolume
     const element: Element = (
-        <div className={className} tabIndex={-1} style={{fontSize}}>
+        <div className={Html.buildClassList(className, background && "background")} tabIndex={-1} style={{fontSize}}>
             <div className="filter">
                 <RadioGroup lifecycle={lifecycle} model={location} elements={[
                     {
