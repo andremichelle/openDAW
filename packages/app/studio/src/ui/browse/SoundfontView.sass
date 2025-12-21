@@ -9,6 +9,7 @@ component
     color: var(--color-gray)
 
   > div.edit
+    display: flex
     grid-row: 1
     grid-column: -1
 
@@ -32,3 +33,9 @@ component
 
       &.right
         text-align: right
+
+  .delete-icon
+    cursor: pointer
+
+    &:hover
+      color: var(--color-red)

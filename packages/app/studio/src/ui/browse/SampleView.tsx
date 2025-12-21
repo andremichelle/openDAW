@@ -75,14 +75,13 @@ export const SampleView = ({lifecycle, service, sampleSelection, sample, playbac
                             }}>
                         <Icon symbol={IconSymbol.Pencil}/>
                     </Button>
-                    <Button lifecycle={lifecycle} appearance={{activeColor: Colors.white}}
-                            onClick={async (event) => {
-                                event.stopPropagation()
-                                await sampleSelection.deleteSamples(sample)
-                                refresh()
-                            }}>
-                        <Icon symbol={IconSymbol.Close}/>
-                    </Button>
+                    <Icon symbol={IconSymbol.Close}
+                          className="delete-icon"
+                          onInit={element => element.onclick = async (event) => {
+                              event.stopPropagation()
+                              await sampleSelection.deleteSamples(sample)
+                              refresh()
+                          }}/>
                 </div>
             )}
         </div>
