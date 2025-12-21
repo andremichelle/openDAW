@@ -8,7 +8,8 @@ import {
     Selection,
     Terminable,
     unitValue,
-    ValueAxis
+    ValueAxis,
+    ValueMapping
 } from "@opendaw/lib-std"
 import {BoxEditing} from "@opendaw/lib-box"
 import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
@@ -22,6 +23,7 @@ type Construct = Readonly<{
     element: Element
     selection: Selection<ValueEventBoxAdapter>
     valueAxis: ValueAxis
+    eventMapping: ValueMapping<number>
     pointerValue: unitValue
     collection: ValueEventCollectionBoxAdapter
 }>
@@ -32,6 +34,7 @@ export class ValueSlopeModifier implements ValueModifier {
     readonly #element: Element
     readonly #selection: Selection<ValueEventBoxAdapter>
     readonly #valueAxis: ValueAxis
+    readonly #eventMapping: ValueMapping<number>
     readonly #pointerValue: unitValue
     readonly #collection: ValueEventCollectionBoxAdapter
 
@@ -39,10 +42,11 @@ export class ValueSlopeModifier implements ValueModifier {
 
     #deltaSlope: number
 
-    private constructor({element, selection, valueAxis, pointerValue, collection}: Construct) {
+    private constructor({element, selection, valueAxis, eventMapping, pointerValue, collection}: Construct) {
         this.#element = element
         this.#selection = selection
         this.#valueAxis = valueAxis
+        this.#eventMapping = eventMapping
         this.#pointerValue = pointerValue
         this.#collection = collection
 
@@ -68,7 +72,9 @@ export class ValueSlopeModifier implements ValueModifier {
         } else if (interpolation.type === "linear") {
             return Interpolation.Linear
         } else if (interpolation.type === "curve") {
-            const slope = clampUnit(interpolation.slope - this.#deltaSlope * Math.sign(event.value - successor.value))
+            const current = this.#eventMapping.x(event.value)
+            const next = this.#eventMapping.x(successor.value)
+            const slope = clampUnit(interpolation.slope - this.#deltaSlope * Math.sign(current - next))
             return Interpolation.Curve(slope)
         }
         return panic("Internal Error (readInterpolation)")
@@ -89,7 +95,8 @@ export class ValueSlopeModifier implements ValueModifier {
     update({clientY}: Dragging.Event): void {
         const clientRect = this.#element.getBoundingClientRect()
         const localY = clientY - clientRect.top
-        const deltaSlope: number = this.#valueAxis.axisToValue(localY) - this.#pointerValue
+        const deltaSlope: number = this.#eventMapping.x(this.#valueAxis.axisToValue(localY))
+            - this.#eventMapping.x(this.#pointerValue)
         if (this.#deltaSlope !== deltaSlope) {
             this.#deltaSlope = deltaSlope
             this.#dispatchChange()

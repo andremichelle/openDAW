@@ -219,6 +219,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                     selection,
                     pointerValue: valueAxis.axisToValue(event.clientY - clientRect.top),
                     valueAxis,
+                    eventMapping,
                     collection: reader.content
                 }))
             } else {
