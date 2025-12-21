@@ -1,6 +1,6 @@
 import css from "./LoopAreaEditor.sass?inline"
 import {asDefined, Lifecycle, Nullable, Option} from "@opendaw/lib-std"
-import {CssUtils, deferNextFrame, Dragging, Html} from "@opendaw/lib-dom"
+import {CssUtils, deferNextFrame, Dragging, Events, Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {BoxEditing, Propagation} from "@opendaw/lib-box"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
@@ -64,37 +64,43 @@ export const LoopAreaEditor = ({lifecycle, editing, range, snapping, loopArea}: 
         context.fill()
         context.globalAlpha = 1.0
     })
-    lifecycle.own(Dragging.attach(canvas, (event: PointerEvent) => {
-        const target = capturing.captureEvent(event)
-        if (target === null) {return Option.None}
-        const pointerPulse = range.xToUnit(event.clientX)
-        const wasLoopFrom = loopFrom.getValue()
-        const wasLoopTo = loopTo.getValue()
-        const referencePulse = target === "loop-end" ? wasLoopTo : wasLoopFrom
-        const length = loopTo.getValue() - loopFrom.getValue()
-        return Option.wrap({
-            update: (event: Dragging.Event) => {
-                editing.modify(() => {
-                    const delta = snapping.computeDelta(pointerPulse, event.clientX, referencePulse)
-                    const position = Math.max(0, referencePulse + delta)
-                    if (target === "loop-start") {
-                        loopFrom.setValue(position)
-                    } else if (target === "loop-end") {
-                        loopTo.setValue(position)
-                    } else if (target === "loop-body") {
-                        loopFrom.setValue(position)
-                        loopTo.setValue(position + length)
-                    }
-                }, false)
-            },
-            approve: () => editing.mark(),
-            cancel: () => editing.modify(() => {
-                loopFrom.setValue(wasLoopFrom)
-                loopTo.setValue(wasLoopTo)
-            }),
-            finally: () => {}
-        })
-    }))
+    lifecycle.ownAll(
+        Events.subscribeDblDwn(canvas, event => {
+            const target = capturing.captureEvent(event)
+            if (target === null) {return}
+            editing.modify(() => loopArea.enabled.setValue(!loopArea.enabled.getValue()))
+        }),
+        Dragging.attach(canvas, (event: PointerEvent) => {
+            const target = capturing.captureEvent(event)
+            if (target === null) {return Option.None}
+            const pointerPulse = range.xToUnit(event.clientX)
+            const wasLoopFrom = loopFrom.getValue()
+            const wasLoopTo = loopTo.getValue()
+            const referencePulse = target === "loop-end" ? wasLoopTo : wasLoopFrom
+            const length = loopTo.getValue() - loopFrom.getValue()
+            return Option.wrap({
+                update: (event: Dragging.Event) => {
+                    editing.modify(() => {
+                        const delta = snapping.computeDelta(pointerPulse, event.clientX, referencePulse)
+                        const position = Math.max(0, referencePulse + delta)
+                        if (target === "loop-start") {
+                            loopFrom.setValue(position)
+                        } else if (target === "loop-end") {
+                            loopTo.setValue(position)
+                        } else if (target === "loop-body") {
+                            loopFrom.setValue(position)
+                            loopTo.setValue(position + length)
+                        }
+                    }, false)
+                },
+                approve: () => editing.mark(),
+                cancel: () => editing.modify(() => {
+                    loopFrom.setValue(wasLoopFrom)
+                    loopTo.setValue(wasLoopTo)
+                }),
+                finally: () => {}
+            })
+        }))
     const onResize = () => {
         if (!canvas.isConnected) {return}
         const {clientWidth, clientHeight} = canvas
