@@ -60,7 +60,7 @@ import {
     TimelineRange
 } from "@opendaw/studio-core"
 import {ProjectDialogs} from "@/project/ProjectDialogs"
-import {AudioUnitBox, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
@@ -90,10 +90,10 @@ export class StudioService implements ProjectEnv {
             count: new DefaultObservableValue(3),
             visible: new DefaultObservableValue(true)
         },
-        followPlaybackCursor: new DefaultObservableValue(true),
+        followPlaybackCursor: new DefaultObservableValue(false),
         primaryVisibility: {
             markers: new DefaultObservableValue(true),
-            tempo: new DefaultObservableValue(true)
+            tempo: new DefaultObservableValue(false)
         }
     } as const
     readonly menu = populateStudioMenu(this)
@@ -137,26 +137,6 @@ export class StudioService implements ProjectEnv {
         this.#configBeforeUnload()
         this.#checkRecovery()
         this.#listenPreferences()
-
-        // TODO Remove when done
-        if (Browser.isLocalHost()) {
-            this.newProject().then()
-            const {timelineBox, editing, boxGraph} = this.project
-            editing.modify(() => {
-                const collection = ValueEventCollectionBox.create(boxGraph, UUID.generate())
-                timelineBox.tempoTrack.events.refer(collection.owners)
-                ValueEventBox.create(boxGraph, UUID.generate(), box => {
-                    box.position.setValue(0)
-                    box.value.setValue(120.0)
-                    box.events.refer(collection.events)
-                })
-                ValueEventBox.create(boxGraph, UUID.generate(), box => {
-                    box.position.setValue(PPQN.Bar)
-                    box.value.setValue(240.0)
-                    box.events.refer(collection.events)
-                })
-            })
-        }
     }
 
     get sampleRate(): number {return this.audioContext.sampleRate}
@@ -343,7 +323,7 @@ export class StudioService implements ProjectEnv {
                 const profile = optProfile.unwrap()
                 const {project, meta} = profile
                 console.debug(`switch to %c${meta.name}%c`, "color: hsl(25, 69%, 63%)", "color: inherit")
-                const {timelineBox, userEditingManager} = project
+                const {timelineBox, timelineBoxAdapter, userEditingManager} = project
                 range.showUnitInterval(0, PPQN.fromSignature(9, 1))
                 lifeTime.own(ShadertoyState.initialize(project))
 
@@ -356,7 +336,7 @@ export class StudioService implements ProjectEnv {
                     this.timeline.primaryVisibility.markers.setValue(true)
                 }
                 // Tempo
-                if (timelineBox.tempoTrack.events.nonEmpty()) {
+                if (timelineBoxAdapter.tempoTrackEvents.mapOr(collection => !collection.events.isEmpty(), false)) {
                     this.timeline.primaryVisibility.tempo.setValue(true)
                 }
                 // Clips

@@ -11,6 +11,7 @@ import {
     MIDIOutputBox,
     MIDIOutputDeviceBox,
     RevampDeviceBox,
+    TimelineBox,
     ValueEventBox,
     ValueEventCollectionBox,
     ValueEventCurveBox,
@@ -48,7 +49,6 @@ export class ProjectMigration {
             globalShuffle.setValue("Groove Shuffle")
             boxGraph.endTransaction()
         }
-
         const loadAudioData = (uuid: UUID.Bytes): Promise<AudioData> => {
             const {promise, resolve, reject} = Promise.withResolvers<AudioData>()
             const loader = env.sampleManager.getOrCreate(uuid)
@@ -64,7 +64,6 @@ export class ProjectMigration {
             })
             return promise
         }
-
         // 1st pass (2nd pass might rely on those changes)
         for (const box of boxGraph.boxes()) {
             await box.accept<BoxVisitor<Promise<unknown>>>({
@@ -82,7 +81,6 @@ export class ProjectMigration {
                 }
             })
         }
-
         // 2nd pass. We need to run on a copy, because we might add more boxes during the migration
         boxGraph.boxes().slice().forEach(box => box.accept<BoxVisitor>({
             visitAudioRegionBox: (box: AudioRegionBox): void => {
@@ -155,6 +153,15 @@ export class ProjectMigration {
                     box.timeBase.setValue(TimeBase.Musical)
                     box.playMode.refer(pitchBox)
                     box.playback.setValue("")
+                    boxGraph.endTransaction()
+                }
+            },
+            visitTimelineBox: (timelineBox: TimelineBox): void => {
+                if (timelineBox.tempoTrack.events.isEmpty()) {
+                    console.debug("Migrate 'TimelineBox' to have a ValueEventCollectionBox for tempo events")
+                    boxGraph.beginTransaction()
+                    ValueEventCollectionBox.create(boxGraph, UUID.generate(),
+                        box => timelineBox.tempoTrack.events.refer(box.owners))
                     boxGraph.endTransaction()
                 }
             },

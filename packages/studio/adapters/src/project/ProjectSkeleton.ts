@@ -8,7 +8,8 @@ import {
     GrooveShuffleBox,
     RootBox,
     TimelineBox,
-    UserInterfaceBox
+    UserInterfaceBox,
+    ValueEventCollectionBox
 } from "@opendaw/studio-boxes"
 import {
     asInstanceOf,
@@ -70,6 +71,8 @@ export namespace ProjectSkeleton {
             })
         }
         const timelineBox = TimelineBox.create(boxGraph, UUID.generate())
+        ValueEventCollectionBox.create(boxGraph, UUID.generate(),
+            box => timelineBox.tempoTrack.events.refer(box.owners))
         rootBox.timeline.refer(timelineBox.root)
         primaryAudioBus.output.refer(primaryAudioOutputUnit.input)
         const userInterfaceBoxes: Array<UserInterfaceBox> = []

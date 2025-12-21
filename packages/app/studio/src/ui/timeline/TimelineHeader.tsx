@@ -31,7 +31,7 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                 <Icon symbol={IconSymbol.Run}/>
             </Checkbox>
             <hr/>
-            <MenuButton appearance={{color: Colors.green}}
+            <MenuButton appearance={{color: Colors.green, tinyTriangle: true, tooltip: "Toggle Markers & Tempo visiblilty"}}
                         root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                             MenuItem.default({label: "Markers", checked: markers.getValue()})
                                 .setTriggerProcedure(() => markers.setValue(!markers.getValue())),
