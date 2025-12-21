@@ -99,7 +99,8 @@ export namespace ProjectBundle {
             })
         }
         await Promise.all(promises)
-        const project = Project.load(env, await asDefined(zip.file(ProjectPaths.ProjectFile)).async("arraybuffer"))
+        const projectData = await asDefined(zip.file(ProjectPaths.ProjectFile)).async("arraybuffer")
+        const project = await Project.loadAnyVersion(env, projectData)
         const meta = JSON.parse(await asDefined(zip.file(ProjectPaths.ProjectMetaFile)).async("text"))
         const coverFile = zip.file(ProjectPaths.ProjectCoverFile)
         const cover: Option<ArrayBuffer> = Option.wrap(await coverFile?.async("arraybuffer"))
