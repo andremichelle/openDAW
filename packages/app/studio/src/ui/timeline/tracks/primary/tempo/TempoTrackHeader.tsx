@@ -48,14 +48,19 @@ export const TempoTrackHeader = ({lifecycle, service, bpmRange}: Construct) => {
         <div className={className}>
             <span>Tempo</span>
             <div className="bpm-range">
-                <NumberInput lifecycle={lifecycle} model={bpmRange[0]}
+                <NumberInput lifecycle={lifecycle}
+                             model={bpmRange[0]}
                              step={1}
+                             maxChars={4}
                              guard={{
                                  guard: (value: bpm): bpm =>
                                      clamp(Math.round(value), TempoRange.min, bpmRange[1].getValue() - MinBpmPadding)
                              }}/>
                 <hr/>
-                <NumberInput lifecycle={lifecycle} model={bpmRange[1]}
+                <NumberInput lifecycle={lifecycle}
+                             model={bpmRange[1]}
+                             step={1}
+                             maxChars={4}
                              guard={{
                                  guard: (value: bpm): bpm =>
                                      clamp(Math.round(value), bpmRange[0].getValue() + MinBpmPadding, TempoRange.max)

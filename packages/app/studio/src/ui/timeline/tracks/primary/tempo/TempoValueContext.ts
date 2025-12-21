@@ -39,7 +39,7 @@ export class TempoValueContext implements ValueContext, Terminable {
             y: (x: unitValue): number => {
                 const min = this.#min.getValue()
                 const max = this.#max.getValue()
-                return Math.exp(x * Math.log(max / min)) * min
+                return clamp(Math.exp(x * Math.log(max / min)) * min, TempoRange.min, TempoRange.max)
             },
             clamp: (y: number): number => clamp(y, this.#min.getValue(), this.#max.getValue()),
             floating: (): boolean => true
