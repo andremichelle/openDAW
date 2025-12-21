@@ -19,10 +19,17 @@ component
     &.negative
       color: var(--color-red) !important
 
+    &.float > div:nth-child(1)::after
+      visibility: visible
+
     > div
       &:nth-child(1)
         font-size: 0.9375em
         line-height: 1.125em
+
+        &::after
+          content: "."
+          visibility: hidden
 
       &:nth-child(2)
         color: hsla(200, 80%, 60%, 0.75)

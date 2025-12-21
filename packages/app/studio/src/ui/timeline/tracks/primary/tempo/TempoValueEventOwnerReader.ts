@@ -30,16 +30,12 @@ export class TempoValueEventOwnerReader implements ValueEventOwnerReader {
     }
     mapPlaybackCursor(position: ppqn): ppqn {return position}
     subscribeChange(observer: Observer<void>): Subscription {
-        // TODO Use a notifier
         let inner: Subscription = Terminable.Empty
         return Terminable.many(
             this.#adapter.tempoTrack.catchupAndSubscribe(option => {
                 inner.terminate()
                 observer()
-                inner = option.mapOr(
-                    collection => collection.subscribeChange(() => observer()),
-                    Terminable.Empty
-                )
+                inner = option.mapOr(collection => collection.subscribeChange(() => observer()), Terminable.Empty)
             }),
             this.#adapter.box.tempoTrack.minBpm.subscribe(() => observer()),
             this.#adapter.box.tempoTrack.maxBpm.subscribe(() => observer()),

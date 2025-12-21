@@ -1,7 +1,7 @@
 import css from "./ValueTooltip.sass?inline"
 import {Surface} from "./Surface"
 import {createElement} from "@opendaw/lib-jsx"
-import {int, PrintValue, Provider, Terminable} from "@opendaw/lib-std"
+import {PrintValue, Provider, Terminable} from "@opendaw/lib-std"
 import {AbstractTooltip} from "@/ui/surface/AbstractTooltip.ts"
 import {Events, Html} from "@opendaw/lib-dom"
 
@@ -11,9 +11,6 @@ export interface ValueData extends PrintValue {
 }
 
 export class ValueTooltip extends AbstractTooltip<ValueData> {
-    static readonly SHOW_DELAY: int = 30
-    static readonly HIDE_DELAY: int = 20
-
     static default(element: Element, provider: Provider<ValueData>): Terminable {
         return Terminable.many(
             Events.subscribe(element, "pointerdown", () => {

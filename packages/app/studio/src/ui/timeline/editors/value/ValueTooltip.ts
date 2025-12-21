@@ -36,9 +36,13 @@ export namespace ValueTooltip {
                         const modifier: ValueModifyStrategy = strategy.unwrapOrElse(ValueModifyStrategy.Identity)
                         const clientRect = element.getBoundingClientRect()
                         const clientX = range.unitToX(modifier.readPosition(event) + reader.offset) + clientRect.left + 8
-                        const value = eventMapping.x(modifier.readValue(event))
+                        const value = modifier.readValue(event)
                         const clientY = valueAxis.valueToAxis(value) + clientRect.top + 8
-                        return ({...context.stringMapping.x(context.valueMapping.y(value)), clientX, clientY})
+                        return ({
+                            ...context.stringMapping.x(context.valueMapping.y(eventMapping.x(value))),
+                            clientX,
+                            clientY
+                        })
                     })
                 } else if (target?.type === "curve") {
                     const event = target.event

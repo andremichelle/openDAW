@@ -39,6 +39,12 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
     const shuffleDigit = Inject.value("60")
     const bpmDigit = Inject.value("120")
     const meterLabel = Inject.value("4/4")
+    const bpmDisplay: HTMLElement = (
+        <div className="number-display">
+            <div>{bpmDigit}</div>
+            <div>BPM</div>
+        </div>
+    )
     // Bar, Bar+Beats, Bar+Beats+SemiQuaver, Bar+Beats+SemiQuaver+Ticks
     const timeUnits = ["Bar", "Beats", "SemiQuaver", "Ticks"] // Bar+Beats
     const timeUnitIndex = new DefaultObservableValue(1)
@@ -59,10 +65,11 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
             ticksDigit.value = ticks.toString().padStart(3, "0")
             timeUnitElements.forEach((element) => element.classList.toggle("negative", position < 0))
         }))
-        engine.bpm.catchupAndSubscribe((owner: ObservableValue<float>) =>
-            bpmDigit.value = owner.getValue().toFixed(0))
-        // timelineBoxAdapter.box.bpm.catchupAndSubscribe((owner: ObservableValue<float>) =>
-        //     bpmDigit.value = owner.getValue().toFixed(0).padStart(3, "0"))
+        engine.bpm.catchupAndSubscribe((owner: ObservableValue<float>) => {
+            const bpm = owner.getValue()
+            bpmDisplay.classList.toggle("float", !Number.isInteger(bpm))
+            return bpmDigit.value = bpm.toFixed(0)
+        })
         const updateMeterLabel = () => {
             const {nominator, denominator} = timelineBoxAdapter.box.signature
             meterLabel.value = `${nominator.getValue()}/${denominator.getValue()}`
@@ -93,12 +100,6 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
         </Frag>
     )
     lifecycle.own(profileService.catchupAndSubscribe(projectProfileObserver))
-    const bpmDisplay: HTMLElement = (
-        <div className="number-display">
-            <div>{bpmDigit}</div>
-            <div>BPM</div>
-        </div>
-    )
     lifecycle.own(Dragging.attach(bpmDisplay, (event: PointerEvent) => profileService.getValue().match({
         none: () => Option.None,
         some: ({project}) => {
@@ -109,7 +110,7 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
             return Option.wrap({
                 update: (event: Dragging.Event) => {
                     const newValue = Validator.clampBpm(oldValue + (pointer - event.clientY) * 2.0)
-                    editing.modify(() => project.timelineBox.bpm.setValue(newValue), false)
+                    editing.modify(() => project.timelineBox.bpm.setValue(Math.round(newValue)), false)
                 },
                 cancel: () => editing.modify(() => project.timelineBox.bpm.setValue(oldValue), false),
                 approve: () => editing.mark()
