@@ -1,10 +1,11 @@
 import css from "./VUMeterPanel.sass?inline"
-import {DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, Lifecycle, Option, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {VUMeterDesign} from "@/ui/meter/VUMeterDesign.tsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Html} from "@opendaw/lib-dom"
 import {EngineAddresses} from "@opendaw/studio-adapters"
+import {ProjectProfile} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "VUMeterPanel")
 
@@ -17,9 +18,9 @@ export const VUMeterPanel = ({lifecycle, service}: Construct) => {
     const peakL = lifecycle.own(new DefaultObservableValue(0.0))
     const peakR = lifecycle.own(new DefaultObservableValue(0.0))
     const runtime = lifecycle.own(new Terminator())
-    lifecycle.own(service.projectProfileService.catchupAndSubscribe((owner) => {
+    lifecycle.own(service.projectProfileService.catchupAndSubscribe((optProfile: Option<ProjectProfile>) => {
         runtime.terminate()
-        owner.getValue().match({
+        optProfile.match({
             none: () => {
                 peakL.setValue(0.0)
                 peakR.setValue(0.0)

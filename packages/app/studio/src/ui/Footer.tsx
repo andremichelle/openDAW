@@ -39,9 +39,8 @@ export const Footer = ({lifecycle, service}: Construct) => {
                                          .then(name => profile.updateMetaData("name", name))
                                  }
                              }),
-                             service.projectProfileService.catchupAndSubscribe(owner => {
+                             service.projectProfileService.catchupAndSubscribe(optProfile => {
                                  profileLifecycle.terminate()
-                                 const optProfile = owner.getValue()
                                  if (optProfile.nonEmpty()) {
                                      const profile = optProfile.unwrap()
                                      const observer = (meta: ProjectMeta) => element.textContent = meta.name

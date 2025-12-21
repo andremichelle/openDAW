@@ -185,9 +185,9 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
     }
 
     const chainLifeTime = lifecycle.own(new Terminator())
-    lifecycle.own(service.projectProfileService.catchupAndSubscribe((owner: ObservableValue<Option<ProjectProfile>>) => {
+    lifecycle.own(service.projectProfileService.catchupAndSubscribe((option: Option<ProjectProfile>) => {
         chainLifeTime.terminate()
-        owner.getValue().ifSome(({project: {userEditingManager}}) =>
+        option.ifSome(({project: {userEditingManager}}) =>
             userEditingManager.audioUnit.catchupAndSubscribe((target) => {
                 chainLifeTime.terminate()
                 if (target.isEmpty()) {return}

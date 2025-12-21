@@ -3,7 +3,7 @@ import {Icon} from "@/ui/components/Icon.tsx"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {Button} from "@/ui/components/Button.tsx"
-import {Lifecycle, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, Lifecycle, Option, Terminator} from "@opendaw/lib-std"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Surface} from "@/ui/surface/Surface"
@@ -11,6 +11,7 @@ import {CountIn} from "@/ui/header/CountIn"
 import {Html} from "@opendaw/lib-dom"
 import {ContextMenu} from "@/ui/ContextMenu"
 import {MenuItem} from "@/ui/model/menu-item"
+import {ProjectProfile} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "TransportGroup")
 
@@ -20,7 +21,8 @@ type Construct = {
 }
 
 export const TransportGroup = ({lifecycle, service}: Construct) => {
-    const {engine, transport} = service
+    const {engine, projectProfileService} = service
+    const loop = new DefaultObservableValue(false)
     const recordButton: HTMLElement = (
         <Button lifecycle={lifecycle}
                 appearance={{
@@ -46,6 +48,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                     }
                 }}><Icon symbol={IconSymbol.Play}/></Button>
     )
+    const loopLifecycle = lifecycle.own(new Terminator())
     const countInLifecycle = lifecycle.own(new Terminator())
     const recordingObserver = () => recordButton.classList.toggle("active",
         engine.isCountingIn.getValue() || engine.isRecording.getValue())
@@ -67,7 +70,20 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                     checked: engine.playbackTimestampEnabled.getValue()
                 }).setTriggerProcedure(() => engine.playbackTimestampEnabled
                     .setValue(!engine.playbackTimestampEnabled.getValue()))
-            ))
+            )),
+        projectProfileService.catchupAndSubscribe((optProfile: Option<ProjectProfile>) => {
+            loopLifecycle.terminate()
+            optProfile.match({
+                none: () => loop.setValue(false),
+                some: ({project: {editing, timelineBox: {loopArea: {enabled}}}}) => {
+                    loop.setValue(enabled.getValue())
+                    loopLifecycle.ownAll(
+                        loop.subscribe(owner => editing.modify(() => enabled.setValue(owner.getValue()))),
+                        enabled.subscribe(owner => loop.setValue(owner.getValue()))
+                    )
+                }
+            })
+        })
     )
     return (
         <div className={className}>
@@ -79,7 +95,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                 <Icon symbol={IconSymbol.Stop}/>
             </Button>
             <Checkbox lifecycle={lifecycle}
-                      model={transport.loop}
+                      model={loop}
                       appearance={{activeColor: Colors.gray, tooltip: "Loop"}}>
                 <Icon symbol={IconSymbol.Loop}/>
             </Checkbox>

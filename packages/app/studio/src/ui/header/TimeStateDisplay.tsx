@@ -50,9 +50,8 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
     const timeUnitIndex = new DefaultObservableValue(1)
     const profileService = service.projectProfileService
     const projectActiveLifeTime = lifecycle.own(new Terminator())
-    const projectProfileObserver = (owner: ObservableValue<Option<ProjectProfile>>) => {
+    const projectProfileObserver = (optProfile: Option<ProjectProfile>) => {
         projectActiveLifeTime.terminate()
-        const optProfile = owner.getValue()
         if (optProfile.isEmpty()) {return}
         const {project} = optProfile.unwrap()
         const {timelineBoxAdapter, rootBoxAdapter, boxGraph, engine} = project

@@ -83,10 +83,6 @@ export class StudioService implements ProjectEnv {
     readonly layout = {
         screen: new DefaultObservableValue<Nullable<Workspace.ScreenKeys>>("default")
     } as const
-    readonly transport = {
-        // TODO This does not respect the loop state of the timeline box.
-        loop: new DefaultObservableValue<boolean>(false)
-    } as const
     readonly timeline = {
         range,
         snapping,
@@ -347,10 +343,7 @@ export class StudioService implements ProjectEnv {
                 const profile = optProfile.unwrap()
                 const {project, meta} = profile
                 console.debug(`switch to %c${meta.name}%c`, "color: hsl(25, 69%, 63%)", "color: inherit")
-                const {timelineBox, editing, userEditingManager} = project
-                const loopState = this.transport.loop
-                const loopEnabled = timelineBox.loopArea.enabled
-                loopState.setValue(loopEnabled.getValue())
+                const {timelineBox, userEditingManager} = project
                 range.showUnitInterval(0, PPQN.fromSignature(9, 1))
                 lifeTime.own(ShadertoyState.initialize(project))
 
@@ -400,7 +393,6 @@ export class StudioService implements ProjectEnv {
                 if (isRoot) {this.switchScreen("default")}
                 lifeTime.ownAll(
                     project,
-                    loopState.subscribe(value => editing.modify(() => loopEnabled.setValue(value.getValue()))),
                     userEditingManager.timeline.catchupAndSubscribe(option => option
                         .ifSome(() => AnimationFrame.once(() => this.panelLayout.showIfAvailable(PanelType.ContentEditor)))),
                     timelineBox.durationInPulses.catchupAndSubscribe(owner => range.maxUnits = owner.getValue() + PPQN.Bar),
@@ -413,7 +405,7 @@ export class StudioService implements ProjectEnv {
                 this.layout.screen.setValue("dashboard")
             }
         }
-        this.#projectProfileService.catchupAndSubscribe(owner => observer(owner.getValue()))
+        this.#projectProfileService.catchupAndSubscribe(observer)
     }
 
     #installConsoleCommands(): void {

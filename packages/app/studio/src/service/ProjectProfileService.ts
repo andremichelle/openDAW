@@ -1,8 +1,7 @@
 import {
     DefaultObservableValue,
     Errors,
-    MutableObservableValue,
-    ObservableValue,
+    MutableObservableOption,
     Observer,
     Option,
     RuntimeNotifier,
@@ -26,8 +25,8 @@ import {
 } from "@opendaw/studio-core"
 import {SampleLoaderManager, SoundfontLoaderManager} from "@opendaw/studio-adapters"
 
-export class ProjectProfileService implements MutableObservableValue<Option<ProjectProfile>> {
-    readonly #profile: DefaultObservableValue<Option<ProjectProfile>>
+export class ProjectProfileService {
+    readonly #profile: MutableObservableOption<ProjectProfile>
 
     readonly #env: ProjectEnv
     readonly #sampleService: SampleService
@@ -47,33 +46,32 @@ export class ProjectProfileService implements MutableObservableValue<Option<Proj
         this.#sampleManager = sampleManager
         this.#soundfontService = soundfontService
         this.#soundfontManager = soundfontManager
-        this.#profile = new DefaultObservableValue<Option<ProjectProfile>>(Option.None)
+        this.#profile = new MutableObservableOption<ProjectProfile>()
     }
 
-    getValue(): Option<ProjectProfile> {return this.#profile.getValue()}
-    setValue(value: Option<ProjectProfile>): void {this.#profile.setValue(value)}
-    subscribe(observer: Observer<ObservableValue<Option<ProjectProfile>>>): Terminable {
+    getValue(): Option<ProjectProfile> {return this.#profile}
+    setValue(value: Option<ProjectProfile>): void {this.#profile.wrapOption(value)}
+    subscribe(observer: Observer<Option<ProjectProfile>>): Terminable {
         return this.#profile.subscribe(observer)
     }
-    catchupAndSubscribe(observer: Observer<ObservableValue<Option<ProjectProfile>>>): Terminable {
-        observer(this)
+    catchupAndSubscribe(observer: Observer<Option<ProjectProfile>>): Terminable {
+        observer(this.#profile)
         return this.#profile.subscribe(observer)
     }
 
     async save(): Promise<void> {
-        return this.#profile.getValue()
-            .ifSome(profile => profile.saved() ? profile.save() : this.saveAs())
+        return this.#profile.ifSome(profile => profile.saved() ? profile.save() : this.saveAs())
     }
 
     async saveAs(): Promise<void> {
-        return this.#profile.getValue().ifSome(async profile => {
+        return this.#profile.ifSome(async profile => {
             const {status, value: meta} = await Promises.tryCatch(ProjectDialogs.showSaveDialog({
                 headline: "Save Project",
                 meta: profile.meta
             }))
             if (status === "rejected") {return}
             const optProfile = await profile.saveAs(meta)
-            optProfile.ifSome(profile => this.#profile.setValue(Option.wrap(profile)))
+            optProfile.ifSome(profile => this.#profile.wrap(profile))
         })
     }
 
@@ -86,7 +84,7 @@ export class ProjectProfileService implements MutableObservableValue<Option<Proj
     }
 
     async exportBundle() {
-        return this.#profile.getValue().ifSome(async profile => {
+        return this.#profile.ifSome(async profile => {
             const progressValue = new DefaultObservableValue(0.0)
             const processDialog = RuntimeNotifier.progress({headline: "Bundling Project...", progress: progressValue})
             const arrayBuffer = await ProjectBundle.encode(profile, progress => progressValue.setValue(progress))
@@ -115,9 +113,9 @@ export class ProjectProfileService implements MutableObservableValue<Option<Proj
         try {
             const [file] = await Files.open({types: [FilePickerAcceptTypes.ProjectBundleFileType]})
             const arrayBuffer = await file.arrayBuffer()
-            const exclude = this.#profile.getValue().map(({uuid}) => uuid).unwrapOrUndefined()
+            const exclude = this.#profile.map(({uuid}) => uuid).unwrapOrUndefined()
             const profile = await ProjectBundle.decode(this.#env, arrayBuffer, exclude)
-            this.#profile.setValue(Option.wrap(profile))
+            this.#profile.wrap(profile)
         } catch (error) {
             if (!Errors.isAbort(error)) {
                 Dialogs.info({headline: "Could not load project", message: String(error)}).finally()
@@ -126,7 +124,7 @@ export class ProjectProfileService implements MutableObservableValue<Option<Proj
     }
 
     async saveFile() {
-        this.#profile.getValue().ifSome(async profile => {
+        this.#profile.ifSome(async profile => {
             const arrayBuffer = profile.project.toArrayBuffer() as ArrayBuffer
             try {
                 const fileName = await Files.save(arrayBuffer, {
@@ -159,7 +157,7 @@ export class ProjectProfileService implements MutableObservableValue<Option<Proj
     }
 
     #setProfile(...args: ConstructorParameters<typeof ProjectProfile>): void {
-        this.#profile.setValue(Option.wrap(this.#createProfile(...args)))
+        this.#profile.wrap(this.#createProfile(...args))
     }
 
     #createProfile(...args: ConstructorParameters<typeof ProjectProfile>): ProjectProfile {
