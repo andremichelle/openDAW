@@ -70,7 +70,7 @@ export const createValuePainter =
         context.stroke()
         context.setLineDash(Arrays.empty())
         context.lineWidth = devicePixelRatio
-        const contentColor = `hsl(${reader.hue}, 60%, 45%)`
+        const contentColor = `hsl(${reader.hue}, ${reader.mute ? 0 : 60}%, 45%)`
         const start = range.unitMin - range.unitPadding
         const end = range.unitMax
         const events = reader.content.events
@@ -93,17 +93,19 @@ export const createValuePainter =
                 return () => Arrays.iterate(valueEvents)
             }
         })
-        renderValueStream(context, range, createIterator(), valueToPixel, contentColor, 0.04, valueEditing.anchorModel.getValue(), {
-            index: 0,
-            rawStart: offset,
-            rawEnd: offset + reader.loopDuration,
-            regionStart: Math.max(offset, reader.position),
-            regionEnd: Math.min(offset + reader.loopDuration, reader.complete),
-            resultStart: start,
-            resultEnd: end,
-            resultStartValue: 0.0,
-            resultEndValue: 1.0
-        })
+        renderValueStream(
+            context, range, createIterator(), valueToPixel,
+            contentColor, 0.04, valueEditing.anchorModel.getValue(), {
+                index: 0,
+                rawStart: offset,
+                rawEnd: offset + reader.loopDuration,
+                regionStart: Math.max(offset, reader.position),
+                regionEnd: Math.min(offset + reader.loopDuration, reader.complete),
+                resultStart: start,
+                resultEnd: end,
+                resultStartValue: 0.0,
+                resultEndValue: 1.0
+            })
         for (const event of createIterator()) {
             context.fillStyle = event.isSelected ? "white" : contentColor
             const x = range.unitToX(offset + event.position) * devicePixelRatio

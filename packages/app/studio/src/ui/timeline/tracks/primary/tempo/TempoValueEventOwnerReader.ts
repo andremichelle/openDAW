@@ -22,7 +22,7 @@ export class TempoValueEventOwnerReader implements ValueEventOwnerReader {
     get complete(): ppqn {return Number.POSITIVE_INFINITY}
     get loopDuration(): ppqn {return Number.POSITIVE_INFINITY}
     get loopOffset(): ppqn {return 0}
-    get mute(): boolean {return false}
+    get mute(): boolean {return !this.#adapter.box.tempoTrack.enabled.getValue()}
     get canLoop(): boolean {return false}
     get trackBoxAdapter(): Option<TrackBoxAdapter> {return Option.None}
     keeoOverlapping(_range: TimelineRange): Subscription {
@@ -39,6 +39,7 @@ export class TempoValueEventOwnerReader implements ValueEventOwnerReader {
             }),
             this.#adapter.box.tempoTrack.minBpm.subscribe(() => observer()),
             this.#adapter.box.tempoTrack.maxBpm.subscribe(() => observer()),
+            this.#adapter.box.tempoTrack.enabled.subscribe(() => observer()),
             this.#adapter.box.bpm.subscribe(() => observer()),
             {terminate: () => inner.terminate()}
         )
