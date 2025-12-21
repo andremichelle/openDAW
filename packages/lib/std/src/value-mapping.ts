@@ -12,16 +12,14 @@ export interface ValueMapping<Y> {
 class Linear implements ValueMapping<number> {
     readonly #min: number
     readonly #max: number
-    readonly #range: number
 
     constructor(min: number, max: number) {
         assert(min < max, "Linear is inverse")
         this.#min = min
         this.#max = max
-        this.#range = max - min
     }
-    x(y: number): unitValue {return y <= this.#min ? 0.0 : y >= this.#max ? 1.0 : (y - this.#min) / this.#range}
-    y(x: unitValue): number {return x <= 0.0 ? this.#min : x >= 1.0 ? this.#max : this.#min + x * this.#range}
+    x(y: number): unitValue {return y <= this.#min ? 0.0 : y >= this.#max ? 1.0 : (y - this.#min) / (this.#max - this.#min)}
+    y(x: unitValue): number {return x <= 0.0 ? this.#min : x >= 1.0 ? this.#max : this.#min + x * (this.#max - this.#min)}
     clamp(y: number): number {return clamp(y, this.#min, this.#max)}
     floating(): boolean {return true}
 }
@@ -45,19 +43,17 @@ class LinearInteger implements ValueMapping<int> {
 class Exponential implements ValueMapping<number> {
     readonly #min: number
     readonly #max: number
-    readonly #range: number
 
     constructor(min: number, max: number) {
         assert(min < max, "Exponential is inverse")
         this.#min = min
         this.#max = max
-        this.#range = Math.log(max / min)
     }
     x(y: number): unitValue {
-        return y <= this.#min ? 0.0 : y >= this.#max ? 1.0 : Math.log(y / this.#min) / this.#range
+        return y <= this.#min ? 0.0 : y >= this.#max ? 1.0 : Math.log(y / this.#min) / Math.log(this.#max / this.#min)
     }
     y(x: unitValue): number {
-        return x <= 0.0 ? this.#min : x >= 1.0 ? this.#max : Math.exp(x * this.#range) * this.#min
+        return x <= 0.0 ? this.#min : x >= 1.0 ? this.#max : Math.exp(x * Math.log(this.#max / this.#min)) * this.#min
     }
     clamp(y: number): number {return Math.min(this.#max, Math.max(this.#min, y))}
     floating(): boolean {return true}

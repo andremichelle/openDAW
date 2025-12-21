@@ -139,12 +139,15 @@ export class ValueMoveModifier implements ValueModifier {
                         : Math.abs(closest.position - localY))
                     ? guide : closest, null)
         const snapValue = closest === null ? Option.None : Option.wrap(closest.value)
-        const deltaValue: number = freezeMode
-            ? 0.0
-            : snapValue.match({
-                none: () => this.#eventMapping.x(pointerValue) - this.#eventMapping.x(this.#pointerValue),
-                some: value => this.#eventMapping.x(value) - this.#eventMapping.x(this.#reference.value)
-            })
+        const deltaValue: number = !freezeMode ? snapValue.match({
+            none: () => {
+                const unitValue = this.#eventMapping.x(pointerValue)
+                return unitValue <= 0.0 || unitValue >= 1.0
+                    ? unitValue - this.#eventMapping.x(this.#reference.value)
+                    : unitValue - this.#eventMapping.x(this.#pointerValue)
+            },
+            some: value => this.#eventMapping.x(value) - this.#eventMapping.x(this.#reference.value)
+        }) : 0.0
         const deltaPosition: int = this.#snapping.computeDelta(this.#pointerPulse, localX, this.#reference.position)
         let change = false
         if (this.#deltaPosition !== deltaPosition) {
