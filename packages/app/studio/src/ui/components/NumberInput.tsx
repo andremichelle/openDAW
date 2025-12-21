@@ -31,7 +31,9 @@ export const NumberInput = ({
     step ??= 1.0
     maxChars ??= 3
     mapper ??= StringMapping.numeric({})
-    const input: HTMLElement = (<div contentEditable="true" style={{width: `calc(0.5em + ${maxChars * 6 + 1}px)`}}/>)
+    const input: HTMLElement = (
+        <div contentEditable="true"
+             style={{width: `calc(0.5em + ${maxChars * 6 + 1}px)`}}/>)
     const element: HTMLElement = (
         <div className={Html.buildClassList(defaultClassName, className)}>
             {input}

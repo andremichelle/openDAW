@@ -1,10 +1,12 @@
 @use "@/colors"
 
 @mixin width-available
+  //noinspection CssInvalidPropertyValue
   width: -moz-available
   width: -webkit-fill-available
 
 @mixin height-available
+  //noinspection CssInvalidPropertyValue
   height: -moz-available
   height: -webkit-fill-available
 
@@ -109,7 +111,7 @@
   flex-direction: row
   column-gap: 2px
   min-height: 2em
-  font-size: 0.75em
+  font-size: 10px
   align-items: center
   border-radius: 0.5em
   width: min-content
@@ -142,8 +144,8 @@
     border: none
     outline: none
     color: var(--color-blue)
-    background-color: rgba(black, 0.25)
-    box-shadow: 0 0 0 1px rgba(white, 0.02)
+    background-color: rgba(black, 0.12)
+    box-shadow: 0 0 0 0.5px rgba(white, 0.1)
     text-align: $ident
     padding: 0.125em 0.25em
     border-radius: 1px
