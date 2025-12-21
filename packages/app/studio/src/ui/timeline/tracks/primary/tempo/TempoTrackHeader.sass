@@ -2,8 +2,24 @@
 
 component
   display: flex
-  align-items: center
-  font-size: 0.625rem
-  padding-left: 1.5em
+  flex-direction: column
+  align-items: end
+  padding-top: 6px
+  padding-right: 16px
+  row-gap: 4px
+  font-size: 10px
   color: var(--color-dark)
   @include colors.panel-background
+
+  > div.bpm-range
+    display: flex
+    flex-direction: row
+    align-items: center
+    column-gap: 4px
+
+    > hr
+      margin: 0 1px
+      width: 6px
+      height: 1px
+      border: none
+      background-color: rgba(white, 0.15)

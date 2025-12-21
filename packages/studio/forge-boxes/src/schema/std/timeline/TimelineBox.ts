@@ -62,12 +62,18 @@ export const TimelineBox: BoxSchema<Pointers> = {
                     name: "TempoTrack",
                     fields: {
                         1: {
-                            type: "pointer",
-                            name: "events",
-                            mandatory: false,
-                            pointerType: Pointers.ValueEventCollection
+                            type: "pointer", name: "events",
+                            mandatory: false, pointerType: Pointers.ValueEventCollection
                         },
                         10: {type: "int32", name: "index", ...IndexConstraints},
+                        15: {
+                            type: "int32", name: "min-bpm",
+                            constraints: {min: 30, max: 999}, unit: "bpm", value: 60
+                        },
+                        16: {
+                            type: "int32", name: "max-bpm",
+                            constraints: {min: 31, max: 1000}, unit: "bpm", value: 240
+                        },
                         20: {type: "boolean", name: "enabled", value: true}
                     }
                 }

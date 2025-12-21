@@ -9,7 +9,7 @@ export namespace EditWrapper {
             getValue(): T {return owner.getValue()}
             setValue(value: T) {
                 if (editing.mustModify()) {
-                    editing.modify(() => owner.setValue(value))
+                    editing.modify(() => owner.setValue(value), false)
                 } else {
                     owner.setValue(value)
                 }

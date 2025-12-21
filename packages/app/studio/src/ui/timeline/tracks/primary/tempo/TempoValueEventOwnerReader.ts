@@ -7,7 +7,9 @@ import {TimelineRange} from "@opendaw/studio-core"
 export class TempoValueEventOwnerReader implements ValueEventOwnerReader {
     readonly #adapter: TimelineBoxAdapter
 
-    constructor(adapter: TimelineBoxAdapter) {this.#adapter = adapter}
+    constructor(adapter: TimelineBoxAdapter) {
+        this.#adapter = adapter
+    }
 
     get content(): ValueEventCollectionBoxAdapter {return this.#adapter.tempoTrack.unwrap()}
     get contentDuration(): ppqn {return Number.POSITIVE_INFINITY}
@@ -39,6 +41,8 @@ export class TempoValueEventOwnerReader implements ValueEventOwnerReader {
                     Terminable.Empty
                 )
             }),
+            this.#adapter.box.tempoTrack.minBpm.subscribe(() => observer()),
+            this.#adapter.box.tempoTrack.maxBpm.subscribe(() => observer()),
             {terminate: () => inner.terminate()}
         )
     }
