@@ -90,18 +90,24 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
             <div>BEAT</div>
         </div>
     )
+    const semiquaverDisplay: HTMLElement = (
+        <div className="number-display">
+            <div>{semiquaverDigit}</div>
+            <div>SEMI</div>
+        </div>
+    )
+    const ticksDisplay: HTMLElement = (
+        <div className="number-display">
+            <div>{ticksDigit}</div>
+            <div>TICKS</div>
+        </div>
+    )
     const timeUnitElements: ReadonlyArray<HTMLElement> = (
         <Frag>
             {barDisplay}
             {beatDisplay}
-            <div className="number-display">
-                <div>{semiquaverDigit}</div>
-                <div>SEMI</div>
-            </div>
-            <div className="number-display">
-                <div>{ticksDigit}</div>
-                <div>TICKS</div>
-            </div>
+            {semiquaverDisplay}
+            {ticksDisplay}
         </Frag>
     )
     lifecycle.own(projectProfileService.catchupAndSubscribe(projectProfileObserver))
@@ -196,6 +202,8 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
     lifecycle.ownAll(
         ContextMenu.subscribe(barDisplay, collectUnitMenu),
         ContextMenu.subscribe(beatDisplay, collectUnitMenu),
+        ContextMenu.subscribe(semiquaverDisplay, collectUnitMenu),
+        ContextMenu.subscribe(ticksDisplay, collectUnitMenu),
         ContextMenu.subscribe(bpmDisplay, collectTempoMenu)
     )
     return element
