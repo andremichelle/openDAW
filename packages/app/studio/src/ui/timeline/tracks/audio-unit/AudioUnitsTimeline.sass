@@ -37,7 +37,7 @@ component
       @include colors.panel-background
 
       > div.create-instrument
-        grid-column: 1
+        grid-column: 1 / calc(var(--clips-count) + 2)
         pointer-events: all
         font-size: 10px
         z-index: 1
