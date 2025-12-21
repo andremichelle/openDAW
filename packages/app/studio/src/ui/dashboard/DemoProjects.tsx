@@ -62,20 +62,18 @@ const loadDemoProject = async (service: StudioService, json: DemoProjectJson) =>
 export const DemoProjects = ({service}: Construct) => (
     <div className={className}>
         <h3 style={{color: Colors.orange.toString()}}>Demo Projects</h3>
-        <Await factory={() => fetch(listUrl)
-            .then(res => res.json())
-            .then(res => res as TracksList)
-            .then(list => list.tracks
-                .sort(({metadata: {modified: a}}, {metadata: {modified: b}}) => b.localeCompare(a)))}
-               loading={() => ThreeDots()}
-               failure={({retry}) => <span onclick={retry}>Retry</span>}
-               success={(tracks) => (
-                   <div className="projects">
-                       <DemoProject json={NewProjectJson} load={() => service.newProject()}/>
-                       {tracks.map(json => (
-                           <DemoProject json={json} load={() => loadDemoProject(service, json)}/>
-                       ))}
-                   </div>
-               )}/>
+        <div className="projects">
+            <DemoProject json={NewProjectJson} load={() => service.newProject()}/>
+            <Await factory={() => fetch(listUrl)
+                .then(res => res.json())
+                .then(res => res as TracksList)
+                .then(list => list.tracks
+                    .sort(({metadata: {modified: a}}, {metadata: {modified: b}}) => b.localeCompare(a)))}
+                   loading={() => ThreeDots()}
+                   failure={({retry}) => <span onclick={retry}>Retry</span>}
+                   success={(tracks) => tracks.map(json => (
+                       <DemoProject json={json} load={() => loadDemoProject(service, json)}/>
+                   ))}/>
+        </div>
     </div>
 )
