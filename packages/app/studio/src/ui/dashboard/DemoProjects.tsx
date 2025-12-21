@@ -64,6 +64,7 @@ export const DemoProjects = ({service}: Construct) => (
         <h3 style={{color: Colors.orange.toString()}}>Demo Projects</h3>
         <div className="projects">
             <DemoProject json={NewProjectJson} load={() => service.newProject()}/>
+            <hr/>
             <Await
                 factory={() => fetch(listUrl)
                     .then(res => res.json())
