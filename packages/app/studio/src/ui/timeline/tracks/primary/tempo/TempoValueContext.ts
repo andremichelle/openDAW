@@ -9,14 +9,14 @@ import {
     unitValue,
     ValueMapping
 } from "@opendaw/lib-std"
-import {TimelineBoxAdapter} from "@opendaw/studio-adapters"
+import {TempoRange, TimelineBoxAdapter} from "@opendaw/studio-adapters"
 import {bpm} from "@opendaw/lib-dsp"
 
 export class TempoValueContext implements ValueContext, Terminable {
     readonly #terminator = new Terminator()
     readonly #adapter: TimelineBoxAdapter
 
-    readonly anchorModel: ObservableValue<number> = ObservableValue.seal(0)
+    readonly anchorModel: ObservableValue<number> = ObservableValue.seal(TempoRange.min)
     readonly stringMapping: StringMapping<number> = StringMapping.numeric({unit: "bpm", fractionDigits: 1})
     readonly valueMapping: ValueMapping<number>
     readonly floating: boolean = true

@@ -11,9 +11,9 @@ export class TempoValueEventOwnerReader implements ValueEventOwnerReader {
         this.#adapter = adapter
     }
 
-    get content(): ValueEventCollectionBoxAdapter {return this.#adapter.tempoTrack.unwrap()}
+    get content(): ValueEventCollectionBoxAdapter {return this.#adapter.tempoTrackEvents.unwrap()}
     get contentDuration(): ppqn {return Number.POSITIVE_INFINITY}
-    get hasContent(): boolean {return this.#adapter.tempoTrack.nonEmpty()}
+    get hasContent(): boolean {return this.#adapter.tempoTrackEvents.nonEmpty()}
     get hue(): int {return 30}
     get isMirrored(): boolean {return false}
     get offset(): ppqn {return 0}
@@ -32,13 +32,14 @@ export class TempoValueEventOwnerReader implements ValueEventOwnerReader {
     subscribeChange(observer: Observer<void>): Subscription {
         let inner: Subscription = Terminable.Empty
         return Terminable.many(
-            this.#adapter.tempoTrack.catchupAndSubscribe(option => {
+            this.#adapter.tempoTrackEvents.catchupAndSubscribe(option => {
                 inner.terminate()
                 observer()
                 inner = option.mapOr(collection => collection.subscribeChange(() => observer()), Terminable.Empty)
             }),
             this.#adapter.box.tempoTrack.minBpm.subscribe(() => observer()),
             this.#adapter.box.tempoTrack.maxBpm.subscribe(() => observer()),
+            this.#adapter.box.bpm.subscribe(() => observer()),
             {terminate: () => inner.terminate()}
         )
     }

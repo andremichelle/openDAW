@@ -28,7 +28,7 @@ export const TempoTrackHeader = ({lifecycle, service, bpmRange}: Construct) => {
                 <Button lifecycle={lifecycle}
                         appearance={{cursor: "pointer", tooltip: "Reset visible range to fit all events"}}
                         onClick={() => {
-                            service.project.timelineBoxAdapter.tempoTrack.ifSome(adapter => {
+                            service.project.timelineBoxAdapter.tempoTrackEvents.ifSome(adapter => {
                                 const [min, max] = adapter.events.asArray().reduce((range, event) => {
                                     range[0] = Math.min(event.value, range[0])
                                     range[1] = Math.max(event.value, range[1])

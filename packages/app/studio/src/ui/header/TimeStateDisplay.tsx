@@ -68,7 +68,7 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
         engine.bpm.catchupAndSubscribe((owner: ObservableValue<float>) => {
             const bpm = owner.getValue()
             bpmDisplay.classList.toggle("float", !Number.isInteger(bpm))
-            return bpmDigit.value = bpm.toFixed(0)
+            return bpmDigit.value = `${Math.floor(bpm)}`
         })
         const updateMeterLabel = () => {
             const {nominator, denominator} = timelineBoxAdapter.box.signature

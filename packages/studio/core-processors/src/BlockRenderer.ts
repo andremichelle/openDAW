@@ -35,23 +35,23 @@ export class BlockRenderer implements Terminable {
     #currentMarker: Nullable<[MarkerBoxAdapter, int]> = null
     #someMarkersChanged: boolean = false
     #freeRunningPosition: ppqn = 0.0 // synced with timeInfo when transporting
-    #optTempoTrack: Option<ValueEventCollectionBoxAdapter> = Option.None
+    #optTempoAutomation: Option<ValueEventCollectionBoxAdapter> = Option.None
     #bpm: bpm
 
     constructor(context: EngineContext, options?: { pauseOnLoopDisabled?: boolean }) {
         this.#context = context
-        const {timelineBoxAdapter: {box: {bpm}, markerTrack, tempoTrack}} = context
+        const {timelineBoxAdapter: {box: {bpm}, markerTrack, tempoAutomation}} = context
         this.#bpm = bpm.getValue()
         markerTrack.subscribe(() => this.#someMarkersChanged = true)
         this.#terminator.ownAll(
             bpm.subscribe((owner) => {
-                if (this.#optTempoTrack.isEmpty()) {
+                if (this.#optTempoAutomation.isEmpty()) {
                     this.#bpm = owner.getValue()
                     this.#bpmChanged = true
                 }
             }),
-            tempoTrack.catchupAndSubscribe(option => {
-                this.#optTempoTrack = option
+            tempoAutomation.catchupAndSubscribe(option => {
+                this.#optTempoAutomation = option
                 if (option.isEmpty()) {
                     this.#bpm = bpm.getValue()
                     this.#bpmChanged = true
@@ -97,8 +97,8 @@ export class BlockRenderer implements Terminable {
                         markerChanged = true
                     }
                 }
-                if (discontinuous && this.#optTempoTrack.nonEmpty()) {
-                    const newBpm = this.#optTempoTrack.unwrap().valueAt(p0, this.#bpm)
+                if (discontinuous && this.#optTempoAutomation.nonEmpty()) {
+                    const newBpm = this.#optTempoAutomation.unwrap().valueAt(p0, this.#bpm)
                     if (newBpm !== this.#bpm) {
                         this.#bpm = newBpm
                         this.#bpmChanged = true
@@ -156,11 +156,11 @@ export class BlockRenderer implements Terminable {
                     }
                 }
                 // --- TEMPO AUTOMATION ---
-                if (this.#optTempoTrack.nonEmpty()) {
-                    if (!this.#optTempoTrack.unwrap().events.isEmpty()) {
+                if (this.#optTempoAutomation.nonEmpty()) {
+                    if (!this.#optTempoAutomation.unwrap().events.isEmpty()) {
                         const nextGrid: ppqn = quantizeCeil(p0, TEMPO_CHANGE_GRID)
                         if (nextGrid >= p0 && nextGrid < p1 && nextGrid < actionPosition) {
-                            const tempoAtGrid = this.#optTempoTrack.unwrap().valueAt(nextGrid, this.#bpm)
+                            const tempoAtGrid = this.#optTempoAutomation.unwrap().valueAt(nextGrid, this.#bpm)
                             if (tempoAtGrid !== this.#bpm) {
                                 action = {type: "tempo", position: nextGrid, bpm: tempoAtGrid}
                                 actionPosition = nextGrid
@@ -255,8 +255,8 @@ export class BlockRenderer implements Terminable {
             this.#bpmChanged = false
         } else {
             const discontinuous = timeInfo.getLeapStateAndReset()
-            if (discontinuous && this.#optTempoTrack.nonEmpty()) {
-                const newBpm = this.#optTempoTrack.unwrap().valueAt(this.#context.timeInfo.position, this.#bpm)
+            if (discontinuous && this.#optTempoAutomation.nonEmpty()) {
+                const newBpm = this.#optTempoAutomation.unwrap().valueAt(this.#context.timeInfo.position, this.#bpm)
                 if (newBpm !== this.#bpm) {
                     this.#bpm = newBpm
                     this.#bpmChanged = true

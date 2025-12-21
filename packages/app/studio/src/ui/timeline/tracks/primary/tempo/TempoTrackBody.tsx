@@ -21,7 +21,7 @@ export const TempoTrackBody = ({lifecycle, service, bpmRange}: Construct) => {
     const editorLifecycle = lifecycle.own(new Terminator())
     return (
         <div className={className} onInit={element => {
-            timelineBoxAdapter.tempoTrack.catchupAndSubscribe(option => {
+            timelineBoxAdapter.tempoTrackEvents.catchupAndSubscribe(option => {
                 editorLifecycle.terminate()
                 option.match({
                     none: () => Html.empty(element),
