@@ -32,6 +32,7 @@ type Construct = {
 }
 
 export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
+    const {projectProfileService, timeline: {primaryVisibility: {tempo}}} = service
     const barDigits = Inject.value("001")
     const beatDigit = Inject.value("1")
     const semiquaverDigit = Inject.value("1")
@@ -48,7 +49,6 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
     // Bar, Bar+Beats, Bar+Beats+SemiQuaver, Bar+Beats+SemiQuaver+Ticks
     const timeUnits = ["Bar", "Beats", "SemiQuaver", "Ticks"] // Bar+Beats
     const timeUnitIndex = new DefaultObservableValue(1)
-    const profileService = service.projectProfileService
     const projectActiveLifeTime = lifecycle.own(new Terminator())
     const projectProfileObserver = (optProfile: Option<ProjectProfile>) => {
         projectActiveLifeTime.terminate()
@@ -78,16 +78,22 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
         rootBoxAdapter.groove.box.amount.catchupAndSubscribe((owner: ObservableValue<float>) =>
             shuffleDigit.value = String(Math.round(owner.getValue() * 100)))
     }
+    const barDisplay: HTMLElement = (
+        <div className="number-display">
+            <div>{barDigits}</div>
+            <div>BAR</div>
+        </div>
+    )
+    const beatDisplay: HTMLElement = (
+        <div className="number-display">
+            <div>{beatDigit}</div>
+            <div>BEAT</div>
+        </div>
+    )
     const timeUnitElements: ReadonlyArray<HTMLElement> = (
         <Frag>
-            <div className="number-display">
-                <div>{barDigits}</div>
-                <div>BAR</div>
-            </div>
-            <div className="number-display">
-                <div>{beatDigit}</div>
-                <div>BEAT</div>
-            </div>
+            {barDisplay}
+            {beatDisplay}
             <div className="number-display">
                 <div>{semiquaverDigit}</div>
                 <div>SEMI</div>
@@ -98,8 +104,8 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
             </div>
         </Frag>
     )
-    lifecycle.own(profileService.catchupAndSubscribe(projectProfileObserver))
-    lifecycle.own(Dragging.attach(bpmDisplay, (event: PointerEvent) => profileService.getValue().match({
+    lifecycle.own(projectProfileService.catchupAndSubscribe(projectProfileObserver))
+    lifecycle.own(Dragging.attach(bpmDisplay, (event: PointerEvent) => projectProfileService.getValue().match({
         none: () => Option.None,
         some: ({project}) => {
             const {editing} = project
@@ -126,11 +132,11 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
                 resolvers.promise.then((value: string) => {
                     const bpmValue = parseFloat(value)
                     if (isNaN(bpmValue)) {return}
-                    profileService.getValue().ifSome(({project: {editing, timelineBox: {bpm}}}) =>
+                    projectProfileService.getValue().ifSome(({project: {editing, timelineBox: {bpm}}}) =>
                         editing.modify(() => bpm.setValue(Validator.clampBpm(bpmValue))))
                 }, EmptyExec)
                 return resolvers
-            }} provider={() => profileService.getValue().match({
+            }} provider={() => projectProfileService.getValue().match({
                 none: () => ({unit: "bpm", value: bpmDigit.value}),
                 some: ({project: {timelineBox: {bpm}}}) => ({unit: "bpm", value: bpm.getValue().toString()})
             })}>{bpmDisplay}</DblClckTextInput>
@@ -142,7 +148,7 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
                     const attempt: Attempt<[int, int], string> = Parsing.parseTimeSignature(value)
                     if (attempt.isSuccess()) {
                         const [nominator, denominator] = attempt.result()
-                        profileService.getValue()
+                        projectProfileService.getValue()
                             .ifSome(({project: {editing, rootBoxAdapter: {timeline: {box: {signature}}}}}) =>
                                 editing.modify(() => {
                                     signature.nominator.setValue(clamp(nominator, 1, 32))
@@ -162,7 +168,7 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
                 resolvers.promise.then((value: string) => {
                     const amount = parseFloat(value)
                     if (isNaN(amount)) {return}
-                    profileService.getValue().ifSome(({project}) =>
+                    projectProfileService.getValue().ifSome(({project}) =>
                         project.editing.modify(() => project.rootBoxAdapter.groove.box.amount
                             .setValue(clamp(amount / 100.0, 0.0, 1.0))))
                 }, EmptyExec)
@@ -175,14 +181,22 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
             </DblClckTextInput>
         </div>
     )
+    const collectUnitMenu = (collector: ContextMenu.Collector) => collector.addItems(MenuItem.default({label: "Units"})
+        .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+            ...timeUnits.map((_, index) => MenuItem.default({
+                label: timeUnits.slice(0, index + 1).join(" > "),
+                checked: index === timeUnitIndex.getValue()
+            }).setTriggerProcedure(() => timeUnitIndex.setValue(index)))
+        )))
+    const collectTempoMenu = (collector: ContextMenu.Collector) =>
+        collector.addItems(MenuItem.default({
+            label: "Show Tempo Automation",
+            checked: tempo.getValue()
+        }).setTriggerProcedure(() => tempo.setValue(!tempo.getValue())))
     lifecycle.ownAll(
-        ContextMenu.subscribe(element, collector => collector.addItems(MenuItem.default({label: "Units"})
-            .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
-                ...timeUnits.map((_, index) => MenuItem.default({
-                    label: timeUnits.slice(0, index + 1).join(" > "),
-                    checked: index === timeUnitIndex.getValue()
-                }).setTriggerProcedure(() => timeUnitIndex.setValue(index)))
-            ))))
+        ContextMenu.subscribe(barDisplay, collectUnitMenu),
+        ContextMenu.subscribe(beatDisplay, collectUnitMenu),
+        ContextMenu.subscribe(bpmDisplay, collectTempoMenu)
     )
     return element
 }

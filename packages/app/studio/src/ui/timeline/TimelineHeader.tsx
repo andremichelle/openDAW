@@ -31,13 +31,19 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                 <Icon symbol={IconSymbol.Run}/>
             </Checkbox>
             <hr/>
-            <MenuButton appearance={{color: Colors.green, tinyTriangle: true, tooltip: "Toggle Markers & Tempo visiblilty"}}
-                        root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
-                            MenuItem.default({label: "Markers", checked: markers.getValue()})
-                                .setTriggerProcedure(() => markers.setValue(!markers.getValue())),
-                            MenuItem.default({label: "Tempo", checked: tempo.getValue()})
-                                .setTriggerProcedure(() => tempo.setValue(!tempo.getValue()))
-                        ))}>
+            <MenuButton
+                appearance={{color: Colors.green, tinyTriangle: true, tooltip: "Toggle Markers & Tempo visiblilty"}}
+                root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                    MenuItem.header({
+                        label: "Primarily Tracks",
+                        icon: IconSymbol.Primary,
+                        color: Colors.green
+                    }),
+                    MenuItem.default({label: "Markers", checked: markers.getValue()})
+                        .setTriggerProcedure(() => markers.setValue(!markers.getValue())),
+                    MenuItem.default({label: "Tempo", checked: tempo.getValue()})
+                        .setTriggerProcedure(() => tempo.setValue(!tempo.getValue()))
+                ))}>
                 <Icon symbol={IconSymbol.Primary}/>
             </MenuButton>
             <Checkbox lifecycle={lifecycle}
