@@ -21,34 +21,30 @@ type Construct = {
 const MinBpmPadding = 30
 
 export const TempoTrackHeader = ({lifecycle, service, bpmRange}: Construct) => {
+    const clampRange = () => {
+        service.project.timelineBoxAdapter.tempoTrackEvents.ifSome(adapter => {
+            const [min, max] = adapter.events.asArray().reduce((range, event) => {
+                range[0] = Math.min(event.value, range[0])
+                range[1] = Math.max(event.value, range[1])
+                return range
+            }, [Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])
+            if (Number.isFinite(min) && Number.isFinite(max)) {
+                if (max - min < MinBpmPadding) {
+                    const center = (min + max) / 2
+                    const low = Math.max(TempoRange.min, center - MinBpmPadding / 2)
+                    bpmRange[0].setValue(low)
+                    bpmRange[1].setValue(low + MinBpmPadding)
+                } else {
+                    bpmRange[0].setValue(Math.max(min - MinBpmPadding, TempoRange.min))
+                    bpmRange[1].setValue(Math.min(max + MinBpmPadding, TempoRange.max))
+                }
+            }
+        })
+    }
     return (
         <div className={className}>
             <span>Tempo</span>
             <div className="bpm-range">
-                <Button lifecycle={lifecycle}
-                        appearance={{cursor: "pointer", tooltip: "Reset visible range to fit all events"}}
-                        onClick={() => {
-                            service.project.timelineBoxAdapter.tempoTrackEvents.ifSome(adapter => {
-                                const [min, max] = adapter.events.asArray().reduce((range, event) => {
-                                    range[0] = Math.min(event.value, range[0])
-                                    range[1] = Math.max(event.value, range[1])
-                                    return range
-                                }, [Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])
-                                if (Number.isFinite(min) && Number.isFinite(max)) {
-                                    if (max - min < MinBpmPadding) {
-                                        const center = (min + max) / 2
-                                        const low = Math.max(TempoRange.min, center - MinBpmPadding / 2)
-                                        bpmRange[0].setValue(low)
-                                        bpmRange[1].setValue(low + MinBpmPadding)
-                                    } else {
-                                        bpmRange[0].setValue(Math.max(min - MinBpmPadding, TempoRange.min))
-                                        bpmRange[1].setValue(Math.min(max + MinBpmPadding, TempoRange.max))
-                                    }
-                                }
-                            })
-                        }}>
-                    <Icon symbol={IconSymbol.Compressor}/>
-                </Button>
                 <NumberInput lifecycle={lifecycle} model={bpmRange[0]}
                              step={1}
                              guard={{
@@ -61,6 +57,11 @@ export const TempoTrackHeader = ({lifecycle, service, bpmRange}: Construct) => {
                                  guard: (value: bpm): bpm =>
                                      clamp(Math.round(value), bpmRange[0].getValue() + MinBpmPadding, TempoRange.max)
                              }}/>
+                <Button lifecycle={lifecycle}
+                        appearance={{cursor: "pointer", tooltip: "Reset visible range to fit all events"}}
+                        onClick={clampRange}>
+                    <Icon symbol={IconSymbol.Compressor}/>
+                </Button>
             </div>
         </div>
     )
