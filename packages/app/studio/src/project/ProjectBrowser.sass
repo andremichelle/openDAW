@@ -3,7 +3,7 @@ component
   padding: 0 0 0 0.25em
   display: grid
   grid-template-columns: 1fr auto auto
-  align-content: start
+  grid-template-rows: auto auto 1fr
   column-gap: 1em
   overflow: hidden
   position: relative
@@ -22,7 +22,6 @@ component
     display: grid
     grid-template-columns: subgrid
     grid-column: 1 / -1
-    align-content: start
     overflow: hidden
     mask-image: linear-gradient(to bottom, black calc(100% - 8px), transparent)
 
@@ -35,16 +34,17 @@ component
 
   div.list
     padding-top: 4px
+    padding-bottom: 8px
     display: grid
     grid-template-columns: subgrid
     grid-column: 1 / -1
+    align-content: start
     align-items: center
     row-gap: 3px
     overflow-y: scroll
     color: var(--color-dark)
     position: relative
     min-height: 2em
-    mask-image: linear-gradient(to bottom, black calc(100% - 8px), transparent)
 
     &:empty:after
       font-size: 0.875em
