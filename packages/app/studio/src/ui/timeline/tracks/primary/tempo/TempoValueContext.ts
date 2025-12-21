@@ -48,7 +48,7 @@ export class TempoValueContext implements ValueContext, Terminable {
 
     get currentValue(): number {return this.#adapter.box.bpm.getValue()}
 
-    quantize(value: number): number {return value}
+    quantize(value: number): number {return Math.round(value)}
 
     terminate(): void {this.#terminator.terminate()}
 }
