@@ -61,7 +61,7 @@ const loadDemoProject = async (service: StudioService, json: DemoProjectJson) =>
 
 export const DemoProjects = ({service}: Construct) => (
     <div className={className}>
-        <h3 style={{color: Colors.orange.toString()}}>Demo Projects</h3>
+        <h3 style={{color: Colors.orange.toString()}}>Start</h3>
         <div className="projects">
             <DemoProject json={NewProjectJson} load={() => service.newProject()}/>
             <hr/>

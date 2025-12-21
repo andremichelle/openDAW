@@ -9,7 +9,8 @@ component
     color: var(--color-gray)
 
   > div.edit
-    display: flex
+    grid-row: 1
+    grid-column: -1
 
   > div.meta
     display: grid
@@ -20,7 +21,6 @@ component
 
     &:hover
       border-left: 3px var(--color-blue) solid
-      cursor: grab
 
     &:active
       cursor: grabbing

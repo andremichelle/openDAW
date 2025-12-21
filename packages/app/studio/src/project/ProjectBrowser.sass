@@ -8,46 +8,38 @@ component
   overflow: hidden
   position: relative
 
-  div.loader
-    top: 2em
-    left: 1.5em
-    position: absolute
-    display: flex
-    align-items: center
-    justify-content: center
-
   div.filter
-    font-size: 1rem
+    font-size: 14px
     display: flex
     align-items: center
-    height: 2rem
-    column-gap: 0.25rem
-    margin-bottom: 0.5rem
+    height: 32px
+    column-gap: 4px
+    margin-bottom: 8px
     grid-column: 1 / -1
 
   div.content
     font-size: 11px
-    flex: 1 0 0
-    padding: 2px 6px
     display: grid
-    grid-template-columns: 1fr auto auto
-    column-gap: 1em
-    row-gap: 0.375em
+    grid-template-columns: subgrid
+    grid-column: 1 / -1
     align-content: start
     overflow: hidden
-    position: relative
+    mask-image: linear-gradient(to bottom, black calc(100% - 8px), transparent)
 
   header
-    display: contents
+    padding-left: 6px
+    display: grid
+    grid-template-columns: subgrid
+    grid-column: 1 / -1
     color: var(--color-blue)
 
   div.list
-    padding: 0
+    padding-top: 4px
     display: grid
     grid-template-columns: subgrid
     grid-column: 1 / -1
     align-items: center
-    row-gap: 0.25em
+    row-gap: 3px
     overflow-y: scroll
     color: var(--color-dark)
     position: relative
@@ -65,11 +57,14 @@ component
         color: var(--color-red)
 
     div.labels
-      display: contents
-      cursor: pointer
+      display: grid
+      grid-template-columns: subgrid
+      grid-column: span 2
+      padding-left: 3px
+      border-left: 3px transparent solid
 
       &:hover
-        color: var(--color-bright)
+        border-left: 3px var(--color-blue) solid
 
       > div
         white-space: nowrap
@@ -81,3 +76,9 @@ component
 
         &.time
           color: inherit
+
+  div.error
+    padding-top: 4px
+    padding-left: 6px
+    cursor: pointer
+    color: var(--color-orange)

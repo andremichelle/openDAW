@@ -2,51 +2,40 @@
 @use "@/mixins"
 
 component
-  flex: 1
-  display: flex
-  flex-direction: column
-  line-height: 1.25em
+  flex: 1 1 0
   padding: 0 0.25em
-  position: relative
+  display: grid
+  grid-template-columns: 1fr auto auto
+  grid-template-rows: auto auto 1fr
+  align-content: start
+  column-gap: 4px
   overflow: hidden
-  outline: none
+  position: relative
 
   &.background
     @include colors.panel-background
 
   > div.filter
-    font-size: 1rem
+    font-size: 14px
     display: flex
     align-items: center
-    height: 2rem
-    column-gap: 0.25em
-    margin-bottom: 0.5em
+    height: 32px
+    column-gap: 4px
+    margin-left: 4px
+    margin-bottom: 8px
     grid-column: 1 / -1
 
   > div.content
     font-size: 11px
-    flex: 1 0 0
     display: grid
-    grid-template-columns: 1fr auto auto auto
-    column-gap: 1em
+    grid-template-columns: subgrid
+    grid-column: 1 / -1
     align-content: start
     overflow: hidden
-    position: relative
     mask-image: linear-gradient(to bottom, black calc(100% - 8px), transparent)
 
-  > div.footer
-    display: flex
-    align-items: center
-    height: 1.25em
-    column-gap: 0.5em
-    grid-column: 1 / -1
-    padding: 0.5em 0 0 0
-    color: var(--color-shadow)
-
-    > input[type="range"]
-      @include mixins.width-available
-
   header
+    font-size: 11px
     padding-left: 6px
 
   header, div.scrollable
@@ -61,13 +50,12 @@ component
       text-align: right
 
   div.scrollable
+    padding-top: 4px
     overflow-y: scroll
-
-  div.loading
-    display: flex
+    row-gap: 3px
 
   div.error
-    display: flex
-    flex-direction: column
-    row-gap: 0.5em
+    padding-top: 4px
+    padding-left: 6px
+    cursor: pointer
     color: var(--color-orange)

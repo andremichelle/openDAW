@@ -34,24 +34,26 @@ export const ProjectBrowser = ({service, lifecycle, select}: Construct) => {
     const filter = new DefaultObservableValue("")
     return (
         <div className={className}>
+            <div className="filter">
+                <SearchInput lifecycle={lifecycle} model={filter} style={{gridColumn: "1 / -1"}}/>
+            </div>
+            <header>
+                <div className="name">Name</div>
+                <div className="time">Modified</div>
+                <div/>
+            </header>
             <Await factory={() => ProjectStorage.listProjects()}
                    loading={() => (<div className="loader"><ThreeDots/></div>)}
-                   failure={({reason}) => (
-                       <span>{reason instanceof DOMException ? reason.name : String(reason)}</span>
+                   failure={({reason, retry}) => (
+                       <div className="error" onclick={retry}>
+                           {reason instanceof DOMException ? reason.name : String(reason)}
+                       </div>
                    )}
                    repeat={exec => lifecycle.own(RuntimeSignal
                        .subscribe(signal => signal === ProjectSignals.StorageUpdated && exec()))}
                    success={projects => (
                        <Frag>
-                           <div className="filter">
-                               <SearchInput lifecycle={lifecycle} model={filter} style={{gridColumn: "1 / -1"}}/>
-                           </div>
                            <div className="content">
-                               <header>
-                                   <div className="name">Name</div>
-                                   <div className="time">Modified</div>
-                                   <div/>
-                               </header>
                                <div className="list">
                                    {projects
                                        .toSorted((a, b) => -StringComparator(a.meta.modified, b.meta.modified))
