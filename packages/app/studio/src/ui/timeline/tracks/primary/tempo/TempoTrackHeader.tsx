@@ -7,8 +7,10 @@ import {bpm} from "@opendaw/lib-dsp"
 import {NumberInput} from "@/ui/components/NumberInput"
 import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {TempoRange} from "@opendaw/studio-adapters"
+import {Checkbox} from "@/ui/components/Checkbox"
+import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 
 const className = Html.adoptStyleSheet(css, "TempoTrackHeader")
 
@@ -21,8 +23,9 @@ type Construct = {
 const MinBpmPadding = 30
 
 export const TempoTrackHeader = ({lifecycle, service, bpmRange}: Construct) => {
+    const {project: {editing, timelineBoxAdapter}} = service
     const clampRange = () => {
-        service.project.timelineBoxAdapter.tempoTrackEvents.ifSome(adapter => {
+        timelineBoxAdapter.tempoTrackEvents.ifSome(adapter => {
             const [min, max] = adapter.events.asArray().reduce((range, event) => {
                 range[0] = Math.min(event.value, range[0])
                 range[1] = Math.max(event.value, range[1])
@@ -63,6 +66,11 @@ export const TempoTrackHeader = ({lifecycle, service, bpmRange}: Construct) => {
                     <Icon symbol={IconSymbol.Compressor}/>
                 </Button>
             </div>
+            <Checkbox lifecycle={lifecycle}
+                      model={EditWrapper.forValue(editing, timelineBoxAdapter.box.tempoTrack.enabled)}>
+                <span style={{color: Colors.dark.toString()}}>Enabled</span> <Icon symbol={IconSymbol.Checkbox}
+                                                                                   style={{fontSize: "11px"}}/>
+            </Checkbox>
         </div>
     )
 }
