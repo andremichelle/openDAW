@@ -1,6 +1,6 @@
 import css from "./TempoTrackBody.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {Lifecycle, MutableObservableValue, Terminator} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, MutableObservableValue, Terminator} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {ValueEditor} from "@/ui/timeline/editors/value/ValueEditor"
@@ -21,6 +21,14 @@ export const TempoTrackBody = ({lifecycle, service, bpmRange}: Construct) => {
     const editorLifecycle = lifecycle.own(new Terminator())
     return (
         <div className={className} onInit={element => {
+            // Chrome bug: grid item collapses to 0 height when containing flex children
+            lifecycle.own(Html.watchResize(element, () => {
+                // This is a fix for a bug in Chrome where grid items collapsing to 0 height
+                // To reproduce: Remove this code, open tempo-track, add one event, add an instrument, canvas goes black
+                // Works fine in Firefox and Safari
+                const parent = element.parentElement
+                element.style.height = isDefined(parent) && element.clientHeight === 0 ? `${parent.clientHeight}px` : ""
+            }))
             timelineBoxAdapter.tempoTrackEvents.catchupAndSubscribe(option => {
                 editorLifecycle.terminate()
                 option.match({

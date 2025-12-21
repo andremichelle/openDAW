@@ -38,10 +38,8 @@ export const Timeline = ({lifecycle, service}: Construct) => {
     )
     const updateRecordingState = () =>
         element.classList.toggle("recording", engine.isRecording.getValue() || engine.isCountingIn.getValue())
-    const {request} = lifecycle.own(deferNextFrame(() => {
-        console.debug(markers.getValue() || tempo.getValue())
-        element.classList.toggle("primary-tracks-visible", markers.getValue() || tempo.getValue())
-    }))
+    const {request} = lifecycle.own(deferNextFrame(() =>
+        element.classList.toggle("primary-tracks-visible", markers.getValue() || tempo.getValue())))
     lifecycle.ownAll(
         Html.watchResize(element, () => {
             const cursorHeight = element.clientHeight
