@@ -1,6 +1,5 @@
 import css from "./ValueEditor.sass?inline"
 import {
-    clamp,
     DefaultObservableValue,
     EmptyExec,
     Func,
@@ -253,17 +252,15 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
         installValueInput({
             element: canvas,
             selection,
-            getter: (adapter) => context.stringMapping.x(context.valueMapping.y(adapter.value)).value,
+            getter: (adapter) => context.stringMapping.x(context.valueMapping.y(eventMapping.x(adapter.value))).value,
             setter: text => {
                 const result = context.stringMapping.y(text)
                 let value
-                if (result.type === "unitValue") {
-                    value = result.value
-                } else if (result.type === "explicit") {
-                    value = context.valueMapping.x(result.value)
+                if (result.type === "explicit") {
+                    value = eventMapping.y(context.valueMapping.x(result.value))
                 } else {return}
                 editing.modify(() => selection.selected()
-                    .forEach(adapter => adapter.box.value.setValue(clamp(value, 0.0, 1.0))))
+                    .forEach(adapter => adapter.box.value.setValue(value)))
             }
         }),
         installValueContextMenu({element: canvas, capturing, editing, selection})
