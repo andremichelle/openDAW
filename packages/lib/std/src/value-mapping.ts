@@ -48,6 +48,7 @@ class Exponential implements ValueMapping<number> {
     readonly #range: number
 
     constructor(min: number, max: number) {
+        assert(min < max, "Exponential is inverse")
         this.#min = min
         this.#max = max
         this.#range = Math.log(max / min)
