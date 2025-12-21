@@ -16,10 +16,10 @@ type Construct = {
 const Labels: { [K in keyof Preferences]: string } = {
     "visible-help-hints": "Visible Help & Hints",
     "note-audition-while-editing": "Note audition while editing",
-    "modifying-controls-wheel": "Modify controls with mouse wheel",
     "auto-open-clips": "Always open clip view",
     "auto-create-output-compressor": "Automatically add compressor to main output",
     "dragging-use-pointer-lock": "Use Pointer Lock when dragging close to window edges [Chrome only]",
+    "modifying-controls-wheel": "Modify controls with mouse wheel",
     "footer-show-fps-meter": "🪲 Show FPS meter",
     "footer-show-build-infos": "🪲 Show Build Informations",
     "enable-beta-features": "☢️ Enable Experimental Features"

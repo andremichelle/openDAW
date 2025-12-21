@@ -1,6 +1,16 @@
 import css from "./VolumeSlider.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
-import {EmptyExec, Lifecycle, Option, Parameter, Strings, Terminator, unitValue} from "@opendaw/lib-std"
+import {
+    clampUnit,
+    EmptyExec,
+    Lifecycle,
+    Nullable,
+    Option,
+    Parameter,
+    Strings,
+    Terminator,
+    unitValue
+} from "@opendaw/lib-std"
 import {ValueDragging} from "@/ui/hooks/dragging.ts"
 import {ValueTooltip} from "@/ui/surface/ValueTooltip.tsx"
 import {BoxEditing} from "@opendaw/lib-box"
@@ -8,6 +18,8 @@ import {CssUtils, Events, Html} from "@opendaw/lib-dom"
 import {Colors} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
+import {Preferences} from "@opendaw/studio-core"
+import {Runtime} from "@opendaw/lib-runtime"
 
 const className = Html.adoptStyleSheet(css, "vertical-slider")
 
@@ -156,7 +168,30 @@ export const VolumeSlider = ({lifecycle, editing, parameter}: Construct) => {
                                    numeric
                                    resolvers={resolvers}/>
             )
-        })
+        }),
+        Preferences.catchupAndSubscribe((() => {
+            const terminator = lifecycle.own(new Terminator())
+            return (enabled) => {
+                terminator.terminate()
+                if (enabled) {
+                    let value: Nullable<unitValue> = null
+                    terminator.own(Events.subscribe(wrapper, "wheel", event => {
+                        if (value === null) {
+                            value = parameter.getUnitValue()
+                        }
+                        const ratio = 0.005
+                        value = clampUnit(value - Math.sign(event.deltaY) * ratio)
+                        editing.modify(() => parameter.setUnitValue(value!), false)
+                        Runtime.debounce(() => {
+                            value = null
+                            editing.mark()
+                        })
+                        event.preventDefault()
+                        event.stopImmediatePropagation()
+                    }))
+                }
+            }
+        })(), "modifying-controls-wheel")
     )
     observer(parameter)
     return wrapper
