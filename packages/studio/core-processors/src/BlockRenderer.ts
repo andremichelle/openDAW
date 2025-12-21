@@ -50,12 +50,12 @@ export class BlockRenderer implements Terminable {
                     this.#bpmChanged = true
                 }
             }),
-            tempoAutomation.catchupAndSubscribe(option => {
+            tempoAutomation.subscribe(option => {
                 this.#optTempoAutomation = option
                 if (option.isEmpty()) {
                     this.#bpm = bpm.getValue()
-                    this.#bpmChanged = true
                 }
+                this.#bpmChanged = true
             })
         )
 
@@ -255,7 +255,7 @@ export class BlockRenderer implements Terminable {
             this.#bpmChanged = false
         } else {
             const discontinuous = timeInfo.getLeapStateAndReset()
-            if (discontinuous && this.#optTempoAutomation.nonEmpty()) {
+            if ((discontinuous || this.#bpmChanged) && this.#optTempoAutomation.nonEmpty()) {
                 const newBpm = this.#optTempoAutomation.unwrap().valueAt(this.#context.timeInfo.position, this.#bpm)
                 if (newBpm !== this.#bpm) {
                     this.#bpm = newBpm

@@ -23,8 +23,6 @@ import {PitchVoice} from "./Tape/PitchVoice"
 import {Voice} from "./Tape/Voice"
 import {TimeStretchSequencer} from "./Tape/TimeStretchSequencer"
 
-// Union type for all voice types used in lanes
-// TODO: Simplify once PitchStretchSequencer is implemented
 type AnyVoice = Voice | PitchVoice
 
 type Lane = {

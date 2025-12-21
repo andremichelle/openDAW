@@ -2,8 +2,10 @@ import {TimelineBox} from "@opendaw/studio-boxes"
 import {
     int,
     MutableObservableOption,
+    Notifier,
     ObservableOption,
     Observer,
+    Option,
     Subscription,
     Terminator,
     UUID
@@ -21,25 +23,25 @@ export class TimelineBoxAdapter implements BoxAdapter {
     readonly #box: TimelineBox
     readonly #markerTrack: MarkerTrackAdapter
     readonly #tempoTrackEvents: MutableObservableOption<ValueEventCollectionBoxAdapter>
-    readonly #tempoAutomation: MutableObservableOption<ValueEventCollectionBoxAdapter>
+    readonly #tempoAutomation: Notifier<Option<ValueEventCollectionBoxAdapter>>
 
     constructor(context: BoxAdaptersContext, box: TimelineBox) {
         this.#box = box
         this.#markerTrack = new MarkerTrackAdapter(context, this.#box.markerTrack)
         this.#tempoTrackEvents = new MutableObservableOption<ValueEventCollectionBoxAdapter>()
-        this.#tempoAutomation = new MutableObservableOption<ValueEventCollectionBoxAdapter>()
+        this.#tempoAutomation = new Notifier<Option<ValueEventCollectionBoxAdapter>>()
 
         const tempoAutomationLifecycle = this.#terminator.own(new Terminator())
         const {tempoTrack: {events, enabled}} = box
         const updateTempoAutomation = () => {
             if (!enabled.getValue()) {
-                this.#tempoAutomation.clear()
+                this.#tempoAutomation.notify(Option.None)
             } else if (this.#tempoTrackEvents.isEmpty()) {
-                this.#tempoAutomation.clear()
+                this.#tempoAutomation.notify(Option.None)
             } else if (this.#tempoTrackEvents.unwrap().events.isEmpty()) {
-                this.#tempoAutomation.clear()
+                this.#tempoAutomation.notify(Option.None)
             } else {
-                this.#tempoAutomation.wrap(this.#tempoTrackEvents.unwrap())
+                this.#tempoAutomation.notify(this.#tempoTrackEvents)
             }
         }
         this.#terminator.own(events.catchupAndSubscribe(({targetVertex}) => {
@@ -64,8 +66,8 @@ export class TimelineBoxAdapter implements BoxAdapter {
     get address(): Address {return this.#box.address}
     get markerTrack(): MarkerTrackAdapter {return this.#markerTrack}
     get tempoTrackEvents(): ObservableOption<ValueEventCollectionBoxAdapter> {return this.#tempoTrackEvents}
-    // For dsp. It does care why events are not available. We just None the option if disabled or no events present.
-    get tempoAutomation(): ObservableOption<ValueEventCollectionBoxAdapter> {return this.#tempoAutomation}
+    // For dsp. It does care why events are not available. We just send Option.None if disabled or no events present.
+    get tempoAutomation(): Notifier<Option<ValueEventCollectionBoxAdapter>> {return this.#tempoAutomation}
     get signature(): Readonly<[int, int]> {
         const {nominator, denominator} = this.#box.signature
         return [nominator.getValue(), denominator.getValue()]
