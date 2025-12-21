@@ -1,7 +1,6 @@
 import {
     Arrays,
     BinarySearch,
-    clamp,
     int,
     Iterables,
     Notifier,
@@ -112,7 +111,7 @@ export class ValuePaintModifier implements ValueModifier {
     update({clientX, clientY}: Dragging.Event): void {
         const clientRect = this.#element.getBoundingClientRect()
         const position: ppqn = this.#snapping.xToUnitFloor(clientX - clientRect.left)
-        const value: unitValue = clamp(this.#valueAxis.axisToValue(clientY - clientRect.top), 0.0, 1.0)
+        const value: unitValue = this.#valueAxis.axisToValue(clientY - clientRect.top)
         if (this.#lastPosition === position && this.#lastValue === value) {return}
         if (this.#strokes.length === 0) {
             this.#strokes.push({position, value})

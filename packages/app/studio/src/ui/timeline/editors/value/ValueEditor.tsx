@@ -156,7 +156,8 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             element: canvas,
                             reader,
                             selection,
-                            snapping, valueAxis
+                            snapping,
+                            valueAxis
                         }))
                     }
                 } else if (target.type === "curve") {
