@@ -1,11 +1,10 @@
-import {bpm, ppqn, PPQN, seconds, TempoMap, ValueEvent} from "@opendaw/lib-dsp"
-import {Observer, Subscription, Terminator} from "@opendaw/lib-std"
+import {bpm, ppqn, PPQN, seconds, TempoChangeGrid, TempoMap} from "@opendaw/lib-dsp"
+import {Observer, quantizeCeil, Subscription, Terminator} from "@opendaw/lib-std"
 import {TimelineBoxAdapter} from "./timeline/TimelineBoxAdapter"
-import {ValueEventBoxAdapter} from "./timeline/event/ValueEventBoxAdapter"
 
 /**
  * TempoMap implementation that handles varying tempo (tempo automation).
- * Integrates over the tempo curve to convert between PPQN and seconds.
+ * Steps through at TempoChangeGrid intervals to match BlockRenderer behavior.
  */
 export class VaryingTempoMap implements TempoMap {
     readonly #adapter: TimelineBoxAdapter
@@ -41,67 +40,31 @@ export class VaryingTempoMap implements TempoMap {
             return PPQN.pulsesToSeconds(toPPQN - fromPPQN, storageBpm)
         }
 
-        const events = tempoEvents.unwrap().events
-        if (events.isEmpty()) {
+        const collection = tempoEvents.unwrap()
+        if (collection.events.isEmpty()) {
             return PPQN.pulsesToSeconds(toPPQN - fromPPQN, storageBpm)
         }
 
-        // Integrate over tempo curve
+        // Step through at TempoChangeGrid intervals (matches BlockRenderer)
         let totalSeconds: seconds = 0
         let currentPPQN = fromPPQN
 
-        const eventArray = events.asArray() as ReadonlyArray<ValueEventBoxAdapter>
-
-        // Find starting event index
-        let eventIndex = 0
-        while (eventIndex < eventArray.length - 1 && eventArray[eventIndex + 1].position <= fromPPQN) {
-            eventIndex++
-        }
-
         while (currentPPQN < toPPQN) {
-            const currentEvent = eventArray[eventIndex]
-            const nextEvent = eventArray[eventIndex + 1] as ValueEventBoxAdapter | undefined
+            // Get tempo at current position
+            const currentTempo = collection.valueAt(currentPPQN, storageBpm)
 
-            // Determine segment end
-            let segmentEnd: ppqn
-            if (nextEvent && nextEvent.position < toPPQN) {
-                segmentEnd = nextEvent.position
-            } else {
-                segmentEnd = toPPQN
-            }
+            // Find next grid boundary
+            const nextGrid = Math.ceil(currentPPQN / TempoChangeGrid) * TempoChangeGrid
+            const segmentEnd = nextGrid <= currentPPQN ? nextGrid + TempoChangeGrid : nextGrid
 
-            // Calculate seconds for this segment
-            const segmentStart = Math.max(currentPPQN, currentEvent?.position ?? 0)
-            const segmentPPQN = segmentEnd - segmentStart
+            // Clamp to target
+            const actualEnd = Math.min(segmentEnd, toPPQN)
+            const segmentPPQN = actualEnd - currentPPQN
 
-            if (segmentPPQN > 0) {
-                if (!currentEvent || currentEvent.interpolation.type === "none" || !nextEvent) {
-                    // Constant tempo segment
-                    const tempo = currentEvent?.value ?? storageBpm
-                    totalSeconds += PPQN.pulsesToSeconds(segmentPPQN, tempo)
-                } else {
-                    // Interpolated tempo - use trapezoidal approximation
-                    const startTempo = ValueEvent.valueAt(events, segmentStart, storageBpm)
-                    const endTempo = ValueEvent.valueAt(events, segmentEnd, storageBpm)
-                    // Average tempo approximation for the segment
-                    const avgTempo = (startTempo + endTempo) / 2
-                    totalSeconds += PPQN.pulsesToSeconds(segmentPPQN, avgTempo)
-                }
-            }
+            // Accumulate seconds for this segment at constant tempo
+            totalSeconds += PPQN.pulsesToSeconds(segmentPPQN, currentTempo)
 
-            currentPPQN = segmentEnd
-
-            if (nextEvent && currentPPQN >= nextEvent.position) {
-                eventIndex++
-            }
-
-            // Safety check
-            if (eventIndex >= eventArray.length) {
-                // Past last event - use last tempo
-                const lastTempo = eventArray[eventArray.length - 1]?.value ?? storageBpm
-                totalSeconds += PPQN.pulsesToSeconds(toPPQN - currentPPQN, lastTempo)
-                break
-            }
+            currentPPQN = actualEnd
         }
 
         return totalSeconds
@@ -118,63 +81,37 @@ export class VaryingTempoMap implements TempoMap {
             return PPQN.secondsToPulses(toSeconds - fromSeconds, storageBpm)
         }
 
-        const events = tempoEvents.unwrap().events
-        if (events.isEmpty()) {
+        const collection = tempoEvents.unwrap()
+        if (collection.events.isEmpty()) {
             return PPQN.secondsToPulses(toSeconds - fromSeconds, storageBpm)
         }
 
-        // Use iterative approach: accumulate PPQN while tracking seconds
+        // Step through grid by grid, accumulating until we reach target seconds
         const targetSeconds = toSeconds - fromSeconds
         let accumulatedSeconds: seconds = 0
         let accumulatedPPQN: ppqn = 0
 
-        const eventArray = events.asArray() as ReadonlyArray<ValueEventBoxAdapter>
-
-        // Start from beginning and accumulate until we reach target seconds
-        let eventIndex = 0
-
         while (accumulatedSeconds < targetSeconds) {
-            const currentEvent = eventArray[eventIndex]
-            const nextEvent = eventArray[eventIndex + 1] as ValueEventBoxAdapter | undefined
+            // Get tempo at current position
+            const currentTempo = collection.valueAt(accumulatedPPQN, storageBpm)
 
-            // Determine tempo for this segment
-            const currentTempo = currentEvent?.value ?? storageBpm
+            // Calculate next grid boundary
+            const nextGrid = quantizeCeil(accumulatedPPQN, TempoChangeGrid)
+            const segmentEnd = nextGrid <= accumulatedPPQN ? nextGrid + TempoChangeGrid : nextGrid
+            const segmentPPQN = segmentEnd - accumulatedPPQN
 
-            if (!nextEvent) {
-                // No more events - use current tempo for remaining time
+            // How many seconds does this segment take?
+            const segmentSeconds = PPQN.pulsesToSeconds(segmentPPQN, currentTempo)
+
+            if (accumulatedSeconds + segmentSeconds >= targetSeconds) {
+                // Target is within this segment - calculate remaining PPQN
                 const remainingSeconds = targetSeconds - accumulatedSeconds
                 accumulatedPPQN += PPQN.secondsToPulses(remainingSeconds, currentTempo)
                 break
             }
 
-            // Calculate how much time this segment takes
-            const segmentPPQN = nextEvent.position - (currentEvent?.position ?? 0)
-
-            let segmentSeconds: seconds
-            if (!currentEvent || currentEvent.interpolation.type === "none") {
-                segmentSeconds = PPQN.pulsesToSeconds(segmentPPQN, currentTempo)
-            } else {
-                // Interpolated - use average tempo
-                const avgTempo = (currentTempo + nextEvent.value) / 2
-                segmentSeconds = PPQN.pulsesToSeconds(segmentPPQN, avgTempo)
-            }
-
-            if (accumulatedSeconds + segmentSeconds >= targetSeconds) {
-                // Target is within this segment
-                const remainingSeconds = targetSeconds - accumulatedSeconds
-                if (!currentEvent || currentEvent.interpolation.type === "none") {
-                    accumulatedPPQN += PPQN.secondsToPulses(remainingSeconds, currentTempo)
-                } else {
-                    // Approximate with average tempo
-                    const avgTempo = (currentTempo + nextEvent.value) / 2
-                    accumulatedPPQN += PPQN.secondsToPulses(remainingSeconds, avgTempo)
-                }
-                break
-            }
-
             accumulatedSeconds += segmentSeconds
-            accumulatedPPQN += segmentPPQN
-            eventIndex++
+            accumulatedPPQN = segmentEnd
         }
 
         return accumulatedPPQN
