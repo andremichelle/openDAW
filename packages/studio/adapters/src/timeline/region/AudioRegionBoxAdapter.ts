@@ -226,9 +226,9 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
                 box.waveformOffset.setValue(this.waveformOffset.getValue())
                 clonedPlayMode.ifSome(mode => box.playMode.refer(mode))
             }), AudioRegionBoxAdapter)
-        adapter.duration = params?.duration ?? this.duration
-        adapter.loopOffset = params?.loopOffset ?? this.loopOffset
-        adapter.loopDuration = params?.loopDuration ?? this.loopDuration
+        adapter.duration = params?.duration ?? this.resolveDuration(adapter.position)
+        adapter.loopOffset = params?.loopOffset ?? this.resolveLoopOffset(adapter.position)
+        adapter.loopDuration = params?.loopDuration ?? this.resolveLoopDuration(adapter.position)
         return adapter
     }
 
