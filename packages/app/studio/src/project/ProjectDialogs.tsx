@@ -68,7 +68,7 @@ export namespace ProjectDialogs {
         const dialog: HTMLDialogElement = (
             <Dialog headline={"Browse Projects"}
                     icon={IconSymbol.FileList}
-                    buttons={[{text: "Ok", onClick: () => dialog.close()}]}
+                    buttons={[{text: "Cancel", onClick: () => dialog.close()}]}
                     cancelable={true} style={{height: "30em"}}>
                 <div style={{height: "2em"}}/>
                 <ProjectBrowser lifecycle={lifecycle} service={service} select={(result) => {

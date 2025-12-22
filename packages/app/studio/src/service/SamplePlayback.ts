@@ -1,5 +1,6 @@
 import {
     ArrayMultimap,
+    clamp,
     DefaultObservableValue,
     EmptyExec,
     Option,
@@ -9,6 +10,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {OpenSampleAPI, SampleStorage, WavFile} from "@opendaw/studio-core"
+import {dbToGain} from "@opendaw/lib-dsp"
 
 export type PlaybackEvent = {
     type: "idle"
@@ -33,8 +35,10 @@ export class SamplePlayback {
         this.#audio.crossOrigin = "use-credentials"
         this.#audio.preload = "auto"
         this.#notifiers = new ArrayMultimap<string, Procedure<PlaybackEvent>>()
-        this.#linearVolume = new DefaultObservableValue<unitValue>(1.0)
-        this.#linearVolume.catchupAndSubscribe(owner => this.#audio.volume = owner.getValue()) // no owner needed
+        this.#linearVolume = new DefaultObservableValue<number>(0.0, {
+            guard: (value: number): number => clamp(value, -36, 0)
+        })
+        this.#linearVolume.catchupAndSubscribe(owner => this.#audio.volume = dbToGain(owner.getValue()))
     }
 
     toggle(uuidAsString: string): void {

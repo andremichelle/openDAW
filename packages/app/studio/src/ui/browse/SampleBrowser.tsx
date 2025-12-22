@@ -1,5 +1,5 @@
 import css from "./SampleBrowser.sass?inline"
-import {clamp, DefaultObservableValue, Lifecycle, RuntimeSignal, StringComparator, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, Lifecycle, RuntimeSignal, StringComparator, Terminator} from "@opendaw/lib-std"
 import {Await, createElement, Hotspot, HotspotUpdater, Inject, replaceChildren} from "@opendaw/lib-jsx"
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {Runtime} from "@opendaw/lib-runtime"
@@ -14,6 +14,7 @@ import {Icon} from "../components/Icon"
 import {AssetLocation} from "@/ui/browse/AssetLocation"
 import {HTMLSelection} from "@/ui/HTMLSelection"
 import {SampleSelection} from "@/ui/browse/SampleSelection"
+import {NumberInput} from "@/ui/components/NumberInput"
 
 const className = Html.adoptStyleSheet(css, "Samples")
 
@@ -33,7 +34,6 @@ export const SampleBrowser = ({lifecycle, service, background, fontSize}: Constr
     const entriesLifeSpan = lifecycle.own(new Terminator())
     const reload = Inject.ref<HotspotUpdater>()
     const filter = new DefaultObservableValue("")
-    const slider: HTMLInputElement = <input type="range" min="0.0" max="1.0" step="0.001"/>
     const linearVolume = service.samplePlayback.linearVolume
     const element: Element = (
         <div className={Html.buildClassList(className, background && "background")} tabIndex={-1} style={{fontSize}}>
@@ -109,7 +109,9 @@ export const SampleBrowser = ({lifecycle, service, background, fontSize}: Constr
                 </Hotspot>
             </div>
             <div className="footer">
-                <label>Volume</label> {slider}
+                <label>Volume:</label>
+                <NumberInput lifecycle={lifecycle} maxChars={3} step={1} model={linearVolume}/>
+                <label>dB</label>
             </div>
         </div>
     )
@@ -117,9 +119,6 @@ export const SampleBrowser = ({lifecycle, service, background, fontSize}: Constr
         location.subscribe(() => reload.get().update()),
         RuntimeSignal.subscribe(signal => signal === ProjectSignals.StorageUpdated && reload.get().update()),
         {terminate: () => service.samplePlayback.eject()},
-        Events.subscribe(slider, "input",
-            () => linearVolume.setValue(clamp(slider.valueAsNumber, 0.0, 1.0))),
-        linearVolume.catchupAndSubscribe(owner => slider.valueAsNumber = owner.getValue()),
         Events.subscribe(element, "keydown", async event => {
             if (Keyboard.isDelete(event) && location.getValue() === AssetLocation.Local) {
                 await sampleSelection.deleteSelected()
