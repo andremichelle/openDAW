@@ -43,12 +43,11 @@ export class VaryingTempoMap implements TempoMap {
         let totalSeconds: seconds = 0.0
         let currentPPQN = fromPPQN
         while (currentPPQN < toPPQN) {
-            const currentTempo = collection.valueAt(currentPPQN, storageBpm)
+            const currentBpm = collection.valueAt(currentPPQN, storageBpm)
             const nextGrid = quantizeCeil(currentPPQN, TempoChangeGrid)
             const segmentEnd = nextGrid <= currentPPQN ? nextGrid + TempoChangeGrid : nextGrid
             const actualEnd = Math.min(segmentEnd, toPPQN)
-            const segmentPPQN = actualEnd - currentPPQN
-            totalSeconds += PPQN.pulsesToSeconds(segmentPPQN, currentTempo)
+            totalSeconds += PPQN.pulsesToSeconds(actualEnd - currentPPQN, currentBpm)
             currentPPQN = actualEnd
         }
         return totalSeconds
@@ -65,14 +64,14 @@ export class VaryingTempoMap implements TempoMap {
         let accumulatedSeconds: seconds = 0.0
         let accumulatedPPQN: ppqn = 0.0
         while (accumulatedSeconds < targetSeconds) {
-            const currentTempo = collection.valueAt(accumulatedPPQN, storageBpm)
+            const currentBpm = collection.valueAt(accumulatedPPQN, storageBpm)
             const nextGrid = quantizeCeil(accumulatedPPQN, TempoChangeGrid)
             const segmentEnd = nextGrid <= accumulatedPPQN ? nextGrid + TempoChangeGrid : nextGrid
             const segmentPPQN = segmentEnd - accumulatedPPQN
-            const segmentSeconds = PPQN.pulsesToSeconds(segmentPPQN, currentTempo)
+            const segmentSeconds = PPQN.pulsesToSeconds(segmentPPQN, currentBpm)
             if (accumulatedSeconds + segmentSeconds >= targetSeconds) {
                 const remainingSeconds = targetSeconds - accumulatedSeconds
-                accumulatedPPQN += PPQN.secondsToPulses(remainingSeconds, currentTempo)
+                accumulatedPPQN += PPQN.secondsToPulses(remainingSeconds, currentBpm)
                 break
             }
             accumulatedSeconds += segmentSeconds

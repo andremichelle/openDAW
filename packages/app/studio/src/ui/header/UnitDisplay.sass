@@ -1,0 +1,29 @@
+component
+  font-size: 14px
+  display: flex
+  flex-direction: column
+  align-items: center
+  row-gap: 1px
+
+  &.negative
+    color: var(--color-red) !important
+
+  &.float > div:nth-child(1)::after
+    visibility: visible
+
+  > div
+    &:nth-child(1)
+      text-align: center
+      line-height: 1.125em
+      position: relative
+
+      &::after
+        content: "."
+        position: absolute
+        visibility: hidden
+
+    &:nth-child(2)
+      color: hsla(200, 80%, 60%, 0.75)
+      font-size: 8px
+      line-height: 1em
+      text-transform: uppercase
