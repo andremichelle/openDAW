@@ -9,9 +9,9 @@ export const Fonts = {
     },
     RubikBold: <FontFaceProperties>{
         "font-family": "Rubik",
-        "font-weight": 700,
+        "font-weight": 400,
         "font-style": "normal",
-        "src": "/fonts/rubik-700.woff2"
+        "src": "/fonts/rubik-400.woff2"
     },
     OpenSans: <FontFaceProperties>{
         "font-family": "Open Sans",
