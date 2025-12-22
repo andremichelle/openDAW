@@ -3,7 +3,6 @@ import {
     Coordinates,
     float,
     int,
-    Intervals,
     Iterables,
     Notifier,
     Observer,
@@ -98,7 +97,7 @@ export class NoteEventCollectionBoxAdapter implements BoxAdapter, SelectableLoca
     selectable(): Iterable<NoteEventBoxAdapter> {return this.#events.asArray()}
 
     selectableAt(coordinates: Coordinates<ppqn, int>): Iterable<NoteEventBoxAdapter> {
-        for (const element of this.#events.asArray()) { // TODO Use optimized data structures
+        for (const element of this.#events.asArray()) {
             if (element.position <= coordinates.u && coordinates.u < element.complete && element.pitch === coordinates.v) {
                 return Iterables.one(element)
             }
@@ -107,14 +106,16 @@ export class NoteEventCollectionBoxAdapter implements BoxAdapter, SelectableLoca
     }
 
     selectablesBetween(begin: Coordinates<ppqn, int>, end: Coordinates<ppqn, int>): Iterable<NoteEventBoxAdapter> {
-        const events: Array<NoteEventBoxAdapter> = []
-        for (const element of this.#events.asArray()) { // TODO Use optimized data structures
-            if (Intervals.intersect1D(element.position, element.complete, begin.u, end.u)
-                && Intervals.intersect1D(element.pitch, element.pitch, begin.v, end.v)) {
-                events.push(element)
+        const result: Array<NoteEventBoxAdapter> = []
+        const array = this.#events.asArray()
+        const endIndex = this.#events.ceilFirstIndex(end.u)
+        for (let i = 0; i < endIndex; i++) {
+            const element = array[i]
+            if (element.complete > begin.u && element.pitch >= begin.v && element.pitch <= end.v) {
+                result.push(element)
             }
         }
-        return events
+        return result
     }
 
     requestSorting(): void {

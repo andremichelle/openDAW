@@ -2,7 +2,7 @@ import {TimelineRange} from "@opendaw/studio-core"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {TimelineCoordinates, TimelineSelectableLocator} from "@/ui/timeline/TimelineSelectableLocator.ts"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
-import {Intervals, Iterables, ValueAxis} from "@opendaw/lib-std"
+import {Iterables, ValueAxis} from "@opendaw/lib-std"
 import {PitchCaptureTarget} from "@/ui/timeline/editors/notes/pitch/PitchEventCapturing.ts"
 
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
@@ -28,9 +28,12 @@ export const createPitchSelectionLocator = (owner: NoteEventOwnerReader,
         const u0 = begin.u - offset
         const u1 = end.u - offset
         const result: Array<NoteEventBoxAdapter> = []
-        for (const element of owner.content.events.asArray()) { // TODO Optimise
-            if (Intervals.intersect1D(element.position, element.complete, u0, u1)
-                && Intervals.intersect1D(element.pitch, element.pitch, v0, v1)) {
+        const events = owner.content.events
+        const array = events.asArray()
+        const endIndex = events.ceilFirstIndex(u1)
+        for (let i = 0; i < endIndex; i++) {
+            const element = array[i]
+            if (element.complete > u0 && element.pitch >= v0 && element.pitch <= v1) {
                 result.push(element)
             }
         }
