@@ -19,7 +19,26 @@ type Construct = {
     service: StudioService
 }
 
-const listUrl = "https://api.opendaw.studio/music/list.php"
+const ids = [
+    "8dd3364e113", // The Rocinante Experience
+    "84f9c4fbb76", // Ambition
+    "3a96772867c", // Fleur de Soul
+    "97b0564366f", // Centauri
+    "f9e029edeb0", // OpenDub Experience
+    "0d8b487992b", // Chaotic
+    "3038c24e87e", // Bury Me by Skyence Remix
+    "468309b2035", // Sturm Chaser
+    "932e7c1d1f1", // Liquid
+    "7a5be6e2478", // Ben
+    "16982e85776", // Fatso
+    "1cc67c64dde", // Seek Deeper
+    "65efa1e1f7f", // Shafted
+    "b41528b9c53", // Dub Speak
+    "b43d04558ec", // Sunset
+    "cab976763f0", // Vapor Run
+]
+
+const listUrl = `https://api.opendaw.studio/music/list-by-ids.php?ids=${ids.join(",")}`
 
 const NewProjectJson: DemoProjectJson = {
     id: "",
@@ -69,8 +88,7 @@ export const DemoProjects = ({service}: Construct) => (
                 factory={() => fetch(listUrl)
                     .then(res => res.json())
                     .then(res => res as TracksList)
-                    .then(list => list.tracks
-                        .sort(({metadata: {modified: a}}, {metadata: {modified: b}}) => b.localeCompare(a)))}
+                    .then(list => list.tracks)}
                 loading={() => <div>{ThreeDots()}</div>}
                 failure={({retry, reason}) => (
                     <div style={{margin: "8px 0 0 4px", justifySelf: "center"}}>
