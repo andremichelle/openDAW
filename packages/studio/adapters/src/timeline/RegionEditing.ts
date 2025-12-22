@@ -4,7 +4,6 @@ import {AnyRegionBoxAdapter, UnionAdapterTypes} from "../UnionAdapterTypes"
 
 export namespace RegionEditing {
     export const cut = (region: AnyRegionBoxAdapter, cut: ppqn, consolidate: boolean): void => {
-        console.debug("cut", region.position, region.complete, cut)
         if (region.position >= cut || cut >= region.complete) {return}
         if (UnionAdapterTypes.isLoopableRegion(region)) {
             const {position, complete, loopOffset, loopDuration} = region
