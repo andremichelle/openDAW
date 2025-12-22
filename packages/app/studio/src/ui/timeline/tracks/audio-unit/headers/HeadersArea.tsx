@@ -28,9 +28,7 @@ export const HeadersArea = ({lifecycle, service, scrollModel}: Construct) => (
              const {api, editing} = project
              lifecycle.ownAll(
                  DragAndDrop.installTarget(element, {
-                     drag: (_event: DragEvent, data: AnyDragData): boolean => {
-                         return data.type === "instrument"
-                     },
+                     drag: (_event: DragEvent, data: AnyDragData): boolean => data.type === "instrument",
                      drop: (_event: DragEvent, data: AnyDragData) => {
                          if (data.type === "instrument") {
                              const factory = InstrumentFactories[data.device]
