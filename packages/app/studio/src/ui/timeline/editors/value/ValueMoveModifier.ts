@@ -2,6 +2,7 @@ import {
     Arrays,
     asDefined,
     assert,
+    clampUnit,
     int,
     Notifier,
     Nullable,
@@ -115,7 +116,7 @@ export class ValueMoveModifier implements ValueModifier {
     }
     readPosition(adapter: ValueEvent): ppqn {return adapter.position + this.#deltaPosition}
     readValue(event: ValueEvent): number {
-        return this.#context.quantize(this.#eventMapping.y(this.#eventMapping.x(event.value) + this.#deltaValue))
+        return this.#context.quantize(this.#eventMapping.y(clampUnit(this.#eventMapping.x(event.value) + this.#deltaValue)))
     }
     readInterpolation(event: UIValueEvent): Interpolation {return event.interpolation}
     iterator(searchMin: ppqn, searchMax: ppqn): Generator<ValueEventDraft> {
