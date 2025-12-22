@@ -3,7 +3,7 @@ import {TimelineRange} from "@opendaw/studio-core"
 import {AudioFileBoxAdapter, AudioPlayMode} from "@opendaw/studio-adapters"
 import {Option} from "@opendaw/lib-std"
 import {RegionBound} from "@/ui/timeline/renderer/env"
-import {dbToGain, LoopableRegion, TempoMap} from "@opendaw/lib-dsp"
+import {dbToGain, LoopableRegion, TempoChangeGrid, TempoMap} from "@opendaw/lib-dsp"
 
 type Segment = { x0: number, x1: number, u0: number, u1: number, outside: boolean }
 export const renderAudio = (context: CanvasRenderingContext2D,
@@ -17,12 +17,13 @@ export const renderAudio = (context: CanvasRenderingContext2D,
                             contentColor: string,
                             {
                                 rawStart,
-                                rawEnd,
+                                rawEnd: _rawEnd,
                                 resultStart,
                                 resultEnd,
-                                resultStartValue,
-                                resultEndValue
+                                resultStartValue: _resultStartValue,
+                                resultEndValue: _resultEndValue
                             }: LoopableRegion.LoopCycle, clip: boolean = true) => {
+    void _rawEnd; void _resultStartValue; void _resultEndValue
     if (file.peaks.isEmpty()) {return}
     const peaks: Peaks = file.peaks.unwrap()
     const durationInSeconds = file.endInSeconds - file.startInSeconds
@@ -135,60 +136,51 @@ export const renderAudio = (context: CanvasRenderingContext2D,
             handleSegment(rawStart + last.position, rawStart + extrapolateEndLocal, last.seconds, audioEnd)
         }
     } else {
-        if (clip) {
-            const frameOffset = (waveformOffset / durationInSeconds) * numFrames
-            let u0 = resultStartValue * numFrames + frameOffset
-            let u1 = resultEndValue * numFrames + frameOffset
-            let x0 = range.unitToX(resultStart) * devicePixelRatio
-            let x1 = range.unitToX(resultEnd) * devicePixelRatio
+        // Non-stretch mode - audio plays at 100% original speed
+        // Use tempoMap to convert timeline PPQN to audio time
+        const regionStart = resultStart
+        const gridSize = TempoChangeGrid
+
+        const addTempoSegment = (ppqnStart: number, ppqnEnd: number, outside: boolean) => {
+            if (ppqnStart >= ppqnEnd) {return}
+            if (ppqnEnd < range.unitMin || ppqnStart > range.unitMax) {return}
+            const clippedStart = Math.max(ppqnStart, range.unitMin)
+            const clippedEnd = Math.min(ppqnEnd, range.unitMax)
+            if (clippedStart >= clippedEnd) {return}
+            // Convert PPQN to audio seconds using tempoMap
+            const audioStartSec = _tempoMap.intervalToSeconds(regionStart, clippedStart) + waveformOffset
+            const audioEndSec = _tempoMap.intervalToSeconds(regionStart, clippedEnd) + waveformOffset
+            // Convert to frames
+            let u0 = (audioStartSec / durationInSeconds) * numFrames
+            let u1 = (audioEndSec / durationInSeconds) * numFrames
+            let x0 = range.unitToX(clippedStart) * devicePixelRatio
+            let x1 = range.unitToX(clippedEnd) * devicePixelRatio
+            // Clip to valid audio range
             if (u0 < 0) {
                 const ratio = -u0 / (u1 - u0)
-                x0 = x0 + ratio * (x1 - x0)
+                x0 += ratio * (x1 - x0)
                 u0 = 0
             }
             if (u1 > numFrames) {
                 const ratio = (u1 - numFrames) / (u1 - u0)
-                x1 = x1 - ratio * (x1 - x0)
+                x1 -= ratio * (x1 - x0)
                 u1 = numFrames
             }
-            if (u0 < u1) {
-                segments.push({x0, x1, u0, u1, outside: false})
+            // Minimum 1 pixel width
+            if (u0 < u1 && x1 - x0 >= 1) {
+                segments.push({x0, x1, u0, u1, outside: outside && !clip})
             }
-        } else {
-            const loopDuration = rawEnd - rawStart
-            const ppqnPerSecond = loopDuration / durationInSeconds
-            const offsetPpqn = waveformOffset * ppqnPerSecond
-            const waveStart = rawStart - offsetPpqn
-            const waveEnd = rawEnd - offsetPpqn
-            const addSegment = (posStart: number, posEnd: number, outside: boolean) => {
-                if (posStart >= posEnd) {return}
-                if (posEnd < range.unitMin || posStart > range.unitMax) {return}
-                const clippedStart = Math.max(posStart, range.unitMin)
-                const clippedEnd = Math.min(posEnd, range.unitMax)
-                if (clippedStart >= clippedEnd) {return}
-                const t0 = (clippedStart - waveStart) / (waveEnd - waveStart)
-                const t1 = (clippedEnd - waveStart) / (waveEnd - waveStart)
-                let u0 = t0 * numFrames
-                let u1 = t1 * numFrames
-                let x0 = range.unitToX(clippedStart) * devicePixelRatio
-                let x1 = range.unitToX(clippedEnd) * devicePixelRatio
-                if (u0 < 0) {
-                    const ratio = -u0 / (u1 - u0)
-                    x0 = x0 + ratio * (x1 - x0)
-                    u0 = 0
-                }
-                if (u1 > numFrames) {
-                    const ratio = (u1 - numFrames) / (u1 - u0)
-                    x1 = x1 - ratio * (x1 - x0)
-                    u1 = numFrames
-                }
-                if (u0 < u1) {
-                    segments.push({x0, x1, u0, u1, outside})
-                }
-            }
-            addSegment(waveStart, resultStart, true)
-            addSegment(resultStart, resultEnd, false)
-            addSegment(resultEnd, waveEnd, true)
+        }
+
+        // Step through at TempoChangeGrid intervals from regionStart until audio ends
+        let currentPPQN = regionStart
+        while (currentPPQN < range.unitMax) {
+            const nextPPQN = Math.ceil((currentPPQN + 0.001) / gridSize) * gridSize
+            const audioAtNext = _tempoMap.intervalToSeconds(regionStart, nextPPQN) + waveformOffset
+            if (audioAtNext > durationInSeconds && currentPPQN > regionStart) {break}
+            const outside = currentPPQN < resultStart || currentPPQN >= resultEnd
+            addTempoSegment(currentPPQN, nextPPQN, outside)
+            currentPPQN = nextPPQN
         }
     }
 
