@@ -36,6 +36,7 @@ import {
     TimelineBoxAdapter,
     UnionBoxTypes,
     UserEditingManager,
+    VaryingTempoMap,
     VertexSelection
 } from "@opendaw/studio-adapters"
 import {LiveStreamBroadcaster, LiveStreamReceiver} from "@opendaw/lib-fusion"
@@ -49,7 +50,7 @@ import {EngineWorklet} from "../EngineWorklet"
 import {MidiDevices, MIDILearning} from "../midi"
 import {ProjectValidation} from "./ProjectValidation"
 import {Preferences} from "../Preferences"
-import {ConstantTempoMap, PPQN, ppqn, TempoMap, TimeBase} from "@opendaw/lib-dsp"
+import {PPQN, ppqn, TempoMap, TimeBase} from "@opendaw/lib-dsp"
 import {MidiData} from "@opendaw/lib-midi"
 
 export type RestartWorklet = { unload: Func<unknown, Promise<unknown>>, load: Procedure<EngineWorklet> }
@@ -133,8 +134,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.editing = new BoxEditing(this.boxGraph)
         this.selection = new VertexSelection(this.editing, this.boxGraph)
         this.parameterFieldAdapters = new ParameterFieldAdapters()
-        this.tempoMap = new ConstantTempoMap(this.timelineBox.bpm)
         this.boxAdapters = this.#terminator.own(new BoxAdapters(this))
+        this.tempoMap = new VaryingTempoMap(this.timelineBoxAdapter)
         this.userEditingManager = new UserEditingManager(this.editing)
         this.liveStreamReceiver = this.#terminator.own(new LiveStreamReceiver())
         this.midiLearning = this.#terminator.own(new MIDILearning(this))

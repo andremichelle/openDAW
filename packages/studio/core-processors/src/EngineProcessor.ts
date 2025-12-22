@@ -40,7 +40,8 @@ import {
     SampleLoaderManager,
     SoundfontLoaderManager,
     TimelineBoxAdapter,
-    TrackBoxAdapter
+    TrackBoxAdapter,
+    VaryingTempoMap
 } from "@opendaw/studio-adapters"
 import {AudioUnit} from "./AudioUnit"
 import {Processor, ProcessPhase} from "./processing"
@@ -51,17 +52,7 @@ import {PeakBroadcaster} from "./PeakBroadcaster"
 import {Metronome} from "./Metronome"
 import {AudioOutputBufferRegistry} from "./AudioOutputBufferRegistry"
 import {BlockRenderer} from "./BlockRenderer"
-import {
-    AudioAnalyser,
-    AudioData,
-    ConstantTempoMap,
-    Graph,
-    PPQN,
-    ppqn,
-    RenderQuantum,
-    TempoMap,
-    TopologicalSort
-} from "@opendaw/lib-dsp"
+import {AudioAnalyser, AudioData, Graph, PPQN, ppqn, RenderQuantum, TempoMap, TopologicalSort} from "@opendaw/lib-dsp"
 import {SampleManagerWorklet} from "./SampleManagerWorklet"
 import {ClipSequencingAudioContext} from "./ClipSequencingAudioContext"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
@@ -155,10 +146,10 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#soundfontManager = new SoundfontManagerWorklet(this.#engineToClient)
         this.#audioUnits = UUID.newSet(unit => unit.adapter.uuid)
         this.#parameterFieldAdapters = new ParameterFieldAdapters()
-        this.#tempoMap = new ConstantTempoMap(timelineBox.bpm)
         this.#boxAdapters = this.#terminator.own(new BoxAdapters(this))
-        this.#rootBoxAdapter = this.#boxAdapters.adapterFor(rootBox, RootBoxAdapter)
         this.#timelineBoxAdapter = this.#boxAdapters.adapterFor(timelineBox, TimelineBoxAdapter)
+        this.#tempoMap = new VaryingTempoMap(this.timelineBoxAdapter)
+        this.#rootBoxAdapter = this.#boxAdapters.adapterFor(rootBox, RootBoxAdapter)
         this.#audioGraph = new Graph<Processor>()
         this.#audioGraphSorting = new TopologicalSort<Processor>(this.#audioGraph)
         this.#notifier = new Notifier<ProcessPhase>()
