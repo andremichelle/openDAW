@@ -52,7 +52,8 @@ export const AudioEditorCanvas = ({lifecycle, project: {editing}, range, cursorM
 
                     const pass = LoopableRegion.locateLoop(reader, range.unitMin - range.unitPadding, range.unitMax)
                     if (pass.isEmpty()) {return}
-                    renderAudio(context, range, file, observableOptPlayMode, waveformOffset.getValue(),
+                    const tempoMap = reader.trackBoxAdapter.unwrap().context.tempoMap
+                    renderAudio(context, range, file, tempoMap, observableOptPlayMode, waveformOffset.getValue(),
                         gain.getValue(), {top: 0, bottom: actualHeight},
                         `hsl(${reader.hue}, ${60}%, 45%)`, pass.unwrap(), false)
 

@@ -70,6 +70,8 @@ export class TrackBoxAdapter implements BoxAdapter {
         )
     }
 
+    get context(): BoxAdaptersContext {return this.#context}
+
     set targetDeviceName(value: string) {
         this.#box.target.targetVertex.ifSome(targetVertex => {
             const vertex = targetVertex.box

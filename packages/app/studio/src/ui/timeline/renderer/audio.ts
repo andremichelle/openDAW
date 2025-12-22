@@ -3,12 +3,13 @@ import {TimelineRange} from "@opendaw/studio-core"
 import {AudioFileBoxAdapter, AudioPlayMode} from "@opendaw/studio-adapters"
 import {Option} from "@opendaw/lib-std"
 import {RegionBound} from "@/ui/timeline/renderer/env"
-import {dbToGain, LoopableRegion} from "@opendaw/lib-dsp"
+import {dbToGain, LoopableRegion, TempoMap} from "@opendaw/lib-dsp"
 
 type Segment = { x0: number, x1: number, u0: number, u1: number, outside: boolean }
 export const renderAudio = (context: CanvasRenderingContext2D,
                             range: TimelineRange,
                             file: AudioFileBoxAdapter,
+                            _tempoMap: TempoMap, // TODO Take this for non-stretch regions
                             playMode: Option<AudioPlayMode>,
                             waveformOffset: number,
                             gain: number,

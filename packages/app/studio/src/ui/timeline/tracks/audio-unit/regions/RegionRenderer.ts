@@ -109,7 +109,8 @@ export const renderRegions = (context: CanvasRenderingContext2D,
                             context.fillStyle = loopStrokeColor
                             context.fillRect(x, labelHeight, 1, height - labelHeight)
                         }
-                        renderAudio(context, range, region.file, region.observableOptPlayMode, region.waveformOffset.getValue(),
+                        const tempoMap = region.trackBoxAdapter.unwrap().context.tempoMap
+                        renderAudio(context, range, region.file, tempoMap, region.observableOptPlayMode, region.waveformOffset.getValue(),
                             region.gain.getValue(), bound, contentColor, pass)
                     }
                     // TODO Record indicator?
