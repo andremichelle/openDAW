@@ -1,4 +1,4 @@
-import {bpm, ppqn, PPQN, RenderQuantum} from "@opendaw/lib-dsp"
+import {bpm, ppqn, PPQN, RenderQuantum, TempoChangeGrid} from "@opendaw/lib-dsp"
 import {Block, BlockFlags, ProcessInfo} from "./processing"
 import {EngineContext} from "./EngineContext"
 import {
@@ -15,8 +15,6 @@ import {
     Terminator
 } from "@opendaw/lib-std"
 import {MarkerBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
-
-const TEMPO_CHANGE_GRID = PPQN.fromSignature(1, 48) // make dynamic window 10ms
 
 type Action = null
     | { type: "loop", target: ppqn }
@@ -158,7 +156,7 @@ export class BlockRenderer implements Terminable {
                 // --- TEMPO AUTOMATION ---
                 if (this.#optTempoAutomation.nonEmpty()) {
                     if (!this.#optTempoAutomation.unwrap().events.isEmpty()) {
-                        const nextGrid: ppqn = quantizeCeil(p0, TEMPO_CHANGE_GRID)
+                        const nextGrid: ppqn = quantizeCeil(p0, TempoChangeGrid)
                         if (nextGrid >= p0 && nextGrid < p1 && nextGrid < actionPosition) {
                             const tempoAtGrid = this.#optTempoAutomation.unwrap().valueAt(nextGrid, this.#bpm)
                             if (tempoAtGrid !== this.#bpm) {
