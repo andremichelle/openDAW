@@ -75,7 +75,7 @@ export const createValuePainter =
         const end = range.unitMax
         const events = reader.content.events
 
-        const createIterator = modifier.match<Provider<Generator<UIValueEvent>>>({
+        const createIterator = modifier.match<Provider<IterableIterator<UIValueEvent>>>({
             none: () => () => ValueEvent.iterateWindow(events, start - offset, end - offset),
             some: (strategy: ValueModifyStrategy) => {
                 const snapValue = strategy.snapValue()

@@ -1,4 +1,4 @@
-import {Generators, int, MakeMutable, Notifier, Observer, Option, Selection, Terminable} from "@opendaw/lib-std"
+import {IterableIterators, int, MakeMutable, Notifier, Observer, Option, Selection, Terminable} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {BoxEditing} from "@opendaw/lib-box"
 import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
@@ -72,7 +72,7 @@ export class NoteCreateModifier implements NoteModifier {
         return {
             ...NoteModifyStrategy.Identity,
             iterateRange: <E extends UINoteEvent>(events: EventCollection<E>, from: number, to: number): Iterable<E> => {
-                return Generators.flatten(events.iterateRange(from, to), [this.#creation as E])
+                return IterableIterators.flatten(events.iterateRange(from, to), [this.#creation as E])
             }
         }
     }

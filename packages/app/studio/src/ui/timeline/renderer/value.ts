@@ -4,7 +4,7 @@ import {TimelineRange} from "@opendaw/studio-core"
 
 export const renderValueStream = (context: CanvasRenderingContext2D,
                                   range: TimelineRange,
-                                  generator: Generator<ValueEvent>,
+                                  generator: IterableIterator<ValueEvent>,
                                   valueToY: Func<unitValue, number>,
                                   contentColor: string,
                                   alphaFill: unitValue,

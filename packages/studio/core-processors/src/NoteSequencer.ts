@@ -96,7 +96,7 @@ export class NoteSequencer implements NoteEventSource, Terminable {
         this.#auditionNotes.push({pitch, duration, velocity})
     }
 
-    * processNotes(from: ppqn, to: ppqn, flags: int): Generator<NoteLifecycleEvent> {
+    * processNotes(from: ppqn, to: ppqn, flags: int): IterableIterator<NoteLifecycleEvent> {
         const read = Bits.every(flags, BlockFlag.transporting | BlockFlag.playing)
         const discontinuous = Bits.every(flags, BlockFlag.discontinuous)
         if (this.#retainer.nonEmpty()) {
@@ -161,7 +161,7 @@ export class NoteSequencer implements NoteEventSource, Terminable {
         }
     }
 
-    * iterateActiveNotesAt(position: ppqn, onlyEnternal: boolean): Generator<NoteEvent> {
+    * iterateActiveNotesAt(position: ppqn, onlyEnternal: boolean): IterableIterator<NoteEvent> {
         if (this.#rawNotes.size > 0) {
             for (const {pitch, velocity} of this.#rawNotes) {
                 yield {
@@ -188,7 +188,7 @@ export class NoteSequencer implements NoteEventSource, Terminable {
 
     toString(): string {return `{${this.constructor.name}}`}
 
-    * #processClip(clip: NoteClipBoxAdapter, p0: ppqn, p1: ppqn): Generator<Id<NoteEvent>> {
+    * #processClip(clip: NoteClipBoxAdapter, p0: ppqn, p1: ppqn): IterableIterator<Id<NoteEvent>> {
         if (clip.optCollection.isEmpty()) {return}
         const collection = clip.optCollection.unwrap()
         const clipDuration = clip.duration
@@ -202,7 +202,7 @@ export class NoteSequencer implements NoteEventSource, Terminable {
         }
     }
 
-    * #processRegions(trackBoxAdapter: TrackBoxAdapter, p0: ppqn, p1: ppqn): Generator<Id<NoteEvent>> {
+    * #processRegions(trackBoxAdapter: TrackBoxAdapter, p0: ppqn, p1: ppqn): IterableIterator<Id<NoteEvent>> {
         for (const region of trackBoxAdapter.regions.collection.iterateRange(p0, p1)) {
             if (this.#context.ignoresRegion(region.address.uuid)
                 || region.mute || !isInstanceOf(region, NoteRegionBoxAdapter)) {continue}
@@ -215,7 +215,7 @@ export class NoteSequencer implements NoteEventSource, Terminable {
         }
     }
 
-    * #processCollection(collection: NoteEventCollectionBoxAdapter, start: ppqn, end: ppqn, delta: ppqn): Generator<Id<NoteEvent>> {
+    * #processCollection(collection: NoteEventCollectionBoxAdapter, start: ppqn, end: ppqn, delta: ppqn): IterableIterator<Id<NoteEvent>> {
         const localStart = start - delta
         const localEnd = end - delta
         for (const source of collection.events.iterateRange(localStart - collection.maxDuration, localEnd)) {
@@ -248,13 +248,13 @@ export class NoteSequencer implements NoteEventSource, Terminable {
         }
     }
 
-    * #releaseAll(from: ppqn): Generator<NoteCompleteEvent> {
+    * #releaseAll(from: ppqn): IterableIterator<NoteCompleteEvent> {
         for (const event of this.#retainer.releaseAll()) {
             yield NoteLifecycleEvent.stop(event, from)
         }
     }
 
-    * #releaseCompleted(from: ppqn, to: ppqn): Generator<NoteCompleteEvent> {
+    * #releaseCompleted(from: ppqn, to: ppqn): IterableIterator<NoteCompleteEvent> {
         for (const event of this.#retainer.releaseLinearCompleted(to)) {
             // We need to clamp the value in case the time-domain has been changed between note-start and note-complete
             const position = clamp(event.position + event.duration, from, to)

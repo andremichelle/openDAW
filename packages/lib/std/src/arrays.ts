@@ -118,23 +118,23 @@ export class Arrays {
             .filter(baseItem => !mergeIntoArray
                 .some(mergeItem => compareFn(baseItem, mergeItem)))), ...mergeIntoArray]
     }
-    static* iterate<T>(array: ArrayLike<T>): Generator<T> {
+    static* iterate<T>(array: ArrayLike<T>): IterableIterator<T> {
         for (let i: int = 0; i < array.length; i++) {
             yield array[i]
         }
     }
-    static* iterateReverse<T>(array: ArrayLike<T>): Generator<T> {
+    static* iterateReverse<T>(array: ArrayLike<T>): IterableIterator<T> {
         for (let i: int = array.length - 1; i >= 0; i--) {
             yield array[i]
         }
     }
-    static* iterateStateFull<T>(array: ArrayLike<T>): Generator<{ value: T, isFirst: boolean, isLast: boolean }> {
+    static* iterateStateFull<T>(array: ArrayLike<T>): IterableIterator<{ value: T, isFirst: boolean, isLast: boolean }> {
         const maxIndex = array.length - 1
         for (let i: int = 0; i <= maxIndex; i++) {
             yield {value: array[i], isFirst: i === 0, isLast: i === maxIndex}
         }
     }
-    static* iterateAdjacent<T>(array: ArrayLike<T>): Generator<[T, T]> {
+    static* iterateAdjacent<T>(array: ArrayLike<T>): IterableIterator<[T, T]> {
         if (array.length <= 1) {return}
         for (let i = 1, left = array[0]; i < array.length; i++) {
             const right = array[i]

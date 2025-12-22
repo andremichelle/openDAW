@@ -49,7 +49,7 @@ export class ZeitgeistDeviceProcessor extends EventProcessor implements MidiEffe
         return Terminable.create(() => this.#source = Option.None)
     }
 
-    * processNotes(from: ppqn, to: ppqn, flags: int): Generator<NoteLifecycleEvent> {
+    * processNotes(from: ppqn, to: ppqn, flags: int): IterableIterator<NoteLifecycleEvent> {
         if (this.#source.isEmpty()) {return}
         const source = this.#source.unwrap()
         const groove: Groove = this.#groove.mapOr(identity, Groove.Identity)
@@ -63,7 +63,7 @@ export class ZeitgeistDeviceProcessor extends EventProcessor implements MidiEffe
         }
     }
 
-    * iterateActiveNotesAt(position: ppqn, onlyExternal: boolean): Generator<NoteEvent> {
+    * iterateActiveNotesAt(position: ppqn, onlyExternal: boolean): IterableIterator<NoteEvent> {
         if (this.#source.isEmpty()) {return}
         const source = this.#source.unwrap()
         const groove: Groove = this.#groove.mapOr(identity, Groove.Identity)

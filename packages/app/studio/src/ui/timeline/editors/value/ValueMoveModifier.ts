@@ -119,7 +119,7 @@ export class ValueMoveModifier implements ValueModifier {
         return this.#context.quantize(this.#eventMapping.y(clampUnit(this.#eventMapping.x(event.value) + this.#deltaValue)))
     }
     readInterpolation(event: UIValueEvent): Interpolation {return event.interpolation}
-    iterator(searchMin: ppqn, searchMax: ppqn): Generator<ValueEventDraft> {
+    iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<ValueEventDraft> {
         return new ValueEventDraft.Solver(this.#eventCollection(), this,
             searchMin - Math.max(0, this.#deltaPosition), searchMax).iterate()
     }

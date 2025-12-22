@@ -46,7 +46,7 @@ export class ValueContentDurationModifier implements ValueModifier {
     readInterpolation(event: UIValueEvent): Interpolation {return event.interpolation}
     translateSearch(value: ppqn): ppqn {return value}
     isVisible(_event: UIValueEvent): boolean {return true}
-    iterator(searchMin: ppqn, searchMax: ppqn): IteratorObject<UIValueEvent> {
+    iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<UIValueEvent> {
         return this.#reference.content.events.iterateRange(searchMin, searchMax)
     }
     readContentDuration(region: ValueEventOwnerReader): number {

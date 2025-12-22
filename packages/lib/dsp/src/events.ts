@@ -3,7 +3,7 @@ import {
     BinarySearch,
     Comparator,
     Func,
-    Generators,
+    IterableIterators,
     int,
     Integer,
     isDefined,
@@ -98,7 +98,7 @@ export namespace LoopableRegion {
     // This is used for region rendering but can also be used for sequencing region's content.
     export function* locateLoops({position, complete, loopOffset, loopDuration}: Region,
                                  from: ppqn,
-                                 to: ppqn): Generator<LoopCycle> {
+                                 to: ppqn): IterableIterator<LoopCycle> {
         const offset = position - loopOffset
         const seekMin = Math.max(position, from)
         const seekMax = Math.min(complete, to)
@@ -164,12 +164,12 @@ export class EventCollection<EVENT extends Event = Event> implements EventArray<
      * Iterate over all events starting from the given position.
      * If an event starts on or before(!) the given position, it will be included.
      */
-    iterateFrom(fromPosition: number, predicate?: Predicate<EVENT>): Generator<EVENT> {
-        if (this.#array.isEmpty()) {return Generators.empty()}
+    iterateFrom(fromPosition: number, predicate?: Predicate<EVENT>): IterableIterator<EVENT> {
+        if (this.#array.isEmpty()) {return IterableIterators.empty()}
         return this.#array.iterateFrom(fromPosition, predicate)
     }
-    iterateRange(fromPosition: int, toPosition: int, predicate?: Predicate<EVENT>): Generator<EVENT> {
-        if (this.#array.isEmpty()) {return Generators.empty()}
+    iterateRange(fromPosition: int, toPosition: int, predicate?: Predicate<EVENT>): IterableIterator<EVENT> {
+        if (this.#array.isEmpty()) {return IterableIterators.empty()}
         return this.#array.iterate(this.#array.ceilFirstIndex(fromPosition), toPosition, predicate)
     }
     first(): Nullable<EVENT> {return this.#array.optAt(0)}
@@ -206,18 +206,18 @@ export class RegionCollection<REGION extends EventSpan> implements EventArray<RE
     }
     floorLastIndex(position: number): number {return this.#array.floorLastIndex(position)}
     ceilFirstIndex(position: number): number {return this.#array.ceilFirstIndex(position)}
-    iterateFrom(fromPosition: number, predicate?: Predicate<REGION>): Generator<REGION> {
-        return this.#array.isEmpty() ? Generators.empty() : this.#array.iterateFrom(fromPosition, predicate)
+    iterateFrom(fromPosition: number, predicate?: Predicate<REGION>): IterableIterator<REGION> {
+        return this.#array.isEmpty() ? IterableIterators.empty() : this.#array.iterateFrom(fromPosition, predicate)
     }
-    iterateRange(fromPosition: int, toPosition: int): Generator<REGION> {
-        if (this.#array.isEmpty()) {return Generators.empty()}
+    iterateRange(fromPosition: int, toPosition: int): IterableIterator<REGION> {
+        if (this.#array.isEmpty()) {return IterableIterators.empty()}
         let index: int = Math.max(0, this.#array.floorLastIndex(fromPosition))
         let period: Nullable<REGION> = this.#array.optAt(index)
-        if (period === null) {return Generators.empty()}
+        if (period === null) {return IterableIterators.empty()}
         while (period.position + period.duration <= fromPosition) {
             period = this.#array.optAt(++index)
             if (period === null || period.position >= toPosition) {
-                return Generators.empty()
+                return IterableIterators.empty()
             }
         }
         return this.#array.iterate(index, toPosition)
@@ -238,8 +238,8 @@ export interface EventArray<E extends Event> {
     greaterEqual(position: int): Nullable<E>
     floorLastIndex(position: int): int
     ceilFirstIndex(position: int): int
-    iterateFrom(fromPosition: int, predicate?: Predicate<E>): Generator<E>
-    iterateRange(fromPosition: int, toPosition: int, predicate?: Predicate<E>): Generator<E>
+    iterateFrom(fromPosition: int, predicate?: Predicate<E>): IterableIterator<E>
+    iterateRange(fromPosition: int, toPosition: int, predicate?: Predicate<E>): IterableIterator<E>
     length(): int
     isEmpty(): boolean
     onIndexingChanged(): void
@@ -259,12 +259,12 @@ export class EventSpanRetainer<E extends EventSpan> {
         }
     }
 
-    * overlapping(position: ppqn, comparator?: Comparator<E>): Generator<E> {
+    * overlapping(position: ppqn, comparator?: Comparator<E>): IterableIterator<E> {
         const result = this.#array.filter(event => event.position <= position && position < event.position + event.duration)
         yield* isDefined(comparator) ? result.sort(comparator) : result
     }
 
-    * releaseLinearCompleted(position: ppqn): Generator<E, void, void> {
+    * releaseLinearCompleted(position: ppqn): IterableIterator<E> {
         if (this.#array.length === 0) {return}
         for (let lastIndex = this.#array.length - 1; lastIndex >= 0; lastIndex--) {
             const event = this.#array[lastIndex]
@@ -277,7 +277,7 @@ export class EventSpanRetainer<E extends EventSpan> {
         }
     }
 
-    * release(predicate: Predicate<E>): Generator<E> {
+    * release(predicate: Predicate<E>): IterableIterator<E> {
         if (this.#array.length === 0) {return}
         for (let lastIndex = this.#array.length - 1; lastIndex >= 0; lastIndex--) {
             const event = this.#array[lastIndex]
@@ -288,7 +288,7 @@ export class EventSpanRetainer<E extends EventSpan> {
         }
     }
 
-    * releaseAll(): Generator<E, void, void> {
+    * releaseAll(): IterableIterator<E> {
         if (this.#array.length === 0) {return}
         for (let lastIndex = this.#array.length - 1; lastIndex >= 0; lastIndex--) {
             const event = this.#array[lastIndex]
@@ -392,7 +392,7 @@ class EventArrayImpl<E extends Event> implements Omit<EventArray<E>, "iterateRan
         return BinarySearch.leftMostMapped(this.#array, position, NumberComparator, Event.PositionExtractor)
     }
 
-    iterateFrom(fromPosition: int, predicate?: Predicate<E>): Generator<E> {
+    iterateFrom(fromPosition: int, predicate?: Predicate<E>): IterableIterator<E> {
         const floorLastIndex: int = this.floorLastIndex(fromPosition)
         let startIndex: int = floorLastIndex
         if (startIndex < 0) {
@@ -412,7 +412,7 @@ class EventArrayImpl<E extends Event> implements Omit<EventArray<E>, "iterateRan
     isEmpty(): boolean {return this.#array.length === 0}
     onIndexingChanged(): void {this.#unsorted = this.length() > 1}
 
-    * iterate(fromIndex: int, toPosition: int, predicate: Predicate<E> = Predicates.alwaysTrue): Generator<E> {
+    * iterate(fromIndex: int, toPosition: int, predicate: Predicate<E> = Predicates.alwaysTrue): IterableIterator<E> {
         if (this.#unsorted) {this.#sort()}
         while (fromIndex < this.#array.length) {
             const element = this.#array[fromIndex++]

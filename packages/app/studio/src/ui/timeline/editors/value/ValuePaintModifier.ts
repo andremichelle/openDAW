@@ -2,7 +2,6 @@ import {
     Arrays,
     BinarySearch,
     int,
-    Iterables,
     Notifier,
     NumberComparator,
     Observer,
@@ -70,22 +69,24 @@ export class ValuePaintModifier implements ValueModifier {
     readPosition(event: ValueEvent): ppqn {return event.position}
     readValue(event: ValueEvent): unitValue {return event.value}
     readInterpolation(event: UIValueEvent): Interpolation {return event.interpolation}
-    * iterator(searchMin: ppqn, searchMax: ppqn): Generator<ValueEventDraft> {
+    * iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<ValueEventDraft> {
         const offset = this.#reader.offset
         const min = Arrays.getFirst(this.#strokes, "Internal Error").position - offset
         const max = Arrays.getLast(this.#strokes, "Internal Error").position - offset
 
-        const iteratorObject = Iterables.map(ValueEvent.iterateWindow(this.#reader.content.events, searchMin, min),
-            (event: UIValueEvent): ValueEventDraft => ({
-                type: "value-event",
-                position: event.position,
-                value: event.value,
-                interpolation: event.interpolation,
-                index: event.index,
-                isSelected: event.isSelected,
-                direction: 0
-            })).filter(event => event.position < min)
-        for (const event of iteratorObject) {yield event}
+        for (const event of ValueEvent.iterateWindow(this.#reader.content.events, searchMin, min)) {
+            if (event.position < min) {
+                yield {
+                    type: "value-event",
+                    position: event.position,
+                    value: event.value,
+                    interpolation: event.interpolation,
+                    index: event.index,
+                    isSelected: event.isSelected,
+                    direction: 0
+                }
+            }
+        }
         for (const event of this.#strokes.map<ValueEventDraft>(stroke => ({
             type: "value-event",
             position: stroke.position - this.#reader.offset,
@@ -95,16 +96,19 @@ export class ValuePaintModifier implements ValueModifier {
             isSelected: true,
             direction: 0
         }))) {yield event}
-        for (const event of Array.from(ValueEvent.iterateWindow(this.#reader.content.events, max, searchMax))
-            .map<ValueEventDraft>(event => ({
-                type: "value-event",
-                position: event.position,
-                value: event.value,
-                interpolation: event.interpolation,
-                index: event.index,
-                isSelected: event.isSelected,
-                direction: 0
-            })).filter(event => event.position > max)) {yield event}
+        for (const event of ValueEvent.iterateWindow(this.#reader.content.events, max, searchMax)) {
+            if (event.position > max) {
+                yield {
+                    type: "value-event",
+                    position: event.position,
+                    value: event.value,
+                    interpolation: event.interpolation,
+                    index: event.index,
+                    isSelected: event.isSelected,
+                    direction: 0
+                }
+            }
+        }
     }
     readContentDuration(owner: ValueEventOwnerReader): number {return owner.contentDuration}
 

@@ -103,7 +103,7 @@ export class NoteRegionBoxAdapter
 
     get isSelected(): boolean {return this.#isSelected}
 
-    * iterateActiveNotesAt(position: ppqn): Generator<NoteEvent> {
+    * iterateActiveNotesAt(position: ppqn): IterableIterator<NoteEvent> {
         const optCollection = this.optCollection
         if (optCollection.isEmpty()) {return}
         const collection = optCollection.unwrap()

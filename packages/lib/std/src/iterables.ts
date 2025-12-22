@@ -42,14 +42,14 @@ export class Iterables {
         for (const value of iterable) {procedure(value)}
     }
 
-    static* map<T, U>(iterable: Iterable<T>, map: (value: T, index: int) => U): Generator<U> {
+    static* map<T, U>(iterable: Iterable<T>, map: (value: T, index: int) => U): IterableIterator<U> {
         let count = 0 | 0
         for (const value of iterable) {
             yield map(value, count++)
         }
     }
 
-    static* take<T>(iterator: Iterable<T>, count: int): Generator<T> {
+    static* take<T>(iterator: Iterable<T>, count: int): IterableIterator<T> {
         let i = 0
         for (const value of iterator) {
             if (i++ >= count) {return}
@@ -78,7 +78,7 @@ export class Iterables {
         return result.reverse()
     }
 
-    static* pairWise<T>(iterable: Iterable<T>): IteratorObject<[T, Nullable<T>]> {
+    static* pairWise<T>(iterable: Iterable<T>): IterableIterator<[T, Nullable<T>]> {
         const iterator: Iterator<T> = iterable[Symbol.iterator]()
         const {done, value} = iterator.next()
         let prev: T = value

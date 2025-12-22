@@ -29,7 +29,7 @@ export namespace ValueEvent {
 
     export function* iterateWindow<E extends ValueEvent>(events: EventCollection<E>,
                                                          fromPosition: ppqn,
-                                                         toPosition: ppqn): Generator<E> {
+                                                         toPosition: ppqn): IterableIterator<E> {
         if (events.isEmpty()) {return Iterables.empty()}
         for (const event of events.iterateFrom(fromPosition)) {
             yield event
@@ -74,10 +74,10 @@ export namespace ValueEvent {
     export function* quantise<E extends ValueEvent>(events: EventCollection<E>,
                                                     position: ppqn,
                                                     duration: ppqn,
-                                                    numSteps: number): IteratorObject<{
+                                                    numSteps: number): IterableIterator<{
         position: ppqn,
         value: number
-    }, void> {
+    }> {
         if (events.isEmpty()) {return} // no events, nothing to iterate
         const iterator = events.iterateFrom(position)
         const {done, value} = iterator.next()

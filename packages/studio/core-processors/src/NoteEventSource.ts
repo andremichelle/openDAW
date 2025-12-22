@@ -40,10 +40,10 @@ export namespace NoteLifecycleEvent {
 
 export interface NoteEventSource {
     // find all notes that start in a given interval and returns them moved into global time space
-    processNotes(from: ppqn, to: ppqn, flags: int /*BlockFlag*/): Generator<NoteLifecycleEvent>
+    processNotes(from: ppqn, to: ppqn, flags: int /*BlockFlag*/): IterableIterator<NoteLifecycleEvent>
 
     // find all active local notes at a given position
-    iterateActiveNotesAt(position: ppqn, onlyExternal: boolean): Generator<NoteEvent>
+    iterateActiveNotesAt(position: ppqn, onlyExternal: boolean): IterableIterator<NoteEvent>
 }
 
 export interface NoteEventTarget {

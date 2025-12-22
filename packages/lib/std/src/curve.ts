@@ -45,12 +45,12 @@ export namespace Curve {
         return {m, q}
     }
 
-    export function* walk(slope: number, steps: int, y0: number, y1: number): Generator<number> {
+    export function* walk(slope: number, steps: int, y0: number, y1: number): IterableIterator<number> {
         const {m, q} = coefficients({slope, steps, y0, y1} satisfies Curve.Definition)
         for (let i = 0, v = y0; i < steps; i++) {yield v = m * v + q}
     }
 
-    export function* walkNormalized(slope: number, steps: int): Generator<unitValue> {
+    export function* walkNormalized(slope: number, steps: int): IterableIterator<unitValue> {
         const d = 1.0 / steps
         const f1 = normalizedAt(d, slope)
         const f2 = normalizedAt(2.0 * d, slope)

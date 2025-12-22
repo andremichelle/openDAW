@@ -100,7 +100,7 @@ export class ClipSequencingAudioContext implements ClipSequencing {
         this.#states.clear()
     }
 
-    * iterate(trackKey: TrackKey, p0: ppqn, p1: ppqn): Generator<Section> {
+    * iterate(trackKey: TrackKey, p0: ppqn, p1: ppqn): IterableIterator<Section> {
         const state = this.#states.getOrNull(trackKey)
         if (state === null) {
             yield {optClip: Option.None, sectionFrom: p0, sectionTo: p1}

@@ -1,5 +1,5 @@
 import {Interpolation, ppqn} from "@opendaw/lib-dsp"
-import {Generators, Option, unitValue} from "@opendaw/lib-std"
+import {IterableIterators, Option, unitValue} from "@opendaw/lib-std"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
 
@@ -11,7 +11,7 @@ export interface ValueModifyStrategy {
     readInterpolation(event: UIValueEvent): Interpolation
     translateSearch(value: ppqn): ppqn
     isVisible(event: UIValueEvent): boolean
-    iterator(searchMin: ppqn, searchMax: ppqn): IteratorObject<UIValueEvent>
+    iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<UIValueEvent>
     readContentDuration(owner: ValueEventOwnerReader): ppqn
 }
 
@@ -24,7 +24,7 @@ export namespace ValueModifyStrategy {
         readInterpolation: (event: UIValueEvent): Interpolation => event.interpolation,
         translateSearch: (value: ppqn): ppqn => value,
         isVisible: (_event: UIValueEvent): boolean => true,
-        iterator: (_searchMin: ppqn, _searchMax: ppqn): IteratorObject<UIValueEvent> => Generators.empty(),
+        iterator: (_searchMin: ppqn, _searchMax: ppqn): IterableIterator<UIValueEvent> => IterableIterators.empty(),
         readContentDuration: (region: ValueEventOwnerReader): ppqn => region.contentDuration
     })
 }

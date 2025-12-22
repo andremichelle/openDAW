@@ -56,8 +56,8 @@ export namespace ValueEventDraft {
     export class Solver {
         readonly #strategy: ValueModifyStrategy
 
-        readonly #selectedIterator: Generator<ValueEventBoxAdapter>
-        readonly #unselectedIterator: Generator<ValueEventBoxAdapter>
+        readonly #selectedIterator: IterableIterator<ValueEventBoxAdapter>
+        readonly #unselectedIterator: IterableIterator<ValueEventBoxAdapter>
 
         #nextUnselected: Nullable<ValueEventDraft> = null
         #nextSelected: Nullable<ValueEventDraft> = null
@@ -75,7 +75,7 @@ export namespace ValueEventDraft {
             this.#evalNext()
         }
 
-        * iterate(): Generator<ValueEventDraft> {
+        * iterate(): IterableIterator<ValueEventDraft> {
             while (this.#next !== null) {
                 const result: ValueEventDraft = this.#next
                 this.#evalNext()

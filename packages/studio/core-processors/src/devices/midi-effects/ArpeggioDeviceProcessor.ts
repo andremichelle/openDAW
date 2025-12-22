@@ -63,7 +63,7 @@ export class ArpeggioDeviceProcessor extends EventProcessor implements MidiEffec
         return Terminable.create(() => this.#source = Option.None)
     }
 
-    * processNotes(from: ppqn, to: ppqn, flags: int): Generator<NoteLifecycleEvent> {
+    * processNotes(from: ppqn, to: ppqn, flags: int): IterableIterator<NoteLifecycleEvent> {
         if (this.#retainer.nonEmpty()) {
             const releaseAll = Bits.every(flags, BlockFlag.discontinuous)
             if (releaseAll) {
@@ -95,7 +95,7 @@ export class ArpeggioDeviceProcessor extends EventProcessor implements MidiEffec
         }
     }
 
-    * iterateActiveNotesAt(position: ppqn, onlyExternal: boolean): Generator<NoteEvent> {
+    * iterateActiveNotesAt(position: ppqn, onlyExternal: boolean): IterableIterator<NoteEvent> {
         if (this.#source.isEmpty() || onlyExternal) {return}
         yield* this.#retainer.overlapping(position, NoteEvent.Comparator)
     }

@@ -53,7 +53,7 @@ export class VelocityDeviceProcessor extends EventProcessor implements MidiEffec
     get incoming(): Processor {return this}
     get outgoing(): Processor {return this}
 
-    * processNotes(from: ppqn, to: ppqn, flags: int): Generator<NoteLifecycleEvent> {
+    * processNotes(from: ppqn, to: ppqn, flags: int): IterableIterator<NoteLifecycleEvent> {
         if (this.#source.isEmpty()) {return}
         for (const event of this.#source.unwrap().processNotes(from, to, flags)) {
             if (NoteLifecycleEvent.isStart(event)) {
@@ -69,7 +69,7 @@ export class VelocityDeviceProcessor extends EventProcessor implements MidiEffec
         }
     }
 
-    * iterateActiveNotesAt(position: ppqn, onlyExternal: boolean): Generator<NoteEvent> {
+    * iterateActiveNotesAt(position: ppqn, onlyExternal: boolean): IterableIterator<NoteEvent> {
         if (this.#source.isEmpty()) {return}
         for (const event of this.#source.unwrap().iterateActiveNotesAt(position, onlyExternal)) {
             if (event.type === "note-event") {

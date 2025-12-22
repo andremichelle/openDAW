@@ -9,5 +9,5 @@ export type Section = {
 }
 
 export interface ClipSequencing extends Terminable {
-    iterate(trackKey: UUID.Bytes, a: ppqn, b: ppqn): Generator<Section>
+    iterate(trackKey: UUID.Bytes, a: ppqn, b: ppqn): IterableIterator<Section>
 }

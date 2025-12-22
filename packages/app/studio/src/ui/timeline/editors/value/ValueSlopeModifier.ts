@@ -80,7 +80,7 @@ export class ValueSlopeModifier implements ValueModifier {
         return panic("Internal Error (readInterpolation)")
     }
     readContentDuration(owner: ValueEventOwnerReader): number {return owner.contentDuration}
-    iterator(searchMin: ppqn, searchMax: ppqn): IteratorObject<ValueEventDraft> {
+    iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<ValueEventDraft> {
         return Iterables.map(ValueEvent.iterateWindow(this.#collection.events, searchMin, searchMax), event => ({
             type: "value-event",
             position: event.position,
