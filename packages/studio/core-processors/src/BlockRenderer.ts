@@ -38,7 +38,9 @@ export class BlockRenderer implements Terminable {
 
     constructor(context: EngineContext, options?: { pauseOnLoopDisabled?: boolean }) {
         this.#context = context
-        const {timelineBoxAdapter: {box: {bpm}, markerTrack, tempoAutomation}} = context
+
+        const {timelineBoxAdapter} = context
+        const {box: {bpm}, markerTrack} = timelineBoxAdapter
         this.#bpm = bpm.getValue()
         markerTrack.subscribe(() => this.#someMarkersChanged = true)
         this.#terminator.ownAll(
@@ -48,7 +50,7 @@ export class BlockRenderer implements Terminable {
                     this.#bpmChanged = true
                 }
             }),
-            tempoAutomation.subscribe(option => {
+            timelineBoxAdapter.catchupAndSubscribeTempoAutomation(option => {
                 this.#optTempoAutomation = option
                 if (option.isEmpty()) {
                     this.#bpm = bpm.getValue()

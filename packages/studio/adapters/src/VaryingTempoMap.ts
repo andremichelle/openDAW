@@ -113,19 +113,15 @@ export class VaryingTempoMap implements TempoMap {
             accumulatedSeconds += segmentSeconds
             accumulatedPPQN = segmentEnd
         }
-
         return accumulatedPPQN
     }
 
     subscribe(observer: Observer<TempoMap>): Subscription {
         const terminator = new Terminator()
-
-        // Subscribe to BPM changes
-        terminator.own(this.#adapter.box.bpm.subscribe(() => observer(this)))
-
-        // Subscribe to tempo automation changes
-        terminator.own(this.#adapter.tempoAutomation.subscribe(() => observer(this)))
-
+        terminator.ownAll(
+            this.#adapter.box.bpm.subscribe(() => observer(this)),
+            this.#adapter.catchupAndSubscribeTempoAutomation(() => observer(this))
+        )
         return terminator
     }
 }

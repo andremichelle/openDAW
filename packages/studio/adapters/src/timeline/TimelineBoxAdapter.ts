@@ -21,29 +21,21 @@ export class TimelineBoxAdapter implements BoxAdapter {
     readonly #terminator = new Terminator()
 
     readonly #box: TimelineBox
+
     readonly #markerTrack: MarkerTrackAdapter
     readonly #tempoTrackEvents: MutableObservableOption<ValueEventCollectionBoxAdapter>
     readonly #tempoAutomation: Notifier<Option<ValueEventCollectionBoxAdapter>>
 
     constructor(context: BoxAdaptersContext, box: TimelineBox) {
         this.#box = box
+
         this.#markerTrack = new MarkerTrackAdapter(context, this.#box.markerTrack)
         this.#tempoTrackEvents = new MutableObservableOption<ValueEventCollectionBoxAdapter>()
         this.#tempoAutomation = new Notifier<Option<ValueEventCollectionBoxAdapter>>()
 
         const tempoAutomationLifecycle = this.#terminator.own(new Terminator())
+        const updateTempoAutomation = (): void => this.#tempoAutomation.notify(this.#resolveTempoAutomation())
         const {tempoTrack: {events, enabled}} = box
-        const updateTempoAutomation = () => {
-            if (!enabled.getValue()) {
-                this.#tempoAutomation.notify(Option.None)
-            } else if (this.#tempoTrackEvents.isEmpty()) {
-                this.#tempoAutomation.notify(Option.None)
-            } else if (this.#tempoTrackEvents.unwrap().events.isEmpty()) {
-                this.#tempoAutomation.notify(Option.None)
-            } else {
-                this.#tempoAutomation.notify(this.#tempoTrackEvents)
-            }
-        }
         this.#terminator.own(events.catchupAndSubscribe(({targetVertex}) => {
             tempoAutomationLifecycle.terminate()
             targetVertex.match({
@@ -57,8 +49,13 @@ export class TimelineBoxAdapter implements BoxAdapter {
                     )
                 }
             })
-            updateTempoAutomation()
         }))
+    }
+
+    // For dsp. It does not care why events are not available. We just send Option.None if disabled or no events present.
+    catchupAndSubscribeTempoAutomation(observer: Observer<Option<ValueEventCollectionBoxAdapter>>): Subscription {
+        observer(this.#resolveTempoAutomation())
+        return this.#tempoAutomation.subscribe(observer)
     }
 
     get box(): TimelineBox {return this.#box}
@@ -66,8 +63,6 @@ export class TimelineBoxAdapter implements BoxAdapter {
     get address(): Address {return this.#box.address}
     get markerTrack(): MarkerTrackAdapter {return this.#markerTrack}
     get tempoTrackEvents(): ObservableOption<ValueEventCollectionBoxAdapter> {return this.#tempoTrackEvents}
-    // For dsp. It does not care why events are not available. We just send Option.None if disabled or no events present.
-    get tempoAutomation(): Notifier<Option<ValueEventCollectionBoxAdapter>> {return this.#tempoAutomation}
     get signature(): Readonly<[int, int]> {
         const {nominator, denominator} = this.#box.signature
         return [nominator.getValue(), denominator.getValue()]
@@ -83,4 +78,17 @@ export class TimelineBoxAdapter implements BoxAdapter {
     }
 
     terminate(): void {this.#terminator.terminate()}
+
+    #resolveTempoAutomation = (): Option<ValueEventCollectionBoxAdapter> => {
+        const {tempoTrack: {enabled}} = this.#box
+        if (!enabled.getValue()) {
+            return Option.None
+        } else if (this.#tempoTrackEvents.isEmpty()) {
+            return Option.None
+        } else if (this.#tempoTrackEvents.unwrap().events.isEmpty()) {
+            return Option.None
+        } else {
+            return (this.#tempoTrackEvents)
+        }
+    }
 }
