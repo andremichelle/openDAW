@@ -84,7 +84,6 @@ export class MIDILearning implements Terminable {
         await MidiDevices.requestPermission()
         const learnLifecycle = this.#terminator.spawn()
         const abortController = new AbortController()
-        // TODO subscribeMessageEvents is not really suffient, because it does not distinguish between midi devices.
         learnLifecycle.own(MidiDevices.subscribeMessageEvents((event: MIDIMessageEvent) => {
             const data = event.data
             if (data === null) {return}
