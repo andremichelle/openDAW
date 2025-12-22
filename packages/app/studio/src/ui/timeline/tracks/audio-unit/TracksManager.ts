@@ -58,6 +58,7 @@ export class TracksManager implements Terminable {
     startClipModifier(option: Option<ClipModifier>): Option<Dragging.Process> {
         return option.map(modifier => {
             assert(this.#currentClipModifier.isEmpty(), "ClipModifier already in use.")
+            this.service.regionModifierInProgress = true
             const lifeTime = this.#terminator.spawn()
             lifeTime.own({terminate: () => this.#currentClipModifier = Option.None})
             this.#currentClipModifier = option
@@ -65,7 +66,10 @@ export class TracksManager implements Terminable {
                 update: (event: Dragging.Event): void => modifier.update(event),
                 approve: (): void => modifier.approve(this.#service.project.editing),
                 cancel: (): void => modifier.cancel(),
-                finally: (): void => lifeTime.terminate()
+                finally: (): void => {
+                    this.service.regionModifierInProgress = false
+                    lifeTime.terminate()
+                }
             }
         })
     }
@@ -75,6 +79,7 @@ export class TracksManager implements Terminable {
         console.debug(`start(${print()})`)
         return option.map(modifier => {
             assert(this.#currentRegionModifier.isEmpty(), "RegionModifier already in use.")
+            this.service.regionModifierInProgress = true
             const lifeTime = this.#terminator.spawn()
             lifeTime.own({terminate: () => this.#currentRegionModifier = Option.None})
             this.#currentRegionModifier = option
@@ -90,6 +95,7 @@ export class TracksManager implements Terminable {
                 },
                 finally: (): void => {
                     console.debug(`finally(${print()})`)
+                    this.service.regionModifierInProgress = false
                     lifeTime.terminate()
                 }
             }

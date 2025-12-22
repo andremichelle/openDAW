@@ -113,6 +113,8 @@ export class StudioService implements ProjectEnv {
 
     #factoryFooterLabel: Option<Provider<FooterLabel>> = Option.None
 
+    regionModifierInProgress: boolean = false
+
     constructor(readonly audioContext: AudioContext,
                 readonly audioWorklets: AudioWorklets,
                 readonly audioDevices: AudioOutputDevice,

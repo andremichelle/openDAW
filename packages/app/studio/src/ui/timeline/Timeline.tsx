@@ -52,7 +52,7 @@ export const Timeline = ({lifecycle, service}: Construct) => {
         engine.position.subscribe((() => {
             let lastPosition: ppqn = 0
             return owner => {
-                if (!followPlaybackCursor.getValue()) {return}
+                if (!followPlaybackCursor.getValue() || service.regionModifierInProgress) {return}
                 const range = service.timeline.range
                 const position = owner.getValue()
                 if (lastPosition <= range.unitMax && position > range.unitMax) {
