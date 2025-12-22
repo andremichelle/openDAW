@@ -26,7 +26,34 @@ export class VaryingTempoMap implements TempoMap {
     }
 
     secondsToPPQN(time: seconds): ppqn {
-        return this.intervalToPPQN(0, time)
+        return this.#absoluteSecondsToPPQN(time)
+    }
+
+    // Internal: find PPQN position for an absolute time (seconds from timeline start)
+    #absoluteSecondsToPPQN(targetSeconds: seconds): ppqn {
+        if (targetSeconds <= 0) {return 0.0}
+        const storageBpm = this.#adapter.box.bpm.getValue()
+        const tempoEvents = this.#adapter.tempoTrackEvents
+        if (tempoEvents.isEmpty()) {return PPQN.secondsToPulses(targetSeconds, storageBpm)}
+        const collection = tempoEvents.unwrap()
+        if (collection.events.isEmpty()) {return PPQN.secondsToPulses(targetSeconds, storageBpm)}
+        let accumulatedSeconds: seconds = 0.0
+        let accumulatedPPQN: ppqn = 0.0
+        while (accumulatedSeconds < targetSeconds) {
+            const currentBpm = collection.valueAt(accumulatedPPQN, storageBpm)
+            const nextGrid = quantizeCeil(accumulatedPPQN, TempoChangeGrid)
+            const segmentEnd = nextGrid <= accumulatedPPQN ? nextGrid + TempoChangeGrid : nextGrid
+            const segmentPPQN = segmentEnd - accumulatedPPQN
+            const segmentSeconds = PPQN.pulsesToSeconds(segmentPPQN, currentBpm)
+            if (accumulatedSeconds + segmentSeconds >= targetSeconds) {
+                const remainingSeconds = targetSeconds - accumulatedSeconds
+                accumulatedPPQN += PPQN.secondsToPulses(remainingSeconds, currentBpm)
+                break
+            }
+            accumulatedSeconds += segmentSeconds
+            accumulatedPPQN = segmentEnd
+        }
+        return accumulatedPPQN
     }
 
     intervalToSeconds(fromPPQN: ppqn, toPPQN: ppqn): seconds {
@@ -55,29 +82,10 @@ export class VaryingTempoMap implements TempoMap {
 
     intervalToPPQN(fromSeconds: seconds, toSeconds: seconds): ppqn {
         if (fromSeconds >= toSeconds) {return 0.0}
-        const storageBpm = this.#adapter.box.bpm.getValue()
-        const tempoEvents = this.#adapter.tempoTrackEvents
-        if (tempoEvents.isEmpty()) {return PPQN.secondsToPulses(toSeconds - fromSeconds, storageBpm)}
-        const collection = tempoEvents.unwrap()
-        if (collection.events.isEmpty()) {return PPQN.secondsToPulses(toSeconds - fromSeconds, storageBpm)}
-        const targetSeconds = toSeconds - fromSeconds
-        let accumulatedSeconds: seconds = 0.0
-        let accumulatedPPQN: ppqn = 0.0
-        while (accumulatedSeconds < targetSeconds) {
-            const currentBpm = collection.valueAt(accumulatedPPQN, storageBpm)
-            const nextGrid = quantizeCeil(accumulatedPPQN, TempoChangeGrid)
-            const segmentEnd = nextGrid <= accumulatedPPQN ? nextGrid + TempoChangeGrid : nextGrid
-            const segmentPPQN = segmentEnd - accumulatedPPQN
-            const segmentSeconds = PPQN.pulsesToSeconds(segmentPPQN, currentBpm)
-            if (accumulatedSeconds + segmentSeconds >= targetSeconds) {
-                const remainingSeconds = targetSeconds - accumulatedSeconds
-                accumulatedPPQN += PPQN.secondsToPulses(remainingSeconds, currentBpm)
-                break
-            }
-            accumulatedSeconds += segmentSeconds
-            accumulatedPPQN = segmentEnd
-        }
-        return accumulatedPPQN
+        // Find PPQN positions for both absolute times, return the difference
+        const fromPPQN = this.#absoluteSecondsToPPQN(fromSeconds)
+        const toPPQN = this.#absoluteSecondsToPPQN(toSeconds)
+        return toPPQN - fromPPQN
     }
 
     subscribe(observer: Observer<TempoMap>): Subscription {

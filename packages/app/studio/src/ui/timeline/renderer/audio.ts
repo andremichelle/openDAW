@@ -9,7 +9,7 @@ type Segment = { x0: number, x1: number, u0: number, u1: number, outside: boolea
 export const renderAudio = (context: CanvasRenderingContext2D,
                             range: TimelineRange,
                             file: AudioFileBoxAdapter,
-                            _tempoMap: TempoMap, // TODO Take this for non-stretch regions
+                            tempoMap: TempoMap,
                             playMode: Option<AudioPlayMode>,
                             waveformOffset: number,
                             gain: number,
@@ -17,13 +17,9 @@ export const renderAudio = (context: CanvasRenderingContext2D,
                             contentColor: string,
                             {
                                 rawStart,
-                                rawEnd: _rawEnd,
                                 resultStart,
-                                resultEnd,
-                                resultStartValue: _resultStartValue,
-                                resultEndValue: _resultEndValue
+                                resultEnd
                             }: LoopableRegion.LoopCycle, clip: boolean = true) => {
-    void _rawEnd; void _resultStartValue; void _resultEndValue
     if (file.peaks.isEmpty()) {return}
     const peaks: Peaks = file.peaks.unwrap()
     const durationInSeconds = file.endInSeconds - file.startInSeconds
@@ -139,7 +135,8 @@ export const renderAudio = (context: CanvasRenderingContext2D,
         // Non-stretch mode - audio plays at 100% original speed
         // Use tempoMap to convert timeline PPQN to audio time
         const regionStart = resultStart
-        const gridSize = TempoChangeGrid
+        // Step at pixel intervals (tempoMap integrates internally for accuracy)
+        const step = Math.max(TempoChangeGrid, range.unitsPerPixel)
 
         const addTempoSegment = (ppqnStart: number, ppqnEnd: number, outside: boolean) => {
             if (ppqnStart >= ppqnEnd) {return}
@@ -148,8 +145,8 @@ export const renderAudio = (context: CanvasRenderingContext2D,
             const clippedEnd = Math.min(ppqnEnd, range.unitMax)
             if (clippedStart >= clippedEnd) {return}
             // Convert PPQN to audio seconds using tempoMap
-            const audioStartSec = _tempoMap.intervalToSeconds(regionStart, clippedStart) + waveformOffset
-            const audioEndSec = _tempoMap.intervalToSeconds(regionStart, clippedEnd) + waveformOffset
+            const audioStartSec = tempoMap.intervalToSeconds(regionStart, clippedStart) + waveformOffset
+            const audioEndSec = tempoMap.intervalToSeconds(regionStart, clippedEnd) + waveformOffset
             // Convert to frames
             let u0 = (audioStartSec / durationInSeconds) * numFrames
             let u1 = (audioEndSec / durationInSeconds) * numFrames
@@ -166,17 +163,14 @@ export const renderAudio = (context: CanvasRenderingContext2D,
                 x1 -= ratio * (x1 - x0)
                 u1 = numFrames
             }
-            // Minimum 1 pixel width
             if (u0 < u1 && x1 - x0 >= 1) {
                 segments.push({x0, x1, u0, u1, outside: outside && !clip})
             }
         }
-
-        // Step through at TempoChangeGrid intervals from regionStart until audio ends
         let currentPPQN = regionStart
         while (currentPPQN < range.unitMax) {
-            const nextPPQN = Math.ceil((currentPPQN + 0.001) / gridSize) * gridSize
-            const audioAtNext = _tempoMap.intervalToSeconds(regionStart, nextPPQN) + waveformOffset
+            const nextPPQN = currentPPQN + step
+            const audioAtNext = tempoMap.intervalToSeconds(regionStart, nextPPQN) + waveformOffset
             if (audioAtNext > durationInSeconds && currentPPQN > regionStart) {break}
             const outside = currentPPQN < resultStart || currentPPQN >= resultEnd
             addTempoSegment(currentPPQN, nextPPQN, outside)
