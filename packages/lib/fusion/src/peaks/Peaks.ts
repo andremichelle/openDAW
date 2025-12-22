@@ -47,7 +47,7 @@ export class SamplePeaks implements Peaks {
             const dataOffset = input.readInt()
             const numPeaks = input.readInt()
             const shift = input.readInt()
-            input.readInt() // TODO deprecate (was mask)
+            input.readInt() // deprecated (was mask)
             stages[i] = new Peaks.Stage(shift, numPeaks, dataOffset)
         }
         const numData = input.readInt()
@@ -101,7 +101,7 @@ export class SamplePeaks implements Peaks {
             output.writeInt(dataOffset)
             output.writeInt(numPeaks)
             output.writeInt(shift)
-            output.writeInt((1 << shift) - 1) // TODO deprecate (was mask)
+            output.writeInt(0) // deprecated (was mask)
         }
         output.writeInt(this.data.length)
         for (let i = 0; i < this.data.length; i++) {

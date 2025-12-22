@@ -21,7 +21,6 @@ export namespace NoteEvent {
         return 0
     }
 
-    // TODO Replace with https://www.desmos.com/calculator/ekbzuu5j2x
     export const curveFunc = (ratio: unitValue, curve: number): unitValue =>
         curve < 0.0 ? ratio ** (2.0 ** -curve) : 1.0 - (1.0 - ratio) ** (2.0 ** curve)
 

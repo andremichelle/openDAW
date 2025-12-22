@@ -22,7 +22,7 @@ import {
     panic,
     UUID
 } from "@opendaw/lib-std"
-import {AudioUnitType, IconSymbol} from "@opendaw/studio-enums"
+import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {ProjectMandatoryBoxes} from "./ProjectMandatoryBoxes"
 
 export type ProjectSkeleton = {
@@ -53,7 +53,7 @@ export namespace ProjectSkeleton {
             box.collection.refer(rootBox.audioBusses)
             box.label.setValue("Output")
             box.icon.setValue(IconSymbol.toName(IconSymbol.SpeakerHeadphone))
-            box.color.setValue(/*Colors.blue*/ "hsl(189, 100%, 65%)") // TODO
+            box.color.setValue(Colors.blue.toString())
         })
         const primaryAudioOutputUnit = AudioUnitBox.create(boxGraph, UUID.generate(), box => {
             box.type.setValue(AudioUnitType.Output)
