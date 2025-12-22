@@ -226,16 +226,20 @@ export const renderAudio = (context: CanvasRenderingContext2D,
             ? Math.min(resultEnd, range.unitMax + TempoChangeGrid)
             : Math.min(Math.max(audioEndPPQN, resultEnd), range.unitMax + TempoChangeGrid)
 
+        // Dynamic step size: ensure each step is at least 1 device pixel wide
+        const minStepSize = range.unitsPerPixel * devicePixelRatio
+        const stepSize = Math.max(TempoChangeGrid, Math.ceil(minStepSize / TempoChangeGrid) * TempoChangeGrid)
+
         // Align to grid for consistent rendering across zoom levels
-        let currentPPQN = Math.floor(iterStart / TempoChangeGrid) * TempoChangeGrid
+        let currentPPQN = Math.floor(iterStart / stepSize) * stepSize
 
         // Compute initial audio time once, then increment (avoid O(n) ppqnToSeconds calls per step)
         let currentAudioTime = audioTimeAt(currentPPQN)
 
         while (currentPPQN < iterEnd) {
-            const nextPPQN = currentPPQN + TempoChangeGrid
+            const nextPPQN = currentPPQN + stepSize
             // Incremental: get tempo at current position and compute step duration
-            const stepSeconds = PPQN.pulsesToSeconds(TempoChangeGrid, tempoMap.getTempoAt(currentPPQN))
+            const stepSeconds = PPQN.pulsesToSeconds(stepSize, tempoMap.getTempoAt(currentPPQN))
             const nextAudioTime = currentAudioTime + stepSeconds
 
             // Skip if entirely outside audio file range
