@@ -16,8 +16,7 @@ import {
     Subscription,
     Terminable,
     Terminator,
-    UUID,
-    ValueOwner
+    UUID
 } from "@opendaw/lib-std"
 import {AudioClipBox} from "@opendaw/studio-boxes"
 import {Address, Int32Field, PointerField, Propagation, Update} from "@opendaw/lib-box"
@@ -33,8 +32,6 @@ import {AudioTimeStretchBoxAdapter} from "../../audio/AudioTimeStretchBoxAdapter
 import {WarpMarkerBoxAdapter} from "../../audio/WarpMarkerBoxAdapter"
 
 export class AudioClipBoxAdapter implements AudioContentBoxAdapter, ClipBoxAdapter<never> {
-    static readonly STATIC_POSITION: ValueOwner<number> = {getValue: (): number => 0}
-
     readonly type = "audio-clip"
 
     readonly #terminator: Terminator = new Terminator()
@@ -60,7 +57,7 @@ export class AudioClipBoxAdapter implements AudioContentBoxAdapter, ClipBoxAdapt
         this.#isConstructing = true
         this.#playMode = new MutableObservableOption()
         this.#selectedValue = this.#terminator.own(new DefaultObservableValue(false))
-        this.#durationConverter = TimeBaseConverter.aware(context.tempoMap, box.timeBase, AudioClipBoxAdapter.STATIC_POSITION, box.duration)
+        this.#durationConverter = TimeBaseConverter.aware(context.tempoMap, box.timeBase, box.duration)
         this.#changeNotifier = this.#terminator.own(new Notifier<void>())
 
         this.#terminator.ownAll(
@@ -125,8 +122,8 @@ export class AudioClipBoxAdapter implements AudioContentBoxAdapter, ClipBoxAdapt
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get indexField(): Int32Field {return this.#box.index}
-    get duration(): ppqn {return this.#durationConverter.toPPQN()}
-    set duration(value: ppqn) {this.#durationConverter.fromPPQN(value)}
+    get duration(): ppqn {return this.#durationConverter.toPPQN(0)}
+    set duration(value: ppqn) {this.#durationConverter.fromPPQN(value, 0)}
     get mute(): boolean {return this.#box.mute.getValue()}
     get hue(): int {return this.#box.hue.getValue()}
     get gain(): MutableObservableValue<number> {return this.#box.gain}

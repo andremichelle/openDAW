@@ -68,10 +68,10 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
         this.#box = box
 
         this.#terminator = new Terminator()
-        const {timeBase, position, duration, loopOffset, loopDuration} = box
-        this.#durationConverter = TimeBaseConverter.aware(context.tempoMap, timeBase, position, duration)
-        this.#loopOffsetConverter = TimeBaseConverter.aware(context.tempoMap, timeBase, position, loopOffset)
-        this.#loopDurationConverter = TimeBaseConverter.aware(context.tempoMap, timeBase, position, loopDuration)
+        const {timeBase, duration, loopOffset, loopDuration} = box
+        this.#durationConverter = TimeBaseConverter.aware(context.tempoMap, timeBase, duration)
+        this.#loopOffsetConverter = TimeBaseConverter.aware(context.tempoMap, timeBase, loopOffset)
+        this.#loopDurationConverter = TimeBaseConverter.aware(context.tempoMap, timeBase, loopDuration)
         this.#playMode = new MutableObservableOption()
         this.#changeNotifier = new Notifier<void>()
 
@@ -155,10 +155,10 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get position(): ppqn {return this.#box.position.getValue()}
-    get duration(): ppqn {return this.#durationConverter.toPPQN()}
+    get duration(): ppqn {return this.#durationConverter.toPPQN(this.position)}
     get complete(): ppqn {return this.position + this.duration}
-    get loopOffset(): ppqn {return this.#loopOffsetConverter.toPPQN()}
-    get loopDuration(): ppqn {return this.#loopDurationConverter.toPPQN()}
+    get loopOffset(): ppqn {return this.#loopOffsetConverter.toPPQN(this.position)}
+    get loopDuration(): ppqn {return this.#loopDurationConverter.toPPQN(this.position)}
     get offset(): ppqn {return this.position - this.loopOffset}
     get mute(): boolean {return this.#box.mute.getValue()}
     get hue(): int {return this.#box.hue.getValue()}
@@ -197,9 +197,9 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
             .map(vertex => this.#context.boxAdapters.adapterFor(vertex.box, ValueEventCollectionBoxAdapter))
     }
     set position(value: ppqn) {this.#box.position.setValue(value)}
-    set duration(value: ppqn) {this.#durationConverter.fromPPQN(value)}
-    set loopOffset(value: ppqn) {this.#loopOffsetConverter.fromPPQN(value)}
-    set loopDuration(value: ppqn) {this.#loopDurationConverter.fromPPQN(value)}
+    set duration(value: ppqn) {this.#durationConverter.fromPPQN(value, this.position)}
+    set loopOffset(value: ppqn) {this.#loopOffsetConverter.fromPPQN(value, this.position)}
+    set loopDuration(value: ppqn) {this.#loopDurationConverter.fromPPQN(value, this.position)}
 
     copyTo(params?: CopyToParams): AudioRegionBoxAdapter {
         const eventCollection = this.optCollection.unwrap("Cannot make copy without event-collection")

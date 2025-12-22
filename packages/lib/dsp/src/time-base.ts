@@ -10,103 +10,64 @@ export enum TimeBase {
 /**
  * Converts between musical time (PPQN) and absolute time (seconds/samples) for a specific value.
  * The converter knows the value's native time-base and uses a TempoMap for conversions.
+ * Position is passed as a parameter to allow preview positions during drag operations.
  */
 export interface TimeBaseConverter {
-    toPPQN(): ppqn
-    fromPPQN(ppqn: ppqn): void
-    toSeconds(): seconds
-    toSamples(sampleRate: number): samples
+    toPPQN(position: ppqn): ppqn
+    fromPPQN(value: ppqn, position: ppqn): void
+    toSeconds(position: ppqn): seconds
+    toSamples(position: ppqn, sampleRate: number): samples
     rawValue(): number
     getTimeBase(): TimeBase
 }
 
 export namespace TimeBaseConverter {
-    export function musical(tempoMap: TempoMap,
-                            position: ValueOwner<ppqn>,
-                            property: MutableValueOwner<number>): TimeBaseConverter {
-        return new TimeBaseMusicalConverter(tempoMap, position, property)
-    }
-
     export function aware(tempoMap: TempoMap,
                           timeBase: ValueOwner<string>,
-                          position: ValueOwner<ppqn>,
                           property: MutableValueOwner<number>): TimeBaseConverter {
-        return new TimeBaseAwareConverter(tempoMap, timeBase, position, property)
+        return new TimeBaseAwareConverter(tempoMap, timeBase, property)
     }
 }
 
 class TimeBaseAwareConverter implements TimeBaseConverter {
     readonly #tempoMap: TempoMap
     readonly #timeBase: ValueOwner<string>
-    readonly #position: ValueOwner<ppqn>
     readonly #property: MutableValueOwner<number>
 
     constructor(tempoMap: TempoMap,
                 timeBase: ValueOwner<string>,
-                position: ValueOwner<ppqn>,
                 property: MutableValueOwner<number>) {
         this.#property = property
         this.#timeBase = timeBase
-        this.#position = position
         this.#tempoMap = tempoMap
     }
 
-    toPPQN(): ppqn {
+    toPPQN(position: ppqn): ppqn {
         const value = this.#property.getValue()
         if (this.getTimeBase() === TimeBase.Musical) {return value}
-        const position = this.#position.getValue()
         const startSeconds = this.#tempoMap.ppqnToSeconds(position)
         const endSeconds = startSeconds + value
         return this.#tempoMap.intervalToPPQN(startSeconds, endSeconds)
     }
 
-    fromPPQN(ppqn: ppqn): void {
+    fromPPQN(value: ppqn, position: ppqn): void {
         if (this.getTimeBase() === TimeBase.Musical) {
-            this.#property.setValue(ppqn)
+            this.#property.setValue(value)
         } else {
-            const position = this.#position.getValue()
-            const seconds = this.#tempoMap.intervalToSeconds(position, position + ppqn)
+            const seconds = this.#tempoMap.intervalToSeconds(position, position + value)
             this.#property.setValue(seconds)
         }
     }
 
-    toSeconds(): seconds {
+    toSeconds(position: ppqn): seconds {
         const value = this.#property.getValue()
         if (this.getTimeBase() === TimeBase.Seconds) {return value}
-        const position = this.#position.getValue()
         return this.#tempoMap.intervalToSeconds(position, position + value)
     }
 
-    toSamples(sampleRate: number): samples {return this.toSeconds() * sampleRate}
+    toSamples(position: ppqn, sampleRate: number): samples {return this.toSeconds(position) * sampleRate}
 
     rawValue(): number {return this.#property.getValue()}
     getTimeBase(): TimeBase {return asEnumValue(this.#timeBase.getValue(), TimeBase)}
 }
 
-class TimeBaseMusicalConverter implements TimeBaseConverter {
-    readonly #tempoMap: TempoMap
-    readonly #position: ValueOwner<ppqn>
-    readonly #property: MutableValueOwner<number>
-
-    constructor(tempoMap: TempoMap,
-                position: ValueOwner<ppqn>,
-                property: MutableValueOwner<number>) {
-        this.#property = property
-        this.#position = position
-        this.#tempoMap = tempoMap
-    }
-
-    toPPQN(): ppqn {return this.#property.getValue()}
-    fromPPQN(ppqn: ppqn): void {this.#property.setValue(ppqn)}
-
-    toSeconds(): seconds {
-        const value = this.#property.getValue()
-        const position = this.#position.getValue()
-        return this.#tempoMap.intervalToSeconds(position, position + value)
-    }
-
-    toSamples(sampleRate: number): samples {return this.toSeconds() * sampleRate}
-
-    rawValue(): number {return this.#property.getValue()}
-    getTimeBase(): TimeBase {return TimeBase.Musical}
-}
