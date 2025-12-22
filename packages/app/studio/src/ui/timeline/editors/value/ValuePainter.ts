@@ -89,8 +89,7 @@ export const createValuePainter =
                     context.stroke()
                     context.setLineDash(Arrays.empty())
                 }
-                const valueEvents = Array.from(strategy.iterator(start - offset, end - offset))
-                return () => Arrays.iterate(valueEvents)
+                return () => strategy.iterator(start - offset, end - offset)
             }
         })
         renderValueStream(
