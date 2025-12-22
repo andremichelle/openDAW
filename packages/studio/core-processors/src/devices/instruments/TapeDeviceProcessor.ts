@@ -179,7 +179,9 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         }
         const asPlayModePitch = adapter.asPlayModePitchStretch
         if (adapter.isPlayModeNoStretch) {
-            const offset = (cycle.resultStartValue * data.numberOfFrames + waveformOffset * data.sampleRate) | 0
+            // For no-stretch, compute elapsed seconds using tempo map (handles tempo automation)
+            const elapsedSeconds = this.context.tempoMap.intervalToSeconds(cycle.rawStart, cycle.resultStart)
+            const offset = ((elapsedSeconds + waveformOffset) * data.sampleRate) | 0
             this.#updateOrCreateDirectVoice(lane, data, offset, 0)
         } else if (asPlayModePitch.isEmpty()) {
             const audioDurationSamples = data.numberOfFrames
@@ -215,9 +217,6 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
     }
 
     #updateOrCreateDirectVoice(lane: Lane, data: AudioData, offset: int, blockOffset: int): void {
-        const fadeLengthSamples = Math.round(VOICE_FADE_DURATION * data.sampleRate)
-        // DirectVoice plays at 1:1 sample rate - no drift detection needed.
-        // Once created, it plays until done or manually faded out.
         let hasActiveDirectVoice = false
         for (const voice of lane.voices) {
             if (voice instanceof DirectVoice && !voice.isFadingOut()) {
@@ -228,7 +227,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             }
         }
         if (!hasActiveDirectVoice) {
-            lane.voices.push(new DirectVoice(this.#audioOutput, data, fadeLengthSamples, offset, blockOffset))
+            lane.voices.push(new DirectVoice(this.#audioOutput, data, offset, blockOffset))
         }
     }
 

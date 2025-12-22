@@ -1,6 +1,7 @@
 import {int} from "@opendaw/lib-std"
 import {AudioBuffer, AudioData} from "@opendaw/lib-dsp"
 import {VoiceState} from "./VoiceState"
+import {VOICE_FADE_DURATION} from "./constants"
 
 /**
  * DirectVoice plays audio at the original speed (100%) without any time-stretching or pitch-shifting.
@@ -17,11 +18,11 @@ export class DirectVoice {
     #blockOffset: int
     #fadeOutBlockOffset: int = 0
 
-    constructor(output: AudioBuffer, data: AudioData, fadeLength: number,
-                offset: int = 0, blockOffset: int = 0) {
+    constructor(output: AudioBuffer, data: AudioData, offset: int = 0,
+                blockOffset: int = 0) {
         this.#output = output
         this.#data = data
-        this.#fadeLength = fadeLength
+        this.#fadeLength = Math.round(VOICE_FADE_DURATION * sampleRate)
         this.#readPosition = offset
         this.#blockOffset = blockOffset
         if (this.#readPosition >= data.numberOfFrames) {
