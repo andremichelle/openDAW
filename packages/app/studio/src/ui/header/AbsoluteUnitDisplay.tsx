@@ -21,7 +21,7 @@ export const AbsoluteUnitDisplay = ({lifecycle, service}: Construct) => {
     const minutesUnitString = new DefaultObservableValue("01")
     const secondsUnitString = new DefaultObservableValue("01")
     const millisecondsUnitString = new DefaultObservableValue("1")
-    const unitDisplays = [
+    const unitDisplays: ReadonlyArray<HTMLElement> = [
         <UnitDisplay lifecycle={lifecycle} name="hour" value={hoursUnitString} numChars={2}/>,
         <UnitDisplay lifecycle={lifecycle} name="min" value={minutesUnitString} numChars={2}/>,
         <UnitDisplay lifecycle={lifecycle} name="sec" value={secondsUnitString} numChars={2}/>,
@@ -66,6 +66,11 @@ export const AbsoluteUnitDisplay = ({lifecycle, service}: Construct) => {
                     }).setTriggerProcedure(() => timeUnitIndex.setValue(index)))
                 ))))
             )
-        }}>{unitDisplays}</div>
+        }}>
+            {unitDisplays[0]}
+            {unitDisplays[1]}
+            {unitDisplays[2]}
+            {unitDisplays[3]}
+        </div>
     )
 }
