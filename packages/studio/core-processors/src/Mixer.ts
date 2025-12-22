@@ -56,10 +56,11 @@ export class Mixer {
     updateSolo(): void {
         if (!this.#needsUpdate) {return}
         this.#virtualSolo.clear()
-        const touched = new Set<ChannelStripProcessor>()
-        const visitChannelStrip = (channelStrip: ChannelStripProcessor) => {
-            if (touched.has(channelStrip)) {return}
-            touched.add(channelStrip)
+        const touchedInputs = new Set<ChannelStripProcessor>()
+        const touchedOutputs = new Set<ChannelStripProcessor>()
+        const visitInputs = (channelStrip: ChannelStripProcessor) => {
+            if (touchedInputs.has(channelStrip)) {return}
+            touchedInputs.add(channelStrip)
             channelStrip.adapter.input.getValue().ifSome(input => {
                 if (input.type === "bus") {
                     input.box.input.pointerHub
@@ -72,12 +73,28 @@ export class Mixer {
                         }), "Could not resolve channel-strip"))
                         .forEach(channelStrip => {
                             if (!channelStrip.isSolo) {this.#virtualSolo.add(channelStrip)}
-                            visitChannelStrip(channelStrip)
+                            visitInputs(channelStrip)
                         })
                 }
             })
         }
-        this.#channelStrips.forEach((channelStrip) => {if (channelStrip.isSolo) {visitChannelStrip(channelStrip)}})
+        const visitOutputs = (channelStrip: ChannelStripProcessor) => {
+            if (touchedOutputs.has(channelStrip)) {return}
+            touchedOutputs.add(channelStrip)
+            channelStrip.adapter.output.adapter.ifSome(bus => {
+                const outputChannelStrip = this.#channelStrips.get(bus.audioUnitBoxAdapter().uuid)
+                if (!outputChannelStrip.isSolo) {
+                    this.#virtualSolo.add(outputChannelStrip)
+                    visitOutputs(outputChannelStrip)
+                }
+            })
+        }
+        this.#channelStrips.forEach((channelStrip) => {
+            if (channelStrip.isSolo) {
+                visitInputs(channelStrip)
+                visitOutputs(channelStrip)
+            }
+        })
         this.#needsUpdate = false
     }
 }
