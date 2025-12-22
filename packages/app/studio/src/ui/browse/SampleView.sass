@@ -11,8 +11,21 @@ component
   > div.edit
     display: flex
     align-items: center
+    column-gap: 3px
     grid-row: 1
     grid-column: -1
+
+    .edit-icon
+      cursor: pointer
+
+      &:hover
+        color: var(--color-bright)
+
+    .delete-icon
+      cursor: pointer
+
+      &:hover
+        color: var(--color-red)
 
   > div.meta
     display: grid
@@ -46,9 +59,3 @@ component
 
       &.right
         text-align: right
-
-  .delete-icon
-    cursor: pointer
-
-    &:hover
-      color: var(--color-red)

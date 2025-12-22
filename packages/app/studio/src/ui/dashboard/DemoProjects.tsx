@@ -25,7 +25,7 @@ const NewProjectJson: DemoProjectJson = {
     id: "",
     hasCover: false,
     metadata: {
-        name: "Empty",
+        name: "New Project",
         artist: "openDAW",
         description: "",
         tags: ["clean slate"],

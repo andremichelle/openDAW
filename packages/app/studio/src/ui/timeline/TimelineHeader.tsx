@@ -24,20 +24,23 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
         <div className={className}>
             <SnapSelector lifecycle={lifecycle} snapping={snapping}/>
             <FlexSpacer/>
-            <hr/>
             <Checkbox lifecycle={lifecycle}
                       model={followPlaybackCursor}
-                      appearance={{activeColor: Colors.orange, tooltip: "Follow Playback Cursor"}}>
+                      appearance={{
+                          color: Colors.shadow,
+                          activeColor: Colors.orange,
+                          tooltip: "Follow Playback Cursor"
+                      }}>
                 <Icon symbol={IconSymbol.Run}/>
             </Checkbox>
-            <hr/>
             <MenuButton
-                appearance={{color: Colors.green, tinyTriangle: true, tooltip: "Toggle Markers & Tempo visiblilty"}}
+                style={{paddingLeft: "3px"}}
+                appearance={{color: Colors.orange, tinyTriangle: true, tooltip: "Toggle Markers & Tempo visiblilty"}}
                 root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                     MenuItem.header({
                         label: "Primarily Tracks",
                         icon: IconSymbol.Primary,
-                        color: Colors.green
+                        color: Colors.orange
                     }),
                     MenuItem.default({label: "Markers", checked: markers.getValue()})
                         .setTriggerProcedure(() => markers.setValue(!markers.getValue())),

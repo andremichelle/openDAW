@@ -4,9 +4,8 @@ import {Exec, Lifecycle, Objects, UUID} from "@opendaw/lib-std"
 import {SamplePlayback} from "@/service/SamplePlayback"
 import {Icon} from "../components/Icon"
 import {Sample} from "@opendaw/studio-adapters"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol} from "@opendaw/studio-enums"
 import {AssetLocation} from "@/ui/browse/AssetLocation"
-import {Button} from "../components/Button"
 import {SampleDialogs} from "@/ui/browse/SampleDialogs"
 import {ContextMenu} from "@/ui/ContextMenu"
 import {MenuItem} from "@/ui/model/menu-item"
@@ -62,19 +61,18 @@ export const SampleView = ({lifecycle, service, sampleSelection, sample, playbac
             </div>
             {location === AssetLocation.Local && (
                 <div className="edit">
-                    <Button lifecycle={lifecycle} appearance={{activeColor: Colors.white}}
-                            onClick={async (event) => {
-                                event.stopPropagation()
-                                const {status, value: meta} =
-                                    await Promises.tryCatch(SampleDialogs.showEditSampleDialog(sample))
-                                if (status === "resolved") {
-                                    await SampleStorage.get()
-                                        .updateSampleMeta(UUID.parse(meta.uuid), Objects.exclude(meta, "uuid"))
-                                    refresh()
-                                }
-                            }}>
-                        <Icon symbol={IconSymbol.Pencil}/>
-                    </Button>
+                    <Icon symbol={IconSymbol.Pencil}
+                          className="edit-icon"
+                          onInit={element => element.onclick = async (event) => {
+                              event.stopPropagation()
+                              const {status, value: meta} =
+                                  await Promises.tryCatch(SampleDialogs.showEditSampleDialog(sample))
+                              if (status === "resolved") {
+                                  await SampleStorage.get()
+                                      .updateSampleMeta(UUID.parse(meta.uuid), Objects.exclude(meta, "uuid"))
+                                  refresh()
+                              }
+                          }}/>
                     <Icon symbol={IconSymbol.Close}
                           className="delete-icon"
                           onInit={element => element.onclick = async (event) => {
