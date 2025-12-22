@@ -30,86 +30,51 @@ export class VaryingTempoMap implements TempoMap {
     }
 
     intervalToSeconds(fromPPQN: ppqn, toPPQN: ppqn): seconds {
-        if (fromPPQN >= toPPQN) {return 0}
-
+        if (fromPPQN >= toPPQN) {return 0.0}
         const storageBpm = this.#adapter.box.bpm.getValue()
         const tempoEvents = this.#adapter.tempoTrackEvents
-
-        // No tempo automation - use constant tempo
         if (tempoEvents.isEmpty()) {
             return PPQN.pulsesToSeconds(toPPQN - fromPPQN, storageBpm)
         }
-
         const collection = tempoEvents.unwrap()
         if (collection.events.isEmpty()) {
             return PPQN.pulsesToSeconds(toPPQN - fromPPQN, storageBpm)
         }
-
-        // Step through at TempoChangeGrid intervals (matches BlockRenderer)
-        let totalSeconds: seconds = 0
+        let totalSeconds: seconds = 0.0
         let currentPPQN = fromPPQN
-
         while (currentPPQN < toPPQN) {
-            // Get tempo at current position
             const currentTempo = collection.valueAt(currentPPQN, storageBpm)
-
-            // Find next grid boundary
-            const nextGrid = Math.ceil(currentPPQN / TempoChangeGrid) * TempoChangeGrid
+            const nextGrid = quantizeCeil(currentPPQN, TempoChangeGrid)
             const segmentEnd = nextGrid <= currentPPQN ? nextGrid + TempoChangeGrid : nextGrid
-
-            // Clamp to target
             const actualEnd = Math.min(segmentEnd, toPPQN)
             const segmentPPQN = actualEnd - currentPPQN
-
-            // Accumulate seconds for this segment at constant tempo
             totalSeconds += PPQN.pulsesToSeconds(segmentPPQN, currentTempo)
-
             currentPPQN = actualEnd
         }
-
         return totalSeconds
     }
 
     intervalToPPQN(fromSeconds: seconds, toSeconds: seconds): ppqn {
-        if (fromSeconds >= toSeconds) {return 0}
-
+        if (fromSeconds >= toSeconds) {return 0.0}
         const storageBpm = this.#adapter.box.bpm.getValue()
         const tempoEvents = this.#adapter.tempoTrackEvents
-
-        // No tempo automation - use constant tempo
-        if (tempoEvents.isEmpty()) {
-            return PPQN.secondsToPulses(toSeconds - fromSeconds, storageBpm)
-        }
-
+        if (tempoEvents.isEmpty()) {return PPQN.secondsToPulses(toSeconds - fromSeconds, storageBpm)}
         const collection = tempoEvents.unwrap()
-        if (collection.events.isEmpty()) {
-            return PPQN.secondsToPulses(toSeconds - fromSeconds, storageBpm)
-        }
-
-        // Step through grid by grid, accumulating until we reach target seconds
+        if (collection.events.isEmpty()) {return PPQN.secondsToPulses(toSeconds - fromSeconds, storageBpm)}
         const targetSeconds = toSeconds - fromSeconds
-        let accumulatedSeconds: seconds = 0
-        let accumulatedPPQN: ppqn = 0
-
+        let accumulatedSeconds: seconds = 0.0
+        let accumulatedPPQN: ppqn = 0.0
         while (accumulatedSeconds < targetSeconds) {
-            // Get tempo at current position
             const currentTempo = collection.valueAt(accumulatedPPQN, storageBpm)
-
-            // Calculate next grid boundary
             const nextGrid = quantizeCeil(accumulatedPPQN, TempoChangeGrid)
             const segmentEnd = nextGrid <= accumulatedPPQN ? nextGrid + TempoChangeGrid : nextGrid
             const segmentPPQN = segmentEnd - accumulatedPPQN
-
-            // How many seconds does this segment take?
             const segmentSeconds = PPQN.pulsesToSeconds(segmentPPQN, currentTempo)
-
             if (accumulatedSeconds + segmentSeconds >= targetSeconds) {
-                // Target is within this segment - calculate remaining PPQN
                 const remainingSeconds = targetSeconds - accumulatedSeconds
                 accumulatedPPQN += PPQN.secondsToPulses(remainingSeconds, currentTempo)
                 break
             }
-
             accumulatedSeconds += segmentSeconds
             accumulatedPPQN = segmentEnd
         }
