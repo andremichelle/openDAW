@@ -21,7 +21,7 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
     readPosition(region: AnyRegionBoxAdapter): ppqn {return region.position}
     readDuration(region: AnyLoopableRegionBoxAdapter): ppqn {return Math.max(region.duration, this.readLoopDuration(region) - region.loopOffset)}
     readComplete(region: AnyLoopableRegionBoxAdapter): ppqn {return region.position + this.readDuration(region)}
-    readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.loopOffset}
+    readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.resolveLoopOffset(this.readPosition(region))}
     readLoopDuration(region: AnyLoopableRegionBoxAdapter): ppqn {
         if (!region.canResize) {return region.loopDuration}
         return Math.max(Math.min(this.#tool.snapping.value, region.loopDuration),

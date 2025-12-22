@@ -162,6 +162,8 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
 
     resolveDuration(position: ppqn): ppqn {return this.#durationConverter.toPPQN(position)}
     resolveComplete(position: ppqn): ppqn {return position + this.resolveDuration(position)}
+    resolveLoopOffset(position: ppqn): ppqn {return this.#loopOffsetConverter.toPPQN(position)}
+    resolveLoopDuration(position: ppqn): ppqn {return this.#loopDurationConverter.toPPQN(position)}
     get offset(): ppqn {return this.position - this.loopOffset}
     get mute(): boolean {return this.#box.mute.getValue()}
     get hue(): int {return this.#box.hue.getValue()}
