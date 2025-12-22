@@ -16,7 +16,7 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
 
     translateTrackIndex(index: int): int {return index - this.#tool.deltaIndex}
     readPosition(region: AnyRegionBoxAdapter): ppqn {return region.position + this.#tool.deltaPosition}
-    readComplete(region: AnyRegionBoxAdapter): ppqn {return region.complete + this.#tool.deltaPosition}
+    readComplete(region: AnyRegionBoxAdapter): ppqn {return region.resolveComplete(this.readPosition(region))}
     readLoopDuration(region: AnyLoopableRegionBoxAdapter): ppqn {return region.loopDuration}
     readMirror(region: AnyRegionBoxAdapter): boolean {return region.canMirror && region.isMirrowed !== this.#tool.mirroredCopy}
     readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.loopOffset}
@@ -32,7 +32,7 @@ class UnselectedStrategy implements RegionModifyStrategy {
 
     translateTrackIndex(index: int): int {return index}
     readPosition(region: AnyRegionBoxAdapter): ppqn {return region.position}
-    readComplete(region: AnyRegionBoxAdapter): ppqn {return region.complete}
+    readComplete(region: AnyRegionBoxAdapter): ppqn {return region.resolveComplete(this.readPosition(region))}
     readLoopDuration(region: AnyLoopableRegionBoxAdapter): ppqn {return region.loopDuration}
     readMirror(region: AnyRegionBoxAdapter): boolean {return region.canMirror && (region.isMirrowed || (region.isSelected && this.#tool.mirroredCopy))}
     readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.loopOffset}

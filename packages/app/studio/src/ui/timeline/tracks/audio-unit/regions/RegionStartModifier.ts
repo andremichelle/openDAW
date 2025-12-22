@@ -18,7 +18,7 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
     constructor(tool: RegionStartModifier) {this.#tool = tool}
 
     readPosition(region: AnyRegionBoxAdapter): ppqn {return region.position + this.computeClampedDelta(region)}
-    readComplete(region: AnyRegionBoxAdapter): ppqn {return region.complete}
+    readComplete(region: AnyRegionBoxAdapter): ppqn {return region.resolveComplete(this.readPosition(region))}
     readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {
         return mod(region.loopOffset + this.computeClampedDelta(region), region.loopDuration)
     }

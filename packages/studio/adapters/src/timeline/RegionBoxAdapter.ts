@@ -31,6 +31,11 @@ export interface RegionBoxAdapter<CONTENT> extends BoxAdapter, Region, Selectabl
     get hasCollection(): boolean
     get optCollection(): Option<CONTENT>
 
+    /** Resolve duration at a given position (for preview during drag operations) */
+    resolveDuration(position: ppqn): ppqn
+    /** Resolve complete (position + duration) at a given position (for preview during drag operations) */
+    resolveComplete(position: ppqn): ppqn
+
     subscribeChange(observer: Observer<void>): Subscription
     copyTo(target?: { track?: Field<Pointers.RegionCollection>, position?: ppqn }): AnyRegionBoxAdapter
     consolidate(): void
