@@ -19,11 +19,12 @@ import {AutomatableParameter} from "../../AutomatableParameter"
 import {DeviceProcessor} from "../../DeviceProcessor"
 import {NoteEventTarget} from "../../NoteEventSource"
 import {VOICE_FADE_DURATION} from "./Tape/constants"
+import {DirectVoice} from "./Tape/DirectVoice"
 import {PitchVoice} from "./Tape/PitchVoice"
 import {Voice} from "./Tape/Voice"
 import {TimeStretchSequencer} from "./Tape/TimeStretchSequencer"
 
-type AnyVoice = Voice | PitchVoice
+type AnyVoice = Voice | PitchVoice | DirectVoice
 
 type Lane = {
     adapter: TrackBoxAdapter
@@ -177,7 +178,10 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             lane.sequencer.reset()
         }
         const asPlayModePitch = adapter.asPlayModePitchStretch
-        if (asPlayModePitch.isEmpty() || adapter.observableOptPlayMode.isEmpty()) {
+        if (adapter.isPlayModeNoStretch) {
+            const offset = (cycle.resultStartValue * data.numberOfFrames + waveformOffset * data.sampleRate) | 0
+            this.#updateOrCreateDirectVoice(lane, data, offset, 0)
+        } else if (asPlayModePitch.isEmpty()) {
             const audioDurationSamples = data.numberOfFrames
             const audioDurationNormalized = cycle.resultEndValue - cycle.resultStartValue
             const audioSamplesInCycle = audioDurationNormalized * audioDurationSamples
@@ -210,6 +214,24 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         lane.voices = lane.voices.filter(voice => !voice.done())
     }
 
+    #updateOrCreateDirectVoice(lane: Lane, data: AudioData, offset: int, blockOffset: int): void {
+        const fadeLengthSamples = Math.round(VOICE_FADE_DURATION * data.sampleRate)
+        // DirectVoice plays at 1:1 sample rate - no drift detection needed.
+        // Once created, it plays until done or manually faded out.
+        let hasActiveDirectVoice = false
+        for (const voice of lane.voices) {
+            if (voice instanceof DirectVoice && !voice.isFadingOut()) {
+                hasActiveDirectVoice = true
+            } else {
+                // Fade out non-DirectVoice voices
+                voice.startFadeOut(blockOffset)
+            }
+        }
+        if (!hasActiveDirectVoice) {
+            lane.voices.push(new DirectVoice(this.#audioOutput, data, fadeLengthSamples, offset, blockOffset))
+        }
+    }
+
     #updateOrCreatePitchVoice(lane: Lane, data: AudioData, playbackRate: number, offset: number, blockOffset: int): void {
         const fadeLengthSamples = Math.round(VOICE_FADE_DURATION * data.sampleRate)
         if (lane.voices.length === 0) {
@@ -229,7 +251,6 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                         hasActiveVoice = true
                     }
                 } else {
-                    // Fade out non-PitchVoice voices (OnceVoice, RepeatVoice, PingpongVoice)
                     voice.startFadeOut(blockOffset)
                 }
             }
@@ -247,7 +268,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                             transients: EventCollection<TransientMarkerBoxAdapter>,
                             waveformOffset: number): void {
         for (const voice of lane.voices) {
-            if (voice instanceof PitchVoice) {
+            if (voice instanceof PitchVoice || voice instanceof DirectVoice) {
                 voice.startFadeOut(0)
             }
         }
@@ -260,7 +281,8 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             block,
             cycle
         )
-        lane.voices = lane.voices.filter(voice => voice instanceof PitchVoice && !voice.done())
+        lane.voices = lane.voices.filter(voice =>
+            (voice instanceof PitchVoice || voice instanceof DirectVoice) && !voice.done())
     }
 
     #getPlaybackRateFromWarp(ppqn: number,
