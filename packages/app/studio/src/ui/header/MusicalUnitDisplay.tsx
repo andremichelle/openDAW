@@ -1,20 +1,21 @@
 import css from "./MusicalUnitDisplay.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {DefaultObservableValue, Lifecycle, ObservableValue} from "@opendaw/lib-std"
+import {DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {PPQN, ppqn} from "@opendaw/lib-dsp"
+import {PPQN} from "@opendaw/lib-dsp"
 import {UnitDisplay} from "@/ui/header/UnitDisplay"
 import {ContextMenu} from "@/ui/ContextMenu"
 import {MenuItem} from "@/ui/model/menu-item"
+import {StudioService} from "@/service/StudioService"
 
 const className = Html.adoptStyleSheet(css, "MusicalUnitDisplay")
 
 type Construct = {
     lifecycle: Lifecycle
-    positionInPPQN: ObservableValue<ppqn>
+    service: StudioService
 }
 
-export const MusicalUnitDisplay = ({lifecycle, positionInPPQN}: Construct) => {
+export const MusicalUnitDisplay = ({lifecycle, service}: Construct) => {
     // Bar, Bar/Beats, Bar/Beats/SemiQuaver, Bar/Beats/SemiQuaver/Ticks
     const timeUnits = ["Bar", "Beats", "SemiQuaver", "Ticks"]
     const timeUnitIndex = new DefaultObservableValue(1)
@@ -31,7 +32,7 @@ export const MusicalUnitDisplay = ({lifecycle, positionInPPQN}: Construct) => {
     return (
         <div className={className} onInit={element => {
             lifecycle.ownAll(
-                positionInPPQN.catchupAndSubscribe(owner => {
+                service.engine.position.catchupAndSubscribe(owner => {
                     const position = owner.getValue()
                     const {bars, beats, semiquavers, ticks} = PPQN.toParts(Math.abs(position))
                     barUnitString.setValue((bars + 1).toString().padStart(3, "0"))

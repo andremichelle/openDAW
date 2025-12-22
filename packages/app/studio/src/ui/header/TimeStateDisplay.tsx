@@ -11,6 +11,7 @@ import {Parsing, Validator} from "@opendaw/studio-adapters"
 import {MusicalUnitDisplay} from "@/ui/header/MusicalUnitDisplay"
 import {MenuItem} from "@/ui/model/menu-item"
 import {ContextMenu} from "@/ui/ContextMenu"
+import {AbsoluteUnitDisplay} from "@/ui/header/AbsoluteUnitDisplay"
 
 const className = Html.adoptStyleSheet(css, "TimeStateDisplay")
 
@@ -70,7 +71,8 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
     })))
     const element: HTMLElement = (
         <div className={className}>
-            <MusicalUnitDisplay lifecycle={lifecycle} positionInPPQN={service.engine.position}/>
+            <MusicalUnitDisplay lifecycle={lifecycle} service={service}/>
+            <AbsoluteUnitDisplay lifecycle={lifecycle} service={service}/>
             <DblClckTextInput numeric resolversFactory={() => {
                 const resolvers = Promise.withResolvers<string>()
                 resolvers.promise.then((value: string) => {
