@@ -68,7 +68,7 @@ export const UsersPage: PageFactory<StudioService> = ({lifecycle}: PageContext<S
                                                     <rect x={x} y={y} width={barWidth - barPadding} height={barHeight}
                                                           fill={Colors.blue} rx="4" ry="4"/>
                                                     <text x={`${centerX}`} y={`${y - 6}`} fill={Colors.cream}
-                                                          font-size="11" font-weight="bold" font-family="sans-serif"
+                                                          font-size="11" font-family="sans-serif"
                                                           text-anchor="middle">{value}</text>
                                                     <text x={`${centerX}`} y={`${padding.top + chartHeight + 8}`}
                                                           fill={Colors.shadow} font-size="10" font-family="sans-serif"

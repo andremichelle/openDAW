@@ -1,7 +1,7 @@
 export type FontFaceProperties = {
     "font-family": string
     "font-style": "normal" | "italic" | "oblique"
-    "font-weight": 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 1000 | "normal" | "bold" | "bolder" | "lighter"
+    "font-weight": 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 1000 | "normal" | "bold" | "bolder" | "lighter" | `${number} ${number}`
     "src": string
 }
 
