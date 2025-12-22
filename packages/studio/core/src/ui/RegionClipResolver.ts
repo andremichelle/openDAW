@@ -148,13 +148,15 @@ export class RegionClipResolver {
     #createTasksFromMasks(masks: ReadonlyArray<Mask>): ReadonlyArray<ClipTask> {
         const tasks: Array<ClipTask> = []
         masks.forEach(({position, complete}) => {
-            for (const region of this.#ground.regions.collection.iterateRange(position, complete)) {
+            // Iterate from 0 to find all regions that OVERLAP with [position, complete],
+            // not just regions that START within that range
+            for (const region of this.#ground.regions.collection.iterateRange(0, complete)) {
+                if (region.position >= complete) {break} // past the mask, done
+                if (region.complete <= position) {continue} // ends before mask, skip
                 if (region.isSelected && !this.#strategy.showOrigin()) {
                     continue
                 } else if (region.duration <= 0) {
                     return panic(`Invalid duration(${region.duration})`)
-                } else if (region.complete <= position || region.position >= complete) {
-                    return panic("Not overlapping")
                 }
                 const positionIn: boolean = region.position >= position
                 const completeIn: boolean = region.complete <= complete
@@ -188,9 +190,13 @@ export class RegionClipResolver {
                     case "start":
                         if (UnionAdapterTypes.isLoopableRegion(region)) {
                             const delta = task.position - region.position
+                            // Capture old values BEFORE changing position (they depend on position for TimeBase.Seconds)
+                            const oldDuration = region.duration
+                            const oldLoopOffset = region.loopOffset
+                            const oldLoopDuration = region.loopDuration
                             region.position = region.position + delta
-                            region.duration = region.duration - delta
-                            region.loopOffset = mod(region.loopOffset + delta, region.loopDuration)
+                            region.duration = oldDuration - delta
+                            region.loopOffset = mod(oldLoopOffset + delta, oldLoopDuration)
                         } else {
                             return panic("Not yet implemented")
                         }
