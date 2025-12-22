@@ -3,7 +3,7 @@ import {TimelineRange} from "@opendaw/studio-core"
 import {AudioFileBoxAdapter, AudioPlayMode} from "@opendaw/studio-adapters"
 import {Option} from "@opendaw/lib-std"
 import {RegionBound} from "@/ui/timeline/renderer/env"
-import {dbToGain, LoopableRegion, TempoChangeGrid, TempoMap} from "@opendaw/lib-dsp"
+import {dbToGain, LoopableRegion, PPQN, TempoChangeGrid, TempoMap} from "@opendaw/lib-dsp"
 
 type Segment = { x0: number, x1: number, u0: number, u1: number, outside: boolean }
 export const renderAudio = (context: CanvasRenderingContext2D,
@@ -229,16 +229,21 @@ export const renderAudio = (context: CanvasRenderingContext2D,
         // Align to grid for consistent rendering across zoom levels
         let currentPPQN = Math.floor(iterStart / TempoChangeGrid) * TempoChangeGrid
 
+        // Compute initial audio time once, then increment (avoid O(n) ppqnToSeconds calls per step)
+        let currentAudioTime = audioTimeAt(currentPPQN)
+
         while (currentPPQN < iterEnd) {
             const nextPPQN = currentPPQN + TempoChangeGrid
-            const audioStart = audioTimeAt(currentPPQN)
-            const audioEnd = audioTimeAt(nextPPQN)
+            // Incremental: get tempo at current position and compute step duration
+            const stepSeconds = PPQN.pulsesToSeconds(TempoChangeGrid, tempoMap.getTempoAt(currentPPQN))
+            const nextAudioTime = currentAudioTime + stepSeconds
 
             // Skip if entirely outside audio file range
-            if (audioEnd > 0 && audioStart < durationInSeconds) {
-                handleTempoSegment(currentPPQN, nextPPQN, audioStart, audioEnd)
+            if (nextAudioTime > 0 && currentAudioTime < durationInSeconds) {
+                handleTempoSegment(currentPPQN, nextPPQN, currentAudioTime, nextAudioTime)
             }
             currentPPQN = nextPPQN
+            currentAudioTime = nextAudioTime
         }
     }
 
