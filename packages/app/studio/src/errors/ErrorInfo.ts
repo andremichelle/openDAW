@@ -64,6 +64,10 @@ export namespace ErrorInfo {
             }
         }
         if (event instanceof PromiseRejectionEvent) {return fromUnknown(event.reason, "UnhandledRejection")}
+        // Fallback for cross-realm PromiseRejectionEvent (e.g., from extensions)
+        if (event.type === "unhandledrejection" && "reason" in event) {
+            return fromUnknown((event as PromiseRejectionEvent).reason, "UnhandledRejection")
+        }
         if (event instanceof MessageEvent) {return fromUnknown(event.data, "MessageError")}
         if (event instanceof SecurityPolicyViolationEvent) {
             return {name: "SecurityPolicyViolation", message: `${event.violatedDirective} blocked ${event.blockedURI}`}
