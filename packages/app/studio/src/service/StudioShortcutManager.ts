@@ -32,7 +32,7 @@ export namespace StudioShortcutManager {
     export const reset = (): void => {
         Object.values(Contexts)
             .forEach(definitions => Object.entries(definitions.factory)
-                .forEach(([key, {keys}]) => definitions.user[key].keys.overrideWith(keys)))
+                .forEach(([key, {shortcut}]) => definitions.user[key].shortcut.overrideWith(shortcut)))
     }
 
     export const store = (): void => {
@@ -67,38 +67,38 @@ export namespace StudioShortcutManager {
             }
         }
         const subscriptions = Terminable.many(
-            gc.register(gs["project-undo"].keys, () => service.runIfProject(project => project.editing.undo())),
-            gc.register(gs["project-redo"].keys, () => service.runIfProject(project => project.editing.redo())),
-            gc.register(gs["project-open"].keys, async () => await service.browseLocalProjects()),
-            gc.register(gs["project-save"].keys, async () => await service.projectProfileService.save(),
+            gc.register(gs["project-undo"].shortcut, () => service.runIfProject(project => project.editing.undo())),
+            gc.register(gs["project-redo"].shortcut, () => service.runIfProject(project => project.editing.redo())),
+            gc.register(gs["project-open"].shortcut, async () => await service.browseLocalProjects()),
+            gc.register(gs["project-save"].shortcut, async () => await service.projectProfileService.save(),
                 ShortcutOptions.of({activeInTextField: true})),
-            gc.register(gs["project-save-as"].keys, async () => await service.projectProfileService.saveAs(),
+            gc.register(gs["project-save-as"].shortcut, async () => await service.projectProfileService.saveAs(),
                 ShortcutOptions.of({activeInTextField: true})),
-            gc.register(gs["toggle-playback"].keys, () => {
+            gc.register(gs["toggle-playback"].shortcut, () => {
                 const {engine} = service
                 const isPlaying = engine.isPlaying.getValue()
                 if (isPlaying) {engine.stop()} else {engine.play()}
             }),
-            gc.register(gs["toggle-software-keyboard"].keys, () => service.toggleSoftwareKeyboard()),
-            gc.register(gs["toggle-device-panel"].keys, () => panelLayout.getByType(PanelType.DevicePanel).toggleMinimize()),
-            gc.register(gs["toggle-content-editor-panel"].keys, () => panelLayout.getByType(PanelType.ContentEditor).toggleMinimize()),
-            gc.register(gs["toggle-browser-panel"].keys, () => panelLayout.getByType(PanelType.BrowserPanel).toggleMinimize()),
-            gc.register(gs["toggle-tempo-track"].keys, () => tempo.setValue(!tempo.getValue())),
-            gc.register(gs["toggle-markers-track"].keys, () => markers.setValue(!markers.getValue())),
-            gc.register(gs["toggle-clips"].keys, () => clipsVisibility.setValue(!clipsVisibility.getValue())),
-            gc.register(gs["toggle-follow-cursor"].keys, () => followCursor.setValue(!followCursor.getValue())),
-            gc.register(gs["toggle-metronome"].keys, () => metronomeEnabled.setValue(!metronomeEnabled.getValue())),
-            gc.register(gs["toggle-loop"].keys, () =>
+            gc.register(gs["toggle-software-keyboard"].shortcut, () => service.toggleSoftwareKeyboard()),
+            gc.register(gs["toggle-device-panel"].shortcut, () => panelLayout.getByType(PanelType.DevicePanel).toggleMinimize()),
+            gc.register(gs["toggle-content-editor-panel"].shortcut, () => panelLayout.getByType(PanelType.ContentEditor).toggleMinimize()),
+            gc.register(gs["toggle-browser-panel"].shortcut, () => panelLayout.getByType(PanelType.BrowserPanel).toggleMinimize()),
+            gc.register(gs["toggle-tempo-track"].shortcut, () => tempo.setValue(!tempo.getValue())),
+            gc.register(gs["toggle-markers-track"].shortcut, () => markers.setValue(!markers.getValue())),
+            gc.register(gs["toggle-clips"].shortcut, () => clipsVisibility.setValue(!clipsVisibility.getValue())),
+            gc.register(gs["toggle-follow-cursor"].shortcut, () => followCursor.setValue(!followCursor.getValue())),
+            gc.register(gs["toggle-metronome"].shortcut, () => metronomeEnabled.setValue(!metronomeEnabled.getValue())),
+            gc.register(gs["toggle-loop"].shortcut, () =>
                 service.runIfProject(({editing, timelineBox: {loopArea: {enabled}}}) =>
                     editing.modify(() => enabled.setValue(!enabled.getValue())))),
-            gc.register(gs["copy-device"].keys, () => service.runIfProject(
+            gc.register(gs["copy-device"].shortcut, () => service.runIfProject(
                 ({editing, userEditingManager, skeleton}) => userEditingManager.audioUnit.get().ifSome(({box}) => {
                     const audioUnitBox = asInstanceOf(box, AudioUnitBox)
                     const copies = editing.modify(() => ProjectUtils
                         .extractAudioUnits([audioUnitBox], skeleton), false).unwrap()
                     userEditingManager.audioUnit.edit(copies[0].editing)
                 }))),
-            gc.register(gs["workspace-next-screen"].keys, () => {
+            gc.register(gs["workspace-next-screen"].shortcut, () => {
                     const keys = Object.entries(DefaultWorkspace).map(([key]) => key as Workspace.ScreenKeys)
                     const screen = service.layout.screen
                     const current = screen.getValue()
@@ -106,7 +106,7 @@ export namespace StudioShortcutManager {
                     screen.setValue(Arrays.getNext(keys, current))
                 }
             ),
-            gc.register(gs["workspace-prev-screen"].keys, () => {
+            gc.register(gs["workspace-prev-screen"].shortcut, () => {
                     const keys = Object.entries(DefaultWorkspace).map(([key]) => key as Workspace.ScreenKeys)
                     const screen = service.layout.screen
                     const current = screen.getValue()
@@ -114,14 +114,14 @@ export namespace StudioShortcutManager {
                     screen.setValue(Arrays.getPrev(keys, current))
                 }
             ),
-            gc.register(gs["workspace-screen-dashboard"].keys, async () => await service.closeProject()),
-            gc.register(gs["workspace-screen-default"].keys, () => service.runIfProject(() => service.switchScreen("default"))),
-            gc.register(gs["workspace-screen-mixer"].keys, () => service.runIfProject(() => service.switchScreen("mixer"))),
-            gc.register(gs["workspace-screen-piano"].keys, () => service.runIfProject(() => service.switchScreen("piano"))),
-            gc.register(gs["workspace-screen-project"].keys, () => service.runIfProject(() => service.switchScreen("project"))),
-            gc.register(gs["workspace-screen-meter"].keys, () => service.runIfProject(() => service.switchScreen("meter"))),
-            gc.register(gs["workspace-screen-shadertoy"].keys, () => service.runIfProject(() => service.switchScreen("shadertoy"))),
-            gc.register(gs["show-preferences"].keys, () => StudioDialogs.showPreferences())
+            gc.register(gs["workspace-screen-dashboard"].shortcut, async () => await service.closeProject()),
+            gc.register(gs["workspace-screen-default"].shortcut, () => service.runIfProject(() => service.switchScreen("default"))),
+            gc.register(gs["workspace-screen-mixer"].shortcut, () => service.runIfProject(() => service.switchScreen("mixer"))),
+            gc.register(gs["workspace-screen-piano"].shortcut, () => service.runIfProject(() => service.switchScreen("piano"))),
+            gc.register(gs["workspace-screen-project"].shortcut, () => service.runIfProject(() => service.switchScreen("project"))),
+            gc.register(gs["workspace-screen-meter"].shortcut, () => service.runIfProject(() => service.switchScreen("meter"))),
+            gc.register(gs["workspace-screen-shadertoy"].shortcut, () => service.runIfProject(() => service.switchScreen("shadertoy"))),
+            gc.register(gs["show-preferences"].shortcut, () => StudioDialogs.showPreferences())
         )
         const conflicts = gc.hasConflicts()
         if (conflicts) {

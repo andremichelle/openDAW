@@ -44,7 +44,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                 appearance={{
                     color: Colors.green.saturate(0.0),
                     activeColor: Colors.green,
-                    tooltip: ShortcutTooltip.create("Play", GlobalShortcuts["toggle-playback"].keys)
+                    tooltip: ShortcutTooltip.create("Play", GlobalShortcuts["toggle-playback"].shortcut)
                 }}
                 onClick={() => {
                     if (engine.isPlaying.getValue()) {
@@ -104,7 +104,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                       model={loop}
                       appearance={{
                           activeColor: Colors.gray,
-                          tooltip: ShortcutTooltip.create("Loop", GlobalShortcuts["toggle-loop"].keys)
+                          tooltip: ShortcutTooltip.create("Loop", GlobalShortcuts["toggle-loop"].shortcut)
                       }}>
                 <Icon symbol={IconSymbol.Loop}/>
             </Checkbox>

@@ -53,10 +53,10 @@ export class ShortcutManager {
     }
 
     #tryHandle(event: KeyboardEvent, context: ShortcutContext): boolean {
-        for (const {keys, action, options} of context.shortcuts) {
+        for (const {shortcut, action, options} of context.shortcuts) {
             if (!options.activeInTextField && Events.isTextInput(event.target)) {continue}
             if (!options.allowRepeat && event.repeat) {continue}
-            if (!keys.matches(event)) {continue}
+            if (!shortcut.matches(event)) {continue}
             if (options.preventDefault) {event.preventDefault()}
             action()
             return true
@@ -77,8 +77,8 @@ export class ShortcutContext {
     get active(): boolean {return this.#isActive()}
     get shortcuts(): ReadonlyArray<ShortcutEntry> {return this.#shortcuts}
 
-    register(keys: Shortcut, action: Exec, options?: ShortcutOptions): Subscription {
-        const entry: ShortcutEntry = {keys: keys, action, options: options ?? ShortcutOptions.Default}
+    register(shortcut: Shortcut, action: Exec, options?: ShortcutOptions): Subscription {
+        const entry: ShortcutEntry = {shortcut, action, options: options ?? ShortcutOptions.Default}
         const index = BinarySearch.leftMostMapped(
             this.#shortcuts, entry.options.priority, NumberComparator, ({options: {priority}}) => priority)
         this.#shortcuts.splice(index, 0, entry)
@@ -86,17 +86,17 @@ export class ShortcutContext {
     }
 
     hasConflict(keys: Shortcut): boolean {
-        return this.#shortcuts.some(entry => entry.keys.equals(keys))
+        return this.#shortcuts.some(entry => entry.shortcut.equals(keys))
     }
 
     hasConflicts(): ReadonlyArray<Shortcut> {
         const conflicts: Array<Shortcut> = []
         for (let i = 0; i < this.#shortcuts.length; i++) {
-            const keys = this.#shortcuts[i].keys
-            if (conflicts.some(other => other.equals(keys))) {continue}
+            const shortcut = this.#shortcuts[i].shortcut
+            if (conflicts.some(other => other.equals(shortcut))) {continue}
             for (let j = i + 1; j < this.#shortcuts.length; j++) {
-                if (keys.equals(this.#shortcuts[j].keys)) {
-                    conflicts.push(keys)
+                if (shortcut.equals(this.#shortcuts[j].shortcut)) {
+                    conflicts.push(shortcut)
                     break
                 }
             }
@@ -213,11 +213,11 @@ export class Shortcut {
         return parts.join(Browser.isMacOS() ? "" : "+")
     }
 
-    overrideWith(keys: Shortcut): void {
-        this.#code = keys.#code
-        this.#ctrl = keys.#ctrl
-        this.#shift = keys.#shift
-        this.#alt = keys.#alt
+    overrideWith(shortcut: Shortcut): void {
+        this.#code = shortcut.#code
+        this.#ctrl = shortcut.#ctrl
+        this.#shift = shortcut.#shift
+        this.#alt = shortcut.#alt
     }
 
     toJSON(): JSONValue {return {code: this.#code, ctrl: this.#ctrl, shift: this.#shift, alt: this.#alt}}
@@ -250,7 +250,7 @@ export class ShortcutOptions {
 }
 
 type ShortcutEntry = {
-    readonly keys: Shortcut
+    readonly shortcut: Shortcut
     readonly action: Exec
     readonly options: ShortcutOptions
 }

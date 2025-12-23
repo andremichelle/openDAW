@@ -19,7 +19,7 @@ export const populateStudioMenu = (service: StudioService) => {
                     MenuItem.header({label: "openDAW", icon: IconSymbol.OpenDAW, color: Colors.green}),
                     MenuItem.default({
                         label: "Dashboard",
-                        shortcut: Global["workspace-screen-dashboard"].keys.format()
+                        shortcut: Global["workspace-screen-dashboard"].shortcut.format()
                     }).setTriggerProcedure(() => service.closeProject()),
                     MenuItem.default({
                         label: "New",
@@ -27,16 +27,16 @@ export const populateStudioMenu = (service: StudioService) => {
                     }).setTriggerProcedure(() => service.newProject()),
                     MenuItem.default({
                         label: "Open...",
-                        shortcut: Global["project-open"].keys.format()
+                        shortcut: Global["project-open"].shortcut.format()
                     }).setTriggerProcedure(() => service.browseLocalProjects()),
                     MenuItem.default({
                         label: "Save",
-                        shortcut: Global["project-save"].keys.format(),
+                        shortcut: Global["project-save"].shortcut.format(),
                         selectable: service.hasProfile
                     }).setTriggerProcedure(() => service.projectProfileService.save()),
                     MenuItem.default({
                         label: "Save As...",
-                        shortcut: Global["project-save-as"].keys.format(),
+                        shortcut: Global["project-save-as"].shortcut.format(),
                         selectable: service.hasProfile
                     }).setTriggerProcedure(() => service.projectProfileService.saveAs()),
                     MenuItem.default({label: "Import", separatorBefore: true})
@@ -97,7 +97,7 @@ export const populateStudioMenu = (service: StudioService) => {
                             return parent.addMenuItem(
                                 MenuItem.default({
                                     label: "Show MIDI-Keyboard",
-                                    shortcut: GlobalShortcuts["toggle-software-keyboard"].keys.format(),
+                                    shortcut: GlobalShortcuts["toggle-software-keyboard"].shortcut.format(),
                                     checked: service.isSoftwareKeyboardVisible()
                                 }).setTriggerProcedure(() => service.toggleSoftwareKeyboard())
                             )
@@ -207,7 +207,7 @@ export const populateStudioMenu = (service: StudioService) => {
                         .setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
                     MenuItem.default({
                         label: "Preferences",
-                        shortcut: GlobalShortcuts["show-preferences"].keys.format()
+                        shortcut: GlobalShortcuts["show-preferences"].shortcut.format()
                     }).setTriggerProcedure(async () => StudioDialogs.showPreferences()),
                     MenuItem.default({
                         label: "Shortcut Manager"

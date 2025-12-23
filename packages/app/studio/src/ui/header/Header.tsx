@@ -129,7 +129,7 @@ export const Header = ({lifecycle, service}: Construct) => {
                       model={service.engine.metronomeEnabled}
                       appearance={{
                           activeColor: Colors.orange,
-                          tooltip: ShortcutTooltip.create("Metronome", GlobalShortcuts["toggle-metronome"].keys)
+                          tooltip: ShortcutTooltip.create("Metronome", GlobalShortcuts["toggle-metronome"].shortcut)
                       }}>
                 <Icon symbol={IconSymbol.Metronome}/>
             </Checkbox>
@@ -166,7 +166,8 @@ export const Header = ({lifecycle, service}: Construct) => {
                                 .map(([key, {icon: iconSymbol, name}]) => ({
                                     value: key,
                                     element: <Icon symbol={iconSymbol}/>,
-                                    tooltip: ShortcutTooltip.create(name, GlobalShortcuts[ScreenShortcutKeys[key as Workspace.ScreenKeys]].keys)
+                                    tooltip: ShortcutTooltip.create(name,
+                                        GlobalShortcuts[ScreenShortcutKeys[key as Workspace.ScreenKeys]].shortcut)
                                 }))}
                             appearance={{framed: true, landscape: true}}/>
             </div>

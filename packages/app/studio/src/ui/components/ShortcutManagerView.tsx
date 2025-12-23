@@ -30,11 +30,11 @@ export const ShortcutManagerView = ({lifecycle, contexts, updateNotifier}: Const
                         {Objects.entries(shortcuts).map(([key, entry]) => (
                             <div className="shortcut" onclick={async () => {
                                 const keys = await editShortcut(shortcuts, entry)
-                                shortcuts[key].keys.overrideWith(keys)
+                                shortcuts[key].shortcut.overrideWith(keys)
                                 update()
                             }}><span>{entry.description}</span>
                                 <hr/>
-                                <span>{entry.keys.format()}</span>
+                                <span>{entry.shortcut.format()}</span>
                             </div>
                         ))}
                     </div>
@@ -51,7 +51,7 @@ const editShortcut = async (definitions: ShortcutDefinitions,
                             original: ShortcutDefinition): Promise<Shortcut> => {
     const lifecycle = new Terminator()
     const abortController = new AbortController()
-    const shortcut = lifecycle.own(new DefaultObservableValue(original.keys))
+    const shortcut = lifecycle.own(new DefaultObservableValue(original.shortcut))
     return Dialogs.show({
         headline: "Edit Shortcut",
         content: (
@@ -66,16 +66,16 @@ const editShortcut = async (definitions: ShortcutDefinitions,
                         event.preventDefault()
                         event.stopImmediatePropagation()
                     }, {capture: true}))
-                }}>{original.keys.format()}</div>
+                }}>{original.shortcut.format()}</div>
                 <div onInit={element => shortcut.catchupAndSubscribe(owner => {
-                    const keys = owner.getValue()
+                    const shortcut = owner.getValue()
                     const conflicts = Objects.entries(definitions)
-                        .find(([_, other]) => !other.keys.equals(original.keys) && other.keys.equals(keys))
+                        .find(([_, other]) => !other.shortcut.equals(original.shortcut) && other.shortcut.equals(shortcut))
                     if (isAbsent(conflicts)) {
                         element.textContent = "No conflict."
                         element.style.color = Colors.dark.toString()
                     } else {
-                        element.textContent = `Conflicts with "${conflicts[1].description} ${conflicts[1].keys.format()}".`
+                        element.textContent = `Conflicts with "${conflicts[1].description} ${conflicts[1].shortcut.format()}".`
                         element.style.color = Colors.red.toString()
                     }
                 })}/>
@@ -87,5 +87,5 @@ const editShortcut = async (definitions: ShortcutDefinitions,
             primary: false,
             onClick: () => abortController.abort()
         }]
-    }).then(() => shortcut.getValue(), () => original.keys).finally(() => lifecycle.terminate())
+    }).then(() => shortcut.getValue(), () => original.shortcut).finally(() => lifecycle.terminate())
 }

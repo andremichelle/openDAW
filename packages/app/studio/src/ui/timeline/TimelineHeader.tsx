@@ -31,7 +31,7 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                       appearance={{
                           color: Colors.shadow,
                           activeColor: Colors.orange,
-                          tooltip: ShortcutTooltip.create("Follow Cursor", GlobalShortcuts["toggle-follow-cursor"].keys)
+                          tooltip: ShortcutTooltip.create("Follow Cursor", GlobalShortcuts["toggle-follow-cursor"].shortcut)
                       }}>
                 <Icon symbol={IconSymbol.Run}/>
             </Checkbox>
@@ -47,12 +47,12 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                     MenuItem.default({
                         label: "Markers",
                         checked: markers.getValue(),
-                        shortcut: GlobalShortcuts["toggle-markers-track"].keys.format()
+                        shortcut: GlobalShortcuts["toggle-markers-track"].shortcut.format()
                     }).setTriggerProcedure(() => markers.setValue(!markers.getValue())),
                     MenuItem.default({
                         label: "Tempo",
                         checked: tempo.getValue(),
-                        shortcut: GlobalShortcuts["toggle-tempo-track"].keys.format()
+                        shortcut: GlobalShortcuts["toggle-tempo-track"].shortcut.format()
                     }).setTriggerProcedure(() => tempo.setValue(!tempo.getValue()))
                 ))}>
                 <Icon symbol={IconSymbol.Primary}/>
@@ -61,7 +61,7 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                       model={clips.visible}
                       appearance={{
                           activeColor: Colors.yellow,
-                          tooltip: ShortcutTooltip.create("Clips", GlobalShortcuts["toggle-clips"].keys)
+                          tooltip: ShortcutTooltip.create("Clips", GlobalShortcuts["toggle-clips"].shortcut)
                       }}>
                 <Icon symbol={IconSymbol.Clips}/>
             </Checkbox>

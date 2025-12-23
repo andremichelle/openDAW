@@ -2,7 +2,7 @@ import {Key, Shortcut, ShortcutDefinitions, ShortcutValidator} from "@opendaw/li
 
 export const NoteEditorShortcutsFactory = ShortcutValidator.validate({
     "move-cursor-right": {
-        keys: Shortcut.of(Key.ArrowRight),
+        shortcut: Shortcut.of(Key.ArrowRight),
         description: "Move playback cursor right"
     }
 })
