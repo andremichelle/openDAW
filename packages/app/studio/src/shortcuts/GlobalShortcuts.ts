@@ -1,6 +1,4 @@
-import {Key, Shortcut} from "@opendaw/lib-dom"
-import {ShortcutValidator} from "@/shortcuts/ShortcutValidator"
-import {ShortcutDefinitions} from "@/shortcuts/ShortcutDefinitions"
+import {Key, Shortcut, ShortcutDefinitions, ShortcutValidator} from "@opendaw/lib-dom"
 
 const shift = true
 const ctrl = true

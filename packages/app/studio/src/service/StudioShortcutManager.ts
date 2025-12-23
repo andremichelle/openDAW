@@ -1,6 +1,3 @@
-import {ShortcutManager, ShortcutOptions} from "@opendaw/lib-dom"
-import {StudioService} from "@/service/StudioService"
-import {PanelType} from "@/ui/workspace/PanelType"
 import {
     Arrays,
     asInstanceOf,
@@ -11,13 +8,15 @@ import {
     Terminable,
     tryCatch
 } from "@opendaw/lib-std"
+import {ShortcutDefinitions, ShortcutManager, ShortcutOptions} from "@opendaw/lib-dom"
+import {GlobalShortcuts, GlobalShortcutsFactory} from "@/shortcuts/GlobalShortcuts"
+import {StudioService} from "@/service/StudioService"
 import {DefaultWorkspace} from "@/ui/workspace/Default"
+import {PanelType} from "@/ui/workspace/PanelType"
 import {Workspace} from "@/ui/workspace/Workspace"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {ProjectUtils} from "@opendaw/studio-adapters"
 import {StudioDialogs} from "@/service/StudioDialogs"
-import {GlobalShortcuts, GlobalShortcutsFactory} from "@/shortcuts/GlobalShortcuts"
-import {ShortcutDefinitions} from "@/shortcuts/ShortcutDefinitions"
 
 export namespace StudioShortcutManager {
     const localStorageKey = "shortcuts"

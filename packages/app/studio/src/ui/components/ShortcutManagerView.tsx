@@ -1,12 +1,10 @@
 import css from "./ShortcutManagerView.sass?inline"
-import {Events, Html, Shortcut} from "@opendaw/lib-dom"
+import {Events, Html, Shortcut, ShortcutDefinition, ShortcutDefinitions} from "@opendaw/lib-dom"
 import {DefaultObservableValue, isAbsent, Lifecycle, Notifier, Objects, Terminator} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Surface} from "@/ui/surface/Surface"
 import {Colors} from "@opendaw/studio-enums"
-import {ShortcutDefinition} from "@/shortcuts/ShortcutDefinition"
-import {ShortcutDefinitions} from "@/shortcuts/ShortcutDefinitions"
 
 const className = Html.adoptStyleSheet(css, "ShortcutManagerView")
 

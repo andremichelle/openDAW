@@ -4,8 +4,8 @@ import {Dialogs} from "@/ui/components/dialogs"
 import {PreferencePanel} from "@/ui/PreferencePanel"
 import {ShortcutManagerView} from "@/ui/components/ShortcutManagerView"
 import {GlobalShortcuts, GlobalShortcutsFactory} from "@/shortcuts/GlobalShortcuts"
-import {ShortcutDefinitions} from "@/shortcuts/ShortcutDefinitions"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
+import {ShortcutDefinitions} from "@opendaw/lib-dom"
 
 export namespace StudioDialogs {
     export const showPreferences = async () => {
