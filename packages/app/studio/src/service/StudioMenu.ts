@@ -8,11 +8,11 @@ import {StudioService} from "@/service/StudioService"
 import {MenuItem} from "@/ui/model/menu-item"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {SyncLogService} from "@/service/SyncLogService"
-import {StudioShortcuts} from "@/service/StudioShortcuts"
+import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {StudioDialogs} from "@/service/StudioDialogs"
 
 export const populateStudioMenu = (service: StudioService) => {
-    const {Global} = StudioShortcuts
+    const {Global} = StudioShortcutManager
     return MenuItem.root()
         .setRuntimeChildrenProcedure(parent => {
                 parent.addMenuItem(
@@ -98,7 +98,7 @@ export const populateStudioMenu = (service: StudioService) => {
                             return parent.addMenuItem(
                                 MenuItem.default({
                                     label: "Show MIDI-Keyboard",
-                                    shortcut: StudioShortcuts.Global["toggle-software-keyboard"].keys.format(),
+                                    shortcut: StudioShortcutManager.Global["toggle-software-keyboard"].keys.format(),
                                     checked: service.isSoftwareKeyboardVisible()
                                 }).setTriggerProcedure(() => service.toggleSoftwareKeyboard())
                             )
@@ -208,7 +208,7 @@ export const populateStudioMenu = (service: StudioService) => {
                         .setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
                     MenuItem.default({
                         label: "Preferences",
-                        shortcut: StudioShortcuts.Global["show-preferences"].keys.format()
+                        shortcut: StudioShortcutManager.Global["show-preferences"].keys.format()
                     }).setTriggerProcedure(async () => StudioDialogs.showPreferences()),
                     MenuItem.default({
                         label: "Shortcut Manager"

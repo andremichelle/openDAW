@@ -29,7 +29,7 @@ import {
     Workers
 } from "@opendaw/studio-core"
 import {AudioData} from "@opendaw/lib-dsp"
-import {StudioShortcuts} from "@/service/StudioShortcuts"
+import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 
 const loadBuildInfo = async () => fetch(`/build-info.json?v=${Date.now()}`)
     .then(x => x.json())
@@ -83,7 +83,7 @@ export const boot = async ({workersUrl, workletsUrl}: { workersUrl: string, work
     })
     const service: StudioService = new StudioService(context, audioWorklets.value, audioDevices,
         sampleManager, soundfontManager, cloudAuthManager, buildInfo)
-    StudioShortcuts.install(service)
+    StudioShortcutManager.install(service)
     const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand())
     const surface = Surface.main({
         config: (surface: Surface) => surface.own(ContextMenu.install(surface.owner))

@@ -18,7 +18,7 @@ import {HorizontalPeakMeter} from "@/ui/components/HorizontalPeakMeter"
 import {gainToDb} from "@opendaw/lib-dsp"
 import {ContextMenu} from "@/ui/ContextMenu"
 import {EngineAddresses} from "@opendaw/studio-adapters"
-import {StudioShortcuts} from "@/service/StudioShortcuts"
+import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 
 const className = Html.adoptStyleSheet(css, "Header")
 
@@ -27,7 +27,7 @@ type Construct = {
     service: StudioService
 }
 
-const ScreenShortcutKeys: Record<Workspace.ScreenKeys, keyof typeof StudioShortcuts.Global> = {
+const ScreenShortcutKeys: Record<Workspace.ScreenKeys, keyof typeof StudioShortcutManager.Global> = {
     "dashboard": "workspace-screen-dashboard",
     "default": "workspace-screen-default",
     "mixer": "workspace-screen-mixer",
@@ -128,7 +128,7 @@ export const Header = ({lifecycle, service}: Construct) => {
                       model={service.engine.metronomeEnabled}
                       appearance={{
                           activeColor: Colors.orange,
-                          tooltip: `Metronome ${StudioShortcuts.Global["toggle-metronome"].keys.format()}`
+                          tooltip: `Metronome ${StudioShortcutManager.Global["toggle-metronome"].keys.format()}`
                       }}>
                 <Icon symbol={IconSymbol.Metronome}/>
             </Checkbox>
@@ -165,7 +165,7 @@ export const Header = ({lifecycle, service}: Construct) => {
                                 .map(([key, {icon: iconSymbol, name}]) => ({
                                     value: key,
                                     element: <Icon symbol={iconSymbol}/>,
-                                    tooltip: `${name} ${StudioShortcuts
+                                    tooltip: `${name} ${StudioShortcutManager
                                         .Global[ScreenShortcutKeys[key as Workspace.ScreenKeys]].keys.format()}`
                                 }))}
                             appearance={{framed: true, landscape: true}}/>

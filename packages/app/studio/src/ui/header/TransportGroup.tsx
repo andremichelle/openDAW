@@ -12,7 +12,7 @@ import {Html} from "@opendaw/lib-dom"
 import {ContextMenu} from "@/ui/ContextMenu"
 import {MenuItem} from "@/ui/model/menu-item"
 import {ProjectProfile} from "@opendaw/studio-core"
-import {StudioShortcuts} from "@/service/StudioShortcuts"
+import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 
 const className = Html.adoptStyleSheet(css, "TransportGroup")
 
@@ -43,7 +43,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                 appearance={{
                     color: Colors.green.saturate(0.0),
                     activeColor: Colors.green,
-                    tooltip: `Play ${StudioShortcuts.Global["toggle-playback"].keys.format()}`
+                    tooltip: `Play ${StudioShortcutManager.Global["toggle-playback"].keys.format()}`
                 }}
                 onClick={() => {
                     if (engine.isPlaying.getValue()) {

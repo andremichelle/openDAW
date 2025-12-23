@@ -10,7 +10,7 @@ import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Html} from "@opendaw/lib-dom"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {MenuItem} from "@/ui/model/menu-item"
-import {StudioShortcuts} from "@/service/StudioShortcuts"
+import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 
 const className = Html.adoptStyleSheet(css, "TimelineHeader")
 
@@ -30,7 +30,7 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                       appearance={{
                           color: Colors.shadow,
                           activeColor: Colors.orange,
-                          tooltip: `Follow Cursor ${StudioShortcuts.Global["toggle-follow-cursor"].keys.format()}`
+                          tooltip: `Follow Cursor ${StudioShortcutManager.Global["toggle-follow-cursor"].keys.format()}`
                       }}>
                 <Icon symbol={IconSymbol.Run}/>
             </Checkbox>
@@ -46,12 +46,12 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                     MenuItem.default({
                         label: "Markers",
                         checked: markers.getValue(),
-                        shortcut: StudioShortcuts.Global["toggle-markers-track"].keys.format()
+                        shortcut: StudioShortcutManager.Global["toggle-markers-track"].keys.format()
                     }).setTriggerProcedure(() => markers.setValue(!markers.getValue())),
                     MenuItem.default({
                         label: "Tempo",
                         checked: tempo.getValue(),
-                        shortcut: StudioShortcuts.Global["toggle-tempo-track"].keys.format()
+                        shortcut: StudioShortcutManager.Global["toggle-tempo-track"].keys.format()
                     }).setTriggerProcedure(() => tempo.setValue(!tempo.getValue()))
                 ))}>
                 <Icon symbol={IconSymbol.Primary}/>
@@ -60,7 +60,7 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                       model={clips.visible}
                       appearance={{
                           activeColor: Colors.yellow,
-                          tooltip: `Clips ${StudioShortcuts.Global["toggle-clips"].keys.format()}`
+                          tooltip: `Clips ${StudioShortcutManager.Global["toggle-clips"].keys.format()}`
                       }}>
                 <Icon symbol={IconSymbol.Clips}/>
             </Checkbox>

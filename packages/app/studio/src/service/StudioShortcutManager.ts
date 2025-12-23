@@ -7,8 +7,9 @@ import {Workspace} from "@/ui/workspace/Workspace"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {ProjectUtils} from "@opendaw/studio-adapters"
 import {StudioDialogs} from "@/service/StudioDialogs"
+import {ShortcutValidator} from "@/shortcuts/ShortcutValidator"
 
-export namespace StudioShortcuts {
+export namespace StudioShortcutManager {
     const shift = true
     const ctrl = true
     // const alt = true
@@ -16,19 +17,7 @@ export namespace StudioShortcuts {
     export type Definition = { keys: ShortcutKeys, description: string }
     export type Definitions = Record<string, Definition>
 
-    const validateActions = <T extends Definitions>(actions: T): T => {
-        const entries = Object.entries(actions)
-        for (let i = 0; i < entries.length; i++) {
-            for (let j = i + 1; j < entries.length; j++) {
-                if (entries[i][1].keys.equals(entries[j][1].keys)) {
-                    alert(`Shortcut conflict: '${entries[i][0]}' and '${entries[j][0]}' both use ${entries[i][1].keys.format()}`)
-                }
-            }
-        }
-        return actions
-    }
-
-    export const Global = validateActions({
+    export const Global = ShortcutValidator.validate({
         "project-new": {
             keys: ShortcutKeys.of(Key.KeyN, {ctrl}),
             description: "Create new project"
