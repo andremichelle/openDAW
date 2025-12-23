@@ -33,14 +33,6 @@ export class ShortcutManager {
         return context
     }
 
-    removeContext(context: ShortcutContext): void {
-        const index = this.#contexts.indexOf(context)
-        if (index !== -1) {
-            context.terminate()
-            this.#contexts.splice(index, 1)
-        }
-    }
-
     hasConflict(keys: Shortcut): boolean {
         if (this.global.hasConflict(keys)) {return true}
         return this.#contexts.some(ctx => ctx.hasConflict(keys))
@@ -88,21 +80,6 @@ export class ShortcutContext implements Terminable {
 
     hasConflict(keys: Shortcut): boolean {
         return this.#shortcuts.some(entry => entry.shortcut.equals(keys))
-    }
-
-    hasConflicts(): ReadonlyArray<Shortcut> {
-        const conflicts: Array<Shortcut> = []
-        for (let i = 0; i < this.#shortcuts.length; i++) {
-            const shortcut = this.#shortcuts[i].shortcut
-            if (conflicts.some(other => other.equals(shortcut))) {continue}
-            for (let j = i + 1; j < this.#shortcuts.length; j++) {
-                if (shortcut.equals(this.#shortcuts[j].shortcut)) {
-                    conflicts.push(shortcut)
-                    break
-                }
-            }
-        }
-        return conflicts
     }
 
     terminate(): void {this.#terminator.terminate()}
