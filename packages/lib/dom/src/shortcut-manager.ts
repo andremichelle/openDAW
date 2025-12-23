@@ -1,11 +1,90 @@
-import {BinarySearch, NumberComparator, Subscription} from "@opendaw/lib-std"
+import {
+    BinarySearch,
+    isAbsent,
+    NumberComparator,
+    Predicate,
+    Predicates,
+    Subscription,
+    Terminator
+} from "@opendaw/lib-std"
 import {Browser} from "./browser"
 import {Events} from "./events"
 import {Keyboard} from "./keyboard"
 
-export class ShortcutDef {
-    static of(code: string, modifiers?: { ctrl?: boolean, shift?: boolean, alt?: boolean }): ShortcutDef {
-        return new ShortcutDef(code, modifiers?.ctrl, modifiers?.shift, modifiers?.alt)
+export class ShortcutManager {
+    readonly global: ShortcutContext = new ShortcutContext(Predicates.alwaysTrue)
+
+    readonly #contexts: Array<ShortcutContext> = []
+
+    createContext(isActive: Predicate<void>): ShortcutContext {
+        const context = new ShortcutContext(isActive)
+        this.#contexts.push(context)
+        return context
+    }
+
+    removeContext(context: ShortcutContext): void {
+        const index = this.#contexts.indexOf(context)
+        if (index !== -1) {
+            context.terminate()
+            this.#contexts.splice(index, 1)
+        }
+    }
+
+    hasConflict(keys: ShortcutKeys): boolean {
+        if (this.global.hasConflict(keys)) {return true}
+        return this.#contexts.some(ctx => ctx.hasConflict(keys))
+    }
+
+    handleEvent(event: KeyboardEvent): void {
+        if (this.#tryHandle(event, this.global)) {return}
+        for (const context of this.#contexts) {
+            if (context.active && this.#tryHandle(event, context)) {return}
+        }
+    }
+
+    #tryHandle(event: KeyboardEvent, context: ShortcutContext): boolean {
+        for (const {keys, action, options} of context.shortcuts) {
+            if (!options.activeInTextField && Events.isTextInput(event.target)) {continue}
+            if (!options.allowRepeat && event.repeat) {continue}
+            if (!keys.matches(event)) {continue}
+            if (options.preventDefault) {event.preventDefault()}
+            action()
+            return true
+        }
+        return false
+    }
+}
+
+export class ShortcutContext {
+    readonly #isActive: Predicate<void>
+    readonly #shortcuts: Array<ShortcutEntry> = []
+    readonly #terminator: Terminator = new Terminator()
+
+    constructor(isActive: Predicate<void>) {
+        this.#isActive = isActive
+    }
+
+    get active(): boolean {return this.#isActive()}
+    get shortcuts(): ReadonlyArray<ShortcutEntry> {return this.#shortcuts}
+
+    register(keys: ShortcutKeys, action: () => void, options?: ShortcutOptions): Subscription {
+        const entry: ShortcutEntry = {keys: keys, action, options: options ?? ShortcutOptions.Default}
+        const index = BinarySearch.leftMostMapped(
+            this.#shortcuts, entry.options.priority, NumberComparator, ({options: {priority}}) => priority)
+        this.#shortcuts.splice(index, 0, entry)
+        return this.#terminator.own({terminate: () => this.#shortcuts.splice(this.#shortcuts.indexOf(entry), 1)})
+    }
+
+    hasConflict(keys: ShortcutKeys): boolean {
+        return this.#shortcuts.some(entry => entry.keys.equals(keys))
+    }
+
+    terminate(): void {this.#terminator.terminate()}
+}
+
+export class ShortcutKeys {
+    static of(code: string, modifiers?: { ctrl?: boolean, shift?: boolean, alt?: boolean }): ShortcutKeys {
+        return new ShortcutKeys(code, modifiers?.ctrl, modifiers?.shift, modifiers?.alt)
     }
 
     static #formatKey(code: string): string {
@@ -28,6 +107,13 @@ export class ShortcutDef {
                         readonly shift: boolean = false,
                         readonly alt: boolean = false) {}
 
+    equals(other: ShortcutKeys): boolean {
+        return this.code === other.code
+            && this.ctrl === other.ctrl
+            && this.shift === other.shift
+            && this.alt === other.alt
+    }
+
     matches(event: KeyboardEvent): boolean {
         return event.code === this.code
             && this.ctrl === Keyboard.isControlKey(event)
@@ -37,10 +123,10 @@ export class ShortcutDef {
 
     format(): string {
         const parts: Array<string> = []
-        if (this.ctrl) {parts.push(Browser.isMacOS() ? "⌘" : "Ctrl")}
         if (this.shift) {parts.push(Browser.isMacOS() ? "⇧" : "Shift")}
         if (this.alt) {parts.push(Browser.isMacOS() ? "⌥" : "Alt")}
-        parts.push(ShortcutDef.#formatKey(this.code))
+        if (this.ctrl) {parts.push(Browser.isMacOS() ? "⌘" : "Ctrl")}
+        parts.push(ShortcutKeys.#formatKey(this.code))
         return parts.join(Browser.isMacOS() ? "" : "+")
     }
 }
@@ -59,7 +145,7 @@ export class ShortcutOptions {
         activeInTextField?: boolean
         priority?: number
     }): ShortcutOptions {
-        if (options === undefined) return ShortcutOptions.Default
+        if (isAbsent(options)) return ShortcutOptions.Default
         return new ShortcutOptions(options.preventDefault ?? true,
             options.allowRepeat ?? false,
             options.activeInTextField ?? false,
@@ -67,31 +153,8 @@ export class ShortcutOptions {
     }
 }
 
-class ShortcutEntry {
-    constructor(readonly def: ShortcutDef,
-                readonly action: () => void,
-                readonly options: ShortcutOptions) {}
-}
-
-export class ShortcutManager {
-    readonly #shortcuts: Array<ShortcutEntry> = []
-
-    register(def: ShortcutDef, action: () => void, options?: ShortcutOptions): Subscription {
-        const entry = new ShortcutEntry(def, action, options ?? ShortcutOptions.Default)
-        const index = BinarySearch.leftMostMapped(
-            this.#shortcuts, entry.options.priority, NumberComparator, ({options: {priority}}) => priority)
-        this.#shortcuts.splice(index, 0, entry)
-        return {terminate: () => this.#shortcuts.splice(this.#shortcuts.indexOf(entry), 1)}
-    }
-
-    handleEvent(event: KeyboardEvent): void {
-        for (const {def, action, options} of this.#shortcuts) {
-            if (!options.activeInTextField && Events.isTextInput(event.target)) {continue}
-            if (!options.allowRepeat && event.repeat) {continue}
-            if (!def.matches(event)) {continue}
-            if (options.preventDefault) event.preventDefault()
-            action()
-            return
-        }
-    }
+type ShortcutEntry = {
+    readonly keys: ShortcutKeys
+    readonly action: () => void
+    readonly options: ShortcutOptions
 }
