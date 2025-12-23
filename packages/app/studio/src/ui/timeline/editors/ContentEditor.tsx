@@ -254,13 +254,13 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
             if (!engine.isPlaying.getValue()) {
                 engine.setPosition(snapping.floor(engine.position.getValue()) + snapping.value)
             }
-        }),
+        }, {allowRepeat: true}),
         shortcuts.register(NoteEditorShortcuts["move-cursor-left"].shortcut, () => {
             if (!engine.isPlaying.getValue()) {
                 engine.setPosition(Math.max(0,
                     snapping.ceil(engine.position.getValue()) - snapping.value))
             }
-        }),
+        }, {allowRepeat: true}),
         shortcuts.register(NoteEditorShortcuts["zoom-to-content"].shortcut, zommContent)
     )
     return element
