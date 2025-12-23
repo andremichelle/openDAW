@@ -12,7 +12,7 @@ import {Html} from "@opendaw/lib-dom"
 import {ContextMenu} from "@/ui/ContextMenu"
 import {MenuItem} from "@/ui/model/menu-item"
 import {ProjectProfile} from "@opendaw/studio-core"
-import {GlobalShortcuts} from "@/shortcuts/GlobalShortcuts"
+import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
 const className = Html.adoptStyleSheet(css, "TransportGroup")
 

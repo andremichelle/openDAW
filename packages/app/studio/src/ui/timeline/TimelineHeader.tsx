@@ -10,7 +10,8 @@ import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Html} from "@opendaw/lib-dom"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {MenuItem} from "@/ui/model/menu-item"
-import {GlobalShortcuts} from "@/shortcuts/GlobalShortcuts"
+import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
+import {ShortcutTooltip} from "@/ui/shortcuts/ShortcutTooltip"
 
 const className = Html.adoptStyleSheet(css, "TimelineHeader")
 
@@ -30,7 +31,7 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                       appearance={{
                           color: Colors.shadow,
                           activeColor: Colors.orange,
-                          tooltip: `Follow Cursor ${GlobalShortcuts["toggle-follow-cursor"].keys.format()}`
+                          tooltip: ShortcutTooltip.create("Follow Cursor", GlobalShortcuts["toggle-follow-cursor"].keys)
                       }}>
                 <Icon symbol={IconSymbol.Run}/>
             </Checkbox>
@@ -60,7 +61,7 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                       model={clips.visible}
                       appearance={{
                           activeColor: Colors.yellow,
-                          tooltip: `Clips ${GlobalShortcuts["toggle-clips"].keys.format()}`
+                          tooltip: () => `Clips ${GlobalShortcuts["toggle-clips"].keys.format()}`
                       }}>
                 <Icon symbol={IconSymbol.Clips}/>
             </Checkbox>

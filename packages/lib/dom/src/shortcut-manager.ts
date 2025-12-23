@@ -129,6 +129,9 @@ export class Shortcut {
             || code.startsWith("Alt")
             || code.startsWith("Meta")
             || code === Key.Escape
+            || code === Key.Delete
+            || code === Key.Backspace
+            || code === Key.Enter
         ) {
             return Option.None
         }

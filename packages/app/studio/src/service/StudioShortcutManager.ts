@@ -9,7 +9,7 @@ import {
     tryCatch
 } from "@opendaw/lib-std"
 import {ShortcutDefinitions, ShortcutManager, ShortcutOptions} from "@opendaw/lib-dom"
-import {GlobalShortcuts, GlobalShortcutsFactory} from "@/shortcuts/GlobalShortcuts"
+import {GlobalShortcuts, GlobalShortcutsFactory} from "@/ui/shortcuts/GlobalShortcuts"
 import {StudioService} from "@/service/StudioService"
 import {DefaultWorkspace} from "@/ui/workspace/Default"
 import {PanelType} from "@/ui/workspace/PanelType"

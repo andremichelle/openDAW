@@ -3,7 +3,7 @@ import {Promises} from "@opendaw/lib-runtime"
 import {Dialogs} from "@/ui/components/dialogs"
 import {PreferencePanel} from "@/ui/PreferencePanel"
 import {ShortcutManagerView} from "@/ui/components/ShortcutManagerView"
-import {GlobalShortcuts, GlobalShortcutsFactory} from "@/shortcuts/GlobalShortcuts"
+import {GlobalShortcuts, GlobalShortcutsFactory} from "@/ui/shortcuts/GlobalShortcuts"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {ShortcutDefinitions} from "@opendaw/lib-dom"
 

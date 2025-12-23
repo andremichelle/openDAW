@@ -7,7 +7,7 @@ import {CaptureMidiBox, TrackBox} from "@opendaw/studio-boxes"
 import {StudioService} from "@/service/StudioService"
 import {MenuCapture} from "@/ui/timeline/tracks/audio-unit/menu/capture"
 import {Project} from "@opendaw/studio-core"
-import {GlobalShortcuts} from "@/shortcuts/GlobalShortcuts"
+import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
 export const installTrackHeaderMenu = (service: StudioService,
                                        audioUnitBoxAdapter: AudioUnitBoxAdapter,

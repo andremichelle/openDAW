@@ -8,7 +8,7 @@ import {StudioService} from "@/service/StudioService"
 import {MenuItem} from "@/ui/model/menu-item"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {SyncLogService} from "@/service/SyncLogService"
-import {GlobalShortcuts} from "@/shortcuts/GlobalShortcuts"
+import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {StudioDialogs} from "@/service/StudioDialogs"
 
 export const populateStudioMenu = (service: StudioService) => {

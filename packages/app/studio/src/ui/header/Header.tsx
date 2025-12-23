@@ -18,7 +18,7 @@ import {HorizontalPeakMeter} from "@/ui/components/HorizontalPeakMeter"
 import {gainToDb} from "@opendaw/lib-dsp"
 import {ContextMenu} from "@/ui/ContextMenu"
 import {EngineAddresses} from "@opendaw/studio-adapters"
-import {GlobalShortcuts} from "@/shortcuts/GlobalShortcuts"
+import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
 const className = Html.adoptStyleSheet(css, "Header")
 
