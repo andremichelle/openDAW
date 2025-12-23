@@ -140,7 +140,7 @@ export class ShortcutKeys {
 
     static #formatKey(code: string): string {
         if (code.startsWith("Key")) {return code.slice(3)}
-        if (code.startsWith("Digit")) { return code.slice(5)}
+        if (code.startsWith("Digit")) {return `#${code.slice(5)}`}
         const mapped = this.#keyNames[code]
         if (isAbsent(mapped)) {return code}
         if (typeof mapped === "string") {return mapped}
