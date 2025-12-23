@@ -34,4 +34,7 @@ export namespace Objects {
     }
 
     export const overwrite = <T extends {}>(target: T, patch: Partial<T>): T => Object.assign(target, patch)
+
+    export const entries = <T extends object>(obj: T): ReadonlyArray<[keyof T, T[keyof T]]> =>
+        Object.entries(obj) as unknown as ReadonlyArray<[keyof T, T[keyof T]]>
 }

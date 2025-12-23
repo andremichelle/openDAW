@@ -13,7 +13,10 @@ export namespace StudioShortcuts {
     const ctrl = true
     // const alt = true
 
-    const validateActions = <T extends Record<string, { keys: ShortcutKeys, description: string }>>(actions: T): T => {
+    export type Definition = { keys: ShortcutKeys, description: string }
+    export type Definitions = Record<string, Definition>
+
+    const validateActions = <T extends Definitions>(actions: T): T => {
         const entries = Object.entries(actions)
         for (let i = 0; i < entries.length; i++) {
             for (let j = i + 1; j < entries.length; j++) {

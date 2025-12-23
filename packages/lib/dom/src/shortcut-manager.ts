@@ -110,6 +110,10 @@ export class ShortcutKeys {
         return new ShortcutKeys(code, modifiers?.ctrl, modifiers?.shift, modifiers?.alt)
     }
 
+    static fromEvent(event: KeyboardEvent): ShortcutKeys {
+        return new ShortcutKeys(event.code, Keyboard.isControlKey(event), event.shiftKey, event.altKey)
+    }
+
     static readonly #keyNames: Record<string, string | [mac: string, other: string]> = {
         [Key.Escape]: ["⎋", "Esc"],
         [Key.Enter]: ["↩", "Enter"],
