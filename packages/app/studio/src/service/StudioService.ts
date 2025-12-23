@@ -65,6 +65,7 @@ import {Surface} from "@/ui/surface/Surface"
 import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
 import {Mixdowns} from "@/service/Mixdowns"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
+import {StudioDialogs} from "@/service/StudioDialogs"
 
 /**
  * I am just piling stuff after stuff in here to boot the environment.
@@ -136,6 +137,9 @@ export class StudioService implements ProjectEnv {
         this.#configBeforeUnload()
         this.#checkRecovery()
         this.#listenPreferences()
+
+        // TODO Remove when done
+        setTimeout(() => StudioDialogs.showShortcutManager().then(), 500)
     }
 
     get sampleRate(): number {return this.audioContext.sampleRate}

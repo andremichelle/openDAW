@@ -16,7 +16,7 @@ export const loadFont = async (properties: FontFaceProperties) => {
         })
         await fontFace.load()
         document.fonts.add(fontFace)
-        console.debug(`font-family: '${fontFace.family}'`)
+        console.debug(`font loaded '${fontFace.family} ${fontFace.style} ${fontFace.weight}'`)
     } catch (error) {
         console.error(error)
     }

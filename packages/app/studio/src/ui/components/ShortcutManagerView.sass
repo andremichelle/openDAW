@@ -1,0 +1,21 @@
+component
+  display: flex
+  flex-direction: column
+  outline: none
+
+  > div.shortcuts
+    flex: 0 0 320px
+    display: flex
+    flex-direction: column
+    row-gap: 0.25em
+    padding: 0 1em 0 0
+    overflow: hidden auto
+    outline: none
+
+    > div.shortcut
+      display: flex
+      justify-content: space-between
+      cursor: pointer
+
+      &:hover
+        color: var(--color-bright)

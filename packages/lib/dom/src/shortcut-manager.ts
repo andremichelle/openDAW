@@ -111,12 +111,10 @@ export class ShortcutKeys {
     }
 
     static readonly #keyNames: Record<string, string | [mac: string, other: string]> = {
-        [Key.Space]: ["␣", "Space"],
         [Key.Escape]: ["⎋", "Esc"],
         [Key.Enter]: ["↩", "Enter"],
         [Key.Backspace]: ["⌫", "Backspace"],
         [Key.Delete]: ["⌦", "Del"],
-        [Key.Tab]: ["⇥", "Tab"],
         [Key.Home]: ["↖", "Home"],
         [Key.End]: ["↘", "End"],
         [Key.PageUp]: ["⇞", "PgUp"],

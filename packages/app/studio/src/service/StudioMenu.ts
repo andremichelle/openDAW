@@ -209,7 +209,10 @@ export const populateStudioMenu = (service: StudioService) => {
                     MenuItem.default({
                         label: "Preferences",
                         shortcut: StudioShortcuts.Actions["show-preferences"].keys.format()
-                    }).setTriggerProcedure(async () => StudioDialogs.showPreferences())
+                    }).setTriggerProcedure(async () => StudioDialogs.showPreferences()),
+                    MenuItem.default({
+                        label: "Shortcut Manager"
+                    }).setTriggerProcedure(async () => StudioDialogs.showShortcutManager())
                 )
             }
         )
