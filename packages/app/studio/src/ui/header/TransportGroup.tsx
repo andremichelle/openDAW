@@ -13,6 +13,7 @@ import {ContextMenu} from "@/ui/ContextMenu"
 import {MenuItem} from "@/ui/model/menu-item"
 import {ProjectProfile} from "@opendaw/studio-core"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
+import {ShortcutTooltip} from "@/ui/shortcuts/ShortcutTooltip"
 
 const className = Html.adoptStyleSheet(css, "TransportGroup")
 
@@ -43,7 +44,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                 appearance={{
                     color: Colors.green.saturate(0.0),
                     activeColor: Colors.green,
-                    tooltip: () => `Play ${GlobalShortcuts["toggle-playback"].keys.format()}`
+                    tooltip: ShortcutTooltip.create("Play", GlobalShortcuts["toggle-playback"].keys)
                 }}
                 onClick={() => {
                     if (engine.isPlaying.getValue()) {
@@ -103,7 +104,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                       model={loop}
                       appearance={{
                           activeColor: Colors.gray,
-                          tooltip: () => `Loop ${GlobalShortcuts["toggle-loop"].keys.format()}`
+                          tooltip: ShortcutTooltip.create("Loop", GlobalShortcuts["toggle-loop"].keys)
                       }}>
                 <Icon symbol={IconSymbol.Loop}/>
             </Checkbox>

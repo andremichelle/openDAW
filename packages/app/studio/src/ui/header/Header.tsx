@@ -19,6 +19,7 @@ import {gainToDb} from "@opendaw/lib-dsp"
 import {ContextMenu} from "@/ui/ContextMenu"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
+import {ShortcutTooltip} from "@/ui/shortcuts/ShortcutTooltip"
 
 const className = Html.adoptStyleSheet(css, "Header")
 
@@ -128,7 +129,7 @@ export const Header = ({lifecycle, service}: Construct) => {
                       model={service.engine.metronomeEnabled}
                       appearance={{
                           activeColor: Colors.orange,
-                          tooltip: `Metronome ${GlobalShortcuts["toggle-metronome"].keys.format()}`
+                          tooltip: ShortcutTooltip.create("Metronome", GlobalShortcuts["toggle-metronome"].keys)
                       }}>
                 <Icon symbol={IconSymbol.Metronome}/>
             </Checkbox>
@@ -165,7 +166,7 @@ export const Header = ({lifecycle, service}: Construct) => {
                                 .map(([key, {icon: iconSymbol, name}]) => ({
                                     value: key,
                                     element: <Icon symbol={iconSymbol}/>,
-                                    tooltip: () => `${name} ${GlobalShortcuts[ScreenShortcutKeys[key as Workspace.ScreenKeys]].keys.format()}`
+                                    tooltip: ShortcutTooltip.create(name, GlobalShortcuts[ScreenShortcutKeys[key as Workspace.ScreenKeys]].keys)
                                 }))}
                             appearance={{framed: true, landscape: true}}/>
             </div>

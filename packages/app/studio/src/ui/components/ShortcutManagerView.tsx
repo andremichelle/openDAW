@@ -14,6 +14,39 @@ type Construct = {
     updateNotifier: Notifier<void>
 }
 
+let lastOpenIndex = 0
+
+export const ShortcutManagerView = ({lifecycle, contexts, updateNotifier}: Construct) => {
+    return (
+        <div className={className} onInit={element => {
+            const update = () => replaceChildren(element, Objects.entries(contexts).map(([name, shortcuts], index) => (
+                <details className="context"
+                         open={lastOpenIndex === index}
+                         onInit={element => element.ontoggle = () => {
+                             if (element.open) {lastOpenIndex = index}
+                         }}>
+                    <summary><h3>{name}</h3></summary>
+                    <div className="shortcuts">
+                        {Objects.entries(shortcuts).map(([key, entry]) => (
+                            <div className="shortcut" onclick={async () => {
+                                const keys = await editShortcut(shortcuts, entry)
+                                shortcuts[key].keys.overrideWith(keys)
+                                update()
+                            }}><span>{entry.description}</span>
+                                <hr/>
+                                <span>{entry.keys.format()}</span>
+                            </div>
+                        ))}
+                    </div>
+                </details>
+            )))
+            lifecycle.own(updateNotifier.subscribe(update))
+            update()
+        }}>
+        </div>
+    )
+}
+
 const editShortcut = async (definitions: ShortcutDefinitions,
                             original: ShortcutDefinition): Promise<Shortcut> => {
     const lifecycle = new Terminator()
@@ -55,37 +88,4 @@ const editShortcut = async (definitions: ShortcutDefinitions,
             onClick: () => abortController.abort()
         }]
     }).then(() => shortcut.getValue(), () => original.keys).finally(() => lifecycle.terminate())
-}
-
-let lastOpenIndex = 0
-
-export const ShortcutManagerView = ({lifecycle, contexts, updateNotifier}: Construct) => {
-    return (
-        <div className={className} onInit={element => {
-            const update = () => replaceChildren(element, Objects.entries(contexts).map(([name, shortcuts], index) => (
-                <details className="context"
-                         open={lastOpenIndex === index}
-                         onInit={element => element.ontoggle = () => {
-                             if (element.open) {lastOpenIndex = index}
-                         }}>
-                    <summary><h3>{name}</h3></summary>
-                    <div className="shortcuts">
-                        {Objects.entries(shortcuts).map(([key, entry]) => (
-                            <div className="shortcut" onclick={async () => {
-                                const keys = await editShortcut(shortcuts, entry)
-                                shortcuts[key].keys.overrideWith(keys)
-                                update()
-                            }}><span>{entry.description}</span>
-                                <hr/>
-                                <span>{entry.keys.format()}</span>
-                            </div>
-                        ))}
-                    </div>
-                </details>
-            )))
-            lifecycle.own(updateNotifier.subscribe(update))
-            update()
-        }}>
-        </div>
-    )
 }
