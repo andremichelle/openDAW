@@ -56,7 +56,6 @@ export class VertexSelection implements Selection<SelectableVertex> {
         this.#entityMap.clear()
     }
 
-    // TODO Make selection local
     createFilteredSelection<T extends Addressable>(affiliate: Predicate<SelectableVertex>,
                                                    map: Bijective<T, SelectableVertex>): FilteredSelection<T> {
         return new FilteredSelection<T>(this, affiliate, map)

@@ -47,8 +47,10 @@ export const NoteEditor =
         const pitchPositioner = lifecycle.own(new PitchPositioner())
         const modifyContext = new ObservableModifyContext<NoteModifier>(editing)
         const propertyOwner = new DefaultObservableValue<PropertyAccessor>(NotePropertyVelocity)
+        const eventsField = reader.content.box.events
         const selection: FilteredSelection<NoteEventBoxAdapter> = lifecycle.own(project.selection
-            .createFilteredSelection(box => box instanceof NoteEventBox, {
+            .createFilteredSelection(box => box instanceof NoteEventBox
+                && box.events.targetVertex.contains(eventsField), {
                 fx: adapter => adapter.box,
                 fy: vertex => project.boxAdapters.adapterFor(vertex.box, NoteEventBoxAdapter)
             }))
@@ -139,7 +141,7 @@ export const NoteEditor =
                     let createdNote = false
                     editing.modify(() => {
                         NoteEventBox.create(boxGraph, UUID.generate(), box => {
-                            box.events.refer(reader.content.box.events)
+                            box.events.refer(eventsField)
                             box.position.setValue(position - reader.position)
                             box.duration.setValue(duration)
                             box.pitch.setValue(pitch)

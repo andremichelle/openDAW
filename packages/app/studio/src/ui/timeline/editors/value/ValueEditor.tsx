@@ -58,8 +58,10 @@ type Construct = {
 export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, reader, context}: Construct) => {
     const {project} = service
     const {editing} = project
+    const eventsField = reader.content.box.events
     const selection: Selection<ValueEventBoxAdapter> = lifecycle.own(project.selection
-        .createFilteredSelection(box => box instanceof ValueEventBox, {
+        .createFilteredSelection(box => box instanceof ValueEventBox
+            && box.events.targetVertex.contains(eventsField), {
             fx: (adapter: ValueEventBoxAdapter) => adapter.box,
             fy: vertex => project.boxAdapters.adapterFor(vertex.box, ValueEventBoxAdapter)
         }))

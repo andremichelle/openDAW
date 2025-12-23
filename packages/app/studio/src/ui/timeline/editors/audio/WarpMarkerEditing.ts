@@ -41,9 +41,11 @@ export namespace WarpMarkerEditing {
                             hoverTransient: ObservableValue<Nullable<TransientMarkerBoxAdapter>>): Terminable => {
         const terminator = new Terminator()
         const capturing = WarpMarkerUtils.createCapturing(canvas, range, reader, MARKER_RADIUS)
+        const warpMarkersField = reader.audioContent.observableOptPlayMode.map(playMode => playMode.box.warpMarkers)
         const selection: FilteredSelection<WarpMarkerBoxAdapter> = terminator.own(
             project.selection
-                .createFilteredSelection(box => box instanceof WarpMarkerBox, {
+                .createFilteredSelection(box => box instanceof WarpMarkerBox
+                    && box.owner.targetVertex.equals(warpMarkersField), {
                     fx: adapter => adapter.box,
                     fy: vertex => project.boxAdapters.adapterFor(vertex.box, WarpMarkerBoxAdapter)
                 }))
