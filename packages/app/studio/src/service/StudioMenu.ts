@@ -1,5 +1,5 @@
-import {EmptyExec, isAbsent, isDefined, panic, RuntimeNotifier, RuntimeSignal, Terminator} from "@opendaw/lib-std"
-import {Browser, Files, ModfierKeys} from "@opendaw/lib-dom"
+import {EmptyExec, isAbsent, isDefined, panic, RuntimeNotifier, RuntimeSignal} from "@opendaw/lib-std"
+import {Browser, Files} from "@opendaw/lib-dom"
 import {RouteLocation} from "@opendaw/lib-jsx"
 import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
@@ -8,8 +8,8 @@ import {StudioService} from "@/service/StudioService"
 import {MenuItem} from "@/ui/model/menu-item"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {SyncLogService} from "@/service/SyncLogService"
-import {PreferencePanel} from "@/ui/PreferencePanel"
 import {StudioShortcuts} from "@/service/StudioShortcuts"
+import {StudioDialogs} from "@/service/StudioDialogs"
 
 export const populateStudioMenu = (service: StudioService) => {
     const {Actions} = StudioShortcuts
@@ -17,12 +17,19 @@ export const populateStudioMenu = (service: StudioService) => {
         .setRuntimeChildrenProcedure(parent => {
                 parent.addMenuItem(
                     MenuItem.header({label: "openDAW", icon: IconSymbol.OpenDAW, color: Colors.green}),
-                    MenuItem.default({label: "Dashboard"})
-                        .setTriggerProcedure(() => service.closeProject()),
-                    MenuItem.default({label: "New", separatorBefore: true})
-                        .setTriggerProcedure(() => service.newProject()),
-                    MenuItem.default({label: "Open...", shortcut: Actions["project-open"].keys.format()})
-                        .setTriggerProcedure(() => service.browseLocalProjects()),
+                    MenuItem.default({
+                        label: "Dashboard",
+                        shortcut: Actions["workspace-screen-dashboard"].keys.format()
+                    }).setTriggerProcedure(() => service.closeProject()),
+                    MenuItem.default({
+                        label: "New",
+                        separatorBefore: true,
+                        shortcut: Actions["project-new"].keys.format()
+                    }).setTriggerProcedure(() => service.newProject()),
+                    MenuItem.default({
+                        label: "Open...",
+                        shortcut: Actions["project-open"].keys.format()
+                    }).setTriggerProcedure(() => service.browseLocalProjects()),
                     MenuItem.default({
                         label: "Save",
                         shortcut: Actions["project-save"].keys.format(),
@@ -91,7 +98,7 @@ export const populateStudioMenu = (service: StudioService) => {
                             return parent.addMenuItem(
                                 MenuItem.default({
                                     label: "Show MIDI-Keyboard",
-                                    shortcut: [ModfierKeys.System.Cmd, "K"],
+                                    shortcut: StudioShortcuts.Actions["toggle-software-keyboard"].keys.format(),
                                     checked: service.isSoftwareKeyboardVisible()
                                 }).setTriggerProcedure(() => service.toggleSoftwareKeyboard())
                             )
@@ -199,16 +206,10 @@ export const populateStudioMenu = (service: StudioService) => {
                         }),
                     MenuItem.default({label: "Script Editor", separatorBefore: true})
                         .setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
-                    MenuItem.default({label: "Preferences"})
-                        .setTriggerProcedure(async () => {
-                            const lifecycle = new Terminator()
-                            await Promises.tryCatch(Dialogs.show({
-                                headline: "Preferences",
-                                content: PreferencePanel({lifecycle}),
-                                growWidth: true
-                            }))
-                            lifecycle.terminate()
-                        })
+                    MenuItem.default({
+                        label: "Preferences",
+                        shortcut: StudioShortcuts.Actions["show-preferences"].keys.format()
+                    }).setTriggerProcedure(async () => StudioDialogs.showPreferences())
                 )
             }
         )

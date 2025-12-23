@@ -18,12 +18,23 @@ import {HorizontalPeakMeter} from "@/ui/components/HorizontalPeakMeter"
 import {gainToDb} from "@opendaw/lib-dsp"
 import {ContextMenu} from "@/ui/ContextMenu"
 import {EngineAddresses} from "@opendaw/studio-adapters"
+import {StudioShortcuts} from "@/service/StudioShortcuts"
 
 const className = Html.adoptStyleSheet(css, "Header")
 
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
+}
+
+const ScreenShortcutKeys: Record<Workspace.ScreenKeys, keyof typeof StudioShortcuts.Actions> = {
+    "dashboard": "workspace-screen-dashboard",
+    "default": "workspace-screen-default",
+    "mixer": "workspace-screen-mixer",
+    "piano": "workspace-screen-piano",
+    "project": "workspace-screen-project",
+    "shadertoy": "workspace-screen-shadertoy",
+    "meter": "workspace-screen-meter"
 }
 
 export const Header = ({lifecycle, service}: Construct) => {
@@ -115,7 +126,10 @@ export const Header = ({lifecycle, service}: Construct) => {
                                       checked: count === service.engine.countInBarsTotal.getValue()
                                   }).setTriggerProcedure(() => service.engine.countInBarsTotal.setValue(count))))))))}
                       model={service.engine.metronomeEnabled}
-                      appearance={{activeColor: Colors.orange, tooltip: "Metronome"}}>
+                      appearance={{
+                          activeColor: Colors.orange,
+                          tooltip: `Metronome ${StudioShortcuts.Actions["toggle-metronome"].keys.format()}`
+                      }}>
                 <Icon symbol={IconSymbol.Metronome}/>
             </Checkbox>
             <hr/>
@@ -151,10 +165,8 @@ export const Header = ({lifecycle, service}: Construct) => {
                                 .map(([key, {icon: iconSymbol, name}]) => ({
                                     value: key,
                                     element: <Icon symbol={iconSymbol}/>,
-                                    tooltip: name,
-                                    className: name === "Modular"
-                                        ? "experimental-section"
-                                        : undefined
+                                    tooltip: `${name} ${StudioShortcuts
+                                        .Actions[ScreenShortcutKeys[key as Workspace.ScreenKeys]].keys.format()}`
                                 }))}
                             appearance={{framed: true, landscape: true}}/>
             </div>

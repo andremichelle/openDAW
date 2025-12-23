@@ -6,6 +6,7 @@ import {DefaultWorkspace} from "@/ui/workspace/Default"
 import {Workspace} from "@/ui/workspace/Workspace"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {ProjectUtils} from "@opendaw/studio-adapters"
+import {StudioDialogs} from "@/service/StudioDialogs"
 
 export namespace StudioShortcuts {
     const shift = true
@@ -25,6 +26,7 @@ export namespace StudioShortcuts {
     }
 
     export const Actions = validateActions({
+        "project-new": {keys: ShortcutKeys.of(Key.KeyN, {ctrl})},
         "project-undo": {keys: ShortcutKeys.of(Key.KeyZ, {ctrl})},
         "project-redo": {keys: ShortcutKeys.of(Key.KeyZ, {ctrl, shift})},
         "project-open": {keys: ShortcutKeys.of(Key.KeyO, {ctrl})},
@@ -39,6 +41,7 @@ export namespace StudioShortcuts {
         "toggle-markers-track": {keys: ShortcutKeys.of(Key.KeyM, {shift})},
         "toggle-clips": {keys: ShortcutKeys.of(Key.KeyC, {shift})},
         "toggle-follow-cursor": {keys: ShortcutKeys.of(Key.KeyF, {shift})},
+        "toggle-metronome": {keys: ShortcutKeys.of(Key.KeyM, {ctrl})},
         "copy-device": {keys: ShortcutKeys.of(Key.KeyD, {ctrl})},
         "workspace-next-screen": {keys: ShortcutKeys.of(Key.Tab)},
         "workspace-prev-screen": {keys: ShortcutKeys.of(Key.Tab, {shift})},
@@ -47,16 +50,20 @@ export namespace StudioShortcuts {
         "workspace-screen-mixer": {keys: ShortcutKeys.of(Key.Digit2, {shift})},
         "workspace-screen-piano": {keys: ShortcutKeys.of(Key.Digit3, {shift})},
         "workspace-screen-project": {keys: ShortcutKeys.of(Key.Digit4, {shift})},
-        "workspace-screen-meter": {keys: ShortcutKeys.of(Key.Digit5, {shift})}
+        "workspace-screen-shadertoy": {keys: ShortcutKeys.of(Key.Digit5, {shift})},
+        "workspace-screen-meter": {keys: ShortcutKeys.of(Key.Digit6, {shift})},
+        "show-preferences": {keys: ShortcutKeys.of(Key.Comma, {ctrl})}
     })
 
     export const install = (service: StudioService): Subscription => {
         const {global: s} = ShortcutManager.get()
         const {
+            engine: {metronomeEnabled},
             panelLayout,
             timeline: {clips: {visible: clipsVisibility}, followCursor, primaryVisibility: {markers, tempo}}
         } = service
         const subscriptions = Terminable.many(
+            s.register(Actions["project-new"].keys, () => service.newProject()),
             s.register(Actions["project-undo"].keys, () => service.runIfProject(project => project.editing.undo())),
             s.register(Actions["project-redo"].keys, () => service.runIfProject(project => project.editing.redo())),
             s.register(Actions["project-open"].keys, async () => await service.browseLocalProjects()),
@@ -77,6 +84,7 @@ export namespace StudioShortcuts {
             s.register(Actions["toggle-markers-track"].keys, () => markers.setValue(!markers.getValue())),
             s.register(Actions["toggle-clips"].keys, () => clipsVisibility.setValue(!clipsVisibility.getValue())),
             s.register(Actions["toggle-follow-cursor"].keys, () => followCursor.setValue(!followCursor.getValue())),
+            s.register(Actions["toggle-metronome"].keys, () => metronomeEnabled.setValue(!metronomeEnabled.getValue())),
             s.register(Actions["copy-device"].keys, () => service.runIfProject(
                 ({editing, userEditingManager, skeleton}) => userEditingManager.audioUnit.get().ifSome(({box}) => {
                     const audioUnitBox = asInstanceOf(box, AudioUnitBox)
@@ -105,7 +113,9 @@ export namespace StudioShortcuts {
             s.register(Actions["workspace-screen-mixer"].keys, () => service.runIfProject(() => service.switchScreen("mixer"))),
             s.register(Actions["workspace-screen-piano"].keys, () => service.runIfProject(() => service.switchScreen("piano"))),
             s.register(Actions["workspace-screen-project"].keys, () => service.runIfProject(() => service.switchScreen("project"))),
-            s.register(Actions["workspace-screen-meter"].keys, () => service.runIfProject(() => service.switchScreen("meter")))
+            s.register(Actions["workspace-screen-meter"].keys, () => service.runIfProject(() => service.switchScreen("meter"))),
+            s.register(Actions["workspace-screen-shadertoy"].keys, () => service.runIfProject(() => service.switchScreen("shadertoy"))),
+            s.register(Actions["show-preferences"].keys, () => StudioDialogs.showPreferences())
         )
         const conflicts = s.hasConflicts()
         if (conflicts) {

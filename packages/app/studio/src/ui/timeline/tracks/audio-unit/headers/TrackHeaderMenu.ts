@@ -7,7 +7,7 @@ import {CaptureMidiBox, TrackBox} from "@opendaw/studio-boxes"
 import {StudioService} from "@/service/StudioService"
 import {MenuCapture} from "@/ui/timeline/tracks/audio-unit/menu/capture"
 import {Project} from "@opendaw/studio-core"
-import {ModfierKeys} from "@opendaw/lib-dom"
+import {StudioShortcuts} from "@/service/StudioShortcuts"
 
 export const installTrackHeaderMenu = (service: StudioService,
                                        audioUnitBoxAdapter: AudioUnitBoxAdapter,
@@ -37,7 +37,7 @@ export const installTrackHeaderMenu = (service: StudioService,
             trackBoxAdapter, editing, captureDevices.get(audioUnitBoxAdapter.uuid)),
         MenuItem.default({
             label: "Copy AudioUnit",
-            shortcut: [ModfierKeys.System.Cmd, "D"]
+            shortcut: StudioShortcuts.Actions["copy-device"].keys.format()
         }).setTriggerProcedure(() => {
             const copies = editing.modify(() => ProjectUtils
                 .extractAudioUnits([trackBoxAdapter.audioUnit], project.skeleton), false).unwrap()

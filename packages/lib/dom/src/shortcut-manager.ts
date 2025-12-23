@@ -11,6 +11,7 @@ import {
 } from "@opendaw/lib-std"
 import {Browser} from "./browser"
 import {Events} from "./events"
+import {Key} from "./key"
 import {Keyboard} from "./keyboard"
 
 export class ShortcutManager {
@@ -109,19 +110,41 @@ export class ShortcutKeys {
         return new ShortcutKeys(code, modifiers?.ctrl, modifiers?.shift, modifiers?.alt)
     }
 
+    static readonly #keyNames: Record<string, string | [mac: string, other: string]> = {
+        [Key.Space]: ["␣", "Space"],
+        [Key.Escape]: ["⎋", "Esc"],
+        [Key.Enter]: ["↩", "Enter"],
+        [Key.Backspace]: ["⌫", "Backspace"],
+        [Key.Delete]: ["⌦", "Del"],
+        [Key.Tab]: ["⇥", "Tab"],
+        [Key.Home]: ["↖", "Home"],
+        [Key.End]: ["↘", "End"],
+        [Key.PageUp]: ["⇞", "PgUp"],
+        [Key.PageDown]: ["⇟", "PgDn"],
+        [Key.ArrowUp]: "↑",
+        [Key.ArrowDown]: "↓",
+        [Key.ArrowLeft]: "←",
+        [Key.ArrowRight]: "→",
+        [Key.Comma]: ",",
+        [Key.Period]: ".",
+        [Key.Semicolon]: ";",
+        [Key.Quote]: "'",
+        [Key.Backquote]: "`",
+        [Key.Slash]: "/",
+        [Key.Backslash]: "\\",
+        [Key.BracketLeft]: "[",
+        [Key.BracketRight]: "]",
+        [Key.Minus]: "-",
+        [Key.Equal]: "="
+    }
+
     static #formatKey(code: string): string {
-        if (code.startsWith("Key")) return code.slice(3)
-        if (code.startsWith("Digit")) return code.slice(5)
-        if (code === "Space") return Browser.isMacOS() ? "␣" : "Space"
-        if (code === "Escape") return Browser.isMacOS() ? "⎋" : "Esc"
-        if (code === "Enter") return Browser.isMacOS() ? "↩" : "Enter"
-        if (code === "Backspace") return Browser.isMacOS() ? "⌫" : "Backspace"
-        if (code === "Delete") return Browser.isMacOS() ? "⌦" : "Del"
-        if (code === "ArrowUp") return "↑"
-        if (code === "ArrowDown") return "↓"
-        if (code === "ArrowLeft") return "←"
-        if (code === "ArrowRight") return "→"
-        return code
+        if (code.startsWith("Key")) {return code.slice(3)}
+        if (code.startsWith("Digit")) { return code.slice(5)}
+        const mapped = this.#keyNames[code]
+        if (isAbsent(mapped)) {return code}
+        if (typeof mapped === "string") {return mapped}
+        return Browser.isMacOS() ? mapped[0] : mapped[1]
     }
 
     private constructor(readonly code: string,
