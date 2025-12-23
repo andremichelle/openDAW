@@ -27,6 +27,18 @@
         "src/**"
       ],
       "outputs": [
+        "../boxes/src/**"
+      ]
+    },
+    "@opendaw/studio-boxes#build": {
+      "dependsOn": [
+        "@opendaw/studio-forge-boxes#build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*"
+      ],
+      "outputs": [
         "dist/**"
       ]
     },

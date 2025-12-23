@@ -50,7 +50,7 @@ export class ShortcutManager {
             if (!options.activeInTextField && Events.isTextInput(event.target)) {continue}
             if (!options.allowRepeat && event.repeat) {continue}
             if (!shortcut.matches(event)) {continue}
-            if (options.preventDefault) {event.preventDefault()}
+            if (options.preventDefault ?? true) {event.preventDefault()}
             action()
             return true
         }
@@ -73,7 +73,7 @@ export class ShortcutContext implements Terminable {
     register(shortcut: Shortcut, action: Exec, options?: ShortcutOptions): Subscription {
         const entry: ShortcutEntry = {shortcut, action, options: options ?? ShortcutOptions.Default}
         const index = BinarySearch.leftMostMapped(
-            this.#shortcuts, entry.options.priority, NumberComparator, ({options: {priority}}) => priority)
+            this.#shortcuts, entry.options.priority ?? 0, NumberComparator, ({options: {priority}}) => priority ?? 0)
         this.#shortcuts.splice(index, 0, entry)
         return this.#terminator.own({terminate: () => this.#shortcuts.splice(this.#shortcuts.indexOf(entry), 1)})
     }
@@ -205,25 +205,19 @@ export class Shortcut {
     toString(): string {return `{ShortcutKeys ${this.format()}}`}
 }
 
-export class ShortcutOptions {
-    private constructor(readonly preventDefault: boolean = true,
-                        readonly allowRepeat: boolean = false,
-                        readonly activeInTextField: boolean = false,
-                        readonly priority: number = 0) {}
+export type ShortcutOptions = {
+    readonly preventDefault?: boolean
+    readonly allowRepeat?: boolean
+    readonly activeInTextField?: boolean
+    readonly priority?: number
+}
 
-    static Default = new ShortcutOptions()
-
-    static of(options?: {
-        preventDefault?: boolean
-        allowRepeat?: boolean
-        activeInTextField?: boolean
-        priority?: number
-    }): ShortcutOptions {
-        if (isAbsent(options)) return ShortcutOptions.Default
-        return new ShortcutOptions(options.preventDefault ?? true,
-            options.allowRepeat ?? false,
-            options.activeInTextField ?? false,
-            options.priority ?? 0)
+export namespace ShortcutOptions {
+    export const Default: ShortcutOptions = {
+        preventDefault: true,
+        allowRepeat: false,
+        activeInTextField: false,
+        priority: 0
     }
 }
 

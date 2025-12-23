@@ -9,7 +9,7 @@ import {
     Terminable,
     tryCatch
 } from "@opendaw/lib-std"
-import {ShortcutDefinitions, ShortcutManager, ShortcutOptions} from "@opendaw/lib-dom"
+import {ShortcutDefinitions, ShortcutManager} from "@opendaw/lib-dom"
 import {GlobalShortcuts, GlobalShortcutsFactory} from "@/ui/shortcuts/GlobalShortcuts"
 import {StudioService} from "@/service/StudioService"
 import {DefaultWorkspace} from "@/ui/workspace/Default"
@@ -70,10 +70,8 @@ export namespace StudioShortcutManager {
             gc.register(gs["project-undo"].shortcut, () => service.runIfProject(project => project.editing.undo())),
             gc.register(gs["project-redo"].shortcut, () => service.runIfProject(project => project.editing.redo())),
             gc.register(gs["project-open"].shortcut, async () => await service.browseLocalProjects()),
-            gc.register(gs["project-save"].shortcut, async () => await service.projectProfileService.save(),
-                ShortcutOptions.of({activeInTextField: true})),
-            gc.register(gs["project-save-as"].shortcut, async () => await service.projectProfileService.saveAs(),
-                ShortcutOptions.of({activeInTextField: true})),
+            gc.register(gs["project-save"].shortcut, async () => await service.projectProfileService.save(), {activeInTextField: true}),
+            gc.register(gs["project-save-as"].shortcut, async () => await service.projectProfileService.saveAs(), {activeInTextField: true}),
             gc.register(gs["move-cursor-right"].shortcut, () => {
                 if (!isPlaying.getValue()) {
                     engine.setPosition(snapping.floor(position.getValue()) + snapping.value)
@@ -84,7 +82,7 @@ export namespace StudioShortcutManager {
                     engine.setPosition(Math.max(0,
                         snapping.ceil(position.getValue()) - snapping.value))
                 }
-            }),
+            }, {allowRepeat: true}),
             gc.register(gs["toggle-playback"].shortcut, () => {
                 const {engine} = service
                 const isPlaying = engine.isPlaying.getValue()
