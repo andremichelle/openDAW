@@ -3,7 +3,7 @@ import {Key, Shortcut, ShortcutDefinitions, ShortcutValidator} from "@opendaw/li
 const shift = true
 const ctrl = true
 
-export const GlobalShortcutsFactory = ShortcutValidator.validate({
+export const GlobalShortcutsFactory: ShortcutDefinitions = ShortcutValidator.validate({
     "project-undo": {
         keys: Shortcut.of(Key.KeyZ, {ctrl}),
         description: "Undo last action"

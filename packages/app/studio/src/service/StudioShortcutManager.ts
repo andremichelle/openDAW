@@ -3,6 +3,8 @@ import {
     asInstanceOf,
     isDefined,
     isNull,
+    JSONValue,
+    Objects,
     RuntimeNotifier,
     Subscription,
     Terminable,
@@ -17,20 +19,29 @@ import {Workspace} from "@/ui/workspace/Workspace"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {ProjectUtils} from "@opendaw/studio-adapters"
 import {StudioDialogs} from "@/service/StudioDialogs"
+import {NoteEditorShortcuts, NoteEditorShortcutsFactory} from "@/ui/shortcuts/NoteEditorContext"
 
 export namespace StudioShortcutManager {
     const localStorageKey = "shortcuts"
 
+    const Contexts = {
+        "global": {factory: GlobalShortcutsFactory, user: GlobalShortcuts},
+        "note-editor": {factory: NoteEditorShortcutsFactory, user: NoteEditorShortcuts}
+    } as const satisfies Record<string, any>
+
     export const reset = (): void => {
-        for (const [key, {keys}] of Object.entries(GlobalShortcutsFactory)) {
-            GlobalShortcuts[key].keys.overrideWith(keys)
-        }
+        Object.values(Contexts)
+            .forEach(definitions => Object.entries(definitions.factory)
+                .forEach(([key, {keys}]) => definitions.user[key].keys.overrideWith(keys)))
     }
 
-    export const store = () => {
+    export const store = (): void => {
         try {
-            const jsonString = JSON.stringify({global: ShortcutDefinitions.toJSON(GlobalShortcuts)})
-            localStorage.setItem(localStorageKey, jsonString)
+            const contexts: JSONValue = Objects.entries(Contexts).reduce((record, [key, {user}]) => {
+                record[key] = ShortcutDefinitions.toJSON(user)
+                return record
+            }, {} as Record<keyof typeof Contexts, JSONValue>)
+            localStorage.setItem(localStorageKey, JSON.stringify(contexts))
             console.debug("Shortcuts saved.")
         } catch (reason) {
             console.warn(reason)
@@ -47,10 +58,12 @@ export namespace StudioShortcutManager {
         const gs = GlobalShortcuts
         const storedShortcuts = localStorage.getItem(localStorageKey)
         if (isDefined(storedShortcuts)) {
-            const {status, value} = tryCatch(() => JSON.parse(storedShortcuts))
-            if (status === "success" && "global" in value) {
+            const {status, value: stored, error} = tryCatch(() => JSON.parse(storedShortcuts))
+            if (status === "success") {
+                Objects.entries(Contexts).forEach(([name, {user}]) => ShortcutDefinitions.fromJSON(user, stored[name]))
                 console.debug("Custom shortcuts loaded.")
-                ShortcutDefinitions.fromJSON(gs, value.global)
+            } else {
+                console.warn(error)
             }
         }
         const subscriptions = Terminable.many(
