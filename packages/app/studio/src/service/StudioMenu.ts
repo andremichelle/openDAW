@@ -206,12 +206,14 @@ export const populateStudioMenu = (service: StudioService) => {
                     MenuItem.default({label: "Script Editor", separatorBefore: true})
                         .setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
                     MenuItem.default({
-                        label: "Preferences",
-                        shortcut: GlobalShortcuts["show-preferences"].shortcut.format()
-                    }).setTriggerProcedure(async () => StudioDialogs.showPreferences()),
+                        label: "Shortcut Manager",
+                        separatorBefore: true
+                    }).setTriggerProcedure(async () => StudioDialogs.showShortcutManager()),
                     MenuItem.default({
-                        label: "Shortcut Manager"
-                    }).setTriggerProcedure(async () => StudioDialogs.showShortcutManager())
+                        label: "Preferences",
+                        shortcut: GlobalShortcuts["show-preferences"].shortcut.format(),
+                        separatorBefore: true
+                    }).setTriggerProcedure(async () => StudioDialogs.showPreferences())
                 )
             }
         )
