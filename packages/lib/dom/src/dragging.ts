@@ -44,7 +44,9 @@ export namespace Dragging {
             const pointerId: int = event.pointerId
             event.stopPropagation()
             event.stopImmediatePropagation()
-            target.setPointerCapture(pointerId)
+            try {
+                target.setPointerCapture(pointerId)
+            } catch (_) {return}
 
             // Pointer lock configuration
             const usePointerLock = options?.pointerLock === true && Dragging.usePointerLock
