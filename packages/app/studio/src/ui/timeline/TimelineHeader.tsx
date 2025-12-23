@@ -10,6 +10,7 @@ import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Html} from "@opendaw/lib-dom"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {MenuItem} from "@/ui/model/menu-item"
+import {StudioShortcuts} from "@/service/StudioShortcuts"
 
 const className = Html.adoptStyleSheet(css, "TimelineHeader")
 
@@ -19,17 +20,17 @@ type Construct = {
 }
 
 export const TimelineHeader = ({lifecycle, service}: Construct) => {
-    const {snapping, followPlaybackCursor, primaryVisibility: {markers, tempo}, clips} = service.timeline
+    const {snapping, followCursor, primaryVisibility: {markers, tempo}, clips} = service.timeline
     return (
         <div className={className}>
             <SnapSelector lifecycle={lifecycle} snapping={snapping}/>
             <FlexSpacer/>
             <Checkbox lifecycle={lifecycle}
-                      model={followPlaybackCursor}
+                      model={followCursor}
                       appearance={{
                           color: Colors.shadow,
                           activeColor: Colors.orange,
-                          tooltip: "Follow Playback Cursor"
+                          tooltip: `Follow Cursor ${StudioShortcuts.Actions["toggle-follow-cursor"].keys.format()}`
                       }}>
                 <Icon symbol={IconSymbol.Run}/>
             </Checkbox>
@@ -42,16 +43,25 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                         icon: IconSymbol.Primary,
                         color: Colors.orange
                     }),
-                    MenuItem.default({label: "Markers", checked: markers.getValue()})
-                        .setTriggerProcedure(() => markers.setValue(!markers.getValue())),
-                    MenuItem.default({label: "Tempo", checked: tempo.getValue()})
-                        .setTriggerProcedure(() => tempo.setValue(!tempo.getValue()))
+                    MenuItem.default({
+                        label: "Markers",
+                        checked: markers.getValue(),
+                        shortcut: StudioShortcuts.Actions["toggle-markers-track"].keys.format()
+                    }).setTriggerProcedure(() => markers.setValue(!markers.getValue())),
+                    MenuItem.default({
+                        label: "Tempo",
+                        checked: tempo.getValue(),
+                        shortcut: StudioShortcuts.Actions["toggle-tempo-track"].keys.format()
+                    }).setTriggerProcedure(() => tempo.setValue(!tempo.getValue()))
                 ))}>
                 <Icon symbol={IconSymbol.Primary}/>
             </MenuButton>
             <Checkbox lifecycle={lifecycle}
                       model={clips.visible}
-                      appearance={{activeColor: Colors.yellow, tooltip: "Clips"}}>
+                      appearance={{
+                          activeColor: Colors.yellow,
+                          tooltip: `Clips ${StudioShortcuts.Actions["toggle-clips"].keys.format()}`
+                      }}>
                 <Icon symbol={IconSymbol.Clips}/>
             </Checkbox>
         </div>

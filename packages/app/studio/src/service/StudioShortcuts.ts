@@ -35,7 +35,10 @@ export namespace StudioShortcuts {
         "toggle-content-editor-panel": {keys: ShortcutKeys.of(Key.KeyE)},
         "toggle-browser-panel": {keys: ShortcutKeys.of(Key.KeyB)},
         "toggle-mixer-panel": {keys: ShortcutKeys.of(Key.KeyM)},
-        "toggle-tempo-track": {keys: ShortcutKeys.of(Key.KeyT)},
+        "toggle-tempo-track": {keys: ShortcutKeys.of(Key.KeyT, {shift})},
+        "toggle-markers-track": {keys: ShortcutKeys.of(Key.KeyM, {shift})},
+        "toggle-clips": {keys: ShortcutKeys.of(Key.KeyC, {shift})},
+        "toggle-follow-cursor": {keys: ShortcutKeys.of(Key.KeyF, {shift})},
         "copy-device": {keys: ShortcutKeys.of(Key.KeyD, {ctrl})},
         "workspace-next-screen": {keys: ShortcutKeys.of(Key.Tab)},
         "workspace-prev-screen": {keys: ShortcutKeys.of(Key.Tab, {shift})},
@@ -49,7 +52,10 @@ export namespace StudioShortcuts {
 
     export const install = (service: StudioService): Subscription => {
         const {global: s} = ShortcutManager.get()
-        const {panelLayout} = service
+        const {
+            panelLayout,
+            timeline: {clips: {visible: clipsVisibility}, followCursor, primaryVisibility: {markers, tempo}}
+        } = service
         const subscriptions = Terminable.many(
             s.register(Actions["project-undo"].keys, () => service.runIfProject(project => project.editing.undo())),
             s.register(Actions["project-redo"].keys, () => service.runIfProject(project => project.editing.redo())),
@@ -67,6 +73,10 @@ export namespace StudioShortcuts {
             s.register(Actions["toggle-content-editor-panel"].keys, () => panelLayout.getByType(PanelType.ContentEditor).toggleMinimize()),
             s.register(Actions["toggle-browser-panel"].keys, () => panelLayout.getByType(PanelType.BrowserPanel).toggleMinimize()),
             s.register(Actions["toggle-mixer-panel"].keys, () => panelLayout.getByType(PanelType.Mixer).toggleMinimize()),
+            s.register(Actions["toggle-tempo-track"].keys, () => tempo.setValue(!tempo.getValue())),
+            s.register(Actions["toggle-markers-track"].keys, () => markers.setValue(!markers.getValue())),
+            s.register(Actions["toggle-clips"].keys, () => clipsVisibility.setValue(!clipsVisibility.getValue())),
+            s.register(Actions["toggle-follow-cursor"].keys, () => followCursor.setValue(!followCursor.getValue())),
             s.register(Actions["copy-device"].keys, () => service.runIfProject(
                 ({editing, userEditingManager, skeleton}) => userEditingManager.audioUnit.get().ifSome(({box}) => {
                     const audioUnitBox = asInstanceOf(box, AudioUnitBox)

@@ -89,7 +89,7 @@ export class StudioService implements ProjectEnv {
             count: new DefaultObservableValue(3),
             visible: new DefaultObservableValue(true)
         },
-        followPlaybackCursor: new DefaultObservableValue(false),
+        followCursor: new DefaultObservableValue(false),
         primaryVisibility: {
             markers: new DefaultObservableValue(true),
             tempo: new DefaultObservableValue(false)

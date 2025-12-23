@@ -21,7 +21,7 @@ type Construct = {
 export const Timeline = ({lifecycle, service}: Construct) => {
     const {project, timeline} = service
     const {engine} = project
-    const {snapping, clips, followPlaybackCursor, primaryVisibility: {markers, tempo}} = timeline
+    const {snapping, clips, followCursor, primaryVisibility: {markers, tempo}} = timeline
     const snappingName = Inject.value(snapping.unit.name)
     lifecycle.own(snapping.subscribe(snapping => {snappingName.value = snapping.unit.name}))
     const timelineHeader = <TimelineHeader lifecycle={lifecycle} service={service}/>
@@ -52,7 +52,7 @@ export const Timeline = ({lifecycle, service}: Construct) => {
         engine.position.subscribe((() => {
             let lastPosition: ppqn = 0
             return owner => {
-                if (!followPlaybackCursor.getValue() || service.regionModifierInProgress) {return}
+                if (!followCursor.getValue() || service.regionModifierInProgress) {return}
                 const range = service.timeline.range
                 const position = owner.getValue()
                 if (lastPosition <= range.unitMax && position > range.unitMax) {
