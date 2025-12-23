@@ -6,7 +6,7 @@ import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
 import {StudioService} from "@/service/StudioService"
 import {EffectFactories, FilePickerAcceptTypes, Project} from "@opendaw/studio-core"
-import {ModularDeviceBox, VaporisateurDeviceBox} from "@opendaw/studio-boxes"
+import {VaporisateurDeviceBox} from "@opendaw/studio-boxes"
 import {Files} from "@opendaw/lib-dom"
 
 export namespace MenuItems {
@@ -39,10 +39,7 @@ export namespace MenuItems {
                         label: entry.defaultName,
                         separatorBefore: entry.separatorBefore
                     }).setTriggerProcedure(() => editing.modify(() =>
-                        api.insertEffect(deviceHost.audioEffects.field(), entry, 0))
-                        .ifSome(box => {
-                            if (isInstanceOf(box, ModularDeviceBox)) {service.switchScreen("modular")}
-                        })))
+                        api.insertEffect(deviceHost.audioEffects.field(), entry, 0))))
                 )),
             MenuItem.default({label: "Save Preset..."})
                 .setTriggerProcedure(async () => {
@@ -164,10 +161,7 @@ export namespace MenuItems {
                             label: factory.defaultName,
                             separatorBefore: factory.separatorBefore
                         }).setTriggerProcedure(() =>
-                            editing.modify(() => api.insertEffect(host.audioEffects.field(), factory, adapter.indexField.getValue() + 1))
-                                .ifSome(box => {
-                                    if (isInstanceOf(box, ModularDeviceBox)) {service.switchScreen("modular")}
-                                })))
+                            editing.modify(() => api.insertEffect(host.audioEffects.field(), factory, adapter.indexField.getValue() + 1))))
                     ))
             : adapter.accepts === "midi"
                 ? MenuItem.default({label: "Add Midi Effect", separatorBefore: true})

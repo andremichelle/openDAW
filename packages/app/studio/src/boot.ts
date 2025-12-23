@@ -14,7 +14,7 @@ import {MissingFeature} from "@/ui/MissingFeature.tsx"
 import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
 import {showStoragePersistDialog} from "@/AppDialogs"
 import {Promises} from "@opendaw/lib-runtime"
-import {AnimationFrame, Browser, Events, Keyboard} from "@opendaw/lib-dom"
+import {AnimationFrame, Browser, ShortcutManager} from "@opendaw/lib-dom"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
@@ -29,6 +29,7 @@ import {
     Workers
 } from "@opendaw/studio-core"
 import {AudioData} from "@opendaw/lib-dsp"
+import {StudioShortcuts} from "@/service/StudioShortcuts"
 
 const loadBuildInfo = async () => fetch(`/build-info.json?v=${Date.now()}`)
     .then(x => x.json())
@@ -80,26 +81,14 @@ export const boot = async ({workersUrl, workletsUrl}: { workersUrl: string, work
         Dropbox: "jtehjzxaxf3bf1l",
         GoogleDrive: "628747153367-gt1oqcn3trr9l9a7jhigja6l1t3f1oik.apps.googleusercontent.com"
     })
-    const service: StudioService = new StudioService(
-        context, audioWorklets.value, audioDevices, sampleManager, soundfontManager, cloudAuthManager, buildInfo)
+    const service: StudioService = new StudioService(context, audioWorklets.value, audioDevices,
+        sampleManager, soundfontManager, cloudAuthManager, buildInfo)
+    StudioShortcuts.install(service)
     const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand())
     const surface = Surface.main({
-        config: (surface: Surface) => {
-            surface.ownAll(
-                Events.subscribe(surface.owner, "keydown", event => {
-                    if (Keyboard.isControlKey(event) && event.key.toLowerCase() === "z") {
-                        if (event.shiftKey) {
-                            service.runIfProject(project => project.editing.redo())
-                        } else {
-                            service.runIfProject(project => project.editing.undo())
-                        }
-                    } else if (event.defaultPrevented) {return}
-                }),
-                ContextMenu.install(surface.owner)
-                // Spotlight.install(surface, service)
-            )
-        }
+        config: (surface: Surface) => surface.own(ContextMenu.install(surface.owner))
     }, errorHandler)
+    Surface.subscribeKeyboard("keydown", event => ShortcutManager.get().handleEvent(event), Number.MAX_SAFE_INTEGER)
     document.querySelector("#preloader")?.remove()
     document.addEventListener("touchmove", (event: TouchEvent) => event.preventDefault(), {passive: false})
     replaceChildren(surface.ground, App(service))

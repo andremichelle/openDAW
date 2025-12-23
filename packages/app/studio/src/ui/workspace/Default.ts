@@ -35,14 +35,14 @@ const ProjectInfoPanel = PanelState.create({
     constrains: {type: "flex", minSize: 384, flex: 1}
 })
 
-const ModularSystem = PanelState.create({
+/*const ModularSystem = PanelState.create({
     type: "panel",
     name: "Modular System",
     icon: IconSymbol.Box,
     panelType: PanelType.ModularSystem,
     notMinimizable: true,
     constrains: {type: "flex", minSize: 20, flex: 1}
-})
+})*/
 export const DefaultWorkspace = Object.freeze({
     "dashboard": {
         name: "Dashboard",
@@ -129,7 +129,7 @@ export const DefaultWorkspace = Object.freeze({
             constrains: {type: "flex", minSize: 20, flex: 1}
         }
     },
-    "modular": {
+    /*"modular": {
         name: "Modular",
         icon: IconSymbol.Box,
         hidden: true,
@@ -150,7 +150,7 @@ export const DefaultWorkspace = Object.freeze({
             ],
             constrains: {type: "flex", minSize: 20, flex: 1}
         }
-    },
+    },*/
     "piano": {
         name: "Piano Tutorial Mode",
         icon: IconSymbol.Piano,

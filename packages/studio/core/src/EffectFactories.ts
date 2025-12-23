@@ -256,7 +256,7 @@ export namespace EffectFactories {
 
     export const MidiNamed = {Arpeggio, Pitch, Velocity, Zeitgeist}
     export const AudioNamed = {
-        StereoTool, Compressor, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal, Modular
+        StereoTool, Compressor, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(MidiNamed)
     export const AudioList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(AudioNamed)

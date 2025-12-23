@@ -80,18 +80,7 @@ export const ModularDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
         <DeviceEditor lifecycle={lifecycle}
                       project={project}
                       adapter={adapter}
-                      populateMenu={parent => {
-                          parent.addMenuItem(MenuItem.default({
-                              label: "Edit...",
-                              selectable: !project.userEditingManager.modularSystem.isEditing(adapter.modular().box.editing) ||
-                                  service.layout.screen.getValue() !== "modular"
-                          })
-                              .setTriggerProcedure(() => {
-                                  project.userEditingManager.modularSystem.edit(adapter.modular().box.editing)
-                                  service.switchScreen("modular")
-                              }))
-                          MenuItems.forEffectDevice(parent, service, deviceHost, adapter)
-                      }}
+                      populateMenu={parent => MenuItems.forEffectDevice(parent, service, deviceHost, adapter)}
                       populateControls={() => userInterface}
                       populateMeter={() => (
                           <DevicePeakMeter lifecycle={lifecycle}

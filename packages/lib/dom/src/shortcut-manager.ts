@@ -1,6 +1,8 @@
 import {
     BinarySearch,
+    Exec,
     isAbsent,
+    Lazy,
     NumberComparator,
     Predicate,
     Predicates,
@@ -12,9 +14,14 @@ import {Events} from "./events"
 import {Keyboard} from "./keyboard"
 
 export class ShortcutManager {
+    @Lazy
+    static get(): ShortcutManager {return new ShortcutManager()}
+
     readonly global: ShortcutContext = new ShortcutContext(Predicates.alwaysTrue)
 
     readonly #contexts: Array<ShortcutContext> = []
+
+    private constructor() {console.debug("ShortcutManager installed")}
 
     createContext(isActive: Predicate<void>): ShortcutContext {
         const context = new ShortcutContext(isActive)
@@ -67,7 +74,7 @@ export class ShortcutContext {
     get active(): boolean {return this.#isActive()}
     get shortcuts(): ReadonlyArray<ShortcutEntry> {return this.#shortcuts}
 
-    register(keys: ShortcutKeys, action: () => void, options?: ShortcutOptions): Subscription {
+    register(keys: ShortcutKeys, action: Exec, options?: ShortcutOptions): Subscription {
         const entry: ShortcutEntry = {keys: keys, action, options: options ?? ShortcutOptions.Default}
         const index = BinarySearch.leftMostMapped(
             this.#shortcuts, entry.options.priority, NumberComparator, ({options: {priority}}) => priority)
@@ -155,6 +162,6 @@ export class ShortcutOptions {
 
 type ShortcutEntry = {
     readonly keys: ShortcutKeys
-    readonly action: () => void
+    readonly action: Exec
     readonly options: ShortcutOptions
 }

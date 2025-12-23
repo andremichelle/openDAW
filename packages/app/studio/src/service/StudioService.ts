@@ -27,7 +27,6 @@ import {PanelType} from "@/ui/workspace/PanelType.ts"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo.ts"
 import {SamplePlayback} from "@/service/SamplePlayback"
-import {Shortcuts} from "@/service/Shortcuts"
 import {ProjectProfileService} from "./ProjectProfileService"
 import {StudioSignal} from "./StudioSignal"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
@@ -100,8 +99,6 @@ export class StudioService implements ProjectEnv {
     readonly panelLayout = new PanelContents(createPanelFactory(this))
     readonly spotlightDataSupplier = new SpotlightDataSupplier()
     readonly samplePlayback: SamplePlayback
-    // noinspection JSUnusedGlobalSymbols
-    readonly _shortcuts = new Shortcuts(this) // TODO reference will be used later in a key-mapping configurator
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
 

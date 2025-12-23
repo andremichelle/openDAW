@@ -1,8 +1,7 @@
 import css from "./DevicesBrowser.sass?inline"
-import {isDefined, isInstanceOf, Lifecycle, Objects, panic} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, Objects, panic} from "@opendaw/lib-std"
 import {Html} from "@opendaw/lib-dom"
 import {createElement, RouteLocation} from "@opendaw/lib-jsx"
-import {ModularBox} from "@opendaw/studio-boxes"
 import {DeviceHost, Devices, InstrumentFactories} from "@opendaw/studio-adapters"
 import {EffectFactories, EffectFactory, Project} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService.ts"
@@ -32,11 +31,11 @@ export const DevicesBrowser = ({lifecycle, service}: Construct) => {
                 </section>
                 <section className="audio">
                     <h1>Audio Effects</h1>
-                    {createEffectList(lifecycle, service, project, Objects.exclude(EffectFactories.AudioNamed, "Modular"), "audio-effect")}
+                    {createEffectList(lifecycle, project, Objects.exclude(EffectFactories.AudioNamed, "Modular"), "audio-effect")}
                 </section>
                 <section className="midi">
                     <h1>Midi Effects</h1>
-                    {createEffectList(lifecycle, service, project, EffectFactories.MidiNamed, "midi-effect")}
+                    {createEffectList(lifecycle, project, EffectFactories.MidiNamed, "midi-effect")}
                 </section>
             </div>
             <div className="manual help-section">
@@ -88,7 +87,7 @@ const createInstrumentList = (lifecycle: Lifecycle, project: Project) => (
 
 const createEffectList = <
     R extends Record<string, EffectFactory>,
-    T extends DragDevice["type"]>(lifecycle: Lifecycle, service: StudioService, project: Project, records: R, type: T): HTMLUListElement => (
+    T extends DragDevice["type"]>(lifecycle: Lifecycle, project: Project, records: R, type: T): HTMLUListElement => (
     <ul>{
         Object.entries(records).map(([key, entry]) => {
             const element = (
@@ -107,13 +106,7 @@ const createEffectList = <
                                 type === "audio-effect" ? deviceHost.audioEffects.field()
                                     : type === "midi-effect" ? deviceHost.midiEffects.field()
                                         : panic(`Unknown ${type}`)
-                            editing.modify(() => {
-                                const box = entry.create(project, effectField, effectField.pointerHub.incoming().length)
-                                if (isInstanceOf(box, ModularBox)) {
-                                    service.switchScreen("modular")
-                                }
-                                return box
-                            })
+                            editing.modify(() => entry.create(project, effectField, effectField.pointerHub.incoming().length))
                         })
                     }
                 }}>
