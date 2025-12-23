@@ -49,10 +49,11 @@ export namespace StudioShortcutManager {
 
     export const install = (service: StudioService): Subscription => {
         const {global: gc} = ShortcutManager.get()
+        const {engine} = service
         const {
-            engine: {metronomeEnabled},
+            engine: {metronomeEnabled, isPlaying, position},
             panelLayout,
-            timeline: {clips: {visible: clipsVisibility}, followCursor, primaryVisibility: {markers, tempo}}
+            timeline: {clips: {visible: clipsVisibility}, followCursor, primaryVisibility: {markers, tempo}, snapping}
         } = service
         const gs = GlobalShortcuts
         const storedShortcuts = localStorage.getItem(localStorageKey)
@@ -73,6 +74,17 @@ export namespace StudioShortcutManager {
                 ShortcutOptions.of({activeInTextField: true})),
             gc.register(gs["project-save-as"].shortcut, async () => await service.projectProfileService.saveAs(),
                 ShortcutOptions.of({activeInTextField: true})),
+            gc.register(gs["move-cursor-right"].shortcut, () => {
+                if (!isPlaying.getValue()) {
+                    engine.setPosition(snapping.floor(position.getValue()) + snapping.value)
+                }
+            }),
+            gc.register(gs["move-cursor-left"].shortcut, () => {
+                if (!engine.isPlaying.getValue()) {
+                    engine.setPosition(Math.max(0,
+                        snapping.ceil(position.getValue()) - snapping.value))
+                }
+            }),
             gc.register(gs["toggle-playback"].shortcut, () => {
                 const {engine} = service
                 const isPlaying = engine.isPlaying.getValue()

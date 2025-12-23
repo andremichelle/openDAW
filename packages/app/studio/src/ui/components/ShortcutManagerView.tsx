@@ -1,6 +1,6 @@
 import css from "./ShortcutManagerView.sass?inline"
 import {Events, Html, Shortcut, ShortcutDefinition, ShortcutDefinitions} from "@opendaw/lib-dom"
-import {DefaultObservableValue, isAbsent, Lifecycle, Notifier, Objects, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, isAbsent, isDefined, Lifecycle, Notifier, Objects, Terminator} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Surface} from "@/ui/surface/Surface"
@@ -87,5 +87,10 @@ const editShortcut = async (definitions: ShortcutDefinitions,
             primary: false,
             onClick: () => abortController.abort()
         }]
-    }).then(() => shortcut.getValue(), () => original.shortcut).finally(() => lifecycle.terminate())
+    }).then(() => {
+        const newShortcut = shortcut.getValue()
+        const conflicts = Objects.entries(definitions)
+            .find(([_, other]) => !other.shortcut.equals(original.shortcut) && other.shortcut.equals(newShortcut))
+        return isDefined(conflicts) ? original.shortcut : shortcut.getValue()
+    }, () => original.shortcut).finally(() => lifecycle.terminate())
 }

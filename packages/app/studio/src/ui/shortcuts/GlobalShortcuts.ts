@@ -24,6 +24,14 @@ export const GlobalShortcutsFactory: ShortcutDefinitions = ShortcutValidator.val
         shortcut: Shortcut.of(Key.KeyS, {ctrl, shift}),
         description: "Save project as new file"
     },
+    "move-cursor-right": {
+        shortcut: Shortcut.of(Key.ArrowRight),
+        description: "Move playback cursor right"
+    },
+    "move-cursor-left": {
+        shortcut: Shortcut.of(Key.ArrowLeft),
+        description: "Move playback cursor left"
+    },
     "toggle-playback": {
         shortcut: Shortcut.of(Key.Space),
         description: "Start or pause playback"
