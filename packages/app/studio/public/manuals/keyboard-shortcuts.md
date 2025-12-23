@@ -1,29 +1,10 @@
 # Keyboard Shortcuts
 
-## Misc
+Most shortcuts can be listed customized in the [Shortcut Manager](action://open-shortcut-manager).
 
-* SPACE: Toggle Playback
-* ⌘Z Undo
-* ⌘⇧Z Redo
+## Modifier Keys
 
-## Views
-
-* ⇧0: Show Dashboard
-* ⇧1: Show Classic View
-* ⇧2: Show Mixer
-* ⇧3: Show Modular Systems
-* ⇧4: Show Piano Tutorial Mode
-* ⇧5: Show Project Info
-* ⇧6: Show VU-Meter
-
-## Panels (if available)
-
-* B: Toggle **B**rowser
-* E: Toggle **E**ditor
-* D: Toggle **D**evices
-* M: Toggle **M**ixer
-
-## Timeline
+### Timeline
 
 * Hold ⌘ and click to cut a region
 * Hold ⌥ and drag to copy a region / clip

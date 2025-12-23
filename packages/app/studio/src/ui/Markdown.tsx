@@ -1,6 +1,6 @@
 import {Browser, Html, ModfierKeys} from "@opendaw/lib-dom"
 import css from "./Markdown.sass?inline"
-import {isDefined} from "@opendaw/lib-std"
+import {Exec, isDefined} from "@opendaw/lib-std"
 import {createElement, RouteLocation} from "@opendaw/lib-jsx"
 import markdownit from "markdown-it"
 import {markdownItTable} from "markdown-it-table"
@@ -11,9 +11,10 @@ const className = Html.adoptStyleSheet(css, "Markdown")
 
 type Construct = {
     text: string
+    actions?: Record<string, Exec>
 }
 
-export const renderMarkdown = (element: HTMLElement, text: string) => {
+export const renderMarkdown = (element: HTMLElement, text: string, actions?: Record<string, Exec>) => {
     if (Browser.isWindows()) {
         Object.entries(ModfierKeys.Mac)
             .forEach(([key, value]) => text = text.replaceAll(value, (ModfierKeys.Win as any)[key]))
@@ -26,6 +27,17 @@ export const renderMarkdown = (element: HTMLElement, text: string) => {
         img.style.maxWidth = "100%"
     })
     element.querySelectorAll("a").forEach(a => {
+        if (a.href.startsWith("action://")) {
+            const actionName = a.href.replace("action://", "")
+            const action = actions?.[actionName]
+            if (isDefined(action)) {
+                a.onclick = (event: Event) => {
+                    event.preventDefault()
+                    action()
+                }
+            }
+            return
+        }
         const url = new URL(a.href)
         if (url.origin === location.origin) {
             a.onclick = (event: Event) => {
@@ -78,9 +90,9 @@ export const renderMarkdown = (element: HTMLElement, text: string) => {
     }
 }
 
-export const Markdown = ({text}: Construct) => {
+export const Markdown = ({text, actions}: Construct) => {
     if (text.startsWith("<")) {return "Invalid Markdown"}
     const element: HTMLElement = <div className={Html.buildClassList(className, "markdown")}/>
-    renderMarkdown(element, text)
+    renderMarkdown(element, text, actions)
     return element
 }

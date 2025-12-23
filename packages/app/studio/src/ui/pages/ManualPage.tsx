@@ -7,8 +7,10 @@ import {Markdown} from "@/ui/Markdown"
 import {Manual, Manuals} from "@/ui/pages/Manuals"
 import {Html} from "@opendaw/lib-dom"
 import {MenuItem} from "@/ui/model/menu-item"
-import {panic} from "@opendaw/lib-std"
+import {EmptyExec, panic} from "@opendaw/lib-std"
 import {network} from "@opendaw/lib-runtime"
+import {StudioDialogs} from "@/service/StudioDialogs"
+import {CloudBackup} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "ManualPage")
 
@@ -51,7 +53,11 @@ export const ManualPage: PageFactory<StudioService> = ({service, path}: PageCont
                         .then(x => x.text())}
                     failure={(error) => `Unknown request (${error.reason})`}
                     loading={() => <ThreeDots/>}
-                    success={text => <Markdown text={text}/>}
+                    success={text => <Markdown text={text} actions={{
+                        "open-shortcut-manager": () => StudioDialogs.showShortcutManager(),
+                        "backup-google-drive": () => CloudBackup.backup(service.cloudAuthManager, "GoogleDrive").catch(EmptyExec),
+                        "backup-dropbox": () => CloudBackup.backup(service.cloudAuthManager, "Dropbox").catch(EmptyExec)
+                    }}/>}
                 />)}
             </div>
         </div>
