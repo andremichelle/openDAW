@@ -123,7 +123,7 @@ export namespace ProjectBundle {
                         resolve()
                         subscription.terminate()
                     } else if (state.type === "error") {
-                        reject(state.reason)
+                        reject(new Error(state.reason))
                         subscription.terminate()
                     }
                 })
@@ -146,7 +146,7 @@ export namespace ProjectBundle {
                         resolve()
                         subscription.terminate()
                     } else if (state.type === "error") {
-                        reject(state.reason)
+                        reject(new Error(state.reason))
                         subscription.terminate()
                     }
                 })

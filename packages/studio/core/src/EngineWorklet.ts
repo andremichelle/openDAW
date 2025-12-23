@@ -155,7 +155,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                         const handler = project.sampleManager.getOrCreate(uuid)
                         const subscription = handler.subscribe(state => {
                             if (state.type === "error") {
-                                reject(state.reason)
+                                reject(new Error(state.reason))
                                 subscription.terminate()
                             } else if (state.type === "loaded") {
                                 resolve(handler.data.unwrap())
@@ -169,7 +169,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                         const handler = project.soundfontManager.getOrCreate(uuid)
                         const subscription = handler.subscribe(state => {
                             if (state.type === "error") {
-                                reject(state.reason)
+                                reject(new Error(state.reason))
                                 subscription.terminate()
                             } else if (state.type === "loaded") {
                                 resolve(handler.soundfont.unwrap())

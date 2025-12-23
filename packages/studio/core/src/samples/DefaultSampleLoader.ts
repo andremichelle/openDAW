@@ -98,8 +98,10 @@ export class DefaultSampleLoader implements SampleLoader {
         const fetchResult = await Promises.tryCatch(this.#manager.fetch(this.#uuid, fetchProgress))
         if (this.#version !== version) {return}
         if (fetchResult.status === "rejected") {
-            console.warn(fetchResult.error)
-            this.#setState({type: "error", reason: "Error: N/A"})
+            const error = fetchResult.error
+            console.warn(error)
+            const reason = error instanceof Error ? error.message : String(error)
+            this.#setState({type: "error", reason})
             return
         }
         const [audio, meta] = fetchResult.value
@@ -123,8 +125,10 @@ export class DefaultSampleLoader implements SampleLoader {
             this.#peaks = Option.wrap(SamplePeaks.from(new ByteArrayInput(peaks)))
             this.#setState({type: "loaded"})
         } else {
-            console.warn(storeResult.error)
-            this.#setState({type: "error", reason: "N/A"})
+            const error = storeResult.error
+            console.warn(error)
+            const reason = error instanceof Error ? error.message : String(error)
+            this.#setState({type: "error", reason})
         }
     }
 }

@@ -44,7 +44,7 @@ export class AudioFileBoxAdapter implements BoxAdapter {
                     resolve(loader.data.unwrap("State mismatch"))
                 } else if (state.type === "error") {
                     subscription.terminate()
-                    reject(state.reason)
+                    reject(new Error(state.reason))
                 }
             })
             return promise

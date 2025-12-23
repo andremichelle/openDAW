@@ -33,7 +33,7 @@ export class DefaultSampleLoaderManager implements SampleLoaderManager, SamplePr
         subscription = loader.subscribe(state => {
             if (state.type === "error") {
                 queueMicrotask(() => subscription.terminate())
-                reject(state.reason)
+                reject(new Error(state.reason))
             } else if (loader.data.nonEmpty()) {
                 queueMicrotask(() => subscription.terminate())
                 resolve(loader.data.unwrap())

@@ -73,8 +73,10 @@ export class DefaultSoundfontLoader implements SoundfontLoader {
         const fetchProgress: Progress.Handler = progress => this.#setState({type: "progress", progress})
         const fetchResult = await Promises.tryCatch(this.#manager.fetch(this.#uuid, fetchProgress))
         if (fetchResult.status === "rejected") {
-            console.warn(fetchResult.error)
-            this.#setState({type: "error", reason: "Error: N/A"})
+            const error = fetchResult.error
+            console.warn(error)
+            const reason = error instanceof Error ? error.message : String(error)
+            this.#setState({type: "error", reason})
             return
         }
         const [file, meta] = fetchResult.value
@@ -86,8 +88,10 @@ export class DefaultSoundfontLoader implements SoundfontLoader {
             this.#meta = Option.wrap(meta)
             this.#setState({type: "loaded"})
         } else {
-            console.warn(storeResult.error)
-            this.#setState({type: "error", reason: "N/A"})
+            const error = storeResult.error
+            console.warn(error)
+            const reason = error instanceof Error ? error.message : String(error)
+            this.#setState({type: "error", reason})
         }
     }
 }
