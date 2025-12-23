@@ -170,9 +170,9 @@
 
   @if $semitransparent
     backdrop-filter: blur(2px)
-    background-color: hsla(200, 12%, 9%, 0.98)
+    background-color: color-mix(in srgb, var(--color-panel-background-dark), transparent 1%)
   @else
-    background-color: hsl(200, 12%, 9%)
+    background-color: var(--color-panel-background-dark)
 
 @mixin corner-frame($color: rgba(white, 0.06))
   position: relative

@@ -2,6 +2,7 @@ import {
     BinarySearch,
     Exec,
     isAbsent,
+    JSONValue,
     Lazy,
     NumberComparator,
     Option,
@@ -111,12 +112,24 @@ export class ShortcutKeys {
         return new ShortcutKeys(code, modifiers?.ctrl, modifiers?.shift, modifiers?.alt)
     }
 
+    static fromJSON(value: JSONValue): Option<ShortcutKeys> {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) {return Option.None}
+        const {code, ctrl, shift, alt} = value as Record<string, unknown>
+        if (typeof code !== "string") {return Option.None}
+        if (typeof ctrl !== "boolean") {return Option.None}
+        if (typeof shift !== "boolean") {return Option.None}
+        if (typeof alt !== "boolean") {return Option.None}
+        return Option.wrap(new ShortcutKeys(code, ctrl, shift, alt))
+    }
+
     static fromEvent(event: KeyboardEvent): Option<ShortcutKeys> {
         const code = event.code
         if (code.startsWith("Shift")
             || code.startsWith("Control")
             || code.startsWith("Alt")
-            || code.startsWith("Meta")) {
+            || code.startsWith("Meta")
+            || code === Key.Escape
+        ) {
             return Option.None
         }
         return Option.wrap(new ShortcutKeys(code, Keyboard.isControlKey(event), event.shiftKey, event.altKey))
@@ -203,6 +216,10 @@ export class ShortcutKeys {
         this.#shift = keys.#shift
         this.#alt = keys.#alt
     }
+
+    toJSON(): JSONValue {return {code: this.#code, ctrl: this.#ctrl, shift: this.#shift, alt: this.#alt}}
+
+    copy(): ShortcutKeys {return new ShortcutKeys(this.#code, this.#ctrl, this.#shift, this.#alt)}
 
     toString(): string {return `{ShortcutKeys ${this.format()}}`}
 }

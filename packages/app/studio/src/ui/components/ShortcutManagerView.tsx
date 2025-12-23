@@ -1,20 +1,23 @@
 import css from "./ShortcutManagerView.sass?inline"
 import {Events, Html, ShortcutKeys} from "@opendaw/lib-dom"
-import {DefaultObservableValue, isAbsent, Lifecycle, Objects, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, isAbsent, Lifecycle, Notifier, Objects, Terminator} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
-import {GlobalShortcuts} from "@/shortcuts/GlobalShortcuts"
-import {ShortcutDefinition, ShortcutDefinitions} from "@/shortcuts/ShortcutValidator"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Surface} from "@/ui/surface/Surface"
 import {Colors} from "@opendaw/studio-enums"
+import {ShortcutDefinition} from "@/shortcuts/ShortcutDefinition"
+import {ShortcutDefinitions} from "@/shortcuts/ShortcutDefinitions"
 
 const className = Html.adoptStyleSheet(css, "ShortcutManagerView")
 
 type Construct = {
     lifecycle: Lifecycle
+    contexts: Record<string, ShortcutDefinitions>
+    updateNotifier: Notifier<void>
 }
 
-const editShortcut = async (definitions: ShortcutDefinitions, original: ShortcutDefinition): Promise<ShortcutKeys> => {
+const editShortcut = async (definitions: ShortcutDefinitions,
+                            original: ShortcutDefinition): Promise<ShortcutKeys> => {
     const lifecycle = new Terminator()
     const abortController = new AbortController()
     const shortcut = lifecycle.own(new DefaultObservableValue(original.keys))
@@ -56,24 +59,29 @@ const editShortcut = async (definitions: ShortcutDefinitions, original: Shortcut
     }).then(() => shortcut.getValue(), () => original.keys).finally(() => lifecycle.terminate())
 }
 
-export const ShortcutManagerView = ({}: Construct) => {
+export const ShortcutManagerView = ({lifecycle, contexts, updateNotifier}: Construct) => {
     return (
-        <div className={className}>
-            <div className="shortcuts" onInit={element => {
-                const update = () => replaceChildren(element, (
-                    Objects.entries(GlobalShortcuts).map(([key, entry]) => (
-                        <div className="shortcut" onclick={async () => {
-                            const keys = await editShortcut(GlobalShortcuts, entry)
-                            GlobalShortcuts[key].keys.overrideWith(keys)
-                            update()
-                        }}><span>{entry.description}</span>
-                            <hr/>
-                            <span>{entry.keys.format()}</span>
-                        </div>
-                    ))
-                ))
-                update()
-            }}/>
+        <div className={className} onInit={element => {
+            const update = () => replaceChildren(element, Objects.entries(contexts).map(([name, shortcuts], index) => (
+                <details className="context" open={index === 0}>
+                    <summary><h3>{name}</h3></summary>
+                    <div className="shortcuts">
+                        {Objects.entries(shortcuts).map(([key, entry]) => (
+                            <div className="shortcut" onclick={async () => {
+                                const keys = await editShortcut(shortcuts, entry)
+                                shortcuts[key].keys.overrideWith(keys)
+                                update()
+                            }}><span>{entry.description}</span>
+                                <hr/>
+                                <span>{entry.keys.format()}</span>
+                            </div>
+                        ))}
+                    </div>
+                </details>
+            )))
+            lifecycle.own(updateNotifier.subscribe(update))
+            update()
+        }}>
         </div>
     )
 }

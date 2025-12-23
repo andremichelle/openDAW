@@ -1,7 +1,4 @@
-import {ShortcutKeys} from "@opendaw/lib-dom"
-
-export type ShortcutDefinition = { keys: ShortcutKeys, description: string }
-export type ShortcutDefinitions = Record<string, ShortcutDefinition>
+import {ShortcutDefinitions} from "@/shortcuts/ShortcutDefinitions"
 
 export namespace ShortcutValidator {
     export const validate = <T extends ShortcutDefinitions>(actions: T): T => {

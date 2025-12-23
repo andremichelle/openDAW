@@ -1,10 +1,11 @@
 import {Key, ShortcutKeys} from "@opendaw/lib-dom"
 import {ShortcutValidator} from "@/shortcuts/ShortcutValidator"
+import {ShortcutDefinitions} from "@/shortcuts/ShortcutDefinitions"
 
 const shift = true
 const ctrl = true
 
-export const GlobalShortcuts = ShortcutValidator.validate({
+export const GlobalShortcutsFactory = ShortcutValidator.validate({
     "project-undo": {
         keys: ShortcutKeys.of(Key.KeyZ, {ctrl}),
         description: "Undo last action"
@@ -110,3 +111,5 @@ export const GlobalShortcuts = ShortcutValidator.validate({
         description: "Open preferences"
     }
 })
+
+export const GlobalShortcuts = ShortcutDefinitions.copy(GlobalShortcutsFactory)

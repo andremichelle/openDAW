@@ -1,33 +1,49 @@
 component
   display: flex
   flex-direction: column
+  row-gap: 1em
   outline: none
+  height: 280px
+  overflow: hidden auto
 
-  > div.shortcuts
-    flex: 0 0 320px
-    display: flex
-    flex-direction: column
-    row-gap: 0.25em
-    padding: 0 1em 0 0
-    overflow: hidden auto
+  > details.context
     outline: none
+    border: none
 
-    > div.shortcut
+    > summary
+      list-style: none
+      color: var(--color-blue)
       display: flex
-      justify-content: space-between
+      align-items: center
       cursor: pointer
-      color: var(--color-dark)
 
-      > span
-        white-space: nowrap
+      > h3
+        display: inline-block
 
-      > hr
-        margin: 0.5em
-        height: 1px
-        border: none
-        background-color: var(--color-dark)
-        opacity: 0.1
-        flex: 1
+    > div.shortcuts
+      margin-top: 0.5em
+      display: flex
+      flex-direction: column
+      row-gap: 0.25em
+      padding: 0 1em 0 0
+      outline: none
 
-      &:hover
-        color: var(--color-bright)
+      > div.shortcut
+        display: flex
+        justify-content: space-between
+        cursor: pointer
+        color: var(--color-dark)
+
+        > span
+          white-space: nowrap
+
+        > hr
+          margin: 0.5em
+          height: 1px
+          border: none
+          background-color: var(--color-dark)
+          opacity: 0.1
+          flex: 1
+
+        &:hover
+          color: var(--color-bright)
