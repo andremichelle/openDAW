@@ -12,6 +12,7 @@ import {Html} from "@opendaw/lib-dom"
 import {ContextMenu} from "@/ui/ContextMenu"
 import {MenuItem} from "@/ui/model/menu-item"
 import {ProjectProfile} from "@opendaw/studio-core"
+import {StudioShortcuts} from "@/service/StudioShortcuts"
 
 const className = Html.adoptStyleSheet(css, "TransportGroup")
 
@@ -39,7 +40,11 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                 }}><Icon symbol={IconSymbol.Record}/></Button>)
     const playButton: HTMLElement = (
         <Button lifecycle={lifecycle}
-                appearance={{color: Colors.green.saturate(0.0), activeColor: Colors.green, tooltip: "Play"}}
+                appearance={{
+                    color: Colors.green.saturate(0.0),
+                    activeColor: Colors.green,
+                    tooltip: `Play ${StudioShortcuts.Actions["toggle-playback"].keys.format()}`
+                }}
                 onClick={() => {
                     if (engine.isPlaying.getValue()) {
                         engine.stop()

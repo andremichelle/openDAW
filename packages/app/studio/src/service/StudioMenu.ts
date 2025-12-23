@@ -9,8 +9,10 @@ import {MenuItem} from "@/ui/model/menu-item"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {SyncLogService} from "@/service/SyncLogService"
 import {PreferencePanel} from "@/ui/PreferencePanel"
+import {StudioShortcuts} from "@/service/StudioShortcuts"
 
 export const populateStudioMenu = (service: StudioService) => {
+    const {Actions} = StudioShortcuts
     return MenuItem.root()
         .setRuntimeChildrenProcedure(parent => {
                 parent.addMenuItem(
@@ -19,16 +21,16 @@ export const populateStudioMenu = (service: StudioService) => {
                         .setTriggerProcedure(() => service.closeProject()),
                     MenuItem.default({label: "New", separatorBefore: true})
                         .setTriggerProcedure(() => service.newProject()),
-                    MenuItem.default({label: "Open...", shortcut: [ModfierKeys.System.Cmd, "O"]})
+                    MenuItem.default({label: "Open...", shortcut: Actions["project-open"].keys.format()})
                         .setTriggerProcedure(() => service.browseLocalProjects()),
                     MenuItem.default({
                         label: "Save",
-                        shortcut: [ModfierKeys.System.Cmd, "S"],
+                        shortcut: Actions["project-save"].keys.format(),
                         selectable: service.hasProfile
                     }).setTriggerProcedure(() => service.projectProfileService.save()),
                     MenuItem.default({
                         label: "Save As...",
-                        shortcut: [ModfierKeys.System.Cmd, ModfierKeys.System.Shift, "S"],
+                        shortcut: Actions["project-save-as"].keys.format(),
                         selectable: service.hasProfile
                     }).setTriggerProcedure(() => service.projectProfileService.saveAs()),
                     MenuItem.default({label: "Import", separatorBefore: true})
