@@ -43,7 +43,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                 appearance={{
                     color: Colors.green.saturate(0.0),
                     activeColor: Colors.green,
-                    tooltip: `Play ${StudioShortcuts.Actions["toggle-playback"].keys.format()}`
+                    tooltip: `Play ${StudioShortcuts.Global["toggle-playback"].keys.format()}`
                 }}
                 onClick={() => {
                     if (engine.isPlaying.getValue()) {

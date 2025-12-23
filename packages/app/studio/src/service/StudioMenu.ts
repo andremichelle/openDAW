@@ -12,32 +12,32 @@ import {StudioShortcuts} from "@/service/StudioShortcuts"
 import {StudioDialogs} from "@/service/StudioDialogs"
 
 export const populateStudioMenu = (service: StudioService) => {
-    const {Actions} = StudioShortcuts
+    const {Global} = StudioShortcuts
     return MenuItem.root()
         .setRuntimeChildrenProcedure(parent => {
                 parent.addMenuItem(
                     MenuItem.header({label: "openDAW", icon: IconSymbol.OpenDAW, color: Colors.green}),
                     MenuItem.default({
                         label: "Dashboard",
-                        shortcut: Actions["workspace-screen-dashboard"].keys.format()
+                        shortcut: Global["workspace-screen-dashboard"].keys.format()
                     }).setTriggerProcedure(() => service.closeProject()),
                     MenuItem.default({
                         label: "New",
                         separatorBefore: true,
-                        shortcut: Actions["project-new"].keys.format()
+                        shortcut: Global["project-new"].keys.format()
                     }).setTriggerProcedure(() => service.newProject()),
                     MenuItem.default({
                         label: "Open...",
-                        shortcut: Actions["project-open"].keys.format()
+                        shortcut: Global["project-open"].keys.format()
                     }).setTriggerProcedure(() => service.browseLocalProjects()),
                     MenuItem.default({
                         label: "Save",
-                        shortcut: Actions["project-save"].keys.format(),
+                        shortcut: Global["project-save"].keys.format(),
                         selectable: service.hasProfile
                     }).setTriggerProcedure(() => service.projectProfileService.save()),
                     MenuItem.default({
                         label: "Save As...",
-                        shortcut: Actions["project-save-as"].keys.format(),
+                        shortcut: Global["project-save-as"].keys.format(),
                         selectable: service.hasProfile
                     }).setTriggerProcedure(() => service.projectProfileService.saveAs()),
                     MenuItem.default({label: "Import", separatorBefore: true})
@@ -98,7 +98,7 @@ export const populateStudioMenu = (service: StudioService) => {
                             return parent.addMenuItem(
                                 MenuItem.default({
                                     label: "Show MIDI-Keyboard",
-                                    shortcut: StudioShortcuts.Actions["toggle-software-keyboard"].keys.format(),
+                                    shortcut: StudioShortcuts.Global["toggle-software-keyboard"].keys.format(),
                                     checked: service.isSoftwareKeyboardVisible()
                                 }).setTriggerProcedure(() => service.toggleSoftwareKeyboard())
                             )
@@ -208,7 +208,7 @@ export const populateStudioMenu = (service: StudioService) => {
                         .setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
                     MenuItem.default({
                         label: "Preferences",
-                        shortcut: StudioShortcuts.Actions["show-preferences"].keys.format()
+                        shortcut: StudioShortcuts.Global["show-preferences"].keys.format()
                     }).setTriggerProcedure(async () => StudioDialogs.showPreferences()),
                     MenuItem.default({
                         label: "Shortcut Manager"

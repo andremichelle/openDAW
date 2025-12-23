@@ -4,6 +4,7 @@ import {
     isAbsent,
     Lazy,
     NumberComparator,
+    Option,
     Predicate,
     Predicates,
     Subscription,
@@ -110,8 +111,15 @@ export class ShortcutKeys {
         return new ShortcutKeys(code, modifiers?.ctrl, modifiers?.shift, modifiers?.alt)
     }
 
-    static fromEvent(event: KeyboardEvent): ShortcutKeys {
-        return new ShortcutKeys(event.code, Keyboard.isControlKey(event), event.shiftKey, event.altKey)
+    static fromEvent(event: KeyboardEvent): Option<ShortcutKeys> {
+        const code = event.code
+        if (code.startsWith("Shift")
+            || code.startsWith("Control")
+            || code.startsWith("Alt")
+            || code.startsWith("Meta")) {
+            return Option.None
+        }
+        return Option.wrap(new ShortcutKeys(code, Keyboard.isControlKey(event), event.shiftKey, event.altKey))
     }
 
     static readonly #keyNames: Record<string, string | [mac: string, other: string]> = {
@@ -149,32 +157,51 @@ export class ShortcutKeys {
         return Browser.isMacOS() ? mapped[0] : mapped[1]
     }
 
-    private constructor(readonly code: string,
-                        readonly ctrl: boolean = false,
-                        readonly shift: boolean = false,
-                        readonly alt: boolean = false) {}
+    #code: string
+    #ctrl: boolean
+    #shift: boolean
+    #alt: boolean
+
+    private constructor(code: string, ctrl: boolean = false, shift: boolean = false, alt: boolean = false) {
+        this.#code = code
+        this.#ctrl = ctrl
+        this.#shift = shift
+        this.#alt = alt
+    }
+
+    get code(): string {return this.#code}
+    get ctrl(): boolean {return this.#ctrl}
+    get shift(): boolean {return this.#shift}
+    get alt(): boolean {return this.#alt}
 
     equals(other: ShortcutKeys): boolean {
-        return this.code === other.code
-            && this.ctrl === other.ctrl
-            && this.shift === other.shift
-            && this.alt === other.alt
+        return this.#code === other.#code
+            && this.#ctrl === other.#ctrl
+            && this.#shift === other.#shift
+            && this.#alt === other.#alt
     }
 
     matches(event: KeyboardEvent): boolean {
-        return event.code === this.code
-            && this.ctrl === Keyboard.isControlKey(event)
-            && this.shift === event.shiftKey
-            && this.alt === event.altKey
+        return event.code === this.#code
+            && this.#ctrl === Keyboard.isControlKey(event)
+            && this.#shift === event.shiftKey
+            && this.#alt === event.altKey
     }
 
     format(): string {
         const parts: Array<string> = []
-        if (this.shift) {parts.push(Browser.isMacOS() ? "⇧" : "Shift")}
-        if (this.alt) {parts.push(Browser.isMacOS() ? "⌥" : "Alt")}
-        if (this.ctrl) {parts.push(Browser.isMacOS() ? "⌘" : "Ctrl")}
-        parts.push(ShortcutKeys.#formatKey(this.code))
+        if (this.#shift) {parts.push(Browser.isMacOS() ? "⇧" : "Shift")}
+        if (this.#alt) {parts.push(Browser.isMacOS() ? "⌥" : "Alt")}
+        if (this.#ctrl) {parts.push(Browser.isMacOS() ? "⌘" : "Ctrl")}
+        parts.push(ShortcutKeys.#formatKey(this.#code))
         return parts.join(Browser.isMacOS() ? "" : "+")
+    }
+
+    overrideWith(keys: ShortcutKeys): void {
+        this.#code = keys.#code
+        this.#ctrl = keys.#ctrl
+        this.#shift = keys.#shift
+        this.#alt = keys.#alt
     }
 
     toString(): string {return `{ShortcutKeys ${this.format()}}`}

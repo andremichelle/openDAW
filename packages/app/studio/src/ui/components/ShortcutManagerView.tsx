@@ -1,7 +1,7 @@
 import css from "./ShortcutManagerView.sass?inline"
 import {Events, Html, ShortcutKeys} from "@opendaw/lib-dom"
 import {DefaultObservableValue, isAbsent, Lifecycle, Objects, Terminator} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {StudioShortcuts} from "@/service/StudioShortcuts"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Surface} from "@/ui/surface/Surface"
@@ -13,29 +13,36 @@ type Construct = {
     lifecycle: Lifecycle
 }
 
-const editShortcut = async (definitions: StudioShortcuts.Definitions, original: ShortcutKeys): Promise<ShortcutKeys> => {
+const editShortcut = async (definitions: StudioShortcuts.Definitions, original: StudioShortcuts.Definition): Promise<ShortcutKeys> => {
     const lifecycle = new Terminator()
     const abortController = new AbortController()
-    const newShortcut = lifecycle.own(new DefaultObservableValue(original))
+    const shortcut = lifecycle.own(new DefaultObservableValue(original.keys))
     return Dialogs.show({
         headline: "Edit Shortcut",
         content: (
-            <div style={{display: "flex", flexDirection: "column"}}>
-                <div style={{color: Colors.blue.toString()}} onConnect={element => {
+            <div style={{display: "flex", flexDirection: "column", rowGap: "0.75em"}}>
+                <h3 style={{color: Colors.orange.toString()}}>Shortcut for "{original.description}"</h3>
+                <div style={{color: Colors.blue.toString(), height: "1.25em"}} onConnect={element => {
                     lifecycle.own(Events.subscribe(Surface.get(element).owner, "keydown", event => {
-                        newShortcut.setValue(ShortcutKeys.fromEvent(event))
-                        element.textContent = newShortcut.getValue().format()
+                        ShortcutKeys.fromEvent(event).ifSome(newShortcut => {
+                            shortcut.setValue(newShortcut)
+                            element.textContent = newShortcut.format()
+                        })
                         event.preventDefault()
                         event.stopImmediatePropagation()
                     }, {capture: true}))
-                }}>{original.format()}</div>
-                <div onInit={element => newShortcut.catchupAndSubscribe(owner => {
+                }}>{original.keys.format()}</div>
+                <div onInit={element => shortcut.catchupAndSubscribe(owner => {
                     const keys = owner.getValue()
                     const conflicts = Objects.entries(definitions)
-                        .find(([_, other]) => !other.keys.equals(original) && other.keys.equals(keys))
-                    element.textContent = isAbsent(conflicts)
-                        ? "No conflict"
-                        : `Conflict with ${conflicts[1].description} ${conflicts[1].keys.format()}`
+                        .find(([_, other]) => !other.keys.equals(original.keys) && other.keys.equals(keys))
+                    if (isAbsent(conflicts)) {
+                        element.textContent = "No conflict."
+                        element.style.color = Colors.dark.toString()
+                    } else {
+                        element.textContent = `Conflicts with "${conflicts[1].description} ${conflicts[1].keys.format()}".`
+                        element.style.color = Colors.red.toString()
+                    }
                 })}/>
             </div>
         ),
@@ -45,22 +52,27 @@ const editShortcut = async (definitions: StudioShortcuts.Definitions, original: 
             primary: false,
             onClick: () => abortController.abort()
         }]
-    }).then(() => newShortcut.getValue(), () => original).finally(() => lifecycle.terminate())
+    }).then(() => shortcut.getValue(), () => original.keys).finally(() => lifecycle.terminate())
 }
 
 export const ShortcutManagerView = ({}: Construct) => {
     return (
         <div className={className}>
-            <div className="shortcuts">
-                {Objects.entries(StudioShortcuts.Actions).map(([_key, entry]) => (
-                    <div className="shortcut" onclick={async () => {
-                        console.debug(await editShortcut(StudioShortcuts.Actions, entry.keys))
-                    }}><span>{entry.description}</span>
-                        <hr/>
-                        <span>{entry.keys.format()}</span>
-                    </div>
-                ))}
-            </div>
+            <div className="shortcuts" onInit={element => {
+                const update = () => replaceChildren(element, (
+                    Objects.entries(StudioShortcuts.Global).map(([key, entry]) => (
+                        <div className="shortcut" onclick={async () => {
+                            const keys = await editShortcut(StudioShortcuts.Global, entry)
+                            StudioShortcuts.Global[key].keys.overrideWith(keys)
+                            update()
+                        }}><span>{entry.description}</span>
+                            <hr/>
+                            <span>{entry.keys.format()}</span>
+                        </div>
+                    ))
+                ))
+                update()
+            }}/>
         </div>
     )
 }

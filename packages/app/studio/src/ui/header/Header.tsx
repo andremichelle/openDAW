@@ -27,7 +27,7 @@ type Construct = {
     service: StudioService
 }
 
-const ScreenShortcutKeys: Record<Workspace.ScreenKeys, keyof typeof StudioShortcuts.Actions> = {
+const ScreenShortcutKeys: Record<Workspace.ScreenKeys, keyof typeof StudioShortcuts.Global> = {
     "dashboard": "workspace-screen-dashboard",
     "default": "workspace-screen-default",
     "mixer": "workspace-screen-mixer",
@@ -128,7 +128,7 @@ export const Header = ({lifecycle, service}: Construct) => {
                       model={service.engine.metronomeEnabled}
                       appearance={{
                           activeColor: Colors.orange,
-                          tooltip: `Metronome ${StudioShortcuts.Actions["toggle-metronome"].keys.format()}`
+                          tooltip: `Metronome ${StudioShortcuts.Global["toggle-metronome"].keys.format()}`
                       }}>
                 <Icon symbol={IconSymbol.Metronome}/>
             </Checkbox>
@@ -166,7 +166,7 @@ export const Header = ({lifecycle, service}: Construct) => {
                                     value: key,
                                     element: <Icon symbol={iconSymbol}/>,
                                     tooltip: `${name} ${StudioShortcuts
-                                        .Actions[ScreenShortcutKeys[key as Workspace.ScreenKeys]].keys.format()}`
+                                        .Global[ScreenShortcutKeys[key as Workspace.ScreenKeys]].keys.format()}`
                                 }))}
                             appearance={{framed: true, landscape: true}}/>
             </div>
