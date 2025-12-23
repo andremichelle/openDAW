@@ -165,7 +165,7 @@ export const Header = ({lifecycle, service}: Construct) => {
                                 .map(([key, {icon: iconSymbol, name}]) => ({
                                     value: key,
                                     element: <Icon symbol={iconSymbol}/>,
-                                    tooltip: `${name} ${GlobalShortcuts[ScreenShortcutKeys[key as Workspace.ScreenKeys]].keys.format()}`
+                                    tooltip: () => `${name} ${GlobalShortcuts[ScreenShortcutKeys[key as Workspace.ScreenKeys]].keys.format()}`
                                 }))}
                             appearance={{framed: true, landscape: true}}/>
             </div>

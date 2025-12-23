@@ -2,7 +2,7 @@ import css from "./MenuButton.sass?inline"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {MenuItem} from "@/ui/model/menu-item.ts"
 import {Menu} from "@/ui/components/Menu.tsx"
-import {Color, isDefined, Option, Procedure} from "@opendaw/lib-std"
+import {Color, getOrProvide, isDefined, Option, Procedure, ValueOrProvider} from "@opendaw/lib-std"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {Html} from "@opendaw/lib-dom"
 
@@ -13,7 +13,7 @@ type Appearance = {
     activeColor?: Color
     framed?: boolean
     tinyTriangle?: boolean
-    tooltip?: string
+    tooltip?: ValueOrProvider<string>
 }
 
 type Construct = {
@@ -48,7 +48,7 @@ export const MenuButton =
                             toggle()
                         }
                     }}
-                    title={appearance?.tooltip ?? ""}>{children}</button>
+                    title={getOrProvide(appearance?.tooltip) ?? ""}>{children}</button>
         )
         if (isDefined(appearance?.color)) {
             button.style.setProperty("--color", appearance.color.toString())

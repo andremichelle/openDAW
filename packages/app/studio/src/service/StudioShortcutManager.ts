@@ -75,6 +75,9 @@ export namespace StudioShortcutManager {
             gc.register(gs["toggle-clips"].keys, () => clipsVisibility.setValue(!clipsVisibility.getValue())),
             gc.register(gs["toggle-follow-cursor"].keys, () => followCursor.setValue(!followCursor.getValue())),
             gc.register(gs["toggle-metronome"].keys, () => metronomeEnabled.setValue(!metronomeEnabled.getValue())),
+            gc.register(gs["toggle-loop"].keys, () =>
+                service.runIfProject(({editing, timelineBox: {loopArea: {enabled}}}) =>
+                    editing.modify(() => enabled.setValue(!enabled.getValue())))),
             gc.register(gs["copy-device"].keys, () => service.runIfProject(
                 ({editing, userEditingManager, skeleton}) => userEditingManager.audioUnit.get().ifSome(({box}) => {
                     const audioUnitBox = asInstanceOf(box, AudioUnitBox)

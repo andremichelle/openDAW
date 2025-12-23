@@ -1,12 +1,12 @@
 import css from "./TextTooltip.sass?inline"
 import {Surface} from "./Surface"
 import {createElement} from "@opendaw/lib-jsx"
-import {Provider, Terminable} from "@opendaw/lib-std"
+import {getOrProvide, Provider, Terminable, ValueOrProvider} from "@opendaw/lib-std"
 import {AbstractTooltip} from "@/ui/surface/AbstractTooltip.ts"
 import {Events, Html} from "@opendaw/lib-dom"
 
 export interface Data {
-    text: string
+    text: ValueOrProvider<string>
     clientX: number
     clientY: number
 }
@@ -54,5 +54,5 @@ export class TextTooltip extends AbstractTooltip<Data> {
     protected showDelayInFrames(): number {return 45}
     protected hideDelayInFrames(): number {return 15}
 
-    update({text}: Data): void {this.element.textContent = text}
+    update({text}: Data): void {this.element.textContent = getOrProvide(text)}
 }

@@ -62,7 +62,11 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
     },
     "toggle-metronome": {
         keys: Shortcut.of(Key.KeyM, {ctrl}),
-        description: "Enable or disable metronome"
+        description: "Toggle metronome"
+    },
+    "toggle-loop": {
+        keys: Shortcut.of(Key.KeyL, {shift}),
+        description: "Toggle loop mode"
     },
     "copy-device": {
         keys: Shortcut.of(Key.KeyD, {ctrl}),

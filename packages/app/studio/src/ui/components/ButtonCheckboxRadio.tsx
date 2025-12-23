@@ -1,5 +1,5 @@
 import css from "./ButtonCheckboxRadio.sass?inline"
-import {Color, isDefined, Lifecycle, Procedure} from "@opendaw/lib-std"
+import {Color, isDefined, Lifecycle, Procedure, ValueOrProvider} from "@opendaw/lib-std"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {TextTooltip} from "@/ui/surface/TextTooltip.tsx"
 import {CssUtils, Html} from "@opendaw/lib-dom"
@@ -11,7 +11,7 @@ export type Appearance = {
     activeColor?: Color
     framed?: boolean
     landscape?: boolean
-    tooltip?: string
+    tooltip?: ValueOrProvider<string>
     cursor?: CssUtils.Cursor
 }
 
