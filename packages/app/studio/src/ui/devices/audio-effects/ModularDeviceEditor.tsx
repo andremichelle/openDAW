@@ -12,7 +12,7 @@ import {ControlBuilder} from "@/ui/devices/ControlBuilder.tsx"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
-import {EffectFactories} from "@opendaw/studio-core"
+import {IconSymbol} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "ModularDeviceEditor")
 
@@ -87,7 +87,7 @@ export const ModularDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
                       )}
-                      icon={EffectFactories.AudioNamed.Modular.defaultIcon}>
+                      icon={IconSymbol.OpenDAW}>
         </DeviceEditor>
     )
 }

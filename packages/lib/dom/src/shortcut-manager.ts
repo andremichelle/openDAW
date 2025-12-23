@@ -86,6 +86,21 @@ export class ShortcutContext {
         return this.#shortcuts.some(entry => entry.keys.equals(keys))
     }
 
+    hasConflicts(): ReadonlyArray<ShortcutKeys> {
+        const conflicts: Array<ShortcutKeys> = []
+        for (let i = 0; i < this.#shortcuts.length; i++) {
+            const keys = this.#shortcuts[i].keys
+            if (conflicts.some(other => other.equals(keys))) {continue}
+            for (let j = i + 1; j < this.#shortcuts.length; j++) {
+                if (keys.equals(this.#shortcuts[j].keys)) {
+                    conflicts.push(keys)
+                    break
+                }
+            }
+        }
+        return conflicts
+    }
+
     terminate(): void {this.#terminator.terminate()}
 }
 
@@ -136,6 +151,8 @@ export class ShortcutKeys {
         parts.push(ShortcutKeys.#formatKey(this.code))
         return parts.join(Browser.isMacOS() ? "" : "+")
     }
+
+    toString(): string {return `{ShortcutKeys ${this.format()}}`}
 }
 
 export class ShortcutOptions {

@@ -1,5 +1,5 @@
 import css from "./DevicesBrowser.sass?inline"
-import {isDefined, Lifecycle, Objects, panic} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, panic} from "@opendaw/lib-std"
 import {Html} from "@opendaw/lib-dom"
 import {createElement, RouteLocation} from "@opendaw/lib-jsx"
 import {DeviceHost, Devices, InstrumentFactories} from "@opendaw/studio-adapters"
@@ -31,7 +31,7 @@ export const DevicesBrowser = ({lifecycle, service}: Construct) => {
                 </section>
                 <section className="audio">
                     <h1>Audio Effects</h1>
-                    {createEffectList(lifecycle, project, Objects.exclude(EffectFactories.AudioNamed, "Modular"), "audio-effect")}
+                    {createEffectList(lifecycle, project, EffectFactories.AudioNamed, "audio-effect")}
                 </section>
                 <section className="midi">
                     <h1>Midi Effects</h1>
