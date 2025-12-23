@@ -47,10 +47,10 @@ export class ShortcutManager {
     }
 
     handleEvent(event: KeyboardEvent): void {
-        if (this.#tryHandle(event, this.global)) {return}
         for (const context of this.#contexts) {
             if (context.active && this.#tryHandle(event, context)) {return}
         }
+        if (this.#tryHandle(event, this.global)) {return}
     }
 
     #tryHandle(event: KeyboardEvent, context: ShortcutContext): boolean {
