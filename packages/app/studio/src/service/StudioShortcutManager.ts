@@ -5,7 +5,6 @@ import {
     isNull,
     JSONValue,
     Objects,
-    RuntimeNotifier,
     Subscription,
     Terminable,
     tryCatch
@@ -19,12 +18,12 @@ import {Workspace} from "@/ui/workspace/Workspace"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {ProjectUtils} from "@opendaw/studio-adapters"
 import {StudioDialogs} from "@/service/StudioDialogs"
-import {NoteEditorShortcuts, NoteEditorShortcutsFactory} from "@/ui/shortcuts/NoteEditorContext"
+import {NoteEditorShortcuts, NoteEditorShortcutsFactory} from "@/ui/shortcuts/NoteEditorShortcuts"
 
 export namespace StudioShortcutManager {
     const localStorageKey = "shortcuts"
 
-    const Contexts = {
+    export const Contexts = {
         "global": {factory: GlobalShortcutsFactory, user: GlobalShortcuts},
         "note-editor": {factory: NoteEditorShortcutsFactory, user: NoteEditorShortcuts}
     } as const satisfies Record<string, any>
@@ -66,7 +65,7 @@ export namespace StudioShortcutManager {
                 console.warn(error)
             }
         }
-        const subscriptions = Terminable.many(
+        return Terminable.many(
             gc.register(gs["project-undo"].shortcut, () => service.runIfProject(project => project.editing.undo())),
             gc.register(gs["project-redo"].shortcut, () => service.runIfProject(project => project.editing.redo())),
             gc.register(gs["project-open"].shortcut, async () => await service.browseLocalProjects()),
@@ -123,13 +122,5 @@ export namespace StudioShortcutManager {
             gc.register(gs["workspace-screen-shadertoy"].shortcut, () => service.runIfProject(() => service.switchScreen("shadertoy"))),
             gc.register(gs["show-preferences"].shortcut, () => StudioDialogs.showPreferences())
         )
-        const conflicts = gc.hasConflicts()
-        if (conflicts) {
-            RuntimeNotifier.info({
-                headline: "Shortcut Conflict",
-                message: conflicts.join(", ")
-            }).then()
-        }
-        return subscriptions
     }
 }

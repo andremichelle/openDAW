@@ -28,7 +28,7 @@ export class FilteredSelection<T extends Addressable> implements Selection<T>, T
         this.#filter = filter
         this.#mapping = mapping
 
-        this.#set = Address.newSet(addressable => addressable.address)
+        this.#set = Address.newSet(({address}) => address)
         this.#listeners = new Listeners<SelectionListener<T>>()
 
         this.#selection.selected()
@@ -43,7 +43,7 @@ export class FilteredSelection<T extends Addressable> implements Selection<T>, T
                 }
             },
             onDeselected: (element: SelectableVertex) => {
-                if (this.#filter(element)) {
+                if (this.#set.hasKey(element.address)) {
                     this.#listeners.proxy.onDeselected(this.#set.removeByKey(element.address))
                 }
             }

@@ -45,7 +45,8 @@ import {
 import {RegionReader} from "@/ui/timeline/editors/RegionReader.ts"
 import {Colors, Pointers} from "@opendaw/studio-enums"
 import {ParameterValueEditing} from "@/ui/timeline/editors/value/ParameterValueEditing.ts"
-import {AnimationFrame, deferNextFrame, Events, Html, Keyboard} from "@opendaw/lib-dom"
+import {AnimationFrame, deferNextFrame, Html, ShortcutManager} from "@opendaw/lib-dom"
+import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
 
 const className = Html.adoptStyleSheet(css, "ContentEditor")
 
@@ -66,16 +67,22 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
         editMenu: MenuItem.root()
     }
     let owner: Option<EventOwnerReader<unknown>> = Option.None
+    const zommContent = () => owner.ifSome(reader =>
+        range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16))
     lifecycle.ownAll(
         {terminate: () => {owner = Option.None}},
         service.project.timelineBoxAdapter.catchupAndSubscribeSignature(signature => snapping.signature = signature),
-        menu.viewMenu.attach(collector => collector.addItems(
-            MenuItem.default({label: "Zoom to Edit-Region", selectable: editingSubject.get().nonEmpty()})
-                .setTriggerProcedure(() => owner
-                    .ifSome(reader => range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16))),
-            MenuItem.default({label: "Exit", selectable: editingSubject.get().nonEmpty()})
-                .setTriggerProcedure(() => editingSubject.clear())
-        ))
+        menu.viewMenu.attach(collector => {
+            return collector.addItems(
+                MenuItem.default({
+                    label: "Zoom to content",
+                    selectable: editingSubject.get().nonEmpty(),
+                    shortcut: NoteEditorShortcuts["zoom-to-content"].shortcut.format()
+                }).setTriggerProcedure(zommContent),
+                MenuItem.default({label: "Exit", selectable: editingSubject.get().nonEmpty()})
+                    .setTriggerProcedure(() => editingSubject.clear())
+            )
+        })
     )
     const element: HTMLElement = (
         <div className={className} tabIndex={-1}>
@@ -220,6 +227,8 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
         }
     }))
 
+    const {project: {engine}} = service
+    const shortcuts = ShortcutManager.get().createContext(() => element.contains(document.activeElement))
     lifecycle.ownAll(
         updateEditor,
         editingSubject.catchupAndSubscribe(() => {
@@ -240,26 +249,19 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                 }
             }
         })()),
-        Events.subscribe(element, "keydown", event => {
-            if (event.altKey || Keyboard.isControlKey(event) || Events.isTextInput(event.target)) {return}
-            const {project: {engine}} = service
-            event.preventDefault()
-            switch (event.key) {
-                case "ArrowLeft": {
-                    if (!engine.isPlaying.getValue()) {
-                        engine.setPosition(Math.max(0,
-                            snapping.ceil(engine.position.getValue()) - snapping.value))
-                    }
-                    break
-                }
-                case "ArrowRight": {
-                    if (!engine.isPlaying.getValue()) {
-                        engine.setPosition(snapping.floor(engine.position.getValue()) + snapping.value)
-                    }
-                    break
-                }
+        shortcuts,
+        shortcuts.register(NoteEditorShortcuts["move-cursor-right"].shortcut, () => {
+            if (!engine.isPlaying.getValue()) {
+                engine.setPosition(snapping.floor(engine.position.getValue()) + snapping.value)
             }
-        })
+        }),
+        shortcuts.register(NoteEditorShortcuts["move-cursor-left"].shortcut, () => {
+            if (!engine.isPlaying.getValue()) {
+                engine.setPosition(Math.max(0,
+                    snapping.ceil(engine.position.getValue()) - snapping.value))
+            }
+        }),
+        shortcuts.register(NoteEditorShortcuts["zoom-to-content"].shortcut, zommContent)
     )
     return element
 }

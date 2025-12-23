@@ -9,6 +9,7 @@ import {
     Predicate,
     Predicates,
     Subscription,
+    Terminable,
     Terminator
 } from "@opendaw/lib-std"
 import {Browser} from "./browser"
@@ -65,7 +66,7 @@ export class ShortcutManager {
     }
 }
 
-export class ShortcutContext {
+export class ShortcutContext implements Terminable {
     readonly #isActive: Predicate<void>
     readonly #shortcuts: Array<ShortcutEntry> = []
     readonly #terminator: Terminator = new Terminator()

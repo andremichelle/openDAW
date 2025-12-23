@@ -1,9 +1,8 @@
-import {Notifier, Terminator} from "@opendaw/lib-std"
+import {Notifier, Objects, Strings, Terminator} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {Dialogs} from "@/ui/components/dialogs"
 import {PreferencePanel} from "@/ui/PreferencePanel"
 import {ShortcutManagerView} from "@/ui/components/ShortcutManagerView"
-import {GlobalShortcuts, GlobalShortcutsFactory} from "@/ui/shortcuts/GlobalShortcuts"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {ShortcutDefinitions} from "@opendaw/lib-dom"
 
@@ -22,9 +21,11 @@ export namespace StudioDialogs {
         const lifecycle = new Terminator()
         const abortController = new AbortController()
         const updateNotifier = new Notifier<void>()
-        const contexts = {
-            "Global": ShortcutDefinitions.copy(GlobalShortcuts)
-        } satisfies Record<string, ShortcutDefinitions>
+
+        const contexts: Record<string, ShortcutDefinitions> = {}
+        Objects.entries(StudioShortcutManager.Contexts).forEach(([name, shortcuts]) =>
+            contexts[Strings.hyphenToCamelCase(name)] = ShortcutDefinitions.copy(shortcuts.user))
+
         await Promises.tryCatch(Dialogs.show({
             headline: "Shortcut Manager",
             content: ShortcutManagerView({lifecycle, contexts, updateNotifier}),
@@ -33,7 +34,8 @@ export namespace StudioDialogs {
             buttons: [
                 {
                     text: "Reset", onClick: () => {
-                        contexts["Global"] = ShortcutDefinitions.copy(GlobalShortcutsFactory)
+                        Objects.entries(StudioShortcutManager.Contexts).forEach(([name, {factory}]) =>
+                            contexts[Strings.hyphenToCamelCase(name)] = ShortcutDefinitions.copy(factory))
                         updateNotifier.notify()
                     }
                 },
@@ -41,7 +43,8 @@ export namespace StudioDialogs {
             ]
         })).then(() => {
             if (!abortController.signal.aborted) {
-                ShortcutDefinitions.copyInto(contexts.Global, GlobalShortcuts)
+                Objects.entries(StudioShortcutManager.Contexts).forEach(([name, {user}]) =>
+                    ShortcutDefinitions.copyInto(contexts[Strings.hyphenToCamelCase(name)], user))
                 StudioShortcutManager.store()
             }
         })
