@@ -65,8 +65,9 @@ component
       > div.header
         width: 100%
         display: flex
+        column-gap: 0.25em
         align-items: center
-        padding: 0.5em 0
+        padding: 0.5em 0.125em
         margin: 0.25em 0
         white-space: nowrap
         color: color-mix(in srgb, var(--color) 75%, transparent)
@@ -74,13 +75,12 @@ component
         --color: var(--color-blue)
 
         > div.icon-space
-          pointer-events: none
-          width: 1em
-          height: 1em
+          display: none
 
       > div.default
         width: 100%
         display: flex
+        column-gap: 0.25em
         align-items: center
         border-radius: 0.25em
         margin: 0 0.5em
