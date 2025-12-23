@@ -1,5 +1,5 @@
 import css from "./ShortcutManagerView.sass?inline"
-import {Events, Html, ShortcutKeys} from "@opendaw/lib-dom"
+import {Events, Html, Shortcut} from "@opendaw/lib-dom"
 import {DefaultObservableValue, isAbsent, Lifecycle, Notifier, Objects, Terminator} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Dialogs} from "@/ui/components/dialogs"
@@ -17,7 +17,7 @@ type Construct = {
 }
 
 const editShortcut = async (definitions: ShortcutDefinitions,
-                            original: ShortcutDefinition): Promise<ShortcutKeys> => {
+                            original: ShortcutDefinition): Promise<Shortcut> => {
     const lifecycle = new Terminator()
     const abortController = new AbortController()
     const shortcut = lifecycle.own(new DefaultObservableValue(original.keys))
@@ -28,7 +28,7 @@ const editShortcut = async (definitions: ShortcutDefinitions,
                 <h3 style={{color: Colors.orange.toString()}}>Shortcut for "{original.description}"</h3>
                 <div style={{color: Colors.blue.toString(), height: "1.25em"}} onConnect={element => {
                     lifecycle.own(Events.subscribe(Surface.get(element).owner, "keydown", event => {
-                        ShortcutKeys.fromEvent(event).ifSome(newShortcut => {
+                        Shortcut.fromEvent(event).ifSome(newShortcut => {
                             shortcut.setValue(newShortcut)
                             element.textContent = newShortcut.format()
                         })
@@ -59,11 +59,17 @@ const editShortcut = async (definitions: ShortcutDefinitions,
     }).then(() => shortcut.getValue(), () => original.keys).finally(() => lifecycle.terminate())
 }
 
+let lastOpenIndex = 0
+
 export const ShortcutManagerView = ({lifecycle, contexts, updateNotifier}: Construct) => {
     return (
         <div className={className} onInit={element => {
             const update = () => replaceChildren(element, Objects.entries(contexts).map(([name, shortcuts], index) => (
-                <details className="context" open={index === 0}>
+                <details className="context"
+                         open={lastOpenIndex === index}
+                         onInit={element => element.ontoggle = () => {
+                             if (element.open) {lastOpenIndex = index}
+                         }}>
                     <summary><h3>{name}</h3></summary>
                     <div className="shortcuts">
                         {Objects.entries(shortcuts).map(([key, entry]) => (

@@ -1,4 +1,4 @@
-import {ShortcutKeys} from "@opendaw/lib-dom"
+import {Shortcut} from "@opendaw/lib-dom"
 import {ShortcutDefinition} from "@/shortcuts/ShortcutDefinition"
 import {isAbsent, JSONValue} from "@opendaw/lib-std"
 
@@ -32,7 +32,7 @@ export namespace ShortcutDefinitions {
         for (const [key, value] of Object.entries(values) as Array<[string, JSONValue]>) {
             const def = defs[key]
             if (isAbsent(def)) {continue}
-            ShortcutKeys.fromJSON(value).ifSome(keys => def.keys.overrideWith(keys))
+            Shortcut.fromJSON(value).ifSome(keys => def.keys.overrideWith(keys))
         }
     }
 }

@@ -1,3 +1,3 @@
-import {ShortcutKeys} from "@opendaw/lib-dom"
+import {Shortcut} from "@opendaw/lib-dom"
 
-export type ShortcutDefinition = { keys: ShortcutKeys, description: string }
+export type ShortcutDefinition = { keys: Shortcut, description: string }

@@ -40,7 +40,7 @@ export class ShortcutManager {
         }
     }
 
-    hasConflict(keys: ShortcutKeys): boolean {
+    hasConflict(keys: Shortcut): boolean {
         if (this.global.hasConflict(keys)) {return true}
         return this.#contexts.some(ctx => ctx.hasConflict(keys))
     }
@@ -77,7 +77,7 @@ export class ShortcutContext {
     get active(): boolean {return this.#isActive()}
     get shortcuts(): ReadonlyArray<ShortcutEntry> {return this.#shortcuts}
 
-    register(keys: ShortcutKeys, action: Exec, options?: ShortcutOptions): Subscription {
+    register(keys: Shortcut, action: Exec, options?: ShortcutOptions): Subscription {
         const entry: ShortcutEntry = {keys: keys, action, options: options ?? ShortcutOptions.Default}
         const index = BinarySearch.leftMostMapped(
             this.#shortcuts, entry.options.priority, NumberComparator, ({options: {priority}}) => priority)
@@ -85,12 +85,12 @@ export class ShortcutContext {
         return this.#terminator.own({terminate: () => this.#shortcuts.splice(this.#shortcuts.indexOf(entry), 1)})
     }
 
-    hasConflict(keys: ShortcutKeys): boolean {
+    hasConflict(keys: Shortcut): boolean {
         return this.#shortcuts.some(entry => entry.keys.equals(keys))
     }
 
-    hasConflicts(): ReadonlyArray<ShortcutKeys> {
-        const conflicts: Array<ShortcutKeys> = []
+    hasConflicts(): ReadonlyArray<Shortcut> {
+        const conflicts: Array<Shortcut> = []
         for (let i = 0; i < this.#shortcuts.length; i++) {
             const keys = this.#shortcuts[i].keys
             if (conflicts.some(other => other.equals(keys))) {continue}
@@ -107,22 +107,22 @@ export class ShortcutContext {
     terminate(): void {this.#terminator.terminate()}
 }
 
-export class ShortcutKeys {
-    static of(code: string, modifiers?: { ctrl?: boolean, shift?: boolean, alt?: boolean }): ShortcutKeys {
-        return new ShortcutKeys(code, modifiers?.ctrl, modifiers?.shift, modifiers?.alt)
+export class Shortcut {
+    static of(code: string, modifiers?: { ctrl?: boolean, shift?: boolean, alt?: boolean }): Shortcut {
+        return new Shortcut(code, modifiers?.ctrl, modifiers?.shift, modifiers?.alt)
     }
 
-    static fromJSON(value: JSONValue): Option<ShortcutKeys> {
+    static fromJSON(value: JSONValue): Option<Shortcut> {
         if (typeof value !== "object" || value === null || Array.isArray(value)) {return Option.None}
         const {code, ctrl, shift, alt} = value as Record<string, unknown>
         if (typeof code !== "string") {return Option.None}
         if (typeof ctrl !== "boolean") {return Option.None}
         if (typeof shift !== "boolean") {return Option.None}
         if (typeof alt !== "boolean") {return Option.None}
-        return Option.wrap(new ShortcutKeys(code, ctrl, shift, alt))
+        return Option.wrap(new Shortcut(code, ctrl, shift, alt))
     }
 
-    static fromEvent(event: KeyboardEvent): Option<ShortcutKeys> {
+    static fromEvent(event: KeyboardEvent): Option<Shortcut> {
         const code = event.code
         if (code.startsWith("Shift")
             || code.startsWith("Control")
@@ -132,7 +132,7 @@ export class ShortcutKeys {
         ) {
             return Option.None
         }
-        return Option.wrap(new ShortcutKeys(code, Keyboard.isControlKey(event), event.shiftKey, event.altKey))
+        return Option.wrap(new Shortcut(code, Keyboard.isControlKey(event), event.shiftKey, event.altKey))
     }
 
     static readonly #keyNames: Record<string, string | [mac: string, other: string]> = {
@@ -187,7 +187,7 @@ export class ShortcutKeys {
     get shift(): boolean {return this.#shift}
     get alt(): boolean {return this.#alt}
 
-    equals(other: ShortcutKeys): boolean {
+    equals(other: Shortcut): boolean {
         return this.#code === other.#code
             && this.#ctrl === other.#ctrl
             && this.#shift === other.#shift
@@ -206,11 +206,11 @@ export class ShortcutKeys {
         if (this.#shift) {parts.push(Browser.isMacOS() ? "⇧" : "Shift")}
         if (this.#alt) {parts.push(Browser.isMacOS() ? "⌥" : "Alt")}
         if (this.#ctrl) {parts.push(Browser.isMacOS() ? "⌘" : "Ctrl")}
-        parts.push(ShortcutKeys.#formatKey(this.#code))
+        parts.push(Shortcut.#formatKey(this.#code))
         return parts.join(Browser.isMacOS() ? "" : "+")
     }
 
-    overrideWith(keys: ShortcutKeys): void {
+    overrideWith(keys: Shortcut): void {
         this.#code = keys.#code
         this.#ctrl = keys.#ctrl
         this.#shift = keys.#shift
@@ -219,7 +219,7 @@ export class ShortcutKeys {
 
     toJSON(): JSONValue {return {code: this.#code, ctrl: this.#ctrl, shift: this.#shift, alt: this.#alt}}
 
-    copy(): ShortcutKeys {return new ShortcutKeys(this.#code, this.#ctrl, this.#shift, this.#alt)}
+    copy(): Shortcut {return new Shortcut(this.#code, this.#ctrl, this.#shift, this.#alt)}
 
     toString(): string {return `{ShortcutKeys ${this.format()}}`}
 }
@@ -247,7 +247,7 @@ export class ShortcutOptions {
 }
 
 type ShortcutEntry = {
-    readonly keys: ShortcutKeys
+    readonly keys: Shortcut
     readonly action: Exec
     readonly options: ShortcutOptions
 }
