@@ -2,7 +2,8 @@ import css from "./ShortcutManagerView.sass?inline"
 import {Events, Html, ShortcutKeys} from "@opendaw/lib-dom"
 import {DefaultObservableValue, isAbsent, Lifecycle, Objects, Terminator} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
-import {StudioShortcutManager} from "@/service/StudioShortcutManager"
+import {GlobalShortcuts} from "@/shortcuts/GlobalShortcuts"
+import {ShortcutDefinition, ShortcutDefinitions} from "@/shortcuts/ShortcutValidator"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Surface} from "@/ui/surface/Surface"
 import {Colors} from "@opendaw/studio-enums"
@@ -13,7 +14,7 @@ type Construct = {
     lifecycle: Lifecycle
 }
 
-const editShortcut = async (definitions: StudioShortcutManager.Definitions, original: StudioShortcutManager.Definition): Promise<ShortcutKeys> => {
+const editShortcut = async (definitions: ShortcutDefinitions, original: ShortcutDefinition): Promise<ShortcutKeys> => {
     const lifecycle = new Terminator()
     const abortController = new AbortController()
     const shortcut = lifecycle.own(new DefaultObservableValue(original.keys))
@@ -60,10 +61,10 @@ export const ShortcutManagerView = ({}: Construct) => {
         <div className={className}>
             <div className="shortcuts" onInit={element => {
                 const update = () => replaceChildren(element, (
-                    Objects.entries(StudioShortcutManager.Global).map(([key, entry]) => (
+                    Objects.entries(GlobalShortcuts).map(([key, entry]) => (
                         <div className="shortcut" onclick={async () => {
-                            const keys = await editShortcut(StudioShortcutManager.Global, entry)
-                            StudioShortcutManager.Global[key].keys.overrideWith(keys)
+                            const keys = await editShortcut(GlobalShortcuts, entry)
+                            GlobalShortcuts[key].keys.overrideWith(keys)
                             update()
                         }}><span>{entry.description}</span>
                             <hr/>

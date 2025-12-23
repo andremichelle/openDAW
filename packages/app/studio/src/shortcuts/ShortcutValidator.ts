@@ -1,7 +1,10 @@
-import {StudioShortcutManager} from "@/service/StudioShortcutManager"
+import {ShortcutKeys} from "@opendaw/lib-dom"
+
+export type ShortcutDefinition = { keys: ShortcutKeys, description: string }
+export type ShortcutDefinitions = Record<string, ShortcutDefinition>
 
 export namespace ShortcutValidator {
-    export const validate = <T extends StudioShortcutManager.Definitions>(actions: T): T => {
+    export const validate = <T extends ShortcutDefinitions>(actions: T): T => {
         const entries = Object.entries(actions)
         for (let i = 0; i < entries.length; i++) {
             for (let j = i + 1; j < entries.length; j++) {
