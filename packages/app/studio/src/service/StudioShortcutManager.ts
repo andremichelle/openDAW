@@ -76,7 +76,7 @@ export namespace StudioShortcutManager {
                 if (!isPlaying.getValue()) {
                     engine.setPosition(snapping.floor(position.getValue()) + snapping.value)
                 }
-            }),
+            }, {allowRepeat: true}),
             gc.register(gs["move-cursor-left"].shortcut, () => {
                 if (!engine.isPlaying.getValue()) {
                     engine.setPosition(Math.max(0,
