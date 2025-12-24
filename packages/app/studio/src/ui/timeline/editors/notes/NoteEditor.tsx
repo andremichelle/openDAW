@@ -137,6 +137,8 @@ export const NoteEditor =
             shortcuts,
             shortcuts.register(NoteEditorShortcuts["toggle-step-recording"].shortcut,
                 () => stepRecording.setValue(!stepRecording.getValue())),
+            stepRecording.catchupAndSubscribe(owner => document.querySelectorAll("[data-component='cursor']")
+                .forEach(cursor => cursor.classList.toggle("step-recording", owner.getValue()))),
             capture.subscribeNotes(signal => {
                 if (engine.isPlaying.getValue() || !stepRecording.getValue()) {return}
                 if (NoteSignal.isOn(signal)) {
