@@ -179,9 +179,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         }
         const asPlayModePitch = adapter.asPlayModePitchStretch
         if (adapter.isPlayModeNoStretch) {
-            // For no-stretch, compute elapsed seconds using tempo map (handles tempo automation)
-            const elapsedSeconds = this.context.tempoMap.intervalToSeconds(cycle.rawStart, cycle.resultStart)
-            const offset = ((elapsedSeconds + waveformOffset) * data.sampleRate) | 0
+            const offset = (cycle.resultStartValue * data.numberOfFrames + waveformOffset * data.sampleRate) | 0
             this.#updateOrCreateDirectVoice(lane, data, offset, 0)
         } else if (asPlayModePitch.isEmpty()) {
             const audioDurationSamples = data.numberOfFrames
@@ -217,12 +215,17 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
     }
 
     #updateOrCreateDirectVoice(lane: Lane, data: AudioData, offset: int, blockOffset: int): void {
+        const fadeLengthSamples = Math.round(VOICE_FADE_DURATION * data.sampleRate)
         let hasActiveDirectVoice = false
         for (const voice of lane.voices) {
             if (voice instanceof DirectVoice && !voice.isFadingOut()) {
-                hasActiveDirectVoice = true
+                const drift = Math.abs(voice.readPosition - offset)
+                if (drift > fadeLengthSamples) {
+                    voice.startFadeOut(blockOffset)
+                } else {
+                    hasActiveDirectVoice = true
+                }
             } else {
-                // Fade out non-DirectVoice voices
                 voice.startFadeOut(blockOffset)
             }
         }
