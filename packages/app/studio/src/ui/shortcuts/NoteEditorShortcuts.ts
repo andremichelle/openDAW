@@ -26,6 +26,10 @@ export const NoteEditorShortcutsFactory = ShortcutValidator.validate({
     "decrement-note-position": {
         shortcut: Shortcut.of(Key.ArrowLeft),
         description: "Move note backwards"
+    },
+    "toggle-step-recording": {
+        shortcut: Shortcut.of(Key.KeyS),
+        description: "Toggle step recording"
     }
 })
 

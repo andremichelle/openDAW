@@ -4,6 +4,7 @@ import {MutableObservableValue, Procedure, Selection} from "@opendaw/lib-std"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {EventCollection} from "@opendaw/lib-dsp"
 import {MenuCollector, MenuItem} from "@/ui/model/menu-item.ts"
+import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
 
 export const createPitchMenu = ({editing, snapping, selection, events, stepRecording}: {
     editing: BoxEditing
@@ -21,7 +22,11 @@ export const createPitchMenu = ({editing, snapping, selection, events, stepRecor
         MenuItem.default({label: "Delete", selectable: !selection.isEmpty()})
             .setTriggerProcedure(() => editing.modify(() => selection.selected()
                 .forEach(adapter => adapter.box.delete()))),
-        MenuItem.default({label: "Step Recording", checked: stepRecording.getValue()})
+        MenuItem.default({
+            label: "Step Recording",
+            checked: stepRecording.getValue(),
+            shortcut: NoteEditorShortcuts["toggle-step-recording"].shortcut.format()
+        })
             .setTriggerProcedure(() => stepRecording.setValue(!stepRecording.getValue())),
         MenuItem.default({
             label: "Consolidate",

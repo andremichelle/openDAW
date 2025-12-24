@@ -1,5 +1,5 @@
 import css from "./NoteEditor.sass?inline"
-import {Html} from "@opendaw/lib-dom"
+import {Html, ShortcutManager} from "@opendaw/lib-dom"
 import {DefaultObservableValue, int, isInstanceOf, Lifecycle, Terminable, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
@@ -22,6 +22,7 @@ import {PropertyHeader} from "@/ui/timeline/editors/notes/property/PropertyHeade
 import {NotePropertyVelocity, PropertyAccessor} from "@/ui/timeline/editors/notes/property/PropertyAccessor.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {createPitchMenu} from "@/ui/timeline/editors/notes/pitch/PitchMenu.ts"
+import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
 
 const className = Html.adoptStyleSheet(css, "NoteEditor")
 
@@ -131,7 +132,11 @@ export const NoteEditor =
                                 reader={reader}/>
             </div>
         )
+        const shortcuts = ShortcutManager.get().createContext(element, "NoteEditor (Main)")
         lifecycle.ownAll(
+            shortcuts,
+            shortcuts.register(NoteEditorShortcuts["toggle-step-recording"].shortcut,
+                () => stepRecording.setValue(!stepRecording.getValue())),
             capture.subscribeNotes(signal => {
                 if (engine.isPlaying.getValue() || !stepRecording.getValue()) {return}
                 if (NoteSignal.isOn(signal)) {
