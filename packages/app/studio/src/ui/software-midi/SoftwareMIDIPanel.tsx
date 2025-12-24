@@ -1,21 +1,22 @@
 import css from "./SoftwareMIDIPanel.sass?inline"
-import {Dragging, Events, Html} from "@opendaw/lib-dom"
+import {Dragging, Events, Html, Shortcut, ShortcutManager} from "@opendaw/lib-dom"
 import {
     asDefined,
     asInstanceOf,
     byte,
     clamp,
     DefaultObservableValue,
+    int,
     isInstanceOf,
     Lifecycle,
     Option,
     ParseResult,
+    Predicates,
     StringResult,
     Terminable
 } from "@opendaw/lib-std"
 import {createElement, DomElement} from "@opendaw/lib-jsx"
 import {PianoRollLayout} from "@/ui/PianoRollLayout"
-import {PianoKeyCodes} from "@/ui/software-midi/Mapping"
 import {MidiDevices} from "@opendaw/studio-core"
 import {AudioUnitBoxAdapter} from "@opendaw/studio-adapters"
 import {NumberInput} from "@/ui/components/NumberInput"
@@ -30,6 +31,7 @@ import {Button} from "@/ui/components/Button"
 import {StudioService} from "@/service/StudioService"
 import {AudioUnitBox, CaptureMidiBox} from "@opendaw/studio-boxes"
 import {Surface} from "@/ui/surface/Surface"
+import {NoteShortcuts, SoftwareMIDIShortcuts} from "@/ui/shortcuts/SoftwareMIDIShortcuts"
 
 const className = Html.adoptStyleSheet(css, "SoftwareMIDIPanel")
 
@@ -48,7 +50,7 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
     const octave = new DefaultObservableValue(5, {guard: (value: number): number => clamp(value, 0, 10)})
     const channel = new DefaultObservableValue(0, {guard: (value: number): number => clamp(value, 0, 15)})
     const velocity = new DefaultObservableValue(100, {guard: (value: number): number => clamp(value, 0, 100)})
-    const svg: SVGElement = (<PianoRoll pianoLayout={pianoLayout}/>)
+    const svg: SVGElement = (<PianoRoll lifecycle={lifecycle} pianoLayout={pianoLayout}/>)
     const midiIndicator: DomElement = <Icon symbol={IconSymbol.Connected}/>
     const element: HTMLElement = <div className={className}>
         <header>
@@ -147,6 +149,22 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
             }
         }
     }
+    const shortcuts = ShortcutManager.get()
+        .createContext(Predicates.alwaysTrue, "SoftwareMIDIPanel", Number.MAX_SAFE_INTEGER)
+    const activeCodes = new Map<string, int>()
+    const playNote = (shortcut: Shortcut, index: int) => {
+        activeCodes.set(shortcut.code, index)
+        if (activeKeys[index] > -1) {
+            softwareMIDIInput.sendNoteOff(activeKeys[index])
+            activeKeys[index] = -1
+        } else {
+            const pitch = index + octave.getValue() * 12
+            if (pitch >= 0 && pitch < 128) {
+                softwareMIDIInput.sendNoteOn(pitch, velocity.getValue() / 100.0)
+                activeKeys[index] = pitch
+            }
+        }
+    }
     lifecycle.ownAll(
         Events.subscribe(softwareMIDIInput, "midimessage", event => {
             const update = () => {
@@ -163,35 +181,12 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
         }),
         softwareMIDIInput.countListeners.catchupAndSubscribe(owner =>
             midiIndicator.style.color = owner.getValue() > 1 ? Colors.green.toString() : Colors.red.toString()),
-        Surface.subscribeKeyboard("keydown", event => {
-            if (event.repeat || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey
-                || Events.isTextInput(event.target)) {return}
-            if (event.code === "ArrowUp") {
-                octave.setValue(octave.getValue() + 1)
-                return
-            }
-            if (event.code === "ArrowDown") {
-                octave.setValue(octave.getValue() - 1)
-                return
-            }
-            const index = PianoKeyCodes.findIndex(([code]) => event.code === code)
-            if (index >= 0) {
-                if (activeKeys[index] > -1) {
-                    softwareMIDIInput.sendNoteOff(activeKeys[index])
-                    activeKeys[index] = -1
-                } else {
-                    const pitch = index + octave.getValue() * 12
-                    if (pitch >= 0 && pitch < 128) {
-                        softwareMIDIInput.sendNoteOn(pitch, velocity.getValue() / 100.0)
-                        activeKeys[index] = pitch
-                    }
-                }
-                event.preventDefault()
-            }
-        }, Number.MAX_SAFE_INTEGER),
+        shortcuts,
+        shortcuts.register(SoftwareMIDIShortcuts["increment-octave"].shortcut, () => octave.setValue(octave.getValue() + 1)),
+        shortcuts.register(SoftwareMIDIShortcuts["decrement-octave"].shortcut, () => octave.setValue(octave.getValue() - 1)),
+        ...NoteShortcuts.map(({shortcut}, index) => shortcuts.register(shortcut, () => playNote(shortcut, index))),
         Surface.subscribeKeyboard("keyup", event => {
-            if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) {return}
-            const index = PianoKeyCodes.findIndex(([code]) => event.code === code)
+            const index = activeCodes.get(event.code) ?? -1
             if (index >= 0) {
                 if (activeKeys[index] === -1) {return}
                 softwareMIDIInput.sendNoteOff(activeKeys[index])

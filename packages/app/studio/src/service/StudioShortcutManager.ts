@@ -22,6 +22,7 @@ import {ContentEditorShortcuts, ContentEditorShortcutsFactory} from "@/ui/shortc
 import {PianoPanelShortcuts, PianoPanelShortcutsFactory} from "@/ui/shortcuts/PianoPanelShortcuts"
 import {RegionsShortcuts, RegionsShortcutsFactory} from "@/ui/shortcuts/RegionsShortcuts"
 import {NoteEditorShortcuts, NoteEditorShortcutsFactory} from "@/ui/shortcuts/NoteEditorShortcuts"
+import {SoftwareMIDIShortcuts, SoftwareMIDIShortcutsFactory} from "@/ui/shortcuts/SoftwareMIDIShortcuts"
 
 export namespace StudioShortcutManager {
     const localStorageKey = "shortcuts"
@@ -31,6 +32,7 @@ export namespace StudioShortcutManager {
         "regions": {factory: RegionsShortcutsFactory, user: RegionsShortcuts},
         "note-editor": {factory: NoteEditorShortcutsFactory, user: NoteEditorShortcuts},
         "content-editor": {factory: ContentEditorShortcutsFactory, user: ContentEditorShortcuts},
+        "software-midi": {factory: SoftwareMIDIShortcutsFactory, user: SoftwareMIDIShortcuts},
         "piano-panel": {factory: PianoPanelShortcutsFactory, user: PianoPanelShortcuts}
     } as const satisfies Record<string, { factory: ShortcutDefinitions, user: ShortcutDefinitions }>
 

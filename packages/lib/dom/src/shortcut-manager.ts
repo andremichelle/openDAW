@@ -1,10 +1,14 @@
 import {
+    Arrays,
     BinarySearch,
+    int,
     isAbsent,
     JSONValue,
     Lazy,
     Maybe,
+    Notifier,
     NumberComparator,
+    Observer,
     Option,
     Predicate,
     Predicates,
@@ -31,17 +35,21 @@ export class ShortcutManager {
         console.debug("ShortcutManager installed")
     }
 
-    createContext(activation: Predicate<void> | Element, name: string): ShortcutContext {
+    createContext(activation: Predicate<void> | Element, name: string, priority?: int): ShortcutContext {
         const isActive = typeof activation === "function"
             ? activation :
             () => activation.contains(document.activeElement)
-        const context = new ShortcutContext(isActive, name)
-        this.#contexts.unshift(context)
+        const context = new ShortcutContext(isActive, name, priority ?? 0)
+        const index = BinarySearch.leftMostMapped(
+            this.#contexts, context.priority, (a, b) => b - a, ({priority}) => priority)
+        this.#contexts.splice(index, 0, context)
+        console.debug(this.#contexts.map(({name, priority}) => `${name} (${priority})`).join(", "))
+        context.own(Terminable.create(() => Arrays.remove(this.#contexts, context)))
         return context
     }
 
-    hasConflict(keys: Shortcut): boolean {
-        return this.#contexts.some(context => context.hasConflict(keys))
+    hasConflict(shortcut: Shortcut): boolean {
+        return this.#contexts.some(context => context.hasConflict(shortcut))
     }
 
     handleEvent(event: KeyboardEvent): void {
@@ -54,7 +62,7 @@ export class ShortcutManager {
     }
 
     #tryHandle(event: KeyboardEvent, context: ShortcutContext): boolean {
-        for (const {shortcut, consume, options} of context.shortcuts) {
+        for (const {shortcut, consume, options} of context.entries) {
             if (!options.activeInTextField && Events.isTextInput(event.target)) {continue}
             if (!options.allowRepeat && event.repeat) {continue}
             if (!shortcut.matches(event)) {continue}
@@ -67,31 +75,34 @@ export class ShortcutManager {
 }
 
 export class ShortcutContext implements Terminable {
+    readonly #terminator: Terminator = new Terminator()
     readonly #isActive: Predicate<void>
     readonly #name: string
-    readonly #shortcuts: Array<ShortcutEntry> = []
-    readonly #terminator: Terminator = new Terminator()
+    readonly #priority: int
+    readonly #entries: Array<ShortcutEntry> = []
 
-    constructor(isActive: Predicate<void>, name: string) {
+    constructor(isActive: Predicate<void>, name: string, priority: int) {
         this.#isActive = isActive
         this.#name = name
+        this.#priority = priority
     }
 
     get active(): boolean {return this.#isActive()}
     get name(): string {return this.#name}
-    get shortcuts(): ReadonlyArray<ShortcutEntry> {return this.#shortcuts}
+    get priority(): int {return this.#priority}
+    get entries(): ReadonlyArray<ShortcutEntry> {return this.#entries}
 
     register(shortcut: Shortcut, consume: Provider<Maybe<boolean> | unknown>, options?: ShortcutOptions): Subscription {
         const entry: ShortcutEntry = {shortcut, consume, options: options ?? ShortcutOptions.Default}
         const index = BinarySearch.leftMostMapped(
-            this.#shortcuts, entry.options.priority ?? 0, NumberComparator, ({options: {priority}}) => priority ?? 0)
-        this.#shortcuts.splice(index, 0, entry)
-        return this.#terminator.own({terminate: () => this.#shortcuts.splice(this.#shortcuts.indexOf(entry), 1)})
+            this.#entries, entry.options.priority ?? 0, NumberComparator, ({options: {priority}}) => priority ?? 0)
+        this.#entries.splice(index, 0, entry)
+        return this.#terminator.own({terminate: () => this.#entries.splice(this.#entries.indexOf(entry), 1)})
     }
 
-    hasConflict(keys: Shortcut): boolean {
-        return this.#shortcuts.some(entry => entry.shortcut.equals(keys))
-    }
+    hasConflict(shortcut: Shortcut): boolean {return this.#entries.some(entry => entry.shortcut.equals(shortcut))}
+
+    own<T extends Terminable>(terminable: T): T {return this.#terminator.own(terminable)}
 
     terminate(): void {this.#terminator.terminate()}
 }
@@ -162,6 +173,8 @@ export class Shortcut {
         return Browser.isMacOS() ? mapped[0] : mapped[1]
     }
 
+    readonly #notifier = new Notifier<void>()
+
     #code: string
     #ctrl: boolean
     #shift: boolean
@@ -203,11 +216,18 @@ export class Shortcut {
     }
 
     overrideWith(shortcut: Shortcut): void {
+        if (this.#code === shortcut.#code
+            && this.#ctrl === shortcut.#ctrl
+            && this.#shift === shortcut.#shift
+            && this.#alt === shortcut.#alt) {return}
         this.#code = shortcut.#code
         this.#ctrl = shortcut.#ctrl
         this.#shift = shortcut.#shift
         this.#alt = shortcut.#alt
+        this.#notifier.notify()
     }
+
+    subscribe(observer: Observer<void>): Subscription {return this.#notifier.subscribe(observer)}
 
     toJSON(): JSONValue {return {code: this.#code, ctrl: this.#ctrl, shift: this.#shift, alt: this.#alt}}
 
