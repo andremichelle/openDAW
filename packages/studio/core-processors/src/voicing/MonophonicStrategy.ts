@@ -24,13 +24,19 @@ export class MonophonicStrategy implements VoicingStrategy {
                 return
             }
         }
-
+        let lastFrequency: number = NaN
         if (isDefined(this.#sounding)) {
+            lastFrequency = this.#sounding.currentFrequency
             this.#sounding.forceStop()
         }
-
         const voice = this.#host.create()
-        voice.start(event, this.#host.computeFrequency(event), 1.0, 0.0)
+        const targetFrequency = this.#host.computeFrequency(event)
+        if (isNaN(lastFrequency)) {
+            voice.start(event, targetFrequency, 1.0, 0.0)
+        } else {
+            voice.start(event, lastFrequency, 1.0, 0.0)
+            voice.startGlide(targetFrequency, this.#host.glideTime)
+        }
         this.#triggered = voice
         this.#sounding = voice
         this.#processing.push(voice)
@@ -39,11 +45,8 @@ export class MonophonicStrategy implements VoicingStrategy {
     stop(id: int): void {
         const index = this.#stack.findIndex(event => event.id === id)
         if (index === -1) {return}
-
         this.#stack.splice(index, 1)
-
         if (!isDefined(this.#triggered)) return
-
         // released the topmost key and glide back if another note held
         if (index === this.#stack.length) {
             const prev = this.#stack.at(-1)
