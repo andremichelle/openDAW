@@ -1,13 +1,14 @@
 import css from "./NotePadPanel.sass?inline"
 import template from "./NotePadTemplate.md?raw"
 import {createElement} from "@opendaw/lib-jsx"
-import {DefaultObservableValue, EmptyExec, Lifecycle} from "@opendaw/lib-std"
+import {DefaultObservableValue, Lifecycle, Predicates} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
 import {Icon} from "@/ui/components/Icon"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {renderMarkdown} from "@/ui/Markdown"
-import {Events, Html, Keyboard} from "@opendaw/lib-dom"
+import {Events, Html, ShortcutManager} from "@opendaw/lib-dom"
+import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
 const className = Html.adoptStyleSheet(css, "NotePadPanel")
 
@@ -57,17 +58,16 @@ export const NotePadPanel = ({lifecycle, service}: Construct) => {
             </Checkbox>
         </div>
     )
+    const shortcuts = ShortcutManager.get().createContext(Predicates.alwaysTrue, "NotePadPanel")
     lifecycle.ownAll(
+        shortcuts,
+        shortcuts.register(GlobalShortcuts["project-save"].shortcut, () => {
+            saveNotepad()
+            return false
+        }, {activeInTextField: true}),
         editMode.subscribe(() => {
             if (!editMode.getValue()) {saveNotepad()}
             update()
-        }),
-        Events.subscribe(element, "keydown", event => {
-            if (editMode.getValue() && Keyboard.isControlKey(event) && event.code === "KeyS") {
-                event.preventDefault()
-                saveNotepad()
-                service.projectProfileService.save().then(EmptyExec, EmptyExec)
-            }
         }),
         Events.subscribe(notepad, "blur", () => editMode.setValue(false)),
         Events.subscribe(notepad, "input", () => Html.limitChars(notepad, "innerText", 10_000)),
