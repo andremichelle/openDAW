@@ -25,7 +25,7 @@ export namespace StudioDialogs {
 
         const contexts: StudioShortcutManager.ShortcutsMap = {}
         Objects.entries(StudioShortcutManager.Contexts).forEach(([key, shortcuts]) =>
-            contexts[key] = ShortcutDefinitions.copy(shortcuts.user))
+            contexts[key] = ShortcutDefinitions.copy(shortcuts.workingDefinition))
 
         await Promises.tryCatch(Dialogs.show({
             headline: "Shortcut Manager",
@@ -63,8 +63,8 @@ export namespace StudioDialogs {
             ]
         })).then(() => {
             if (!abortController.signal.aborted) {
-                Objects.entries(StudioShortcutManager.Contexts).forEach(([key, {user}]) =>
-                    ShortcutDefinitions.copyInto(contexts[key], user))
+                Objects.entries(StudioShortcutManager.Contexts).forEach(([key, {workingDefinition}]) =>
+                    ShortcutDefinitions.copyInto(contexts[key], workingDefinition))
                 StudioShortcutManager.store()
             }
         })

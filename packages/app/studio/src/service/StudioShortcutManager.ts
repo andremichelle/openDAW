@@ -31,17 +31,17 @@ export namespace StudioShortcutManager {
     export type ShortcutsMap = Record<string, ShortcutDefinitions>
 
     export const Contexts = {
-        "global": {factory: GlobalShortcutsFactory, user: GlobalShortcuts},
-        "regions": {factory: RegionsShortcutsFactory, user: RegionsShortcuts},
-        "note-editor": {factory: NoteEditorShortcutsFactory, user: NoteEditorShortcuts},
-        "content-editor": {factory: ContentEditorShortcutsFactory, user: ContentEditorShortcuts},
-        "software-midi": {factory: SoftwareMIDIShortcutsFactory, user: SoftwareMIDIShortcuts},
-        "piano-panel": {factory: PianoPanelShortcutsFactory, user: PianoPanelShortcuts}
-    } as const satisfies Record<string, { factory: ShortcutDefinitions, user: ShortcutDefinitions }>
+        "global": {factory: GlobalShortcutsFactory, workingDefinition: GlobalShortcuts},
+        "regions": {factory: RegionsShortcutsFactory, workingDefinition: RegionsShortcuts},
+        "note-editor": {factory: NoteEditorShortcutsFactory, workingDefinition: NoteEditorShortcuts},
+        "content-editor": {factory: ContentEditorShortcutsFactory, workingDefinition: ContentEditorShortcuts},
+        "software-midi": {factory: SoftwareMIDIShortcutsFactory, workingDefinition: SoftwareMIDIShortcuts},
+        "piano-panel": {factory: PianoPanelShortcutsFactory, workingDefinition: PianoPanelShortcuts}
+    } as const satisfies Record<string, { factory: ShortcutDefinitions, workingDefinition: ShortcutDefinitions }>
 
     export const toJSONString = (source: ShortcutsMap): Option<string> => {
-        const contexts: JSONValue = Objects.entries(source).reduce((record, [key, shortcuts]) => {
-            record[key] = ShortcutDefinitions.toJSON(shortcuts)
+        const contexts: JSONValue = Objects.entries(source).reduce((record, [key, definition]) => {
+            record[key] = ShortcutDefinitions.toJSON(definition)
             return record
         }, {} as Record<string, JSONValue>)
         return Option.tryCatch(() => JSON.stringify(contexts))
@@ -50,7 +50,7 @@ export namespace StudioShortcutManager {
     export const fromJSONString = (target: ShortcutsMap, source: string): void => {
         const {status, value: stored, error} = tryCatch(() => JSON.parse(source))
         if (status === "success") {
-            Objects.entries(target).forEach(([key, user]) => ShortcutDefinitions.fromJSON(user, stored[key]))
+            Objects.entries(target).forEach(([key, definition]) => ShortcutDefinitions.fromJSON(definition, stored[key]))
         } else {
             console.warn(error)
         }
@@ -58,7 +58,7 @@ export namespace StudioShortcutManager {
 
     export const store = (): void => {
         const shortcuts: ShortcutsMap = {}
-        Objects.entries(Contexts).forEach(([key, {user}]) => shortcuts[key] = user)
+        Objects.entries(Contexts).forEach(([key, {workingDefinition}]) => shortcuts[key] = workingDefinition)
         toJSONString(shortcuts).ifSome(jsonString => localStorage.setItem(localStorageKey, jsonString))
     }
 
@@ -75,7 +75,8 @@ export namespace StudioShortcutManager {
         if (isDefined(storedShortcuts)) {
             const {status, value: stored, error} = tryCatch(() => JSON.parse(storedShortcuts))
             if (status === "success") {
-                Objects.entries(Contexts).forEach(([name, {user}]) => ShortcutDefinitions.fromJSON(user, stored[name]))
+                Objects.entries(Contexts).forEach(([name, {workingDefinition}]) =>
+                    ShortcutDefinitions.fromJSON(workingDefinition, stored[name]))
                 console.debug("Custom shortcuts loaded.")
             } else {
                 console.warn(error)
