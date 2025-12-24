@@ -42,6 +42,20 @@
         "dist/**"
       ]
     },
+    "@opendaw/studio-core#build": {
+      "dependsOn": [
+        "^build",
+        "@opendaw/studio-core-workers#build",
+        "@opendaw/studio-core-processors#build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
+    },
     "lint": {},
     "dev": {
       "cache": false,

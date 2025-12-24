@@ -94,7 +94,7 @@ export namespace RecordAudio {
                     streamGain.connect(recordingWorklet)
                     recordingData = createRecordingData(quantizeFloor(owner.getValue(), beats))
                 }
-                const {regionBox, warpMarkerBox} = recordingData.unwrap()
+                const {fileBox, regionBox, warpMarkerBox} = recordingData.unwrap()
                 editing.modify(() => {
                     if (regionBox.isAttached()) {
                         const {duration, loopDuration} = regionBox
@@ -105,6 +105,7 @@ export namespace RecordAudio {
                         const seconds = tempoMap.intervalToSeconds(0, distanceInPPQN)
                         const totalSamples: int = Math.ceil(seconds * sampleRate)
                         recordingWorklet.setFillLength(totalSamples)
+                        fileBox.endInSeconds.setValue(seconds)
                         warpMarkerBox.seconds.setValue(seconds)
                     } else {
                         terminator.terminate()
