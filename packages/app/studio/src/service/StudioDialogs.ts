@@ -32,6 +32,7 @@ export namespace StudioDialogs {
             content: ShortcutManagerView({lifecycle, contexts, updateNotifier}),
             growWidth: true,
             abortSignal: abortController.signal,
+            okText: "Apply",
             buttons: [
                 {
                     text: "Load", onClick: async () => {
