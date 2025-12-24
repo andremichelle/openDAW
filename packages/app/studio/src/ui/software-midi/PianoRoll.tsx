@@ -14,7 +14,7 @@ type Construct = {
 
 export const PianoRoll = ({lifecycle, pianoLayout}: Construct): SVGElement => {
     const {sizes: {whiteKeys, blackKeys}} = pianoLayout
-    const fontSize = "9px"
+    const fontSize = "8px"
     return (
         <svg classList={className}
              viewBox={`0.5 0 ${pianoLayout.whiteKeys.length * whiteKeys.width - 1} ${(whiteKeys.height)}`}
@@ -32,7 +32,7 @@ export const PianoRoll = ({lifecycle, pianoLayout}: Construct): SVGElement => {
                               text-anchor="middle"
                               dominant-baseline="alphabetic"
                               onInit={element => lifecycle.own(noteShortcut.shortcut.subscribe(() =>
-                                  element.textContent = noteShortcut.shortcut.format()))}>
+                                  element.textContent = noteShortcut.shortcut.format().join("")))}>
                             {noteShortcut.shortcut.format()}
                         </text>
                     </Frag>
@@ -51,7 +51,7 @@ export const PianoRoll = ({lifecycle, pianoLayout}: Construct): SVGElement => {
                               text-anchor="middle"
                               dominant-baseline="alphabetic"
                               onInit={element => lifecycle.own(noteShortcut.shortcut.subscribe(() =>
-                                  element.textContent = noteShortcut.shortcut.format()))}>
+                                  element.textContent = noteShortcut.shortcut.format().join("")))}>
                             {noteShortcut.shortcut.format()}
                         </text>
                     </Frag>
