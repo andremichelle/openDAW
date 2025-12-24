@@ -38,6 +38,10 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.KeyR),
         description: "Start reocrding"
     },
+    "restart-recording": {
+        shortcut: Shortcut.of(Key.KeyR, {ctrl}),
+        description: "Start reocrding"
+    },
     "start-recording-direct": {
         shortcut: Shortcut.of(Key.KeyR, {shift}),
         description: "Start reocrding without count-in"

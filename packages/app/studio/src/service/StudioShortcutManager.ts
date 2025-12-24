@@ -115,6 +115,7 @@ export namespace StudioShortcutManager {
                     document.querySelector<HTMLElement>("[data-scope=\"regions\"]")?.focus()
                 }
             }),
+            gc.register(gs["restart-recording"].shortcut, () => service.runIfProject(project => project.restartRecording())),
             gc.register(gs["start-recording-direct"].shortcut, () => {
                 if (isCountingIn.getValue()) {
                     engine.stop()

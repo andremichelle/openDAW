@@ -74,7 +74,7 @@ export namespace RecordAudio {
             })
             project.selection.select(regionBox)
             return {fileBox, regionBox, warpMarkerBox}
-        })
+        }, false)
         const {tempoMap, env: {audioContext: {sampleRate}}} = project
         terminator.ownAll(
             Terminable.create(() => {

@@ -10,6 +10,7 @@ import {
 import {AudioContentBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioContentHelpers} from "./AudioContentHelpers"
 import {Workers} from "../../Workers"
+import {Pointers} from "@opendaw/studio-enums"
 
 export namespace AudioContentModifier {
     export const toNotStretched = async (adapters: ReadonlyArray<AudioContentBoxAdapter>): Promise<Exec> => {
@@ -17,6 +18,12 @@ export namespace AudioContentModifier {
         if (audioAdapters.length === 0) {return EmptyExec}
         return () => audioAdapters.forEach((adapter) => {
             adapter.box.playMode.defer()
+            adapter.asPlayModeTimeStretch.ifSome(({box}) => {
+                if (box.pointerHub.filter(Pointers.AudioPlayMode).length === 0) {box.delete()}
+            })
+            adapter.asPlayModePitchStretch.ifSome(({box}) => {
+                if (box.pointerHub.filter(Pointers.AudioPlayMode).length === 0) {box.delete()}
+            })
             switchTimeBaseToSeconds(adapter)
         })
     }
@@ -31,7 +38,8 @@ export namespace AudioContentModifier {
             adapter.box.playMode.refer(pitchStretch)
             if (optTimeStretch.nonEmpty()) {
                 const timeStretch = optTimeStretch.unwrap()
-                if (timeStretch.box.pointerHub.isEmpty()) {
+                const numPointers = timeStretch.box.pointerHub.filter(Pointers.AudioPlayMode).length
+                if (numPointers === 0) {
                     timeStretch.warpMarkers.asArray()
                         .forEach(({box: {owner}}) => owner.refer(pitchStretch.warpMarkers))
                     timeStretch.box.delete()
@@ -69,7 +77,8 @@ export namespace AudioContentModifier {
             adapter.box.playMode.refer(timeStretch)
             if (optPitchStretch.nonEmpty()) {
                 const pitchStretch = optPitchStretch.unwrap()
-                if (pitchStretch.box.pointerHub.isEmpty()) {
+                const numPointers = pitchStretch.box.pointerHub.filter(Pointers.AudioPlayMode).length
+                if (numPointers === 0) {
                     pitchStretch.warpMarkers.asArray()
                         .forEach(({box: {owner}}) => owner.refer(timeStretch.warpMarkers))
                     pitchStretch.box.delete()

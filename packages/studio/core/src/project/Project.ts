@@ -23,6 +23,7 @@ import {
     UserInterfaceBox
 } from "@opendaw/studio-boxes"
 import {
+    AudioRegionBoxAdapter,
     BoxAdapters,
     BoxAdaptersContext,
     ClipSequencing,
@@ -232,6 +233,28 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         return this.boxGraph.boxes()
             .filter(box => box.accept<BoxVisitor<boolean>>({visitAudioFileBox: (_box: AudioFileBox): boolean => true}))
             .map(box => box.address.uuid)
+    }
+
+    restartRecording(): void {
+        if (this.engine.isRecording.getValue()) {
+            this.engine.stopRecording()
+            this.editing.modify(() => {
+                this.collectRecordingRegions().forEach(region => {
+                    region.file.box.delete()
+                    region.box.delete()
+                })
+            }, false)
+
+            // this.startRecording(true)
+        }
+    }
+
+    collectRecordingRegions(): ReadonlyArray<AudioRegionBoxAdapter> {
+        return this.rootBoxAdapter.audioUnits.adapters()
+            .flatMap(audioUnitAdapter => audioUnitAdapter.tracks.values()
+                .flatMap(trackAdapter => trackAdapter.regions.adapters.values()
+                    .filter((region): region is AudioRegionBoxAdapter => region instanceof AudioRegionBoxAdapter
+                        && region.file.getOrCreateLoader().state.type === "record")))
     }
 
     toArrayBuffer(): ArrayBufferLike {
