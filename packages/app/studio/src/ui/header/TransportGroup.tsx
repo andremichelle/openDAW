@@ -29,7 +29,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
         <Button lifecycle={lifecycle}
                 appearance={{
                     color: Colors.red.fade(0.2), activeColor: Colors.red,
-                    tooltip: "Start Recording (Shift-Click to suppress count-in)"
+                    tooltip: ShortcutTooltip.create("Start Recording", GlobalShortcuts["start-recording"].shortcut)
                 }}
                 onClick={event => {
                     if (service.engine.isRecording.getValue()) {
@@ -97,7 +97,10 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
             {playButton}
             <Button lifecycle={lifecycle}
                     onClick={() => {engine.stop(true)}}
-                    appearance={{activeColor: Colors.bright, tooltip: "Stop"}}>
+                    appearance={{
+                        activeColor: Colors.bright,
+                        tooltip: ShortcutTooltip.create("Stop", GlobalShortcuts["stop-playback"].shortcut)
+                    }}>
                 <Icon symbol={IconSymbol.Stop}/>
             </Button>
             <Checkbox lifecycle={lifecycle}

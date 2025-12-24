@@ -30,6 +30,18 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.Space),
         description: "Start or pause playback"
     },
+    "stop-playback": {
+        shortcut: Shortcut.of(Key.Period),
+        description: "Stop playback"
+    },
+    "start-recording": {
+        shortcut: Shortcut.of(Key.KeyR),
+        description: "Start reocrding"
+    },
+    "start-recording-direct": {
+        shortcut: Shortcut.of(Key.KeyR, {shift}),
+        description: "Start reocrding without count-in"
+    },
     "toggle-software-keyboard": {
         shortcut: Shortcut.of(Key.KeyK, {ctrl}),
         description: "Show or hide software keyboard"

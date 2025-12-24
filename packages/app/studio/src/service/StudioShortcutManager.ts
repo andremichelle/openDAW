@@ -66,7 +66,7 @@ export namespace StudioShortcutManager {
         const {global: gc} = ShortcutManager.get()
         const {engine} = service
         const {
-            engine: {metronomeEnabled, isPlaying, position},
+            engine: {metronomeEnabled, isPlaying, isRecording, isCountingIn, position},
             panelLayout,
             timeline: {clips: {visible: clipsVisibility}, followCursor, primaryVisibility: {markers, tempo}, snapping}
         } = service
@@ -83,8 +83,8 @@ export namespace StudioShortcutManager {
             }
         }
         return Terminable.many(
-            gc.register(gs["project-undo"].shortcut, () => service.runIfProject(project => project.editing.undo())),
-            gc.register(gs["project-redo"].shortcut, () => service.runIfProject(project => project.editing.redo())),
+            gc.register(gs["project-undo"].shortcut, () => service.runIfProject(project => project.editing.undo()), {allowRepeat: true}),
+            gc.register(gs["project-redo"].shortcut, () => service.runIfProject(project => project.editing.redo()), {allowRepeat: true}),
             gc.register(gs["project-open"].shortcut, async () => await service.browseLocalProjects()),
             gc.register(gs["project-save"].shortcut, async () => await service.projectProfileService.save(), {activeInTextField: true}),
             gc.register(gs["project-save-as"].shortcut, async () => await service.projectProfileService.saveAs(), {activeInTextField: true}),
@@ -103,6 +103,27 @@ export namespace StudioShortcutManager {
                 const {engine} = service
                 const isPlaying = engine.isPlaying.getValue()
                 if (isPlaying) {engine.stop()} else {engine.play()}
+            }),
+            gc.register(gs["stop-playback"].shortcut, () => engine.stop(true)),
+            gc.register(gs["start-recording"].shortcut, () => {
+                if (isCountingIn.getValue()) {
+                    engine.stop()
+                } else if (isRecording.getValue()) {
+                    service.engine.stopRecording()
+                } else {
+                    service.runIfProject(project => project.startRecording(true))
+                    document.querySelector<HTMLElement>("[data-scope=\"regions\"]")?.focus()
+                }
+            }),
+            gc.register(gs["start-recording-direct"].shortcut, () => {
+                if (isCountingIn.getValue()) {
+                    engine.stop()
+                } else if (isRecording.getValue()) {
+                    service.engine.stopRecording()
+                } else {
+                    service.runIfProject(project => project.startRecording(false))
+                    document.querySelector<HTMLElement>("[data-scope=\"regions\"]")?.focus()
+                }
             }),
             gc.register(gs["toggle-software-keyboard"].shortcut, () => service.toggleSoftwareKeyboard()),
             gc.register(gs["toggle-device-panel"].shortcut, () => panelLayout.getByType(PanelType.DevicePanel).toggleMinimize()),
