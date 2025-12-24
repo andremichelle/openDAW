@@ -23,9 +23,15 @@ export const ShortcutManagerView = ({lifecycle, contexts, updateNotifier}: Const
                 <details className="context"
                          open={lastOpenIndex === index}
                          onInit={element => element.ontoggle = () => {
-                             if (element.open) {lastOpenIndex = index}
+                             if (element.open) {
+                                 lastOpenIndex = index
+                                 element.scrollIntoView()
+                             }
                          }}>
-                    <summary><h3>{name}</h3></summary>
+                    <summary>
+                        <h3>{name}</h3>
+                        <hr/>
+                    </summary>
                     <div className="shortcuts">
                         {Objects.entries(shortcuts).map(([key, entry]) => (
                             <div className="shortcut" onclick={async () => {
@@ -69,13 +75,13 @@ const editShortcut = async (definitions: ShortcutDefinitions,
                 }}>{original.shortcut.format()}</div>
                 <div onInit={element => shortcut.catchupAndSubscribe(owner => {
                     const shortcut = owner.getValue()
-                    const conflicts = Objects.entries(definitions)
-                        .find(([_, other]) => !other.shortcut.equals(original.shortcut) && other.shortcut.equals(shortcut))
+                    const conflicts = Object.values(definitions)
+                        .find((other) => !other.shortcut.equals(original.shortcut) && other.shortcut.equals(shortcut))
                     if (isAbsent(conflicts)) {
                         element.textContent = "No conflict."
                         element.style.color = Colors.dark.toString()
                     } else {
-                        element.textContent = `Conflicts with "${conflicts[1].description} ${conflicts[1].shortcut.format()}".`
+                        element.textContent = `Conflicts with "${conflicts.description} ${conflicts.shortcut.format()}".`
                         element.style.color = Colors.red.toString()
                     }
                 })}/>

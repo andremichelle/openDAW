@@ -1,18 +1,28 @@
 import css from "./PianoModePanel.sass?inline"
 import {createElement, Group} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {deferNextFrame, Html} from "@opendaw/lib-dom"
+import {deferNextFrame, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {PianoRoll} from "@/ui/piano-panel/PianoRoll.tsx"
 import {NoteFall} from "@/ui/piano-panel/NoteFall.tsx"
-import {Exec, Lifecycle, MutableObservableValue, Notifier, Subscription, Terminable, Terminator} from "@opendaw/lib-std"
+import {
+    Exec,
+    Lifecycle,
+    MutableObservableValue,
+    Notifier,
+    Predicates,
+    Subscription,
+    Terminable,
+    Terminator
+} from "@opendaw/lib-std"
 import {NumberInput} from "@/ui/components/NumberInput.tsx"
 import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {AudioUnitBoxAdapter, RootBoxAdapter, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
-import {Colors} from "@opendaw/studio-enums"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {PPQN} from "@opendaw/lib-dsp"
+import {PianoPanelShortcuts} from "@/ui/shortcuts/PianoPanelShortcuts"
 
 const className = Html.adoptStyleSheet(css, "PianoModePanel")
 
@@ -75,10 +85,25 @@ export const PianoModePanel = ({lifecycle, service}: Construct) => {
         })
     }
     subscribeExcludePianoMode()
+    const shortcuts = ShortcutManager.get().createContext(Predicates.alwaysTrue, "PianoPanel")
+    const engine = project.engine
     lifecycle.ownAll(
         position.subscribe(notify.request),
         pianoMode.subscribe(notify.request),
-        excludePianoModeSubscription
+        excludePianoModeSubscription,
+        shortcuts,
+        shortcuts.register(PianoPanelShortcuts["position-increment"].shortcut, () => {
+            if (!engine.isPlaying.getValue()) {
+                const ppqn = position.getValue() + PPQN.Quarter
+                engine.setPosition(Math.max(0, ppqn))
+            }
+        }, {allowRepeat: true}),
+        shortcuts.register(PianoPanelShortcuts["position-decrement"].shortcut, () => {
+            if (!engine.isPlaying.getValue()) {
+                const ppqn = position.getValue() - PPQN.Quarter
+                engine.setPosition(Math.max(0, ppqn))
+            }
+        }, {allowRepeat: true})
     )
     return (
         <div className={className}>

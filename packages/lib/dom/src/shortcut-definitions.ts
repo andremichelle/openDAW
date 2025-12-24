@@ -6,12 +6,12 @@ export type ShortcutDefinition = { shortcut: Shortcut, description: string }
 export type ShortcutDefinitions = Record<string, ShortcutDefinition>
 
 export namespace ShortcutDefinitions {
-    export const copy = (defs: ShortcutDefinitions): ShortcutDefinitions => {
+    export const copy = <T extends ShortcutDefinitions>(defs: T): T => {
         const result: ShortcutDefinitions = {}
         for (const [key, {shortcut, description}] of Object.entries(defs)) {
             result[key] = {shortcut: shortcut.copy(), description}
         }
-        return result
+        return result as T
     }
 
     export const copyInto = (source: ShortcutDefinitions, target: ShortcutDefinitions): void => {

@@ -1,17 +1,31 @@
 import {Key, Shortcut, ShortcutDefinitions, ShortcutValidator} from "@opendaw/lib-dom"
 
+const shift = true
+
 export const NoteEditorShortcutsFactory = ShortcutValidator.validate({
-    "move-cursor-right": {
+    "increment-note-semitone": {
+        shortcut: Shortcut.of(Key.ArrowUp),
+        description: "Move note up by one semitone"
+    },
+    "decrement-note-semitone": {
+        shortcut: Shortcut.of(Key.ArrowDown),
+        description: "Move note down by one semitone"
+    },
+    "increment-note-octave": {
+        shortcut: Shortcut.of(Key.ArrowUp, {shift}),
+        description: "Move note up by one octave"
+    },
+    "decrement-note-octave": {
+        shortcut: Shortcut.of(Key.ArrowDown, {shift}),
+        description: "Move note down by one octave"
+    },
+    "increment-note-position": {
         shortcut: Shortcut.of(Key.ArrowRight),
-        description: "Move playback cursor right"
+        description: "Move note forwards"
     },
-    "move-cursor-left": {
+    "decrement-note-position": {
         shortcut: Shortcut.of(Key.ArrowLeft),
-        description: "Move playback cursor left"
-    },
-    "zoom-to-content": {
-        shortcut: Shortcut.of(Key.Backslash),
-        description: "Zoom to content"
+        description: "Move note backwards"
     }
 })
 

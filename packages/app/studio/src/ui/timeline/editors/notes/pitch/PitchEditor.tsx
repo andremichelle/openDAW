@@ -30,7 +30,6 @@ import {Cursor} from "@/ui/Cursors.ts"
 import {createPitchEventCapturing, PitchCaptureTarget} from "@/ui/timeline/editors/notes/pitch/PitchEventCapturing.ts"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {createPitchSelectionLocator} from "@/ui/timeline/editors/notes/pitch/PitchSelectionLocator.ts"
-import {attachShortcuts} from "@/ui/timeline/editors/Shortcuts.ts"
 import {Config} from "@/ui/timeline/Config.ts"
 import {NoteMoveModifier} from "@/ui/timeline/editors/notes/NoteMoveModifier.ts"
 import {NoteDurationModifier} from "@/ui/timeline/editors/notes/NoteDurationModifier.ts"
@@ -40,9 +39,11 @@ import {NoteCreateModifier} from "@/ui/timeline/editors/notes/NoteCreateModifier
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {BoxEditing} from "@opendaw/lib-box"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {CssUtils, Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
+import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
 import {PPQN, ppqn} from "@opendaw/lib-dsp"
 import {Surface} from "@/ui/surface/Surface"
+import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
+import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 
 const className = Html.adoptStyleSheet(css, "PitchEditor")
 
@@ -83,10 +84,10 @@ export const PitchEditor = ({
             const position = previewNote.position
             const complete = position + previewNote.duration
             const {context} = painter
-            const x0 = Math.floor(range.unitToX(position + reader.offset) * devicePixelRatio)
+            const x0 = Math.floor(range.unitToX(position + reader.offset) + 1) * devicePixelRatio
             const x1 = Math.floor(range.unitToX(complete + reader.offset) * devicePixelRatio)
             const y0 = positioner.pitchToY(previewNote.pitch) * devicePixelRatio
-            const y1 = y0 + positioner.noteHeight * devicePixelRatio
+            const y1 = y0 + (positioner.noteHeight - 1) * devicePixelRatio
             context.fillStyle = "rgba(255, 255, 255, 0.08)"
             context.fillRect(x0, y0, x1 - x0, y1 - y0)
         }
@@ -139,12 +140,13 @@ export const PitchEditor = ({
                             xAxis={range.valueAxis}
                             yAxis={positioner.valueAxis}/>
     )
-    const modifySelection = (procedure: Procedure<NoteEventBoxAdapter>): void => {
+    const modifySelection = (procedure: Procedure<NoteEventBoxAdapter>): boolean => {
         const adapters = selection.selected()
-        if (adapters.length === 0) {return}
+        if (adapters.length === 0) {return false}
         const first = adapters[0]
         editing.modify(() => adapters.forEach(procedure))
         auditionNote(first.pitch, first.duration)
+        return true
     }
     const updatePreview = (): void => {
         const point = Surface.get(canvas).pointer
@@ -171,8 +173,29 @@ export const PitchEditor = ({
         }
         renderer.requestUpdate()
     }
+    const shortcuts = ShortcutManager.get().createContext(canvas, "PitchEditor")
     lifecycle.ownAll(
-        attachShortcuts(canvas, editing, selection, locator),
+        shortcuts,
+        shortcuts.register(NoteEditorShortcuts["increment-note-semitone"].shortcut, () =>
+            modifySelection(({box, pitch}: NoteEventBoxAdapter) => box.pitch.setValue(Math.min(pitch + 1, 127)))),
+        shortcuts.register(NoteEditorShortcuts["decrement-note-semitone"].shortcut, () =>
+            modifySelection(({box, pitch}: NoteEventBoxAdapter) => box.pitch.setValue(Math.max(pitch - 1, 0)))),
+        shortcuts.register(NoteEditorShortcuts["increment-note-octave"].shortcut, () =>
+            modifySelection(({box, pitch}: NoteEventBoxAdapter) => {
+                if (pitch + 12 <= 127) {box.pitch.setValue(pitch + 12)}
+            })),
+        shortcuts.register(NoteEditorShortcuts["decrement-note-octave"].shortcut, () =>
+            modifySelection(({box, pitch}: NoteEventBoxAdapter) => {
+                if (pitch - 12 >= 0) {box.pitch.setValue(pitch - 12)}
+            })),
+        shortcuts.register(NoteEditorShortcuts["increment-note-position"].shortcut, () =>
+            modifySelection(({box, position}: NoteEventBoxAdapter) =>
+                box.position.setValue(position + snapping.value))),
+        shortcuts.register(NoteEditorShortcuts["decrement-note-position"].shortcut, () =>
+            modifySelection(({box, position}: NoteEventBoxAdapter) =>
+                box.position.setValue(position - snapping.value))),
+        shortcuts.register(ContentEditorShortcuts["select-all"].shortcut, () => selection.select(...locator.selectable())),
+        shortcuts.register(ContentEditorShortcuts["deselect-all"].shortcut, () => selection.deselectAll()),
         Html.watchResize(canvas, () => range.width = canvas.clientWidth),
         Events.subscribe(canvas, "wheel", (event: WheelEvent) => {
             event.preventDefault()
@@ -273,54 +296,6 @@ export const PitchEditor = ({
             if (Keyboard.isControlKey(event)) {
                 updatePreview()
                 return
-            }
-            if (event.altKey || Keyboard.isControlKey(event) || Events.isTextInput(event.target)) {return}
-            event.preventDefault()
-            switch (event.key) {
-                case "ArrowUp": {
-                    if (event.shiftKey) {
-                        modifySelection(({box, pitch}: NoteEventBoxAdapter) => {
-                            if (pitch + 12 <= 127) {box.pitch.setValue(pitch + 12)}
-                        })
-                    } else {
-                        modifySelection(({box, pitch}: NoteEventBoxAdapter) =>
-                            box.pitch.setValue(Math.max(pitch + 1, 0)))
-                    }
-                    event.stopPropagation()
-                    break
-                }
-                case "ArrowDown": {
-                    if (event.shiftKey) {
-                        modifySelection(({box, pitch}: NoteEventBoxAdapter) => {
-                            if (pitch - 12 >= 0) {box.pitch.setValue(pitch - 12)}
-                        })
-                    } else {
-                        modifySelection(({box, pitch}: NoteEventBoxAdapter) =>
-                            box.pitch.setValue(Math.max(pitch - 1, 0)))
-                    }
-                    event.stopPropagation()
-                    break
-                }
-                case "ArrowLeft": {
-                    if (selection.nonEmpty()) {
-                        if (!event.shiftKey) {
-                            modifySelection(({box, position}: NoteEventBoxAdapter) =>
-                                box.position.setValue(position - snapping.value))
-                            event.stopPropagation()
-                        }
-                    }
-                    break
-                }
-                case "ArrowRight": {
-                    if (selection.nonEmpty()) {
-                        if (!event.shiftKey) {
-                            modifySelection(({box, position}: NoteEventBoxAdapter) =>
-                                box.position.setValue(position + snapping.value))
-                            event.stopPropagation()
-                        }
-                    }
-                    break
-                }
             }
         })
     )

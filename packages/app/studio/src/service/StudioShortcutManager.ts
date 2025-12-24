@@ -18,6 +18,9 @@ import {Workspace} from "@/ui/workspace/Workspace"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {ProjectUtils} from "@opendaw/studio-adapters"
 import {StudioDialogs} from "@/service/StudioDialogs"
+import {ContentEditorShortcuts, ContentEditorShortcutsFactory} from "@/ui/shortcuts/ContentEditorShortcuts"
+import {PianoPanelShortcuts, PianoPanelShortcutsFactory} from "@/ui/shortcuts/PianoPanelShortcuts"
+import {RegionsShortcuts, RegionsShortcutsFactory} from "@/ui/shortcuts/RegionsShortcuts"
 import {NoteEditorShortcuts, NoteEditorShortcutsFactory} from "@/ui/shortcuts/NoteEditorShortcuts"
 
 export namespace StudioShortcutManager {
@@ -25,13 +28,17 @@ export namespace StudioShortcutManager {
 
     export const Contexts = {
         "global": {factory: GlobalShortcutsFactory, user: GlobalShortcuts},
-        "note-editor": {factory: NoteEditorShortcutsFactory, user: NoteEditorShortcuts}
-    } as const satisfies Record<string, any>
+        "regions": {factory: RegionsShortcutsFactory, user: RegionsShortcuts},
+        "note-editor": {factory: NoteEditorShortcutsFactory, user: NoteEditorShortcuts},
+        "content-editor": {factory: ContentEditorShortcutsFactory, user: ContentEditorShortcuts},
+        "piano-panel": {factory: PianoPanelShortcutsFactory, user: PianoPanelShortcuts}
+    } as const satisfies Record<string, { factory: ShortcutDefinitions, user: ShortcutDefinitions }>
 
     export const reset = (): void => {
         Object.values(Contexts)
             .forEach(definitions => Object.entries(definitions.factory)
-                .forEach(([key, {shortcut}]) => definitions.user[key].shortcut.overrideWith(shortcut)))
+                .forEach(([key, {shortcut}]) =>
+                    (definitions.user as ShortcutDefinitions)[key].shortcut.overrideWith(shortcut)))
     }
 
     export const store = (): void => {
@@ -72,12 +79,12 @@ export namespace StudioShortcutManager {
             gc.register(gs["project-open"].shortcut, async () => await service.browseLocalProjects()),
             gc.register(gs["project-save"].shortcut, async () => await service.projectProfileService.save(), {activeInTextField: true}),
             gc.register(gs["project-save-as"].shortcut, async () => await service.projectProfileService.saveAs(), {activeInTextField: true}),
-            gc.register(gs["move-cursor-right"].shortcut, () => {
+            gc.register(gs["position-increment"].shortcut, () => {
                 if (!isPlaying.getValue()) {
                     engine.setPosition(snapping.floor(position.getValue()) + snapping.value)
                 }
             }, {allowRepeat: true}),
-            gc.register(gs["move-cursor-left"].shortcut, () => {
+            gc.register(gs["position-decrement"].shortcut, () => {
                 if (!engine.isPlaying.getValue()) {
                     engine.setPosition(Math.max(0,
                         snapping.ceil(position.getValue()) - snapping.value))

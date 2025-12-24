@@ -37,11 +37,12 @@ import {RegionLoopDurationModifier} from "@/ui/timeline/tracks/audio-unit/region
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {RegionDragAndDrop} from "@/ui/timeline/tracks/audio-unit/regions/RegionDragAndDrop.ts"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
-import {CssUtils, Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
+import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
 import {TimelineRange} from "@opendaw/studio-core"
+import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 
 const className = Html.adoptStyleSheet(css, "RegionsArea")
 
@@ -80,18 +81,20 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
     const capturing: ElementCapturing<RegionCaptureTarget> = RegionCapturing.create(element, manager, range)
     const regionLocator = createRegionLocator(manager, regionSelection)
     const dragAndDrop = new RegionDragAndDrop(service, capturing, timeline.snapping)
+    const shortcuts = ShortcutManager.get().createContext(() => element.contains(document.activeElement), "Regions")
     lifecycle.ownAll(
         regionSelection.catchupAndSubscribe({
             onSelected: (selectable: AnyRegionBoxAdapter) => selectable.onSelected(),
             onDeselected: (selectable: AnyRegionBoxAdapter) => selectable.onDeselected()
         }),
+        shortcuts,
+        shortcuts.register(RegionsShortcuts["select-all"].shortcut, () => {
+            regionSelection.select(...manager.tracks()
+                .flatMap(({trackBoxAdapter: {regions}}) => regions.collection.asArray()))
+        }),
+        shortcuts.register(RegionsShortcuts["deselect-all"].shortcut, () => regionSelection.deselectAll()),
         Events.subscribe(element, "keydown", (event: KeyboardEvent) => {
-            if (Keyboard.isDeselectAll(event)) {
-                regionSelection.deselectAll()
-            } else if (Keyboard.isSelectAll(event)) {
-                regionSelection.select(...manager.tracks()
-                    .flatMap(({trackBoxAdapter: {regions}}) => regions.collection.asArray()))
-            } else if (Keyboard.isDelete(event)) {
+            if (Keyboard.isDelete(event)) {
                 editing.modify(() => regionSelection.selected()
                     .forEach(region => region.box.delete()))
             }

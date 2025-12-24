@@ -4,7 +4,13 @@ component
   row-gap: 0.5em
   outline: none
   height: 280px
-  overflow: hidden auto
+  overflow: hidden scroll
+
+  hr
+    margin: 0.5em
+    height: 1px
+    border: none
+    flex: 1
 
   > details.context
     outline: none
@@ -18,11 +24,17 @@ component
       cursor: pointer
 
       > h3
+        font-size: inherit
         text-transform: capitalize
         display: inline-block
 
+      > hr
+        background-color: var(--color-blue)
+        opacity: 0.2
+
     > div.shortcuts
       margin-top: 0.5em
+      margin-bottom: 0.125em
       display: flex
       flex-direction: column
       row-gap: 0.25em
@@ -39,12 +51,8 @@ component
           white-space: nowrap
 
         > hr
-          margin: 0.5em
-          height: 1px
-          border: none
           background-color: var(--color-dark)
           opacity: 0.1
-          flex: 1
 
         &:hover
           color: var(--color-bright)

@@ -26,7 +26,6 @@ import {ValuePaintModifier} from "@/ui/timeline/editors/value/ValuePaintModifier
 import {SelectionRectangle} from "@/ui/timeline/SelectionRectangle.tsx"
 import {SnapValueThresholdInPixels, ValueMoveModifier} from "@/ui/timeline/editors/value/ValueMoveModifier.ts"
 import {ValueSlopeModifier} from "@/ui/timeline/editors/value/ValueSlopeModifier.ts"
-import {attachShortcuts} from "@/ui/timeline/editors/Shortcuts.ts"
 import {installCursor} from "@/ui/hooks/cursor.ts"
 import {Cursor} from "@/ui/Cursors.ts"
 import {installValueContextMenu} from "@/ui/timeline/editors/value/ValueContextMenu.ts"
@@ -37,11 +36,12 @@ import {installValueInput} from "@/ui/timeline/editors/ValueInput.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {installEditorBody} from "../EditorBody"
 import {ValueContentDurationModifier} from "./ValueContentDurationModifier"
-import {Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
+import {Dragging, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
 import {ValueTooltip} from "./ValueTooltip"
 import {ValueEventEditing} from "./ValueEventEditing"
 import {TimelineRange} from "@opendaw/studio-core"
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
+import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 
 const className = Html.adoptStyleSheet(css, "ValueEditor")
 
@@ -197,7 +197,13 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             xAxis={range.valueAxis}
                             yAxis={valueAxis}/>
     )
+    const shortcuts = ShortcutManager.get().createContext(canvas, "ValueEditor")
     lifecycle.ownAll(
+        shortcuts,
+        shortcuts.register(ContentEditorShortcuts["select-all"].shortcut, () =>
+            selection.select(...selectableLocator.selectable())),
+        shortcuts.register(ContentEditorShortcuts["deselect-all"].shortcut, () =>
+            selection.deselectAll()),
         Dragging.attach(canvas, (event: PointerEvent) => {
             const target: Nullable<ValueCaptureTarget> = capturing.captureEvent(event)
             if (target === null || selection.isEmpty()) {return Option.None}
@@ -233,7 +239,6 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
         reader.subscribeChange(painter.requestUpdate),
         context.anchorModel.subscribe(painter.requestUpdate),
         modifyContext.subscribeUpdate(painter.requestUpdate),
-        attachShortcuts(canvas, editing, selection, selectableLocator),
         installCursor(canvas, capturing, {
             get: (target, event) => {
                 cutCursorModel.setValue(target?.type === "curve" && event.altKey

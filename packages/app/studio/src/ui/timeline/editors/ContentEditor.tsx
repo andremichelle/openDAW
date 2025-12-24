@@ -46,7 +46,7 @@ import {RegionReader} from "@/ui/timeline/editors/RegionReader.ts"
 import {Colors, Pointers} from "@opendaw/studio-enums"
 import {ParameterValueEditing} from "@/ui/timeline/editors/value/ParameterValueEditing.ts"
 import {AnimationFrame, deferNextFrame, Html, ShortcutManager} from "@opendaw/lib-dom"
-import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
+import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 
 const className = Html.adoptStyleSheet(css, "ContentEditor")
 
@@ -77,7 +77,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                 MenuItem.default({
                     label: "Zoom to content",
                     selectable: editingSubject.get().nonEmpty(),
-                    shortcut: NoteEditorShortcuts["zoom-to-content"].shortcut.format()
+                    shortcut: ContentEditorShortcuts["zoom-to-content"].shortcut.format()
                 }).setTriggerProcedure(zommContent),
                 MenuItem.default({label: "Exit", selectable: editingSubject.get().nonEmpty()})
                     .setTriggerProcedure(() => editingSubject.clear())
@@ -228,7 +228,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
     }))
 
     const {project: {engine}} = service
-    const shortcuts = ShortcutManager.get().createContext(() => element.contains(document.activeElement))
+    const shortcuts = ShortcutManager.get().createContext(element, "ContentEditor")
     lifecycle.ownAll(
         updateEditor,
         editingSubject.catchupAndSubscribe(() => {
@@ -250,18 +250,18 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
             }
         })()),
         shortcuts,
-        shortcuts.register(NoteEditorShortcuts["move-cursor-right"].shortcut, () => {
+        shortcuts.register(ContentEditorShortcuts["position-increment"].shortcut, () => {
             if (!engine.isPlaying.getValue()) {
                 engine.setPosition(snapping.floor(engine.position.getValue()) + snapping.value)
             }
         }, {allowRepeat: true}),
-        shortcuts.register(NoteEditorShortcuts["move-cursor-left"].shortcut, () => {
+        shortcuts.register(ContentEditorShortcuts["position-decrement"].shortcut, () => {
             if (!engine.isPlaying.getValue()) {
                 engine.setPosition(Math.max(0,
                     snapping.ceil(engine.position.getValue()) - snapping.value))
             }
         }, {allowRepeat: true}),
-        shortcuts.register(NoteEditorShortcuts["zoom-to-content"].shortcut, zommContent)
+        shortcuts.register(ContentEditorShortcuts["zoom-to-content"].shortcut, zommContent)
     )
     return element
 }

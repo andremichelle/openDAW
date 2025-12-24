@@ -15,7 +15,6 @@ import {PropertyAccessor} from "@/ui/timeline/editors/notes/property/PropertyAcc
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {PropertyNodeModifier} from "@/ui/timeline/editors/notes/property/PropertyNodeModifier.ts"
-import {attachShortcuts} from "@/ui/timeline/editors/Shortcuts.ts"
 import {installCursor} from "@/ui/hooks/cursor.ts"
 import {attachWheelScroll} from "@/ui/timeline/editors/WheelScroll.ts"
 import {installEditorAuxBody} from "@/ui/timeline/editors/EditorBody.ts"
@@ -25,8 +24,9 @@ import {Cursor} from "@/ui/Cursors.ts"
 import {installValueInput} from "@/ui/timeline/editors/ValueInput.ts"
 
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {Dragging, Html, Keyboard} from "@opendaw/lib-dom"
+import {Dragging, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
 import {TimelineRange} from "@opendaw/studio-core"
+import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 
 const className = Html.adoptStyleSheet(css, "PropertyEditor")
 
@@ -100,9 +100,12 @@ export const PropertyEditor =
                 {selectionRectangle}
             </div>
         )
+        const shortcuts = ShortcutManager.get().createContext(canvas, "PropertyEditor")
         lifecycle.ownAll(
+            shortcuts,
+            shortcuts.register(ContentEditorShortcuts["select-all"].shortcut, () => selection.select(...locator.selectable())),
+            shortcuts.register(ContentEditorShortcuts["deselect-all"].shortcut, () => selection.deselectAll()),
             installEditorAuxBody(canvas, range),
-            attachShortcuts(canvas, editing, selection, locator),
             Html.watchResize(element, () => range.width = element.clientWidth),
             range.subscribe(painter.requestUpdate),
             reader.subscribeChange(painter.requestUpdate),

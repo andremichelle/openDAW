@@ -1,13 +1,14 @@
 import {
     BinarySearch,
-    Exec,
     isAbsent,
     JSONValue,
     Lazy,
+    Maybe,
     NumberComparator,
     Option,
     Predicate,
     Predicates,
+    Provider,
     Subscription,
     Terminable,
     Terminator
@@ -21,38 +22,45 @@ export class ShortcutManager {
     @Lazy
     static get(): ShortcutManager {return new ShortcutManager()}
 
-    readonly global: ShortcutContext = new ShortcutContext(Predicates.alwaysTrue)
+    readonly global: ShortcutContext
 
     readonly #contexts: Array<ShortcutContext> = []
 
-    private constructor() {console.debug("ShortcutManager installed")}
+    private constructor() {
+        this.global = this.createContext(Predicates.alwaysTrue, "Global")
+        console.debug("ShortcutManager installed")
+    }
 
-    createContext(isActive: Predicate<void>): ShortcutContext {
-        const context = new ShortcutContext(isActive)
-        this.#contexts.push(context)
+    createContext(activation: Predicate<void> | Element, name: string): ShortcutContext {
+        const isActive = typeof activation === "function"
+            ? activation :
+            () => activation.contains(document.activeElement)
+        const context = new ShortcutContext(isActive, name)
+        this.#contexts.unshift(context)
         return context
     }
 
     hasConflict(keys: Shortcut): boolean {
-        if (this.global.hasConflict(keys)) {return true}
-        return this.#contexts.some(ctx => ctx.hasConflict(keys))
+        return this.#contexts.some(context => context.hasConflict(keys))
     }
 
     handleEvent(event: KeyboardEvent): void {
         for (const context of this.#contexts) {
-            if (context.active && this.#tryHandle(event, context)) {return}
+            if (context.active && this.#tryHandle(event, context)) {
+                console.debug("consumed by", context.name)
+                return
+            }
         }
-        if (this.#tryHandle(event, this.global)) {return}
     }
 
     #tryHandle(event: KeyboardEvent, context: ShortcutContext): boolean {
-        for (const {shortcut, action, options} of context.shortcuts) {
+        for (const {shortcut, consume, options} of context.shortcuts) {
             if (!options.activeInTextField && Events.isTextInput(event.target)) {continue}
             if (!options.allowRepeat && event.repeat) {continue}
             if (!shortcut.matches(event)) {continue}
             if (options.preventDefault ?? true) {event.preventDefault()}
-            action()
-            return true
+            const returnValue: unknown = consume()
+            return returnValue !== false // everything counts as consumed unless one specifically returns false
         }
         return false
     }
@@ -60,18 +68,21 @@ export class ShortcutManager {
 
 export class ShortcutContext implements Terminable {
     readonly #isActive: Predicate<void>
+    readonly #name: string
     readonly #shortcuts: Array<ShortcutEntry> = []
     readonly #terminator: Terminator = new Terminator()
 
-    constructor(isActive: Predicate<void>) {
+    constructor(isActive: Predicate<void>, name: string) {
         this.#isActive = isActive
+        this.#name = name
     }
 
     get active(): boolean {return this.#isActive()}
+    get name(): string {return this.#name}
     get shortcuts(): ReadonlyArray<ShortcutEntry> {return this.#shortcuts}
 
-    register(shortcut: Shortcut, action: Exec, options?: ShortcutOptions): Subscription {
-        const entry: ShortcutEntry = {shortcut, action, options: options ?? ShortcutOptions.Default}
+    register(shortcut: Shortcut, consume: Provider<Maybe<boolean> | unknown>, options?: ShortcutOptions): Subscription {
+        const entry: ShortcutEntry = {shortcut, consume, options: options ?? ShortcutOptions.Default}
         const index = BinarySearch.leftMostMapped(
             this.#shortcuts, entry.options.priority ?? 0, NumberComparator, ({options: {priority}}) => priority ?? 0)
         this.#shortcuts.splice(index, 0, entry)
@@ -223,6 +234,6 @@ export namespace ShortcutOptions {
 
 type ShortcutEntry = {
     readonly shortcut: Shortcut
-    readonly action: Exec
+    readonly consume: Provider<Maybe<boolean> | unknown>
     readonly options: ShortcutOptions
 }

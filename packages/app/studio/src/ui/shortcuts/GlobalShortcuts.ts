@@ -1,9 +1,10 @@
 import {Key, Shortcut, ShortcutDefinitions, ShortcutValidator} from "@opendaw/lib-dom"
+import {CommonShortcuts} from "@/ui/shortcuts/CommonShortcuts"
 
 const shift = true
 const ctrl = true
 
-export const GlobalShortcutsFactory: ShortcutDefinitions = ShortcutValidator.validate({
+export const GlobalShortcutsFactory = ShortcutValidator.validate({
     "project-undo": {
         shortcut: Shortcut.of(Key.KeyZ, {ctrl}),
         description: "Undo last action"
@@ -24,14 +25,7 @@ export const GlobalShortcutsFactory: ShortcutDefinitions = ShortcutValidator.val
         shortcut: Shortcut.of(Key.KeyS, {ctrl, shift}),
         description: "Save project as new file"
     },
-    "move-cursor-right": {
-        shortcut: Shortcut.of(Key.ArrowRight),
-        description: "Move playback cursor right"
-    },
-    "move-cursor-left": {
-        shortcut: Shortcut.of(Key.ArrowLeft),
-        description: "Move playback cursor left"
-    },
+    ...CommonShortcuts.Position,
     "toggle-playback": {
         shortcut: Shortcut.of(Key.Space),
         description: "Start or pause playback"

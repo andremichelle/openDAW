@@ -1,9 +1,9 @@
 import css from "./PianoRoll.sass?inline"
-import {Events, Html} from "@opendaw/lib-dom"
+import {Html} from "@opendaw/lib-dom"
 import {createElement, Group} from "@opendaw/lib-jsx"
 import {PianoRollLayout} from "@/ui/PianoRollLayout.ts"
 import {isDefined, isInstanceOf, Lifecycle, Notifier} from "@opendaw/lib-std"
-import {LoopableRegion, PPQN, ppqn} from "@opendaw/lib-dsp"
+import {LoopableRegion, ppqn} from "@opendaw/lib-dsp"
 import {NoteRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 
@@ -83,17 +83,6 @@ export const PianoRoll = ({lifecycle, service, updateNotifier}: Construct) => {
             svg = createSVG()
             placeholder.appendChild(svg)
         }),
-        // TODO We need a way to subscribe to all surfaces (this will fail when popping out into a new window)
-        Events.subscribe(self, "keydown", event => {
-            if (Events.isTextInput(event.target)) {return}
-            if (event.code === "ArrowUp") {
-                const ppqn = position.getValue() + PPQN.Quarter
-                engine.setPosition(Math.max(0, ppqn))
-            } else if (event.code === "ArrowDown") {
-                const ppqn = position.getValue() - PPQN.Quarter
-                engine.setPosition(Math.max(0, ppqn))
-            }
-        }, {capture: true}),
         updateNotifier.subscribe(() => update(position.getValue()))
     )
     update(position.getValue())
