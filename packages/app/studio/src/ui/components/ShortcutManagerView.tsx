@@ -1,6 +1,15 @@
 import css from "./ShortcutManagerView.sass?inline"
 import {Events, Html, Shortcut, ShortcutDefinition, ShortcutDefinitions} from "@opendaw/lib-dom"
-import {DefaultObservableValue, isAbsent, isDefined, Lifecycle, Notifier, Objects, Terminator} from "@opendaw/lib-std"
+import {
+    DefaultObservableValue,
+    isAbsent,
+    isDefined,
+    Lifecycle,
+    Notifier,
+    Objects,
+    Strings,
+    Terminator
+} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Surface} from "@/ui/surface/Surface"
@@ -19,7 +28,7 @@ let lastOpenIndex = 0
 export const ShortcutManagerView = ({lifecycle, contexts, updateNotifier}: Construct) => {
     return (
         <div className={className} onInit={element => {
-            const update = () => replaceChildren(element, Objects.entries(contexts).map(([name, shortcuts], index) => (
+            const update = () => replaceChildren(element, Objects.entries(contexts).map(([key, shortcuts], index) => (
                 <details className="context"
                          open={lastOpenIndex === index}
                          onInit={element => element.ontoggle = () => {
@@ -29,7 +38,7 @@ export const ShortcutManagerView = ({lifecycle, contexts, updateNotifier}: Const
                              }
                          }}>
                     <summary>
-                        <h3>{name}</h3>
+                        <h3>{Strings.hyphenToCamelCase(key)}</h3>
                         <hr/>
                     </summary>
                     <div className="shortcuts">

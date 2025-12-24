@@ -38,7 +38,7 @@ export namespace Option {
 
     export const wrap = <T>(value: Maybe<T>): Option<T | never> => isDefined(value) ? new Some(value) : None
     export const from = <T>(provider: Provider<Maybe<T>>): Option<T> => wrap(provider())
-    export const tryFrom = <T>(provider: Provider<T>): Option<T> => {
+    export const tryCatch = <T>(provider: Provider<T>): Option<T> => {
         try {return Option.wrap(provider())} catch (_error) {return Option.None}
     }
     export const execute = <F extends AnyFunc>(func: Maybe<F>, ...args: Parameters<F>)

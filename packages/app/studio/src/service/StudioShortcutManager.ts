@@ -5,6 +5,7 @@ import {
     isNull,
     JSONValue,
     Objects,
+    Option,
     Subscription,
     Terminable,
     tryCatch
@@ -27,6 +28,8 @@ import {SoftwareMIDIShortcuts, SoftwareMIDIShortcutsFactory} from "@/ui/shortcut
 export namespace StudioShortcutManager {
     const localStorageKey = "shortcuts"
 
+    export type ShortcutsMap = Record<string, ShortcutDefinitions>
+
     export const Contexts = {
         "global": {factory: GlobalShortcutsFactory, user: GlobalShortcuts},
         "regions": {factory: RegionsShortcutsFactory, user: RegionsShortcuts},
@@ -36,24 +39,27 @@ export namespace StudioShortcutManager {
         "piano-panel": {factory: PianoPanelShortcutsFactory, user: PianoPanelShortcuts}
     } as const satisfies Record<string, { factory: ShortcutDefinitions, user: ShortcutDefinitions }>
 
-    export const reset = (): void => {
-        Object.values(Contexts)
-            .forEach(definitions => Object.entries(definitions.factory)
-                .forEach(([key, {shortcut}]) =>
-                    (definitions.user as ShortcutDefinitions)[key].shortcut.overrideWith(shortcut)))
+    export const toJSONString = (source: ShortcutsMap): Option<string> => {
+        const contexts: JSONValue = Objects.entries(source).reduce((record, [key, shortcuts]) => {
+            record[key] = ShortcutDefinitions.toJSON(shortcuts)
+            return record
+        }, {} as Record<string, JSONValue>)
+        return Option.tryCatch(() => JSON.stringify(contexts))
+    }
+
+    export const fromJSONString = (target: ShortcutsMap, source: string): void => {
+        const {status, value: stored, error} = tryCatch(() => JSON.parse(source))
+        if (status === "success") {
+            Objects.entries(target).forEach(([key, user]) => ShortcutDefinitions.fromJSON(user, stored[key]))
+        } else {
+            console.warn(error)
+        }
     }
 
     export const store = (): void => {
-        try {
-            const contexts: JSONValue = Objects.entries(Contexts).reduce((record, [key, {user}]) => {
-                record[key] = ShortcutDefinitions.toJSON(user)
-                return record
-            }, {} as Record<keyof typeof Contexts, JSONValue>)
-            localStorage.setItem(localStorageKey, JSON.stringify(contexts))
-            console.debug("Shortcuts saved.")
-        } catch (reason) {
-            console.warn(reason)
-        }
+        const shortcuts: ShortcutsMap = {}
+        Objects.entries(Contexts).forEach(([key, {user}]) => shortcuts[key] = user)
+        toJSONString(shortcuts).ifSome(jsonString => localStorage.setItem(localStorageKey, jsonString))
     }
 
     export const install = (service: StudioService): Subscription => {

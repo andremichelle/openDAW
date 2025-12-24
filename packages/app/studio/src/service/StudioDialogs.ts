@@ -1,10 +1,11 @@
-import {Notifier, Objects, Strings, Terminator} from "@opendaw/lib-std"
+import {Notifier, Objects, Terminator} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {Dialogs} from "@/ui/components/dialogs"
 import {PreferencePanel} from "@/ui/PreferencePanel"
 import {ShortcutManagerView} from "@/ui/components/ShortcutManagerView"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
-import {ShortcutDefinitions} from "@opendaw/lib-dom"
+import {Files, ShortcutDefinitions} from "@opendaw/lib-dom"
+import {FilePickerAcceptTypes} from "@opendaw/studio-core"
 
 export namespace StudioDialogs {
     export const showPreferences = async () => {
@@ -22,9 +23,9 @@ export namespace StudioDialogs {
         const abortController = new AbortController()
         const updateNotifier = new Notifier<void>()
 
-        const contexts: Record<string, ShortcutDefinitions> = {}
-        Objects.entries(StudioShortcutManager.Contexts).forEach(([name, shortcuts]) =>
-            contexts[Strings.hyphenToCamelCase(name)] = ShortcutDefinitions.copy(shortcuts.user))
+        const contexts: StudioShortcutManager.ShortcutsMap = {}
+        Objects.entries(StudioShortcutManager.Contexts).forEach(([key, shortcuts]) =>
+            contexts[key] = ShortcutDefinitions.copy(shortcuts.user))
 
         await Promises.tryCatch(Dialogs.show({
             headline: "Shortcut Manager",
@@ -33,9 +34,27 @@ export namespace StudioDialogs {
             abortSignal: abortController.signal,
             buttons: [
                 {
+                    text: "Load", onClick: async () => {
+                        const {status, value: jsonString, error} = await Promises
+                            .tryCatch(Files.open({types: [FilePickerAcceptTypes.JsonFileType]})
+                                .then(([file]) => file.text()))
+                        if (status === "resolved") {
+                            StudioShortcutManager.fromJSONString(contexts, jsonString)
+                            updateNotifier.notify()
+                        } else {
+                            console.warn(error)
+                        }
+                    }
+                },
+                {
+                    text: "Save", onClick: () => StudioShortcutManager.toJSONString(contexts)
+                        .ifSome(jsonString => Files.save(new TextEncoder().encode(jsonString).buffer,
+                            {suggestedName: "openDAW.shortcuts.json"}))
+                },
+                {
                     text: "Reset", onClick: () => {
-                        Objects.entries(StudioShortcutManager.Contexts).forEach(([name, {factory}]) =>
-                            contexts[Strings.hyphenToCamelCase(name)] = ShortcutDefinitions.copy(factory))
+                        Objects.entries(StudioShortcutManager.Contexts).forEach(([key, {factory}]) =>
+                            contexts[key] = ShortcutDefinitions.copy(factory))
                         updateNotifier.notify()
                     }
                 },
@@ -43,8 +62,8 @@ export namespace StudioDialogs {
             ]
         })).then(() => {
             if (!abortController.signal.aborted) {
-                Objects.entries(StudioShortcutManager.Contexts).forEach(([name, {user}]) =>
-                    ShortcutDefinitions.copyInto(contexts[Strings.hyphenToCamelCase(name)], user))
+                Objects.entries(StudioShortcutManager.Contexts).forEach(([key, {user}]) =>
+                    ShortcutDefinitions.copyInto(contexts[key], user))
                 StudioShortcutManager.store()
             }
         })
