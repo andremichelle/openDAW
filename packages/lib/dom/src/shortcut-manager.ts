@@ -206,13 +206,21 @@ export class Shortcut {
             && this.#alt === event.altKey
     }
 
-    format(): string {
+    format(): ReadonlyArray<string> {
         const parts: Array<string> = []
         if (this.#shift) {parts.push(Browser.isMacOS() ? "⇧" : "Shift")}
         if (this.#alt) {parts.push(Browser.isMacOS() ? "⌥" : "Alt")}
         if (this.#ctrl) {parts.push(Browser.isMacOS() ? "⌘" : "Ctrl")}
         parts.push(Shortcut.#formatKey(this.#code))
-        return parts.join(Browser.isMacOS() ? "" : "+")
+        if (!Browser.isMacOS()) {
+            const result: Array<string> = []
+            for (let i = 0; i < parts.length; i++) {
+                if (i > 0) {result.push("+")}
+                result.push(parts[i])
+            }
+            return result
+        }
+        return parts
     }
 
     overrideWith(shortcut: Shortcut): void {
@@ -233,7 +241,7 @@ export class Shortcut {
 
     copy(): Shortcut {return new Shortcut(this.#code, this.#ctrl, this.#shift, this.#alt)}
 
-    toString(): string {return `{ShortcutKeys ${this.format()}}`}
+    toString(): string {return `{ShortcutKeys ${this.format().join("")}}`}
 }
 
 export type ShortcutOptions = {
