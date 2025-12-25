@@ -28,6 +28,7 @@ export class Recording {
             this.#isRecording = false
             return Errors.warn(String(error))
         }
+        captures.forEach(capture => capture.clearRecordedRegions())
         terminator.ownAll(...captures.map(capture => capture.startRecording()))
         engine.prepareRecordingState(countIn)
         const {isRecording, isCountingIn} = engine
