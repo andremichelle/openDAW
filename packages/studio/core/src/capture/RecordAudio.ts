@@ -72,6 +72,7 @@ export namespace RecordAudio {
                 box.label.setValue("Recording")
                 box.playMode.refer(stretchBox)
             })
+            capture.addRecordedRegion(regionBox)
             project.selection.select(regionBox)
             return {fileBox, regionBox, warpMarkerBox}
         }, false)

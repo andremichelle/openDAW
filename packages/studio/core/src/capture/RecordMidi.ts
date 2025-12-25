@@ -34,6 +34,7 @@ export namespace RecordMidi {
                     box.position.setValue(Math.max(quantizeRound(writePosition, beats), 0))
                     box.hue.setValue(ColorCodes.forTrackType(TrackType.Notes))
                 })
+                capture.addRecordedRegion(regionBox)
                 project.selection.select(regionBox)
                 engine.ignoreNoteRegion(regionBox.address.uuid)
                 writing = Option.wrap({region: regionBox, collection})

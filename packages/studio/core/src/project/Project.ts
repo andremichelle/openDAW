@@ -23,7 +23,6 @@ import {
     UserInterfaceBox
 } from "@opendaw/studio-boxes"
 import {
-    AudioRegionBoxAdapter,
     BoxAdapters,
     BoxAdaptersContext,
     ClipSequencing,
@@ -238,23 +237,17 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     restartRecording(): void {
         if (this.engine.isRecording.getValue()) {
             this.engine.stopRecording()
-            this.editing.modify(() => this.collectRecordingRegions().forEach(region => region.file.box.delete()), false)
+            this.editing.modify(() => this.captureDevices.filterArmed()
+                .forEach(capture => {
+                    capture.recordedRegions().forEach(region => region.box.delete())
+                    capture.clearRecordedRegions()
+                }), false)
             this.engine.stop(true)
             setTimeout(() => this.startRecording(true), 100)
         }
     }
 
-    collectRecordingRegions(): ReadonlyArray<AudioRegionBoxAdapter> {
-        return this.rootBoxAdapter.audioUnits.adapters()
-            .flatMap(audioUnitAdapter => audioUnitAdapter.tracks.values()
-                .flatMap(trackAdapter => trackAdapter.regions.adapters.values()
-                    .filter((region): region is AudioRegionBoxAdapter => region instanceof AudioRegionBoxAdapter
-                        && region.file.getOrCreateLoader().state.type === "record")))
-    }
-
-    toArrayBuffer(): ArrayBufferLike {
-        return ProjectSkeleton.encode(this.boxGraph)
-    }
+    toArrayBuffer(): ArrayBufferLike {return ProjectSkeleton.encode(this.boxGraph)}
 
     copy(env?: Partial<ProjectEnv>): Project {
         return Project.load({...this.#env, ...env}, this.toArrayBuffer() as ArrayBuffer)

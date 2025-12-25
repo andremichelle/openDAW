@@ -8,7 +8,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
-import {CaptureBox} from "@opendaw/studio-adapters"
+import {AnyRegionBox, CaptureBox} from "@opendaw/studio-adapters"
 import {CaptureDevices} from "./CaptureDevices"
 
 export abstract class Capture<BOX extends CaptureBox = CaptureBox> implements Terminable {
@@ -20,6 +20,7 @@ export abstract class Capture<BOX extends CaptureBox = CaptureBox> implements Te
 
     readonly #deviceId: MutableObservableValue<Option<string>>
     readonly #armed: DefaultObservableValue<boolean>
+    readonly #recordedRegions: Array<AnyRegionBox> = []
 
     protected constructor(manager: CaptureDevices, audioUnitBox: AudioUnitBox, captureBox: BOX) {
         this.#manager = manager
@@ -55,4 +56,8 @@ export abstract class Capture<BOX extends CaptureBox = CaptureBox> implements Te
     own<T extends Terminable>(terminable: T): T {return this.#terminator.own(terminable)}
     ownAll<T extends Terminable>(...terminables: ReadonlyArray<T>): void {this.#terminator.ownAll(...terminables)}
     terminate(): void {this.#terminator.terminate()}
+
+    addRecordedRegion(region: AnyRegionBox): void {this.#recordedRegions.push(region)}
+    recordedRegions(): ReadonlyArray<AnyRegionBox> {return this.#recordedRegions}
+    clearRecordedRegions(): void {this.#recordedRegions.length = 0}
 }
