@@ -79,16 +79,16 @@ export const MarkerTrackBody = ({lifecycle, service}: Construct) => {
                 update: (event: Dragging.Event) => {
                     const rect = canvas.getBoundingClientRect()
                     const position = snapping.xToUnitFloor(event.clientX - rect.left)
-                    editing.modify(() => adapter.box.position.setValue(position), false)
+                    editing.modify(() => {
+                        const atPosition = events.lowerEqual(position)
+                        if (atPosition !== null && atPosition.position === position && atPosition !== adapter) {
+                            atPosition.box.delete()
+                        }
+                        adapter.box.position.setValue(position)
+                    }, false)
                 },
                 cancel: () => editing.modify(() => adapter.box.position.setValue(oldPosition)),
-                approve: () => {
-                    const events = adapter.trackAdapter.unwrap().events
-                    const remove = Array.from(events.iterateFrom(adapter.position - 1))
-                        .filter(x => x.position === adapter.position && x !== adapter)
-                    editing.modify(() => remove.forEach(x => x.box.delete()))
-                    editing.mark()
-                }
+                approve: () => editing.mark()
             } satisfies Dragging.Process)
         })
     )
