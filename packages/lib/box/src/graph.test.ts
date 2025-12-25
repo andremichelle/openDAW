@@ -134,6 +134,135 @@ class ChildBox extends Box<PointerType.Node, ChildBoxFields> {
     get owner(): PointerField<PointerType.Hook> {return this.getField(0)}
 }
 
+describe("findOrphans", () => {
+    it("finds no orphans when all boxes are connected", () => {
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const root = NodeBox.create(graph, UUID.generate())
+        const B = ParentBox.create(graph, UUID.generate())
+        const C = ChildBox.create(graph, UUID.generate())
+        root.ref.refer(B)
+        C.owner.refer(B.hook)
+        graph.endTransaction()
+
+        const orphans = graph.findOrphans(root)
+        expect(orphans.length).toBe(0)
+    })
+
+    it("finds isolated box not connected to root", () => {
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const root = NodeBox.create(graph, UUID.generate())
+        const connected = NodeBox.create(graph, UUID.generate())
+        root.ref.refer(connected)
+
+        // Create isolated box with no connection to root
+        const isolated = NodeBox.create(graph, UUID.generate())
+        graph.endTransaction()
+
+        const orphans = graph.findOrphans(root)
+        expect(orphans.length).toBe(1)
+        expect(orphans).toContain(isolated)
+    })
+
+    it("finds multiple isolated boxes", () => {
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const root = NodeBox.create(graph, UUID.generate())
+
+        // Create isolated boxes
+        const isolated1 = NodeBox.create(graph, UUID.generate())
+        const isolated2 = ParentBox.create(graph, UUID.generate())
+        const isolated3 = NodeBox.create(graph, UUID.generate())
+        graph.endTransaction()
+
+        const orphans = graph.findOrphans(root)
+        expect(orphans.length).toBe(3)
+        expect(orphans).toContain(isolated1)
+        expect(orphans).toContain(isolated2)
+        expect(orphans).toContain(isolated3)
+    })
+
+    it("follows outgoing pointers to find connected boxes", () => {
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const root = NodeBox.create(graph, UUID.generate())
+        const A = NodeBox.create(graph, UUID.generate())
+        const B = NodeBox.create(graph, UUID.generate())
+        root.ref.refer(A)
+        A.ref.refer(B)
+
+        // Create isolated box
+        const isolated = NodeBox.create(graph, UUID.generate())
+        graph.endTransaction()
+
+        const orphans = graph.findOrphans(root)
+        expect(orphans.length).toBe(1)
+        expect(orphans).toContain(isolated)
+        expect(orphans).not.toContain(A)
+        expect(orphans).not.toContain(B)
+    })
+
+    it("follows incoming pointers to find connected boxes", () => {
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const root = NodeBox.create(graph, UUID.generate())
+        // Child points TO root (incoming edge to root)
+        const child = NodeBox.create(graph, UUID.generate())
+        child.ref.refer(root)
+
+        // Create isolated box
+        const isolated = NodeBox.create(graph, UUID.generate())
+        graph.endTransaction()
+
+        const orphans = graph.findOrphans(root)
+        expect(orphans.length).toBe(1)
+        expect(orphans).toContain(isolated)
+        expect(orphans).not.toContain(child)
+    })
+
+    it("finds isolated cluster of connected boxes", () => {
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const root = NodeBox.create(graph, UUID.generate())
+        const connected = NodeBox.create(graph, UUID.generate())
+        root.ref.refer(connected)
+
+        // Create isolated cluster - connected to each other but not to root
+        const cluster1 = NodeBox.create(graph, UUID.generate())
+        const cluster2 = NodeBox.create(graph, UUID.generate())
+        cluster1.ref.refer(cluster2)
+        graph.endTransaction()
+
+        const orphans = graph.findOrphans(root)
+        expect(orphans.length).toBe(2)
+        expect(orphans).toContain(cluster1)
+        expect(orphans).toContain(cluster2)
+    })
+
+    it("box becomes orphan when disconnected", () => {
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const root = NodeBox.create(graph, UUID.generate())
+        const A = NodeBox.create(graph, UUID.generate())
+        root.ref.refer(A)
+        graph.endTransaction()
+
+        // Initially no orphans
+        expect(graph.findOrphans(root).length).toBe(0)
+
+        // Disconnect A
+        graph.beginTransaction()
+        root.ref.defer()
+        graph.endTransaction()
+
+        // Now A is orphan
+        const orphans = graph.findOrphans(root)
+        expect(orphans.length).toBe(1)
+        expect(orphans).toContain(A)
+    })
+})
+
 describe("dependenciesOf", () => {
     it("traces mandatory target when only one incoming", () => {
         // A → B (mandatory target)

@@ -25,6 +25,8 @@ import {PointerField} from "./pointer"
 import {PrimitiveField, PrimitiveValues} from "./primitive"
 import {ObjectField} from "./object"
 import {Box} from "./box"
+import {Field} from "./field"
+import {ArrayField} from "./array"
 import {DeleteUpdate, FieldUpdate, NewUpdate, PointerUpdate, PrimitiveUpdate, Update} from "./updates"
 import {Dispatchers, Propagation} from "./dispatchers"
 import {GraphEdges} from "./graph-edges"
@@ -218,6 +220,51 @@ export class BoxGraph<BoxMap = any> {
         })
         this.#dispatchers.dispatch(update)
         this.#updateListeners.proxy.onUpdate(update)
+    }
+
+    findOrphans(rootBox: Box): ReadonlyArray<Box> {
+        const connectedBoxes = this.#collectAllConnectedBoxes(rootBox)
+        return this.boxes().filter(box => !connectedBoxes.has(box))
+    }
+
+    #collectAllConnectedBoxes(rootBox: Box): Set<Box> {
+        const visited = new Set<Box>()
+        const queue: Array<Box> = [rootBox]
+        while (queue.length > 0) {
+            const box = queue.pop()!
+            if (visited.has(box)) {continue}
+            visited.add(box)
+            this.#collectPointersFromBox(box).forEach(pointer => {
+                pointer.targetAddress.ifSome(address => {
+                    this.findBox(address.uuid).ifSome(targetBox => {
+                        if (!visited.has(targetBox)) {
+                            queue.push(targetBox)
+                        }
+                    })
+                })
+            })
+            for (const pointer of box.incomingEdges()) {
+                if (!visited.has(pointer.box)) {
+                    queue.push(pointer.box)
+                }
+            }
+        }
+        return visited
+    }
+
+    #collectPointersFromBox(box: Box): Array<PointerField> {
+        const pointers: Array<PointerField> = []
+        const collectFromFields = (fields: ReadonlyArray<Field>): void => {
+            for (const field of fields) {
+                field.accept({
+                    visitPointerField: (p: PointerField) => pointers.push(p),
+                    visitObjectField: (o: ObjectField<any>) => collectFromFields(o.fields()),
+                    visitArrayField: (a: ArrayField) => collectFromFields(a.fields())
+                })
+            }
+        }
+        collectFromFields(box.fields())
+        return pointers
     }
 
     dependenciesOf(box: Box, options: {

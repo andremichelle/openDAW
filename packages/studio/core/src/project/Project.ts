@@ -238,11 +238,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     restartRecording(): void {
         if (this.engine.isRecording.getValue()) {
             this.engine.stopRecording()
-            this.editing.modify(() => {
-                this.collectRecordingRegions().forEach(region => {
-                    region.file.box.delete()
-                })
-            }, false)
+            this.editing.modify(() => this.collectRecordingRegions().forEach(region => region.file.box.delete()), false)
             this.engine.stop(true)
             setTimeout(() => this.startRecording(true), 100)
         }
