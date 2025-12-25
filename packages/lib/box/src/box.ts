@@ -42,7 +42,7 @@ export type BoxConstruct<T extends PointerTypes> = {
 }
 
 export abstract class Box<P extends PointerTypes = PointerTypes, F extends Fields = any> implements Vertex<P, F> {
-    static readonly DEBUG_DELETION = false
+    static readonly DEBUG_DELETION = true
 
     static Index: int = 0 | 0
 

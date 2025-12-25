@@ -239,6 +239,8 @@ export class BoxGraph<BoxMap = any> {
                     pointers.add(source)
                     if (targetVertex.pointerRules.mandatory &&
                         (alwaysFollowMandatory || targetVertex.pointerHub.incoming()
+                            // Only check pointers to this specific address, not to other fields in the box
+                            .filter(p => p.targetAddress.mapOr(address => address.equals(targetAddress), false))
                             .every(pointer => pointers.has(pointer)))) {
                         return trace(targetVertex.box)
                     }
