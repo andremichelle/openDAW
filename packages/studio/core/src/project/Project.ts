@@ -241,11 +241,10 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
             this.editing.modify(() => {
                 this.collectRecordingRegions().forEach(region => {
                     region.file.box.delete()
-                    region.box.delete()
                 })
             }, false)
-
-            // this.startRecording(true)
+            this.engine.stop(true)
+            setTimeout(() => this.startRecording(true), 100)
         }
     }
 
