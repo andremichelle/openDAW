@@ -128,9 +128,12 @@ export namespace WarpMarkerEditing {
                             }
                             if (!found) {return}
                         }
+                        const [adjLeft, adjRight] = WarpMarkerUtils.findAdjacent(position!, warpMarkers, true)
+                        if (isNull(adjLeft) || isNull(adjRight)) {return}
+                        if (position! - adjLeft.position < MIN_DISTANCE || adjRight.position - position! < MIN_DISTANCE) {return}
                         project.editing.modify(() => WarpMarkerBox.create(project.boxGraph, UUID.generate(), box => {
                             box.owner.refer(audioPlayModeBox.warpMarkers)
-                            box.position.setValue(position)
+                            box.position.setValue(position!)
                             box.seconds.setValue(adjustedSeconds)
                         }))
                     }
