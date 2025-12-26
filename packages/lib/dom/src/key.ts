@@ -57,6 +57,7 @@ export namespace Key {
     export const Escape = "Escape"
     export const Backspace = "Backspace"
     export const Delete = "Delete"
+    export const DeleteAction = "DeleteAction"
     export const Insert = "Insert"
     export const Home = "Home"
     export const End = "End"

@@ -196,6 +196,12 @@ export const PitchEditor = ({
                 box.position.setValue(position - snapping.value))),
         shortcuts.register(ContentEditorShortcuts["select-all"].shortcut, () => selection.select(...locator.selectable())),
         shortcuts.register(ContentEditorShortcuts["deselect-all"].shortcut, () => selection.deselectAll()),
+        shortcuts.register(ContentEditorShortcuts["delete-selection"].shortcut, () => {
+            const selected = selection.selected()
+            if (selected.length === 0) {return false}
+            editing.modify(() => selected.forEach(adapter => adapter.box.delete()))
+            return true
+        }),
         Html.watchResize(canvas, () => range.width = canvas.clientWidth),
         Events.subscribe(canvas, "wheel", (event: WheelEvent) => {
             event.preventDefault()

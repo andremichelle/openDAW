@@ -93,11 +93,11 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 .flatMap(({trackBoxAdapter: {regions}}) => regions.collection.asArray()))
         }),
         shortcuts.register(RegionsShortcuts["deselect-all"].shortcut, () => regionSelection.deselectAll()),
-        Events.subscribe(element, "keydown", (event: KeyboardEvent) => {
-            if (Keyboard.isDelete(event)) {
-                editing.modify(() => regionSelection.selected()
-                    .forEach(region => region.box.delete()))
-            }
+        shortcuts.register(RegionsShortcuts["delete-selection"].shortcut, () => {
+            const selected = regionSelection.selected()
+            if (selected.length === 0) {return false}
+            editing.modify(() => selected.forEach(region => region.box.delete()))
+            return true
         }),
         installRegionContextMenu({timelineBox, element, service, capturing, selection: regionSelection, range}),
         Events.subscribeDblDwn(element, event => {
@@ -114,7 +114,8 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 const duration = Math.min(project.signatureDuration,
                     (trackBoxAdapter.regions.collection
                         .greaterEqual(position + 1)?.position ?? Number.POSITIVE_INFINITY) - position)
-                editing.modify(() => project.api.createTrackRegion(trackBoxAdapter.box, position, duration))
+                editing.modify(() => project.api.createTrackRegion(trackBoxAdapter.box, position, duration)
+                    .ifSome(region => selection.select(region)))
             }
         }),
         Dragging.attach(element, (event: PointerEvent) => {

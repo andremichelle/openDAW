@@ -143,6 +143,7 @@ export class Shortcut {
         [Key.Enter]: ["↩", "Enter"],
         [Key.Backspace]: ["⌫", "Backspace"],
         [Key.Delete]: ["⌦", "Del"],
+        [Key.DeleteAction]: ["⌫", "Del"],
         [Key.Home]: ["↖", "Home"],
         [Key.End]: ["↘", "End"],
         [Key.PageUp]: ["⇞", "PgUp"],
@@ -200,7 +201,9 @@ export class Shortcut {
     }
 
     matches(event: KeyboardEvent): boolean {
-        return event.code === this.#code
+        const codeMatches = event.code === this.#code
+            || (this.#code === Key.DeleteAction && Keyboard.isDelete(event))
+        return codeMatches
             && this.#ctrl === Keyboard.isControlKey(event)
             && this.#shift === event.shiftKey
             && this.#alt === event.altKey

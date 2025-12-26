@@ -204,6 +204,12 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
             selection.select(...selectableLocator.selectable())),
         shortcuts.register(ContentEditorShortcuts["deselect-all"].shortcut, () =>
             selection.deselectAll()),
+        shortcuts.register(ContentEditorShortcuts["delete-selection"].shortcut, () => {
+            const selected = selection.selected()
+            if (selected.length === 0) {return false}
+            editing.modify(() => selected.forEach(adapter => ValueEventEditing.deleteEvent(reader.content, adapter)))
+            return true
+        }),
         Dragging.attach(canvas, (event: PointerEvent) => {
             const target: Nullable<ValueCaptureTarget> = capturing.captureEvent(event)
             if (target === null || selection.isEmpty()) {return Option.None}

@@ -23,6 +23,10 @@ export namespace CommonShortcuts {
         "deselect-all": {
             shortcut: Shortcut.of(Key.KeyA, {ctrl, shift}),
             description: "Deselect all"
+        },
+        "delete-selection": {
+            shortcut: Shortcut.of(Key.DeleteAction),
+            description: "Delete selection"
         }
     }
 }
