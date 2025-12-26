@@ -139,6 +139,10 @@ export const NoteEditor =
                 () => stepRecording.setValue(!stepRecording.getValue())),
             stepRecording.catchupAndSubscribe(owner => document.querySelectorAll("[data-component='cursor']")
                 .forEach(cursor => cursor.classList.toggle("step-recording", owner.getValue()))),
+            {
+                terminate: () => document.querySelectorAll("[data-component='cursor']")
+                    .forEach(cursor => cursor.classList.remove("step-recording"))
+            },
             capture.subscribeNotes(signal => {
                 if (engine.isPlaying.getValue() || !stepRecording.getValue()) {return}
                 if (NoteSignal.isOn(signal)) {
