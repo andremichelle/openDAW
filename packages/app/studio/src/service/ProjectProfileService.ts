@@ -87,14 +87,19 @@ export class ProjectProfileService {
         return this.#profile.ifSome(async profile => {
             const progressValue = new DefaultObservableValue(0.0)
             const processDialog = RuntimeNotifier.progress({headline: "Bundling Project...", progress: progressValue})
-            const arrayBuffer = await ProjectBundle.encode(profile, progress => progressValue.setValue(progress))
+            const {status, value: arrayBuffer, error} = await Promises.tryCatch(
+                ProjectBundle.encode(profile, progress => progressValue.setValue(progress)))
             processDialog.terminate()
-            const {status} = await Promises.tryCatch(Dialogs.approve({
+            if (status === "rejected") {
+                await RuntimeNotifier.info({headline: "Export Failed", message: String(error)})
+                return
+            }
+            const {status: approveStatus} = await Promises.tryCatch(Dialogs.approve({
                 headline: "Save Project Bundle",
                 message: "",
                 approveText: "Save"
             }))
-            if (status === "rejected") {return}
+            if (approveStatus === "rejected") {return}
             try {
                 await Files.save(arrayBuffer, {
                     suggestedName: `${profile.meta.name}.odb`,

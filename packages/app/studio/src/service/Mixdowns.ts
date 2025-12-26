@@ -73,11 +73,19 @@ export namespace Mixdowns {
             progress,
             cancel: () => abortController.abort()
         })
-        const {status, value} = await Promises.tryCatch(AudioOfflineRenderer
+        const {status, value, error: renderError} = await Promises.tryCatch(AudioOfflineRenderer
             .start(project, Option.wrap(config), x => progress.setValue(x), abortController.signal))
         dialog.terminate()
-        if (status === "rejected") {return}
-        await saveZipFile(value, meta, Object.values(config).map(({fileName}) => fileName))
+        if (status === "rejected") {
+            await RuntimeNotifier.info({headline: "Export Failed", message: String(renderError)})
+            return
+        }
+        const {status: zipStatus, error: zipError} = await Promises.tryCatch(
+            saveZipFile(value, meta, Object.values(config).map(({fileName}) => fileName)))
+        if (zipStatus === "rejected") {
+            await RuntimeNotifier.info({headline: "Export Failed", message: String(zipError)})
+            return
+        }
     }
 
     const saveWavFile = async (buffer: AudioBuffer, meta: ProjectMeta) => {
