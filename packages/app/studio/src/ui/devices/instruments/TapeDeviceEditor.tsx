@@ -21,7 +21,7 @@ type Construct = {
 
 export const TapeDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
-    const {engine: {position}} = project
+    const {engine: {position}, timelineBox: {durationInPulses}} = project
     const tracks: AudioUnitTracks = deviceHost.audioUnitBoxAdapter().tracks
     return (
         <DeviceEditor lifecycle={lifecycle}
@@ -32,8 +32,13 @@ export const TapeDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                           <div className={className}>
                               <div className="controls"/>
                               <div className="content">
-                                  <Tape lifecycle={lifecycle} position={position} tracks={tracks}/>
-                                  <Timeline lifecycle={lifecycle} position={position} tracks={tracks}/>
+                                  <Tape lifecycle={lifecycle}
+                                        position={position}
+                                        durationInPulses={durationInPulses}
+                                        tracks={tracks}/>
+                                  <Timeline lifecycle={lifecycle}
+                                            position={position}
+                                            tracks={tracks}/>
                               </div>
                           </div>
                       )}

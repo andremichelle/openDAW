@@ -29,10 +29,11 @@ const tapeReelHub = (): SVGPathElement => (
 export type Construct = {
     lifecycle: Lifecycle
     position: ObservableValue<ppqn>
+    durationInPulses: ObservableValue<ppqn>
     tracks: AudioUnitTracks
 }
 
-export const Tape = ({lifecycle, position, tracks}: Construct) => {
+export const Tape = ({lifecycle, position, durationInPulses, tracks}: Construct) => {
     const reelHubs: ReadonlyArray<SVGGraphicsElement> = [tapeReelHub(), tapeReelHub()]
     const reelElements: ReadonlyArray<SVGCircleElement> = reels.map(reel =>
         (<circle cx={reel.x} cy={reel.y} r={0} fill="rgba(0,0,0,0.08)" stroke={stroke}/>))
@@ -49,13 +50,13 @@ export const Tape = ({lifecycle, position, tracks}: Construct) => {
         head.setAttribute("fill", playingRegion ? Colors.bright.toString() : Colors.dark.toString())
     })
 
-    const total = PPQN.fromSignature(128, 1)
     const angles = [0.0, 0.0]
 
     let lastTime = 0.0
     let delta = 0.0
     const observer = (owner: ObservableValue<number>) => {
         const position = owner.getValue()
+        const total = durationInPulses.getValue()
         const elapsed = position - lastTime
         delta += elapsed
         const ratio = clamp(delta / total, 0.0, 1.0)
