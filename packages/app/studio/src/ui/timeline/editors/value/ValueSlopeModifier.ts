@@ -83,20 +83,20 @@ export class ValueSlopeModifier implements ValueModifier {
     update({clientY, altKey}: Dragging.Event): void {
         const clientRect = this.#element.getBoundingClientRect()
         const localY = clientY - clientRect.top
-        const v0 = this.#reference.value
-        const v1 = this.#successor.value
-        let targetMidValue: unitValue
+        const y0 = this.#valueAxis.valueToAxis(this.#reference.value)
+        const y1 = this.#valueAxis.valueToAxis(this.#successor.value)
+        let targetY: number
         if (altKey) {
             if (Number.isNaN(this.#lastY)) {this.#lastY = localY}
             const deltaY = (localY - this.#lastY) * 0.1
             this.#lastY = localY
-            const currentMidValue = Curve.normalizedAt(0.5, this.#slope) * (v1 - v0) + v0
-            targetMidValue = this.#valueAxis.axisToValue(this.#valueAxis.valueToAxis(currentMidValue) + deltaY)
+            const currentMidY = Curve.normalizedAt(0.5, this.#slope) * (y1 - y0) + y0
+            targetY = currentMidY + deltaY
         } else {
             this.#lastY = localY
-            targetMidValue = this.#valueAxis.axisToValue(localY)
+            targetY = localY
         }
-        let slope = clampUnit(Curve.slopeByHalf(v0, targetMidValue, v1))
+        let slope = clampUnit(Curve.slopeByHalf(y0, targetY, y1))
         if (!altKey && Math.abs(slope - 0.5) < 0.02) {slope = 0.5}
         if (this.#slope !== slope) {
             this.#slope = slope

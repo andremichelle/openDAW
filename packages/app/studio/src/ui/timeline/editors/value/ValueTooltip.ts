@@ -23,6 +23,8 @@ export namespace ValueTooltip {
         modifyContext: ObservableModifyContext<ValueModifier>
     }
 
+    const stringMapping = StringMapping.percent({unit: "bend", bipolar: true, fractionDigits: 1})
+
     export const install = (
         {element, capturing, range, valueAxis, reader, context, eventMapping, modifyContext}: Creation): Terminable =>
         Terminable.many(
@@ -48,18 +50,17 @@ export namespace ValueTooltip {
                     const event = target.event
                     const nextEvent = ValueEvent.nextEvent(reader.content.events, event) ?? event
                     Surface.get(element).valueTooltip.show(() => {
-                        const stringMapping = StringMapping.numeric({unit: "bend", bipolar: true, fractionDigits: 3})
                         const strategy: Option<ValueModifyStrategy> = modifyContext.modifier
                         const modifier: ValueModifyStrategy = strategy.unwrapOrElse(ValueModifyStrategy.Identity)
                         const interpolation = modifier.readInterpolation(event)
                         const slope = interpolation.type !== "curve" ? 0.5 : interpolation.slope
-                        const v0 = modifier.readValue(event)
-                        const v1 = modifier.readValue(nextEvent)
                         const midPosition = (modifier.readPosition(event) + modifier.readPosition(nextEvent)) * 0.5
-                        const midValue = Curve.normalizedAt(0.5, slope) * (v1 - v0) + v0
+                        const y0 = valueAxis.valueToAxis(modifier.readValue(event))
+                        const y1 = valueAxis.valueToAxis(modifier.readValue(nextEvent))
+                        const midY = Curve.normalizedAt(0.5, slope) * (y1 - y0) + y0
                         const clientRect = element.getBoundingClientRect()
                         const clientX = range.unitToX(midPosition + reader.offset) + clientRect.left + 8
-                        const clientY = valueAxis.valueToAxis(midValue) + clientRect.top + 8
+                        const clientY = midY + clientRect.top + 8
                         return ({...stringMapping.x(slope), clientX, clientY})
                     })
                 } else {

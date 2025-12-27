@@ -122,7 +122,9 @@ export const createValuePainter =
             if (isNotNull(prevEvent) && prevEvent.interpolation.type !== "none") {
                 const slope = prevEvent.interpolation.type === "curve" ? prevEvent.interpolation.slope : 0.5
                 const midX = range.unitToX(offset + (prevEvent.position + event.position) * 0.5) * devicePixelRatio
-                const midY = valueToPixel((Curve.normalizedAt(0.5, slope) * (event.value - prevEvent.value) + prevEvent.value))
+                const y0 = valueToPixel(prevEvent.value)
+                const y1 = valueToPixel(event.value)
+                const midY = Curve.normalizedAt(0.5, slope) * (y1 - y0) + y0
                 context.fillStyle = contentColor
                 context.beginPath()
                 context.arc(midX, midY, MidPointRadius * devicePixelRatio, 0.0, TAU)

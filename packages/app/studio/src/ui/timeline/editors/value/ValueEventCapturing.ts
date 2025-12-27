@@ -58,7 +58,9 @@ export const createValueEventCapturing = (element: Element,
             const n1 = array[index + 1]
             const slope = interpolation.type === "curve" ? interpolation.slope : 0.5
             const midX = range.unitToX(offset + (n0.position + n1.position) * 0.5)
-            const midY = valueToY(Curve.normalizedAt(0.5, slope) * (n1.value - n0.value) + n0.value)
+            const y0 = valueToY(n0.value)
+            const y1 = valueToY(n1.value)
+            const midY = Curve.normalizedAt(0.5, slope) * (y1 - y0) + y0
             const dx = x - midX
             const dy = y - midY
             if (dx * dx + dy * dy <= MidPointRadius * MidPointRadius) {
