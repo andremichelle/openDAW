@@ -2,7 +2,7 @@ import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {Arrays, Curve, Func, isDefined, Nullable, unitValue} from "@opendaw/lib-std"
 import {ValueEventBoxAdapter} from "@opendaw/studio-adapters"
 import {ValueEvent} from "@opendaw/lib-dsp"
-import {EventRadius, MidPointRadius} from "./Constants"
+import {EventRadius, EventRatio, MidPointRadius} from "./Constants"
 import {PointerRadiusDistance} from "@/ui/timeline/constants.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {TimelineRange} from "@opendaw/studio-core"
@@ -30,7 +30,7 @@ export const createValueEventCapturing = (element: Element,
             const dx = x - range.unitToX(offset + event.position)
             const dy = y - valueToY(event.value)
             const distance = Math.sqrt(dx * dx + dy * dy)
-            if (distance <= EventRadius) {
+            if (distance <= EventRadius * EventRatio) {
                 if (closest === null) {
                     closest = {event, distance}
                 } else if (closest.distance < distance) {
@@ -63,7 +63,7 @@ export const createValueEventCapturing = (element: Element,
             const midY = Curve.normalizedAt(0.5, slope) * (y1 - y0) + y0
             const dx = x - midX
             const dy = y - midY
-            if (dx * dx + dy * dy <= MidPointRadius * MidPointRadius) {
+            if (Math.sqrt(dx * dx + dy * dy) <= MidPointRadius * EventRatio) {
                 return {type: "midpoint", event: n0}
             }
         }

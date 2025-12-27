@@ -40,7 +40,8 @@ export class ValueSlopeModifier implements ValueModifier {
     readonly #initialMidY: number
 
     #slope: unitValue
-    #pointerY: number = NaN
+    #lastLocalY: number = NaN
+    #accumulatedDeltaY: number = 0
 
     private constructor({element, valueAxis, reference, collection}: Construct) {
         this.#element = element
@@ -86,9 +87,14 @@ export class ValueSlopeModifier implements ValueModifier {
     update({clientY, altKey}: Dragging.Event): void {
         const clientRect = this.#element.getBoundingClientRect()
         const localY = clientY - clientRect.top
-        if (Number.isNaN(this.#pointerY)) {this.#pointerY = localY}
-        const deltaY = (localY - this.#pointerY) * (altKey ? 0.1 : 1.0)
-        const targetY = this.#initialMidY + deltaY
+        if (Number.isNaN(this.#lastLocalY)) {
+            this.#lastLocalY = localY
+        } else {
+            const incrementalDelta = localY - this.#lastLocalY
+            this.#accumulatedDeltaY += incrementalDelta * (altKey ? 0.1 : 1.0)
+            this.#lastLocalY = localY
+        }
+        const targetY = this.#initialMidY + this.#accumulatedDeltaY
         let slope = clampUnit(Curve.slopeByHalf(this.#y0, targetY, this.#y1))
         if (!altKey && Math.abs(slope - 0.5) < 0.02) {slope = 0.5}
         if (this.#slope !== slope) {
@@ -105,6 +111,7 @@ export class ValueSlopeModifier implements ValueModifier {
     cancel(): void {
         const interpolation = this.#reference.interpolation
         this.#slope = interpolation.type === "curve" ? interpolation.slope : 0.5
+        this.#accumulatedDeltaY = 0
         this.#dispatchChange()
     }
 
