@@ -163,24 +163,22 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                     if (event.shiftKey) {
                         const clientRect = canvas.getBoundingClientRect()
                         const position: ppqn = range.xToUnit(event.clientX - clientRect.left) - reader.offset
-                        const valueEvent = editing.modify(() => reader.content.cut(position).unwrapOrNull(), false)
-                            .map(event => {
-                                selection.deselectAll()
-                                selection.select(event)
-                                return event
-                            }).unwrap()
-                        return modifyContext.startModifier(ValueMoveModifier.create({
-                            element: canvas,
-                            context,
-                            selection,
-                            snapping,
-                            pointerValue: valueEvent.value,
-                            pointerPulse: position,
-                            valueAxis,
-                            eventMapping,
-                            reference: valueEvent,
-                            collection: reader.content
-                        }))
+                        return editing.modify(() => reader.content.cut(position, eventMapping).flatMap(event => {
+                            selection.deselectAll()
+                            selection.select(event)
+                            return modifyContext.startModifier(ValueMoveModifier.create({
+                                element: canvas,
+                                context,
+                                selection,
+                                snapping,
+                                pointerValue: event.value,
+                                pointerPulse: position,
+                                valueAxis,
+                                eventMapping,
+                                reference: event,
+                                collection: reader.content
+                            }))
+                        }), false).unwrap()
                     }
                 }
                 return Option.None

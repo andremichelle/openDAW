@@ -35,6 +35,7 @@ parameter over time.
 ### 2.1 Creating Events
 
 - **Double-click** on empty space to create a new event at that position and value
+- **⇧ + click + drag** to create a new event and immediately drag it to position
 - Events snap to the current grid when snapping is enabled
 - Values snap to the current anchor value (shown as dashed horizontal line) when close
 
@@ -123,25 +124,26 @@ Automation clips and regions can loop. You can adjust the content duration:
 
 ## 6. Mouse Actions Summary
 
-| Action                   | Result                   |
-|--------------------------|--------------------------|
-| Double-click empty space | Create event             |
-| Double-click event       | Delete event             |
-| Click + drag event       | Move selected events     |
-| Click + drag empty space | Selection rectangle      |
-| Click + drag midpoint    | Adjust curve slope       |
-| ⌥ + click midpoint       | Cut curve at position    |
-| ⌘ + click + drag         | Paint mode (draw values) |
+| Action                   | Result                        |
+|--------------------------|-------------------------------|
+| Double-click empty space | Create event                  |
+| Double-click event       | Delete event                  |
+| ⇧ + click + drag         | Create event and drag         |
+| Click + drag event       | Move selected events          |
+| Click + drag empty space | Selection rectangle           |
+| Click + drag midpoint    | Adjust curve slope            |
+| ⌥ + click curve/midpoint | Cut curve at position         |
+| ⌘ + click + drag         | Paint mode (draw values)      |
 
 ---
 
 ## 7. Modifier Keys
 
-| Modifier             | Effect                                                              |
-|----------------------|---------------------------------------------------------------------|
-| **⌥** (Option/Alt)   | Copy events when dragging, fine control for slopes, cut on midpoint |
-| **⇧** (Shift)        | Disable value/linear snapping                                       |
-| **⌘** (Command/Ctrl) | Paint mode                                                          |
+| Modifier             | Effect                                                               |
+|----------------------|----------------------------------------------------------------------|
+| **⌥** (Option/Alt)   | Copy events when dragging, fine control for slopes, cut on curve     |
+| **⇧** (Shift)        | Create new event (click+drag), disable value/linear snapping         |
+| **⌘** (Command/Ctrl) | Paint mode                                                           |
 
 ---
 
