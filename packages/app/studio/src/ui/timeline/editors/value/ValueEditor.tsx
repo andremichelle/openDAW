@@ -147,7 +147,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                                     }))
                                 }
                             })
-                    } else {
+                    } else if (target?.type === "event") {
                         editing.modify(() => ValueEventEditing.deleteEvent(reader.content, target.event))
                         return Option.wrap({update: EmptyExec}) // Avoid selection
                     }
