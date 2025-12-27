@@ -16,9 +16,12 @@ type Construct = {
 export const SignatureTrack = ({lifecycle, service}: Construct) => {
     return (
         <div className={className}>
-            <SignatureTrackHeader/>
+            <SignatureTrackHeader lifecycle={lifecycle}
+                                  editing={service.project.editing}
+                                  timelineBox={service.project.timelineBox}/>
             <div className="void"/>
-            <SignatureTrackBody lifecycle={lifecycle} service={service}/>
+            <SignatureTrackBody lifecycle={lifecycle}
+                                service={service}/>
         </div>
     )
 }

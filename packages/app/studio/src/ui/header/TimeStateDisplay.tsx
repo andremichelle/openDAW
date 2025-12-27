@@ -21,7 +21,7 @@ type Construct = {
 }
 
 export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
-    const {projectProfileService, timeline: {primaryVisibility: {tempo}}} = service
+    const {projectProfileService, timeline: {primaryVisibility: {tempo, signature: signatureVisible}}} = service
     const shuffleDigit = Inject.value("60")
     const bpmDigit = Inject.value("120")
     const meterLabel = Inject.value("4/4")
@@ -42,12 +42,23 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
             bpmDisplay.classList.toggle("float", !Number.isInteger(bpm))
             return bpmDigit.value = `${Math.floor(bpm)}`
         })
-        const updateMeterLabel = () => {
-            const {nominator, denominator} = timelineBoxAdapter.box.signature
-            meterLabel.value = `${nominator.getValue()}/${denominator.getValue()}`
+        const {signatureTrack} = timelineBoxAdapter
+        const updateSignatureLabel = () => {
+            const [nominator, denominator] = signatureTrack.enabled
+                ? signatureTrack.signatureAt(engine.position.getValue(), timelineBoxAdapter.signature)
+                : timelineBoxAdapter.signature
+            meterLabel.value = `${nominator}/${denominator}`
         }
-        boxGraph.subscribeVertexUpdates(Propagation.Children, timelineBoxAdapter.box.signature.address, updateMeterLabel)
-        updateMeterLabel()
+        projectActiveLifeTime.ownAll(
+            boxGraph.subscribeVertexUpdates(Propagation.Children,
+                timelineBoxAdapter.box.signature.address, updateSignatureLabel),
+            timelineBoxAdapter.signatureTrack.object.enabled.subscribe(updateSignatureLabel),
+            timelineBoxAdapter.signatureTrack.subscribe(updateSignatureLabel),
+            signatureVisible.subscribe(updateSignatureLabel),
+            signatureTrack.subscribe(updateSignatureLabel),
+            engine.position.subscribe(updateSignatureLabel)
+        )
+        updateSignatureLabel()
         rootBoxAdapter.groove.box.amount.catchupAndSubscribe((owner: ObservableValue<float>) =>
             shuffleDigit.value = String(Math.round(owner.getValue() * 100)))
     }
