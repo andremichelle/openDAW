@@ -29,20 +29,21 @@ export class ValueSlopeModifier implements ValueModifier {
     static create(construct: Construct): ValueSlopeModifier {return new ValueSlopeModifier(construct)}
 
     readonly #element: Element
-    readonly #valueAxis: ValueAxis
     readonly #reference: ValueEventBoxAdapter
     readonly #successor: ValueEventBoxAdapter
     readonly #collection: ValueEventCollectionBoxAdapter
 
     readonly #notifier: Notifier<void>
 
-    readonly #initialSlope: unitValue
+    readonly #y0: number
+    readonly #y1: number
+    readonly #initialMidY: number
+
     #slope: unitValue
-    #lastY: number = NaN
+    #pointerY: number = NaN
 
     private constructor({element, valueAxis, reference, collection}: Construct) {
         this.#element = element
-        this.#valueAxis = valueAxis
         this.#reference = reference
         this.#successor = ValueEvent.nextEvent<ValueEventBoxAdapter>(collection.events, reference)
             ?? panic("No successor event")
@@ -51,8 +52,10 @@ export class ValueSlopeModifier implements ValueModifier {
         this.#notifier = new Notifier<void>()
 
         const interpolation = reference.interpolation
-        this.#initialSlope = interpolation.type === "curve" ? interpolation.slope : 0.5
-        this.#slope = this.#initialSlope
+        this.#slope = interpolation.type === "curve" ? interpolation.slope : 0.5
+        this.#y0 = valueAxis.valueToAxis(reference.value)
+        this.#y1 = valueAxis.valueToAxis(this.#successor.value)
+        this.#initialMidY = Curve.normalizedAt(0.5, this.#slope) * (this.#y1 - this.#y0) + this.#y0
     }
 
     subscribeUpdate(observer: Observer<void>): Terminable {return this.#notifier.subscribe(observer)}
@@ -83,20 +86,10 @@ export class ValueSlopeModifier implements ValueModifier {
     update({clientY, altKey}: Dragging.Event): void {
         const clientRect = this.#element.getBoundingClientRect()
         const localY = clientY - clientRect.top
-        const y0 = this.#valueAxis.valueToAxis(this.#reference.value)
-        const y1 = this.#valueAxis.valueToAxis(this.#successor.value)
-        let targetY: number
-        if (altKey) {
-            if (Number.isNaN(this.#lastY)) {this.#lastY = localY}
-            const deltaY = (localY - this.#lastY) * 0.1
-            this.#lastY = localY
-            const currentMidY = Curve.normalizedAt(0.5, this.#slope) * (y1 - y0) + y0
-            targetY = currentMidY + deltaY
-        } else {
-            this.#lastY = localY
-            targetY = localY
-        }
-        let slope = clampUnit(Curve.slopeByHalf(y0, targetY, y1))
+        if (Number.isNaN(this.#pointerY)) {this.#pointerY = localY}
+        const deltaY = (localY - this.#pointerY) * (altKey ? 0.1 : 1.0)
+        const targetY = this.#initialMidY + deltaY
+        let slope = clampUnit(Curve.slopeByHalf(this.#y0, targetY, this.#y1))
         if (!altKey && Math.abs(slope - 0.5) < 0.02) {slope = 0.5}
         if (this.#slope !== slope) {
             this.#slope = slope
