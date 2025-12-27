@@ -1,4 +1,15 @@
-import {clampUnit, Curve, Iterables, Notifier, Observer, Option, panic, Terminable, unitValue, ValueAxis} from "@opendaw/lib-std"
+import {
+    clampUnit,
+    Curve,
+    Iterables,
+    Notifier,
+    Observer,
+    Option,
+    panic,
+    Terminable,
+    unitValue,
+    ValueAxis
+} from "@opendaw/lib-std"
 import {BoxEditing} from "@opendaw/lib-box"
 import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 import {Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
@@ -25,7 +36,9 @@ export class ValueSlopeModifier implements ValueModifier {
 
     readonly #notifier: Notifier<void>
 
+    readonly #initialSlope: unitValue
     #slope: unitValue
+    #lastY: number = NaN
 
     private constructor({element, valueAxis, reference, collection}: Construct) {
         this.#element = element
@@ -38,7 +51,8 @@ export class ValueSlopeModifier implements ValueModifier {
         this.#notifier = new Notifier<void>()
 
         const interpolation = reference.interpolation
-        this.#slope = interpolation.type === "curve" ? interpolation.slope : 0.5
+        this.#initialSlope = interpolation.type === "curve" ? interpolation.slope : 0.5
+        this.#slope = this.#initialSlope
     }
 
     subscribeUpdate(observer: Observer<void>): Terminable {return this.#notifier.subscribe(observer)}
@@ -66,13 +80,24 @@ export class ValueSlopeModifier implements ValueModifier {
         }))
     }
 
-    update({clientY, shiftKey}: Dragging.Event): void {
+    update({clientY, altKey}: Dragging.Event): void {
         const clientRect = this.#element.getBoundingClientRect()
-        const pointerValue = this.#valueAxis.axisToValue(clientY - clientRect.top)
+        const localY = clientY - clientRect.top
         const v0 = this.#reference.value
         const v1 = this.#successor.value
-        let slope = clampUnit(Curve.slopeByHalf(v0, pointerValue, v1))
-        if (!shiftKey && Math.abs(slope - 0.5) < 0.02) {slope = 0.5}
+        let targetMidValue: unitValue
+        if (altKey) {
+            if (Number.isNaN(this.#lastY)) {this.#lastY = localY}
+            const deltaY = (localY - this.#lastY) * 0.1
+            this.#lastY = localY
+            const currentMidValue = Curve.normalizedAt(0.5, this.#slope) * (v1 - v0) + v0
+            targetMidValue = this.#valueAxis.axisToValue(this.#valueAxis.valueToAxis(currentMidValue) + deltaY)
+        } else {
+            this.#lastY = localY
+            targetMidValue = this.#valueAxis.axisToValue(localY)
+        }
+        let slope = clampUnit(Curve.slopeByHalf(v0, targetMidValue, v1))
+        if (!altKey && Math.abs(slope - 0.5) < 0.02) {slope = 0.5}
         if (this.#slope !== slope) {
             this.#slope = slope
             this.#dispatchChange()
