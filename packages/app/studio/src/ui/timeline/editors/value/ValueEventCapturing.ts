@@ -61,7 +61,7 @@ export const createValueEventCapturing = (element: Element,
             const midY = valueToY(Curve.normalizedAt(0.5, slope) * (n1.value - n0.value) + n0.value)
             const dx = x - midX
             const dy = y - midY
-            if (Math.sqrt(dx * dx + dy * dy) <= MidPointRadius) {
+            if (dx * dx + dy * dy <= MidPointRadius * MidPointRadius) {
                 return {type: "midpoint", event: n0}
             }
         }

@@ -48,7 +48,7 @@ export namespace ValueTooltip {
                     const event = target.event
                     const nextEvent = ValueEvent.nextEvent(reader.content.events, event) ?? event
                     Surface.get(element).valueTooltip.show(() => {
-                        const stringMapping = StringMapping.numeric({unit: "bend", bipolar: true, fractionDigits: 2})
+                        const stringMapping = StringMapping.numeric({unit: "bend", bipolar: true, fractionDigits: 3})
                         const strategy: Option<ValueModifyStrategy> = modifyContext.modifier
                         const modifier: ValueModifyStrategy = strategy.unwrapOrElse(ValueModifyStrategy.Identity)
                         const interpolation = modifier.readInterpolation(event)
