@@ -1,1 +1,1 @@
-export const PointerRadiusDistance = 3
+export const PointerRadiusDistance = 4

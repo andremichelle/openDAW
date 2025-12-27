@@ -10,6 +10,7 @@ import {TimelineRange} from "@opendaw/studio-core"
 export type ValueCaptureTarget =
     | { type: "event", event: ValueEventBoxAdapter }
     | { type: "midpoint", event: ValueEventBoxAdapter }
+    | { type: "curve", event: ValueEventBoxAdapter }
     | { type: "loop-duration", reader: ValueEventOwnerReader }
 
 export const createValueEventCapturing = (element: Element,
@@ -57,14 +58,22 @@ export const createValueEventCapturing = (element: Element,
             }
             const n1 = array[index + 1]
             const slope = interpolation.type === "curve" ? interpolation.slope : 0.5
-            const midX = range.unitToX(offset + (n0.position + n1.position) * 0.5)
+            const x0 = range.unitToX(n0.position + offset)
+            const x1 = range.unitToX(n1.position + offset)
             const y0 = valueToY(n0.value)
             const y1 = valueToY(n1.value)
+            // Check midpoint first
+            const midX = (x0 + x1) * 0.5
             const midY = Curve.normalizedAt(0.5, slope) * (y1 - y0) + y0
             const dx = x - midX
             const dy = y - midY
             if (Math.sqrt(dx * dx + dy * dy) <= MidPointRadius * EventRatio) {
                 return {type: "midpoint", event: n0}
+            }
+            // Check curve line
+            const curveY = Curve.valueAt({slope, steps: x1 - x0, y0, y1}, x - x0)
+            if (Math.abs(curveY - y) < PointerRadiusDistance) {
+                return {type: "curve", event: n0}
             }
         }
         return null

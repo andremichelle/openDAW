@@ -1,6 +1,5 @@
 import css from "./ValueEditor.sass?inline"
 import {
-    DefaultObservableValue,
     EmptyExec,
     Func,
     Lifecycle,
@@ -31,7 +30,6 @@ import {Cursor} from "@/ui/Cursors.ts"
 import {installValueContextMenu} from "@/ui/timeline/editors/value/ValueContextMenu.ts"
 import {createElement} from "@opendaw/lib-jsx"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {CutCursor} from "@/ui/timeline/CutCursor.tsx"
 import {installValueInput} from "@/ui/timeline/editors/ValueInput.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {installEditorBody} from "../EditorBody"
@@ -78,7 +76,6 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
     }
     const valueToPixel: Func<unitValue, number> = value => valueAxis.valueToAxis(value) * devicePixelRatio
     const modifyContext = new ObservableModifyContext<ValueModifier>(service.project.editing)
-    const cutCursorModel = lifecycle.own(new DefaultObservableValue<Nullable<ppqn>>(null))
     const paintValues = createValuePainter({
         range,
         valueToPixel,
@@ -162,16 +159,28 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             valueAxis
                         }))
                     }
-                } else if (target.type === "midpoint") {
-                    if (event.altKey) {
+                } else if (target.type === "midpoint" || target.type === "curve") {
+                    if (event.shiftKey) {
                         const clientRect = canvas.getBoundingClientRect()
-                        const position: ppqn = snapping.xToUnitRound(event.clientX - clientRect.left) - reader.offset
-                        editing.modify(() => reader.content.cut(position).unwrapOrNull())
-                            .ifSome(event => {
+                        const position: ppqn = range.xToUnit(event.clientX - clientRect.left) - reader.offset
+                        const valueEvent = editing.modify(() => reader.content.cut(position).unwrapOrNull(), false)
+                            .map(event => {
                                 selection.deselectAll()
                                 selection.select(event)
-                            })
-                        return Option.wrap({update: EmptyExec}) // Avoid selection
+                                return event
+                            }).unwrap()
+                        return modifyContext.startModifier(ValueMoveModifier.create({
+                            element: canvas,
+                            context,
+                            selection,
+                            snapping,
+                            pointerValue: valueEvent.value,
+                            pointerPulse: position,
+                            valueAxis,
+                            eventMapping,
+                            reference: valueEvent,
+                            collection: reader.content
+                        }))
                     }
                 }
                 return Option.None
@@ -245,22 +254,24 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
         modifyContext.subscribeUpdate(painter.requestUpdate),
         installCursor(canvas, capturing, {
             get: (target, event) => {
-                cutCursorModel.setValue(target?.type === "midpoint" && event.altKey
-                    ? snapping.xToUnitRound(event.clientX - canvas.getBoundingClientRect().left)
-                    : null)
+                const onCurve = target?.type === "curve" || target?.type === "midpoint"
                 const controlKey = Keyboard.isControlKey(event) && event.buttons === 0
                 if (target === null) {
                     if (controlKey) {return Cursor.Pencil}
                 } else if (target.type === "event") {
                     return "move"
-                } else if (target.type === "midpoint") {
-                    return event.altKey ? Cursor.Scissors : "ns-resize"
-                } else if (target.type === "loop-duration") {
-                    return "ew-resize"
+                } else {
+                    if (event.shiftKey && onCurve) {
+                        return "pointer"
+                    } else if (target.type === "midpoint") {
+                        return "ns-resize"
+                    } else if (target.type === "loop-duration") {
+                        return "ew-resize"
+                    }
                 }
                 return null
             },
-            leave: () => cutCursorModel.setValue(null)
+            leave: EmptyExec
         }),
         installValueInput({
             element: canvas,
@@ -282,7 +293,6 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
         <div className={className}>
             {canvas}
             {selectionRectangle}
-            <CutCursor lifecycle={lifecycle} position={cutCursorModel} range={range}/>
         </div>
     )
 }
