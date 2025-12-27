@@ -20,7 +20,7 @@ export const ValueEditorHeader = ({lifecycle, context}: Construct) => {
         <div className={className}>
             <p className="help-section manual">
                 Double-click to create/delete value.<br/>
-                {Opt} + click on segment to cut.<br/>
+                {Shift} click on segment to cut.<br/>
                 {Cmd} + drag to paint events.<br/>
                 Drag + {Cmd} to copy events.<br/>
                 Optional hold {Shift} to disable value snapping or hold {Opt} to contrain movement to time.

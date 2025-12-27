@@ -37,13 +37,6 @@ export class ProjectMigration {
     static async migrate(env: ProjectEnv, {boxGraph, mandatoryBoxes}: ProjectSkeleton) {
         const {rootBox, timelineBox: {bpm}} = mandatoryBoxes
         console.debug("migrate project from", rootBox.created.getValue())
-        const orphans = boxGraph.findOrphans(rootBox)
-        if(orphans.length > 0) {
-            console.debug("Migrate remove orphaned boxes: ", orphans.length)
-            boxGraph.beginTransaction()
-            orphans.forEach(orphan => orphan.delete())
-            boxGraph.endTransaction()
-        }
         if (rootBox.groove.targetAddress.isEmpty()) {
             console.debug("Migrate to global GrooveShuffleBox")
             boxGraph.beginTransaction()
@@ -70,6 +63,13 @@ export class ProjectMigration {
                 }
             })
             return promise
+        }
+        const orphans = boxGraph.findOrphans(rootBox)
+        if(orphans.length > 0) {
+            console.debug("Migrate remove orphaned boxes: ", orphans.length)
+            boxGraph.beginTransaction()
+            orphans.forEach(orphan => orphan.delete())
+            boxGraph.endTransaction()
         }
         // 1st pass (2nd pass might rely on those changes)
         for (const box of boxGraph.boxes()) {
