@@ -162,7 +162,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             valueAxis
                         }))
                     }
-                } else if (target.type === "curve") {
+                } else if (target.type === "midpoint") {
                     if (event.altKey) {
                         const clientRect = canvas.getBoundingClientRect()
                         const position: ppqn = snapping.xToUnitRound(event.clientX - clientRect.left) - reader.offset
@@ -227,7 +227,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                     reference: target.event,
                     collection: reader.content
                 }))
-            } else if (target.type === "curve") {
+            } else if (target.type === "midpoint") {
                 return modifyContext.startModifier(ValueSlopeModifier.create({
                     element: canvas,
                     selection,
@@ -247,7 +247,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
         modifyContext.subscribeUpdate(painter.requestUpdate),
         installCursor(canvas, capturing, {
             get: (target, event) => {
-                cutCursorModel.setValue(target?.type === "curve" && event.altKey
+                cutCursorModel.setValue(target?.type === "midpoint" && event.altKey
                     ? snapping.xToUnitRound(event.clientX - canvas.getBoundingClientRect().left)
                     : null)
                 const controlKey = Keyboard.isControlKey(event) && event.buttons === 0
@@ -255,7 +255,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                     if (controlKey) {return Cursor.Pencil}
                 } else if (target.type === "event") {
                     return "move"
-                } else if (target.type === "curve") {
+                } else if (target.type === "midpoint") {
                     return event.altKey ? Cursor.Scissors : "ns-resize"
                 } else if (target.type === "loop-duration") {
                     return "ew-resize"

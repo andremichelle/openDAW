@@ -2,14 +2,14 @@ import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {Arrays, Curve, Func, isDefined, Nullable, unitValue} from "@opendaw/lib-std"
 import {ValueEventBoxAdapter} from "@opendaw/studio-adapters"
 import {ValueEvent} from "@opendaw/lib-dsp"
-import {EventRadius} from "./Constants"
+import {EventRadius, MidPointRadius} from "./Constants"
 import {PointerRadiusDistance} from "@/ui/timeline/constants.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {TimelineRange} from "@opendaw/studio-core"
 
 export type ValueCaptureTarget =
     | { type: "event", event: ValueEventBoxAdapter }
-    | { type: "curve", event: ValueEventBoxAdapter }
+    | { type: "midpoint", event: ValueEventBoxAdapter }
     | { type: "loop-duration", reader: ValueEventOwnerReader }
 
 export const createValueEventCapturing = (element: Element,
@@ -55,19 +55,14 @@ export const createValueEventCapturing = (element: Element,
             if (interpolation.type === "none") {
                 return null
             }
-            if (interpolation.type === "linear") {
-                return null
-            } else if (interpolation.type === "curve") {
-                const n1 = array[index + 1]
-                const x0 = range.unitToX(n0.position + offset)
-                const x1 = range.unitToX(n1.position + offset)
-                const y0 = valueToY(n0.value)
-                const y1 = valueToY(n1.value)
-                // This is not the 2d distance, just the y-distance (good enough for our purposes)
-                const dy = Curve.valueAt({slope: interpolation.slope, steps: x1 - x0, y0, y1}, x - x0) - y
-                if (Math.abs(dy) < PointerRadiusDistance) {
-                    return {type: "curve", event: n0}
-                }
+            const n1 = array[index + 1]
+            const slope = interpolation.type === "curve" ? interpolation.slope : 0.5
+            const midX = range.unitToX(offset + (n0.position + n1.position) * 0.5)
+            const midY = valueToY(Curve.normalizedAt(0.5, slope) * (n1.value - n0.value) + n0.value)
+            const dx = x - midX
+            const dy = y - midY
+            if (Math.sqrt(dx * dx + dy * dy) <= MidPointRadius) {
+                return {type: "midpoint", event: n0}
             }
         }
         return null

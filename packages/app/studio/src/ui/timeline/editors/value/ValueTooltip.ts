@@ -44,7 +44,7 @@ export namespace ValueTooltip {
                             clientY
                         })
                     })
-                } else if (target?.type === "curve") {
+                } else if (target?.type === "midpoint") {
                     const event = target.event
                     const mostRightEvent = ValueEvent.nextEvent(reader.content.events, event) ?? event
                     Surface.get(element).valueTooltip.show(() => {
