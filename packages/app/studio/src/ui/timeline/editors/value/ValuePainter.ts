@@ -1,10 +1,22 @@
-import {Arrays, Func, Option, Procedure, Provider, TAU, unitValue, ValueMapping} from "@opendaw/lib-std"
+import {
+    Arrays,
+    Curve,
+    Func,
+    isNotNull,
+    Nullable,
+    Option,
+    Procedure,
+    Provider,
+    TAU,
+    unitValue,
+    ValueMapping
+} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {renderValueStream} from "@/ui/timeline/renderer/value.ts"
 import {ValueEvent} from "@opendaw/lib-dsp"
 import {renderTimeGrid} from "@/ui/timeline/editors/TimeGridRenderer.ts"
-import {EventRadius} from "@/ui/timeline/editors/value/Constants.ts"
+import {EventRadius, MidPointRadius} from "@/ui/timeline/editors/value/Constants.ts"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {ValueModifier} from "./ValueModifier"
 import {ValueModifyStrategy} from "@/ui/timeline/editors/value/ValueModifyStrategies.ts"
@@ -105,12 +117,24 @@ export const createValuePainter =
                 resultStartValue: 0.0,
                 resultEndValue: 1.0
             })
+        let prevEvent: Nullable<UIValueEvent> = null
         for (const event of createIterator()) {
+            if (isNotNull(prevEvent) && prevEvent.interpolation.type !== "none") {
+                const slope = prevEvent.interpolation.type === "curve" ? prevEvent.interpolation.slope : 0.5
+                const midX = range.unitToX(offset + (prevEvent.position + event.position) * 0.5) * devicePixelRatio
+                const midY = valueToPixel(Curve.normalizedAt(0.5, slope) * (event.value - prevEvent.value) + prevEvent.value)
+                context.fillStyle = contentColor
+                context.beginPath()
+                context.arc(midX, midY, MidPointRadius * devicePixelRatio, 0.0, TAU)
+                context.fill()
+            }
+            // Draw event circle
             context.fillStyle = event.isSelected ? "white" : contentColor
             const x = range.unitToX(offset + event.position) * devicePixelRatio
             const y = valueToPixel(event.value)
             context.beginPath()
             context.arc(x, y, EventRadius * devicePixelRatio, 0.0, TAU)
             context.fill()
+            prevEvent = event
         }
     }
