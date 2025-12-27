@@ -1,8 +1,10 @@
-import {assert, Notifier, Observer, SortedSet, Subscription, Terminable, UUID} from "@opendaw/lib-std"
+import {assert, int, Notifier, Observer, SortedSet, Subscription, Terminable, UUID} from "@opendaw/lib-std"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
-import {EventCollection} from "@opendaw/lib-dsp"
+import {EventCollection, ppqn} from "@opendaw/lib-dsp"
 import {SignatureEventBoxAdapter} from "./SignatureEventBoxAdapter"
 import {SignatureEventBox, SignatureTrack} from "@opendaw/studio-boxes"
+
+export type Signature = Readonly<{ position: ppqn, nominator: int, denominator: int }>
 
 export class SignatureTrackAdapter implements Terminable {
     readonly #context: BoxAdaptersContext
@@ -50,6 +52,23 @@ export class SignatureTrackAdapter implements Terminable {
     onSortingChanged(): void {
         this.#events.onIndexingChanged()
         this.dispatchChange()
+    }
+
+    signatureAt(position: ppqn, fallback: Readonly<[int, int]>): Readonly<[int, int]> {
+        const event = this.#events.lowerEqual(position)
+        return event === null ? fallback : [event.nominator, event.denominator]
+    }
+
+    *iterateSignatures(from: ppqn, to: ppqn, fallback: Readonly<[int, int]>): IterableIterator<Signature> {
+        const first = this.#events.lowerEqual(from)
+        if (first === null || first.position < from) {
+            const [nominator, denominator] = first === null ? fallback : [first.nominator, first.denominator]
+            yield {position: from, nominator, denominator}
+        }
+        for (const event of this.#events.iterateFrom(from)) {
+            if (event.position > to) {break}
+            yield {position: event.position, nominator: event.nominator, denominator: event.denominator}
+        }
     }
 
     terminate(): void {this.#subscription.terminate()}
