@@ -1,4 +1,4 @@
-import {Nullable, Option, StringMapping, Terminable, ValueAxis, ValueMapping} from "@opendaw/lib-std"
+import {Curve, Nullable, Option, StringMapping, Terminable, ValueAxis, ValueMapping} from "@opendaw/lib-std"
 import {ValueCaptureTarget} from "@/ui/timeline/editors/value/ValueEventCapturing"
 import {Surface} from "@/ui/surface/Surface"
 import {ValueModifyStrategy} from "@/ui/timeline/editors/value/ValueModifyStrategies"
@@ -46,16 +46,20 @@ export namespace ValueTooltip {
                     })
                 } else if (target?.type === "midpoint") {
                     const event = target.event
-                    const mostRightEvent = ValueEvent.nextEvent(reader.content.events, event) ?? event
+                    const nextEvent = ValueEvent.nextEvent(reader.content.events, event) ?? event
                     Surface.get(element).valueTooltip.show(() => {
                         const stringMapping = StringMapping.numeric({unit: "bend", bipolar: true, fractionDigits: 2})
                         const strategy: Option<ValueModifyStrategy> = modifyContext.modifier
                         const modifier: ValueModifyStrategy = strategy.unwrapOrElse(ValueModifyStrategy.Identity)
-                        const clientRect = element.getBoundingClientRect()
-                        const clientX = range.unitToX(modifier.readPosition(mostRightEvent) + reader.offset) + clientRect.left + 8
-                        const clientY = valueAxis.valueToAxis(modifier.readValue(mostRightEvent)) + clientRect.top + 8
                         const interpolation = modifier.readInterpolation(event)
                         const slope = interpolation.type !== "curve" ? 0.5 : interpolation.slope
+                        const v0 = modifier.readValue(event)
+                        const v1 = modifier.readValue(nextEvent)
+                        const midPosition = (modifier.readPosition(event) + modifier.readPosition(nextEvent)) * 0.5
+                        const midValue = Curve.normalizedAt(0.5, slope) * (v1 - v0) + v0
+                        const clientRect = element.getBoundingClientRect()
+                        const clientX = range.unitToX(midPosition + reader.offset) + clientRect.left + 8
+                        const clientY = valueAxis.valueToAxis(midValue) + clientRect.top + 8
                         return ({...stringMapping.x(slope), clientX, clientY})
                     })
                 } else {
