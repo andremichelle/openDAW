@@ -92,7 +92,8 @@ export class StudioService implements ProjectEnv {
         followCursor: new DefaultObservableValue(false),
         primaryVisibility: {
             markers: new DefaultObservableValue(true),
-            tempo: new DefaultObservableValue(false)
+            tempo: new DefaultObservableValue(false),
+            signature: new DefaultObservableValue(false)
         }
     } as const
     readonly menu = populateStudioMenu(this)
@@ -337,6 +338,10 @@ export class StudioService implements ProjectEnv {
                 // Tempo
                 if (timelineBoxAdapter.tempoTrackEvents.mapOr(collection => !collection.events.isEmpty(), false)) {
                     this.timeline.primaryVisibility.tempo.setValue(true)
+                }
+                // Signature
+                if (!timelineBoxAdapter.signatureTrack.events.isEmpty()) {
+                    this.timeline.primaryVisibility.signature.setValue(true)
                 }
                 // Clips
                 const maxClipIndex: int = project.rootBoxAdapter.audioUnits.adapters()

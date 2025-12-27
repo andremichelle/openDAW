@@ -84,8 +84,8 @@ export const TimelineBox: BoxSchema<Pointers> = {
                     name: "SignatureTrack",
                     fields: {
                         1: {
-                            type: "pointer", name: "events",
-                            mandatory: false, pointerType: Pointers.SignatureAutomation
+                            type: "field", name: "events",
+                            pointerRules: {mandatory: false, accepts: [Pointers.SignatureAutomation]}
                         },
                         10: {type: "int32", name: "index", ...IndexConstraints, value: 1},
                         20: {type: "boolean", name: "enabled", value: true}

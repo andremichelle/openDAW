@@ -50,6 +50,7 @@ import {
     RevampDeviceBox,
     ReverbDeviceBox,
     RootBox,
+    SignatureEventBox,
     SoundfontDeviceBox,
     SoundfontFileBox,
     StereoToolDeviceBox,
@@ -126,6 +127,7 @@ import {AudioPitchStretchBoxAdapter} from "./audio/AudioPitchStretchBoxAdapter"
 import {TransientMarkerBoxAdapter} from "./audio/TransientMarkerBoxAdapter"
 import {WarpMarkerBoxAdapter} from "./audio/WarpMarkerBoxAdapter"
 import {AudioTimeStretchBoxAdapter} from "./audio/AudioTimeStretchBoxAdapter"
+import {SignatureEventBoxAdapter} from "./timeline/SignatureEventBoxAdapter"
 
 export class BoxAdapters implements Terminable {
     readonly #context: BoxAdaptersContext
@@ -198,6 +200,7 @@ export class BoxAdapters implements Terminable {
             visitFoldDeviceBox: (box: FoldDeviceBox) => new FoldDeviceBoxAdapter(this.#context, box),
             visitGrooveShuffleBox: (box: GrooveShuffleBox) => new GrooveShuffleBoxAdapter(this.#context, box),
             visitMarkerBox: (box: MarkerBox) => new MarkerBoxAdapter(this.#context, box),
+            visitSignatureEventBox: (box: SignatureEventBox) => new SignatureEventBoxAdapter(this.#context, box),
             visitMIDIOutputDeviceBox: (box: MIDIOutputDeviceBox) => new MIDIOutputDeviceBoxAdapter(this.#context, box),
             visitModularAudioInputBox: (box: ModularAudioInputBox) => new ModularAudioInputAdapter(this.#context, box),
             visitModularAudioOutputBox: (box: ModularAudioOutputBox) => new ModularAudioOutputAdapter(this.#context, box),

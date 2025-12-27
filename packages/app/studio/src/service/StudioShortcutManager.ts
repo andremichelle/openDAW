@@ -68,7 +68,7 @@ export namespace StudioShortcutManager {
         const {
             engine: {metronomeEnabled, isPlaying, isRecording, isCountingIn, position},
             panelLayout,
-            timeline: {clips: {visible: clipsVisibility}, followCursor, primaryVisibility: {markers, tempo}, snapping}
+            timeline: {clips: {visible: clipsVisibility}, followCursor, primaryVisibility: {markers, tempo, signature}, snapping}
         } = service
         const gs = GlobalShortcuts
         const storedShortcuts = localStorage.getItem(localStorageKey)
@@ -132,6 +132,7 @@ export namespace StudioShortcutManager {
             gc.register(gs["toggle-browser-panel"].shortcut, () => panelLayout.getByType(PanelType.BrowserPanel).toggleMinimize()),
             gc.register(gs["toggle-tempo-track"].shortcut, () => tempo.setValue(!tempo.getValue())),
             gc.register(gs["toggle-markers-track"].shortcut, () => markers.setValue(!markers.getValue())),
+            gc.register(gs["toggle-signature-track"].shortcut, () => signature.setValue(!signature.getValue())),
             gc.register(gs["toggle-clips"].shortcut, () => clipsVisibility.setValue(!clipsVisibility.getValue())),
             gc.register(gs["toggle-follow-cursor"].shortcut, () => followCursor.setValue(!followCursor.getValue())),
             gc.register(gs["toggle-metronome"].shortcut, () => metronomeEnabled.setValue(!metronomeEnabled.getValue())),

@@ -70,6 +70,10 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.KeyM, {shift}),
         description: "Show or hide markers track"
     },
+    "toggle-signature-track": {
+        shortcut: Shortcut.of(Key.KeyS, {shift}),
+        description: "Show or hide signature track"
+    },
     "toggle-clips": {
         shortcut: Shortcut.of(Key.KeyC, {shift}),
         description: "Show or hide clips"

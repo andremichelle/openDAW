@@ -21,7 +21,7 @@ type Construct = {
 }
 
 export const TimelineHeader = ({lifecycle, service}: Construct) => {
-    const {snapping, followCursor, primaryVisibility: {markers, tempo}, clips} = service.timeline
+    const {snapping, followCursor, primaryVisibility: {markers, tempo, signature}, clips} = service.timeline
     return (
         <div className={className}>
             <SnapSelector lifecycle={lifecycle} snapping={snapping}/>
@@ -37,7 +37,7 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
             </Checkbox>
             <MenuButton
                 style={{paddingLeft: "3px"}}
-                appearance={{color: Colors.orange, tinyTriangle: true, tooltip: "Toggle Markers & Tempo visiblilty"}}
+                appearance={{color: Colors.orange, tinyTriangle: true, tooltip: "Primary Tracks"}}
                 root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                     MenuItem.header({
                         label: "Primarily Tracks",
@@ -53,7 +53,12 @@ export const TimelineHeader = ({lifecycle, service}: Construct) => {
                         label: "Tempo",
                         checked: tempo.getValue(),
                         shortcut: GlobalShortcuts["toggle-tempo-track"].shortcut.format()
-                    }).setTriggerProcedure(() => tempo.setValue(!tempo.getValue()))
+                    }).setTriggerProcedure(() => tempo.setValue(!tempo.getValue())),
+                    MenuItem.default({
+                        label: "Signature",
+                        checked: signature.getValue(),
+                        shortcut: GlobalShortcuts["toggle-signature-track"].shortcut.format()
+                    }).setTriggerProcedure(() => signature.setValue(!signature.getValue()))
                 ))}>
                 <Icon symbol={IconSymbol.Primary}/>
             </MenuButton>

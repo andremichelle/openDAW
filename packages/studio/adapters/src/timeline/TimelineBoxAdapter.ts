@@ -13,6 +13,7 @@ import {
 import {Address} from "@opendaw/lib-box"
 import {BoxAdapter} from "../BoxAdapter"
 import {MarkerTrackAdapter} from "./MarkerTrackAdapter"
+import {SignatureTrackAdapter} from "./SignatureTrackAdapter"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {PPQN, ppqn} from "@opendaw/lib-dsp"
 import {ValueEventCollectionBoxAdapter} from "./collection/ValueEventCollectionBoxAdapter"
@@ -23,6 +24,7 @@ export class TimelineBoxAdapter implements BoxAdapter {
     readonly #box: TimelineBox
 
     readonly #markerTrack: MarkerTrackAdapter
+    readonly #signatureTrack: SignatureTrackAdapter
     readonly #tempoTrackEvents: MutableObservableOption<ValueEventCollectionBoxAdapter>
     readonly #tempoAutomation: Notifier<Option<ValueEventCollectionBoxAdapter>>
 
@@ -30,6 +32,7 @@ export class TimelineBoxAdapter implements BoxAdapter {
         this.#box = box
 
         this.#markerTrack = new MarkerTrackAdapter(context, this.#box.markerTrack)
+        this.#signatureTrack = new SignatureTrackAdapter(context, this.#box.signatureTrack)
         this.#tempoTrackEvents = new MutableObservableOption<ValueEventCollectionBoxAdapter>()
         this.#tempoAutomation = new Notifier<Option<ValueEventCollectionBoxAdapter>>()
 
@@ -62,6 +65,7 @@ export class TimelineBoxAdapter implements BoxAdapter {
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get markerTrack(): MarkerTrackAdapter {return this.#markerTrack}
+    get signatureTrack(): SignatureTrackAdapter {return this.#signatureTrack}
     get tempoTrackEvents(): ObservableOption<ValueEventCollectionBoxAdapter> {return this.#tempoTrackEvents}
     get signature(): Readonly<[int, int]> {
         const {nominator, denominator} = this.#box.signature
