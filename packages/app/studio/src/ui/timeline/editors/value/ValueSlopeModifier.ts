@@ -51,7 +51,7 @@ export class ValueSlopeModifier implements ValueModifier {
     readValue(event: ValueEvent): unitValue {return event.value}
     readInterpolation(event: ValueEventBoxAdapter): Interpolation {
         if (event !== this.#reference) {return event.interpolation}
-        return Interpolation.Curve(this.#slope)
+        return this.#slope === 0.5 ? Interpolation.Linear : Interpolation.Curve(this.#slope)
     }
     readContentDuration(owner: ValueEventOwnerReader): number {return owner.contentDuration}
     iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<ValueEventDraft> {
@@ -66,12 +66,13 @@ export class ValueSlopeModifier implements ValueModifier {
         }))
     }
 
-    update({clientY}: Dragging.Event): void {
+    update({clientY, shiftKey}: Dragging.Event): void {
         const clientRect = this.#element.getBoundingClientRect()
         const pointerValue = this.#valueAxis.axisToValue(clientY - clientRect.top)
         const v0 = this.#reference.value
         const v1 = this.#successor.value
-        const slope = clampUnit(Curve.slopeByHalf(v0, pointerValue, v1))
+        let slope = clampUnit(Curve.slopeByHalf(v0, pointerValue, v1))
+        if (!shiftKey && Math.abs(slope - 0.5) < 0.02) {slope = 0.5}
         if (this.#slope !== slope) {
             this.#slope = slope
             this.#dispatchChange()
@@ -79,7 +80,8 @@ export class ValueSlopeModifier implements ValueModifier {
     }
 
     approve(editing: BoxEditing): void {
-        editing.modify(() => this.#reference.interpolation = Interpolation.Curve(this.#slope))
+        const interpolation = this.#slope === 0.5 ? Interpolation.Linear : Interpolation.Curve(this.#slope)
+        editing.modify(() => this.#reference.interpolation = interpolation)
     }
 
     cancel(): void {

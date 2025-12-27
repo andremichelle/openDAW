@@ -63,5 +63,5 @@ export namespace Curve {
     })
 
     export const slopeByHalf = (y0: number, ym: number, y1: number): number =>
-        Math.abs(y1 - y0) < 0.000001 ? 0.5 : (ym - y0) / (y1 - y0)
+        Math.abs(y1 - y0) < 1e-6 ? 0.5 : (ym - y0) / (y1 - y0)
 }

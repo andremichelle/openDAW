@@ -5,9 +5,9 @@ import {ppqn} from "./ppqn"
 export type Interpolation = | { type: "none" } | { type: "linear" } | { type: "curve", slope: unitValue }
 
 export const Interpolation = {
-    None: {type: "none"},
-    Linear: {type: "linear"},
-    Curve: (slope: unitValue) => ({type: "curve", slope}) as const
+    None: {type: "none"} as const,
+    Linear: {type: "linear"} as const,
+    Curve: (slope: unitValue) => slope === 0.5 ? Interpolation.Linear : ({type: "curve", slope}) as const
 } as const
 
 export interface ValueEvent extends Event {
