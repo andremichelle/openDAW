@@ -1,5 +1,5 @@
 import {PPQN} from "@opendaw/lib-dsp"
-import {BoxSchema} from "@opendaw/lib-box-forge"
+import {BoxSchema, deprecated} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
 import {IndexConstraints, PPQNDurationConstraints, PPQNPositionConstraints} from "../Defaults"
 
@@ -34,9 +34,8 @@ export const TimelineBox: BoxSchema<Pointers> = {
                     }
                 }
             },
-            20: { // TODO deprecate
-                type: "field",
-                name: "deprecated-marker-track",
+            20: {
+                type: "field", name: "deprecated-marker-track", deprecated,
                 pointerRules: {accepts: [Pointers.MarkerTrack], mandatory: false}
             },
             21: {
@@ -50,7 +49,7 @@ export const TimelineBox: BoxSchema<Pointers> = {
                             name: "markers",
                             pointerRules: {accepts: [Pointers.MarkerTrack], mandatory: false}
                         },
-                        10: {type: "int32", name: "index", ...IndexConstraints},
+                        10: {type: "int32", name: "index", ...IndexConstraints, value: 0},
                         20: {type: "boolean", name: "enabled", value: true}
                     }
                 }
@@ -65,7 +64,7 @@ export const TimelineBox: BoxSchema<Pointers> = {
                             type: "pointer", name: "events",
                             mandatory: false, pointerType: Pointers.ValueEventCollection
                         },
-                        10: {type: "int32", name: "index", ...IndexConstraints},
+                        10: {type: "int32", name: "index", ...IndexConstraints, value: 2},
                         15: {
                             type: "int32", name: "min-bpm",
                             constraints: {min: 30, max: 999}, unit: "bpm", value: 60
@@ -74,6 +73,21 @@ export const TimelineBox: BoxSchema<Pointers> = {
                             type: "int32", name: "max-bpm",
                             constraints: {min: 31, max: 1000}, unit: "bpm", value: 240
                         },
+                        20: {type: "boolean", name: "enabled", value: true}
+                    }
+                }
+            },
+            23: {
+                type: "object",
+                name: "signature-track",
+                class: {
+                    name: "SignatureTrack",
+                    fields: {
+                        1: {
+                            type: "pointer", name: "events",
+                            mandatory: false, pointerType: Pointers.SignatureAutomation
+                        },
+                        10: {type: "int32", name: "index", ...IndexConstraints, value: 1},
                         20: {type: "boolean", name: "enabled", value: true}
                     }
                 }
