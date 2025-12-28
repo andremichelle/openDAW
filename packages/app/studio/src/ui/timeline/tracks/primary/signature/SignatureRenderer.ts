@@ -1,4 +1,4 @@
-import {SignatureEventBoxAdapter, SignatureTrackAdapter} from "@opendaw/studio-adapters"
+import {Signature, SignatureTrackAdapter} from "@opendaw/studio-adapters"
 import {isDefined} from "@opendaw/lib-std"
 import {CanvasPainter} from "@/ui/canvas/painter"
 import {Context2d} from "@opendaw/lib-dom"
@@ -10,37 +10,36 @@ export namespace SignatureRenderer {
 
     export const createTrackRenderer = (canvas: HTMLCanvasElement,
                                         range: TimelineRange,
-                                        {events}: SignatureTrackAdapter) =>
+                                        trackAdapter: SignatureTrackAdapter) =>
         new CanvasPainter(canvas, ({context}) => {
             const {width, height} = canvas
             const {fontFamily, fontSize} = getComputedStyle(canvas)
             context.clearRect(0, 0, width, height)
             context.textBaseline = "middle"
             context.font = `${parseFloat(fontSize) * devicePixelRatio}px ${fontFamily}`
-            const renderSignature = (curr: SignatureEventBoxAdapter, next?: SignatureEventBoxAdapter): void => {
-                SignatureRenderer.renderSignature(context, range, curr, height, next)
-            }
+
             const unitMin = range.unitMin
             const unitMax = range.unitMax
-            const iterator = events.iterateFrom(unitMin)
-            const {value, done} = iterator.next()
-            if (done) {return}
-            let prev: SignatureEventBoxAdapter = value
-            for (const curr of iterator) {
-                renderSignature(prev, curr)
-                prev = curr
+            const signatures = [...trackAdapter.iterateAll()]
+
+            for (let i = 0; i < signatures.length; i++) {
+                const curr = signatures[i]
+                const next = signatures[i + 1]
+
+                if (isDefined(next) && next.position < unitMin) {continue}
                 if (curr.position > unitMax) {break}
+
+                SignatureRenderer.renderSignature(context, range, curr, height, next)
             }
-            renderSignature(prev)
         })
 
     export const renderSignature = (context: CanvasRenderingContext2D,
                                     range: TimelineRange,
-                                    adapter: SignatureEventBoxAdapter,
+                                    signature: Signature,
                                     height: number,
-                                    next?: SignatureEventBoxAdapter): void => {
-        const x0 = Math.floor(range.unitToX(adapter.position) * devicePixelRatio)
-        const label = `${adapter.nominator}/${adapter.denominator}`
+                                    next?: Signature): void => {
+        const x0 = Math.floor(range.unitToX(signature.position) * devicePixelRatio)
+        const label = `${signature.nominator}/${signature.denominator}`
         let text: string
         if (isDefined(next)) {
             const x1 = Math.floor(range.unitToX(next.position) * devicePixelRatio)
@@ -56,8 +55,8 @@ export namespace SignatureRenderer {
     }
 
     export const computeWidth = (context: CanvasRenderingContext2D,
-                                 adapter: SignatureEventBoxAdapter): number => {
-        const label = `${adapter.nominator}/${adapter.denominator}`
+                                 signature: Signature): number => {
+        const label = `${signature.nominator}/${signature.denominator}`
         const width = context.measureText(label).width
         return (width + textPadding) / devicePixelRatio
     }

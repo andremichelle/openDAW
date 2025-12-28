@@ -1,9 +1,10 @@
-import {PPQN} from "@opendaw/lib-dsp"
+import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {int, quantizeFloor} from "@opendaw/lib-std"
 import {TimelineRange} from "./TimelineRange"
 
 export namespace TimeGrid {
     export type Signature = [int, int]
+    export type SignatureEvent = Readonly<{ position: ppqn, nominator: int, denominator: int }>
     export type Options = { minLength?: number }
     export type Fragment = { bars: int, beats: int, ticks: int, isBar: boolean, isBeat: boolean, pulse: number }
     export type Designer = (fragment: Fragment) => void
@@ -69,5 +70,91 @@ export namespace TimeGrid {
             const isBar = isBeat && beats === 0
             designer({bars, beats, ticks, isBar, isBeat, pulse})
         }
+    }
+
+    export const fragmentWithSignatures = (
+        signatures: Iterable<SignatureEvent>,
+        range: TimelineRange,
+        designer: Designer,
+        options?: Options
+    ): void => {
+        const unitsPerPixel = range.unitsPerPixel
+        if (unitsPerPixel <= 0) {return}
+        const minLength = options?.minLength ?? 48
+
+        let accumulatedBars = 0
+        let prevPosition: ppqn = 0
+        let prevNominator = 4
+        let prevDenominator = 4
+
+        const renderSegment = (from: ppqn, to: ppqn, nominator: int, denominator: int, barOffset: int) => {
+            const barPulses = PPQN.fromSignature(nominator, denominator)
+            const beatPulses = PPQN.fromSignature(1, denominator)
+
+            let interval = barPulses
+            let pixel = interval / unitsPerPixel
+            if (pixel > minLength) {
+                while (pixel > minLength) {
+                    if (interval > barPulses) {
+                        interval /= 2
+                    } else if (interval > beatPulses) {
+                        interval /= nominator
+                    } else {
+                        interval /= 2
+                    }
+                    pixel = interval / unitsPerPixel
+                }
+            }
+            if (pixel < minLength) {
+                while (pixel < minLength) {
+                    if (interval < beatPulses) {
+                        const nextInterval = interval * 2
+                        interval = nextInterval > beatPulses ? beatPulses : nextInterval
+                    } else if (interval < barPulses) {
+                        const nextInterval = interval * nominator
+                        interval = nextInterval > barPulses ? barPulses : nextInterval
+                    } else {
+                        interval *= 2
+                    }
+                    pixel = interval / unitsPerPixel
+                }
+            }
+
+            const segmentStart = Math.max(from, range.unitMin)
+            const segmentEnd = Math.min(to, range.unitMax)
+            const p0 = quantizeFloor(segmentStart, interval)
+            for (let pulse = p0; pulse < segmentEnd; pulse += interval) {
+                if (pulse < from) {continue}
+                const relativePulse = pulse - from
+                const {bars, beats, semiquavers, ticks} = PPQN.toParts(relativePulse, nominator, denominator)
+                const isBeat = ticks === 0 && semiquavers === 0
+                const isBar = isBeat && beats === 0
+                designer({
+                    bars: bars + barOffset,
+                    beats,
+                    ticks,
+                    isBar,
+                    isBeat,
+                    pulse
+                })
+            }
+        }
+
+        for (const sig of signatures) {
+            if (sig.position > range.unitMax) {break}
+
+            if (sig.position > prevPosition) {
+                const prevBarPulses = PPQN.fromSignature(prevNominator, prevDenominator)
+                const barsInSegment = Math.floor((sig.position - prevPosition) / prevBarPulses)
+                renderSegment(prevPosition, sig.position, prevNominator, prevDenominator, accumulatedBars)
+                accumulatedBars += barsInSegment
+            }
+
+            prevPosition = sig.position
+            prevNominator = sig.nominator
+            prevDenominator = sig.denominator
+        }
+
+        renderSegment(prevPosition, range.unitMax, prevNominator, prevDenominator, accumulatedBars)
     }
 }

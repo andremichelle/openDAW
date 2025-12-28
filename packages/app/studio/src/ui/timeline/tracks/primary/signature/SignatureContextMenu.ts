@@ -1,8 +1,8 @@
 import {ContextMenu} from "@/ui/ContextMenu"
 import {MenuItem} from "@/ui/model/menu-item"
 import {ElementCapturing} from "@/ui/canvas/capturing"
-import {Parsing, SignatureEventBoxAdapter} from "@opendaw/studio-adapters"
-import {clamp, EmptyExec} from "@opendaw/lib-std"
+import {Parsing, Signature, SignatureTrackAdapter} from "@opendaw/studio-adapters"
+import {clamp, EmptyExec, int} from "@opendaw/lib-std"
 import {BoxEditing} from "@opendaw/lib-box"
 import {DebugMenus} from "@/ui/menu/debug"
 import {TimelineRange} from "@opendaw/studio-core"
@@ -14,23 +14,37 @@ export namespace SignatureContextMenu {
         [4, 4], [3, 4], [2, 4], [6, 8], [5, 4], [7, 8], [12, 8]
     ] as const
 
+    const findIndexForSignature = (trackAdapter: SignatureTrackAdapter, signature: Signature): int => {
+        let index = 0
+        for (const sig of trackAdapter.iterateAll()) {
+            if (sig.position === signature.position) {return index}
+            index++
+        }
+        return -1
+    }
+
     export const install = (element: Element,
                             range: TimelineRange,
-                            capturing: ElementCapturing<SignatureEventBoxAdapter>,
-                            editing: BoxEditing) => {
+                            capturing: ElementCapturing<Signature>,
+                            editing: BoxEditing,
+                            trackAdapter: SignatureTrackAdapter) => {
         return ContextMenu.subscribe(element, ({addItems, client}: ContextMenu.Collector) => {
-            const adapter = capturing.captureEvent(client)
-            if (adapter === null) {return}
+            const signature = capturing.captureEvent(client)
+            if (signature === null) {return}
+
+            const adapter = trackAdapter.adapterAt(findIndexForSignature(trackAdapter, signature))
+            if (adapter === undefined) {return}
+
             addItems(
                 MenuItem.default({label: "Edit Signature"}).setTriggerProcedure(() => {
                     const resolvers = Promise.withResolvers<string>()
                     const clientRect = element.getBoundingClientRect()
                     Surface.get(element).flyout.appendChild(FloatingTextInput({
                         position: {
-                            x: range.unitToX(adapter.position) + clientRect.left,
+                            x: range.unitToX(signature.position) + clientRect.left,
                             y: clientRect.top + clientRect.height / 2
                         },
-                        value: `${adapter.nominator}/${adapter.denominator}`,
+                        value: `${signature.nominator}/${signature.denominator}`,
                         resolvers
                     }))
                     resolvers.promise.then(value => {
@@ -48,15 +62,13 @@ export namespace SignatureContextMenu {
                     parent.addMenuItem(
                         ...PresetSignatures.map(([nom, denom]) => MenuItem.default({
                             label: `${nom}/${denom}`,
-                            checked: adapter.nominator === nom && adapter.denominator === denom
+                            checked: signature.nominator === nom && signature.denominator === denom
                         }).setTriggerProcedure(() => editing.modify(() => {
                             adapter.box.nominator.setValue(nom)
                             adapter.box.denominator.setValue(denom)
                         })))
                     )
                 }),
-                MenuItem.default({label: "Delete", separatorBefore: true})
-                    .setTriggerProcedure(() => editing.modify(() => adapter.box.delete())),
                 DebugMenus.debugBox(adapter.box))
         })
     }

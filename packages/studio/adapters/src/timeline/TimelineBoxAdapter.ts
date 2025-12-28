@@ -32,7 +32,7 @@ export class TimelineBoxAdapter implements BoxAdapter {
         this.#box = box
 
         this.#markerTrack = new MarkerTrackAdapter(context, this.#box.markerTrack)
-        this.#signatureTrack = new SignatureTrackAdapter(context, this.#box.signatureTrack)
+        this.#signatureTrack = new SignatureTrackAdapter(context, this.#box)
         this.#tempoTrackEvents = new MutableObservableOption<ValueEventCollectionBoxAdapter>()
         this.#tempoAutomation = new Notifier<Option<ValueEventCollectionBoxAdapter>>()
 

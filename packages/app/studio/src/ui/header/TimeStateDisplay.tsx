@@ -45,7 +45,7 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
         const {signatureTrack} = timelineBoxAdapter
         const updateSignatureLabel = () => {
             const [nominator, denominator] = signatureTrack.enabled
-                ? signatureTrack.signatureAt(engine.position.getValue(), timelineBoxAdapter.signature)
+                ? signatureTrack.signatureAt(engine.position.getValue())
                 : timelineBoxAdapter.signature
             meterLabel.value = `${nominator}/${denominator}`
         }

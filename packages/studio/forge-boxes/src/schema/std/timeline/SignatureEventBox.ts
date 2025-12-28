@@ -1,6 +1,5 @@
 import {BoxSchema} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
-import {PPQNPositionConstraints} from "../Defaults"
 
 export const SignatureEventBox: BoxSchema<Pointers> = {
     type: "box",
@@ -8,7 +7,8 @@ export const SignatureEventBox: BoxSchema<Pointers> = {
         name: "SignatureEventBox",
         fields: {
             1: {type: "pointer", name: "events", pointerType: Pointers.SignatureAutomation, mandatory: true},
-            10: {type: "int32", name: "position", ...PPQNPositionConstraints},
+            9: {type: "int32", name: "index", constraints: "index", unit: "", value: 0},
+            10: {type: "int32", name: "relative-position", constraints: "positive", unit: "bars", value: 1},
             21: {type: "int32", name: "nominator", constraints: "positive", unit: "", value: 4},
             22: {type: "int32", name: "denominator", constraints: "positive", unit: "", value: 4}
         }
