@@ -50,7 +50,7 @@ import {EngineWorklet} from "../EngineWorklet"
 import {MidiDevices, MIDILearning} from "../midi"
 import {ProjectValidation} from "./ProjectValidation"
 import {Preferences} from "../Preferences"
-import {PPQN, ppqn, TempoMap, TimeBase} from "@opendaw/lib-dsp"
+import {TempoMap, TimeBase} from "@opendaw/lib-dsp"
 import {MidiData} from "@opendaw/lib-midi"
 
 export type RestartWorklet = { unload: Func<unknown, Promise<unknown>>, load: Procedure<EngineWorklet> }
@@ -195,10 +195,6 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     get isAudioContext(): boolean {return false}
     get isMainThread(): boolean {return true}
     get liveStreamBroadcaster(): LiveStreamBroadcaster {return panic("Only available in audio context")}
-    get signatureDuration(): ppqn {
-        const {nominator, denominator} = this.timelineBox.signature
-        return PPQN.fromSignature(nominator.getValue(), denominator.getValue())
-    }
 
     get skeleton(): ProjectSkeleton {
         return {

@@ -373,7 +373,6 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     get soundfontManager(): SoundfontLoaderManager {return this.#soundfontManager}
     get rootBoxAdapter(): RootBoxAdapter {return this.#rootBoxAdapter}
     get timelineBoxAdapter(): TimelineBoxAdapter {return this.#timelineBoxAdapter}
-    get signatureDuration(): ppqn {return this.timelineBoxAdapter.signatureDuration}
     get tempoMap(): TempoMap {return this.#tempoMap}
     get liveStreamBroadcaster(): LiveStreamBroadcaster {return this.#liveStreamBroadcaster}
     get liveStreamReceiver(): never {return panic("Only available in main thread")}

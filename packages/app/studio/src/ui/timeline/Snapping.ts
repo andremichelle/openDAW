@@ -44,14 +44,6 @@ export class Snapping implements Observable<Snapping> {
         this.#notifier = new Notifier<Snapping>()
     }
 
-    subscribe(observer: Observer<Snapping>): Subscription {return this.#notifier.subscribe(observer)}
-    catchupAndSubscribe(observer: Observer<Snapping>): Subscription {
-        observer(this)
-        return this.#notifier.subscribe(observer)
-    }
-
-    terminate(): void {this.#notifier.terminate()}
-
     get unit(): SnapUnit {return this.#units[this.#index]}
     get enabled(): boolean {return this.#enabled}
     get index(): int {return this.#index}
@@ -61,11 +53,8 @@ export class Snapping implements Observable<Snapping> {
         this.#notifier.notify(this)
     }
     get units(): ReadonlyArray<SnapUnit> {return this.#units}
-    value(position: ppqn): ppqn {return this.#enabled ? this.#units[this.#index].ppqn(position) : 1}
 
-    #signatureAt(position: ppqn): Readonly<[int, int]> {
-        return this.#optSignatureTrack.mapOr(adapter => adapter.signatureAt(position), [4, 4])
-    }
+    value(position: ppqn): ppqn {return this.#enabled ? this.#units[this.#index].ppqn(position) : 1}
 
     registerSignatureTrackAdapter(adapter: SignatureTrackAdapter): Subscription {
         this.#optSignatureTrack = Option.wrap(adapter)
@@ -75,6 +64,15 @@ export class Snapping implements Observable<Snapping> {
     xToUnitFloor(x: number): ppqn {return this.floor(this.#range.xToUnit(x))}
     xToUnitCeil(x: number): ppqn {return this.ceil(this.#range.xToUnit(x))}
     xToUnitRound(x: number): ppqn {return this.round(this.#range.xToUnit(x))}
+
+    xToBarInterval(x: number): { position: ppqn, complete: ppqn } {
+        const pulse = this.#range.xToUnit(x)
+        if (this.#optSignatureTrack.nonEmpty()) {
+            return this.#optSignatureTrack.unwrap().getBarInterval(pulse)
+        }
+        const position = this.floor(pulse)
+        return {position, complete: position + this.value(position)}
+    }
 
     floor(position: ppqn): ppqn {
         if (this.#optSignatureTrack.nonEmpty()) {
@@ -114,6 +112,15 @@ export class Snapping implements Observable<Snapping> {
         const globalDistance = Math.abs((beginValuePulse + globalDelta) - pointerTicks)
         return localDistance < globalDistance ? localDelta : globalDelta
     }
+
+    subscribe(observer: Observer<Snapping>): Subscription {return this.#notifier.subscribe(observer)}
+
+    catchupAndSubscribe(observer: Observer<Snapping>): Subscription {
+        observer(this)
+        return this.#notifier.subscribe(observer)
+    }
+
+    terminate(): void {this.#notifier.terminate()}
 
     #initUnits() {
         const range: TimelineRange = this.#range
@@ -179,5 +186,9 @@ export class Snapping implements Observable<Snapping> {
             {name: "1/128", ppqn: (_position: ppqn): int => PPQN.fromSignature(1, 128)},
             {name: "Off", ppqn: (_position: ppqn): int => 1}
         ]
+    }
+
+    #signatureAt(position: ppqn): Readonly<[int, int]> {
+        return this.#optSignatureTrack.mapOr(adapter => adapter.signatureAt(position), [4, 4])
     }
 }

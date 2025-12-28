@@ -110,11 +110,15 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 })
             } else if (target.type === "track") {
                 const {trackBoxAdapter} = target.track
-                const position = snapping.xToUnitFloor(event.clientX - element.getBoundingClientRect().left)
-                const duration = Math.min(project.signatureDuration,
+                const x = event.clientX - element.getBoundingClientRect().left
+                let {position, complete} = snapping.xToBarInterval(x)
+                position = Math.max(position,
                     (trackBoxAdapter.regions.collection
-                        .greaterEqual(position + 1)?.position ?? Number.POSITIVE_INFINITY) - position)
-                editing.modify(() => project.api.createTrackRegion(trackBoxAdapter.box, position, duration)
+                        .lowerEqual(position)?.complete ?? Number.NEGATIVE_INFINITY))
+                complete = Math.min(complete,
+                    (trackBoxAdapter.regions.collection
+                        .greaterEqual(position + 1)?.position ?? Number.POSITIVE_INFINITY))
+                editing.modify(() => project.api.createTrackRegion(trackBoxAdapter.box, position, complete - position)
                     .ifSome(region => selection.select(region)))
             }
         }),

@@ -8,7 +8,7 @@ import {ParameterFieldAdapters} from "./ParameterFieldAdapters"
 import {BoxAdapters} from "./BoxAdapters"
 import {SampleLoaderManager} from "./sample/SampleLoaderManager"
 import {SoundfontLoaderManager} from "./soundfont/SoundfontLoaderManager"
-import {ppqn, TempoMap} from "@opendaw/lib-dsp"
+import {TempoMap} from "@opendaw/lib-dsp"
 
 export interface BoxAdaptersContext extends Terminable {
     get boxGraph(): BoxGraph
@@ -21,7 +21,6 @@ export interface BoxAdaptersContext extends Terminable {
     get liveStreamBroadcaster(): LiveStreamBroadcaster
     get clipSequencing(): ClipSequencing
     get parameterFieldAdapters(): ParameterFieldAdapters
-    get signatureDuration(): ppqn
     get tempoMap(): TempoMap
     get isMainThread(): boolean
     get isAudioContext(): boolean

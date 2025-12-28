@@ -222,5 +222,12 @@ export class SignatureTrackAdapter implements Terminable {
         return PPQN.fromSignature(nom, denom)
     }
 
+    getBarInterval(position: ppqn): { position: ppqn, complete: ppqn } {
+        const {event, barPpqn} = this.#findSignatureEventAt(position)
+        const barsFromEvent = Math.floor((position - event.accumulatedPpqn) / barPpqn)
+        const start = event.accumulatedPpqn + barsFromEvent * barPpqn
+        return {position: start, complete: start + barPpqn}
+    }
+
     terminate(): void {this.#terminator.terminate()}
 }
