@@ -181,6 +181,36 @@ export class SignatureTrackAdapter implements Terminable {
 
     adapterAt(index: int): Option<SignatureEventBoxAdapter> {return this.#adapters.getAdapterByIndex(index)}
 
+    moveEvent(adapter: SignatureEventBoxAdapter, targetPpqn: ppqn): void {
+        const allEvents = Array.from(this.iterateAll()).slice(1)
+        const movedIdx = allEvents.findIndex(e => e.index === adapter.index)
+        if (movedIdx === -1) {return}
+        const movedEvent = allEvents[movedIdx]
+        if (targetPpqn === movedEvent.accumulatedPpqn) {return}
+        const originalBars = allEvents.map(e => e.accumulatedBars)
+        const storageBarPpqn = PPQN.fromSignature(...this.storageSignature)
+        const targetBar = Math.max(1, Math.round(targetPpqn / storageBarPpqn))
+        const newBars = [...originalBars]
+        newBars[movedIdx] = targetBar
+        const sortedIndices = newBars
+            .map((bar, i) => ({bar, i}))
+            .sort((a, b) => a.bar - b.bar)
+            .map(x => x.i)
+        const adapters = allEvents.map(e => this.adapterAt(e.index).unwrap())
+        for (let newIdx = 0; newIdx < sortedIndices.length; newIdx++) {
+            adapters[sortedIndices[newIdx]].box.index.setValue(newIdx)
+        }
+        let prevBar = 0
+        for (let i = 0; i < sortedIndices.length; i++) {
+            const origIdx = sortedIndices[i]
+            const eventAdapter = adapters[origIdx]
+            const bar = newBars[origIdx]
+            const relPos = Math.max(1, bar - prevBar)
+            eventAdapter.box.relativePosition.setValue(relPos)
+            prevBar = bar
+        }
+    }
+
     #findSignatureEventAt(position: ppqn): { event: SignatureEvent, barPpqn: ppqn } {
         let prevEvent: SignatureEvent | null = null
         for (const event of this.iterateAll()) {

@@ -1,12 +1,12 @@
 import css from "./SignatureTrackBody.sass?inline"
-import {EmptyExec, Lifecycle, Nullable} from "@opendaw/lib-std"
+import {EmptyExec, Lifecycle, Nullable, Option} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {Events, Html} from "@opendaw/lib-dom"
+import {Dragging, Events, Html} from "@opendaw/lib-dom"
 import {ppqn} from "@opendaw/lib-dsp"
-import {Parsing, SignatureEvent, SignatureTrackAdapter, TimelineBoxAdapter} from "@opendaw/studio-adapters"
+import {Parsing, SignatureEvent, SignatureEventBoxAdapter, SignatureTrackAdapter, TimelineBoxAdapter} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
-import {SignatureRenderer} from "@/ui/timeline/tracks/primary/signature/SignatureRenderer"
+import {SignatureDragPreview, SignatureRenderer} from "@/ui/timeline/tracks/primary/signature/SignatureRenderer"
 import {SignatureContextMenu} from "@/ui/timeline/tracks/primary/signature/SignatureContextMenu"
 import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
@@ -21,11 +21,13 @@ type Construct = {
 export const SignatureTrackBody = ({lifecycle, service}: Construct) => {
     const {project, timeline} = service
     const {editing} = project
-    const {range} = timeline
+    const {range, snapping} = timeline
     const canvas: HTMLCanvasElement = <canvas style={{fontSize: "1.25em"}}/>
     const timelineAdapter = project.boxAdapters.adapterFor(project.timelineBox, TimelineBoxAdapter)
     const signatureTrackAdapter: SignatureTrackAdapter = timelineAdapter.signatureTrack
-    const {context, requestUpdate} = lifecycle.own(SignatureRenderer.forTrack(canvas, range, signatureTrackAdapter))
+    let dragPreview: Nullable<SignatureDragPreview> = null
+    const {context, requestUpdate} = lifecycle.own(SignatureRenderer.forTrack(
+        canvas, range, signatureTrackAdapter, () => dragPreview))
     const findSignatureAtPosition = (ppqn: ppqn): Nullable<SignatureEvent> => {
         let result: Nullable<SignatureEvent> = null
         for (const signature of signatureTrackAdapter.iterateAll()) {
@@ -44,6 +46,39 @@ export const SignatureTrackBody = ({lifecycle, service}: Construct) => {
         }
     })
     lifecycle.ownAll(
+        Dragging.attach(canvas, (pointerEvent: PointerEvent): Option<Dragging.Process> => {
+            const clientRect = canvas.getBoundingClientRect()
+            const localX = pointerEvent.clientX - clientRect.left
+            const event = capturing.captureLocalPoint(localX, 0)
+            if (event === null || event.index === -1) {return Option.None}
+            const adapter = signatureTrackAdapter.adapterAt(event.index)
+            if (adapter.isEmpty()) {return Option.None}
+            const signatureAdapter: SignatureEventBoxAdapter = adapter.unwrap()
+            const pointerPpqn = range.xToUnit(localX)
+            const offsetPpqn = pointerPpqn - event.accumulatedPpqn
+            return Option.wrap({
+                update: (dragEvent: Dragging.Event): void => {
+                    const currentX = dragEvent.clientX - clientRect.left
+                    const rawPpqn = range.xToUnit(currentX) - offsetPpqn
+                    const targetPpqn = snapping.floor(Math.max(0, rawPpqn))
+                    if (dragPreview === null || dragPreview.targetPpqn !== targetPpqn) {
+                        dragPreview = {event, targetPpqn}
+                        requestUpdate()
+                    }
+                },
+                approve: (): void => {
+                    if (dragPreview !== null && dragPreview.targetPpqn !== event.accumulatedPpqn) {
+                        editing.modify(() => signatureTrackAdapter.moveEvent(signatureAdapter, dragPreview!.targetPpqn))
+                    }
+                    dragPreview = null
+                    requestUpdate()
+                },
+                cancel: (): void => {
+                    dragPreview = null
+                    requestUpdate()
+                }
+            })
+        }),
         Events.subscribeDblDwn(canvas, event => {
             const localX = event.clientX - canvas.getBoundingClientRect().left
             const position = range.xToUnit(localX)
