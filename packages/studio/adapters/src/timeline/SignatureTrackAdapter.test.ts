@@ -283,4 +283,120 @@ describe("SignatureTrackAdapter", () => {
             expect(result.newRelPositions).toEqual([7, 2, 4])
         })
     })
+    describe("createEvent algorithm", () => {
+        // Test data: Storage 4/4
+        // Original events: [bar 5 (5/4), bar 7 (7/8), bar 10 (11/16), bar 13 (4/4)]
+        // Original ppqn: [15360, 24960, 35040, 42960]
+        //
+        // Creating new event at bar 3 with 3/4 signature, Logic Pro shows:
+        // - New 3/4 at bar 3
+        // - 5/4 at bar 6 (was bar 5)
+        // - 7/8 at bar 8 (was bar 7)
+        // - 11/16 at bar 11 (was bar 10)
+        // - 4/4 at bar 14 (was bar 13)
+
+        type MockEvent = {
+            index: int
+            relativePosition: int
+            nominator: int
+            denominator: int
+            accumulatedPpqn: ppqn
+        }
+
+        type StorageEvent = {
+            index: -1
+            accumulatedPpqn: 0
+            nominator: int
+            denominator: int
+        }
+
+        const simulateCreateEvent = (
+            events: MockEvent[],
+            storage: Readonly<[int, int]>,
+            position: ppqn,
+            newNominator: int,
+            newDenominator: int
+        ): { newRelPositions: int[], newAccumulatedBars: int[] } => {
+            // Build allEvents including storage
+            const storageEvent: StorageEvent = {
+                index: -1, accumulatedPpqn: 0,
+                nominator: storage[0], denominator: storage[1]
+            }
+            type AllEvent = StorageEvent | MockEvent
+            const allEvents: AllEvent[] = [storageEvent, ...events]
+
+            // Find previous event
+            let prevEvent: AllEvent = allEvents[0]
+            let insertAfterIndex = 0
+            for (let i = 1; i < allEvents.length; i++) {
+                const event = allEvents[i] as MockEvent
+                if (event.accumulatedPpqn > position) {break}
+                prevEvent = event
+                insertAfterIndex = i
+            }
+
+            // Calculate new event's relativePosition
+            const prevBarPpqn = barPpqn(prevEvent.nominator, prevEvent.denominator)
+            const prevAccPpqn = prevEvent.index === -1 ? 0 : (prevEvent as MockEvent).accumulatedPpqn
+            const barsFromPrev = (position - prevAccPpqn) / prevBarPpqn
+            const newRelPos = Math.max(1, Math.round(barsFromPrev))
+
+            // Calculate new event's accumulated ppqn
+            const newEventPpqn = prevAccPpqn + newRelPos * prevBarPpqn
+            const newBarPpqn = barPpqn(newNominator, newDenominator)
+
+            // Get successor events and calculate their new relativePositions
+            const successorEvents = allEvents.slice(insertAfterIndex + 1) as MockEvent[]
+            const newRelPositions: int[] = [newRelPos]
+
+            let accPpqn = newEventPpqn
+            let prevDurationBar = newBarPpqn
+
+            for (let i = 0; i < successorEvents.length; i++) {
+                const event = successorEvents[i]
+                if (i === 0) {
+                    // First successor: recalculate based on distance from new event
+                    const barsToNext = (event.accumulatedPpqn - accPpqn) / prevDurationBar
+                    const relPos = Math.max(1, Math.round(barsToNext))
+                    newRelPositions.push(relPos)
+                    accPpqn += relPos * prevDurationBar
+                } else {
+                    // Other successors: keep original relativePosition
+                    newRelPositions.push(event.relativePosition)
+                    accPpqn += event.relativePosition * prevDurationBar
+                }
+                prevDurationBar = barPpqn(event.nominator, event.denominator)
+            }
+
+            // Calculate accumulated bars
+            const newAccumulatedBars: int[] = []
+            let accBars = 0
+            for (const relPos of newRelPositions) {
+                accBars += relPos
+                newAccumulatedBars.push(accBars)
+            }
+
+            return {newRelPositions, newAccumulatedBars}
+        }
+
+        it("should create event at bar 3 with 3/4 and adjust successors", () => {
+            const events: MockEvent[] = [
+                {index: 0, relativePosition: 4, nominator: 5, denominator: 4, accumulatedPpqn: 15360},
+                {index: 1, relativePosition: 2, nominator: 7, denominator: 8, accumulatedPpqn: 24960},
+                {index: 2, relativePosition: 3, nominator: 11, denominator: 16, accumulatedPpqn: 35040},
+                {index: 3, relativePosition: 3, nominator: 4, denominator: 4, accumulatedPpqn: 42960}
+            ]
+
+            // Bar 3 = 2 bars of 4/4 = 7680 ppqn
+            const position = 2 * barPpqn(4, 4) // 7680
+            const result = simulateCreateEvent(events, STORAGE_SIGNATURE, position, 3, 4)
+
+            // Logic Pro shows bars: [3, 6, 8, 11, 14] (1-indexed)
+            // So accumulated bars (0-indexed) should be: [2, 5, 7, 10, 13]
+            expect(result.newAccumulatedBars).toEqual([2, 5, 7, 10, 13])
+
+            // Verify relative positions: [2, 3, 2, 3, 3]
+            expect(result.newRelPositions).toEqual([2, 3, 2, 3, 3])
+        })
+    })
 })

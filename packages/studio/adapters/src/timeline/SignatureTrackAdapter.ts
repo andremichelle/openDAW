@@ -1,8 +1,19 @@
-import {assert, int, Notifier, Observer, Option, panic, Subscription, Terminable, Terminator} from "@opendaw/lib-std"
+import {
+    assert,
+    int,
+    Notifier,
+    Observer,
+    Option,
+    panic,
+    Subscription,
+    Terminable,
+    Terminator,
+    UUID
+} from "@opendaw/lib-std"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {SignatureEventBoxAdapter} from "./SignatureEventBoxAdapter"
-import {Signature, SignatureTrack, TimelineBox} from "@opendaw/studio-boxes"
+import {Signature, SignatureEventBox, SignatureTrack, TimelineBox} from "@opendaw/studio-boxes"
 import {IndexedBoxAdapterCollection} from "../IndexedBoxAdapterCollection"
 import {Pointers} from "@opendaw/studio-enums"
 
@@ -144,6 +155,42 @@ export class SignatureTrackAdapter implements Terminable {
             accumulatedPpqn += relativePosition * durationBar
             durationBar = PPQN.fromSignature(event.nominator, event.denominator)
         }
+    }
+
+    createEvent(position: ppqn, nominator: int, denominator: int): void {
+        const allEvents = Array.from(this.iterateAll())
+        let prevEvent: SignatureEvent = allEvents[0]
+        let insertAfterIndex = 0
+        for (let i = 1; i < allEvents.length; i++) {
+            if (allEvents[i].accumulatedPpqn > position) {break}
+            prevEvent = allEvents[i]
+            insertAfterIndex = i
+        }
+        const prevBarPpqn = PPQN.fromSignature(prevEvent.nominator, prevEvent.denominator)
+        const barsFromPrev = (position - prevEvent.accumulatedPpqn) / prevBarPpqn
+        const newRelativePosition = Math.max(1, Math.round(barsFromPrev))
+        const newIndex = prevEvent.index + 1
+        const successorEvents = allEvents.slice(insertAfterIndex + 1)
+        const newEventPpqn = prevEvent.accumulatedPpqn + newRelativePosition * prevBarPpqn
+        const newBarPpqn = PPQN.fromSignature(nominator, denominator)
+        for (let i = 0; i < successorEvents.length; i++) {
+            const event = successorEvents[i]
+            const adapter = this.adapterAt(event.index)
+            if (adapter.isEmpty()) {continue}
+            const box = adapter.unwrap().box
+            box.index.setValue(event.index + 1)
+            if (i === 0) {
+                const barsToNext = (event.accumulatedPpqn - newEventPpqn) / newBarPpqn
+                box.relativePosition.setValue(Math.max(1, Math.round(barsToNext)))
+            }
+        }
+        SignatureEventBox.create(this.#context.boxGraph, UUID.generate(), box => {
+            box.index.setValue(newIndex)
+            box.relativePosition.setValue(newRelativePosition)
+            box.nominator.setValue(nominator)
+            box.denominator.setValue(denominator)
+            box.events.refer(this.#signatureTrack.events)
+        })
     }
 
     adapterAt(index: int): Option<SignatureEventBoxAdapter> {return this.#adapters.getAdapterByIndex(index)}
