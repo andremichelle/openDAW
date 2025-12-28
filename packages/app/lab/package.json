@@ -1,7 +1,7 @@
 {
     "name": "@opendaw/lab",
     "private": true,
-    "version": "0.0.84",
+    "version": "0.0.85",
     "type": "module",
     "license": "LGPL-3.0-or-later",
     "scripts": {
@@ -11,20 +11,20 @@
         "lint": "eslint \"src/**/*.ts\""
     },
     "dependencies": {
-        "@opendaw/lib-box": "^0.0.62",
-        "@opendaw/lib-dom": "^0.0.62",
-        "@opendaw/lib-dsp": "^0.0.61",
-        "@opendaw/lib-jsx": "^0.0.62",
-        "@opendaw/lib-runtime": "^0.0.61",
-        "@opendaw/lib-std": "^0.0.61",
-        "@opendaw/studio-adapters": "^0.0.70",
-        "@opendaw/studio-boxes": "^0.0.63",
-        "@opendaw/studio-core": "^0.0.84",
-        "@opendaw/studio-enums": "^0.0.53"
+        "@opendaw/lib-box": "^0.0.63",
+        "@opendaw/lib-dom": "^0.0.63",
+        "@opendaw/lib-dsp": "^0.0.62",
+        "@opendaw/lib-jsx": "^0.0.63",
+        "@opendaw/lib-runtime": "^0.0.62",
+        "@opendaw/lib-std": "^0.0.62",
+        "@opendaw/studio-adapters": "^0.0.71",
+        "@opendaw/studio-boxes": "^0.0.64",
+        "@opendaw/studio-core": "^0.0.85",
+        "@opendaw/studio-enums": "^0.0.54"
     },
     "devDependencies": {
         "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/typescript-config": "^0.0.27",
+        "@opendaw/typescript-config": "^0.0.28",
         "@types/node": "^22.15.18",
         "eslint": "^8.57.0",
         "sass": "^1.88.0",

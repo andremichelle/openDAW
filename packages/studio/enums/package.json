@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/studio-enums",
-    "version": "0.0.53",
+    "version": "0.0.54",
     "license": "LGPL-3.0-or-later",
     "publishConfig": {
         "access": "public"
@@ -22,11 +22,11 @@
         "test": "echo \"No tests to run\""
     },
     "dependencies": {
-        "@opendaw/lib-std": "^0.0.61"
+        "@opendaw/lib-std": "^0.0.62"
     },
     "devDependencies": {
         "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/typescript-config": "^0.0.27"
+        "@opendaw/typescript-config": "^0.0.28"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }
