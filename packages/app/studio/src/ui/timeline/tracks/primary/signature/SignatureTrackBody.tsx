@@ -1,7 +1,7 @@
 import css from "./SignatureTrackBody.sass?inline"
 import {Lifecycle, Nullable} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService.ts"
-import {Signature, SignatureTrackAdapter, TimelineBoxAdapter} from "@opendaw/studio-adapters"
+import {SignatureEvent, SignatureTrackAdapter, TimelineBoxAdapter} from "@opendaw/studio-adapters"
 import {createElement} from "@opendaw/lib-jsx"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {SignatureRenderer} from "@/ui/timeline/tracks/primary/signature/SignatureRenderer"
@@ -26,8 +26,8 @@ export const SignatureTrackBody = ({lifecycle, service}: Construct) => {
         SignatureRenderer.createTrackRenderer(canvas, range, signatureTrackAdapter)
     )
 
-    const findSignatureAtPosition = (ppqn: number): Nullable<Signature> => {
-        let result: Nullable<Signature> = null
+    const findSignatureAtPosition = (ppqn: number): Nullable<SignatureEvent> => {
+        let result: Nullable<SignatureEvent> = null
         for (const sig of signatureTrackAdapter.iterateAll()) {
             if (sig.accumulatedPpqn > ppqn) {break}
             result = sig
@@ -35,8 +35,8 @@ export const SignatureTrackBody = ({lifecycle, service}: Construct) => {
         return result
     }
 
-    const capturing = new ElementCapturing<Signature>(canvas, {
-        capture: (localX: number, _localY: number): Nullable<Signature> => {
+    const capturing = new ElementCapturing<SignatureEvent>(canvas, {
+        capture: (localX: number, _localY: number): Nullable<SignatureEvent> => {
             const pointer = range.xToUnit(localX)
             const signature = findSignatureAtPosition(pointer)
             if (signature === null) {return null}

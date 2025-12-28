@@ -1,8 +1,8 @@
 import {ContextMenu} from "@/ui/ContextMenu"
 import {MenuItem} from "@/ui/model/menu-item"
 import {ElementCapturing} from "@/ui/canvas/capturing"
-import {Parsing, Signature, SignatureTrackAdapter} from "@opendaw/studio-adapters"
-import {clamp, EmptyExec, int} from "@opendaw/lib-std"
+import {Parsing, SignatureEvent, SignatureTrackAdapter} from "@opendaw/studio-adapters"
+import {clamp, EmptyExec} from "@opendaw/lib-std"
 import {BoxEditing} from "@opendaw/lib-box"
 import {DebugMenus} from "@/ui/menu/debug"
 import {TimelineRange} from "@opendaw/studio-core"
@@ -14,25 +14,15 @@ export namespace SignatureContextMenu {
         [4, 4], [3, 4], [2, 4], [6, 8], [5, 4], [7, 8], [12, 8]
     ] as const
 
-    const findIndexForSignature = (trackAdapter: SignatureTrackAdapter, signature: Signature): int => {
-        let index = 0
-        for (const sig of trackAdapter.iterateAll()) {
-            if (sig.accumulatedPpqn === signature.accumulatedPpqn) {return index}
-            index++
-        }
-        return -1
-    }
-
     export const install = (element: Element,
                             range: TimelineRange,
-                            capturing: ElementCapturing<Signature>,
+                            capturing: ElementCapturing<SignatureEvent>,
                             editing: BoxEditing,
                             trackAdapter: SignatureTrackAdapter) => {
         return ContextMenu.subscribe(element, ({addItems, client}: ContextMenu.Collector) => {
             const signature = capturing.captureEvent(client)
             if (signature === null) {return}
-            const optAdapter = trackAdapter.adapterAt(findIndexForSignature(trackAdapter, signature))
-            if (optAdapter.isEmpty()) {return}
+            const optAdapter = trackAdapter.adapterAt(signature.index)
             addItems(
                 MenuItem.default({label: "Edit Signature"}).setTriggerProcedure(() => {
                     const resolvers = Promise.withResolvers<string>()

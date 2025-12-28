@@ -1,4 +1,4 @@
-import {Signature, SignatureTrackAdapter} from "@opendaw/studio-adapters"
+import {SignatureEvent, SignatureTrackAdapter} from "@opendaw/studio-adapters"
 import {isDefined} from "@opendaw/lib-std"
 import {CanvasPainter} from "@/ui/canvas/painter"
 import {Context2d} from "@opendaw/lib-dom"
@@ -35,9 +35,9 @@ export namespace SignatureRenderer {
 
     export const renderSignature = (context: CanvasRenderingContext2D,
                                     range: TimelineRange,
-                                    signature: Signature,
+                                    signature: SignatureEvent,
                                     height: number,
-                                    next?: Signature): void => {
+                                    next?: SignatureEvent): void => {
         const x0 = Math.floor(range.unitToX(signature.accumulatedPpqn) * devicePixelRatio)
         const label = `${signature.nominator}/${signature.denominator}`
         let text: string
@@ -55,7 +55,7 @@ export namespace SignatureRenderer {
     }
 
     export const computeWidth = (context: CanvasRenderingContext2D,
-                                 signature: Signature): number => {
+                                 signature: SignatureEvent): number => {
         const label = `${signature.nominator}/${signature.denominator}`
         const width = context.measureText(label).width
         return (width + textPadding) / devicePixelRatio
