@@ -1,6 +1,6 @@
 import {BlockFlag, ProcessInfo} from "./processing"
-import {AudioBuffer, Fragmentor, PPQN, RenderQuantum} from "@opendaw/lib-dsp"
-import {assert, Bits, int, TAU} from "@opendaw/lib-std"
+import {AudioBuffer, PPQN, RenderQuantum} from "@opendaw/lib-dsp"
+import {assert, Bits, int, isNotNull, Iterables, TAU} from "@opendaw/lib-std"
 import {TimeInfo} from "./TimeInfo"
 import {TimelineBoxAdapter} from "@opendaw/studio-adapters"
 
@@ -18,12 +18,22 @@ export class Metronome {
     process({blocks}: ProcessInfo): void {
         blocks.forEach(({p0, p1, bpm, s0, s1, flags}) => {
             if (this.#timeInfo.metronomeEnabled && Bits.every(flags, BlockFlag.transporting)) {
-                const [nominator, denominator] = this.#timelineBoxAdapter.signature
-                const stepSize = PPQN.fromSignature(1, denominator)
-                for (const position of Fragmentor.iterate(p0, p1, stepSize)) {
-                    assert(p0 <= position && position < p1, () => `${position} out of bounds (${p0}, ${p1})`)
-                    const distanceToEvent = Math.floor(PPQN.pulsesToSamples(position - p0, bpm, sampleRate))
-                    this.#clicks.push(new Click(position, s0 + distanceToEvent, nominator, denominator))
+                for (const [curr, next] of Iterables.pairWise(this.#timelineBoxAdapter.signatureTrack.iterateAll())) {
+                    if (isNotNull(next) && next.accumulatedPpqn <= p0) {continue}
+                    if (curr.accumulatedPpqn >= p1) {break}
+                    const regionStart = Math.max(p0, curr.accumulatedPpqn)
+                    const regionEnd = isNotNull(next) ? Math.min(p1, next.accumulatedPpqn) : p1
+                    const stepSize = PPQN.fromSignature(1, curr.denominator)
+                    const signatureStart = curr.accumulatedPpqn
+                    const offset = regionStart - signatureStart
+                    const firstBeatIndex = Math.ceil(offset / stepSize)
+                    let position = signatureStart + firstBeatIndex * stepSize
+                    while (position < regionEnd) {
+                        const distanceToEvent = Math.floor(PPQN.pulsesToSamples(position - p0, bpm, sampleRate))
+                        const beatIndex = Math.round((position - signatureStart) / stepSize)
+                        this.#clicks.push(new Click(s0 + distanceToEvent, beatIndex % curr.nominator === 0))
+                        position += stepSize
+                    }
                 }
             }
             this.#output.clear(s0, s1)
@@ -45,9 +55,9 @@ class Click {
     #position: int = 0 | 0
     #startIndex: int = 0 | 0
 
-    constructor(timeCode: number, startIndex: int, nominator: int, denominator: int) {
+    constructor(startIndex: int, isAccent: boolean) {
         assert(startIndex >= 0 && startIndex < RenderQuantum, `${startIndex} out of bounds`)
-        this.#frequency = PPQN.toParts(timeCode, nominator, denominator).beats === 0 ? 880.0 : 440.0
+        this.#frequency = isAccent ? 880.0 : 440.0
         this.#startIndex = startIndex
     }
 
