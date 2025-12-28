@@ -1,7 +1,6 @@
 import css from "./TimeAxis.sass?inline"
 import {clamp, EmptyExec, isDefined, Lifecycle, Nullable, Option} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {Propagation} from "@opendaw/lib-box"
 import {StudioService} from "@/service/StudioService.ts"
 import {TimeGrid, TimelineRange} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
@@ -34,11 +33,9 @@ export const TimeAxis = ({lifecycle, service, snapping, range, mapper}: Construc
     let endMarkerPosition: Nullable<ppqn> = null
     const {
         project: {
-            timelineBox: {signature, durationInPulses},
+            timelineBox: {durationInPulses},
             timelineBoxAdapter: {signatureTrack},
-            engine,
-            editing,
-            boxGraph
+            engine, editing
         }
     } = service
     const {position, playbackTimestamp} = engine
@@ -55,7 +52,7 @@ export const TimeAxis = ({lifecycle, service, snapping, range, mapper}: Construc
                 const x = Math.floor(range.unitToX(pulse) * devicePixelRatio)
                 const textX = x + 5
                 if (isBar) {
-                    context.fillRect(x, 0, 2, height)
+                    context.fillRect(x, 0, devicePixelRatio, height)
                     context.fillText((bars + 1).toFixed(0), textX, textY)
                 } else if (isBeat) {
                     context.fillRect(x, height * 0.5, 1, height * 0.5)
@@ -119,7 +116,7 @@ export const TimeAxis = ({lifecycle, service, snapping, range, mapper}: Construc
         Html.watchResize(canvas, onResize),
         range.subscribe(painter.requestUpdate),
         playbackTimestamp.subscribe(painter.requestUpdate),
-        boxGraph.subscribeVertexUpdates(Propagation.Children, signature.address, painter.requestUpdate)
+        signatureTrack.subscribe(painter.requestUpdate)
     )
     return (
         <div className={className}>

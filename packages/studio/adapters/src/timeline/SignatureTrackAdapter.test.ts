@@ -201,4 +201,86 @@ describe("SignatureTrackAdapter", () => {
             }
         })
     })
+    describe("deleteAdapter algorithm", () => {
+        // Test data: Storage 4/4
+        // Original events: [bar 5 (5/4), bar 7 (7/8), bar 10 (11/16), bar 13 (4/4)]
+        // Original ppqn: [15360, 24960, 35040, 42960]
+        //
+        // After deleting the 5/4 event (bar 5), Logic Pro shows:
+        // - 7/8 goes to bar 8
+        // - 11/16 goes to bar 10
+        // - 4/4 goes to bar 14
+
+        type MockEvent = {
+            index: int
+            relativePosition: int
+            nominator: int
+            denominator: int
+            accumulatedPpqn: ppqn
+        }
+
+        const simulateDeleteAdapter = (
+            events: MockEvent[],
+            storage: Readonly<[int, int]>,
+            deleteIndex: int
+        ): { newRelPositions: int[], newAccumulatedBars: int[] } => {
+            const deleteEventIndex = events.findIndex(e => e.index === deleteIndex)
+            if (deleteEventIndex === -1) {return {newRelPositions: [], newAccumulatedBars: []}}
+
+            const eventsAfter = events.slice(deleteEventIndex + 1)
+            const originalPositions = eventsAfter.map(e => e.accumulatedPpqn)
+
+            // Determine previous signature
+            const prevEvent = deleteEventIndex > 0 ? events[deleteEventIndex - 1] : null
+            const [prevNom, prevDenom] = prevEvent !== null
+                ? [prevEvent.nominator, prevEvent.denominator]
+                : storage
+            const prevAccumulatedPpqn = prevEvent !== null ? prevEvent.accumulatedPpqn : 0
+
+            // Recalculate using round() for deletion
+            const newRelPositions: int[] = []
+            let accumulatedPpqn = prevAccumulatedPpqn
+            let durationBar = barPpqn(prevNom, prevDenom)
+
+            for (let i = 0; i < eventsAfter.length; i++) {
+                const targetPpqn = originalPositions[i]
+                const exactBars = (targetPpqn - accumulatedPpqn) / durationBar
+                const newRelPos = Math.max(1, Math.round(exactBars))
+                newRelPositions.push(newRelPos)
+
+                accumulatedPpqn += newRelPos * durationBar
+                durationBar = barPpqn(eventsAfter[i].nominator, eventsAfter[i].denominator)
+            }
+
+            // Calculate accumulated bars
+            const newAccumulatedBars: int[] = []
+            let accBars = prevEvent !== null
+                ? events.slice(0, deleteEventIndex).reduce((sum, e) => sum + e.relativePosition, 0)
+                : 0
+            for (const relPos of newRelPositions) {
+                accBars += relPos
+                newAccumulatedBars.push(accBars)
+            }
+
+            return {newRelPositions, newAccumulatedBars}
+        }
+
+        it("should recalculate positions when deleting first event (5/4)", () => {
+            const events: MockEvent[] = [
+                {index: 0, relativePosition: 4, nominator: 5, denominator: 4, accumulatedPpqn: 15360},
+                {index: 1, relativePosition: 2, nominator: 7, denominator: 8, accumulatedPpqn: 24960},
+                {index: 2, relativePosition: 3, nominator: 11, denominator: 16, accumulatedPpqn: 35040},
+                {index: 3, relativePosition: 3, nominator: 4, denominator: 4, accumulatedPpqn: 42960}
+            ]
+
+            const result = simulateDeleteAdapter(events, STORAGE_SIGNATURE, 0)
+
+            // Logic Pro shows bars: [8, 10, 14] (1-indexed)
+            // So accumulated bars (0-indexed) should be: [7, 9, 13]
+            expect(result.newAccumulatedBars).toEqual([7, 9, 13])
+
+            // Verify relative positions
+            expect(result.newRelPositions).toEqual([7, 2, 4])
+        })
+    })
 })

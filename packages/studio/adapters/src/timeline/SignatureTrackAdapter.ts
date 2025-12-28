@@ -83,13 +83,11 @@ export class SignatureTrackAdapter implements Terminable {
         const originalPositions = originalEvents.map(e => e.accumulatedPpqn)
         this.#signature.nominator.setValue(nominator)
         this.#signature.denominator.setValue(denominator)
-
         // Recalculate each event's relativePosition to preserve approximate absolute positions.
         // This matches Logic Pro's behavior of preserving absolute time positions.
         let accumulatedPpqn: ppqn = 0.0
         let accumulatedFraction = 0.0
         let durationBar = PPQN.fromSignature(nominator, denominator)
-
         for (let i = 0; i < originalEvents.length; i++) {
             const event = originalEvents[i]
             const adapter = this.adapterAt(event.index)
@@ -101,8 +99,8 @@ export class SignatureTrackAdapter implements Terminable {
             accumulatedFraction += fraction
             let relativePosition = barsInt
             if (accumulatedFraction >= 1.0) {
-                relativePosition += 1
-                accumulatedFraction -= 1.0
+                relativePosition++
+                accumulatedFraction--
             }
             relativePosition = Math.max(1, relativePosition)
             adapter.unwrap().box.relativePosition.setValue(relativePosition)
@@ -112,7 +110,40 @@ export class SignatureTrackAdapter implements Terminable {
     }
 
     deleteAdapter(adapter: SignatureEventBoxAdapter): void {
-        // TODO Implement. Usse logic and style from changeSignature above
+        const deleteIndex = adapter.index
+        const allEvents = Array.from(this.iterateAll()).slice(1)
+        const deleteEventIndex = allEvents.findIndex(e => e.index === deleteIndex)
+        if (deleteEventIndex === -1) {return}
+
+        // Capture original ppqn positions of events AFTER the deleted one
+        const eventsAfter = allEvents.slice(deleteEventIndex + 1)
+        const originalPositions = eventsAfter.map(e => e.accumulatedPpqn)
+
+        // Determine the signature that will precede the remaining events
+        const prevEvent = deleteEventIndex > 0 ? allEvents[deleteEventIndex - 1] : null
+        const [prevNom, prevDenom] = prevEvent !== null
+            ? [prevEvent.nominator, prevEvent.denominator]
+            : this.storageSignature
+        const prevAccumulatedPpqn = prevEvent !== null ? prevEvent.accumulatedPpqn : 0.0
+
+        // Delete the adapter's box from the graph
+        adapter.box.delete()
+
+        // Recalculate relativePositions for events after the deleted one using round()
+        let accumulatedPpqn: ppqn = prevAccumulatedPpqn
+        let durationBar = PPQN.fromSignature(prevNom, prevDenom)
+
+        for (let i = 0; i < eventsAfter.length; i++) {
+            const event = eventsAfter[i]
+            const eventAdapter = this.adapterAt(event.index)
+            if (eventAdapter.isEmpty()) {continue}
+            const targetPpqn = originalPositions[i]
+            const exactBars = (targetPpqn - accumulatedPpqn) / durationBar
+            const relativePosition = Math.max(1, Math.round(exactBars))
+            eventAdapter.unwrap().box.relativePosition.setValue(relativePosition)
+            accumulatedPpqn += relativePosition * durationBar
+            durationBar = PPQN.fromSignature(event.nominator, event.denominator)
+        }
     }
 
     adapterAt(index: int): Option<SignatureEventBoxAdapter> {return this.#adapters.getAdapterByIndex(index)}
