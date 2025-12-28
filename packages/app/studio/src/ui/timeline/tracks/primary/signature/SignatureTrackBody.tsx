@@ -68,7 +68,19 @@ export const SignatureTrackBody = ({lifecycle, service}: Construct) => {
                 },
                 approve: (): void => {
                     if (dragPreview !== null && dragPreview.targetPpqn !== event.accumulatedPpqn) {
-                        editing.modify(() => signatureTrackAdapter.moveEvent(signatureAdapter, dragPreview!.targetPpqn))
+                        editing.modify(() => {
+                            const targetPpqn = dragPreview!.targetPpqn
+                            for (const sig of signatureTrackAdapter.iterateAll()) {
+                                if (sig.index !== -1 && sig.index !== event.index && sig.accumulatedPpqn === targetPpqn) {
+                                    const targetAdapter = signatureTrackAdapter.adapterAt(sig.index)
+                                    if (targetAdapter.nonEmpty()) {
+                                        signatureTrackAdapter.deleteAdapter(targetAdapter.unwrap())
+                                    }
+                                    break
+                                }
+                            }
+                            signatureTrackAdapter.moveEvent(signatureAdapter, targetPpqn)
+                        })
                     }
                     dragPreview = null
                     requestUpdate()
@@ -80,12 +92,21 @@ export const SignatureTrackBody = ({lifecycle, service}: Construct) => {
             })
         }),
         Events.subscribeDblDwn(canvas, event => {
-            const localX = event.clientX - canvas.getBoundingClientRect().left
+            const clientRect = canvas.getBoundingClientRect()
+            const localX = event.clientX - clientRect.left
+            const capturedEvent = capturing.captureLocalPoint(localX, 0)
+            if (capturedEvent !== null) {
+                if (capturedEvent.index === -1) {return}
+                const adapter = signatureTrackAdapter.adapterAt(capturedEvent.index)
+                if (adapter.nonEmpty()) {
+                    editing.modify(() => signatureTrackAdapter.deleteAdapter(adapter.unwrap()))
+                }
+                return
+            }
             const position = range.xToUnit(localX)
             const signature = findSignatureAtPosition(position)
             if (signature === null) {return}
             const resolvers = Promise.withResolvers<string>()
-            const clientRect = canvas.getBoundingClientRect()
             Surface.get(canvas).flyout.appendChild(FloatingTextInput({
                 position: {x: event.clientX, y: clientRect.top + clientRect.height / 2},
                 value: `${signature.nominator}/${signature.denominator}`,

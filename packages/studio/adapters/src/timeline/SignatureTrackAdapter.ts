@@ -1,4 +1,15 @@
-import {int, Notifier, Observer, Option, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {
+    int,
+    isNull,
+    Notifier,
+    Nullable,
+    Observer,
+    Option,
+    Subscription,
+    Terminable,
+    Terminator,
+    UUID
+} from "@opendaw/lib-std"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {SignatureEventBoxAdapter} from "./SignatureEventBoxAdapter"
@@ -88,7 +99,6 @@ export class SignatureTrackAdapter implements Terminable {
         this.#signature.nominator.setValue(nominator)
         this.#signature.denominator.setValue(denominator)
         // Recalculate each event's relativePosition to preserve approximate absolute positions.
-        // This matches Logic Pro's behavior of preserving absolute time positions.
         let accumulatedPpqn: ppqn = 0.0
         let accumulatedFraction = 0.0
         let durationBar = PPQN.fromSignature(nominator, denominator)
@@ -190,8 +200,8 @@ export class SignatureTrackAdapter implements Terminable {
         const movedEvent = allEvents[movedIdx]
         if (targetPpqn === movedEvent.accumulatedPpqn) {return}
         const originalBars = allEvents.map(e => e.accumulatedBars)
-        const storageBarPpqn = PPQN.fromSignature(...this.storageSignature)
-        const targetBar = Math.max(1, Math.round(targetPpqn / storageBarPpqn))
+        const targetBar = this.#ppqnToBar(targetPpqn, movedEvent.index)
+        if (targetBar === movedEvent.accumulatedBars) {return}
         const newBars = [...originalBars]
         newBars[movedIdx] = targetBar
         const sortedIndices = newBars
@@ -213,17 +223,34 @@ export class SignatureTrackAdapter implements Terminable {
         }
     }
 
+    #ppqnToBar(position: ppqn, excludeIndex: int): int {
+        let prevEvent: Nullable<SignatureEvent> = null
+        for (const event of this.iterateAll()) {
+            if (event.index === excludeIndex) {continue}
+            if (event.accumulatedPpqn > position) {break}
+            prevEvent = event
+        }
+        if (isNull(prevEvent)) {
+            const [nom, denom] = this.storageSignature
+            const barPpqn = PPQN.fromSignature(nom, denom)
+            return Math.max(1, Math.round(position / barPpqn))
+        }
+        const barPpqn = PPQN.fromSignature(prevEvent.nominator, prevEvent.denominator)
+        const barsFromEvent = Math.round((position - prevEvent.accumulatedPpqn) / barPpqn)
+        return Math.max(1, prevEvent.accumulatedBars + barsFromEvent)
+    }
+
     #findSignatureEventAt(position: ppqn): { event: SignatureEvent, barPpqn: ppqn } {
-        let prevEvent: SignatureEvent | null = null
+        let prevEvent: Nullable<SignatureEvent> = null
         for (const event of this.iterateAll()) {
             if (event.accumulatedPpqn > position) {break}
             prevEvent = event
         }
-        if (prevEvent === null) {
-            const [nom, denom] = this.storageSignature
+        if (isNull(prevEvent)) {
+            const [nominator, denominator] = this.storageSignature
             return {
-                event: {index: -1, accumulatedPpqn: 0, accumulatedBars: 0, nominator: nom, denominator: denom},
-                barPpqn: PPQN.fromSignature(nom, denom)
+                event: {index: -1, accumulatedPpqn: 0, accumulatedBars: 0, nominator, denominator},
+                barPpqn: PPQN.fromSignature(nominator, denominator)
             }
         }
         return {

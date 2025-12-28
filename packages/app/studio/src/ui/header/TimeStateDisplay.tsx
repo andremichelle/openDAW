@@ -52,7 +52,6 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
         projectActiveLifeTime.ownAll(
             boxGraph.subscribeVertexUpdates(Propagation.Children,
                 timelineBoxAdapter.box.signature.address, updateSignatureLabel),
-            timelineBoxAdapter.signatureTrack.object.enabled.subscribe(updateSignatureLabel),
             timelineBoxAdapter.signatureTrack.subscribe(updateSignatureLabel),
             signatureVisible.subscribe(updateSignatureLabel),
             signatureTrack.subscribe(updateSignatureLabel),
