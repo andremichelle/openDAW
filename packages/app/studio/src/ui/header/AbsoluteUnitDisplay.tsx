@@ -17,7 +17,7 @@ type Construct = {
 
 export const AbsoluteUnitDisplay = ({lifecycle, service}: Construct) => {
     const timeUnits = ["Hours", "Minutes", "Seconds", "Frames", "SubFrames"]
-    const timeUnitIndex = new DefaultObservableValue(3)
+    const timeUnitIndex = new DefaultObservableValue(2)
     const hoursUnitString = new DefaultObservableValue("1")
     const minutesUnitString = new DefaultObservableValue("01")
     const secondsUnitString = new DefaultObservableValue("01")
