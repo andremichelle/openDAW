@@ -19,12 +19,13 @@ export class Metronome {
         blocks.forEach(({p0, p1, bpm, s0, s1, flags}) => {
             if (this.#timeInfo.metronomeEnabled && Bits.every(flags, BlockFlag.transporting)) {
                 for (const [curr, next] of Iterables.pairWise(this.#timelineBoxAdapter.signatureTrack.iterateAll())) {
-                    if (isNotNull(next) && next.accumulatedPpqn <= p0) {continue}
-                    if (curr.accumulatedPpqn >= p1) {break}
-                    const regionStart = Math.max(p0, curr.accumulatedPpqn)
-                    const regionEnd = isNotNull(next) ? Math.min(p1, next.accumulatedPpqn) : p1
-                    const stepSize = PPQN.fromSignature(1, curr.denominator)
                     const signatureStart = curr.accumulatedPpqn
+                    const signatureEnd = isNotNull(next) ? next.accumulatedPpqn : Infinity
+                    if (signatureEnd <= p0) {continue}
+                    if (signatureStart >= p1 && curr.index !== -1) {break}
+                    const regionStart = curr.index === -1 ? p0 : Math.max(p0, signatureStart)
+                    const regionEnd = Math.min(p1, signatureEnd)
+                    const stepSize = PPQN.fromSignature(1, curr.denominator)
                     const offset = regionStart - signatureStart
                     const firstBeatIndex = Math.ceil(offset / stepSize)
                     let position = signatureStart + firstBeatIndex * stepSize
