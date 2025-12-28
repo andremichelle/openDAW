@@ -1,15 +1,4 @@
-import {
-    assert,
-    int,
-    Notifier,
-    Observer,
-    Option,
-    panic,
-    Subscription,
-    Terminable,
-    Terminator,
-    UUID
-} from "@opendaw/lib-std"
+import {int, Notifier, Observer, Option, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {SignatureEventBoxAdapter} from "./SignatureEventBoxAdapter"
@@ -68,11 +57,13 @@ export class SignatureTrackAdapter implements Terminable {
     dispatchChange(): void {this.changeNotifier.notify()}
 
     signatureAt(position: ppqn): Readonly<[int, int]> {
-        assert(position >= 0.0, "Position in signatureAt must be non-negative")
+        position = Math.max(0, position)
+        let result: Readonly<[int, int]> = this.storageSignature
         for (const {accumulatedPpqn, nominator, denominator} of this.iterateAll()) {
-            if (accumulatedPpqn >= position) return [nominator, denominator]
+            if (accumulatedPpqn > position) {break}
+            result = [nominator, denominator]
         }
-        return panic("Unvalid signature state")
+        return result
     }
 
     * iterateAll(): IterableIterator<SignatureEvent> {
@@ -125,25 +116,19 @@ export class SignatureTrackAdapter implements Terminable {
         const allEvents = Array.from(this.iterateAll()).slice(1)
         const deleteEventIndex = allEvents.findIndex(e => e.index === deleteIndex)
         if (deleteEventIndex === -1) {return}
-
         // Capture original ppqn positions of events AFTER the deleted one
         const eventsAfter = allEvents.slice(deleteEventIndex + 1)
         const originalPositions = eventsAfter.map(e => e.accumulatedPpqn)
-
         // Determine the signature that will precede the remaining events
         const prevEvent = deleteEventIndex > 0 ? allEvents[deleteEventIndex - 1] : null
         const [prevNom, prevDenom] = prevEvent !== null
             ? [prevEvent.nominator, prevEvent.denominator]
             : this.storageSignature
         const prevAccumulatedPpqn = prevEvent !== null ? prevEvent.accumulatedPpqn : 0.0
-
-        // Delete the adapter's box from the graph
         adapter.box.delete()
-
         // Recalculate relativePositions for events after the deleted one using round()
         let accumulatedPpqn: ppqn = prevAccumulatedPpqn
         let durationBar = PPQN.fromSignature(prevNom, prevDenom)
-
         for (let i = 0; i < eventsAfter.length; i++) {
             const event = eventsAfter[i]
             const eventAdapter = this.adapterAt(event.index)
@@ -194,6 +179,48 @@ export class SignatureTrackAdapter implements Terminable {
     }
 
     adapterAt(index: int): Option<SignatureEventBoxAdapter> {return this.#adapters.getAdapterByIndex(index)}
+
+    #findSignatureEventAt(position: ppqn): { event: SignatureEvent, barPpqn: ppqn } {
+        let prevEvent: SignatureEvent | null = null
+        for (const event of this.iterateAll()) {
+            if (event.accumulatedPpqn > position) {break}
+            prevEvent = event
+        }
+        if (prevEvent === null) {
+            const [nom, denom] = this.storageSignature
+            return {
+                event: {index: -1, accumulatedPpqn: 0, accumulatedBars: 0, nominator: nom, denominator: denom},
+                barPpqn: PPQN.fromSignature(nom, denom)
+            }
+        }
+        return {
+            event: prevEvent,
+            barPpqn: PPQN.fromSignature(prevEvent.nominator, prevEvent.denominator)
+        }
+    }
+
+    floorToBar(position: ppqn): ppqn {
+        const {event, barPpqn} = this.#findSignatureEventAt(position)
+        const barsFromEvent = Math.floor((position - event.accumulatedPpqn) / barPpqn)
+        return event.accumulatedPpqn + barsFromEvent * barPpqn
+    }
+
+    ceilToBar(position: ppqn): ppqn {
+        const {event, barPpqn} = this.#findSignatureEventAt(position)
+        const barsFromEvent = Math.ceil((position - event.accumulatedPpqn) / barPpqn)
+        return event.accumulatedPpqn + barsFromEvent * barPpqn
+    }
+
+    roundToBar(position: ppqn): ppqn {
+        const {event, barPpqn} = this.#findSignatureEventAt(position)
+        const barsFromEvent = Math.round((position - event.accumulatedPpqn) / barPpqn)
+        return event.accumulatedPpqn + barsFromEvent * barPpqn
+    }
+
+    barLengthAt(position: ppqn): ppqn {
+        const [nom, denom] = this.signatureAt(position)
+        return PPQN.fromSignature(nom, denom)
+    }
 
     terminate(): void {this.#terminator.terminate()}
 }

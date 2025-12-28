@@ -46,7 +46,7 @@ export class NoteContentDurationModifier implements NoteModifier {
     showPropertyLine(): Option<Line> {return Option.None}
     readContentDuration(region: NoteEventOwnerReader): number {
         return Math.max(region.loopDuration + this.#deltaLoopDuration,
-            Math.min(region.loopDuration, this.#snapping.value))
+            Math.min(region.loopDuration, this.#snapping.value(region.position)))
     }
     selectedModifyStrategy(): NoteModifyStrategy {return NoteModifyStrategy.Identity}
     unselectedModifyStrategy(): NoteModifyStrategy {return NoteModifyStrategy.Identity}

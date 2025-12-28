@@ -40,7 +40,7 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
                     position = region.complete
                 }
             })
-        const min = Math.min(region.duration, this.#tool.snapping.value)
+        const min = Math.min(region.duration, this.#tool.snapping.value(region.position))
         return Math.max(region.duration - Math.max(min, region.complete - position), -region.position)
     }
 }

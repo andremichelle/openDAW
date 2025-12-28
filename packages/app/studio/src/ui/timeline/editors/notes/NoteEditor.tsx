@@ -148,7 +148,7 @@ export const NoteEditor =
                 if (NoteSignal.isOn(signal)) {
                     const {pitch, velocity} = signal
                     const position = snapping.floor(engine.position.getValue())
-                    const duration = snapping.value
+                    const duration = snapping.value(position)
                     let createdNote = false
                     editing.modify(() => {
                         NoteEventBox.create(boxGraph, UUID.generate(), box => {

@@ -90,13 +90,14 @@ export namespace StudioShortcutManager {
             gc.register(gs["project-save-as"].shortcut, async () => await service.projectProfileService.saveAs(), {activeInTextField: true}),
             gc.register(gs["position-increment"].shortcut, () => {
                 if (!isPlaying.getValue()) {
-                    engine.setPosition(snapping.floor(position.getValue()) + snapping.value)
+                    const pos = position.getValue()
+                    engine.setPosition(snapping.floor(pos) + snapping.value(pos))
                 }
             }, {allowRepeat: true}),
             gc.register(gs["position-decrement"].shortcut, () => {
                 if (!engine.isPlaying.getValue()) {
-                    engine.setPosition(Math.max(0,
-                        snapping.ceil(position.getValue()) - snapping.value))
+                    const pos = position.getValue()
+                    engine.setPosition(Math.max(0, snapping.ceil(pos) - snapping.value(pos)))
                 }
             }, {allowRepeat: true}),
             gc.register(gs["toggle-playback"].shortcut, () => {

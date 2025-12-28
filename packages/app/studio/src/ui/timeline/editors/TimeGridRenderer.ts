@@ -13,7 +13,7 @@ export const renderTimeGrid = (context: CanvasRenderingContext2D,
                                bottom: number) => {
     TimeGrid.fragment(signatureTrack, range, ({pulse, ticks}) => {
         const x = Math.floor(range.unitToX(pulse) * devicePixelRatio)
-        context.fillStyle = ticks % snapping.value === 0 ? SnapColor : SubSnapColor
+        context.fillStyle = ticks % snapping.value(pulse) === 0 ? SnapColor : SubSnapColor
         context.fillRect(x, top, devicePixelRatio, bottom - top)
     }, {minLength: 16})
 }

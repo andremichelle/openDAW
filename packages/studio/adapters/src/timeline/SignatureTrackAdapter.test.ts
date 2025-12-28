@@ -399,4 +399,92 @@ describe("SignatureTrackAdapter", () => {
             expect(result.newRelPositions).toEqual([2, 3, 2, 3, 3])
         })
     })
+    describe("bar snapping methods", () => {
+        // Test data: Storage 4/4
+        // Signature events: [bar 5 (5/4), bar 7 (7/8), bar 10 (11/16), bar 13 (4/4)]
+        // Bar boundaries:
+        // - Bars 1-4: 4/4, bar length = 3840
+        //   Bar 1: 0, Bar 2: 3840, Bar 3: 7680, Bar 4: 11520
+        // - Bar 5: 5/4 starts at 15360, bar length = 4800
+        //   Bar 5: 15360, Bar 6: 20160
+        // - Bar 7: 7/8 starts at 24960, bar length = 3360
+        //   Bar 7: 24960, Bar 8: 28320, Bar 9: 31680
+        // - Bar 10: 11/16 starts at 35040, bar length = 2640
+        //   Bar 10: 35040, Bar 11: 37680, Bar 12: 40320
+        // - Bar 13: 4/4 starts at 42960, bar length = 3840
+        //   Bar 13: 42960, Bar 14: 46800, etc.
+
+        describe("floorToBar", () => {
+            it("should floor to bar boundaries in uniform 4/4", () => {
+                // Without signature events, just storage 4/4
+                // All bars are 3840 ppqn
+                const bar44 = barPpqn(4, 4) // 3840
+
+                // Position 0 should floor to 0
+                expect(Math.floor(0 / bar44) * bar44).toBe(0)
+
+                // Position 1000 (in bar 1) should floor to 0
+                expect(Math.floor(1000 / bar44) * bar44).toBe(0)
+
+                // Position 5000 (in bar 2) should floor to 3840
+                expect(Math.floor(5000 / bar44) * bar44).toBe(3840)
+            })
+
+            it("should floor correctly across signature changes", () => {
+                // With signature change at bar 5 from 4/4 to 5/4
+                // Bar 5 starts at 15360 (4 bars * 3840)
+                // Bar 6 starts at 15360 + 4800 = 20160
+
+                const bar44 = barPpqn(4, 4) // 3840
+                const bar54 = barPpqn(5, 4) // 4800
+
+                // Position 16000 is after bar 5 start (15360) but before bar 6 (20160)
+                // Should floor to 15360 (bar 5 start)
+                const prevEventPpqn = 4 * bar44 // 15360
+                const barsFromEvent = Math.floor((16000 - prevEventPpqn) / bar54)
+                expect(barsFromEvent).toBe(0) // 0 full bars from event
+                expect(prevEventPpqn + barsFromEvent * bar54).toBe(15360)
+
+                // Position 21000 is after bar 6 start (20160) but before bar 7 (24960)
+                // Should floor to 20160 (bar 6 start)
+                const barsFromEvent2 = Math.floor((21000 - prevEventPpqn) / bar54)
+                expect(barsFromEvent2).toBe(1) // 1 full bar from event
+                expect(prevEventPpqn + barsFromEvent2 * bar54).toBe(20160)
+            })
+        })
+
+        describe("roundToBar", () => {
+            it("should round to nearest bar boundary", () => {
+                const bar44 = barPpqn(4, 4) // 3840
+                const halfBar = bar44 / 2 // 1920
+
+                // Position < halfBar should round to 0
+                expect(Math.round(1000 / bar44) * bar44).toBe(0)
+
+                // Position >= halfBar should round to 3840
+                expect(Math.round(2000 / bar44) * bar44).toBe(3840)
+
+                // Exactly at halfBar rounds up (JS rounds 0.5 up)
+                expect(Math.round(halfBar / bar44) * bar44).toBe(3840) // 1920/3840 = 0.5, rounds to 1
+            })
+        })
+
+        describe("ceilToBar", () => {
+            it("should ceil to next bar boundary", () => {
+                const bar44 = barPpqn(4, 4) // 3840
+
+                // Position 0 should ceil to 0
+                expect(Math.ceil(0 / bar44) * bar44).toBe(0)
+
+                // Position 1 should ceil to 3840
+                expect(Math.ceil(1 / bar44) * bar44).toBe(3840)
+
+                // Position 3840 should ceil to 3840
+                expect(Math.ceil(3840 / bar44) * bar44).toBe(3840)
+
+                // Position 3841 should ceil to 7680
+                expect(Math.ceil(3841 / bar44) * bar44).toBe(7680)
+            })
+        })
+    })
 })

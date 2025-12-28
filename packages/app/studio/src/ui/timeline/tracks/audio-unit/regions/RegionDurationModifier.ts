@@ -24,7 +24,7 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
         const duration = this.#tool.aligned
             ? (this.#tool.bounds[1] + this.#tool.deltaDuration) - region.position
             : region.duration + this.#tool.deltaDuration
-        const complete = region.position + Math.max(Math.min(this.#tool.snapping.value, region.duration), duration)
+        const complete = region.position + Math.max(Math.min(this.#tool.snapping.value(region.position), region.duration), duration)
         return region.trackBoxAdapter.map(trackAdapter => trackAdapter.regions.collection
             .greaterEqual(region.complete, region => region.isSelected)).match({
             none: () => complete,

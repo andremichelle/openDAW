@@ -256,13 +256,14 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
         shortcuts,
         shortcuts.register(ContentEditorShortcuts["position-increment"].shortcut, () => {
             if (!engine.isPlaying.getValue()) {
-                engine.setPosition(snapping.floor(engine.position.getValue()) + snapping.value)
+                const pos = engine.position.getValue()
+                engine.setPosition(snapping.floor(pos) + snapping.value(pos))
             }
         }, {allowRepeat: true}),
         shortcuts.register(ContentEditorShortcuts["position-decrement"].shortcut, () => {
             if (!engine.isPlaying.getValue()) {
-                engine.setPosition(Math.max(0,
-                    snapping.ceil(engine.position.getValue()) - snapping.value))
+                const pos = engine.position.getValue()
+                engine.setPosition(Math.max(0, snapping.ceil(pos) - snapping.value(pos)))
             }
         }, {allowRepeat: true}),
         shortcuts.register(ContentEditorShortcuts["zoom-to-content"].shortcut, zommContent)

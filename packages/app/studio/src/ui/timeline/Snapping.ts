@@ -1,4 +1,16 @@
-import {clamp, int, Notifier, Observable, Observer, Option, Subscription, Terminable} from "@opendaw/lib-std"
+import {
+    clamp,
+    int,
+    Notifier,
+    Observable,
+    Observer,
+    Option,
+    quantizeCeil,
+    quantizeFloor,
+    quantizeRound,
+    Subscription,
+    Terminable
+} from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {TimelineRange} from "@opendaw/studio-core"
 import {MenuItem, MenuRootData} from "@/ui/model/menu-item"
@@ -6,7 +18,7 @@ import {SignatureTrackAdapter} from "@opendaw/studio-adapters"
 
 export interface SnapUnit {
     get name(): string
-    get ppqn(): int
+    ppqn(position: ppqn): int
 }
 
 const SMART_MIN_PIXEL = 16 as const
@@ -49,7 +61,11 @@ export class Snapping implements Observable<Snapping> {
         this.#notifier.notify(this)
     }
     get units(): ReadonlyArray<SnapUnit> {return this.#units}
-    get value(): ppqn {return this.#enabled ? this.#units[this.#index].ppqn : 1}
+    value(position: ppqn): ppqn {return this.#enabled ? this.#units[this.#index].ppqn(position) : 1}
+
+    #signatureAt(position: ppqn): Readonly<[int, int]> {
+        return this.#optSignatureTrack.mapOr(adapter => adapter.signatureAt(position), [4, 4])
+    }
 
     registerSignatureTrackAdapter(adapter: SignatureTrackAdapter): Subscription {
         this.#optSignatureTrack = Option.wrap(adapter)
@@ -60,19 +76,34 @@ export class Snapping implements Observable<Snapping> {
     xToUnitCeil(x: number): ppqn {return this.ceil(this.#range.xToUnit(x))}
     xToUnitRound(x: number): ppqn {return this.round(this.#range.xToUnit(x))}
 
-    floor(value: ppqn): ppqn {
-        const units = this.value
-        return Math.floor(value / units) * units
+    floor(position: ppqn): ppqn {
+        if (this.#optSignatureTrack.nonEmpty()) {
+            const adapter = this.#optSignatureTrack.unwrap()
+            if (this.value(position) === adapter.barLengthAt(position)) {
+                return adapter.floorToBar(position)
+            }
+        }
+        return quantizeFloor(position, this.value(position))
     }
 
-    round(value: ppqn): ppqn {
-        const units = this.value
-        return Math.round(value / units) * units
+    round(position: ppqn): ppqn {
+        if (this.#optSignatureTrack.nonEmpty()) {
+            const adapter = this.#optSignatureTrack.unwrap()
+            if (this.value(position) === adapter.barLengthAt(position)) {
+                return adapter.roundToBar(position)
+            }
+        }
+        return quantizeRound(position, this.value(position))
     }
 
-    ceil(value: ppqn): ppqn {
-        const units = this.value
-        return Math.ceil(value / units) * units
+    ceil(position: ppqn): ppqn {
+        if (this.#optSignatureTrack.nonEmpty()) {
+            const adapter = this.#optSignatureTrack.unwrap()
+            if (this.value(position) === adapter.barLengthAt(position)) {
+                return adapter.ceilToBar(position)
+            }
+        }
+        return quantizeCeil(position, this.value(position))
     }
 
     computeDelta(beingPointerPulse: ppqn, newPointerX: number, beginValuePulse: ppqn): ppqn {
@@ -90,15 +121,13 @@ export class Snapping implements Observable<Snapping> {
         return [
             {
                 name: "Smart",
-                get ppqn(): int {
-                    const [nominator, denominator] = scope.#optSignatureTrack.mapOr(adapter => adapter.storageSignature, [4, 4])
+                ppqn: (position: ppqn): int => {
+                    const [nominator, denominator] = scope.#signatureAt(position)
                     const barPulses = PPQN.fromSignature(nominator, denominator)
                     const beatPulses = PPQN.fromSignature(1, denominator)
                     const minUnits = SMART_MIN_PIXEL * range.unitsPerPixel
-
                     // Start from the finest resolution
                     let interval = PPQN.fromSignature(1, 128)
-
                     // Scale up using the same logic as TimeGrid
                     while (interval < minUnits) {
                         if (interval < beatPulses) {
@@ -127,23 +156,28 @@ export class Snapping implements Observable<Snapping> {
                     const min = clampSmartSnapping
                         ? PPQN.fromSignature(1, 16)
                         : PPQN.fromSignature(1, 128)
-
                     // Clamp between min and bar level
                     return clamp(Math.floor(interval), min, barPulses)
                 }
             },
-            {name: "Bar", ppqn: PPQN.fromSignature(1, 1)},
-            {name: "1/2", ppqn: PPQN.fromSignature(1, 2)},
-            {name: "1/4", ppqn: PPQN.fromSignature(1, 4)},
-            {name: "1/8", ppqn: PPQN.fromSignature(1, 8)},
-            {name: "1/8T", ppqn: PPQN.fromSignature(1, 4) / 3},
-            {name: "1/16", ppqn: PPQN.fromSignature(1, 16)},
-            {name: "1/16T", ppqn: PPQN.fromSignature(1, 8) / 3},
-            {name: "1/32", ppqn: PPQN.fromSignature(1, 32)},
-            {name: "1/32T", ppqn: PPQN.fromSignature(1, 16) / 3},
-            {name: "1/64", ppqn: PPQN.fromSignature(1, 64)},
-            {name: "1/128", ppqn: PPQN.fromSignature(1, 128)},
-            {name: "Off", ppqn: 1}
+            {
+                name: "Bar",
+                ppqn: (position: ppqn): int => {
+                    const [nominator, denominator] = scope.#signatureAt(position)
+                    return PPQN.fromSignature(nominator, denominator)
+                }
+            },
+            {name: "1/2", ppqn: (_position: ppqn): int => PPQN.fromSignature(1, 2)},
+            {name: "1/4", ppqn: (_position: ppqn): int => PPQN.fromSignature(1, 4)},
+            {name: "1/8", ppqn: (_position: ppqn): int => PPQN.fromSignature(1, 8)},
+            {name: "1/8T", ppqn: (_position: ppqn): int => PPQN.fromSignature(1, 4) / 3},
+            {name: "1/16", ppqn: (_position: ppqn): int => PPQN.fromSignature(1, 16)},
+            {name: "1/16T", ppqn: (_position: ppqn): int => PPQN.fromSignature(1, 8) / 3},
+            {name: "1/32", ppqn: (_position: ppqn): int => PPQN.fromSignature(1, 32)},
+            {name: "1/32T", ppqn: (_position: ppqn): int => PPQN.fromSignature(1, 16) / 3},
+            {name: "1/64", ppqn: (_position: ppqn): int => PPQN.fromSignature(1, 64)},
+            {name: "1/128", ppqn: (_position: ppqn): int => PPQN.fromSignature(1, 128)},
+            {name: "Off", ppqn: (_position: ppqn): int => 1}
         ]
     }
 }

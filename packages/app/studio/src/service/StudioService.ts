@@ -59,7 +59,7 @@ import {
     TimelineRange
 } from "@opendaw/studio-core"
 import {ProjectDialogs} from "@/project/ProjectDialogs"
-import {AudioUnitBox, SignatureEventBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
@@ -137,50 +137,6 @@ export class StudioService implements ProjectEnv {
         this.#configBeforeUnload()
         this.#checkRecovery()
         this.#listenPreferences()
-
-        this.newProject().then(() => {
-            const {boxGraph, editing, timelineBox} = this.project
-            // Test data: Storage 4/4, BPM 60, 25 fps
-            // | rel-pos | signature | abs-time           | abs-bar |
-            // |---------|-----------|--------------------| --------|
-            // |    4    |   5/4     | 16s                | bar 5   |
-            // |    2    |   7/8     | 26s                | bar 7   |
-            // |    3    |  11/16    | 36s 12fr 40sub     | bar 10  |
-            // |    3    |   4/4     | 44s 18fr 60sub     | bar 13  |
-            //
-            // relativePosition = bars of PREVIOUS signature before this event starts
-            editing.modify(() => {
-                SignatureEventBox.create(boxGraph, UUID.generate(), box => {
-                    box.index.setValue(0)
-                    box.relativePosition.setValue(4) // 4 bars of storage (4/4) → 16s
-                    box.nominator.setValue(5)
-                    box.denominator.setValue(4)
-                    box.events.refer(timelineBox.signatureTrack.events)
-                })
-                SignatureEventBox.create(boxGraph, UUID.generate(), box => {
-                    box.index.setValue(1)
-                    box.relativePosition.setValue(2) // 2 bars of 5/4 → +10s = 26s
-                    box.nominator.setValue(7)
-                    box.denominator.setValue(8)
-                    box.events.refer(timelineBox.signatureTrack.events)
-                })
-                SignatureEventBox.create(boxGraph, UUID.generate(), box => {
-                    box.index.setValue(2)
-                    box.relativePosition.setValue(3) // 3 bars of 7/8 → +10.5s = 36.5s
-                    box.nominator.setValue(11)
-                    box.denominator.setValue(16)
-                    box.events.refer(timelineBox.signatureTrack.events)
-                })
-                SignatureEventBox.create(boxGraph, UUID.generate(), box => {
-                    box.index.setValue(3)
-                    box.relativePosition.setValue(3) // 3 bars of 11/16 → +8.25s = 44.75s
-                    box.nominator.setValue(4)
-                    box.denominator.setValue(4)
-                    box.events.refer(timelineBox.signatureTrack.events)
-                })
-            })
-        })
-        this.timeline.primaryVisibility.signature.setValue(true)
     }
 
     get sampleRate(): number {return this.audioContext.sampleRate}

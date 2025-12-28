@@ -156,7 +156,7 @@ export const PitchEditor = ({
             const pitch = positioner.yToPitch(point.y - rect.top)
             const position = snapping.xToUnitFloor(point.x - rect.left) - reader.offset
             // TODO #58
-            const duration = snapping.value
+            const duration = snapping.value(position + reader.offset)
             const velocity = 1.0
             if (isNotNull(previewNote)) {
                 if (previewNote.pitch === pitch
@@ -190,10 +190,10 @@ export const PitchEditor = ({
             })),
         shortcuts.register(NoteEditorShortcuts["increment-note-position"].shortcut, () =>
             modifySelection(({box, position}: NoteEventBoxAdapter) =>
-                box.position.setValue(position + snapping.value))),
+                box.position.setValue(position + snapping.value(reader.position + position)))),
         shortcuts.register(NoteEditorShortcuts["decrement-note-position"].shortcut, () =>
             modifySelection(({box, position}: NoteEventBoxAdapter) =>
-                box.position.setValue(position - snapping.value))),
+                box.position.setValue(position - snapping.value(reader.position + position)))),
         shortcuts.register(ContentEditorShortcuts["select-all"].shortcut, () => selection.select(...locator.selectable())),
         shortcuts.register(ContentEditorShortcuts["deselect-all"].shortcut, () => selection.deselectAll()),
         shortcuts.register(ContentEditorShortcuts["delete-selection"].shortcut, () => {
@@ -215,16 +215,18 @@ export const PitchEditor = ({
                 const clientY = event.clientY - rect.top
                 const pulse = snapping.floor(range.xToUnit(clientX)) - reader.offset
                 const pitch = positioner.yToPitch(clientY)
+                const absolutePulse = reader.position + pulse
+                const duration = snapping.value(absolutePulse)
                 const boxOpt = editing.modify(() => NoteEventBox.create(project.boxGraph, UUID.generate(), box => {
                     box.position.setValue(pulse)
                     box.pitch.setValue(pitch)
-                    box.duration.setValue(snapping.value)
+                    box.duration.setValue(duration)
                     box.events.refer(reader.content.box.events)
                 }))
                 if (boxOpt.nonEmpty()) {
                     selection.deselectAll()
                     selection.select(boxAdapters.adapterFor(boxOpt.unwrap(), NoteEventBoxAdapter))
-                    auditionNote(pitch, snapping.value)
+                    auditionNote(pitch, duration)
                 }
             } else if (target.type !== "loop-duration") {
                 editing.modify(() => target.event.box.delete())

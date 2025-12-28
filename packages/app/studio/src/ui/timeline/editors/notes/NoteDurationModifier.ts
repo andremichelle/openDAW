@@ -19,7 +19,7 @@ class SelectedModifyStrategy implements NoteModifyStrategy {
         const duration = this.#tool.aligned
             ? (this.#tool.reference.position + this.#tool.reference.duration + this.#tool.deltaDuration) - adapter.position
             : adapter.duration + this.#tool.deltaDuration
-        return adapter.position + Math.max(Math.min(this.#tool.snapping.value, adapter.duration), duration)
+        return adapter.position + Math.max(Math.min(this.#tool.snapping.value(adapter.position), adapter.duration), duration)
     }
     readPitch(adapter: NoteEventBoxAdapter): number {return adapter.pitch}
     readVelocity(adapter: NoteEventBoxAdapter): unitValue {return adapter.velocity}

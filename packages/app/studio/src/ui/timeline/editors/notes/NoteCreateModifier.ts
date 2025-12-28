@@ -44,12 +44,13 @@ export class NoteCreateModifier implements NoteModifier {
         this.#notifier = new Notifier<void>()
 
         const position = this.#snapping.floor(pointerPulse)
+        const snapValue = snapping.value(position)
         this.#creation = {
             type: "note-event",
             position,
             pitch: pointerPitch,
-            duration: snapping.value,
-            complete: position + snapping.value,
+            duration: snapValue,
+            complete: position + snapValue,
             cent: 0.0,
             chance: 100,
             playCount: 1,
@@ -80,7 +81,7 @@ export class NoteCreateModifier implements NoteModifier {
 
     update({clientX}: Dragging.Event): void {
         const clientRect = this.#element.getBoundingClientRect()
-        const minDuration = this.#snapping.value
+        const minDuration = this.#snapping.value(this.#creation.position)
         const deltaLoopDuration: int = this.#snapping
             .computeDelta(this.#pointerPulse, clientX - clientRect.left, minDuration)
         if (this.#deltaLoopDuration !== deltaLoopDuration) {

@@ -51,7 +51,7 @@ export class ValueContentDurationModifier implements ValueModifier {
     }
     readContentDuration(region: ValueEventOwnerReader): number {
         return Math.max(region.loopDuration + this.#deltaLoopDuration,
-            Math.min(region.loopDuration, this.#snapping.value))
+            Math.min(region.loopDuration, this.#snapping.value(region.position)))
     }
 
     update({clientX}: Dragging.Event): void {
