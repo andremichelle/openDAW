@@ -1,11 +1,12 @@
 import css from "./AbsoluteUnitDisplay.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {DefaultObservableValue, Lifecycle, Terminator, TimeSpan} from "@opendaw/lib-std"
+import {DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {UnitDisplay} from "@/ui/header/UnitDisplay"
 import {ContextMenu} from "@/ui/ContextMenu"
 import {MenuItem} from "@/ui/model/menu-item"
 import {StudioService} from "@/service/StudioService"
+import {SMPTE} from "@opendaw/lib-dsp"
 
 const className = Html.adoptStyleSheet(css, "AbsoluteUnitDisplay")
 
@@ -15,17 +16,19 @@ type Construct = {
 }
 
 export const AbsoluteUnitDisplay = ({lifecycle, service}: Construct) => {
-    const timeUnits = ["Hours", "Minutes", "Seconds", "Milliseconds"]
-    const timeUnitIndex = new DefaultObservableValue(2)
+    const timeUnits = ["Hours", "Minutes", "Seconds", "Frames", "SubFrames"]
+    const timeUnitIndex = new DefaultObservableValue(3)
     const hoursUnitString = new DefaultObservableValue("1")
     const minutesUnitString = new DefaultObservableValue("01")
     const secondsUnitString = new DefaultObservableValue("01")
-    const millisecondsUnitString = new DefaultObservableValue("1")
+    const framesUnitString = new DefaultObservableValue("00")
+    const subFramesUnitString = new DefaultObservableValue("00")
     const unitDisplays: ReadonlyArray<HTMLElement> = [
         <UnitDisplay lifecycle={lifecycle} name="hour" value={hoursUnitString} numChars={2}/>,
         <UnitDisplay lifecycle={lifecycle} name="min" value={minutesUnitString} numChars={2}/>,
         <UnitDisplay lifecycle={lifecycle} name="sec" value={secondsUnitString} numChars={2}/>,
-        <UnitDisplay lifecycle={lifecycle} name="ms" value={millisecondsUnitString} numChars={3}/>
+        <UnitDisplay lifecycle={lifecycle} name="fr" value={framesUnitString} numChars={2}/>,
+        <UnitDisplay lifecycle={lifecycle} name="sub" value={subFramesUnitString} numChars={2}/>
     ]
     const subscription = lifecycle.own(new Terminator())
     return (
@@ -36,12 +39,19 @@ export const AbsoluteUnitDisplay = ({lifecycle, service}: Construct) => {
                     if (optProfile.nonEmpty()) {
                         const {project: {engine: {position}, tempoMap, timelineBoxAdapter}} = optProfile.unwrap()
                         const update = () => {
-                            const seconds = tempoMap.ppqnToSeconds(position.getValue())
-                            const timeSpan = TimeSpan.seconds(seconds)
-                            hoursUnitString.setValue(timeSpan.absHours().toFixed(0).padStart(2, "0"))
-                            minutesUnitString.setValue(timeSpan.absMinutes().toFixed(0).padStart(2, "0"))
-                            secondsUnitString.setValue(timeSpan.absSeconds().toFixed(0).padStart(2, "0"))
-                            millisecondsUnitString.setValue((timeSpan.millis() % 1000.0).toFixed(0).padStart(3, "0"))
+                            const ppqn = position.getValue()
+                            const {
+                                hours,
+                                minutes,
+                                seconds,
+                                frames,
+                                subframes
+                            } = SMPTE.fromSeconds(tempoMap.ppqnToSeconds(ppqn), 25)
+                            hoursUnitString.setValue(Math.abs(hours).toFixed(0).padStart(2, "0"))
+                            minutesUnitString.setValue(Math.abs(minutes).toFixed(0).padStart(2, "0"))
+                            secondsUnitString.setValue(Math.abs(seconds).toFixed(0).padStart(2, "0"))
+                            framesUnitString.setValue(frames.toFixed(0).padStart(2, "0"))
+                            subFramesUnitString.setValue(subframes.toFixed(0).padStart(2, "0"))
                         }
                         subscription.ownAll(
                             service.engine.position.catchupAndSubscribe(update),
@@ -51,7 +61,8 @@ export const AbsoluteUnitDisplay = ({lifecycle, service}: Construct) => {
                         hoursUnitString.setValue("00")
                         minutesUnitString.setValue("00")
                         secondsUnitString.setValue("00")
-                        millisecondsUnitString.setValue("000")
+                        framesUnitString.setValue("00")
+                        subFramesUnitString.setValue("00")
                     }
                 }),
                 timeUnitIndex.catchupAndSubscribe(owner =>
@@ -71,6 +82,7 @@ export const AbsoluteUnitDisplay = ({lifecycle, service}: Construct) => {
             {unitDisplays[1]}
             {unitDisplays[2]}
             {unitDisplays[3]}
+            {unitDisplays[4]}
         </div>
     )
 }
