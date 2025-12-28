@@ -68,7 +68,12 @@ export namespace StudioShortcutManager {
         const {
             engine: {metronomeEnabled, isPlaying, isRecording, isCountingIn, position},
             panelLayout,
-            timeline: {clips: {visible: clipsVisibility}, followCursor, primaryVisibility: {markers, tempo, signature}, snapping}
+            timeline: {
+                clips: {visible: clipsVisibility},
+                followCursor,
+                primaryVisibility: {markers, tempo, signature},
+                snapping
+            }
         } = service
         const gs = GlobalShortcuts
         const storedShortcuts = localStorage.getItem(localStorageKey)
@@ -148,6 +153,7 @@ export namespace StudioShortcutManager {
                     userEditingManager.audioUnit.edit(copies[0].editing)
                 }))),
             gc.register(gs["workspace-next-screen"].shortcut, () => {
+                    if (!service.hasProfile) {return}
                     const keys = Object.entries(DefaultWorkspace).map(([key]) => key as Workspace.ScreenKeys)
                     const screen = service.layout.screen
                     const current = screen.getValue()
@@ -156,6 +162,7 @@ export namespace StudioShortcutManager {
                 }
             ),
             gc.register(gs["workspace-prev-screen"].shortcut, () => {
+                    if (!service.hasProfile) {return}
                     const keys = Object.entries(DefaultWorkspace).map(([key]) => key as Workspace.ScreenKeys)
                     const screen = service.layout.screen
                     const current = screen.getValue()

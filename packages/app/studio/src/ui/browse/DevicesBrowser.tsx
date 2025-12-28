@@ -51,7 +51,7 @@ export const DevicesBrowser = ({lifecycle, service}: Construct) => {
                     <h1>Adding EffectFactories</h1>
                     <p>
                         Once an instrument is created, you can add effects. To do this, simply drag an effect
-                        from the list and drop it into the instrument’s device chain.
+                        from the list and drop it into the instrument's device chain.
                     </p>
                 </section>
             </div>
