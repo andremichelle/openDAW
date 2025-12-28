@@ -26,8 +26,8 @@ export namespace SignatureRenderer {
                 const curr = signatures[i]
                 const next = signatures[i + 1]
 
-                if (isDefined(next) && next.position < unitMin) {continue}
-                if (curr.position > unitMax) {break}
+                if (isDefined(next) && next.accumulatedPpqn < unitMin) {continue}
+                if (curr.accumulatedPpqn > unitMax) {break}
 
                 SignatureRenderer.renderSignature(context, range, curr, height, next)
             }
@@ -38,11 +38,11 @@ export namespace SignatureRenderer {
                                     signature: Signature,
                                     height: number,
                                     next?: Signature): void => {
-        const x0 = Math.floor(range.unitToX(signature.position) * devicePixelRatio)
+        const x0 = Math.floor(range.unitToX(signature.accumulatedPpqn) * devicePixelRatio)
         const label = `${signature.nominator}/${signature.denominator}`
         let text: string
         if (isDefined(next)) {
-            const x1 = Math.floor(range.unitToX(next.position) * devicePixelRatio)
+            const x1 = Math.floor(range.unitToX(next.accumulatedPpqn) * devicePixelRatio)
             const truncate = Context2d.truncateText(context, label, x1 - x0 - textPadding)
             text = truncate.text
         } else {

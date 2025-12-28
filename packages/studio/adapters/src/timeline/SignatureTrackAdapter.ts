@@ -14,7 +14,12 @@ import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {SignatureEventBoxAdapter} from "./SignatureEventBoxAdapter"
 import {SignatureEventBox, TimelineBox} from "@opendaw/studio-boxes"
 
-export type Signature = Readonly<{ position: ppqn, relativePosition: int, nominator: int, denominator: int }>
+export type Signature = Readonly<{
+    accumulatedPpqn: ppqn,
+    accumulatedBars: int,
+    nominator: int,
+    denominator: int
+}>
 
 export class SignatureTrackAdapter implements Terminable {
     readonly #context: BoxAdaptersContext
@@ -91,80 +96,21 @@ export class SignatureTrackAdapter implements Terminable {
         return lastSignature
     }
 
-    * iterateSignatures(from: ppqn, to: ppqn): IterableIterator<Signature> {
-        const storage = this.storageSignature
-        let accumulatedPpqn: ppqn = 0
-        let prevSignature: Readonly<[int, int]> = storage
-        let lastYieldedSignature: Signature | null = null
-
-        for (const adapter of this.#sortedByIndex) {
-            // Calculate event position using PREVIOUS signature
-            accumulatedPpqn += PPQN.fromSignature(prevSignature[0], prevSignature[1]) * adapter.relativePosition
-            const eventPosition = accumulatedPpqn
-
-            if (eventPosition <= from) {
-                lastYieldedSignature = {
-                    position: eventPosition,
-                    relativePosition: adapter.relativePosition,
-                    nominator: adapter.nominator,
-                    denominator: adapter.denominator
-                }
-                prevSignature = [adapter.nominator, adapter.denominator]
-                continue
-            }
-
-            if (eventPosition > to) {break}
-
-            if (lastYieldedSignature !== null && eventPosition > from) {
-                yield {
-                    position: from,
-                    relativePosition: lastYieldedSignature.relativePosition,
-                    nominator: lastYieldedSignature.nominator,
-                    denominator: lastYieldedSignature.denominator
-                }
-                lastYieldedSignature = null
-            } else if (lastYieldedSignature === null && eventPosition > from) {
-                yield {position: from, relativePosition: 0, nominator: storage[0], denominator: storage[1]}
-            }
-
-            yield {
-                position: eventPosition,
-                relativePosition: adapter.relativePosition,
-                nominator: adapter.nominator,
-                denominator: adapter.denominator
-            }
-            lastYieldedSignature = null
-            prevSignature = [adapter.nominator, adapter.denominator]
-        }
-
-        if (lastYieldedSignature !== null) {
-            yield {
-                position: from,
-                relativePosition: lastYieldedSignature.relativePosition,
-                nominator: lastYieldedSignature.nominator,
-                denominator: lastYieldedSignature.denominator
-            }
-        } else if (this.#sortedByIndex.size() === 0) {
-            yield {position: from, relativePosition: 0, nominator: storage[0], denominator: storage[1]}
-        }
-    }
-
     * iterateAll(): IterableIterator<Signature> {
         let accumulatedPpqn: ppqn = 0
-        let prevSignature: Readonly<[int, int]> = this.storageSignature
-
+        let accumulatedBars: int = 0
+        let [nominator, denominator]: Readonly<[int, int]> = this.storageSignature
         for (const adapter of this.#sortedByIndex) {
-            // Position = accumulated + (relativePosition bars of PREVIOUS signature)
-            accumulatedPpqn += PPQN.fromSignature(prevSignature[0], prevSignature[1]) * adapter.relativePosition
-
             yield {
-                position: accumulatedPpqn,
-                relativePosition: adapter.relativePosition,
-                nominator: adapter.nominator,
-                denominator: adapter.denominator
+                accumulatedPpqn,
+                accumulatedBars,
+                nominator,
+                denominator
             }
-
-            prevSignature = [adapter.nominator, adapter.denominator]
+            accumulatedPpqn += PPQN.fromSignature(nominator, denominator) * adapter.relativePosition
+            accumulatedBars += adapter.relativePosition
+            nominator = adapter.nominator
+            denominator = adapter.denominator
         }
     }
 
