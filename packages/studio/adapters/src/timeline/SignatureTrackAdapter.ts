@@ -99,14 +99,14 @@ export class SignatureTrackAdapter implements Terminable {
             const barsInt = Math.floor(barsFrac)
             const fraction = barsFrac - barsInt
             accumulatedFraction += fraction
-            let newRelPos = barsInt
+            let relativePosition = barsInt
             if (accumulatedFraction >= 1.0) {
-                newRelPos += 1
+                relativePosition += 1
                 accumulatedFraction -= 1.0
             }
-            newRelPos = Math.max(1, newRelPos)
-            adapter.unwrap().box.relativePosition.setValue(newRelPos)
-            accumulatedPpqn += newRelPos * durationBar
+            relativePosition = Math.max(1, relativePosition)
+            adapter.unwrap().box.relativePosition.setValue(relativePosition)
+            accumulatedPpqn += relativePosition * durationBar
             durationBar = PPQN.fromSignature(event.nominator, event.denominator)
         }
     }

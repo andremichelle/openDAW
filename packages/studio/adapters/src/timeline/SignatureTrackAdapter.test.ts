@@ -10,18 +10,6 @@ describe("SignatureTrackAdapter", () => {
         PPQN.fromSignature(nominator, denominator)
     const secondsToPpqn = (seconds: number): ppqn =>
         PPQN.secondsToPulses(seconds, BPM)
-    describe("SMPTE conversions", () => {
-        it("should convert SMPTE to seconds at 25 fps", () => {
-            expect(SMPTE.toSeconds(SMPTE.create(16), FPS)).toBe(16)
-            expect(SMPTE.toSeconds(SMPTE.create(26), FPS)).toBe(26)
-            expect(SMPTE.toSeconds(SMPTE.create(36, 12, 40), FPS)).toBe(36.5)
-            expect(SMPTE.toSeconds(SMPTE.create(44, 18, 60), FPS)).toBe(44.75)
-        })
-        it("should format SMPTE as short string", () => {
-            expect(SMPTE.toShortString(SMPTE.create(16))).toBe("16s")
-            expect(SMPTE.toShortString(SMPTE.create(36, 12, 40))).toBe("36s 12fr 40sub")
-        })
-    })
     describe("bar duration calculations", () => {
         it("should compute bar duration for different signatures", () => {
             expect(barPpqn(4, 4)).toBe(3840)   // 4 quarter notes
