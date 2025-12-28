@@ -78,6 +78,22 @@ export class SignatureTrackAdapter implements Terminable {
         }
     }
 
+    changeSignature(nominator: int, denominator: int): void {
+        const events = Array.from(this.iterateAll()).slice(1)
+        // TODO quantise each each to the nearest new bar (with respect to the new storage signature)
+        //  So in fact they might ALL change their relativePosition to come closer to their rendered position before the change.
+        //  Example:
+        //      1. 4/4 at storage, 5/4 at bar 5 (displayed)
+        //      2. 3/4 at storage, 5/4 now at bar 6 (displayed)
+
+        this.#signature.nominator.setValue(nominator)
+        this.#signature.denominator.setValue(denominator)
+    }
+
+    deleteAdapterAt(index: int): void {
+
+    }
+
     adapterAt(index: int): Option<SignatureEventBoxAdapter> {return this.#adapters.getAdapterByIndex(index)}
 
     terminate(): void {this.#terminator.terminate()}

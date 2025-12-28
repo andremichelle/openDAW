@@ -105,11 +105,8 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
                     if (attempt.isSuccess()) {
                         const [nominator, denominator] = attempt.result()
                         projectProfileService.getValue()
-                            .ifSome(({project: {editing, rootBoxAdapter: {timeline: {box: {signature}}}}}) =>
-                                editing.modify(() => {
-                                    signature.nominator.setValue(clamp(nominator, 1, 32))
-                                    signature.denominator.setValue(clamp(denominator, 1, 32))
-                                }))
+                            .ifSome(({project: {editing, timelineBoxAdapter: {signatureTrack}}}) =>
+                                editing.modify(() => signatureTrack.changeSignature(nominator, denominator)))
                     }
                 }, EmptyExec)
                 return resolvers
