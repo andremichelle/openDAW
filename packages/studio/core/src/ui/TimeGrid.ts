@@ -62,9 +62,12 @@ export namespace TimeGrid {
         for (const [prev, next] of Iterables.pairWise(signatureTrack.iterateAll())) {
             const {accumulatedPpqn, accumulatedBars, nominator, denominator} = prev
             const interval = computeInterval(prev.nominator, prev.denominator, unitsPerPixel, minLength)
+            const barDuration = PPQN.fromSignature(nominator, denominator)
             const p0 = accumulatedPpqn
             const p1 = isDefined(next) ? next.accumulatedPpqn : range.unitMax
             for (let pulse = p0; pulse < p1; pulse += interval) {
+                if (pulse < range.unitMin - barDuration) {continue}
+                if (pulse >= range.unitMax) {break}
                 const {bars, beats, semiquavers, ticks} = PPQN.toParts(pulse - accumulatedPpqn, nominator, denominator)
                 const isBeat = ticks === 0 && semiquavers === 0
                 const isBar = isBeat && beats === 0
