@@ -6,7 +6,7 @@ import {TimelineRange} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
 import {ppqn} from "@opendaw/lib-dsp"
 
-export type SignatureDragPreview = Readonly<{event: SignatureEvent, targetPpqn: ppqn}>
+export type SignatureDragPreview = Readonly<{ event: SignatureEvent, targetPpqn: ppqn }>
 
 export namespace SignatureRenderer {
     const textPadding = 8 as const
@@ -55,7 +55,7 @@ export namespace SignatureRenderer {
         }
         const vPadding = Math.ceil(height / 5)
         context.globalAlpha = alpha
-        context.fillStyle = Colors.dark.toString()
+        context.fillStyle = signature.index > -1 ? Colors.dark.toString() : Colors.shadow.toString()
         context.fillRect(x0, vPadding, 2, height - (vPadding << 1))
         context.fillText(text, x0 + textPadding, height >> 1)
         context.globalAlpha = 1.0

@@ -326,27 +326,23 @@ export class StudioService implements ProjectEnv {
                 const {timelineBox, timelineBoxAdapter, userEditingManager} = project
                 range.showUnitInterval(0, PPQN.fromSignature(9, 1))
                 lifeTime.own(ShadertoyState.initialize(project))
-
+                //
                 // -------------------------------
                 // Show views if content available
                 // -------------------------------
                 //
                 // Markers
-                if (timelineBox.markerTrack.markers.pointerHub.nonEmpty()) {
-                    this.timeline.primaryVisibility.markers.setValue(true)
-                }
+                this.timeline.primaryVisibility.markers.setValue(true)
                 // Tempo
-                if (timelineBoxAdapter.tempoTrackEvents.mapOr(collection => !collection.events.isEmpty(), false)) {
-                    this.timeline.primaryVisibility.tempo.setValue(true)
-                }
+                this.timeline.primaryVisibility.tempo.setValue(timelineBoxAdapter
+                    .tempoTrackEvents.mapOr(collection => !collection.events.isEmpty(), false))
                 // Signature
-                if (timelineBoxAdapter.signatureTrack.size > 0) {
-                    this.timeline.primaryVisibility.signature.setValue(true)
-                }
+                this.timeline.primaryVisibility.signature.setValue(timelineBoxAdapter.signatureTrack.size > 0)
                 // Clips
                 const maxClipIndex: int = project.rootBoxAdapter.audioUnits.adapters()
                     .reduce((max, unit) => Math.max(max, unit.tracks.values()
-                        .reduce((max, track) => Math.max(max, track.clips.collection.getMinFreeIndex()), 0)), 0)
+                        .reduce((max, track) => Math.max(max, track.clips.collection
+                            .getMinFreeIndex()), 0)), 0)
                 if (maxClipIndex > 0 || Preferences.values["auto-open-clips"]) {
                     this.timeline.clips.count.setValue(Math.max(maxClipIndex + 1, 3))
                     this.timeline.clips.visible.setValue(true)
