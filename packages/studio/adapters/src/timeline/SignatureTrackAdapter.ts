@@ -158,15 +158,16 @@ export class SignatureTrackAdapter implements Terminable {
         const successorEvents = allEvents.slice(insertAfterIndex + 1)
         const newEventPpqn = prevEvent.accumulatedPpqn + newRelativePosition * prevBarPpqn
         const newBarPpqn = PPQN.fromSignature(nominator, denominator)
-        for (let i = 0; i < successorEvents.length; i++) {
-            const event = successorEvents[i]
-            const adapter = this.adapterAt(event.index)
-            if (adapter.isEmpty()) {continue}
-            const box = adapter.unwrap().box
-            box.index.setValue(event.index + 1)
+        const adaptersToUpdate = successorEvents
+            .map(event => ({event, adapter: this.adapterAt(event.index)}))
+            .filter(({adapter}) => adapter.nonEmpty())
+            .map(({event, adapter}) => ({event, adapter: adapter.unwrap()}))
+        for (let i = 0; i < adaptersToUpdate.length; i++) {
+            const {event, adapter} = adaptersToUpdate[i]
+            adapter.box.index.setValue(event.index + 1)
             if (i === 0) {
                 const barsToNext = (event.accumulatedPpqn - newEventPpqn) / newBarPpqn
-                box.relativePosition.setValue(Math.max(1, Math.round(barsToNext)))
+                adapter.box.relativePosition.setValue(Math.max(1, Math.round(barsToNext)))
             }
         }
         SignatureEventBox.create(this.#context.boxGraph, UUID.generate(), box => {

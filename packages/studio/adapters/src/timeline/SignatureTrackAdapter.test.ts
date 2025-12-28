@@ -398,6 +398,41 @@ describe("SignatureTrackAdapter", () => {
             // Verify relative positions: [2, 3, 2, 3, 3]
             expect(result.newRelPositions).toEqual([2, 3, 2, 3, 3])
         })
+
+        it("should preserve existing events when inserting before them", () => {
+            // Scenario:
+            // 1. Storage is 4/4
+            // 2. First create 3/4 at bar 3 → becomes event at index 0
+            // 3. Then create 7/8 at bar 2 → should insert before 3/4
+            // Result: 7/8 at bar 2, 3/4 at bar 3, both should exist
+
+            // After step 2, we have 3/4 at bar 3:
+            // - 3/4 is at index 0, relativePosition 2 (starts at 2 bars of 4/4 = 7680 ppqn)
+            const eventsAfterFirstCreate: MockEvent[] = [
+                {index: 0, relativePosition: 2, nominator: 3, denominator: 4, accumulatedPpqn: 7680}
+            ]
+
+            // Now insert 7/8 at bar 2 (position = 1 bar of 4/4 = 3840 ppqn)
+            const position = 1 * barPpqn(4, 4) // 3840
+            const result = simulateCreateEvent(eventsAfterFirstCreate, STORAGE_SIGNATURE, position, 7, 8)
+
+            // Expected result:
+            // - 7/8 at bar 2 (relPos=1, index=0)
+            // - 3/4 at bar 3 (recalculated relPos based on new 7/8 position, index=1)
+            // Both events should exist
+            expect(result.newRelPositions.length).toBe(2)
+            expect(result.newAccumulatedBars.length).toBe(2)
+
+            // 7/8 at bar 2: relativePosition = 1 (1 bar from start)
+            expect(result.newRelPositions[0]).toBe(1)
+            expect(result.newAccumulatedBars[0]).toBe(1) // bar 2 (0-indexed: bar 1)
+
+            // 3/4: distance from 7/8 start to 3/4 start
+            // 7/8 starts at 3840, 3/4 was at 7680
+            // 7/8 bar = 3360, so (7680 - 3840) / 3360 ≈ 1.14 → rounds to 1
+            expect(result.newRelPositions[1]).toBe(1)
+            expect(result.newAccumulatedBars[1]).toBe(2) // bar 3 (0-indexed: bar 2)
+        })
     })
     describe("bar snapping methods", () => {
         // Test data: Storage 4/4
