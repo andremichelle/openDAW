@@ -16,9 +16,12 @@ type Construct = {
 export const MarkerTrack = ({lifecycle, service}: Construct) => {
     return (
         <div className={className}>
-            <MarkerTrackHeader/>
+            <MarkerTrackHeader lifecycle={lifecycle}
+                               editing={service.project.editing}
+                               timelineBox={service.project.timelineBox}/>
             <div className="void"/>
-            <MarkerTrackBody lifecycle={lifecycle} service={service}/>
+            <MarkerTrackBody lifecycle={lifecycle}
+                             service={service}/>
         </div>
     )
 }
