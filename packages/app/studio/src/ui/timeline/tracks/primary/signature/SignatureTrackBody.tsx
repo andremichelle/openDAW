@@ -29,7 +29,7 @@ export const SignatureTrackBody = ({lifecycle, service}: Construct) => {
     const findSignatureAtPosition = (ppqn: number): Nullable<Signature> => {
         let result: Nullable<Signature> = null
         for (const sig of signatureTrackAdapter.iterateAll()) {
-            if (sig.position > ppqn) {break}
+            if (sig.accumulatedPpqn > ppqn) {break}
             result = sig
         }
         return result
@@ -41,7 +41,7 @@ export const SignatureTrackBody = ({lifecycle, service}: Construct) => {
             const signature = findSignatureAtPosition(pointer)
             if (signature === null) {return null}
             const signatureWidth = SignatureRenderer.computeWidth(context, signature)
-            return localX - range.unitToX(signature.position) < signatureWidth ? signature : null
+            return localX - range.unitToX(signature.accumulatedPpqn) < signatureWidth ? signature : null
         }
     })
 

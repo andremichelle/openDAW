@@ -30,7 +30,13 @@ export class SignatureTrackAdapter implements Terminable {
         this.#adapters = this.#terminator.own(IndexedBoxAdapterCollection.create(
             this.#timelineBox.signatureTrack.events,
             box => context.boxAdapters.adapterFor(box, SignatureEventBoxAdapter), Pointers.SignatureAutomation))
-
+        this.#terminator.ownAll(
+            this.#adapters.subscribe({
+                onAdd: (_adapter: SignatureEventBoxAdapter) => this.changeNotifier.notify(),
+                onRemove: (_adapter: SignatureEventBoxAdapter) => this.changeNotifier.notify(),
+                onReorder: (_adapter: SignatureEventBoxAdapter) => this.changeNotifier.notify()
+            })
+        )
     }
 
     get storageSignature(): Readonly<[int, int]> {

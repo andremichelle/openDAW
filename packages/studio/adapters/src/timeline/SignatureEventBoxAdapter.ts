@@ -38,5 +38,5 @@ export class SignatureEventBoxAdapter implements IndexedBoxAdapter {
     }
 
     terminate() {this.#terminator.terminate()}
-    toString(): string {return `{SignatureEventBoxAdapter ${UUID.toString(this.#box.address.uuid).substring(0, 4)}, ${this.nominator}/${this.denominator}}`}
+    toString(): string {return `{SignatureEventBoxAdapter ${this.nominator}/${this.denominator}}`}
 }

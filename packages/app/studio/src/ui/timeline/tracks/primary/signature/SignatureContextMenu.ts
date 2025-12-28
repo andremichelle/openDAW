@@ -31,7 +31,6 @@ export namespace SignatureContextMenu {
         return ContextMenu.subscribe(element, ({addItems, client}: ContextMenu.Collector) => {
             const signature = capturing.captureEvent(client)
             if (signature === null) {return}
-
             const optAdapter = trackAdapter.adapterAt(findIndexForSignature(trackAdapter, signature))
             if (optAdapter.isEmpty()) {return}
             addItems(
@@ -74,6 +73,11 @@ export namespace SignatureContextMenu {
                         }))
                     )
                 }),
+                MenuItem.default({label: "Delete"}).setTriggerProcedure(() =>
+                    optAdapter.ifSome(adapter => editing.modify(() => {
+                        console.debug("delete", adapter.toString())
+                        adapter.box.delete()
+                    }))),
                 DebugMenus.debugBox(optAdapter.unwrap().box))
         })
     }
