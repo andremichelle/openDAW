@@ -44,7 +44,7 @@ export namespace SignatureRenderer {
             text = label
         }
         const vPadding = Math.ceil(height / 5)
-        context.fillStyle = Colors.cream.toString()
+        context.fillStyle = Colors.dark.toString()
         context.fillRect(x0, vPadding, 2, height - (vPadding << 1))
         context.fillText(text, x0 + textPadding, height >> 1)
     }
