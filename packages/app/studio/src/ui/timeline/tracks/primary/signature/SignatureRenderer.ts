@@ -8,36 +8,31 @@ import {Colors} from "@opendaw/studio-enums"
 export namespace SignatureRenderer {
     const textPadding = 8 as const
 
-    export const createTrackRenderer = (canvas: HTMLCanvasElement,
-                                        range: TimelineRange,
-                                        trackAdapter: SignatureTrackAdapter) =>
-        new CanvasPainter(canvas, ({context}) => {
-            const {width, height} = canvas
-            const {fontFamily, fontSize} = getComputedStyle(canvas)
-            context.clearRect(0, 0, width, height)
-            context.textBaseline = "middle"
-            context.font = `${parseFloat(fontSize) * devicePixelRatio}px ${fontFamily}`
+    export const forTrack = (canvas: HTMLCanvasElement,
+                             range: TimelineRange,
+                             trackAdapter: SignatureTrackAdapter) => new CanvasPainter(canvas, ({context}) => {
+        const {width, height} = canvas
+        const {fontFamily, fontSize} = getComputedStyle(canvas)
+        context.clearRect(0, 0, width, height)
+        context.textBaseline = "middle"
+        context.font = `${parseFloat(fontSize) * devicePixelRatio}px ${fontFamily}`
+        const unitMin = range.unitMin
+        const unitMax = range.unitMax
+        const signatures = [...trackAdapter.iterateAll()]
+        for (let i = 0; i < signatures.length; i++) {
+            const curr = signatures[i]
+            const next = signatures[i + 1]
+            if (isDefined(next) && next.accumulatedPpqn < unitMin) {continue}
+            if (curr.accumulatedPpqn > unitMax) {break}
+            renderSignature(context, range, curr, height, next)
+        }
+    })
 
-            const unitMin = range.unitMin
-            const unitMax = range.unitMax
-            const signatures = [...trackAdapter.iterateAll()]
-
-            for (let i = 0; i < signatures.length; i++) {
-                const curr = signatures[i]
-                const next = signatures[i + 1]
-
-                if (isDefined(next) && next.accumulatedPpqn < unitMin) {continue}
-                if (curr.accumulatedPpqn > unitMax) {break}
-
-                SignatureRenderer.renderSignature(context, range, curr, height, next)
-            }
-        })
-
-    export const renderSignature = (context: CanvasRenderingContext2D,
-                                    range: TimelineRange,
-                                    signature: SignatureEvent,
-                                    height: number,
-                                    next?: SignatureEvent): void => {
+    const renderSignature = (context: CanvasRenderingContext2D,
+                             range: TimelineRange,
+                             signature: SignatureEvent,
+                             height: number,
+                             next?: SignatureEvent): void => {
         const x0 = Math.floor(range.unitToX(signature.accumulatedPpqn) * devicePixelRatio)
         const label = `${signature.nominator}/${signature.denominator}`
         let text: string
