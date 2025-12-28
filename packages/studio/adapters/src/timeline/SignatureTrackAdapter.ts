@@ -81,28 +81,33 @@ export class SignatureTrackAdapter implements Terminable {
     changeSignature(nominator: int, denominator: int): void {
         const originalEvents = Array.from(this.iterateAll()).slice(1)
         const originalPositions = originalEvents.map(e => e.accumulatedPpqn)
-
-        // Change storage signature
         this.#signature.nominator.setValue(nominator)
         this.#signature.denominator.setValue(denominator)
 
-        // Recalculate each event's relativePosition to preserve approximate absolute position
-        const newStorageBarPpqn = PPQN.fromSignature(nominator, denominator)
-        let prevAccumulatedPpqn: ppqn = 0
-        let prevBarPpqn = newStorageBarPpqn
+        // Recalculate each event's relativePosition to preserve approximate absolute positions.
+        // This matches Logic Pro's behavior of preserving absolute time positions.
+        let accumulatedPpqn: ppqn = 0.0
+        let accumulatedFraction = 0.0
+        let durationBar = PPQN.fromSignature(nominator, denominator)
 
         for (let i = 0; i < originalEvents.length; i++) {
             const event = originalEvents[i]
             const adapter = this.adapterAt(event.index)
             if (adapter.isEmpty()) {continue}
-
             const targetPpqn = originalPositions[i]
-            const newRelPos = Math.max(1, Math.round((targetPpqn - prevAccumulatedPpqn) / prevBarPpqn))
-
+            const barsFrac = (targetPpqn - accumulatedPpqn) / durationBar
+            const barsInt = Math.floor(barsFrac)
+            const fraction = barsFrac - barsInt
+            accumulatedFraction += fraction
+            let newRelPos = barsInt
+            if (accumulatedFraction >= 1.0) {
+                newRelPos += 1
+                accumulatedFraction -= 1.0
+            }
+            newRelPos = Math.max(1, newRelPos)
             adapter.unwrap().box.relativePosition.setValue(newRelPos)
-
-            prevAccumulatedPpqn += newRelPos * prevBarPpqn
-            prevBarPpqn = PPQN.fromSignature(event.nominator, event.denominator)
+            accumulatedPpqn += newRelPos * durationBar
+            durationBar = PPQN.fromSignature(event.nominator, event.denominator)
         }
     }
 

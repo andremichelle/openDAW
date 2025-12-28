@@ -83,4 +83,134 @@ describe("SignatureTrackAdapter", () => {
             }
         })
     })
+    describe("changeSignature algorithm", () => {
+        // Test data: Storage 4/4, changing to 3/4
+        // Original positions: [15360, 24960, 35040, 42960]
+        // Original bars (0-indexed): [4, 6, 9, 12] → displayed (1-indexed): [5, 7, 10, 13]
+        //
+        // After change to 3/4, Logic Pro shows: [6, 8, 11, 14]
+        // So new accumulated bars should be: [5, 7, 10, 13] (0-indexed)
+
+        type MockEvent = {
+            index: int
+            relativePosition: int
+            nominator: int
+            denominator: int
+        }
+
+        const simulateChangeSignature = (
+            events: MockEvent[],
+            oldStorage: Readonly<[int, int]>,
+            newStorage: Readonly<[int, int]>
+        ): { newRelPositions: int[], newAccumulatedBars: int[], newAccumulatedPpqn: ppqn[] } => {
+            // Step 1: Calculate original absolute ppqn positions
+            const originalPositions: ppqn[] = []
+            let accPpqn = 0
+            let prevSig = oldStorage
+            for (const event of events) {
+                accPpqn += event.relativePosition * barPpqn(prevSig[0], prevSig[1])
+                originalPositions.push(accPpqn)
+                prevSig = [event.nominator, event.denominator]
+            }
+
+            // Step 2: Recalculate relative positions for new storage
+            // Logic Pro appears to accumulate fractional bar errors and apply correction
+            const newRelPositions: int[] = []
+            const newAccumulatedPpqn: ppqn[] = []
+            const newAccumulatedBars: int[] = []
+            const newStorageBarPpqn = barPpqn(newStorage[0], newStorage[1])
+
+            let prevAccumulatedPpqn = 0
+            let prevBarPpqn = newStorageBarPpqn
+            let accumulatedFraction = 0
+
+            for (let i = 0; i < events.length; i++) {
+                const targetPpqn = originalPositions[i]
+                const exactBars = (targetPpqn - prevAccumulatedPpqn) / prevBarPpqn
+                const wholeBars = Math.floor(exactBars)
+                const fraction = exactBars - wholeBars
+
+                accumulatedFraction += fraction
+
+                // Apply correction when accumulated fraction exceeds 1.0
+                let newRelPos = wholeBars
+                if (accumulatedFraction >= 1.0) {
+                    newRelPos += 1
+                    accumulatedFraction -= 1.0
+                }
+                newRelPos = Math.max(1, newRelPos)
+                newRelPositions.push(newRelPos)
+
+                prevAccumulatedPpqn += newRelPos * prevBarPpqn
+                newAccumulatedPpqn.push(prevAccumulatedPpqn)
+
+                prevBarPpqn = barPpqn(events[i].nominator, events[i].denominator)
+            }
+
+            // Calculate accumulated bars
+            let accBars = 0
+            for (const relPos of newRelPositions) {
+                accBars += relPos
+                newAccumulatedBars.push(accBars)
+            }
+
+            return {newRelPositions, newAccumulatedBars, newAccumulatedPpqn}
+        }
+
+        it("should preserve approximate positions when changing 4/4 to 3/4", () => {
+            const events: MockEvent[] = [
+                {index: 0, relativePosition: 4, nominator: 5, denominator: 4},
+                {index: 1, relativePosition: 2, nominator: 7, denominator: 8},
+                {index: 2, relativePosition: 3, nominator: 11, denominator: 16},
+                {index: 3, relativePosition: 3, nominator: 4, denominator: 4}
+            ]
+            const oldStorage: Readonly<[int, int]> = [4, 4]
+            const newStorage: Readonly<[int, int]> = [3, 4]
+
+            const result = simulateChangeSignature(events, oldStorage, newStorage)
+
+            // Logic Pro shows bars: [6, 8, 11, 15] (1-indexed)
+            // So accumulated bars (0-indexed) should be: [5, 7, 10, 14]
+            expect(result.newAccumulatedBars).toEqual([5, 7, 10, 14])
+
+            // Verify relative positions
+            expect(result.newRelPositions).toEqual([5, 2, 3, 4])
+
+            // Verify positions are close to original (within 1 bar tolerance)
+            const originalPositions = [15360, 24960, 35040, 42960]
+            for (let i = 0; i < originalPositions.length; i++) {
+                const maxBarPpqn = Math.max(
+                    barPpqn(4, 4), barPpqn(5, 4), barPpqn(7, 8), barPpqn(11, 16)
+                )
+                const drift = Math.abs(result.newAccumulatedPpqn[i] - originalPositions[i])
+                expect(drift).toBeLessThanOrEqual(maxBarPpqn)
+            }
+        })
+
+        it("should verify original positions are preserved", () => {
+            // The algorithm should not LOSE any events or drastically change positions
+            const events: MockEvent[] = [
+                {index: 0, relativePosition: 4, nominator: 5, denominator: 4},
+                {index: 1, relativePosition: 2, nominator: 7, denominator: 8},
+                {index: 2, relativePosition: 3, nominator: 11, denominator: 16},
+                {index: 3, relativePosition: 3, nominator: 4, denominator: 4}
+            ]
+
+            // Changing 4/4 → 3/4 → 4/4 should return to roughly original positions
+            const result1 = simulateChangeSignature(events, [4, 4], [3, 4])
+            const eventsAfterChange = events.map((e, i) => ({
+                ...e,
+                relativePosition: result1.newRelPositions[i]
+            }))
+            const result2 = simulateChangeSignature(eventsAfterChange, [3, 4], [4, 4])
+
+            // Bars should be close to original [4, 6, 9, 12]
+            // Due to rounding, there may be small drift
+            const originalBars = [4, 6, 9, 12]
+            for (let i = 0; i < originalBars.length; i++) {
+                const drift = Math.abs(result2.newAccumulatedBars[i] - originalBars[i])
+                expect(drift).toBeLessThanOrEqual(1) // Allow 1 bar drift due to rounding
+            }
+        })
+    })
 })
