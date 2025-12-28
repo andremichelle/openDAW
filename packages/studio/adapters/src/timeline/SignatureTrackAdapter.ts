@@ -79,15 +79,31 @@ export class SignatureTrackAdapter implements Terminable {
     }
 
     changeSignature(nominator: int, denominator: int): void {
-        const events = Array.from(this.iterateAll()).slice(1)
-        // TODO quantise each each to the nearest new bar (with respect to the new storage signature)
-        //  So in fact they might ALL change their relativePosition to come closer to their rendered position before the change.
-        //  Example:
-        //      1. 4/4 at storage, 5/4 at bar 5 (displayed)
-        //      2. 3/4 at storage, 5/4 now at bar 6 (displayed)
+        const originalEvents = Array.from(this.iterateAll()).slice(1)
+        const originalPositions = originalEvents.map(e => e.accumulatedPpqn)
 
+        // Change storage signature
         this.#signature.nominator.setValue(nominator)
         this.#signature.denominator.setValue(denominator)
+
+        // Recalculate each event's relativePosition to preserve approximate absolute position
+        const newStorageBarPpqn = PPQN.fromSignature(nominator, denominator)
+        let prevAccumulatedPpqn: ppqn = 0
+        let prevBarPpqn = newStorageBarPpqn
+
+        for (let i = 0; i < originalEvents.length; i++) {
+            const event = originalEvents[i]
+            const adapter = this.adapterAt(event.index)
+            if (adapter.isEmpty()) {continue}
+
+            const targetPpqn = originalPositions[i]
+            const newRelPos = Math.max(1, Math.round((targetPpqn - prevAccumulatedPpqn) / prevBarPpqn))
+
+            adapter.unwrap().box.relativePosition.setValue(newRelPos)
+
+            prevAccumulatedPpqn += newRelPos * prevBarPpqn
+            prevBarPpqn = PPQN.fromSignature(event.nominator, event.denominator)
+        }
     }
 
     deleteAdapterAt(index: int): void {
