@@ -30,11 +30,12 @@ export class SignatureTrackAdapter implements Terminable {
         this.#signatureTrack = signatureTrack
 
         this.changeNotifier = new Notifier<void>()
-        this.#adapters = this.#terminator.own(IndexedBoxAdapterCollection.create(
-            this.#signatureTrack.events,
-            box => context.boxAdapters.adapterFor(box, SignatureEventBoxAdapter), Pointers.SignatureAutomation))
+        this.#adapters = this.#terminator.own(
+            IndexedBoxAdapterCollection.create(this.#signatureTrack.events,
+                box => context.boxAdapters.adapterFor(box, SignatureEventBoxAdapter), Pointers.SignatureAutomation))
         this.#terminator.ownAll(
             this.#signature.subscribe(() => this.dispatchChange()),
+            this.#signatureTrack.enabled.subscribe(() => this.dispatchChange()),
             this.#adapters.subscribe({
                 onAdd: (_adapter: SignatureEventBoxAdapter) => this.changeNotifier.notify(),
                 onRemove: (_adapter: SignatureEventBoxAdapter) => this.changeNotifier.notify(),
@@ -71,6 +72,7 @@ export class SignatureTrackAdapter implements Terminable {
         let accumulatedBars: int = 0
         let [nominator, denominator]: Readonly<[int, int]> = this.storageSignature
         yield {index: -1, accumulatedPpqn, accumulatedBars, nominator, denominator}
+        if (!this.#signatureTrack.enabled.getValue()) {return}
         for (const adapter of this.#adapters.adapters()) {
             accumulatedPpqn += PPQN.fromSignature(nominator, denominator) * adapter.relativePosition
             accumulatedBars += adapter.relativePosition
