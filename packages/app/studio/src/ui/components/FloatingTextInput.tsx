@@ -14,6 +14,7 @@ type Construct = {
 }
 
 export const FloatingTextInput = ({resolvers, position, value, unit, numeric}: Construct) => {
+    const focusElement = document.activeElement as HTMLElement
     const inputField: HTMLInputElement = (<input type="text" value={isDefined(value) ? String(value) : ""}/>)
     requestAnimationFrame(() => {
         inputField.select()
@@ -25,6 +26,7 @@ export const FloatingTextInput = ({resolvers, position, value, unit, numeric}: C
             inputField.onblur = null
             inputField.onkeydown = null
             element.remove()
+            focusElement?.focus()
         }
         inputField.onblur = () => {
             remove()

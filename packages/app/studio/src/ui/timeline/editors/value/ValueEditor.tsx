@@ -281,8 +281,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 if (result.type === "explicit") {
                     value = eventMapping.y(context.valueMapping.x(result.value))
                 } else {return}
-                editing.modify(() => selection.selected()
-                    .forEach(adapter => adapter.box.value.setValue(value)))
+                editing.modify(() => selection.selected().forEach(adapter => adapter.box.value.setValue(value)))
             }
         }),
         installValueContextMenu({element: canvas, capturing, editing, selection})
