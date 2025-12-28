@@ -119,7 +119,7 @@ evolves.
 #### 2026/Q1
 
 - [ ] Fade-in and out on audio-regions
-- [ ] Signature automation track
+- [X] Signature automation track
 - [X] Tempo automation track
 - [ ] Fine-tune recording including loops (takes)
 
