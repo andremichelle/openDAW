@@ -1,12 +1,12 @@
 import {Comparator, int, Option, Terminator, UUID} from "@opendaw/lib-std"
-import {Address, Propagation, Update} from "@opendaw/lib-box"
+import {Address, Int32Field, Propagation, Update} from "@opendaw/lib-box"
 import {SignatureEventBox} from "@opendaw/studio-boxes"
-import {BoxAdapter} from "../BoxAdapter"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {SignatureTrackAdapter} from "./SignatureTrackAdapter"
 import {TimelineBoxAdapter} from "./TimelineBoxAdapter"
+import {IndexedBoxAdapter} from "../IndexedBoxAdapterCollection"
 
-export class SignatureEventBoxAdapter implements BoxAdapter {
+export class SignatureEventBoxAdapter implements IndexedBoxAdapter {
     static readonly Comparator: Comparator<SignatureEventBoxAdapter> = (a, b) => a.index - b.index
 
     readonly type = "signature-event"
@@ -20,23 +20,15 @@ export class SignatureEventBoxAdapter implements BoxAdapter {
         this.#context = context
         this.#box = box
 
-        this.#terminator.own(this.#box.subscribe(Propagation.Children, (update: Update) => {
-            if (this.trackAdapter.isEmpty()) {return}
-            if (update.type === "primitive" || update.type === "pointer") {
-                const track = this.trackAdapter.unwrap()
-                if (this.#box.index.address.equals(update.address)) {
-                    track.onSortingChanged()
-                } else {
-                    track.dispatchChange()
-                }
-            }
-        }))
+        this.#terminator.own(this.#box.subscribe(Propagation.Children, (_update: Update) =>
+            this.trackAdapter.ifSome(adapter => adapter.dispatchChange())))
     }
 
     get box(): SignatureEventBox {return this.#box}
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get index(): int {return this.#box.index.getValue()}
+    get indexField(): Int32Field {return this.#box.index}
     get relativePosition(): int {return this.#box.relativePosition.getValue()}
     get nominator(): int {return this.#box.nominator.getValue()}
     get denominator(): int {return this.#box.denominator.getValue()}

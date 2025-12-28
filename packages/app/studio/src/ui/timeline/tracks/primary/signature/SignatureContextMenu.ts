@@ -17,7 +17,7 @@ export namespace SignatureContextMenu {
     const findIndexForSignature = (trackAdapter: SignatureTrackAdapter, signature: Signature): int => {
         let index = 0
         for (const sig of trackAdapter.iterateAll()) {
-            if (sig.position === signature.position) {return index}
+            if (sig.accumulatedPpqn === signature.accumulatedPpqn) {return index}
             index++
         }
         return -1
@@ -32,16 +32,15 @@ export namespace SignatureContextMenu {
             const signature = capturing.captureEvent(client)
             if (signature === null) {return}
 
-            const adapter = trackAdapter.adapterAt(findIndexForSignature(trackAdapter, signature))
-            if (adapter === undefined) {return}
-
+            const optAdapter = trackAdapter.adapterAt(findIndexForSignature(trackAdapter, signature))
+            if (optAdapter.isEmpty()) {return}
             addItems(
                 MenuItem.default({label: "Edit Signature"}).setTriggerProcedure(() => {
                     const resolvers = Promise.withResolvers<string>()
                     const clientRect = element.getBoundingClientRect()
                     Surface.get(element).flyout.appendChild(FloatingTextInput({
                         position: {
-                            x: range.unitToX(signature.position) + clientRect.left,
+                            x: range.unitToX(signature.accumulatedPpqn) + clientRect.left,
                             y: clientRect.top + clientRect.height / 2
                         },
                         value: `${signature.nominator}/${signature.denominator}`,
@@ -51,9 +50,11 @@ export namespace SignatureContextMenu {
                         const attempt = Parsing.parseTimeSignature(value)
                         if (attempt.isSuccess()) {
                             const [nominator, denominator] = attempt.result()
+                            if (optAdapter.isEmpty()) {return}
                             editing.modify(() => {
-                                adapter.box.nominator.setValue(clamp(nominator, 1, 32))
-                                adapter.box.denominator.setValue(clamp(denominator, 1, 32))
+                                const {box} = optAdapter.unwrap()
+                                box.nominator.setValue(clamp(nominator, 1, 32))
+                                box.denominator.setValue(clamp(denominator, 1, 32))
                             })
                         }
                     }, EmptyExec)
@@ -63,13 +64,17 @@ export namespace SignatureContextMenu {
                         ...PresetSignatures.map(([nom, denom]) => MenuItem.default({
                             label: `${nom}/${denom}`,
                             checked: signature.nominator === nom && signature.denominator === denom
-                        }).setTriggerProcedure(() => editing.modify(() => {
-                            adapter.box.nominator.setValue(nom)
-                            adapter.box.denominator.setValue(denom)
-                        })))
+                        }).setTriggerProcedure(() => {
+                            if (optAdapter.isEmpty()) {return}
+                            editing.modify(() => {
+                                const {box} = optAdapter.unwrap()
+                                box.nominator.setValue(nom)
+                                box.denominator.setValue(denom)
+                            })
+                        }))
                     )
                 }),
-                DebugMenus.debugBox(adapter.box))
+                DebugMenus.debugBox(optAdapter.unwrap().box))
         })
     }
 }

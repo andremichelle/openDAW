@@ -384,7 +384,7 @@ export class StudioService implements ProjectEnv {
                     this.timeline.primaryVisibility.tempo.setValue(true)
                 }
                 // Signature
-                if (timelineBoxAdapter.signatureTrack.count > 0) {
+                if (timelineBoxAdapter.signatureTrack.size > 0) {
                     this.timeline.primaryVisibility.signature.setValue(true)
                 }
                 // Clips
