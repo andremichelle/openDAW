@@ -111,8 +111,8 @@ export class SignatureTrackAdapter implements Terminable {
         }
     }
 
-    deleteAdapterAt(index: int): void {
-
+    deleteAdapter(adapter: SignatureEventBoxAdapter): void {
+        // TODO Implement. Usse logic and style from changeSignature above
     }
 
     adapterAt(index: int): Option<SignatureEventBoxAdapter> {return this.#adapters.getAdapterByIndex(index)}

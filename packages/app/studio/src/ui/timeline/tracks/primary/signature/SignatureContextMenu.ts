@@ -2,7 +2,7 @@ import {ContextMenu} from "@/ui/ContextMenu"
 import {MenuItem} from "@/ui/model/menu-item"
 import {ElementCapturing} from "@/ui/canvas/capturing"
 import {Parsing, SignatureEvent, SignatureTrackAdapter} from "@opendaw/studio-adapters"
-import {clamp, EmptyExec} from "@opendaw/lib-std"
+import {EmptyExec} from "@opendaw/lib-std"
 import {BoxEditing} from "@opendaw/lib-box"
 import {DebugMenus} from "@/ui/menu/debug"
 import {TimelineRange} from "@opendaw/studio-core"
@@ -39,36 +39,45 @@ export namespace SignatureContextMenu {
                         const attempt = Parsing.parseTimeSignature(value)
                         if (attempt.isSuccess()) {
                             const [nominator, denominator] = attempt.result()
-                            if (optAdapter.isEmpty()) {return}
-                            editing.modify(() => {
-                                const {box} = optAdapter.unwrap()
-                                box.nominator.setValue(clamp(nominator, 1, 32))
-                                box.denominator.setValue(clamp(denominator, 1, 32))
+                            optAdapter.match<unknown>({
+                                none: () => editing.modify(() => trackAdapter.changeSignature(nominator, denominator)),
+                                some: adapter => {
+                                    editing.modify(() => {
+                                        const {box} = adapter
+                                        box.nominator.setValue(nominator)
+                                        box.denominator.setValue(denominator)
+                                    })
+                                }
                             })
                         }
                     }, EmptyExec)
                 }),
                 MenuItem.default({label: "Presets"}).setRuntimeChildrenProcedure(parent => {
                     parent.addMenuItem(
-                        ...PresetSignatures.map(([nom, denom]) => MenuItem.default({
-                            label: `${nom}/${denom}`,
-                            checked: signature.nominator === nom && signature.denominator === denom
+                        ...PresetSignatures.map(([nominator, denominator]) => MenuItem.default({
+                            label: `${nominator}/${denominator}`,
+                            checked: signature.nominator === nominator && signature.denominator === denominator
                         }).setTriggerProcedure(() => {
-                            if (optAdapter.isEmpty()) {return}
-                            editing.modify(() => {
-                                const {box} = optAdapter.unwrap()
-                                box.nominator.setValue(nom)
-                                box.denominator.setValue(denom)
+                            optAdapter.match<unknown>({
+                                none: () => editing.modify(() => trackAdapter.changeSignature(nominator, denominator)),
+                                some: adapter => {
+                                    editing.modify(() => {
+                                        const {box} = adapter
+                                        box.nominator.setValue(nominator)
+                                        box.denominator.setValue(denominator)
+                                    })
+                                }
                             })
                         }))
                     )
-                }),
-                MenuItem.default({label: "Delete"}).setTriggerProcedure(() =>
-                    optAdapter.ifSome(adapter => editing.modify(() => {
-                        console.debug("delete", adapter.toString())
-                        adapter.box.delete()
-                    }))),
-                DebugMenus.debugBox(optAdapter.unwrap().box))
+                })
+            )
+            if (optAdapter.nonEmpty()) {
+                addItems(
+                    MenuItem.default({label: "Delete"}).setTriggerProcedure(() => optAdapter.ifSome(adapter =>
+                        editing.modify(() => trackAdapter.deleteAdapter(adapter)))),
+                    DebugMenus.debugBox(optAdapter.unwrap().box))
+            }
         })
     }
 }
