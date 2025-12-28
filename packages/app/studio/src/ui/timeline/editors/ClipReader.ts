@@ -4,6 +4,7 @@ import {
     ClipBoxAdapter,
     NoteClipBoxAdapter,
     NoteEventCollectionBoxAdapter,
+    TimelineBoxAdapter,
     TrackBoxAdapter,
     ValueClipBoxAdapter,
     ValueEventCollectionBoxAdapter
@@ -20,22 +21,24 @@ import {
 } from "@/ui/timeline/editors/EventOwnerReader.ts"
 
 export class ClipReader<CONTENT> implements EventOwnerReader<CONTENT> {
-    static forAudioClipBoxAdapter(clip: AudioClipBoxAdapter): AudioEventOwnerReader {
+    static forAudioClipBoxAdapter(clip: AudioClipBoxAdapter, timelineBoxAdapter: TimelineBoxAdapter): AudioEventOwnerReader {
         return new class extends ClipReader<never> implements AudioEventOwnerReader {
-            constructor(clip: AudioClipBoxAdapter) {super(clip)}
+            constructor(clip: AudioClipBoxAdapter) {super(clip, timelineBoxAdapter)}
             get audioContent(): AudioContentBoxAdapter {return clip}
         }(clip)
     }
 
-    static forNoteClipBoxAdapter(adapter: NoteClipBoxAdapter): NoteEventOwnerReader {
-        return new ClipReader<NoteEventCollectionBoxAdapter>(adapter)
+    static forNoteClipBoxAdapter(adapter: NoteClipBoxAdapter,
+                                 timelineBoxAdapter: TimelineBoxAdapter): NoteEventOwnerReader {
+        return new ClipReader<NoteEventCollectionBoxAdapter>(adapter, timelineBoxAdapter)
     }
 
-    static forValueClipBoxAdapter(adapter: ValueClipBoxAdapter): ValueEventOwnerReader {
-        return new ClipReader<ValueEventCollectionBoxAdapter>(adapter)
+    static forValueClipBoxAdapter(adapter: ValueClipBoxAdapter,
+                                  timelineBoxAdapter: TimelineBoxAdapter): ValueEventOwnerReader {
+        return new ClipReader<ValueEventCollectionBoxAdapter>(adapter, timelineBoxAdapter)
     }
 
-    constructor(readonly clip: ClipBoxAdapter<CONTENT>) {}
+    constructor(readonly clip: ClipBoxAdapter<CONTENT>, readonly timelineBoxAdapter: TimelineBoxAdapter) {}
 
     get position(): number {return 0}
     get duration(): number {return this.clip.duration}

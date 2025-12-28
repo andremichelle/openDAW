@@ -33,9 +33,9 @@ export const renderRegions = (context: CanvasRenderingContext2D,
 
     const grid = true
     if (grid) {
-        const {timelineBox: {signature: {nominator, denominator}}} = tracks.service.project
+        const {timelineBoxAdapter: {signatureTrack}} = tracks.service.project
         context.fillStyle = "rgba(0, 0, 0, 0.3)"
-        TimeGrid.fragment([nominator.getValue(), denominator.getValue()], range, ({pulse}) => {
+        TimeGrid.fragment(signatureTrack, range, ({pulse}) => {
             const x0 = Math.floor(range.unitToX(pulse) * devicePixelRatio)
             context.fillRect(x0, 0, devicePixelRatio, height)
         }, {minLength: 32})

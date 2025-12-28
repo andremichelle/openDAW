@@ -4,6 +4,7 @@ import {
     LoopableRegionBoxAdapter,
     NoteEventCollectionBoxAdapter,
     NoteRegionBoxAdapter,
+    TimelineBoxAdapter,
     TrackBoxAdapter,
     ValueEventCollectionBoxAdapter,
     ValueRegionBoxAdapter
@@ -21,23 +22,26 @@ import {TimelineRange} from "@opendaw/studio-core"
 import {deferNextFrame} from "@opendaw/lib-dom"
 
 export class RegionReader<REGION extends LoopableRegionBoxAdapter<CONTENT>, CONTENT> implements EventOwnerReader<CONTENT> {
-    static forAudioRegionBoxAdapter(region: AudioRegionBoxAdapter): AudioEventOwnerReader {
+    static forAudioRegionBoxAdapter(region: AudioRegionBoxAdapter,
+                                    timelineBoxAdapter: TimelineBoxAdapter): AudioEventOwnerReader {
         return new class extends RegionReader<AudioRegionBoxAdapter, ValueEventCollectionBoxAdapter>
             implements AudioEventOwnerReader {
-            constructor(region: AudioRegionBoxAdapter) {super(region)}
+            constructor(region: AudioRegionBoxAdapter) {super(region, timelineBoxAdapter)}
             get audioContent(): AudioContentBoxAdapter {return region}
         }(region)
     }
 
-    static forNoteRegionBoxAdapter(adapter: NoteRegionBoxAdapter): NoteEventOwnerReader {
-        return new RegionReader<NoteRegionBoxAdapter, NoteEventCollectionBoxAdapter>(adapter)
+    static forNoteRegionBoxAdapter(adapter: NoteRegionBoxAdapter,
+                                   timelineBoxAdapter: TimelineBoxAdapter): NoteEventOwnerReader {
+        return new RegionReader<NoteRegionBoxAdapter, NoteEventCollectionBoxAdapter>(adapter, timelineBoxAdapter)
     }
 
-    static forValueRegionBoxAdapter(adapter: ValueRegionBoxAdapter): ValueEventOwnerReader {
-        return new RegionReader<ValueRegionBoxAdapter, ValueEventCollectionBoxAdapter>(adapter)
+    static forValueRegionBoxAdapter(adapter: ValueRegionBoxAdapter,
+                                    timelineBoxAdapter: TimelineBoxAdapter): ValueEventOwnerReader {
+        return new RegionReader<ValueRegionBoxAdapter, ValueEventCollectionBoxAdapter>(adapter, timelineBoxAdapter)
     }
 
-    constructor(readonly region: REGION) {}
+    constructor(readonly region: REGION, readonly timelineBoxAdapter: TimelineBoxAdapter) {}
 
     get position(): number {return this.region.position}
     get duration(): number {return this.region.duration}

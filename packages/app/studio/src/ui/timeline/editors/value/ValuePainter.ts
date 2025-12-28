@@ -48,7 +48,7 @@ export const createValuePainter =
         context.font = `${em}px ${fontFamily}`
         const y0 = Math.floor(valueToPixel(eventMapping.y(1.0)))
         const y1 = Math.floor(valueToPixel(eventMapping.y(0.0)))
-        renderTimeGrid(context, range, snapping, y0, y1)
+        renderTimeGrid(context, reader.timelineBoxAdapter.signatureTrack, range, snapping, y0, y1)
         const offset = reader.offset
         // LOOP DURATION
         if (reader.canLoop) {

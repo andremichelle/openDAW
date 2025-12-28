@@ -26,7 +26,14 @@ type Construct = {
     cursorModel: ObservableValue<Nullable<ppqn>>
 }
 
-export const AudioEditorCanvas = ({lifecycle, project: {editing}, range, cursorModel, snapping, reader}: Construct) => {
+export const AudioEditorCanvas = ({
+                                      lifecycle,
+                                      project: {editing, timelineBoxAdapter: {signatureTrack}},
+                                      range,
+                                      cursorModel,
+                                      snapping,
+                                      reader
+                                  }: Construct) => {
     const {audioContent: {file, observableOptPlayMode, waveformOffset, gain}} = reader
     return (
         <div className={className}>
@@ -34,9 +41,7 @@ export const AudioEditorCanvas = ({lifecycle, project: {editing}, range, cursorM
                 const capturing = createAudioCapturing(canvas, range, reader)
                 const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
                     const {context, actualHeight, devicePixelRatio} = painter
-
-                    renderTimeGrid(context, range, snapping, 0, actualHeight)
-
+                    renderTimeGrid(context, signatureTrack, range, snapping, 0, actualHeight)
                     const x0 = Math.floor(range.unitToX(reader.offset) * devicePixelRatio)
                     const x1 = Math.floor(range.unitToX(reader.offset + reader.loopDuration) * devicePixelRatio)
                     if (x0 > 0) {

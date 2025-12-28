@@ -1,6 +1,7 @@
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {int, quantizeFloor} from "@opendaw/lib-std"
 import {TimelineRange} from "./TimelineRange"
+import {SignatureTrackAdapter} from "@opendaw/studio-adapters"
 
 export namespace TimeGrid {
     export type Signature = [int, int]
@@ -9,10 +10,11 @@ export namespace TimeGrid {
     export type Fragment = { bars: int, beats: int, ticks: int, isBar: boolean, isBeat: boolean, pulse: number }
     export type Designer = (fragment: Fragment) => void
 
-    export const fragment = ([nominator, denominator]: Signature,
+    export const fragment = (signatureTrack: SignatureTrackAdapter,
                              range: TimelineRange, designer: Designer, options?: Options): void => {
         const unitsPerPixel = range.unitsPerPixel
         if (unitsPerPixel <= 0) {return}
+        const [nominator, denominator] = signatureTrack.storageSignature
         const barPulses = PPQN.fromSignature(nominator, denominator)
         const beatPulses = PPQN.fromSignature(1, denominator)
         const minLength = options?.minLength ?? 48

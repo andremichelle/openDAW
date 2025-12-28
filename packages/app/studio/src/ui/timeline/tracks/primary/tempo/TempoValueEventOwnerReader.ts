@@ -25,6 +25,7 @@ export class TempoValueEventOwnerReader implements ValueEventOwnerReader {
     get mute(): boolean {return !this.#adapter.box.tempoTrack.enabled.getValue()}
     get canLoop(): boolean {return false}
     get trackBoxAdapter(): Option<TrackBoxAdapter> {return Option.None}
+    get timelineBoxAdapter(): TimelineBoxAdapter {return this.#adapter}
     keeoOverlapping(_range: TimelineRange): Subscription {
         return Terminable.Empty
     }

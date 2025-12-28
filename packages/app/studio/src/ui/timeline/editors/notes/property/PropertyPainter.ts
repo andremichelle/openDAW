@@ -24,7 +24,7 @@ export const createPropertyPainter =
     ({range, valueAxis, propertyOwner, snapping, modifyContext, reader}: Construct): Procedure<CanvasPainter> =>
         painter => {
             const context = painter.context
-            renderTimeGrid(context, range, snapping,
+            renderTimeGrid(context, reader.timelineBoxAdapter.signatureTrack, range, snapping,
                 Math.floor(valueAxis.valueToAxis(1.0) * devicePixelRatio),
                 Math.floor(valueAxis.valueToAxis(0.0) * devicePixelRatio))
             const {offset, hue, content: {events}} = reader

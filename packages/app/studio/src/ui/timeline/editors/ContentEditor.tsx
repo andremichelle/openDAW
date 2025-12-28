@@ -168,37 +168,41 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
 
     const updateEditor = deferNextFrame(() => editingSubject.get().match({
         some: (vertex: Vertex) => {
+            const {project: {boxAdapters, timelineBoxAdapter}} = service
             replaceChildren(contentEditor, vertex.box.accept<BoxVisitor<Element>>({
                 visitNoteClipBox: (box: NoteClipBox): Element => {
                     const reader = ClipReader
-                        .forNoteClipBoxAdapter(service.project.boxAdapters.adapterFor(box, NoteClipBoxAdapter))
+                        .forNoteClipBoxAdapter(boxAdapters.adapterFor(box, NoteClipBoxAdapter), timelineBoxAdapter)
                     owner = Option.wrap(reader)
                     return createNoteEditor(reader)
                 },
                 visitNoteRegionBox: (box: NoteRegionBox): Element => {
-                    const reader = RegionReader.forNoteRegionBoxAdapter(service.project.boxAdapters.adapterFor(box, NoteRegionBoxAdapter))
+                    const adapter = boxAdapters.adapterFor(box, NoteRegionBoxAdapter)
+                    const reader = RegionReader.forNoteRegionBoxAdapter(adapter, timelineBoxAdapter)
                     owner = Option.wrap(reader)
-                    return createNoteEditor(RegionReader.forNoteRegionBoxAdapter(service.project.boxAdapters.adapterFor(box, NoteRegionBoxAdapter)))
+                    return createNoteEditor(reader)
                 },
                 visitValueClipBox: (box: ValueClipBox): Element => {
-                    const reader = ClipReader.forValueClipBoxAdapter(service.project.boxAdapters.adapterFor(box, ValueClipBoxAdapter))
+                    const adapter = boxAdapters.adapterFor(box, ValueClipBoxAdapter)
+                    const reader = ClipReader.forValueClipBoxAdapter(adapter, timelineBoxAdapter)
                     owner = Option.wrap(reader)
                     return createValueEditor(reader, box.clips)
                 },
                 visitValueRegionBox: (box: ValueRegionBox): Element => {
-                    const reader = RegionReader.forValueRegionBoxAdapter(service.project.boxAdapters.adapterFor(box, ValueRegionBoxAdapter))
+                    const adapter = boxAdapters.adapterFor(box, ValueRegionBoxAdapter)
+                    const reader = RegionReader.forValueRegionBoxAdapter(adapter, timelineBoxAdapter)
                     owner = Option.wrap(reader)
                     return createValueEditor(reader, box.regions)
                 },
                 visitAudioClipBox: (box: AudioClipBox): Element => {
-                    const reader = ClipReader
-                        .forAudioClipBoxAdapter(service.project.boxAdapters.adapterFor(box, AudioClipBoxAdapter))
+                    const adapter = boxAdapters.adapterFor(box, AudioClipBoxAdapter)
+                    const reader = ClipReader.forAudioClipBoxAdapter(adapter, timelineBoxAdapter)
                     owner = Option.wrap(reader)
                     return createAudioEditor(reader)
                 },
                 visitAudioRegionBox: (box: AudioRegionBox): Element => {
-                    const reader = RegionReader
-                        .forAudioRegionBoxAdapter(service.project.boxAdapters.adapterFor(box, AudioRegionBoxAdapter))
+                    const adapter = boxAdapters.adapterFor(box, AudioRegionBoxAdapter)
+                    const reader = RegionReader.forAudioRegionBoxAdapter(adapter, timelineBoxAdapter)
                     owner = Option.wrap(reader)
                     return createAudioEditor(reader)
                 }

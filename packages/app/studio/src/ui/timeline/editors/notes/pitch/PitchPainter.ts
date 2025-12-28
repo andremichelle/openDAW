@@ -28,7 +28,7 @@ export const createNotePitchPainter =
             const {canvas: {width, height}} = context
             const unitToX = (unit: ppqn) => Math.floor(range.unitToX(unit + reader.offset) * devicePixelRatio)
             const pitchToY = (pitch: int) => positioner.pitchToY(pitch) * devicePixelRatio
-            renderTimeGrid(context, range, snapping, 0, height)
+            renderTimeGrid(context, reader.timelineBoxAdapter.signatureTrack, range, snapping, 0, height)
             const modifier: Option<NoteModifyStrategies> = modifyContext.modifier
             const strategy = modifier.unwrapOrElse(NoteModifyStrategies.Identity)
             // LOOP DURATION

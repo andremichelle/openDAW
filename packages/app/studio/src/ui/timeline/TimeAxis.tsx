@@ -32,7 +32,15 @@ export interface TimeAxisCursorMapper {
 
 export const TimeAxis = ({lifecycle, service, snapping, range, mapper}: Construct) => {
     let endMarkerPosition: Nullable<ppqn> = null
-    const {project: {timelineBox: {signature, durationInPulses}, engine, editing, boxGraph}} = service
+    const {
+        project: {
+            timelineBox: {signature, durationInPulses},
+            timelineBoxAdapter: {signatureTrack},
+            engine,
+            editing,
+            boxGraph
+        }
+    } = service
     const {position, playbackTimestamp} = engine
     const canvas: HTMLCanvasElement = (<canvas/>)
     const painter = lifecycle.own(new CanvasPainter(canvas, ({context}) => {
@@ -42,8 +50,7 @@ export const TimeAxis = ({lifecycle, service, snapping, range, mapper}: Construc
         context.textBaseline = "alphabetic"
         context.font = `${parseFloat(fontSize) * devicePixelRatio}px ${fontFamily}`
         const textY = height - 4 * devicePixelRatio
-        const {nominator, denominator} = signature
-        TimeGrid.fragment([nominator.getValue(), denominator.getValue()],
+        TimeGrid.fragment(signatureTrack,
             range, ({bars, beats, isBar, isBeat, pulse}) => {
                 const x = Math.floor(range.unitToX(pulse) * devicePixelRatio)
                 const textX = x + 5

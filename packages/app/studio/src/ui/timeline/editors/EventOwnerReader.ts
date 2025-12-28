@@ -4,6 +4,7 @@ import {TimeAxisCursorMapper} from "@/ui/timeline/TimeAxis.tsx"
 import {
     AudioContentBoxAdapter,
     NoteEventCollectionBoxAdapter,
+    TimelineBoxAdapter,
     TrackBoxAdapter,
     ValueEventCollectionBoxAdapter
 } from "@opendaw/studio-adapters"
@@ -33,6 +34,7 @@ export interface EventOwnerReader<CONTENT> extends TimeAxisCursorMapper {
     get isMirrored(): boolean
     get content(): CONTENT
     get trackBoxAdapter(): Option<TrackBoxAdapter>
+    get timelineBoxAdapter(): TimelineBoxAdapter
 
     subscribeChange(observer: Observer<void>): Subscription
     keeoOverlapping(range: TimelineRange): Subscription
