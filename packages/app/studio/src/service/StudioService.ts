@@ -418,14 +418,14 @@ export class StudioService implements ProjectEnv {
                     }
                 }
                 this.engine.setWorklet(project.startAudioWorklet(restart, {pauseOnLoopDisabled: false}))
-                if (isRoot) {this.switchScreen("default")}
                 lifeTime.ownAll(
                     project,
+                    snapping.registerSignatureTrackAdapter(project.timelineBoxAdapter.signatureTrack),
                     userEditingManager.timeline.catchupAndSubscribe(option => option
                         .ifSome(() => AnimationFrame.once(() => this.panelLayout.showIfAvailable(PanelType.ContentEditor)))),
-                    timelineBox.durationInPulses.catchupAndSubscribe(owner => range.maxUnits = owner.getValue() + PPQN.Bar),
-                    project.timelineBoxAdapter.catchupAndSubscribeSignature(signature => snapping.signature = signature)
+                    timelineBox.durationInPulses.catchupAndSubscribe(owner => range.maxUnits = owner.getValue() + PPQN.Bar)
                 )
+                if (isRoot) {this.switchScreen("default")}
             } else {
                 this.engine.releaseWorklet()
                 range.maxUnits = PPQN.fromSignature(128, 1)

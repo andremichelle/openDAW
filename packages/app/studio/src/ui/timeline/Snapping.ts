@@ -1,7 +1,8 @@
-import {clamp, int, Notifier, Observable, Observer, Subscription} from "@opendaw/lib-std"
+import {clamp, int, Notifier, Observable, Observer, Option, Subscription, Terminable} from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {TimelineRange} from "@opendaw/studio-core"
 import {MenuItem, MenuRootData} from "@/ui/model/menu-item"
+import {SignatureTrackAdapter} from "@opendaw/studio-adapters"
 
 export interface SnapUnit {
     get name(): string
@@ -20,7 +21,7 @@ export class Snapping implements Observable<Snapping> {
     readonly #units: ReadonlyArray<SnapUnit>
     readonly #notifier: Notifier<Snapping>
 
-    readonly #signature: [int, int] = [4, 4]
+    #optSignatureTrack: Option<SignatureTrackAdapter> = Option.None
 
     #enabled: boolean = true
     #index: int = 0 | 0
@@ -50,12 +51,9 @@ export class Snapping implements Observable<Snapping> {
     get units(): ReadonlyArray<SnapUnit> {return this.#units}
     get value(): ppqn {return this.#enabled ? this.#units[this.#index].ppqn : 1}
 
-    get signature(): Readonly<[int, int]> {return this.#signature}
-    set signature([nominator, denominator]: Readonly<[int, int]>) {
-        if (this.#signature[0] === nominator && this.#signature[1] === denominator) {return}
-        console.debug(`set signature: ${nominator}/${denominator}`)
-        this.#signature[0] = nominator
-        this.#signature[1] = denominator
+    registerSignatureTrackAdapter(adapter: SignatureTrackAdapter): Subscription {
+        this.#optSignatureTrack = Option.wrap(adapter)
+        return Terminable.create(() => this.#optSignatureTrack = Option.None)
     }
 
     xToUnitFloor(x: number): ppqn {return this.floor(this.#range.xToUnit(x))}
@@ -93,7 +91,7 @@ export class Snapping implements Observable<Snapping> {
             {
                 name: "Smart",
                 get ppqn(): int {
-                    const [nominator, denominator] = scope.signature
+                    const [nominator, denominator] = scope.#optSignatureTrack.mapOr(adapter => adapter.storageSignature, [4, 4])
                     const barPulses = PPQN.fromSignature(nominator, denominator)
                     const beatPulses = PPQN.fromSignature(1, denominator)
                     const minUnits = SMART_MIN_PIXEL * range.unitsPerPixel

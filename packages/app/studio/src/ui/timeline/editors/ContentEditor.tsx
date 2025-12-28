@@ -71,7 +71,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
         range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16))
     lifecycle.ownAll(
         {terminate: () => {owner = Option.None}},
-        service.project.timelineBoxAdapter.catchupAndSubscribeSignature(signature => snapping.signature = signature),
+        snapping.registerSignatureTrackAdapter(service.project.timelineBoxAdapter.signatureTrack),
         menu.viewMenu.attach(collector => {
             return collector.addItems(
                 MenuItem.default({
