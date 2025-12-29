@@ -21,13 +21,15 @@ import {
     ClipNotification,
     ClipSequencingUpdates,
     EngineCommands,
-    EnginePreferencesHost,
     EngineProcessorAttachment,
+    EngineSettings,
+    EngineSettingsSchema,
     EngineState,
     EngineStateSchema,
     EngineToClient,
     ExportStemsConfiguration,
     NoteSignal,
+    PreferencesHost,
     ProcessorOptions
 } from "@opendaw/studio-adapters"
 import {BoxIO} from "@opendaw/studio-boxes"
@@ -53,7 +55,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #isCountingIn: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #countInBarsTotal: DefaultObservableValue<int> = new DefaultObservableValue(1)
     readonly #countInBeatsRemaining: DefaultObservableValue<int> = new DefaultObservableValue(0)
-    readonly #preferences: EnginePreferencesHost
+    readonly #preferences: PreferencesHost<EngineSettings>
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
     readonly #controlFlags: Int32Array<SharedArrayBuffer>
@@ -194,7 +196,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 switchMarkerState: (state: Nullable<[UUID.Bytes, int]>): void => this.#markerState.setValue(state)
             } satisfies EngineToClient
         )
-        this.#preferences = this.#terminator.own(new EnginePreferencesHost(messenger.channel("engine-preferences")))
+        this.#preferences = this.#terminator.own(
+            new PreferencesHost<EngineSettings>(messenger.channel("engine-preferences"),
+                EngineSettingsSchema.parse({})))
         this.#terminator.ownAll(
             AnimationFrame.add(() => reader.tryRead()),
             project.liveStreamReceiver.connect(messenger.channel("engine-live-data")),
@@ -229,7 +233,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get playbackTimestampEnabled(): MutableObservableValue<boolean> {return this.#playbackTimestampEnabled}
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get project(): Project {return this.#project}
-    get preferences(): EnginePreferencesHost {return this.#preferences}
+    get preferences(): PreferencesHost<EngineSettings> {return this.#preferences}
 
     isReady(): Promise<void> {return this.#isReady}
     queryLoadingComplete(): Promise<boolean> {return this.#commands.queryLoadingComplete()}

@@ -30,12 +30,14 @@ import {
     ClipSequencingUpdates,
     EngineAddresses,
     EngineCommands,
-    EnginePreferencesClient,
     EngineProcessorAttachment,
+    EngineSettings,
+    EngineSettingsSchema,
     EngineStateSchema,
     EngineToClient,
     NoteSignal,
     ParameterFieldAdapters,
+    PreferencesClient,
     ProjectSkeleton,
     RootBoxAdapter,
     SampleLoaderManager,
@@ -69,7 +71,7 @@ const DEBUG = false
 export class EngineProcessor extends AudioWorkletProcessor implements EngineContext {
     readonly #terminator: Terminator
     readonly #messenger: Messenger
-    readonly #preferences: EnginePreferencesClient
+    readonly #preferences: PreferencesClient<EngineSettings>
     readonly #boxGraph: BoxGraph<BoxIO.TypeMap>
     readonly #timeInfo: TimeInfo
     readonly #engineToClient: EngineToClient
@@ -121,7 +123,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
 
         this.#terminator = new Terminator()
         this.#messenger = Messenger.for(this.port)
-        this.#preferences = new EnginePreferencesClient(this.#messenger.channel("engine-preferences"))
+        this.#preferences = new PreferencesClient(this.#messenger.channel("engine-preferences"), EngineSettingsSchema.parse({}))
         this.#boxGraph = boxGraph
         this.#timeInfo = new TimeInfo()
         this.#controlFlags = new Int32Array<SharedArrayBuffer>(controlFlagsBuffer)
@@ -369,7 +371,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         }
     }
 
-    get preferences(): EnginePreferencesClient {return this.#preferences}
+    get preferences(): PreferencesClient<EngineSettings> {return this.#preferences}
     get boxGraph(): BoxGraph<BoxIO.TypeMap> {return this.#boxGraph}
     get boxAdapters(): BoxAdapters {return this.#boxAdapters}
     get sampleManager(): SampleLoaderManager {return this.#sampleManager}
@@ -481,5 +483,5 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#peaks.clear()
     }
 
-    #isMetronomeEnabled(): boolean {return this.#preferences.settings().metronome.enabled}
+    #isMetronomeEnabled(): boolean {return this.#preferences.settings.metronome.enabled}
 }

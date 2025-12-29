@@ -1,8 +1,8 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest"
 import {Messenger} from "@opendaw/lib-runtime"
-import {EnginePreferencesHost} from "./EnginePreferencesHost"
-import {EnginePreferencesClient} from "./EnginePreferencesClient"
-import {EngineSettingsSchema} from "./EnginePreferencesSchema"
+import {PreferencesHost} from "./PreferencesHost"
+import {PreferencesClient} from "./PreferencesClient"
+import {EngineSettings, EngineSettingsSchema} from "./EnginePreferencesSchema"
 
 const EngineSettingsDefaults = EngineSettingsSchema.parse({})
 
@@ -11,8 +11,8 @@ const waitForBroadcast = (): Promise<void> => new Promise(resolve => setTimeout(
 interface TestContext {
     mainChannel: BroadcastChannel
     audioChannel: BroadcastChannel
-    host: EnginePreferencesHost
-    client: EnginePreferencesClient
+    host: PreferencesHost
+    client: PreferencesClient<EngineSettings>
 }
 
 describe("EnginePreferences", () => {
@@ -20,8 +20,8 @@ describe("EnginePreferences", () => {
         const channelName = `engine-preferences-${Math.random()}`
         context.mainChannel = new BroadcastChannel(channelName)
         context.audioChannel = new BroadcastChannel(channelName)
-        context.host = new EnginePreferencesHost(Messenger.for(context.mainChannel))
-        context.client = new EnginePreferencesClient(Messenger.for(context.audioChannel))
+        context.host = new PreferencesHost(Messenger.for(context.mainChannel))
+        context.client = new PreferencesClient(Messenger.for(context.audioChannel), EngineSettingsSchema.parse({}))
     })
 
     afterEach<TestContext>(context => {

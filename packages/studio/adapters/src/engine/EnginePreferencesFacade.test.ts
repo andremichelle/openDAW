@@ -1,7 +1,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest"
 import {Messenger} from "@opendaw/lib-runtime"
-import {EnginePreferencesFacade} from "./EnginePreferencesFacade"
-import {EnginePreferencesHost} from "./EnginePreferencesHost"
+import {PreferencesFacade} from "./PreferencesFacade"
+import {PreferencesHost} from "./PreferencesHost"
 import {EngineSettingsSchema} from "./EnginePreferencesSchema"
 
 const EngineSettingsDefaults = EngineSettingsSchema.parse({})
@@ -10,10 +10,10 @@ const waitForMicrotask = (): Promise<void> => new Promise(resolve => setTimeout(
 
 describe("EnginePreferencesFacade", () => {
     describe("without host", () => {
-        let facade: EnginePreferencesFacade
+        let facade: PreferencesFacade
 
         beforeEach(() => {
-            facade = new EnginePreferencesFacade(EngineSettingsSchema.parse({}))
+            facade = new PreferencesFacade(EngineSettingsSchema.parse({}))
         })
 
         afterEach(() => {
@@ -44,15 +44,15 @@ describe("EnginePreferencesFacade", () => {
     })
 
     describe("with host", () => {
-        let facade: EnginePreferencesFacade
-        let host: EnginePreferencesHost
+        let facade: PreferencesFacade
+        let host: PreferencesHost
         let channel: BroadcastChannel
 
         beforeEach(() => {
             const channelName = `facade-test-${Math.random()}`
             channel = new BroadcastChannel(channelName)
-            host = new EnginePreferencesHost(Messenger.for(channel))
-            facade = new EnginePreferencesFacade(EngineSettingsSchema.parse({}))
+            host = new PreferencesHost(Messenger.for(channel))
+            facade = new PreferencesFacade(EngineSettingsSchema.parse({}))
         })
 
         afterEach(async () => {
@@ -80,7 +80,7 @@ describe("EnginePreferencesFacade", () => {
 
             const channelName2 = `facade-test-${Math.random()}`
             const channel2 = new BroadcastChannel(channelName2)
-            const host2 = new EnginePreferencesHost(Messenger.for(channel2))
+            const host2 = new PreferencesHost(Messenger.for(channel2))
 
             facade.setHost(host2)
 
