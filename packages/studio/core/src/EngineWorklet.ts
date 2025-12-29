@@ -53,7 +53,6 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #isCountingIn: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #countInBarsTotal: DefaultObservableValue<int> = new DefaultObservableValue(1)
     readonly #countInBeatsRemaining: DefaultObservableValue<int> = new DefaultObservableValue(0)
-    readonly #metronomeEnabled: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #preferences: EnginePreferencesHost
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
@@ -200,7 +199,6 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             AnimationFrame.add(() => reader.tryRead()),
             project.liveStreamReceiver.connect(messenger.channel("engine-live-data")),
             new SyncSource<BoxIO.TypeMap>(project.boxGraph, messenger.channel("engine-sync"), false),
-            this.#metronomeEnabled.catchupAndSubscribe(owner => this.#commands.setMetronomeEnabled(owner.getValue())),
             this.#playbackTimestampEnabled.catchupAndSubscribe(owner =>
                 this.#commands.setPlaybackTimestampEnabled(owner.getValue())),
             this.#countInBarsTotal.catchupAndSubscribe(owner =>
@@ -229,7 +227,6 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get bpm(): ObservableValue<bpm> {return this.#bpm}
     get playbackTimestamp(): MutableObservableValue<number> {return this.#playbackTimestamp}
     get playbackTimestampEnabled(): MutableObservableValue<boolean> {return this.#playbackTimestampEnabled}
-    get metronomeEnabled(): MutableObservableValue<boolean> {return this.#metronomeEnabled}
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get project(): Project {return this.#project}
     get preferences(): EnginePreferencesHost {return this.#preferences}

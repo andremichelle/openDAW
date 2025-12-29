@@ -199,7 +199,6 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                 setPosition: (position: number): void => this.#setPosition(position),
                 prepareRecordingState: (countIn: boolean): void => this.#prepareRecordingState(countIn),
                 stopRecording: (): void => this.#stopRecording(),
-                setMetronomeEnabled: (value: boolean) => {}, // TODO Remove
                 setPlaybackTimestampEnabled: (value: boolean) => this.#playbackTimestampEnabled = value,
                 setCountInBarsTotal: (value: int) => this.#countInBarsTotal = value,
                 queryLoadingComplete: (): Promise<boolean> =>

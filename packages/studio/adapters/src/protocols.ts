@@ -10,7 +10,6 @@ export interface EngineCommands extends Terminable {
     setPosition(position: ppqn): void
     prepareRecordingState(countIn: boolean): void
     stopRecording(): void
-    setMetronomeEnabled(enabled: boolean): void
     setPlaybackTimestampEnabled(enabled: boolean): void
     setCountInBarsTotal(value: int): void
     queryLoadingComplete(): Promise<boolean>
