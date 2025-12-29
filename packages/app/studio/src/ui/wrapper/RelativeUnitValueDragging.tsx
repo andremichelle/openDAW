@@ -20,7 +20,7 @@ import {ValueTooltip} from "@/ui/surface/ValueTooltip.tsx"
 import {Surface} from "../surface/Surface"
 import {Events} from "@opendaw/lib-dom"
 import {Runtime} from "@opendaw/lib-runtime"
-import {Preferences} from "@opendaw/studio-core"
+import {StudioPreferences} from "@opendaw/studio-core"
 
 type Construct = {
     lifecycle: Lifecycle
@@ -82,7 +82,7 @@ export const RelativeUnitValueDragging = ({
             finalise: (_prevValue: unitValue, _newValue: unitValue): void => editing.mark(),
             finally: (): void => element.classList.remove("modifying")
         }), element, options),
-        Preferences.catchupAndSubscribe((() => {
+        StudioPreferences.catchupAndSubscribe((() => {
             const terminator = lifecycle.own(new Terminator())
             return (enabled) => {
                 terminator.terminate()

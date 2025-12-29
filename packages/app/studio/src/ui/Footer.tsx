@@ -6,7 +6,7 @@ import {Surface} from "@/ui/surface/Surface"
 import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
 import {Runtime} from "@opendaw/lib-runtime"
 import {FooterLabel} from "@/service/FooterLabel"
-import {Preferences, ProjectMeta} from "@opendaw/studio-core"
+import {ProjectMeta, StudioPreferences} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
 import {UserCounter} from "@/UserCounter"
 
@@ -65,7 +65,7 @@ export const Footer = ({lifecycle, service}: Construct) => {
             <article title="FPS"
                      onInit={element => {
                          const lifeSpan = lifecycle.own(new Terminator())
-                         lifecycle.own(Preferences.catchupAndSubscribe(show => {
+                         lifecycle.own(StudioPreferences.catchupAndSubscribe(show => {
                              element.classList.toggle("hidden", !show)
                              if (show) {
                                  let frame = 0 | 0
@@ -86,7 +86,7 @@ export const Footer = ({lifecycle, service}: Construct) => {
             <div style={{display: "contents"}}
                  onInit={element => {
                      const lifeSpan = lifecycle.own(new Terminator())
-                     lifecycle.own(Preferences.catchupAndSubscribe(show => {
+                     lifecycle.own(StudioPreferences.catchupAndSubscribe(show => {
                          element.classList.toggle("hidden", !show)
                          if (show) {
                              replaceChildren(element, (

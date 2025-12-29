@@ -46,7 +46,6 @@ import {
     EngineFacade,
     EngineWorklet,
     FilePickerAcceptTypes,
-    Preferences,
     Project,
     ProjectEnv,
     ProjectMeta,
@@ -56,6 +55,7 @@ import {
     RestartWorklet,
     SampleService,
     SoundfontService,
+    StudioPreferences,
     TimelineRange
 } from "@opendaw/studio-core"
 import {ProjectDialogs} from "@/project/ProjectDialogs"
@@ -344,7 +344,7 @@ export class StudioService implements ProjectEnv {
                     .reduce((max, unit) => Math.max(max, unit.tracks.values()
                         .reduce((max, track) => Math.max(max, track.clips.collection
                             .getMinFreeIndex()), 0)), 0)
-                if (maxClipIndex > 0 || Preferences.values["auto-open-clips"]) {
+                if (maxClipIndex > 0 || StudioPreferences.settings["auto-open-clips"]) {
                     this.timeline.clips.count.setValue(Math.max(maxClipIndex + 1, 3))
                     this.timeline.clips.visible.setValue(true)
                 } else {
@@ -427,11 +427,11 @@ export class StudioService implements ProjectEnv {
     }
 
     #listenPreferences(): void {
-        Preferences.catchupAndSubscribe(value =>
+        StudioPreferences.catchupAndSubscribe(value =>
             Dragging.usePointerLock = value && Browser.isChrome(), "dragging-use-pointer-lock")
-        Preferences.catchupAndSubscribe(value =>
+        StudioPreferences.catchupAndSubscribe(value =>
             document.body.classList.toggle("experimental-visible", value), "enable-beta-features")
-        Preferences.catchupAndSubscribe(value =>
+        StudioPreferences.catchupAndSubscribe(value =>
             document.body.classList.toggle("help-hidden", !value), "visible-help-hints")
     }
 }

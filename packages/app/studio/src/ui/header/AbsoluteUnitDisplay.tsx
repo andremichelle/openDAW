@@ -5,7 +5,7 @@ import {createElement} from "@opendaw/lib-jsx"
 import {UnitDisplay} from "@/ui/header/UnitDisplay"
 import {StudioService} from "@/service/StudioService"
 import {SMPTE} from "@opendaw/lib-dsp"
-import {Preferences} from "@opendaw/studio-core"
+import {StudioPreferences} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "AbsoluteUnitDisplay")
 
@@ -35,7 +35,7 @@ export const AbsoluteUnitDisplay = ({lifecycle, service}: Construct) => {
                     subscription.terminate()
                     if (optProfile.nonEmpty()) {
                         const {project: {engine: {position}, tempoMap, timelineBoxAdapter}} = optProfile.unwrap()
-                        const values = Preferences.values["time-display"]
+                        const values = StudioPreferences.settings["time-display"]
                         const update = () => {
                             const ppqn = position.getValue()
                             const {
@@ -63,9 +63,9 @@ export const AbsoluteUnitDisplay = ({lifecycle, service}: Construct) => {
                         subFramesUnitString.setValue("00")
                     }
                 }),
-                Preferences.catchupAndSubscribe(enabled =>
+                StudioPreferences.catchupAndSubscribe(enabled =>
                     element.classList.toggle("hidden", !enabled), "time-display", "absolute"),
-                Preferences.catchupAndSubscribe(details => {
+                StudioPreferences.catchupAndSubscribe(details => {
                     const maxIndex = details ? 4 : 2
                     unitDisplays.forEach((element, index) => element.classList.toggle("hidden", index > maxIndex))
                 }, "time-display", "details")

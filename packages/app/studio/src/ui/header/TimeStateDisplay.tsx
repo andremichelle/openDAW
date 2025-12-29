@@ -3,7 +3,7 @@ import {float, Lifecycle, ObservableValue, Option, Terminator} from "@opendaw/li
 import {createElement, Inject} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Html} from "@opendaw/lib-dom"
-import {FpsOptions, Preferences, ProjectProfile} from "@opendaw/studio-core"
+import {FpsOptions, ProjectProfile, StudioPreferences} from "@opendaw/studio-core"
 import {TapButton} from "@/ui/header/TapButton"
 import {MusicalUnitDisplay} from "@/ui/header/MusicalUnitDisplay"
 import {AbsoluteUnitDisplay} from "@/ui/header/AbsoluteUnitDisplay"
@@ -38,7 +38,7 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
     lifecycle.own(projectProfileService.catchupAndSubscribe(projectProfileObserver))
     const element: HTMLElement = (
         <div className={className} onInit={element => {
-            const values = Preferences.values["time-display"]
+            const values = StudioPreferences.settings["time-display"]
             return ContextMenu.subscribe(element, collector => collector.addItems(
                 MenuItem.header({label: "Time Units", icon: IconSymbol.Time, color: Colors.green}),
                 MenuItem.default({

@@ -5,7 +5,7 @@ import {createElement} from "@opendaw/lib-jsx"
 import {PPQN} from "@opendaw/lib-dsp"
 import {UnitDisplay} from "@/ui/header/UnitDisplay"
 import {StudioService} from "@/service/StudioService"
-import {Preferences} from "@opendaw/studio-core"
+import {StudioPreferences} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "MusicalUnitDisplay")
 
@@ -37,9 +37,9 @@ export const MusicalUnitDisplay = ({lifecycle, service}: Construct) => {
                     ticksUnitString.setValue(ticks.toString().padStart(3, "0"))
                     element.classList.toggle("negative", position < 0)
                 }),
-                Preferences.catchupAndSubscribe(enabled =>
+                StudioPreferences.catchupAndSubscribe(enabled =>
                     element.classList.toggle("hidden", !enabled), "time-display", "musical"),
-                Preferences.catchupAndSubscribe(details => {
+                StudioPreferences.catchupAndSubscribe(details => {
                     const maxIndex = details ? 3 : 1
                     unitDisplays.forEach((element, index) => element.classList.toggle("hidden", index > maxIndex))
                 }, "time-display", "details")

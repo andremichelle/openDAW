@@ -3,7 +3,14 @@ import {Browser, Files} from "@opendaw/lib-dom"
 import {RouteLocation} from "@opendaw/lib-jsx"
 import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {CloudBackup, FilePickerAcceptTypes, Preferences, ProjectSignals, Workers, YService} from "@opendaw/studio-core"
+import {
+    CloudBackup,
+    FilePickerAcceptTypes,
+    ProjectSignals,
+    StudioPreferences,
+    Workers,
+    YService
+} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {MenuItem} from "@/ui/model/menu-item"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
@@ -104,7 +111,7 @@ export const populateStudioMenu = (service: StudioService) => {
                         }),
                     MenuItem.default({
                         label: "Experimental Features",
-                        hidden: !Preferences.values["enable-beta-features"],
+                        hidden: !StudioPreferences.settings["enable-beta-features"],
                         separatorBefore: true
                     }).setRuntimeChildrenProcedure(parent => {
                         parent.addMenuItem(

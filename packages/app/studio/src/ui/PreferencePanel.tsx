@@ -2,7 +2,7 @@ import css from "./PreferencePanel.sass?inline"
 import {Html} from "@opendaw/lib-dom"
 import {DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
 import {createElement, Frag} from "@opendaw/lib-jsx"
-import {Preferences, StudioSettings} from "@opendaw/studio-core"
+import {StudioPreferences, StudioSettings} from "@opendaw/studio-core"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Icon} from "@/ui/components/Icon"
@@ -33,15 +33,15 @@ export const PreferencePanel = ({lifecycle}: Construct) => {
         <div className={className}>
             {Object.keys(Labels).map(key => {
                 const pKey = key as keyof StudioSettings
-                const values = Preferences.values
-                const value = values[pKey]
-                switch (typeof value) {
+                const settings = StudioPreferences.settings
+                const setting = settings[pKey]
+                switch (typeof setting) {
                     case "boolean": {
                         const pKey = key as keyof StudioSettings & {
                             [K in keyof StudioSettings]: StudioSettings[K] extends boolean ? K : never
                         }[keyof StudioSettings]
-                        const model = new DefaultObservableValue<boolean>(value)
-                        lifecycle.own(model.subscribe(owner => values[pKey] = owner.getValue()))
+                        const model = new DefaultObservableValue<boolean>(setting)
+                        lifecycle.own(model.subscribe(owner => settings[pKey] = owner.getValue()))
                         return (
                             <Frag>
                                 <Checkbox lifecycle={lifecycle}

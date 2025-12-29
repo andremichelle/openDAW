@@ -18,7 +18,7 @@ import {CssUtils, Events, Html} from "@opendaw/lib-dom"
 import {Colors} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
-import {Preferences} from "@opendaw/studio-core"
+import {StudioPreferences} from "@opendaw/studio-core"
 import {Runtime} from "@opendaw/lib-runtime"
 
 const className = Html.adoptStyleSheet(css, "vertical-slider")
@@ -169,7 +169,7 @@ export const VolumeSlider = ({lifecycle, editing, parameter}: Construct) => {
                                    resolvers={resolvers}/>
             )
         }),
-        Preferences.catchupAndSubscribe((() => {
+        StudioPreferences.catchupAndSubscribe((() => {
             const terminator = lifecycle.own(new Terminator())
             return (enabled) => {
                 terminator.terminate()

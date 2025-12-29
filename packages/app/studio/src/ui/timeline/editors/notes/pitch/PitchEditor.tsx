@@ -14,7 +14,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {CaptureMidi, Preferences, Project, TimelineRange} from "@opendaw/studio-core"
+import {CaptureMidi, Project, StudioPreferences, TimelineRange} from "@opendaw/studio-core"
 import {PitchPositioner} from "./PitchPositioner.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {Scroller} from "@/ui/components/Scroller.tsx"
@@ -94,7 +94,7 @@ export const PitchEditor = ({
         pitchPainter(painter)
     }))
     const auditionNote = (pitch: byte, duration: ppqn) => {
-        if (!Preferences.values["note-audition-while-editing"]) {return}
+        if (!StudioPreferences.settings["note-audition-while-editing"]) {return}
         project.engine.noteSignal({
             type: "note-audition",
             uuid: reader.trackBoxAdapter.unwrap().audioUnit.address.uuid, pitch, duration, velocity: 1.0
