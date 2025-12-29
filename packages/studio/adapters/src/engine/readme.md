@@ -10,7 +10,16 @@ Cross-thread preferences for the AudioEngine. Main thread holds state and broadc
 - **Audio threads:** Clients - receive updates, read-only access
 - **Initial state:** Sent via `processorOptions` when engine starts
 - **Updates:** Broadcast full object on any change (small payload)
-- **Batching:** Changes within a frame are batched before broadcast
+- **Batching:** Changes within a microtask are batched before broadcast
+
+## Shared Utilities (lib-std)
+
+Types in `lang.ts`:
+- `PathTuple<T>` - tuple type for nested property paths
+- `ValueAtPath<T, P>` - value type at a given path
+
+Class in `observables.ts`:
+- `PropertyObserver<T>` - proxy-based change detection with `catchupAndSubscribe`
 
 ## Schema
 
@@ -18,9 +27,9 @@ Cross-thread preferences for the AudioEngine. Main thread holds state and broadc
 const EnginePreferencesSchema = z.object({
     metronome: z.object({
         enabled: z.boolean(),
-        beatSubDivision: z.union([z.literal(2), z.literal(4), z.literal(8)]),
-        gain: z.number()
-    })
+        beatSubDivision: z.union(BeatSubDivisionOptions.map(value => z.literal(value))),
+        gain: z.number().min(0).max(1)
+    }).default({enabled: true, beatSubDivision: 4, gain: 0.5})
 })
 ```
 
@@ -31,7 +40,7 @@ packages/studio/adapters/src/engine/
 ├── readme.md
 ├── EnginePreferencesSchema.ts      # Zod schema + types
 ├── EnginePreferencesProtocol.ts    # Protocol interface
-├── EnginePreferencesMain.ts        # Main thread: state + broadcast
+├── EnginePreferencesMain.ts        # Main thread: PropertyObserver + broadcast
 ├── EnginePreferencesClient.ts      # Audio thread: receive updates
 └── EnginePreferences.test.ts       # Tests using BroadcastChannel
 ```
@@ -44,38 +53,23 @@ interface EnginePreferencesProtocol {
 }
 ```
 
-Single fire-and-forget call. Main thread broadcasts entire state on any change.
+## Usage
 
-## Main Thread API
-
+**Main thread:**
 ```typescript
-EnginePreferencesMain.values          // Proxy-wrapped, triggers broadcast on change
-EnginePreferencesMain.connect(messenger)  // Connect to audio thread
-EnginePreferencesMain.catchupAndSubscribe(observer, ...path)  // For UI bindings
+const prefs = new EnginePreferencesMain()
+prefs.values.metronome.enabled = false  // triggers broadcast
+prefs.catchupAndSubscribe(value => console.log(value), "metronome", "gain")
+prefs.connect(messenger)  // connect to audio thread
 ```
 
-## Audio Thread API
-
+**Audio thread:**
 ```typescript
-EnginePreferencesClient.values        // Current state (read-only)
-EnginePreferencesClient.connect(messenger)  // Connect to main thread
-EnginePreferencesClient.catchupAndSubscribe(observer, ...path)  // For engine components
+const prefs = new EnginePreferencesClient()
+prefs.connect(messenger)  // receive updates
+prefs.catchupAndSubscribe(value => console.log(value), "metronome", "enabled")
 ```
 
 ## Testing
 
-Uses `BroadcastChannel` to emulate thread boundaries:
-
-```typescript
-const mainChannel = new BroadcastChannel("engine-preferences")
-const audioChannel = new BroadcastChannel("engine-preferences")
-
-EnginePreferencesMain.connect(Messenger.for(mainChannel))
-EnginePreferencesClient.connect(Messenger.for(audioChannel))
-```
-
-## Notes
-
-- Storage not implemented yet (focus on communication first)
-- Multiple audio threads can exist - all receive same updates
-- Not connected to existing `Preferences.ts` (separate system)
+Uses `BroadcastChannel` to emulate thread boundaries.

@@ -66,6 +66,14 @@ export type Equality<T> = { equals: (other: T) => boolean }
 export type AnyFunc = (...args: any[]) => any
 export type Stringifiable = { toString(): string }
 export type MakeMutable<T> = { -readonly [P in keyof T]: T[P] }
+export type PathTuple<T> = T extends object
+    ? { [K in keyof T]: [K] | [K, ...PathTuple<T[K]>] }[keyof T]
+    : []
+export type ValueAtPath<T, P extends readonly unknown[]> = P extends readonly [infer K, ...infer Rest]
+    ? K extends keyof T
+        ? Rest extends [] ? T[K] : ValueAtPath<T[K], Rest>
+        : never
+    : T
 export type AssertType<T> = (value: unknown) => value is T
 export const identity = <T>(value: T): T => value
 export const isDefined = <T>(value: Maybe<T>): value is T => value !== undefined && value !== null
