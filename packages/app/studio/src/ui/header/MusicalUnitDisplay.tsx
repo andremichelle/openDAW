@@ -4,9 +4,8 @@ import {DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {PPQN} from "@opendaw/lib-dsp"
 import {UnitDisplay} from "@/ui/header/UnitDisplay"
-import {ContextMenu} from "@/ui/ContextMenu"
-import {MenuItem} from "@/ui/model/menu-item"
 import {StudioService} from "@/service/StudioService"
+import {Preferences} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "MusicalUnitDisplay")
 
@@ -16,9 +15,6 @@ type Construct = {
 }
 
 export const MusicalUnitDisplay = ({lifecycle, service}: Construct) => {
-    // Bar, Bar/Beats, Bar/Beats/SemiQuaver, Bar/Beats/SemiQuaver/Ticks
-    const timeUnits = ["Bar", "Beats", "SemiQuaver", "Ticks"]
-    const timeUnitIndex = new DefaultObservableValue(1)
     const barUnitString = new DefaultObservableValue("001")
     const beatUnitString = new DefaultObservableValue("1")
     const semiquaverUnitString = new DefaultObservableValue("1")
@@ -41,17 +37,12 @@ export const MusicalUnitDisplay = ({lifecycle, service}: Construct) => {
                     ticksUnitString.setValue(ticks.toString().padStart(3, "0"))
                     element.classList.toggle("negative", position < 0)
                 }),
-                timeUnitIndex.catchupAndSubscribe(owner =>
-                    unitDisplays.forEach((element, index) => element.classList.toggle("hidden", index > owner.getValue()))),
-                ContextMenu.subscribe(element, (collector: ContextMenu.Collector) => collector.addItems(MenuItem.default({
-                    label: "Units"
-                }).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
-                    ...timeUnits.map((_, index) => MenuItem.default({
-                        label: timeUnits.slice(0, index + 1).join(" > "),
-                        checked:
-                            index === timeUnitIndex.getValue()
-                    }).setTriggerProcedure(() => timeUnitIndex.setValue(index)))
-                ))))
+                Preferences.catchupAndSubscribe(enabled =>
+                    element.classList.toggle("hidden", !enabled), "time-display", "musical"),
+                Preferences.catchupAndSubscribe(details => {
+                    const maxIndex = details ? 3 : 1
+                    unitDisplays.forEach((element, index) => element.classList.toggle("hidden", index > maxIndex))
+                }, "time-display", "details")
             )
         }}>{unitDisplays}</div>
     )

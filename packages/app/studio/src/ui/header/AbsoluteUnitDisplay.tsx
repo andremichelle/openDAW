@@ -3,10 +3,9 @@ import {Html} from "@opendaw/lib-dom"
 import {DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {UnitDisplay} from "@/ui/header/UnitDisplay"
-import {ContextMenu} from "@/ui/ContextMenu"
-import {MenuItem} from "@/ui/model/menu-item"
 import {StudioService} from "@/service/StudioService"
 import {SMPTE} from "@opendaw/lib-dsp"
+import {Preferences} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "AbsoluteUnitDisplay")
 
@@ -16,8 +15,6 @@ type Construct = {
 }
 
 export const AbsoluteUnitDisplay = ({lifecycle, service}: Construct) => {
-    const timeUnits = ["Hours", "Minutes", "Seconds", "Frames", "SubFrames"]
-    const timeUnitIndex = new DefaultObservableValue(2)
     const hoursUnitString = new DefaultObservableValue("1")
     const minutesUnitString = new DefaultObservableValue("01")
     const secondsUnitString = new DefaultObservableValue("01")
@@ -65,17 +62,12 @@ export const AbsoluteUnitDisplay = ({lifecycle, service}: Construct) => {
                         subFramesUnitString.setValue("00")
                     }
                 }),
-                timeUnitIndex.catchupAndSubscribe(owner =>
-                    unitDisplays.forEach((element, index) => element.classList.toggle("hidden", index > owner.getValue()))),
-                ContextMenu.subscribe(element, (collector: ContextMenu.Collector) => collector.addItems(MenuItem.default({
-                    label: "Units"
-                }).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
-                    ...timeUnits.map((_, index) => MenuItem.default({
-                        label: timeUnits.slice(0, index + 1).join(" > "),
-                        checked:
-                            index === timeUnitIndex.getValue()
-                    }).setTriggerProcedure(() => timeUnitIndex.setValue(index)))
-                ))))
+                Preferences.catchupAndSubscribe(enabled =>
+                    element.classList.toggle("hidden", !enabled), "time-display", "absolute"),
+                Preferences.catchupAndSubscribe(details => {
+                    const maxIndex = details ? 3 : 1
+                    unitDisplays.forEach((element, index) => element.classList.toggle("hidden", index > maxIndex))
+                }, "time-display", "details")
             )
         }}>
             {unitDisplays[0]}

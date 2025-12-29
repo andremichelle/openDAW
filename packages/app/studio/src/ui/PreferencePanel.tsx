@@ -22,6 +22,7 @@ const Labels: { [K in keyof Preferences]: string } = {
     "dragging-use-pointer-lock": "Use Pointer Lock when dragging close to window edges [Chrome only]",
     "modifying-controls-wheel": "Modify controls with mouse wheel",
     "normalize-mouse-wheel": "Normalize mouse wheel speed",
+    "time-display": "Time Display",
     "footer-show-fps-meter": "🪲 Show FPS meter",
     "footer-show-build-infos": "🪲 Show Build Informations",
     "enable-beta-features": "☢️ Enable Experimental Features"
@@ -32,12 +33,15 @@ export const PreferencePanel = ({lifecycle}: Construct) => {
         <div className={className}>
             {Object.keys(Labels).map(key => {
                 const pKey = key as keyof Preferences
-                const value = Preferences.values[pKey]
+                const values = Preferences.values
+                const value = values[pKey]
                 switch (typeof value) {
                     case "boolean": {
-                        const pKey = key as keyof Preferences
+                        const pKey = key as keyof Preferences & {
+                            [K in keyof Preferences]: Preferences[K] extends boolean ? K : never
+                        }[keyof Preferences]
                         const model = new DefaultObservableValue<boolean>(value)
-                        lifecycle.own(model.subscribe(owner => Preferences.values[pKey] = owner.getValue()))
+                        lifecycle.own(model.subscribe(owner => values[pKey] = owner.getValue()))
                         return (
                             <Frag>
                                 <Checkbox lifecycle={lifecycle}
