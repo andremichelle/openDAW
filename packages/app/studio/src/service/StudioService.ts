@@ -264,6 +264,7 @@ export class StudioService implements ProjectEnv {
     }
 
     get project(): Project {return this.profile.project}
+    get optProject(): Option<Project> {return this.projectProfileService.getValue().map(({project}) => project)}
     get profile(): ProjectProfile {return this.#projectProfileService.getValue().unwrap("No profile available")}
     get hasProfile(): boolean {return this.#projectProfileService.getValue().nonEmpty()}
 

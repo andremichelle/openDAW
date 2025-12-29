@@ -21,6 +21,7 @@ import {
     ClipNotification,
     ClipSequencingUpdates,
     EngineCommands,
+    EnginePreferencesHost,
     EngineProcessorAttachment,
     EngineState,
     EngineStateSchema,
@@ -53,6 +54,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #countInBarsTotal: DefaultObservableValue<int> = new DefaultObservableValue(1)
     readonly #countInBeatsRemaining: DefaultObservableValue<int> = new DefaultObservableValue(0)
     readonly #metronomeEnabled: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
+    readonly #preferences: EnginePreferencesHost
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
     readonly #controlFlags: Int32Array<SharedArrayBuffer>
@@ -193,6 +195,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 switchMarkerState: (state: Nullable<[UUID.Bytes, int]>): void => this.#markerState.setValue(state)
             } satisfies EngineToClient
         )
+        this.#preferences = this.#terminator.own(new EnginePreferencesHost(messenger.channel("engine-preferences")))
         this.#terminator.ownAll(
             AnimationFrame.add(() => reader.tryRead()),
             project.liveStreamReceiver.connect(messenger.channel("engine-live-data")),
@@ -229,6 +232,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get metronomeEnabled(): MutableObservableValue<boolean> {return this.#metronomeEnabled}
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get project(): Project {return this.#project}
+    get preferences(): EnginePreferencesHost {return this.#preferences}
 
     isReady(): Promise<void> {return this.#isReady}
     queryLoadingComplete(): Promise<boolean> {return this.#commands.queryLoadingComplete()}

@@ -5,7 +5,7 @@ import {UpdateClock} from "./UpdateClock"
 import {TimeInfo} from "./TimeInfo"
 import {AudioUnit} from "./AudioUnit"
 import {Mixer} from "./Mixer"
-import {BoxAdaptersContext, EngineToClient} from "@opendaw/studio-adapters"
+import {BoxAdaptersContext, EnginePreferencesClient, EngineToClient} from "@opendaw/studio-adapters"
 import {AudioOutputBufferRegistry} from "./AudioOutputBufferRegistry"
 
 export interface EngineContext extends BoxAdaptersContext, Terminable {
@@ -15,6 +15,7 @@ export interface EngineContext extends BoxAdaptersContext, Terminable {
     get mixer(): Mixer
     get engineToClient(): EngineToClient
     get audioOutputBufferRegistry(): AudioOutputBufferRegistry
+    get preferences(): EnginePreferencesClient
 
     getAudioUnit(uuid: UUID.Bytes): AudioUnit
     registerProcessor(processor: Processor): Terminable

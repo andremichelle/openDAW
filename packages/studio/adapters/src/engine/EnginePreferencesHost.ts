@@ -1,48 +1,44 @@
-import {
-    Arrays,
-    Observer,
-    PathTuple,
-    VirtualObject,
-    Subscription,
-    Terminable,
-    Terminator,
-    ValueAtPath
-} from "@opendaw/lib-std"
+import {Observer, PathTuple, Subscription, Terminable, Terminator, ValueAtPath, VirtualObject} from "@opendaw/lib-std"
 import {queueTask} from "@opendaw/lib-dom"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
-import {EnginePreferences, EnginePreferencesSchema} from "./EnginePreferencesSchema"
+import {EnginePreferences, EngineSettings, EngineSettingsSchema} from "./EnginePreferencesSchema"
 import {EnginePreferencesProtocol} from "./EnginePreferencesProtocol"
 
-export class EnginePreferencesHost implements Terminable {
+export class EnginePreferencesHost implements EnginePreferences, Terminable {
     readonly #terminator = new Terminator()
-    readonly #clients: Array<EnginePreferencesProtocol> = []
-    readonly #observer: VirtualObject<EnginePreferences>
+    readonly #observer: VirtualObject<EngineSettings>
+    readonly #client: EnginePreferencesProtocol
 
-    readonly #queueTask = queueTask(() =>
-        this.#clients.forEach(connection => connection.updatePreferences(this.#observer.data)))
+    readonly #queueTask = queueTask(() => this.#client.updatePreferences(this.#observer.data))
 
-    constructor() {
-        this.#observer = this.#terminator.own(new VirtualObject(EnginePreferencesSchema.parse({})))
-        this.#terminator.own(this.#observer.subscribe(this.#queueTask))
-    }
-
-    get settings(): EnginePreferences {return this.#observer.proxy}
-
-    connect(messenger: Messenger): Terminable {
-        const client = Communicator.sender<EnginePreferencesProtocol>(messenger,
+    constructor(messenger: Messenger) {
+        this.#observer = this.#terminator.own(new VirtualObject(EngineSettingsSchema.parse({})))
+        this.#client = Communicator.sender<EnginePreferencesProtocol>(messenger,
             ({dispatchAndForget}) => new class implements EnginePreferencesProtocol {
-                updatePreferences(preferences: EnginePreferences): void {
+                updatePreferences(preferences: EngineSettings): void {
                     dispatchAndForget(this.updatePreferences, preferences)
                 }
             })
-        this.#clients.push(client)
-        client.updatePreferences(this.#observer.data)
-        return {terminate: () => Arrays.remove(this.#clients, client)}
+        this.#terminator.own(this.#observer.subscribeAll(this.#queueTask))
+        this.#client.updatePreferences(this.#observer.data)
     }
 
-    catchupAndSubscribe<P extends PathTuple<EnginePreferences>>(
-        observer: Observer<ValueAtPath<EnginePreferences, P>>, ...path: P): Subscription {
+    settings(): EngineSettings {return this.#observer.proxy}
+
+    update(data: EngineSettings): void {this.#observer.update(data)}
+
+    subscribe<P extends PathTuple<EngineSettings>>(
+        observer: Observer<ValueAtPath<EngineSettings, P>>, ...path: P): Subscription {
+        return this.#observer.subscribe(observer, ...path)
+    }
+
+    catchupAndSubscribe<P extends PathTuple<EngineSettings>>(
+        observer: Observer<ValueAtPath<EngineSettings, P>>, ...path: P): Subscription {
         return this.#observer.catchupAndSubscribe(observer, ...path)
+    }
+
+    subscribeAll(observer: Observer<keyof EngineSettings>): Subscription {
+        return this.#observer.subscribeAll(observer)
     }
 
     terminate(): void {this.#terminator.terminate()}

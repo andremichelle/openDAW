@@ -1,24 +1,25 @@
 import {BlockFlag, ProcessInfo} from "./processing"
 import {AudioBuffer, PPQN, RenderQuantum} from "@opendaw/lib-dsp"
 import {assert, Bits, int, isNotNull, Iterables, TAU} from "@opendaw/lib-std"
-import {TimeInfo} from "./TimeInfo"
-import {TimelineBoxAdapter} from "@opendaw/studio-adapters"
+import {EngineContext} from "./EngineContext"
 
 export class Metronome {
-    readonly #timelineBoxAdapter: TimelineBoxAdapter
-    readonly #timeInfo: TimeInfo
+    readonly #context: EngineContext
     readonly #output = new AudioBuffer()
     readonly #clicks: Click[] = []
 
-    constructor(timelineBoxAdapter: TimelineBoxAdapter, timeInfo: TimeInfo) {
-        this.#timelineBoxAdapter = timelineBoxAdapter
-        this.#timeInfo = timeInfo
+    constructor(context: EngineContext) {
+        this.#context = context
+
+        console.debug("Metronome")
     }
 
     process({blocks}: ProcessInfo): void {
+        const enabled = this.#context.timeInfo.metronomeEnabled
+        const signatureTrack = this.#context.timelineBoxAdapter.signatureTrack
         blocks.forEach(({p0, p1, bpm, s0, s1, flags}) => {
-            if (this.#timeInfo.metronomeEnabled && Bits.every(flags, BlockFlag.transporting)) {
-                for (const [curr, next] of Iterables.pairWise(this.#timelineBoxAdapter.signatureTrack.iterateAll())) {
+            if (enabled && Bits.every(flags, BlockFlag.transporting)) {
+                for (const [curr, next] of Iterables.pairWise(signatureTrack.iterateAll())) {
                     const signatureStart = curr.accumulatedPpqn
                     const signatureEnd = isNotNull(next) ? next.accumulatedPpqn : Infinity
                     if (signatureEnd <= p0) {continue}

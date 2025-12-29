@@ -1,24 +1,22 @@
-import {Observer, PathTuple, VirtualObject, Subscription, Terminable, Terminator, ValueAtPath} from "@opendaw/lib-std"
+import {Observer, PathTuple, Subscription, Terminable, Terminator, ValueAtPath, VirtualObject} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
-import {EnginePreferences, EnginePreferencesSchema} from "./EnginePreferencesSchema"
+import {EngineSettings, EngineSettingsSchema} from "./EnginePreferencesSchema"
 import {EnginePreferencesProtocol} from "./EnginePreferencesProtocol"
 
 export class EnginePreferencesClient implements Terminable {
     readonly #terminator = new Terminator()
-    readonly #observer = new VirtualObject<EnginePreferences>(EnginePreferencesSchema.parse({}))
+    readonly #observer = new VirtualObject<EngineSettings>(EngineSettingsSchema.parse({}))
 
-    get settings(): Readonly<EnginePreferences> {return this.#observer.data}
-
-    connect(messenger: Messenger): Terminable {
-        return this.#terminator.own(Communicator.executor<EnginePreferencesProtocol>(messenger, {
-            updatePreferences: (preferences: EnginePreferences): void => {
-                this.#observer.update(preferences)
-            }
+    constructor(messenger: Messenger) {
+        this.#terminator.own(Communicator.executor<EnginePreferencesProtocol>(messenger, {
+            updatePreferences: (preferences: EngineSettings): void => this.#observer.update(preferences)
         }))
     }
 
-    catchupAndSubscribe<P extends PathTuple<EnginePreferences>>(
-        observer: Observer<ValueAtPath<EnginePreferences, P>>, ...path: P): Subscription {
+    settings(): Readonly<EngineSettings> {return this.#observer.data}
+
+    catchupAndSubscribe<P extends PathTuple<EngineSettings>>(
+        observer: Observer<ValueAtPath<EngineSettings, P>>, ...path: P): Subscription {
         return this.#observer.catchupAndSubscribe(observer, ...path)
     }
 

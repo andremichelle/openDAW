@@ -11,7 +11,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {bpm, ppqn} from "@opendaw/lib-dsp"
-import {ClipNotification, NoteSignal} from "@opendaw/studio-adapters"
+import {ClipNotification, EnginePreferences, EnginePreferencesFacade, NoteSignal} from "@opendaw/studio-adapters"
 import {Engine} from "./Engine"
 import {EngineWorklet} from "./EngineWorklet"
 import {Project} from "./project"
@@ -31,13 +31,17 @@ export class EngineFacade implements Engine {
     readonly #metronomeEnabled: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
+    readonly #preferencesFacade: EnginePreferencesFacade
 
     #worklet: Option<EngineWorklet> = Option.None
 
-    constructor() {}
+    constructor() {
+        this.#preferencesFacade = new EnginePreferencesFacade()
+    }
 
     setWorklet(worklet: EngineWorklet) {
         this.#worklet = Option.wrap(worklet)
+        this.#preferencesFacade.setHost(worklet.preferences)
         this.#lifecycle.terminate()
         this.#lifecycle.ownAll(
             worklet.playbackTimestamp.catchupAndSubscribe(owner => this.#playbackTimestamp.setValue(owner.getValue())),
@@ -60,6 +64,7 @@ export class EngineFacade implements Engine {
     assertWorklet(): void {this.#worklet.unwrap("No worklet available")}
 
     releaseWorklet(): void {
+        this.#preferencesFacade.releaseHost()
         this.#lifecycle.terminate()
         this.#worklet.ifSome(worklet => worklet.terminate())
         this.#worklet = Option.None
@@ -84,6 +89,7 @@ export class EngineFacade implements Engine {
     get markerState(): DefaultObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get project(): Project {return this.#worklet.unwrap("No worklet to get project").project}
     get sampleRate(): number {return this.#worklet.isEmpty() ? 44_100 : this.#worklet.unwrap().context.sampleRate}
+    get preferences(): EnginePreferences {return this.#preferencesFacade}
 
     isReady(): Promise<void> {return this.#worklet.mapOr(worklet => worklet.isReady(), Promise.resolve())}
     queryLoadingComplete(): Promise<boolean> {

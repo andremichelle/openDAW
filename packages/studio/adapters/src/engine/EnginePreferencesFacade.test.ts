@@ -1,0 +1,118 @@
+import {afterEach, beforeEach, describe, expect, it, vi} from "vitest"
+import {Messenger} from "@opendaw/lib-runtime"
+import {EnginePreferencesFacade} from "./EnginePreferencesFacade"
+import {EnginePreferencesHost} from "./EnginePreferencesHost"
+import {EngineSettingsSchema} from "./EnginePreferencesSchema"
+
+const EngineSettingsDefaults = EngineSettingsSchema.parse({})
+
+const waitForMicrotask = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
+
+describe("EnginePreferencesFacade", () => {
+    describe("without host", () => {
+        let facade: EnginePreferencesFacade
+
+        beforeEach(() => {
+            facade = new EnginePreferencesFacade()
+        })
+
+        afterEach(() => {
+            facade.terminate()
+        })
+
+        it("should have default settings", () => {
+            expect(facade.settings()).toEqual(EngineSettingsDefaults)
+        })
+
+        it("should allow modifying settings", () => {
+            facade.settings().metronome.enabled = false
+            facade.settings().metronome.gain = 0.8
+
+            expect(facade.settings().metronome.enabled).toBe(false)
+            expect(facade.settings().metronome.gain).toBe(0.8)
+        })
+
+        it("should support catchupAndSubscribe", () => {
+            const observer = vi.fn()
+            facade.catchupAndSubscribe(observer, "metronome", "enabled")
+
+            expect(observer).toHaveBeenCalledWith(true)
+
+            facade.settings().metronome.enabled = false
+            expect(observer).toHaveBeenCalledWith(false)
+        })
+    })
+
+    describe("with host", () => {
+        let facade: EnginePreferencesFacade
+        let host: EnginePreferencesHost
+        let channel: BroadcastChannel
+
+        beforeEach(() => {
+            const channelName = `facade-test-${Math.random()}`
+            channel = new BroadcastChannel(channelName)
+            host = new EnginePreferencesHost(Messenger.for(channel))
+            facade = new EnginePreferencesFacade()
+        })
+
+        afterEach(() => {
+            facade.terminate()
+            host.terminate()
+            channel.close()
+        })
+
+        it("should sync initial state from host on setHost", () => {
+            host.settings().metronome.enabled = false
+            host.settings().metronome.gain = 0.7
+
+            facade.setHost(host)
+
+            expect(facade.settings().metronome.enabled).toBe(false)
+            expect(facade.settings().metronome.gain).toBe(0.7)
+        })
+
+        it("should propagate facade changes to host", async () => {
+            facade.setHost(host)
+
+            facade.settings().metronome.beatSubDivision = 8
+            await waitForMicrotask()
+
+            expect(host.settings().metronome.beatSubDivision).toBe(8)
+        })
+
+        it("should propagate host changes to facade", () => {
+            facade.setHost(host)
+
+            host.settings().metronome.gain = 0.3
+
+            expect(facade.settings().metronome.gain).toBe(0.3)
+        })
+
+        it("should batch multiple facade changes", async () => {
+            facade.setHost(host)
+
+            const hostObserver = vi.fn()
+            host.subscribeAll(hostObserver)
+
+            facade.settings().metronome.enabled = false
+            facade.settings().metronome.gain = 0.2
+            facade.settings().metronome.beatSubDivision = 2
+            await waitForMicrotask()
+
+            expect(hostObserver).toHaveBeenCalledTimes(1)
+            expect(host.settings().metronome.enabled).toBe(false)
+            expect(host.settings().metronome.gain).toBe(0.2)
+            expect(host.settings().metronome.beatSubDivision).toBe(2)
+        })
+
+        it("should stop syncing after releaseHost", async () => {
+            facade.setHost(host)
+            facade.releaseHost()
+
+            facade.settings().metronome.enabled = false
+            await waitForMicrotask()
+
+            expect(host.settings().metronome.enabled).toBe(true)
+        })
+    })
+})

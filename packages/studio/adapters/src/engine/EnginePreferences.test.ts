@@ -2,9 +2,9 @@ import {afterEach, beforeEach, describe, expect, it, vi} from "vitest"
 import {Messenger} from "@opendaw/lib-runtime"
 import {EnginePreferencesHost} from "./EnginePreferencesHost"
 import {EnginePreferencesClient} from "./EnginePreferencesClient"
-import {EnginePreferencesSchema} from "./EnginePreferencesSchema"
+import {EngineSettingsSchema} from "./EnginePreferencesSchema"
 
-const EnginePreferencesDefaults = EnginePreferencesSchema.parse({})
+const EngineSettingsDefaults = EngineSettingsSchema.parse({})
 
 const waitForBroadcast = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 10))
 
@@ -20,8 +20,8 @@ describe("EnginePreferences", () => {
         const channelName = `engine-preferences-${Math.random()}`
         context.mainChannel = new BroadcastChannel(channelName)
         context.audioChannel = new BroadcastChannel(channelName)
-        context.host = new EnginePreferencesHost()
-        context.client = new EnginePreferencesClient()
+        context.host = new EnginePreferencesHost(Messenger.for(context.mainChannel))
+        context.client = new EnginePreferencesClient(Messenger.for(context.audioChannel))
     })
 
     afterEach<TestContext>(context => {
@@ -32,70 +32,46 @@ describe("EnginePreferences", () => {
     })
 
     it<TestContext>("should have default settings on host", ({host}) => {
-        expect(host.settings).toEqual(EnginePreferencesDefaults)
+        expect(host.settings()).toEqual(EngineSettingsDefaults)
     })
 
-    it<TestContext>("should have default settings on client before connection", ({client}) => {
-        expect(client.settings).toEqual(EnginePreferencesDefaults)
+    it<TestContext>("should have default settings on client before receiving", ({client}) => {
+        expect(client.settings()).toEqual(EngineSettingsDefaults)
     })
 
-    it<TestContext>("should send initial state to client on connect", async ({
-                                                                                 host,
-                                                                                 client,
-                                                                                 mainChannel,
-                                                                                 audioChannel
-                                                                             }) => {
-        host.settings.metronome.enabled = false
-        host.settings.metronome.gain = 0.8
+    it<TestContext>("should send initial state to client", async ({client}) => {
         await waitForBroadcast()
 
-        host.connect(Messenger.for(mainChannel))
-        client.connect(Messenger.for(audioChannel))
-        await waitForBroadcast()
-
-        expect(client.settings.metronome.enabled).toBe(false)
-        expect(client.settings.metronome.gain).toBe(0.8)
+        expect(client.settings().metronome.enabled).toBe(true)
+        expect(client.settings().metronome.gain).toBe(0.5)
+        expect(client.settings().metronome.beatSubDivision).toBe(4)
     })
 
-    it<TestContext>("should broadcast changes to connected client", async ({
-                                                                               host,
-                                                                               client,
-                                                                               mainChannel,
-                                                                               audioChannel
-                                                                           }) => {
-        host.connect(Messenger.for(mainChannel))
-        client.connect(Messenger.for(audioChannel))
+    it<TestContext>("should broadcast changes to client", async ({host, client}) => {
         await waitForBroadcast()
 
-        host.settings.metronome.beatSubDivision = 8
+        host.settings().metronome.beatSubDivision = 8
         await waitForBroadcast()
 
-        expect(client.settings.metronome.beatSubDivision).toBe(8)
+        expect(client.settings().metronome.beatSubDivision).toBe(8)
     })
 
-    it<TestContext>("should batch multiple changes within same microtask", async ({
-                                                                                      host,
-                                                                                      client,
-                                                                                      mainChannel,
-                                                                                      audioChannel
-                                                                                  }) => {
+    it<TestContext>("should batch multiple changes within same microtask", async ({host, client}) => {
+        await waitForBroadcast()
+
         const updateSpy = vi.fn()
-        host.connect(Messenger.for(mainChannel))
-        client.connect(Messenger.for(audioChannel))
-        await waitForBroadcast()
-
         client.catchupAndSubscribe(updateSpy, "metronome")
         updateSpy.mockClear()
 
-        host.settings.metronome.enabled = false
-        host.settings.metronome.gain = 0.3
-        host.settings.metronome.beatSubDivision = 2
+        host.settings().metronome.enabled = false
+        host.settings().metronome.gain = 0.3
+        host.settings().metronome.beatSubDivision = 2
         await waitForBroadcast()
 
         expect(updateSpy).toHaveBeenCalledTimes(1)
-        expect(client.settings.metronome.enabled).toBe(false)
-        expect(client.settings.metronome.gain).toBe(0.3)
-        expect(client.settings.metronome.beatSubDivision).toBe(2)
+        expect(client.settings().metronome.enabled).toBe(false)
+        expect(client.settings().metronome.gain).toBe(0.3)
+        expect(client.settings().metronome.beatSubDivision).toBe(2)
     })
 
     it<TestContext>("should support catchupAndSubscribe on host", ({host}) => {
@@ -104,18 +80,11 @@ describe("EnginePreferences", () => {
 
         expect(observer).toHaveBeenCalledWith(true)
 
-        host.settings.metronome.enabled = false
+        host.settings().metronome.enabled = false
         expect(observer).toHaveBeenCalledWith(false)
     })
 
-    it<TestContext>("should support catchupAndSubscribe on client", async ({
-                                                                               host,
-                                                                               client,
-                                                                               mainChannel,
-                                                                               audioChannel
-                                                                           }) => {
-        host.connect(Messenger.for(mainChannel))
-        client.connect(Messenger.for(audioChannel))
+    it<TestContext>("should support catchupAndSubscribe on client", async ({host, client}) => {
         await waitForBroadcast()
 
         const observer = vi.fn()
@@ -123,71 +92,22 @@ describe("EnginePreferences", () => {
         expect(observer).toHaveBeenCalledWith(0.5)
 
         observer.mockClear()
-        host.settings.metronome.gain = 0.9
+        host.settings().metronome.gain = 0.9
         await waitForBroadcast()
 
         expect(observer).toHaveBeenCalledWith(0.9)
     })
 
-    it<TestContext>("should broadcast to multiple clients", async ({host}) => {
-        const channelName = `engine-preferences-multi-${Math.random()}`
-        const mainChannel = new BroadcastChannel(channelName)
-        const audioChannel1 = new BroadcastChannel(channelName)
-        const audioChannel2 = new BroadcastChannel(channelName)
-
-        const client1 = new EnginePreferencesClient()
-        const client2 = new EnginePreferencesClient()
-
-        host.connect(Messenger.for(mainChannel))
-        client1.connect(Messenger.for(audioChannel1))
-        client2.connect(Messenger.for(audioChannel2))
-        await waitForBroadcast()
-
-        host.settings.metronome.enabled = false
-        await waitForBroadcast()
-
-        expect(client1.settings.metronome.enabled).toBe(false)
-        expect(client2.settings.metronome.enabled).toBe(false)
-
-        client1.terminate()
-        client2.terminate()
-        mainChannel.close()
-        audioChannel1.close()
-        audioChannel2.close()
-    })
-
-    it<TestContext>("should only notify changed keys on client", async ({
-                                                                            host,
-                                                                            client,
-                                                                            mainChannel,
-                                                                            audioChannel
-                                                                        }) => {
-        host.connect(Messenger.for(mainChannel))
-        client.connect(Messenger.for(audioChannel))
+    it<TestContext>("should only notify changed keys on client", async ({host, client}) => {
         await waitForBroadcast()
 
         const metronomeObserver = vi.fn()
         client.catchupAndSubscribe(metronomeObserver, "metronome")
         metronomeObserver.mockClear()
 
-        host.settings.metronome.gain = 0.7
+        host.settings().metronome.gain = 0.7
         await waitForBroadcast()
 
         expect(metronomeObserver).toHaveBeenCalledTimes(1)
-    })
-
-    it<TestContext>("should handle disconnect", async ({host, mainChannel, audioChannel}) => {
-        const client = new EnginePreferencesClient()
-        const connection = host.connect(Messenger.for(mainChannel))
-        client.connect(Messenger.for(audioChannel))
-        await waitForBroadcast()
-
-        connection.terminate()
-
-        host.settings.metronome.enabled = false
-        await waitForBroadcast()
-
-        expect(client.settings.metronome.enabled).toBe(true)
-        client.terminate()
     })
 })

@@ -1,7 +1,16 @@
 import css from "./Header.sass?inline"
 import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {Icon} from "@/ui/components/Icon.tsx"
-import {Lifecycle, Nullable, ObservableValue, Observer, panic, Subscription, Terminator} from "@opendaw/lib-std"
+import {
+    Lifecycle,
+    MutableObservableValue,
+    Nullable,
+    ObservableValue,
+    Observer,
+    panic,
+    Subscription,
+    Terminator
+} from "@opendaw/lib-std"
 import {TransportGroup} from "@/ui/header/TransportGroup.tsx"
 import {TimeStateDisplay} from "@/ui/header/TimeStateDisplay.tsx"
 import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
@@ -110,7 +119,23 @@ export const Header = ({lifecycle, service}: Construct) => {
                                       label: String(count),
                                       checked: count === service.engine.countInBarsTotal.getValue()
                                   }).setTriggerProcedure(() => service.engine.countInBarsTotal.setValue(count))))))))}
-                      model={service.engine.metronomeEnabled}
+                      model={new class implements MutableObservableValue<boolean> {
+                          setValue(value: boolean): void {
+                              service.engine.preferences.settings().metronome.enabled = value
+                          }
+
+                          getValue(): boolean {
+                              return service.engine.preferences.settings().metronome.enabled
+                          }
+
+                          catchupAndSubscribe(observer: Observer<ObservableValue<boolean>>): Subscription {
+                              return service.engine.preferences.catchupAndSubscribe(() => observer(this), "metronome", "enabled")
+                          }
+
+                          subscribe(observer: Observer<ObservableValue<boolean>>): Subscription {
+                              return service.engine.preferences.subscribe(() => observer(this), "metronome", "enabled")
+                          }
+                      }}
                       appearance={{
                           activeColor: Colors.orange,
                           tooltip: ShortcutTooltip.create("Metronome", GlobalShortcuts["toggle-metronome"].shortcut)

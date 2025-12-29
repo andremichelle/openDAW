@@ -1,5 +1,5 @@
-import {EnginePreferences} from "./EnginePreferencesSchema"
+import {EngineSettings} from "./EnginePreferencesSchema"
 
 export interface EnginePreferencesProtocol {
-    updatePreferences(preferences: EnginePreferences): void
+    updatePreferences(preferences: EngineSettings): void
 }

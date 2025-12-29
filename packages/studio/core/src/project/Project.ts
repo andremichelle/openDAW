@@ -153,21 +153,21 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     startAudioWorklet(restart?: RestartWorklet, options?: ProcessorOptions): EngineWorklet {
         console.debug(`start AudioWorklet`)
         const lifecycle = this.#terminator.spawn()
-        const engine: EngineWorklet = lifecycle.own(this.#env.audioWorklets.createEngine({project: this, options}))
+        const worklet: EngineWorklet = lifecycle.own(this.#env.audioWorklets.createEngine({project: this, options}))
         const handler = async (event: unknown) => {
             console.warn(event)
             // we will only accept the first error
-            engine.removeEventListener("error", handler)
-            engine.removeEventListener("processorerror", handler)
+            worklet.removeEventListener("error", handler)
+            worklet.removeEventListener("processorerror", handler)
             lifecycle.terminate()
             await safeExecute(restart?.unload, event)
             safeExecute(restart?.load, this.startAudioWorklet(restart))
         }
-        engine.addEventListener("error", handler)
-        engine.addEventListener("processorerror", handler)
-        engine.connect(engine.context.destination)
-        this.engine.setWorklet(engine)
-        return engine
+        worklet.addEventListener("error", handler)
+        worklet.addEventListener("processorerror", handler)
+        worklet.connect(worklet.context.destination)
+        this.engine.setWorklet(worklet)
+        return worklet
     }
 
     startRecording(countIn: boolean = true) {

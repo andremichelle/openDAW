@@ -30,6 +30,7 @@ import {
     ClipSequencingUpdates,
     EngineAddresses,
     EngineCommands,
+    EnginePreferencesClient,
     EngineProcessorAttachment,
     EngineStateSchema,
     EngineToClient,
@@ -68,6 +69,7 @@ const DEBUG = false
 export class EngineProcessor extends AudioWorkletProcessor implements EngineContext {
     readonly #terminator: Terminator
     readonly #messenger: Messenger
+    readonly #preferences: EnginePreferencesClient
     readonly #boxGraph: BoxGraph<BoxIO.TypeMap>
     readonly #timeInfo: TimeInfo
     readonly #engineToClient: EngineToClient
@@ -105,7 +107,6 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     #midiSender: Option<MIDISender> = Option.None
     #panic: boolean = false // will throw an error if set to true to test error handling
     #valid: boolean = true // to shut down the engine
-    #metronomeEnabled: boolean = false
     #recordingStartTime: ppqn = 0.0
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
     #playbackTimestampEnabled: boolean = true
@@ -120,6 +121,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
 
         this.#terminator = new Terminator()
         this.#messenger = Messenger.for(this.port)
+        this.#preferences = new EnginePreferencesClient(this.#messenger.channel("engine-preferences"))
         this.#boxGraph = boxGraph
         this.#timeInfo = new TimeInfo()
         this.#controlFlags = new Int32Array<SharedArrayBuffer>(controlFlagsBuffer)
@@ -154,7 +156,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#audioGraphSorting = new TopologicalSort<Processor>(this.#audioGraph)
         this.#notifier = new Notifier<ProcessPhase>()
         this.#mixer = new Mixer()
-        this.#metronome = new Metronome(this.#timelineBoxAdapter, this.#timeInfo)
+        this.#metronome = new Metronome(this)
         this.#midiTransportClock = new MIDITransportClock(this, this.#rootBoxAdapter)
         this.#audioOutputBufferRegistry = new AudioOutputBufferRegistry()
         this.#renderer = this.#terminator.own(new BlockRenderer(this, options))
@@ -190,13 +192,14 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#clipSequencing = this.#terminator.own(new ClipSequencingAudioContext(this.#boxGraph))
         this.#terminator.ownAll(
             createSyncTarget(this.#boxGraph, this.#messenger.channel("engine-sync")),
+            this.#preferences.catchupAndSubscribe(enabled => this.#timeInfo.metronomeEnabled = enabled, "metronome", "enabled"),
             Communicator.executor<EngineCommands>(this.#messenger.channel("engine-commands"), {
                 play: (): void => this.#play(),
                 stop: (reset: boolean): void => this.#stop(reset),
                 setPosition: (position: number): void => this.#setPosition(position),
                 prepareRecordingState: (countIn: boolean): void => this.#prepareRecordingState(countIn),
                 stopRecording: (): void => this.#stopRecording(),
-                setMetronomeEnabled: (value: boolean) => this.#timeInfo.metronomeEnabled = this.#metronomeEnabled = value,
+                setMetronomeEnabled: (value: boolean) => {}, // TODO Remove
                 setPlaybackTimestampEnabled: (value: boolean) => this.#playbackTimestampEnabled = value,
                 setCountInBarsTotal: (value: int) => this.#countInBarsTotal = value,
                 queryLoadingComplete: (): Promise<boolean> =>
@@ -367,6 +370,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         }
     }
 
+    get preferences(): EnginePreferencesClient {return this.#preferences}
     get boxGraph(): BoxGraph<BoxIO.TypeMap> {return this.#boxGraph}
     get boxAdapters(): BoxAdapters {return this.#boxAdapters}
     get sampleManager(): SampleLoaderManager {return this.#sampleManager}
@@ -416,7 +420,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         }
         const wasTransporting = this.#timeInfo.transporting
         this.#timeInfo.transporting = false
-        this.#timeInfo.metronomeEnabled = this.#metronomeEnabled
+        this.#timeInfo.metronomeEnabled = this.#isMetronomeEnabled()
         this.#ignoredRegions.clear()
         if (reset || !wasTransporting) {
             this.#reset()
@@ -444,7 +448,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
             const subscription = this.#renderer.setCallback(this.#recordingStartTime, () => {
                 this.#timeInfo.isCountingIn = false
                 this.#timeInfo.isRecording = true
-                this.#timeInfo.metronomeEnabled = this.#metronomeEnabled
+                this.#timeInfo.metronomeEnabled = this.#isMetronomeEnabled()
                 subscription.terminate()
             })
             this.#midiTransportClock.schedule(MidiData.positionInPPQN(this.#timeInfo.position))
@@ -459,7 +463,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         if (!this.#timeInfo.isRecording && !this.#timeInfo.isCountingIn) {return}
         this.#timeInfo.isRecording = false
         this.#timeInfo.isCountingIn = false
-        this.#timeInfo.metronomeEnabled = this.#metronomeEnabled
+        this.#timeInfo.metronomeEnabled = this.#isMetronomeEnabled()
         this.#timeInfo.transporting = false
         this.#ignoredRegions.clear()
         this.#midiTransportClock.schedule(MidiData.Stop)
@@ -469,7 +473,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#playbackTimestamp = 0.0
         this.#timeInfo.isRecording = false
         this.#timeInfo.isCountingIn = false
-        this.#timeInfo.metronomeEnabled = this.#metronomeEnabled
+        this.#timeInfo.metronomeEnabled = this.#isMetronomeEnabled()
         this.#timeInfo.position = 0.0
         this.#timeInfo.transporting = false
         this.#renderer.reset()
@@ -477,4 +481,6 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#audioGraphSorting.sorted().forEach(processor => processor.reset())
         this.#peaks.clear()
     }
+
+    #isMetronomeEnabled(): boolean {return this.#preferences.settings.metronome.enabled}
 }
