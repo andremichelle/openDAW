@@ -5,23 +5,23 @@ import {EnginePreferencesProtocol} from "./EnginePreferencesProtocol"
 
 export class EnginePreferencesClient implements Terminable {
     readonly #terminator = new Terminator()
-    readonly #observer = new VirtualObject<EngineSettings>(EngineSettingsSchema.parse({}))
+    readonly #object = new VirtualObject<EngineSettings>(EngineSettingsSchema.parse({}))
 
     constructor(messenger: Messenger) {
         this.#terminator.own(Communicator.executor<EnginePreferencesProtocol>(messenger, {
-            updatePreferences: (preferences: EngineSettings): void => this.#observer.update(preferences)
+            updatePreferences: (preferences: EngineSettings): void => this.#object.update(preferences)
         }))
     }
 
-    settings(): Readonly<EngineSettings> {return this.#observer.data}
+    settings(): Readonly<EngineSettings> {return this.#object.data}
 
     catchupAndSubscribe<P extends PathTuple<EngineSettings>>(
         observer: Observer<ValueAtPath<EngineSettings, P>>, ...path: P): Subscription {
-        return this.#observer.catchupAndSubscribe(observer, ...path)
+        return this.#object.catchupAndSubscribe(observer, ...path)
     }
 
     terminate(): void {
         this.#terminator.terminate()
-        this.#observer.terminate()
+        this.#object.terminate()
     }
 }

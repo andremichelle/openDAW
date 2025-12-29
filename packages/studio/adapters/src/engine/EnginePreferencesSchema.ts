@@ -1,5 +1,5 @@
 import {z} from "zod"
-import {Observer, PathTuple, Subscription, ValueAtPath} from "@opendaw/lib-std"
+import {MutableObservableValue, Observer, PathTuple, Subscription, Terminable, ValueAtPath} from "@opendaw/lib-std"
 
 export const BeatSubDivisionOptions = [2, 4, 8] as const
 
@@ -19,4 +19,5 @@ export interface EnginePreferences {
         observer: Observer<ValueAtPath<EngineSettings, P>>, ...path: P): Subscription
     catchupAndSubscribe<P extends PathTuple<EngineSettings>>(
         observer: Observer<ValueAtPath<EngineSettings, P>>, ...path: P): Subscription
+    createMutableObservableValue<P extends PathTuple<EngineSettings>>(...path: P): MutableObservableValue<ValueAtPath<EngineSettings, P>> & Terminable
 }

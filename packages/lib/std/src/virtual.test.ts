@@ -145,4 +145,80 @@ describe("VirtualObject", () => {
             expect(observer).toHaveBeenNthCalledWith(2, 0.8)
         })
     })
+
+    describe("createMutableObservableValue", () => {
+        it("should get value at path", () => {
+            const obj = new VirtualObject(createTestData())
+            const observable = obj.createMutableObservableValue("metronome", "gain")
+
+            expect(observable.getValue()).toBe(0.5)
+        })
+
+        it("should set value at path", () => {
+            const obj = new VirtualObject(createTestData())
+            const observable = obj.createMutableObservableValue("metronome", "gain")
+
+            observable.setValue(0.8)
+
+            expect(obj.proxy.metronome.gain).toBe(0.8)
+        })
+
+        it("should notify on value change via proxy", () => {
+            const obj = new VirtualObject(createTestData())
+            const observable = obj.createMutableObservableValue("metronome", "gain")
+            const observer = vi.fn()
+
+            observable.subscribe(observer)
+            obj.proxy.metronome.gain = 0.8
+
+            expect(observer).toHaveBeenCalledTimes(1)
+            expect(observer).toHaveBeenCalledWith(observable)
+            expect(observable.getValue()).toBe(0.8)
+        })
+
+        it("should notify on value change via setValue", () => {
+            const obj = new VirtualObject(createTestData())
+            const observable = obj.createMutableObservableValue("metronome", "gain")
+            const observer = vi.fn()
+
+            observable.subscribe(observer)
+            observable.setValue(0.8)
+
+            expect(observer).toHaveBeenCalledTimes(1)
+        })
+
+        it("should NOT notify for sibling changes", () => {
+            const obj = new VirtualObject(createTestData())
+            const observable = obj.createMutableObservableValue("metronome", "gain")
+            const observer = vi.fn()
+
+            observable.subscribe(observer)
+            obj.proxy.metronome.enabled = false
+
+            expect(observer).not.toHaveBeenCalled()
+        })
+
+        it("should stop notifying after terminate", () => {
+            const obj = new VirtualObject(createTestData())
+            const observable = obj.createMutableObservableValue("metronome", "gain")
+            const observer = vi.fn()
+
+            observable.subscribe(observer)
+            observable.terminate()
+            obj.proxy.metronome.gain = 0.8
+
+            expect(observer).not.toHaveBeenCalled()
+        })
+
+        it("catchupAndSubscribe should call immediately and on changes", () => {
+            const obj = new VirtualObject(createTestData())
+            const observable = obj.createMutableObservableValue("metronome", "gain")
+            const observer = vi.fn()
+
+            observable.catchupAndSubscribe(observer)
+            obj.proxy.metronome.gain = 0.8
+
+            expect(observer).toHaveBeenCalledTimes(2)
+        })
+    })
 })

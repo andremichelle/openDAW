@@ -1,4 +1,4 @@
-import {Observer, Option, PathTuple, Subscription, Terminable, Terminator, ValueAtPath, VirtualObject} from "@opendaw/lib-std"
+import {MutableObservableValue, Observer, Option, PathTuple, Subscription, Terminable, Terminator, ValueAtPath, VirtualObject} from "@opendaw/lib-std"
 import {queueTask} from "@opendaw/lib-dom"
 import {EnginePreferences, EngineSettings, EngineSettingsSchema} from "./EnginePreferencesSchema"
 import {EnginePreferencesHost} from "./EnginePreferencesHost"
@@ -6,18 +6,18 @@ import {EnginePreferencesHost} from "./EnginePreferencesHost"
 export class EnginePreferencesFacade implements EnginePreferences, Terminable {
     readonly #terminator = new Terminator()
     readonly #lifecycle = this.#terminator.own(new Terminator())
-    readonly #observer = this.#terminator.own(new VirtualObject<EngineSettings>(EngineSettingsSchema.parse({})))
+    readonly #object = this.#terminator.own(new VirtualObject<EngineSettings>(EngineSettingsSchema.parse({})))
 
     #host: Option<EnginePreferencesHost> = Option.None
 
     setHost(host: EnginePreferencesHost): void {
         this.#host = Option.wrap(host)
         this.#lifecycle.terminate()
-        this.#observer.update(host.settings())
-        const queueHostUpdate = queueTask(() => host.update(this.#observer.data))
+        this.#object.update(host.settings())
+        const queueHostUpdate = queueTask(() => host.update(this.#object.data))
         this.#lifecycle.ownAll(
-            host.subscribeAll(() => this.#observer.update(host.settings())),
-            this.#observer.subscribeAll(queueHostUpdate)
+            host.subscribeAll(() => this.#object.update(host.settings())),
+            this.#object.subscribeAll(queueHostUpdate)
         )
     }
 
@@ -26,16 +26,20 @@ export class EnginePreferencesFacade implements EnginePreferences, Terminable {
         this.#host = Option.None
     }
 
-    settings(): EngineSettings {return this.#observer.proxy}
+    settings(): EngineSettings {return this.#object.proxy}
 
     subscribe<P extends PathTuple<EngineSettings>>(
         observer: Observer<ValueAtPath<EngineSettings, P>>, ...path: P): Subscription {
-        return this.#observer.subscribe(observer, ...path)
+        return this.#object.subscribe(observer, ...path)
     }
 
     catchupAndSubscribe<P extends PathTuple<EngineSettings>>(
         observer: Observer<ValueAtPath<EngineSettings, P>>, ...path: P): Subscription {
-        return this.#observer.catchupAndSubscribe(observer, ...path)
+        return this.#object.catchupAndSubscribe(observer, ...path)
+    }
+
+    createMutableObservableValue<P extends PathTuple<EngineSettings>>(...path: P): MutableObservableValue<ValueAtPath<EngineSettings, P>> & Terminable {
+        return this.#object.createMutableObservableValue(...path)
     }
 
     terminate(): void {this.#terminator.terminate()}
