@@ -15,7 +15,7 @@ export namespace TextScroller {
                     const moveFunc = smoothStep(clamp((t - 0.25) / (0.75 - 0.25), 0.0, 1.0))
                     element.scrollTop = moveFunc * (element.scrollHeight - element.clientHeight)
                     element.scrollLeft = moveFunc * (element.scrollWidth - element.clientWidth)
-                    x += 0.5 / Math.max(element.scrollWidth, element.scrollHeight)
+                    x += 0.125 / Math.max(element.scrollWidth, element.scrollHeight)
                 }))
             }),
             Events.subscribe(element, "pointerleave", () => {

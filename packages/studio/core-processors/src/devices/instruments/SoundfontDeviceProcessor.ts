@@ -21,6 +21,7 @@ export class SoundfontDeviceProcessor extends AudioProcessor implements Instrume
     readonly #peakBroadcaster: PeakBroadcaster
 
     #loader: Option<SoundfontLoader> = Option.None
+    #enabled: boolean = true
 
     constructor(context: EngineContext, adapter: SoundfontDeviceBoxAdapter) {
         super(context)
@@ -32,6 +33,10 @@ export class SoundfontDeviceProcessor extends AudioProcessor implements Instrume
         this.#peakBroadcaster = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
 
         this.ownAll(
+            adapter.box.enabled.catchupAndSubscribe(owner => {
+                this.#enabled = owner.getValue()
+                if (!this.#enabled) {this.reset()}
+            }),
             context.registerProcessor(this),
             context.audioOutputBufferRegistry.register(adapter.address, this.#audioOutput, this.outgoing),
             adapter.box.file.catchupAndSubscribe((pointer) =>
@@ -59,6 +64,7 @@ export class SoundfontDeviceProcessor extends AudioProcessor implements Instrume
     }
 
     handleEvent(event: Event): void {
+        if (!this.#enabled) {return}
         const optSoundfont = this.#loader.flatMap(loader => loader.soundfont)
         if (optSoundfont.isEmpty()) {return}
         const soundfont = optSoundfont.unwrap()
@@ -90,6 +96,7 @@ export class SoundfontDeviceProcessor extends AudioProcessor implements Instrume
     }
 
     processAudio(_block: Block, fromIndex: int, toIndex: int): void {
+        if (!this.#enabled) {return}
         this.#audioOutput.clear(fromIndex, toIndex)
         for (let index = this.#voices.length - 1; index >= 0; index--) {
             if (this.#voices[index].processAdd(this.#audioOutput, fromIndex, toIndex)) {
@@ -99,6 +106,7 @@ export class SoundfontDeviceProcessor extends AudioProcessor implements Instrume
     }
 
     finishProcess(): void {
+        if (!this.#enabled) {return}
         this.#audioOutput.assertSanity()
         this.#peakBroadcaster.process(this.#audioOutput.getChannel(0), this.#audioOutput.getChannel(1))
     }

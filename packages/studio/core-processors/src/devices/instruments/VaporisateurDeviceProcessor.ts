@@ -82,6 +82,7 @@ export class VaporisateurDeviceProcessor extends AudioProcessor
     flt_env_amount: number = 0.0
     flt_order: int = 1
     #glideTime: number = 0.0
+    #enabled: boolean = true
 
     constructor(context: EngineContext, adapter: VaporisateurDeviceBoxAdapter) {
         super(context)
@@ -94,7 +95,7 @@ export class VaporisateurDeviceProcessor extends AudioProcessor
         this.#limiter = new SimpleLimiter(sampleRate)
         this.#peakBroadcaster = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
 
-        const {namedParameter} = this.#adapter
+        const {box, namedParameter} = this.#adapter
         const {oscillators} = namedParameter
         this.#parameterOscAWaveform = this.own(this.bindParameter(oscillators[0].waveform))
         this.#parameterOscAOctave = this.own(this.bindParameter(oscillators[0].octave))
@@ -126,6 +127,10 @@ export class VaporisateurDeviceProcessor extends AudioProcessor
 
         const envValues = new Float32Array(32)
         this.ownAll(
+            box.enabled.catchupAndSubscribe(owner => {
+                this.#enabled = owner.getValue()
+                if (!this.#enabled) {this.reset()}
+            }),
             context.broadcaster.broadcastFloats(adapter.address.append(0), envValues, (hasSubscribers) => {
                 if (!hasSubscribers) {return}
                 let index = 0
@@ -190,6 +195,7 @@ export class VaporisateurDeviceProcessor extends AudioProcessor
     }
 
     processAudio(block: Block, fromIndex: int, toIndex: int): void {
+        if (!this.#enabled) {return}
         this.#voicing.process(this.#audioOutput, block, fromIndex, toIndex)
         this.#limiter.replace(this.#audioOutput, fromIndex, toIndex)
     }

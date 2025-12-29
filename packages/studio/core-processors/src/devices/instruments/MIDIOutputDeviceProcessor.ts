@@ -21,7 +21,7 @@ export class MIDIOutputDeviceProcessor extends AudioProcessor implements Instrum
     readonly #parameters: Array<AutomatableParameter<number>>
 
     #lastChannel: byte
-
+    #enabled: boolean = true
     #source: Option<NoteEventSource> = Option.None
 
     constructor(context: EngineContext, adapter: MIDIOutputDeviceBoxAdapter) {
@@ -36,6 +36,10 @@ export class MIDIOutputDeviceProcessor extends AudioProcessor implements Instrum
         this.#lastChannel = box.channel.getValue()
 
         this.ownAll(
+            box.enabled.catchupAndSubscribe(owner => {
+                this.#enabled = owner.getValue()
+                if (!this.#enabled) {this.reset()}
+            }),
             box.parameters.pointerHub.catchupAndSubscribe({
                 onAdded: (({box}) =>
                     this.#parameters.push(this.bindParameter(
@@ -59,7 +63,7 @@ export class MIDIOutputDeviceProcessor extends AudioProcessor implements Instrum
     get noteEventTarget(): Option<NoteEventTarget & DeviceProcessor> {return Option.wrap(this)}
 
     introduceBlock({p0, p1, s0, flags, bpm}: Block): void {
-        if (this.#source.isEmpty()) {return}
+        if (this.#source.isEmpty() || !this.#enabled) {return}
         const {box: {channel, device}} = this.#adapter
         const optDevice = device.targetVertex.match({
             none: () => Option.None,
@@ -106,7 +110,7 @@ export class MIDIOutputDeviceProcessor extends AudioProcessor implements Instrum
 
     parameterChanged(parameter: AutomatableParameter, relativeBlockTime: number = 0.0): void {
         const {box: {channel, device}} = this.#adapter
-        if (device.isEmpty()) {return}
+        if (device.isEmpty() || !this.#enabled) {return}
         const {id, delayInMs} = asInstanceOf(device.targetVertex.unwrap().box, MIDIOutputBox)
         const relativeTimeInMs = relativeBlockTime * 1000.0 * delayInMs.getValue()
         const controllerId = asInstanceOf(parameter.adapter.field.box, MIDIOutputParameterBox).controller.getValue()

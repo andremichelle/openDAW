@@ -12,6 +12,8 @@ export class PlayfieldSequencer extends EventProcessor implements NoteEventTarge
 
     readonly #noteEventInstrument: NoteEventInstrument
 
+    #enabled: boolean = true
+
     constructor(context: EngineContext, device: PlayfieldDeviceProcessor) {
         super(context)
 
@@ -21,6 +23,11 @@ export class PlayfieldSequencer extends EventProcessor implements NoteEventTarge
 
         this.own(context.registerProcessor(this))
         this.readAllParameters()
+    }
+
+    setEnabled(enabled: boolean): void {
+        this.#enabled = enabled
+        if (!enabled) {this.reset()}
     }
 
     introduceBlock(block: Block): void {this.#noteEventInstrument.introduceBlock(block)}
@@ -34,6 +41,7 @@ export class PlayfieldSequencer extends EventProcessor implements NoteEventTarge
     processEvents(_block: Readonly<Block>, _from: number, _to: number): void {}
 
     handleEvent({index}: Readonly<Block>, event: Event): void {
+        if (!this.#enabled) {return}
         if (NoteLifecycleEvent.isStart(event)) {
             this.#device.optSampleProcessor(event.pitch).ifSome(({eventInput}) => eventInput.add(index, event))
         } else if (NoteLifecycleEvent.isStop(event)) {

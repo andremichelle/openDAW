@@ -15,32 +15,12 @@ component
   &:not(.enabled)
     filter: brightness(0.5) grayscale(1.0)
 
-  &.minimized
-    > header
-      grid-row: 1 / -1
-      padding-top: 0.75em
-      width: 2em
-      align-items: start
-      grid-template-rows: 1.5rem 1fr
-      grid-template-columns: auto
-
-      > h1
-        justify-self: center
-        writing-mode: vertical-rl
-        text-orientation: mixed
-        min-width: 1.5em
-        @include mixins.height-available
-
-      > div.icon > svg
-        top: 1px
-        position: relative
-
   > header
     display: grid
-    grid-template-columns: auto 1fr
+    grid-template-columns: auto auto 1fr
     line-height: 2rem
     align-items: center
-    column-gap: 0.5rem
+    column-gap: 3px
     padding: 0 0.25rem
     font-size: 0.625em
     overflow: hidden
@@ -53,19 +33,39 @@ component
       height: 2px
       background: linear-gradient(to bottom, rgba(black, 0.2) 0 1px, rgba(white, 0.03) 1px 2px)
 
-    > div.icon
-      display: flex
-
-      > svg
-        font-size: 1.5em
+    > svg
+      pointer-events: bounding-box
+      font-size: 1.5em
+      cursor: pointer
 
     > h1
       white-space: nowrap
       overflow: hidden
       text-overflow: ellipsis
       font-size: inherit
-      letter-spacing: 0.04em
-      min-height: 2em
+      font-weight: 500
+      letter-spacing: 0.03em
+      min-height: 2rem
+
+  &.minimized > header
+    grid-row: 1 / -1
+    width: 1.25rem
+    grid-template-columns: 1fr
+    grid-template-rows: 2rem auto 1fr
+    padding: 0 0.25rem
+
+    &::after
+      display: none
+
+    > svg:nth-of-type(2)
+      margin-top: -5px
+
+    > h1
+      padding-top: 0.25rem
+      writing-mode: vertical-rl
+      text-orientation: mixed
+      min-width: 1.5rem
+      @include mixins.height-available
 
   // for the implementations
   h5

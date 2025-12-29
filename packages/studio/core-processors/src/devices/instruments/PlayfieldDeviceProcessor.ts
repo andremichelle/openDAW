@@ -22,6 +22,8 @@ export class PlayfieldDeviceProcessor implements DeviceProcessor, NoteEventTarge
         terminable: Terminable
     }>
 
+    #enabled: boolean = true
+
     constructor(context: EngineContext, adapter: PlayfieldDeviceBoxAdapter) {
         this.#adapter = adapter
 
@@ -30,6 +32,13 @@ export class PlayfieldDeviceProcessor implements DeviceProcessor, NoteEventTarge
         this.#sampleSet = UUID.newSet(entry => entry.uuid)
 
         this.#terminator.ownAll(
+            adapter.box.enabled.catchupAndSubscribe(owner => {
+                this.#enabled = owner.getValue()
+                this.#sequencer.setEnabled(this.#enabled)
+                if (!this.#enabled) {
+                    this.#mixProcessor.reset()
+                }
+            }),
             adapter.samples.catchupAndSubscribe({
                 onAdd: (adapter: PlayfieldSampleBoxAdapter) => {
                     const processor = new SampleProcessor(context, this, adapter, this.#mixProcessor)

@@ -104,6 +104,7 @@ export enum IconSymbol {
     Scissors,
     Search,
     Shadertoy,
+    Shutdown,
     Sine,
     Solo,
     SoundFont,

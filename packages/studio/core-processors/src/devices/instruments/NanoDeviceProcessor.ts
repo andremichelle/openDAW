@@ -21,6 +21,8 @@ export class NanoDeviceProcessor extends AudioProcessor implements InstrumentDev
     readonly #parameterVolume: AutomatableParameter<number>
     readonly #parameterRelease: AutomatableParameter<number>
 
+    #enabled: boolean = true
+
     gain: number = 1.0
     release: number = 1.0
 
@@ -39,6 +41,10 @@ export class NanoDeviceProcessor extends AudioProcessor implements InstrumentDev
         this.#parameterRelease = this.own(this.bindParameter(this.#adapter.namedParameter.release))
 
         this.ownAll(
+            adapter.box.enabled.catchupAndSubscribe(owner => {
+                this.#enabled = owner.getValue()
+                if (!this.#enabled) {this.reset()}
+            }),
             context.registerProcessor(this),
             context.audioOutputBufferRegistry.register(adapter.address, this.#audioOutput, this.outgoing),
             adapter.box.file.catchupAndSubscribe((pointer) =>
@@ -48,18 +54,13 @@ export class NanoDeviceProcessor extends AudioProcessor implements InstrumentDev
         this.readAllParameters()
     }
 
-    get noteEventTarget(): Option<NoteEventTarget & DeviceProcessor> {return Option.wrap(this)}
-
-    introduceBlock(block: Block): void {
-        this.#noteEventProcessor.introduceBlock(block)
-    }
-
-    setNoteEventSource(source: NoteEventSource): Terminable {
-        return this.#noteEventProcessor.setNoteEventSource(source)
-    }
-
     get incoming(): Processor {return this}
     get outgoing(): Processor {return this}
+    get noteEventTarget(): Option<NoteEventTarget & DeviceProcessor> {return Option.wrap(this)}
+
+    introduceBlock(block: Block): void {this.#noteEventProcessor.introduceBlock(block)}
+
+    setNoteEventSource(source: NoteEventSource): Terminable {return this.#noteEventProcessor.setNoteEventSource(source)}
 
     reset(): void {
         this.#voices.length = 0
@@ -82,6 +83,7 @@ export class NanoDeviceProcessor extends AudioProcessor implements InstrumentDev
     }
 
     processAudio(_block: Block, fromIndex: int, toIndex: int): void {
+        if (!this.#enabled) {return}
         this.#audioOutput.clear(fromIndex, toIndex)
         for (let i = this.#voices.length - 1; i >= 0; i--) {
             if (this.#voices[i].processAdd(this.#audioOutput, fromIndex, toIndex)) {

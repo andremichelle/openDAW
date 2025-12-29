@@ -36,9 +36,12 @@ export class MidiDeviceChain implements DeviceChain {
             this.#audioUnit.adapter.midiEffects.catchupAndSubscribe({
                 onAdd: (adapter: MidiEffectDeviceAdapter) => {
                     this.invalidateWiring()
-                    const device = MidiEffectDeviceProcessorFactory.create(this.#audioUnit.context, adapter.box)
+                    const processor = MidiEffectDeviceProcessorFactory.create(this.#audioUnit.context, adapter.box)
                     const added = this.#effects.add({
-                        device, subscription: device.adapter().enabledField.subscribe(() => this.invalidateWiring())
+                        device: processor, subscription: processor.adapter().enabledField.subscribe(() => {
+                            processor.reset()
+                            this.invalidateWiring()
+                        })
                     })
                     assert(added, "Could not add.")
                 },

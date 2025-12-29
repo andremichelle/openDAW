@@ -38,6 +38,8 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
     readonly #peaks: PeakBroadcaster
     readonly #lanes: SortedSet<UUID.Bytes, Lane>
 
+    #enabled: boolean = true
+
     constructor(context: EngineContext, adapter: TapeDeviceBoxAdapter) {
         super(context)
 
@@ -46,6 +48,10 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
         this.#lanes = UUID.newSet<Lane>(({adapter: {uuid}}) => uuid)
         this.ownAll(
+            this.#adapter.box.enabled.catchupAndSubscribe(owner => {
+                this.#enabled = owner.getValue()
+                if (!this.#enabled) {this.reset()}
+            }),
             this.#adapter.deviceHost().audioUnitBoxAdapter().tracks.catchupAndSubscribe({
                 onAdd: (adapter: TrackBoxAdapter) => this.#lanes.add({
                     adapter,
@@ -79,6 +85,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
     }
 
     process({blocks}: ProcessInfo): void {
+        if (!this.#enabled) {return}
         this.#audioOutput.clear(0, RenderQuantum)
         this.#lanes.forEach(lane => blocks.forEach(block => this.#processBlock(lane, block)))
         this.#audioOutput.assertSanity()

@@ -1,5 +1,5 @@
 import css from "./DeviceEditor.sass?inline"
-import {Lifecycle, ObservableValue, Procedure, Provider} from "@opendaw/lib-std"
+import {Editing, Errors, Lifecycle, ObservableValue, panic, Procedure, Provider} from "@opendaw/lib-std"
 import {createElement, Group, JsxValue} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
@@ -13,6 +13,8 @@ import {TextScroller} from "@/ui/TextScroller"
 import {StringField} from "@opendaw/lib-box"
 import {Project} from "@opendaw/studio-core"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Promises} from "@opendaw/lib-runtime"
+import {Surface} from "@/ui/surface/Surface"
 
 const className = Html.adoptStyleSheet(css, "DeviceEditor")
 
@@ -39,15 +41,24 @@ type Construct = {
     icon: IconSymbol
 }
 
-const defaultLabelFactory = (lifecycle: Lifecycle, labelField: StringField): Provider<JsxValue> =>
-    () => {
-        const label: HTMLElement = <h1/>
-        lifecycle.ownAll(
-            TextScroller.install(label),
-            labelField.catchupAndSubscribe(owner => label.textContent = owner.getValue())
-        )
-        return label
-    }
+const defaultLabelFactory = (lifecycle: Lifecycle, editing: Editing, labelField: StringField): Provider<JsxValue> =>
+    () => (
+        <h1 onInit={element => {
+            lifecycle.ownAll(
+                TextScroller.install(element),
+                labelField.catchupAndSubscribe(owner => element.textContent = owner.getValue()),
+                Events.subscribeDblDwn(element, async event => {
+                    const {status, error, value} = await Promises.tryCatch(Surface.get(element)
+                        .requestFloatingTextInput(event, labelField.getValue()))
+                    if (status === "rejected") {
+                        if (!Errors.isAbort(error)) {return panic(error)}
+                    } else {
+                        editing.modify(() => labelField.setValue(value))
+                    }
+                })
+            )
+        }}/>
+    )
 
 export const DeviceEditor =
     ({lifecycle, project, adapter, populateMenu, populateControls, populateMeter, createLabel, icon}: Construct) => {
@@ -66,8 +77,6 @@ export const DeviceEditor =
                      )
                  }} data-drag>
                 <header onInit={element => {
-                    lifecycle.own(Events.subscribeDblDwn(element, () =>
-                        editing.modify(() => minimizedField.toggle())))
                     if (type === "midi-effect" || type === "audio-effect") {
                         const effect = adapter as EffectDeviceBoxAdapter
                         lifecycle.own(DragAndDrop.installSource(element, () => ({
@@ -76,10 +85,13 @@ export const DeviceEditor =
                         } satisfies DragDevice), element))
                     }
                 }} style={{color: color.toString()}}>
-                    <div className="icon">
-                        <Icon symbol={icon}/>
-                    </div>
-                    {(createLabel ?? defaultLabelFactory(lifecycle, labelField))()}
+                    <Icon symbol={icon} onInit={element =>
+                        lifecycle.own(Events.subscribe(element, "click", () =>
+                            editing.modify(() => minimizedField.toggle())))}/>
+                    <Icon symbol={IconSymbol.Shutdown} onInit={element =>
+                        lifecycle.own(Events.subscribe(element, "click", () =>
+                            editing.modify(() => enabledField.toggle())))}/>
+                    {(createLabel ?? defaultLabelFactory(lifecycle, editing, labelField))()}
                 </header>
                 <MenuButton root={MenuItem.root()
                     .setRuntimeChildrenProcedure(parent => {

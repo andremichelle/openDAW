@@ -42,9 +42,13 @@ export class AudioDeviceChain implements DeviceChain {
             this.#audioUnit.adapter.audioEffects.catchupAndSubscribe({
                 onAdd: (adapter: AudioEffectDeviceAdapter) => {
                     this.invalidateWiring()
-                    const device = AudioEffectDeviceProcessorFactory.create(this.#audioUnit.context, adapter.box)
+                    const processor = AudioEffectDeviceProcessorFactory.create(this.#audioUnit.context, adapter.box)
                     const added = this.#effects.add({
-                        device, subscription: device.adapter().enabledField.subscribe(() => this.invalidateWiring())
+                        device: processor, subscription: processor.adapter().enabledField.subscribe(() => {
+                            processor.incoming.reset()
+                            processor.outgoing.reset()
+                            this.invalidateWiring()
+                        })
                     })
                     assert(added, "Could not add.")
                 },
