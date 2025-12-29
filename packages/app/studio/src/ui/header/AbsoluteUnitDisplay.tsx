@@ -35,6 +35,7 @@ export const AbsoluteUnitDisplay = ({lifecycle, service}: Construct) => {
                     subscription.terminate()
                     if (optProfile.nonEmpty()) {
                         const {project: {engine: {position}, tempoMap, timelineBoxAdapter}} = optProfile.unwrap()
+                        const values = Preferences.values["time-display"]
                         const update = () => {
                             const ppqn = position.getValue()
                             const {
@@ -43,7 +44,7 @@ export const AbsoluteUnitDisplay = ({lifecycle, service}: Construct) => {
                                 seconds,
                                 frames,
                                 subframes
-                            } = SMPTE.fromSeconds(tempoMap.ppqnToSeconds(ppqn), 25)
+                            } = SMPTE.fromSeconds(tempoMap.ppqnToSeconds(ppqn), values.fps)
                             hoursUnitString.setValue(Math.abs(hours).toFixed(0).padStart(2, "0"))
                             minutesUnitString.setValue(Math.abs(minutes).toFixed(0).padStart(2, "0"))
                             secondsUnitString.setValue(Math.abs(seconds).toFixed(0).padStart(2, "0"))

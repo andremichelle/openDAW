@@ -21,15 +21,13 @@ const toSeconds = (time: SMPTETime, fps: FrameRate): number =>
 
 const fromSeconds = (seconds: number, fps: FrameRate): SMPTETime => {
     const totalSeconds = Math.floor(seconds)
-    const hours = Math.floor(totalSeconds / 3600)
-    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const hours = Math.floor(totalSeconds / 3600.0)
+    const minutes = Math.floor((totalSeconds % 3600.0) / 60.0)
     const secs = totalSeconds % 60
-
     const fractionalSeconds = seconds - totalSeconds
     const totalFrames = fractionalSeconds * fps
     const frames = Math.floor(totalFrames)
     const subframes = Math.round((totalFrames - frames) * SubframesPerFrame)
-
     return {hours, minutes, seconds: secs, frames, subframes}
 }
 

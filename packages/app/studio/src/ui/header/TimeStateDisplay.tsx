@@ -3,7 +3,7 @@ import {float, Lifecycle, ObservableValue, Option, Terminator} from "@opendaw/li
 import {createElement, Inject} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Html} from "@opendaw/lib-dom"
-import {Preferences, ProjectProfile} from "@opendaw/studio-core"
+import {FpsOptions, Preferences, ProjectProfile} from "@opendaw/studio-core"
 import {TapButton} from "@/ui/header/TapButton"
 import {MusicalUnitDisplay} from "@/ui/header/MusicalUnitDisplay"
 import {AbsoluteUnitDisplay} from "@/ui/header/AbsoluteUnitDisplay"
@@ -37,24 +37,31 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
     }
     lifecycle.own(projectProfileService.catchupAndSubscribe(projectProfileObserver))
     const element: HTMLElement = (
-        <div className={className} onInit={element => ContextMenu.subscribe(element, collector => collector.addItems(
-            MenuItem.header({label: "Time Units", icon: IconSymbol.Time, color: Colors.green}),
-            MenuItem.default({
-                label: "Musical Time (Bars, Beats)",
-                checked: Preferences.values["time-display"].musical
-            }).setTriggerProcedure(() => Preferences.values["time-display"].musical =
-                !Preferences.values["time-display"].musical),
-            MenuItem.default({
-                label: "Absolute Time (Hours, Minutes, Seconds)",
-                checked: Preferences.values["time-display"].absolute
-            }).setTriggerProcedure(() => Preferences.values["time-display"].absolute =
-                !Preferences.values["time-display"].absolute),
-            MenuItem.default({
-                label: "Fine Details (Ticks, Frames)",
-                checked: Preferences.values["time-display"].details
-            }).setTriggerProcedure(() => Preferences.values["time-display"].details =
-                !Preferences.values["time-display"].details)
-        ))}>
+        <div className={className} onInit={element => {
+            const values = Preferences.values["time-display"]
+            return ContextMenu.subscribe(element, collector => collector.addItems(
+                MenuItem.header({label: "Time Units", icon: IconSymbol.Time, color: Colors.green}),
+                MenuItem.default({
+                    label: "Musical Time (Bars, Beats)",
+                    checked: values.musical
+                }).setTriggerProcedure(() => values.musical = !values.musical),
+                MenuItem.default({
+                    label: "Absolute Time (Hours, Minutes, Seconds)",
+                    checked: values.absolute
+                }).setTriggerProcedure(() => values.absolute = !values.absolute),
+                MenuItem.default({
+                    label: "Fine Details (Ticks, Frames)",
+                    checked: values.details
+                }).setTriggerProcedure(() => values.details = !values.details),
+                MenuItem.default({
+                    label: "FPS"
+                }).setRuntimeChildrenProcedure(parent => parent.addMenuItem(...FpsOptions
+                    .map(fps => MenuItem.default({
+                        label: String(fps),
+                        checked: values.fps === fps
+                    }).setTriggerProcedure(() => values.fps = fps))))
+            ))
+        }}>
             <MusicalUnitDisplay lifecycle={lifecycle} service={service}/>
             <AbsoluteUnitDisplay lifecycle={lifecycle} service={service}/>
             <TempoControl lifecycle={lifecycle} service={service}/>

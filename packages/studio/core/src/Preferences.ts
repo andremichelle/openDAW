@@ -1,17 +1,17 @@
 import {z} from "zod"
 import {isDefined, Notifier, Observer, Subscription, tryCatch} from "@opendaw/lib-std"
 
-// Recursive path as tuple for nested property access
 type PathTuple<T> = T extends object
     ? { [K in keyof T]: [K] | [K, ...PathTuple<T[K]>] }[keyof T]
     : []
 
-// Get value type at path
 type ValueAtPath<T, P extends readonly unknown[]> = P extends readonly [infer K, ...infer Rest]
     ? K extends keyof T
         ? Rest extends [] ? T[K] : ValueAtPath<T[K], Rest>
         : never
     : T
+
+export const FpsOptions = [24, 25, 29.97, 30] as const
 
 const PreferencesSchema = z.object({
     "visible-help-hints": z.boolean().default(true),
@@ -26,8 +26,9 @@ const PreferencesSchema = z.object({
     "time-display": z.object({
         "musical": z.boolean(),
         "absolute": z.boolean(),
-        "details": z.boolean()
-    }).default({musical: true, absolute: false, details: false}),
+        "details": z.boolean(),
+        "fps": z.union(FpsOptions.map(v => z.literal(v)))
+    }).default({musical: true, absolute: false, details: false, fps: 25}),
     "dragging-use-pointer-lock": z.boolean().default(false),
     "enable-beta-features": z.boolean().default(false)
 })
