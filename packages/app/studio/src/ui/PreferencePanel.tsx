@@ -2,7 +2,7 @@ import css from "./PreferencePanel.sass?inline"
 import {Html} from "@opendaw/lib-dom"
 import {DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
 import {createElement, Frag} from "@opendaw/lib-jsx"
-import {Preferences} from "@opendaw/studio-core"
+import {Preferences, StudioSettings} from "@opendaw/studio-core"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Icon} from "@/ui/components/Icon"
@@ -13,7 +13,7 @@ type Construct = {
     lifecycle: Lifecycle
 }
 
-const Labels: { [K in keyof Preferences]: string } = {
+const Labels: { [K in keyof StudioSettings]: string } = {
     "visible-help-hints": "Visible Help & Hints",
     "enable-history-buttons": "Show Undo/Redo buttons",
     "note-audition-while-editing": "Note audition while editing",
@@ -32,14 +32,14 @@ export const PreferencePanel = ({lifecycle}: Construct) => {
     return (
         <div className={className}>
             {Object.keys(Labels).map(key => {
-                const pKey = key as keyof Preferences
+                const pKey = key as keyof StudioSettings
                 const values = Preferences.values
                 const value = values[pKey]
                 switch (typeof value) {
                     case "boolean": {
-                        const pKey = key as keyof Preferences & {
-                            [K in keyof Preferences]: Preferences[K] extends boolean ? K : never
-                        }[keyof Preferences]
+                        const pKey = key as keyof StudioSettings & {
+                            [K in keyof StudioSettings]: StudioSettings[K] extends boolean ? K : never
+                        }[keyof StudioSettings]
                         const model = new DefaultObservableValue<boolean>(value)
                         lifecycle.own(model.subscribe(owner => values[pKey] = owner.getValue()))
                         return (

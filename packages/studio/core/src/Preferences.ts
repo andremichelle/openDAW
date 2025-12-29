@@ -1,9 +1,10 @@
 import {z} from "zod"
-import {isDefined, Notifier, Observer, PathTuple, Subscription, tryCatch, ValueAtPath} from "@opendaw/lib-std"
+import {isDefined, tryCatch} from "@opendaw/lib-std"
+import {PreferencesHost} from "@opendaw/lib-fusion"
 
 export const FpsOptions = [24, 25, 29.97, 30] as const
 
-const Schema = z.object({
+export const StudioSettingsSchema = z.object({
     "visible-help-hints": z.boolean().default(true),
     "enable-history-buttons": z.boolean().default(false),
     "note-audition-while-editing": z.boolean().default(true),
@@ -23,59 +24,31 @@ const Schema = z.object({
     "enable-beta-features": z.boolean().default(false)
 })
 
-export type Preferences = z.infer<typeof Schema>
+export type StudioSettings = z.infer<typeof StudioSettingsSchema>
 
-export const Preferences = (() => {
-    const STORAGE_KEY = "preferences"
+const STORAGE_KEY = "preferences"
 
-    const notifier = new Notifier<keyof Preferences>()
-
-    const watch = (target: Preferences): Preferences => {
-        const createProxy = <T extends object>(obj: T, rootKey?: keyof Preferences): T => new Proxy(obj, {
-            get(target, prop) {
-                const value = target[prop as keyof T]
-                if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-                    return createProxy(value as object, rootKey ?? prop as keyof Preferences) as T[keyof T]
-                }
-                return value
-            },
-            set(obj, prop, value) {
-                const key = rootKey ?? prop as keyof Preferences
-                console.debug(`preference changed. key: ${key}, value: ${value}`)
-                ;(obj as any)[prop] = value
-                notifier.notify(key)
-                tryCatch(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(target)))
-                return true
-            },
-            preventExtensions() {
-                return false
-            }
-        })
-        return createProxy(target)
-    }
-
-    const getOrCreate = (): Preferences => {
-        const stored = localStorage.getItem(STORAGE_KEY)
-        if (isDefined(stored)) {
-            const {status, value} = tryCatch(() => JSON.parse(stored))
-            if (status === "success") {
-                return watch({...Schema.parse(value)})
-            }
-        }
-        return watch({...Schema.parse({})})
-    }
-
-    const preferences = getOrCreate()
-    return {
-        values: preferences,
-        catchupAndSubscribe: <P extends PathTuple<Preferences>>(
-            observer: Observer<ValueAtPath<Preferences, P>>, ...path: P): Subscription => {
-            const getValue = (): ValueAtPath<Preferences, P> =>
-                path.reduce((obj: any, key) => obj[key], preferences)
-            observer(getValue())
-            return notifier.subscribe(key => {
-                if (key === path[0]) {observer(getValue())}
-            })
+const loadFromStorage = (): StudioSettings => {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (isDefined(stored)) {
+        const {status, value} = tryCatch(() => JSON.parse(stored))
+        if (status === "success") {
+            return StudioSettingsSchema.parse(value)
         }
     }
-})()
+    return StudioSettingsSchema.parse({})
+}
+
+const host = new PreferencesHost<StudioSettings>(loadFromStorage())
+
+host.subscribeAll(() => {
+    tryCatch(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(host.settings)))
+})
+
+export const StudioPreferences = {
+    get values(): StudioSettings {return host.settings},
+    catchupAndSubscribe: host.catchupAndSubscribe.bind(host)
+}
+
+/** @deprecated Use StudioPreferences instead */
+export const Preferences = StudioPreferences
