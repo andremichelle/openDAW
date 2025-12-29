@@ -12,3 +12,57 @@ component
   > h1
     margin: 0
     color: var(--color-cream)
+
+  > .status
+    padding: 8px 12px
+    background: rgba(255, 255, 255, 0.1)
+    border-radius: 4px
+    font-family: monospace
+
+  > .buttons
+    display: flex
+    gap: 8px
+
+    > button
+      padding: 8px 16px
+      border: none
+      border-radius: 4px
+      color: var(--color-cream)
+      cursor: pointer
+      font-size: 14px
+
+      &:hover
+        background: var(--color-bright)
+
+      &:active
+        opacity: 0.8
+
+  > .controls
+    display: flex
+    flex-direction: column
+    gap: 12px
+
+    > h2
+      margin: 0
+      color: var(--color-cream)
+      font-size: 16px
+
+    > .control
+      display: grid
+      grid-template-columns: 150px 1fr 100px
+      align-items: center
+      gap: 12px
+
+      > label
+        color: var(--color-cream)
+        font-size: 14px
+
+      > input[type="range"]
+        width: 100%
+        cursor: pointer
+
+      > span
+        font-family: monospace
+        font-size: 12px
+        color: var(--color-cream)
+        text-align: right

@@ -3,6 +3,9 @@
   "include": [
     "src"
   ],
+  "exclude": [
+    "src/ui/pages/test/*Processor.ts"
+  ],
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
