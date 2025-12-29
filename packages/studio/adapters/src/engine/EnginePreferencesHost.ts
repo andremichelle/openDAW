@@ -1,4 +1,13 @@
-import {MutableObservableValue, Observer, PathTuple, Subscription, Terminable, Terminator, ValueAtPath, VirtualObject} from "@opendaw/lib-std"
+import {
+    MutableObservableValue,
+    Observer,
+    PathTuple,
+    Subscription,
+    Terminable,
+    Terminator,
+    ValueAtPath,
+    VirtualObject
+} from "@opendaw/lib-std"
 import {queueTask} from "@opendaw/lib-dom"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {EngineSettings, EngineSettingsSchema} from "./EnginePreferencesSchema"
