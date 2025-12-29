@@ -482,5 +482,5 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#peaks.clear()
     }
 
-    #isMetronomeEnabled(): boolean {return this.#preferences.settings.metronome.enabled}
+    #isMetronomeEnabled(): boolean {return this.#preferences.settings().metronome.enabled}
 }
