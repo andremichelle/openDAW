@@ -1,0 +1,16 @@
+component
+  display: flex
+  column-gap: 0.5rem
+  color: var(--color-dark)
+
+  > svg
+    opacity: 0.4
+    pointer-events: none
+    cursor: pointer
+
+    &:active
+      color: var(--color-bright)
+
+    &.enabled
+      pointer-events: bounding-box
+      opacity: 1

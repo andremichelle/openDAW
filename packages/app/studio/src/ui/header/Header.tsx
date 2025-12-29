@@ -5,7 +5,7 @@ import {Lifecycle, Nullable, ObservableValue, Observer, panic, Subscription, Ter
 import {TransportGroup} from "@/ui/header/TransportGroup.tsx"
 import {TimeStateDisplay} from "@/ui/header/TimeStateDisplay.tsx"
 import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
-import {createElement, Frag, RouteLocation} from "@opendaw/lib-jsx"
+import {createElement, Group, RouteLocation} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
@@ -20,6 +20,7 @@ import {ContextMenu} from "@/ui/ContextMenu"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {ShortcutTooltip} from "@/ui/shortcuts/ShortcutTooltip"
+import {UndoRedoButtons} from "@/ui/header/UndoRedoButtons"
 
 const className = Html.adoptStyleSheet(css, "Header")
 
@@ -76,7 +77,11 @@ export const Header = ({lifecycle, service}: Construct) => {
                 <h5>openDAW</h5>
             </MenuButton>
             <hr/>
-            <div style={{display: "flex"}}>
+            <Group>
+                <UndoRedoButtons lifecycle={lifecycle} service={service}/>
+                <hr/>
+            </Group>
+            <div style={{display: "flex", columnGap: "4px"}}>
                 <Checkbox lifecycle={lifecycle}
                           model={MidiDevices.available()}
                           appearance={{activeColor: Colors.orange, tooltip: "Midi Access", cursor: "pointer"}}>
@@ -95,28 +100,6 @@ export const Header = ({lifecycle, service}: Construct) => {
             <TransportGroup lifecycle={lifecycle} service={service}/>
             <hr/>
             <TimeStateDisplay lifecycle={lifecycle} service={service}/>
-            {
-                location.origin.includes("localhost") && (
-                    <Frag>
-                        <hr/>
-                        <div title="Just a visual indicator to debug a smooth frame-rate"
-                             style={{display: "flex", scale: "0.625"}}>
-                            <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <g classList="spinner_GuJz">
-                                    <circle cx="3" cy="12" r="2"/>
-                                    <circle cx="21" cy="12" r="2"/>
-                                    <circle cx="12" cy="21" r="2"/>
-                                    <circle cx="12" cy="3" r="2"/>
-                                    <circle cx="5.64" cy="5.64" r="2"/>
-                                    <circle cx="18.36" cy="18.36" r="2"/>
-                                    <circle cx="5.64" cy="18.36" r="2"/>
-                                    <circle cx="18.36" cy="5.64" r="2"/>
-                                </g>
-                            </svg>
-                        </div>
-                    </Frag>
-                )
-            }
             <hr/>
             <Checkbox lifecycle={lifecycle}
                       onInit={element => lifecycle.own(ContextMenu.subscribe(element, collector =>

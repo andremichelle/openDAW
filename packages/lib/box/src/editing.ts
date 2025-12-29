@@ -1,5 +1,16 @@
 import {BoxGraph} from "./graph"
-import {Arrays, assert, Editing, int, Maybe, Option, SyncProvider} from "@opendaw/lib-std"
+import {
+    Arrays,
+    assert,
+    Editing,
+    int,
+    Maybe,
+    Notifier,
+    Observer,
+    Option,
+    Subscription,
+    SyncProvider
+} from "@opendaw/lib-std"
 import {Update} from "./updates"
 
 class Modification {
@@ -29,6 +40,7 @@ export class BoxEditing implements Editing {
     readonly #graph: BoxGraph
     readonly #pending: Array<Modification> = []
     readonly #marked: Array<ReadonlyArray<Modification>> = []
+    readonly #notifier: Notifier<void>
 
     #modifying: boolean = false
     #inProcess: boolean = false
@@ -38,9 +50,15 @@ export class BoxEditing implements Editing {
 
     constructor(graph: BoxGraph) {
         this.#graph = graph
+
+        this.#notifier = new Notifier<void>()
     }
 
     get graph(): BoxGraph {return this.#graph}
+
+    subscribe(observer: Observer<void>): Subscription {
+        return this.#notifier.subscribe(observer)
+    }
 
     markSaved(): void {
         if (this.#pending.length > 0) {this.mark()}
@@ -61,28 +79,36 @@ export class BoxEditing implements Editing {
         Arrays.clear(this.#marked)
         this.#historyIndex = 0
         this.#savedHistoryIndex = 0
+        this.#notifier.notify()
     }
 
     undo(): boolean {
-        if (this.#disabled) {return false}
-        if (this.#pending.length > 0) {this.mark()}
-        if (this.#historyIndex === 0) {return false}
+        if (!this.canUndo()) {return false}
         const modifications = this.#marked[--this.#historyIndex]
         modifications.toReversed().forEach(step => step.inverse(this.#graph))
         this.#graph.edges().validateRequirements()
+        this.#notifier.notify()
         return true
     }
 
     redo(): boolean {
-        if (this.#disabled) {return false}
-        if (this.#historyIndex === this.#marked.length) {return false}
-        if (this.#pending.length > 0) {
-            console.warn("redo while having pending updates?")
-            return false
-        }
+        if (!this.canRedo()) {return false}
         this.#marked[this.#historyIndex++].forEach(step => step.forward(this.#graph))
         this.#graph.edges().validateRequirements()
+        this.#notifier.notify()
         return true
+    }
+
+    canUndo(): boolean {
+        if (this.#disabled) {return false}
+        if (this.#pending.length > 0) {this.mark()}
+        return this.#historyIndex !== 0
+    }
+
+    canRedo(): boolean {
+        if (this.#disabled) {return false}
+        if (this.#historyIndex === this.#marked.length) {return false}
+        return this.#pending.length <= 0
     }
 
     // TODO This is an option to clarify, if user actions meant to be run by a modifier or not.
@@ -93,6 +119,7 @@ export class BoxEditing implements Editing {
         assert(!this.#inProcess, "Cannot call modify while a modification process is running")
         if (this.#modifying) {
             // Nested modify call - just execute without separate recording
+            this.#notifier.notify()
             return Option.wrap(modifier())
         }
         if (mark && this.#pending.length > 0) {this.mark()}
@@ -111,6 +138,7 @@ export class BoxEditing implements Editing {
         this.#modifying = false
         this.#graph.edges().validateRequirements()
         if (mark) {this.mark()}
+        this.#notifier.notify()
         return Option.wrap(result)
     }
 
@@ -134,6 +162,7 @@ export class BoxEditing implements Editing {
                 this.#inProcess = false
                 this.#graph.edges().validateRequirements()
                 this.mark()
+                this.#notifier.notify()
             },
             revert: () => {
                 this.#graph.endTransaction()
@@ -164,6 +193,7 @@ export class BoxEditing implements Editing {
         if (this.#pending.length === 0) {return}
         this.#pending.reverse().forEach(modification => modification.inverse(this.#graph))
         this.#pending.length = 0
+        this.#notifier.notify()
     }
 
     disable(): void {
