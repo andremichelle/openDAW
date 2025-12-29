@@ -4,14 +4,21 @@ component
   flex-direction: column
   align-items: center
   row-gap: 1px
+  position: relative
 
-  .negative &
+  .negative &, &.negative
     color: var(--color-red) !important
 
   .automated &, &.automated
-    outline: 1px color-mix(in srgb, var(--color-blue), transparent 45%) solid
-    outline-offset: 2px
-    border-radius: 3px
+    &::before
+      content: ""
+      position: absolute
+      top: -4px
+      left: -4px
+      width: calc(100% + 8px)
+      height: calc(100% + 8px)
+      border-top: 1px color-mix(in srgb, var(--color-blue), transparent 25%) solid
+      background: linear-gradient(to bottom, var(--color-blue) -1500%, transparent 100%)
 
   &.float > div:nth-child(1)::after
     visibility: visible
