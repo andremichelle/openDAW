@@ -16,23 +16,24 @@ import {PreferencesProtocol} from "./PreferencesProtocol"
 export class PreferencesHost<SETTINGS extends object> implements Preferences<SETTINGS>, Terminable {
     readonly #terminator = new Terminator()
     readonly #object: VirtualObject<SETTINGS>
-    readonly #client: PreferencesProtocol<SETTINGS>
 
-    readonly #queueTask = queueTask(() => this.#client.updateSettings(this.#object.data))
-
-    constructor(messenger: Messenger, settings: SETTINGS) {
+    constructor(settings: SETTINGS) {
         this.#object = this.#terminator.own(new VirtualObject(settings))
-        this.#client = Communicator.sender<PreferencesProtocol<SETTINGS>>(messenger,
+    }
+
+    get settings(): SETTINGS {return this.#object.proxy}
+
+    syncWith(messenger: Messenger): Subscription {
+        const client = Communicator.sender<PreferencesProtocol<SETTINGS>>(messenger,
             ({dispatchAndForget}) => new class implements PreferencesProtocol<SETTINGS> {
                 updateSettings(preferences: SETTINGS): void {
                     dispatchAndForget(this.updateSettings, preferences)
                 }
             })
-        this.#terminator.own(this.#object.subscribeAll(this.#queueTask))
-        this.#client.updateSettings(this.#object.data)
+        const queue = queueTask(() => client.updateSettings(this.#object.data))
+        client.updateSettings(this.#object.data)
+        return this.#object.subscribeAll(queue)
     }
-
-    get settings(): SETTINGS {return this.#object.proxy}
 
     update(data: SETTINGS): void {this.#object.update(data)}
 

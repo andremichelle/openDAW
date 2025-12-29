@@ -196,12 +196,11 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 switchMarkerState: (state: Nullable<[UUID.Bytes, int]>): void => this.#markerState.setValue(state)
             } satisfies EngineToClient
         )
-        this.#preferences = this.#terminator.own(
-            new PreferencesHost<EngineSettings>(messenger.channel("engine-preferences"),
-                EngineSettingsSchema.parse({})))
+        this.#preferences = this.#terminator.own(new PreferencesHost<EngineSettings>(EngineSettingsSchema.parse({})))
         this.#terminator.ownAll(
             AnimationFrame.add(() => reader.tryRead()),
             project.liveStreamReceiver.connect(messenger.channel("engine-live-data")),
+            this.#preferences.syncWith(messenger.channel("engine-preferences")),
             new SyncSource<BoxIO.TypeMap>(project.boxGraph, messenger.channel("engine-sync"), false),
             this.#playbackTimestampEnabled.catchupAndSubscribe(owner =>
                 this.#commands.setPlaybackTimestampEnabled(owner.getValue())),

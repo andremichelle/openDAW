@@ -1,4 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest"
+import {Subscription} from "@opendaw/lib-std"
 import {Messenger} from "@opendaw/lib-runtime"
 import {PreferencesClient, PreferencesHost} from "@opendaw/lib-fusion"
 import {EngineSettings, EngineSettingsSchema} from "./EnginePreferencesSchema"
@@ -11,6 +12,7 @@ interface TestContext {
     mainChannel: BroadcastChannel
     audioChannel: BroadcastChannel
     host: PreferencesHost<EngineSettings>
+    hostSync: Subscription
     client: PreferencesClient<EngineSettings>
 }
 
@@ -19,11 +21,13 @@ describe("EnginePreferences", () => {
         const channelName = `engine-preferences-${Math.random()}`
         context.mainChannel = new BroadcastChannel(channelName)
         context.audioChannel = new BroadcastChannel(channelName)
-        context.host = new PreferencesHost(Messenger.for(context.mainChannel), EngineSettingsSchema.parse({}))
+        context.host = new PreferencesHost(EngineSettingsSchema.parse({}))
+        context.hostSync = context.host.syncWith(Messenger.for(context.mainChannel))
         context.client = new PreferencesClient(Messenger.for(context.audioChannel), EngineSettingsSchema.parse({}))
     })
 
     afterEach<TestContext>(context => {
+        context.hostSync.terminate()
         context.host.terminate()
         context.client.terminate()
         context.mainChannel.close()

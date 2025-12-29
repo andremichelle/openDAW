@@ -1,5 +1,4 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest"
-import {Messenger} from "@opendaw/lib-runtime"
 import {PreferencesFacade, PreferencesHost} from "@opendaw/lib-fusion"
 import {EngineSettings, EngineSettingsSchema} from "./EnginePreferencesSchema"
 
@@ -45,20 +44,15 @@ describe("EnginePreferencesFacade", () => {
     describe("with host", () => {
         let facade: PreferencesFacade<EngineSettings>
         let host: PreferencesHost<EngineSettings>
-        let channel: BroadcastChannel
 
         beforeEach(() => {
-            const channelName = `facade-test-${Math.random()}`
-            channel = new BroadcastChannel(channelName)
-            host = new PreferencesHost(Messenger.for(channel), EngineSettingsSchema.parse({}))
+            host = new PreferencesHost(EngineSettingsSchema.parse({}))
             facade = new PreferencesFacade(EngineSettingsSchema.parse({}))
         })
 
-        afterEach(async () => {
+        afterEach(() => {
             facade.terminate()
             host.terminate()
-            await waitForMicrotask()
-            channel.close()
         })
 
         it("should push facade state to host on setHost", () => {
@@ -71,15 +65,12 @@ describe("EnginePreferencesFacade", () => {
             expect(host.settings.metronome.gain).toBe(0.7)
         })
 
-        it("should preserve facade settings when switching hosts", async () => {
+        it("should preserve facade settings when switching hosts", () => {
             facade.settings.metronome.enabled = false
             facade.setHost(host)
             facade.releaseHost()
-            await waitForMicrotask()
 
-            const channelName2 = `facade-test-${Math.random()}`
-            const channel2 = new BroadcastChannel(channelName2)
-            const host2 = new PreferencesHost(Messenger.for(channel2), EngineSettingsSchema.parse({}))
+            const host2 = new PreferencesHost(EngineSettingsSchema.parse({}))
 
             facade.setHost(host2)
 
@@ -87,8 +78,6 @@ describe("EnginePreferencesFacade", () => {
             expect(host2.settings.metronome.enabled).toBe(false)
 
             host2.terminate()
-            await waitForMicrotask()
-            channel2.close()
         })
 
         it("should propagate facade changes to host", async () => {

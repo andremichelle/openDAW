@@ -1,15 +1,5 @@
 import {z} from "zod"
-import {isDefined, Notifier, Observer, Subscription, tryCatch} from "@opendaw/lib-std"
-
-type PathTuple<T> = T extends object
-    ? { [K in keyof T]: [K] | [K, ...PathTuple<T[K]>] }[keyof T]
-    : []
-
-type ValueAtPath<T, P extends readonly unknown[]> = P extends readonly [infer K, ...infer Rest]
-    ? K extends keyof T
-        ? Rest extends [] ? T[K] : ValueAtPath<T[K], Rest>
-        : never
-    : T
+import {isDefined, Notifier, Observer, PathTuple, Subscription, tryCatch, ValueAtPath} from "@opendaw/lib-std"
 
 export const FpsOptions = [24, 25, 29.97, 30] as const
 
