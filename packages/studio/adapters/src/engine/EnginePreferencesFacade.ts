@@ -23,14 +23,14 @@ export class EnginePreferencesFacade implements EnginePreferences, Terminable {
         host.update(this.#object.data)
         const queueHostUpdate = queueTask(() => host.update(this.#object.data))
         this.#lifecycle.ownAll(
-            host.subscribeAll(() => this.#object.update(host.settings())),
+            host.subscribeAll(() => this.#object.update(host.settings)),
             this.#object.subscribeAll(queueHostUpdate)
         )
     }
 
     releaseHost(): void {this.#lifecycle.terminate()}
 
-    settings(): EngineSettings {return this.#object.proxy}
+    get settings(): EngineSettings {return this.#object.proxy}
 
     subscribe<P extends PathTuple<EngineSettings>>(
         observer: Observer<ValueAtPath<EngineSettings, P>>, ...path: P): Subscription {

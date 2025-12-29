@@ -24,7 +24,7 @@ export class EnginePreferencesHost implements EnginePreferences, Terminable {
         this.#client.updatePreferences(this.#object.data)
     }
 
-    settings(): EngineSettings {return this.#object.proxy}
+    get settings(): EngineSettings {return this.#object.proxy}
 
     update(data: EngineSettings): void {this.#object.update(data)}
 

@@ -66,7 +66,7 @@ export namespace StudioShortcutManager {
         const {global: gc} = ShortcutManager.get()
         const {engine} = service
         const {
-            engine: {preferences, isPlaying, isRecording, isCountingIn, position},
+            engine: {preferences: {settings: {metronome}}, isPlaying, isRecording, isCountingIn, position},
             panelLayout,
             timeline: {
                 clips: {visible: clipsVisibility},
@@ -141,8 +141,7 @@ export namespace StudioShortcutManager {
             gc.register(gs["toggle-signature-track"].shortcut, () => signature.setValue(!signature.getValue())),
             gc.register(gs["toggle-clips"].shortcut, () => clipsVisibility.setValue(!clipsVisibility.getValue())),
             gc.register(gs["toggle-follow-cursor"].shortcut, () => followCursor.setValue(!followCursor.getValue())),
-            gc.register(gs["toggle-metronome"].shortcut,
-                () => preferences.settings().metronome.enabled = !preferences.settings().metronome.enabled),
+            gc.register(gs["toggle-metronome"].shortcut, () => metronome.enabled = !metronome.enabled),
             gc.register(gs["toggle-loop"].shortcut, () =>
                 service.runIfProject(({editing, timelineBox: {loopArea: {enabled}}}) =>
                     editing.modify(() => enabled.setValue(!enabled.getValue())))),

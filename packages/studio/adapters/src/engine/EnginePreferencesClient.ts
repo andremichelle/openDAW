@@ -13,7 +13,7 @@ export class EnginePreferencesClient implements Terminable {
         }))
     }
 
-    settings(): Readonly<EngineSettings> {return this.#object.data}
+    get settings(): Readonly<EngineSettings> {return this.#object.data}
 
     catchupAndSubscribe<P extends PathTuple<EngineSettings>>(
         observer: Observer<ValueAtPath<EngineSettings, P>>, ...path: P): Subscription {

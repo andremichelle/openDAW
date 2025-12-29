@@ -32,28 +32,28 @@ describe("EnginePreferences", () => {
     })
 
     it<TestContext>("should have default settings on host", ({host}) => {
-        expect(host.settings()).toEqual(EngineSettingsDefaults)
+        expect(host.settings).toEqual(EngineSettingsDefaults)
     })
 
     it<TestContext>("should have default settings on client before receiving", ({client}) => {
-        expect(client.settings()).toEqual(EngineSettingsDefaults)
+        expect(client.settings).toEqual(EngineSettingsDefaults)
     })
 
     it<TestContext>("should send initial state to client", async ({client}) => {
         await waitForBroadcast()
 
-        expect(client.settings().metronome.enabled).toBe(true)
-        expect(client.settings().metronome.gain).toBe(0.5)
-        expect(client.settings().metronome.beatSubDivision).toBe(4)
+        expect(client.settings.metronome.enabled).toBe(false)
+        expect(client.settings.metronome.gain).toBe(0.5)
+        expect(client.settings.metronome.beatSubDivision).toBe(4)
     })
 
     it<TestContext>("should broadcast changes to client", async ({host, client}) => {
         await waitForBroadcast()
 
-        host.settings().metronome.beatSubDivision = 8
+        host.settings.metronome.beatSubDivision = 8
         await waitForBroadcast()
 
-        expect(client.settings().metronome.beatSubDivision).toBe(8)
+        expect(client.settings.metronome.beatSubDivision).toBe(8)
     })
 
     it<TestContext>("should batch multiple changes within same microtask", async ({host, client}) => {
@@ -63,25 +63,25 @@ describe("EnginePreferences", () => {
         client.catchupAndSubscribe(updateSpy, "metronome")
         updateSpy.mockClear()
 
-        host.settings().metronome.enabled = false
-        host.settings().metronome.gain = 0.3
-        host.settings().metronome.beatSubDivision = 2
+        host.settings.metronome.enabled = false
+        host.settings.metronome.gain = 0.3
+        host.settings.metronome.beatSubDivision = 2
         await waitForBroadcast()
 
         expect(updateSpy).toHaveBeenCalledTimes(1)
-        expect(client.settings().metronome.enabled).toBe(false)
-        expect(client.settings().metronome.gain).toBe(0.3)
-        expect(client.settings().metronome.beatSubDivision).toBe(2)
+        expect(client.settings.metronome.enabled).toBe(false)
+        expect(client.settings.metronome.gain).toBe(0.3)
+        expect(client.settings.metronome.beatSubDivision).toBe(2)
     })
 
     it<TestContext>("should support catchupAndSubscribe on host", ({host}) => {
         const observer = vi.fn()
         host.catchupAndSubscribe(observer, "metronome", "enabled")
 
-        expect(observer).toHaveBeenCalledWith(true)
-
-        host.settings().metronome.enabled = false
         expect(observer).toHaveBeenCalledWith(false)
+
+        host.settings.metronome.enabled = true
+        expect(observer).toHaveBeenCalledWith(true)
     })
 
     it<TestContext>("should support catchupAndSubscribe on client", async ({host, client}) => {
@@ -92,7 +92,7 @@ describe("EnginePreferences", () => {
         expect(observer).toHaveBeenCalledWith(0.5)
 
         observer.mockClear()
-        host.settings().metronome.gain = 0.9
+        host.settings.metronome.gain = 0.9
         await waitForBroadcast()
 
         expect(observer).toHaveBeenCalledWith(0.9)
@@ -105,7 +105,7 @@ describe("EnginePreferences", () => {
         client.catchupAndSubscribe(metronomeObserver, "metronome")
         metronomeObserver.mockClear()
 
-        host.settings().metronome.gain = 0.7
+        host.settings.metronome.gain = 0.7
         await waitForBroadcast()
 
         expect(metronomeObserver).toHaveBeenCalledTimes(1)

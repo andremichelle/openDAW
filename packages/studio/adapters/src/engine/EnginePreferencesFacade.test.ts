@@ -21,25 +21,25 @@ describe("EnginePreferencesFacade", () => {
         })
 
         it("should have default settings", () => {
-            expect(facade.settings()).toEqual(EngineSettingsDefaults)
+            expect(facade.settings).toEqual(EngineSettingsDefaults)
         })
 
         it("should allow modifying settings", () => {
-            facade.settings().metronome.enabled = false
-            facade.settings().metronome.gain = 0.8
+            facade.settings.metronome.enabled = false
+            facade.settings.metronome.gain = 0.8
 
-            expect(facade.settings().metronome.enabled).toBe(false)
-            expect(facade.settings().metronome.gain).toBe(0.8)
+            expect(facade.settings.metronome.enabled).toBe(false)
+            expect(facade.settings.metronome.gain).toBe(0.8)
         })
 
         it("should support catchupAndSubscribe", () => {
             const observer = vi.fn()
             facade.catchupAndSubscribe(observer, "metronome", "enabled")
 
-            expect(observer).toHaveBeenCalledWith(true)
-
-            facade.settings().metronome.enabled = false
             expect(observer).toHaveBeenCalledWith(false)
+
+            facade.settings.metronome.enabled = true
+            expect(observer).toHaveBeenCalledWith(true)
         })
     })
 
@@ -63,17 +63,17 @@ describe("EnginePreferencesFacade", () => {
         })
 
         it("should push facade state to host on setHost", () => {
-            facade.settings().metronome.enabled = false
-            facade.settings().metronome.gain = 0.7
+            facade.settings.metronome.enabled = false
+            facade.settings.metronome.gain = 0.7
 
             facade.setHost(host)
 
-            expect(host.settings().metronome.enabled).toBe(false)
-            expect(host.settings().metronome.gain).toBe(0.7)
+            expect(host.settings.metronome.enabled).toBe(false)
+            expect(host.settings.metronome.gain).toBe(0.7)
         })
 
         it("should preserve facade settings when switching hosts", async () => {
-            facade.settings().metronome.enabled = false
+            facade.settings.metronome.enabled = false
             facade.setHost(host)
             facade.releaseHost()
             await waitForMicrotask()
@@ -84,8 +84,8 @@ describe("EnginePreferencesFacade", () => {
 
             facade.setHost(host2)
 
-            expect(facade.settings().metronome.enabled).toBe(false)
-            expect(host2.settings().metronome.enabled).toBe(false)
+            expect(facade.settings.metronome.enabled).toBe(false)
+            expect(host2.settings.metronome.enabled).toBe(false)
 
             host2.terminate()
             await waitForMicrotask()
@@ -95,18 +95,18 @@ describe("EnginePreferencesFacade", () => {
         it("should propagate facade changes to host", async () => {
             facade.setHost(host)
 
-            facade.settings().metronome.beatSubDivision = 8
+            facade.settings.metronome.beatSubDivision = 8
             await waitForMicrotask()
 
-            expect(host.settings().metronome.beatSubDivision).toBe(8)
+            expect(host.settings.metronome.beatSubDivision).toBe(8)
         })
 
         it("should propagate host changes to facade", () => {
             facade.setHost(host)
 
-            host.settings().metronome.gain = 0.3
+            host.settings.metronome.gain = 0.3
 
-            expect(facade.settings().metronome.gain).toBe(0.3)
+            expect(facade.settings.metronome.gain).toBe(0.3)
         })
 
         it("should batch multiple facade changes", async () => {
@@ -115,25 +115,25 @@ describe("EnginePreferencesFacade", () => {
             const hostObserver = vi.fn()
             host.subscribeAll(hostObserver)
 
-            facade.settings().metronome.enabled = false
-            facade.settings().metronome.gain = 0.2
-            facade.settings().metronome.beatSubDivision = 2
+            facade.settings.metronome.enabled = false
+            facade.settings.metronome.gain = 0.2
+            facade.settings.metronome.beatSubDivision = 2
             await waitForMicrotask()
 
             expect(hostObserver).toHaveBeenCalledTimes(1)
-            expect(host.settings().metronome.enabled).toBe(false)
-            expect(host.settings().metronome.gain).toBe(0.2)
-            expect(host.settings().metronome.beatSubDivision).toBe(2)
+            expect(host.settings.metronome.enabled).toBe(false)
+            expect(host.settings.metronome.gain).toBe(0.2)
+            expect(host.settings.metronome.beatSubDivision).toBe(2)
         })
 
         it("should stop syncing after releaseHost", async () => {
             facade.setHost(host)
             facade.releaseHost()
 
-            facade.settings().metronome.enabled = false
+            facade.settings.metronome.enabled = true
             await waitForMicrotask()
 
-            expect(host.settings().metronome.enabled).toBe(true)
+            expect(host.settings.metronome.enabled).toBe(false)
         })
     })
 })
