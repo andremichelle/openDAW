@@ -11,7 +11,13 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {bpm, ppqn} from "@opendaw/lib-dsp"
-import {ClipNotification, EnginePreferences, EnginePreferencesFacade, NoteSignal} from "@opendaw/studio-adapters"
+import {
+    ClipNotification,
+    EnginePreferences,
+    EnginePreferencesFacade,
+    EngineSettingsSchema,
+    NoteSignal
+} from "@opendaw/studio-adapters"
 import {Engine} from "./Engine"
 import {EngineWorklet} from "./EngineWorklet"
 import {Project} from "./project"
@@ -30,7 +36,7 @@ export class EngineFacade implements Engine {
     readonly #isCountingIn: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
-    readonly #preferencesFacade: EnginePreferencesFacade = new EnginePreferencesFacade()
+    readonly #preferencesFacade: EnginePreferencesFacade = new EnginePreferencesFacade(EngineSettingsSchema.parse({}))
 
     #worklet: Option<EngineWorklet> = Option.None
 

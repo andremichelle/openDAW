@@ -13,7 +13,7 @@ describe("EnginePreferencesFacade", () => {
         let facade: EnginePreferencesFacade
 
         beforeEach(() => {
-            facade = new EnginePreferencesFacade()
+            facade = new EnginePreferencesFacade(EngineSettingsSchema.parse({}))
         })
 
         afterEach(() => {
@@ -52,7 +52,7 @@ describe("EnginePreferencesFacade", () => {
             const channelName = `facade-test-${Math.random()}`
             channel = new BroadcastChannel(channelName)
             host = new EnginePreferencesHost(Messenger.for(channel))
-            facade = new EnginePreferencesFacade()
+            facade = new EnginePreferencesFacade(EngineSettingsSchema.parse({}))
         })
 
         afterEach(async () => {

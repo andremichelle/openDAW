@@ -9,14 +9,18 @@ import {
     VirtualObject
 } from "@opendaw/lib-std"
 import {queueTask} from "@opendaw/lib-dom"
-import {EngineSettings, EngineSettingsSchema} from "./EnginePreferencesSchema"
+import {EngineSettings} from "./EnginePreferencesSchema"
 import {EnginePreferencesHost} from "./EnginePreferencesHost"
 import {EnginePreferences} from "./EnginePreferences"
 
 export class EnginePreferencesFacade implements EnginePreferences, Terminable {
     readonly #terminator = new Terminator()
     readonly #lifecycle = this.#terminator.own(new Terminator())
-    readonly #object = this.#terminator.own(new VirtualObject<EngineSettings>(EngineSettingsSchema.parse({})))
+    readonly #object: VirtualObject<EngineSettings>
+
+    constructor(settings: EngineSettings) {
+        this.#object = this.#terminator.own(new VirtualObject<EngineSettings>(settings))
+    }
 
     setHost(host: EnginePreferencesHost): void {
         this.#lifecycle.terminate()
