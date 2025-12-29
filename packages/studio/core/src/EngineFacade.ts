@@ -31,13 +31,11 @@ export class EngineFacade implements Engine {
     readonly #metronomeEnabled: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
-    readonly #preferencesFacade: EnginePreferencesFacade
+    readonly #preferencesFacade: EnginePreferencesFacade = new EnginePreferencesFacade()
 
     #worklet: Option<EngineWorklet> = Option.None
 
-    constructor() {
-        this.#preferencesFacade = new EnginePreferencesFacade()
-    }
+    constructor() {}
 
     setWorklet(worklet: EngineWorklet) {
         this.#worklet = Option.wrap(worklet)

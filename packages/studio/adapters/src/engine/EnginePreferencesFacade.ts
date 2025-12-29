@@ -9,8 +9,9 @@ import {
     VirtualObject
 } from "@opendaw/lib-std"
 import {queueTask} from "@opendaw/lib-dom"
-import {EnginePreferences, EngineSettings, EngineSettingsSchema} from "./EnginePreferencesSchema"
+import {EngineSettings, EngineSettingsSchema} from "./EnginePreferencesSchema"
 import {EnginePreferencesHost} from "./EnginePreferencesHost"
+import {EnginePreferences} from "./EnginePreferences"
 
 export class EnginePreferencesFacade implements EnginePreferences, Terminable {
     readonly #terminator = new Terminator()

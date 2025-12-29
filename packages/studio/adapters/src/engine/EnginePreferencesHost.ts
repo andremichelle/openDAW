@@ -1,8 +1,9 @@
 import {MutableObservableValue, Observer, PathTuple, Subscription, Terminable, Terminator, ValueAtPath, VirtualObject} from "@opendaw/lib-std"
 import {queueTask} from "@opendaw/lib-dom"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
-import {EnginePreferences, EngineSettings, EngineSettingsSchema} from "./EnginePreferencesSchema"
+import {EngineSettings, EngineSettingsSchema} from "./EnginePreferencesSchema"
 import {EnginePreferencesProtocol} from "./EnginePreferencesProtocol"
+import {EnginePreferences} from "./EnginePreferences"
 
 export class EnginePreferencesHost implements EnginePreferences, Terminable {
     readonly #terminator = new Terminator()
