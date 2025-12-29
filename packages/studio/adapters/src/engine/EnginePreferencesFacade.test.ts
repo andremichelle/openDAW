@@ -55,20 +55,41 @@ describe("EnginePreferencesFacade", () => {
             facade = new EnginePreferencesFacade()
         })
 
-        afterEach(() => {
+        afterEach(async () => {
             facade.terminate()
             host.terminate()
+            await waitForMicrotask()
             channel.close()
         })
 
-        it("should sync initial state from host on setHost", () => {
-            host.settings().metronome.enabled = false
-            host.settings().metronome.gain = 0.7
+        it("should push facade state to host on setHost", () => {
+            facade.settings().metronome.enabled = false
+            facade.settings().metronome.gain = 0.7
 
             facade.setHost(host)
 
+            expect(host.settings().metronome.enabled).toBe(false)
+            expect(host.settings().metronome.gain).toBe(0.7)
+        })
+
+        it("should preserve facade settings when switching hosts", async () => {
+            facade.settings().metronome.enabled = false
+            facade.setHost(host)
+            facade.releaseHost()
+            await waitForMicrotask()
+
+            const channelName2 = `facade-test-${Math.random()}`
+            const channel2 = new BroadcastChannel(channelName2)
+            const host2 = new EnginePreferencesHost(Messenger.for(channel2))
+
+            facade.setHost(host2)
+
             expect(facade.settings().metronome.enabled).toBe(false)
-            expect(facade.settings().metronome.gain).toBe(0.7)
+            expect(host2.settings().metronome.enabled).toBe(false)
+
+            host2.terminate()
+            await waitForMicrotask()
+            channel2.close()
         })
 
         it("should propagate facade changes to host", async () => {
