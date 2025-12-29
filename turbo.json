@@ -42,6 +42,32 @@
         "dist/**"
       ]
     },
+    "@opendaw/studio-core-workers#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*"
+      ],
+      "outputs": [
+        "../core/dist/workers-main.js",
+        "../core/dist/workers-main.js.map"
+      ]
+    },
+    "@opendaw/studio-core-processors#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*"
+      ],
+      "outputs": [
+        "../core/dist/processors.js",
+        "../core/dist/processors.js.map"
+      ]
+    },
     "@opendaw/studio-core#build": {
       "dependsOn": [
         "^build",
