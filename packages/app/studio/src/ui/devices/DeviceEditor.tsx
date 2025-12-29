@@ -55,12 +55,14 @@ export const DeviceEditor =
         const {box, type, enabledField, minimizedField, labelField} = adapter
         const color = getColorFor(type)
         return (
-            <div className={Html.buildClassList(className, minimizedField.getValue() && "minimized")}
+            <div className={className}
                  tabIndex={0}
                  onInit={element => {
                      lifecycle.ownAll(
                          enabledField.catchupAndSubscribe((owner: ObservableValue<boolean>) =>
-                             element.classList.toggle("enabled", owner.getValue()))
+                             element.classList.toggle("enabled", owner.getValue())),
+                         minimizedField.catchupAndSubscribe((owner: ObservableValue<boolean>) =>
+                             element.classList.toggle("minimized", owner.getValue()))
                      )
                  }} data-drag>
                 <header onInit={element => {
@@ -86,7 +88,7 @@ export const DeviceEditor =
                     })} style={{minWidth: "0", fontSize: "0.75em"}} appearance={{color, activeColor: Colors.bright}}>
                     <Icon symbol={IconSymbol.Menu}/>
                 </MenuButton>
-                <Group>{minimizedField.getValue() ? false : populateControls()}</Group>
+                <Group>{minimizedField.getValue() ? null : populateControls()}</Group>
                 <Group>{populateMeter()}</Group>
                 <div/>
             </div>
