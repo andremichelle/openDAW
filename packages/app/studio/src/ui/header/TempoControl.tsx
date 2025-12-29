@@ -24,7 +24,7 @@ type Construct = {
 
 export const TempoControl = ({lifecycle, service}: Construct) => {
     const {projectProfileService, timeline: {primaryVisibility: {tempo}}} = service
-    const bpmUnitString = lifecycle.own(new DefaultObservableValue("120"))
+    const unitString = lifecycle.own(new DefaultObservableValue("120"))
     const projectActiveLifeTime = lifecycle.own(new Terminator())
     return (
         <DblClckTextInput numeric resolversFactory={() => {
@@ -40,7 +40,7 @@ export const TempoControl = ({lifecycle, service}: Construct) => {
             none: () => ({unit: "bpm", value: ""}),
             some: ({project: {timelineBox: {bpm}}}) => ({unit: "bpm", value: bpm.getValue().toFixed(3)})
         })}>
-            <UnitDisplay lifecycle={lifecycle} name="bpm" value={bpmUnitString} numChars={3} onInit={element => {
+            <UnitDisplay lifecycle={lifecycle} name="bpm" value={unitString} numChars={3} onInit={element => {
                 lifecycle.own(projectProfileService.catchupAndSubscribe(optProfile => {
                     projectActiveLifeTime.terminate()
                     if (optProfile.isEmpty()) {return}
@@ -50,7 +50,7 @@ export const TempoControl = ({lifecycle, service}: Construct) => {
                         engine.bpm.catchupAndSubscribe((owner: ObservableValue<float>) => {
                             const bpm = owner.getValue()
                             element.classList.toggle("float", !Number.isInteger(bpm))
-                            return bpmUnitString.setValue(`${Math.floor(bpm)}`)
+                            return unitString.setValue(`${Math.floor(bpm)}`)
                         }),
                         timelineBoxAdapter.catchupAndSubscribeTempoAutomation(opt =>
                             element.classList.toggle("automated", opt.nonEmpty())),
@@ -81,7 +81,8 @@ export const TempoControl = ({lifecycle, service}: Construct) => {
                                 MenuItem.default({
                                     label: "Enable Automation",
                                     checked: projectProfileService.getValue()
-                                        .mapOr(({project: {timelineBox: {tempoTrack: {enabled}}}}) => enabled.getValue(), false)
+                                        .mapOr(({project: {timelineBox: {tempoTrack: {enabled}}}}) =>
+                                            enabled.getValue(), false)
                                 }).setTriggerProcedure(() => projectProfileService.getValue()
                                     .ifSome(({project: {editing, timelineBox: {tempoTrack: {enabled}}}}) =>
                                         editing.modify(() => enabled.setValue(!enabled.getValue()))))
