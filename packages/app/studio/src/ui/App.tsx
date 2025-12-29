@@ -17,6 +17,7 @@ import {CodeEditorPage} from "@/ui/pages/CodeEditorPage"
 import {OpenBundlePage} from "@/ui/pages/OpenBundlePage"
 import {UsersPage} from "@/ui/pages/UsersPage"
 import {PrivacyPage} from "@/ui/pages/PrivacyPage"
+import {TestPage} from "@/ui/pages/TestPage"
 
 export const App = (service: StudioService) => {
     const terminator = new Terminator()
@@ -46,7 +47,8 @@ export const App = (service: StudioService) => {
                     {path: "/colors", factory: ColorsPage},
                     {path: "/graph", factory: GraphPage},
                     {path: "/users", factory: UsersPage},
-                    {path: "/open-bundle/*", factory: OpenBundlePage}
+                    {path: "/open-bundle/*", factory: OpenBundlePage},
+                    {path: "/test", factory: TestPage}
                 ]}
             />
             <Footer lifecycle={terminator} service={service}/>
