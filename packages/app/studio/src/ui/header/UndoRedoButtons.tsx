@@ -1,10 +1,13 @@
 import css from "./UndoRedoButtons.sass?inline"
 import {Events, Html} from "@opendaw/lib-dom"
-import {Lifecycle, Terminator} from "@opendaw/lib-std"
+import {getOrProvide, Lifecycle, Terminator} from "@opendaw/lib-std"
 import {createElement, DomElement} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
+import {TextTooltip} from "@/ui/surface/TextTooltip"
+import {ShortcutTooltip} from "@/ui/shortcuts/ShortcutTooltip"
+import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
 const className = Html.adoptStyleSheet(css, "UndoRedoButtons")
 
@@ -26,10 +29,15 @@ export const UndoRedoButtons = ({lifecycle, service: {projectProfileService}}: C
                 undoButton.classList.toggle("enabled", editing.canUndo())
                 redoButton.classList.toggle("enabled", editing.canRedo())
             }
+            updateState()
             runtime.ownAll(
                 editing.subscribe(updateState),
                 Events.subscribe(undoButton, "click", () => editing.undo()),
-                Events.subscribe(redoButton, "click", () => editing.redo())
+                Events.subscribe(redoButton, "click", () => editing.redo()),
+                TextTooltip.default(undoButton, () => getOrProvide(
+                    ShortcutTooltip.create("Undo", GlobalShortcuts["project-undo"].shortcut))),
+                TextTooltip.default(redoButton, () => getOrProvide(
+                    ShortcutTooltip.create("Redo", GlobalShortcuts["project-redo"].shortcut)))
             )
         })
     )

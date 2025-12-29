@@ -3,6 +3,7 @@ import {isDefined, Notifier, Observer, Subscription, tryCatch} from "@opendaw/li
 
 const PreferencesSchema = z.object({
     "visible-help-hints": z.boolean().default(true),
+    "enable-history-buttons": z.boolean().default(false),
     "note-audition-while-editing": z.boolean().default(true),
     "modifying-controls-wheel": z.boolean().default(false),
     "auto-open-clips": z.boolean().default(true),

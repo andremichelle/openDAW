@@ -12,7 +12,7 @@ import {Workspace} from "@/ui/workspace/Workspace.ts"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Html} from "@opendaw/lib-dom"
 import {MenuItem} from "@/ui/model/menu-item"
-import {MidiDevices} from "@opendaw/studio-core"
+import {MidiDevices, Preferences} from "@opendaw/studio-core"
 import {Manual, Manuals} from "@/ui/pages/Manuals"
 import {HorizontalPeakMeter} from "@/ui/components/HorizontalPeakMeter"
 import {gainToDb} from "@opendaw/lib-dsp"
@@ -77,7 +77,8 @@ export const Header = ({lifecycle, service}: Construct) => {
                 <h5>openDAW</h5>
             </MenuButton>
             <hr/>
-            <Group>
+            <Group onInit={element => Preferences.catchupAndSubscribe(enabled =>
+                element.classList.toggle("hidden", !enabled), "enable-history-buttons")}>
                 <UndoRedoButtons lifecycle={lifecycle} service={service}/>
                 <hr/>
             </Group>

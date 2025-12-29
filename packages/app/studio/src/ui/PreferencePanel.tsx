@@ -15,6 +15,7 @@ type Construct = {
 
 const Labels: { [K in keyof Preferences]: string } = {
     "visible-help-hints": "Visible Help & Hints",
+    "enable-history-buttons": "Show Undo/Redo buttons",
     "note-audition-while-editing": "Note audition while editing",
     "auto-open-clips": "Always open clip view",
     "auto-create-output-compressor": "Automatically add compressor to main output",
@@ -42,11 +43,11 @@ export const PreferencePanel = ({lifecycle}: Construct) => {
                                 <Checkbox lifecycle={lifecycle}
                                           model={model}
                                           appearance={{
-                                              color: Colors.shadow,
+                                              color: Colors.black,
                                               activeColor: Colors.bright,
                                               cursor: "pointer"
                                           }}>
-                                    <span style={{color: Colors.dark.toString()}}>{Labels[pKey]}</span>
+                                    <span style={{color: Colors.shadow.toString()}}>{Labels[pKey]}</span>
                                     <hr/>
                                     <Icon symbol={IconSymbol.Checkbox}/>
                                 </Checkbox>
