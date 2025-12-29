@@ -1,5 +1,16 @@
 import css from "./TimeStateDisplay.sass?inline"
-import {Attempt, clamp, EmptyExec, float, int, Lifecycle, ObservableValue, Option, Terminator} from "@opendaw/lib-std"
+import {
+    Attempt,
+    clamp,
+    DefaultObservableValue,
+    EmptyExec,
+    float,
+    int,
+    Lifecycle,
+    ObservableValue,
+    Option,
+    Terminator
+} from "@opendaw/lib-std"
 import {createElement, Inject} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {DblClckTextInput} from "@/ui/wrapper/DblClckTextInput.tsx"
@@ -12,6 +23,7 @@ import {MusicalUnitDisplay} from "@/ui/header/MusicalUnitDisplay"
 import {MenuItem} from "@/ui/model/menu-item"
 import {ContextMenu} from "@/ui/ContextMenu"
 import {AbsoluteUnitDisplay} from "@/ui/header/AbsoluteUnitDisplay"
+import {UnitDisplay} from "@/ui/header/UnitDisplay"
 
 const className = Html.adoptStyleSheet(css, "TimeStateDisplay")
 
@@ -23,13 +35,10 @@ type Construct = {
 export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
     const {projectProfileService, timeline: {primaryVisibility: {tempo, signature: signatureVisible}}} = service
     const shuffleDigit = Inject.value("60")
-    const bpmDigit = Inject.value("120")
     const meterLabel = Inject.value("4/4")
+    const bpmUnitString = new DefaultObservableValue("120")
     const bpmDisplay: HTMLElement = (
-        <div className="number-display">
-            <div>{bpmDigit}</div>
-            <div>BPM</div>
-        </div>
+        <UnitDisplay lifecycle={lifecycle} name="bpm" value={bpmUnitString} numChars={3}/>
     )
     const projectActiveLifeTime = lifecycle.own(new Terminator())
     const projectProfileObserver = (optProfile: Option<ProjectProfile>) => {
@@ -37,11 +46,6 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
         if (optProfile.isEmpty()) {return}
         const {project} = optProfile.unwrap()
         const {timelineBoxAdapter, rootBoxAdapter, boxGraph, engine} = project
-        engine.bpm.catchupAndSubscribe((owner: ObservableValue<float>) => {
-            const bpm = owner.getValue()
-            bpmDisplay.classList.toggle("float", !Number.isInteger(bpm))
-            return bpmDigit.value = `${Math.floor(bpm)}`
-        })
         const {signatureTrack} = timelineBoxAdapter
         const updateSignatureLabel = () => {
             const [nominator, denominator] = signatureTrack.enabled
@@ -52,7 +56,14 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
         projectActiveLifeTime.ownAll(
             boxGraph.subscribeVertexUpdates(Propagation.Children,
                 timelineBoxAdapter.box.signature.address, updateSignatureLabel),
+            engine.bpm.catchupAndSubscribe((owner: ObservableValue<float>) => {
+                const bpm = owner.getValue()
+                bpmDisplay.classList.toggle("float", !Number.isInteger(bpm))
+                return bpmUnitString.setValue(`${Math.floor(bpm)}`)
+            }),
             timelineBoxAdapter.signatureTrack.subscribe(updateSignatureLabel),
+            timelineBoxAdapter.catchupAndSubscribeTempoAutomation(opt =>
+                bpmDisplay.classList.toggle("automated", opt.nonEmpty())),
             signatureVisible.subscribe(updateSignatureLabel),
             signatureTrack.subscribe(updateSignatureLabel),
             engine.position.subscribe(updateSignatureLabel)
@@ -93,7 +104,7 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
                 }, EmptyExec)
                 return resolvers
             }} provider={() => projectProfileService.getValue().match({
-                none: () => ({unit: "bpm", value: bpmDigit.value}),
+                none: () => ({unit: "bpm", value: ""}),
                 some: ({project: {timelineBox: {bpm}}}) => ({unit: "bpm", value: bpm.getValue().toString()})
             })}>{bpmDisplay}</DblClckTextInput>
             <TapButton service={service}/>
@@ -134,11 +145,19 @@ export const TimeStateDisplay = ({lifecycle, service}: Construct) => {
         </div>
     )
     const collectTempoMenu = (collector: ContextMenu.Collector) =>
-        collector.addItems(MenuItem.default({
-            label: "Show Tempo Automation",
-            checked:
-                tempo.getValue()
-        }).setTriggerProcedure(() => tempo.setValue(!tempo.getValue())))
+        collector.addItems(
+            MenuItem.default({
+                label: "Show Tempo Automation",
+                checked: tempo.getValue()
+            }).setTriggerProcedure(() => tempo.setValue(!tempo.getValue())),
+            MenuItem.default({
+                label: "Enable Automation",
+                checked: projectProfileService.getValue()
+                    .mapOr(({project: {timelineBox: {tempoTrack: {enabled}}}}) => enabled.getValue(), false)
+            }).setTriggerProcedure(() => projectProfileService.getValue()
+                .ifSome(({project: {editing, timelineBox: {tempoTrack: {enabled}}}}) =>
+                    editing.modify(() => enabled.setValue(!enabled.getValue()))))
+        )
     lifecycle.ownAll(
         ContextMenu.subscribe(bpmDisplay, collectTempoMenu)
     )

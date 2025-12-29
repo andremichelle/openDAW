@@ -8,6 +8,11 @@ component
   .negative &
     color: var(--color-red) !important
 
+  .automated &, &.automated
+    outline: 1px color-mix(in srgb, var(--color-blue), transparent 45%) solid
+    outline-offset: 2px
+    border-radius: 3px
+
   &.float > div:nth-child(1)::after
     visibility: visible
 

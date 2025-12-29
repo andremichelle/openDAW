@@ -24,7 +24,7 @@ export const AbsoluteUnitDisplay = ({lifecycle, service}: Construct) => {
     const framesUnitString = new DefaultObservableValue("00")
     const subFramesUnitString = new DefaultObservableValue("00")
     const unitDisplays: ReadonlyArray<HTMLElement> = [
-        <UnitDisplay lifecycle={lifecycle} name="hour" value={hoursUnitString} numChars={2}/>,
+        <UnitDisplay lifecycle={lifecycle} name="hr" value={hoursUnitString} numChars={2}/>,
         <UnitDisplay lifecycle={lifecycle} name="min" value={minutesUnitString} numChars={2}/>,
         <UnitDisplay lifecycle={lifecycle} name="sec" value={secondsUnitString} numChars={2}/>,
         <UnitDisplay lifecycle={lifecycle} name="fr" value={framesUnitString} numChars={2}/>,
