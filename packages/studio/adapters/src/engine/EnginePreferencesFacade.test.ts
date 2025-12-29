@@ -1,8 +1,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest"
 import {Messenger} from "@opendaw/lib-runtime"
-import {PreferencesFacade} from "./PreferencesFacade"
-import {PreferencesHost} from "./PreferencesHost"
-import {EngineSettingsSchema} from "./EnginePreferencesSchema"
+import {PreferencesFacade, PreferencesHost} from "@opendaw/lib-fusion"
+import {EngineSettings, EngineSettingsSchema} from "./EnginePreferencesSchema"
 
 const EngineSettingsDefaults = EngineSettingsSchema.parse({})
 
@@ -10,7 +9,7 @@ const waitForMicrotask = (): Promise<void> => new Promise(resolve => setTimeout(
 
 describe("EnginePreferencesFacade", () => {
     describe("without host", () => {
-        let facade: PreferencesFacade
+        let facade: PreferencesFacade<EngineSettings>
 
         beforeEach(() => {
             facade = new PreferencesFacade(EngineSettingsSchema.parse({}))
@@ -44,14 +43,14 @@ describe("EnginePreferencesFacade", () => {
     })
 
     describe("with host", () => {
-        let facade: PreferencesFacade
-        let host: PreferencesHost
+        let facade: PreferencesFacade<EngineSettings>
+        let host: PreferencesHost<EngineSettings>
         let channel: BroadcastChannel
 
         beforeEach(() => {
             const channelName = `facade-test-${Math.random()}`
             channel = new BroadcastChannel(channelName)
-            host = new PreferencesHost(Messenger.for(channel))
+            host = new PreferencesHost(Messenger.for(channel), EngineSettingsSchema.parse({}))
             facade = new PreferencesFacade(EngineSettingsSchema.parse({}))
         })
 
@@ -80,7 +79,7 @@ describe("EnginePreferencesFacade", () => {
 
             const channelName2 = `facade-test-${Math.random()}`
             const channel2 = new BroadcastChannel(channelName2)
-            const host2 = new PreferencesHost(Messenger.for(channel2))
+            const host2 = new PreferencesHost(Messenger.for(channel2), EngineSettingsSchema.parse({}))
 
             facade.setHost(host2)
 

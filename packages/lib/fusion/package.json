@@ -24,6 +24,7 @@
     },
     "dependencies": {
         "@opendaw/lib-box": "^0.0.63",
+        "@opendaw/lib-dom": "^0.0.63",
         "@opendaw/lib-runtime": "^0.0.62",
         "@opendaw/lib-std": "^0.0.62"
     },

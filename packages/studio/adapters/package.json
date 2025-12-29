@@ -25,6 +25,7 @@
     "dependencies": {
         "@opendaw/lib-box": "^0.0.63",
         "@opendaw/lib-dsp": "^0.0.62",
+        "@opendaw/lib-fusion": "^0.0.66",
         "@opendaw/lib-runtime": "^0.0.62",
         "@opendaw/lib-std": "^0.0.62",
         "@opendaw/studio-boxes": "^0.0.64",
