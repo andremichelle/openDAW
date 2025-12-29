@@ -13,7 +13,7 @@ type ValueAtPath<T, P extends readonly unknown[]> = P extends readonly [infer K,
 
 export const FpsOptions = [24, 25, 29.97, 30] as const
 
-const PreferencesSchema = z.object({
+const Schema = z.object({
     "visible-help-hints": z.boolean().default(true),
     "enable-history-buttons": z.boolean().default(false),
     "note-audition-while-editing": z.boolean().default(true),
@@ -33,7 +33,7 @@ const PreferencesSchema = z.object({
     "enable-beta-features": z.boolean().default(false)
 })
 
-export type Preferences = z.infer<typeof PreferencesSchema>
+export type Preferences = z.infer<typeof Schema>
 
 export const Preferences = (() => {
     const STORAGE_KEY = "preferences"
@@ -69,10 +69,10 @@ export const Preferences = (() => {
         if (isDefined(stored)) {
             const {status, value} = tryCatch(() => JSON.parse(stored))
             if (status === "success") {
-                return watch({...PreferencesSchema.parse(value)})
+                return watch({...Schema.parse(value)})
             }
         }
-        return watch({...PreferencesSchema.parse({})})
+        return watch({...Schema.parse({})})
     }
 
     const preferences = getOrCreate()
