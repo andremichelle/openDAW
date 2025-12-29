@@ -53,7 +53,6 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #isPlaying: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #isRecording: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #isCountingIn: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
-    readonly #countInBarsTotal: DefaultObservableValue<int> = new DefaultObservableValue(1)
     readonly #countInBeatsRemaining: DefaultObservableValue<int> = new DefaultObservableValue(0)
     readonly #preferences: PreferencesHost<EngineSettings>
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
@@ -203,9 +202,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             this.#preferences.syncWith(messenger.channel("engine-preferences")),
             new SyncSource<BoxIO.TypeMap>(project.boxGraph, messenger.channel("engine-sync"), false),
             this.#playbackTimestampEnabled.catchupAndSubscribe(owner =>
-                this.#commands.setPlaybackTimestampEnabled(owner.getValue())),
-            this.#countInBarsTotal.catchupAndSubscribe(owner =>
-                this.#commands.setCountInBarsTotal(owner.getValue()))
+                this.#commands.setPlaybackTimestampEnabled(owner.getValue()))
         )
     }
 
@@ -224,7 +221,6 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get isPlaying(): ObservableValue<boolean> {return this.#isPlaying}
     get isRecording(): ObservableValue<boolean> {return this.#isRecording}
     get isCountingIn(): ObservableValue<boolean> {return this.#isCountingIn}
-    get countInBarsTotal(): MutableObservableValue<int> {return this.#countInBarsTotal}
     get countInBeatsRemaining(): ObservableValue<number> {return this.#countInBeatsRemaining}
     get position(): ObservableValue<ppqn> {return this.#position}
     get bpm(): ObservableValue<bpm> {return this.#bpm}

@@ -9,7 +9,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {bpm, ppqn} from "@opendaw/lib-dsp"
-import {ClipNotification, NoteSignal} from "@opendaw/studio-adapters"
+import {ClipNotification, EnginePreferences, NoteSignal} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 
 export interface Engine extends Terminable {
@@ -38,8 +38,8 @@ export interface Engine extends Terminable {
     get isCountingIn(): ObservableValue<boolean>
     get playbackTimestamp(): ObservableValue<ppqn>
     get playbackTimestampEnabled(): MutableObservableValue<boolean>
-    get countInBarsTotal(): ObservableValue<int>
     get countInBeatsRemaining(): ObservableValue<number>
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>>
     get project(): Project
+    get preferences(): EnginePreferences
 }

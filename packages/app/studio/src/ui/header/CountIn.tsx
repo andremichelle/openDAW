@@ -55,7 +55,7 @@ export const CountIn = ({lifecycle, engine}: Construct) => {
         engine.countInBeatsRemaining
             .catchupAndSubscribe(owner => {
                 const remaining = owner.getValue()
-                showProgress(remaining / engine.countInBarsTotal.getValue())
+                showProgress(remaining / engine.preferences.settings.recording.countInBars)
                 textElement.textContent = Math.floor(remaining + 1).toString()
             }),
         Terminable.create(() => element.remove())

@@ -17,6 +17,7 @@ export class Metronome {
     process({blocks}: ProcessInfo): void {
         const enabled = this.#context.timeInfo.metronomeEnabled
         const signatureTrack = this.#context.timelineBoxAdapter.signatureTrack
+        const beatSubDivision = this.#context.preferences.settings.metronome.beatSubDivision
         blocks.forEach(({p0, p1, bpm, s0, s1, flags}) => {
             if (enabled && Bits.every(flags, BlockFlag.transporting)) {
                 for (const [curr, next] of Iterables.pairWise(signatureTrack.iterateAll())) {
@@ -26,14 +27,15 @@ export class Metronome {
                     if (signatureStart >= p1 && curr.index !== -1) {break}
                     const regionStart = curr.index === -1 ? p0 : Math.max(p0, signatureStart)
                     const regionEnd = Math.min(p1, signatureEnd)
-                    const stepSize = PPQN.fromSignature(1, curr.denominator)
+                    const denominator = curr.denominator * beatSubDivision
+                    const stepSize = PPQN.fromSignature(1, denominator)
                     const offset = regionStart - signatureStart
                     const firstBeatIndex = Math.ceil(offset / stepSize)
                     let position = signatureStart + firstBeatIndex * stepSize
                     while (position < regionEnd) {
                         const distanceToEvent = Math.floor(PPQN.pulsesToSamples(position - p0, bpm, sampleRate))
                         const beatIndex = Math.round((position - signatureStart) / stepSize)
-                        this.#clicks.push(new Click(s0 + distanceToEvent, beatIndex % curr.nominator === 0))
+                        this.#clicks.push(new Click(s0 + distanceToEvent, beatIndex % denominator === 0))
                         position += stepSize
                     }
                 }

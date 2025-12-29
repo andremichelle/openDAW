@@ -112,7 +112,6 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     #recordingStartTime: ppqn = 0.0
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
     #playbackTimestampEnabled: boolean = true
-    #countInBarsTotal: int = 1
 
     constructor({processorOptions: {syncStreamBuffer, controlFlagsBuffer, project, exportConfiguration, options}}: {
         processorOptions: EngineProcessorAttachment
@@ -202,7 +201,6 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                 prepareRecordingState: (countIn: boolean): void => this.#prepareRecordingState(countIn),
                 stopRecording: (): void => this.#stopRecording(),
                 setPlaybackTimestampEnabled: (value: boolean) => this.#playbackTimestampEnabled = value,
-                setCountInBarsTotal: (value: int) => this.#countInBarsTotal = value,
                 queryLoadingComplete: (): Promise<boolean> =>
                     Promise.resolve(this.#boxGraph.boxes().every(box => box.accept<BoxVisitor<boolean>>({
                         visitAudioFileBox: (box: AudioFileBox) =>
@@ -441,11 +439,12 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         if (!this.#timeInfo.transporting && countIn) {
             const position = this.#timeInfo.position
             const [nominator, denominator] = this.#timelineBoxAdapter.signature
+            const countInOffset = PPQN.fromSignature(this.#preferences.settings.recording.countInBars * nominator, denominator)
             this.#recordingStartTime = quantizeFloor(position, PPQN.fromSignature(nominator, denominator))
             this.#timeInfo.isCountingIn = true
             this.#timeInfo.metronomeEnabled = true
             this.#timeInfo.transporting = true
-            this.#timeInfo.position = this.#recordingStartTime - PPQN.fromSignature(this.#countInBarsTotal * nominator, denominator)
+            this.#timeInfo.position = this.#recordingStartTime - countInOffset
             const subscription = this.#renderer.setCallback(this.#recordingStartTime, () => {
                 this.#timeInfo.isCountingIn = false
                 this.#timeInfo.isRecording = true
