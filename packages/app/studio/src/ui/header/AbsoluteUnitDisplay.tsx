@@ -65,7 +65,7 @@ export const AbsoluteUnitDisplay = ({lifecycle, service}: Construct) => {
                 Preferences.catchupAndSubscribe(enabled =>
                     element.classList.toggle("hidden", !enabled), "time-display", "absolute"),
                 Preferences.catchupAndSubscribe(details => {
-                    const maxIndex = details ? 3 : 1
+                    const maxIndex = details ? 4 : 1
                     unitDisplays.forEach((element, index) => element.classList.toggle("hidden", index > maxIndex))
                 }, "time-display", "details")
             )
