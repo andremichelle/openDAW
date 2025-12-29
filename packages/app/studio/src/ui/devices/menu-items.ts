@@ -20,11 +20,7 @@ export namespace MenuItems {
                 label: `Delete '${audioUnit.label}'`,
                 hidden: audioUnit.isOutput
             }).setTriggerProcedure(() => editing.modify(() => project.api.deleteAudioUnit(audioUnit.box))),
-            MenuItem.default({
-                label: "Minimized",
-                checked: deviceHost.minimizedField.getValue()
-            }).setTriggerProcedure(() => editing.modify(() => deviceHost.minimizedField.toggle())),
-            createMenuItemToRenameDevice(editing, audioUnit.inputAdapter.unwrap().labelField),
+            populateMenuItemToRenameDevice(editing, audioUnit.inputAdapter.unwrap().labelField),
             MenuItem.default({label: "Add Midi-Effect", separatorBefore: true, selectable: canProcessMidi})
                 .setRuntimeChildrenProcedure(parent => parent.addMenuItem(...EffectFactories.MidiList
                     .map(entry => MenuItem.default({
@@ -112,16 +108,13 @@ export namespace MenuItems {
         const {project} = service
         const {editing} = project
         parent.addMenuItem(
-            createMenuItemToToggleEnabled(editing, device),
-            createMenuItemToToggleMinimized(editing, device),
-            createMenuItemToDeleteDevice(editing, device),
-            createMenuItemToRenameDevice(editing, device.labelField),
-            createMenuItemToCreateEffect(service, host, device),
-            createMenuItemToMoveEffect(project, host, device)
+            populateMenuItemToDeleteDevice(editing, device),
+            populateMenuItemToCreateEffect(service, host, device),
+            populateMenuItemToMoveEffect(project, host, device)
         )
     }
 
-    const createMenuItemToRenameDevice = (editing: BoxEditing, labelField: StringField) =>
+    const populateMenuItemToRenameDevice = (editing: BoxEditing, labelField: StringField) =>
         MenuItem.default({label: "Rename..."}).setTriggerProcedure(() => {
             const resolvers = Promise.withResolvers<string>()
             const surface = Surface.get()
@@ -133,24 +126,13 @@ export namespace MenuItems {
             resolvers.promise.then(newName => editing.modify(() => labelField.setValue(newName)), EmptyExec)
         })
 
-    const createMenuItemToToggleEnabled = (editing: BoxEditing, {enabledField}: EffectDeviceBoxAdapter) =>
-        MenuItem.default({label: "Enabled", checked: enabledField.getValue()})
-            .setTriggerProcedure(() => editing.modify(() =>
-                enabledField.setValue(!enabledField.getValue())))
-
-    const createMenuItemToToggleMinimized = (editing: BoxEditing, {minimizedField}: EffectDeviceBoxAdapter) =>
-        MenuItem.default({label: "Minimized", checked: minimizedField.getValue()})
-            .setTriggerProcedure(() => editing.modify(() => {
-                minimizedField.setValue(!minimizedField.getValue())
-            }))
-
-    const createMenuItemToDeleteDevice = (editing: BoxEditing, ...devices: ReadonlyArray<EffectDeviceBoxAdapter>) => {
+    const populateMenuItemToDeleteDevice = (editing: BoxEditing, ...devices: ReadonlyArray<EffectDeviceBoxAdapter>) => {
         const label = `Delete '${devices.map(device => device.labelField.getValue()).join(", ")}'`
         return MenuItem.default({label})
             .setTriggerProcedure(() => editing.modify(() => Devices.deleteEffectDevices(devices)))
     }
 
-    const createMenuItemToCreateEffect = (service: StudioService, host: DeviceHost, adapter: EffectDeviceBoxAdapter) => {
+    const populateMenuItemToCreateEffect = (service: StudioService, host: DeviceHost, adapter: EffectDeviceBoxAdapter) => {
         const {project} = service
         const {editing, api} = project
         return adapter.accepts === "audio"
@@ -175,32 +157,29 @@ export namespace MenuItems {
                         )) : panic(`Unknown accepts value: ${adapter.accepts}`)
     }
 
-    const createMenuItemToMoveEffect = ({editing}: Project, host: DeviceHost, adapter: EffectDeviceBoxAdapter) =>
-        MenuItem.default({label: "Move Effect"})
+    const populateMenuItemToMoveEffect = ({editing}: Project, host: DeviceHost, adapter: EffectDeviceBoxAdapter) => {
+        const adapters: ReadonlyArray<EffectDeviceBoxAdapter> =
+            adapter.accepts === "audio"
+                ? host.audioEffects.adapters()
+                : adapter.accepts === "midi"
+                    ? host.midiEffects.adapters()
+                    : panic(`Unknown accept type: ${adapter.accepts}`)
+        const index = adapter.indexField.getValue()
+        return MenuItem.default({label: "Move Effect", selectable: index > 0 || index < adapters.length - 1})
             .setRuntimeChildrenProcedure(parent => {
-                    const adapters: ReadonlyArray<EffectDeviceBoxAdapter> =
-                        adapter.accepts === "audio"
-                            ? host.audioEffects.adapters()
-                            : adapter.accepts === "midi"
-                                ? host.midiEffects.adapters()
-                                : panic(`Unknown accept type: ${adapter.accepts}`)
-                    const index = adapter.indexField.getValue()
                     return parent.addMenuItem(
-                        MenuItem.default({
-                            label: "Left",
-                            selectable: index > 0
-                        }).setTriggerProcedure(() => editing.modify(() => {
-                            adapter.indexField.setValue(index - 1)
-                            adapters[index - 1].indexField.setValue(index)
-                        })),
-                        MenuItem.default({
-                            label: "Right",
-                            selectable: index < adapters.length - 1
-                        }).setTriggerProcedure(() => editing.modify(() => {
-                            adapter.indexField.setValue(index + 1)
-                            adapters[index + 1].indexField.setValue(index)
-                        }))
+                        MenuItem.default({label: "Left", selectable: index > 0})
+                            .setTriggerProcedure(() => editing.modify(() => {
+                                adapter.indexField.setValue(index - 1)
+                                adapters[index - 1].indexField.setValue(index)
+                            })),
+                        MenuItem.default({label: "Right", selectable: index < adapters.length - 1})
+                            .setTriggerProcedure(() => editing.modify(() => {
+                                adapter.indexField.setValue(index + 1)
+                                adapters[index + 1].indexField.setValue(index)
+                            }))
                     )
                 }
             )
+    }
 }
