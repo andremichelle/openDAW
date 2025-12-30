@@ -4,7 +4,7 @@ export const FpsOptions = [24, 25, 29.97, 30] as const
 
 export const StudioSettingsSchema = z.object({
     "visible-help-hints": z.boolean().default(true),
-    "enable-history-buttons": z.boolean().default(false),
+    "enable-history-buttons": z.boolean().default(navigator.maxTouchPoints > 0),
     "note-audition-while-editing": z.boolean().default(true),
     "modifying-controls-wheel": z.boolean().default(false),
     "auto-open-clips": z.boolean().default(true),
