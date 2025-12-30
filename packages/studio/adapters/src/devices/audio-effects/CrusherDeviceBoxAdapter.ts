@@ -11,6 +11,7 @@ import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 export class CrusherDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly type = "audio-effect"
     readonly accepts = "audio"
+    readonly manualUrl = "manuals/devices/audio/crusher"
 
     readonly #context: BoxAdaptersContext
     readonly #box: CrusherDeviceBox

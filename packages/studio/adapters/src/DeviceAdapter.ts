@@ -71,6 +71,7 @@ export interface DeviceHost extends BoxAdapter, LabeledAudioOutputsOwner {
 
 export interface DeviceBoxAdapter extends BoxAdapter {
     readonly type: DeviceType
+    readonly manualUrl: string
 
     get box(): Box
     get labelField(): StringField

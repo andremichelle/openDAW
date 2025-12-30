@@ -22,6 +22,7 @@ export class MIDIOutputDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     readonly type = "instrument"
     readonly accepts = "midi"
+    readonly manualUrl = "manuals/devices/instruments/midi-output"
 
     readonly #context: BoxAdaptersContext
     readonly #box: MIDIOutputDeviceBox

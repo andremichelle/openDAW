@@ -13,6 +13,7 @@ import {DeviceInterfaceKnobAdapter} from "../../modular/user-interface"
 export class ModularDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly type = "audio-effect"
     readonly accepts = "audio"
+    readonly manualUrl = "manuals/devices/audio/modular"
 
     readonly #context: BoxAdaptersContext
     readonly #box: ModularDeviceBox

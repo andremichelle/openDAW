@@ -1,15 +1,10 @@
-import {EffectPointerType} from "@opendaw/studio-adapters"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {DeviceFactory, EffectPointerType} from "@opendaw/studio-adapters"
 import {Field} from "@opendaw/lib-box"
 import {int} from "@opendaw/lib-std"
 import {Project} from "./project"
 import {EffectBox} from "./EffectBox"
 
-export interface EffectFactory {
-    readonly defaultName: string
-    readonly defaultIcon: IconSymbol
-    readonly description: string
-    readonly manualPage?: string
+export interface EffectFactory extends DeviceFactory {
     readonly separatorBefore: boolean
     readonly type: "audio" | "midi"
 

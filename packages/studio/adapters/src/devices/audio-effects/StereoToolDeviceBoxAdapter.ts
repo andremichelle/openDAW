@@ -11,6 +11,7 @@ import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 export class StereoToolDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly type = "audio-effect"
     readonly accepts = "audio"
+    readonly manualUrl = "manuals/devices/audio/stereo-tool"
 
     readonly #context: BoxAdaptersContext
     readonly #box: StereoToolDeviceBox

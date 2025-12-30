@@ -14,6 +14,7 @@ import {LabeledAudioOutput, LabeledAudioOutputsOwner} from "../../LabeledAudioOu
 export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter, LabeledAudioOutputsOwner {
     readonly type = "instrument"
     readonly accepts = "midi"
+    readonly manualUrl = "manuals/devices/instruments/playfield"
 
     readonly #context: BoxAdaptersContext
     readonly #box: PlayfieldDeviceBox

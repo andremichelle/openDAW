@@ -22,6 +22,7 @@ import type {Preset, SoundFont2} from "soundfont2"
 export class SoundfontDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly type = "instrument"
     readonly accepts = "midi"
+    readonly manualUrl = "manuals/devices/instruments/soundfont"
 
     readonly #terminator = new Terminator()
 

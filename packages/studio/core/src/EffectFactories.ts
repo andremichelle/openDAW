@@ -30,6 +30,7 @@ export namespace EffectFactories {
         defaultName: "Arpeggio",
         defaultIcon: IconSymbol.Stack,
         description: "Generates rhythmic note sequences from chords",
+        manualPage: "manuals/devices/midi/arpeggio",
         separatorBefore: false,
         type: "midi",
         create: ({boxGraph}, hostField, index) => ArpeggioDeviceBox.create(boxGraph, UUID.generate(), box => {
@@ -43,6 +44,7 @@ export namespace EffectFactories {
         defaultName: "Pitch",
         defaultIcon: IconSymbol.Note,
         description: "Shifts the pitch of incoming notes",
+        manualPage: "manuals/devices/midi/pitch",
         separatorBefore: false,
         type: "midi",
         create: ({boxGraph}, hostField, index) => PitchDeviceBox.create(boxGraph, UUID.generate(), box => {
@@ -70,6 +72,7 @@ export namespace EffectFactories {
         defaultName: "Zeitgeist",
         defaultIcon: IconSymbol.Zeitgeist,
         description: "Distorts space and time",
+        manualPage: "manuals/devices/midi/zeitgeist",
         separatorBefore: false,
         type: "midi",
         create: ({boxGraph, rootBoxAdapter}, hostField, index): ZeitgeistDeviceBox => {
@@ -93,6 +96,7 @@ export namespace EffectFactories {
         defaultName: "Stereo Tool",
         defaultIcon: IconSymbol.Stereo,
         description: "Computes a stereo transformation matrix with volume, panning, phase inversion and stereo width.",
+        manualPage: "manuals/devices/audio/stereo-tool",
         separatorBefore: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): StereoToolDeviceBox =>
@@ -107,6 +111,7 @@ export namespace EffectFactories {
         defaultName: "Delay",
         defaultIcon: IconSymbol.Time,
         description: "Echoes the input signal with time-based repeats",
+        manualPage: "manuals/devices/audio/delay",
         separatorBefore: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): DelayDeviceBox =>
@@ -121,6 +126,7 @@ export namespace EffectFactories {
         defaultName: "Dattorro Reverb",
         defaultIcon: IconSymbol.Dattorro,
         description: "Dense algorithmic reverb based on Dattorro's design, capable of infinite decay",
+        manualPage: "manuals/devices/audio/dattorro-reverb",
         separatorBefore: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): DattorroReverbDeviceBox =>
@@ -135,6 +141,7 @@ export namespace EffectFactories {
         defaultName: "Brick",
         defaultIcon: IconSymbol.Brick,
         description: "Brickwall limiter with boost capabilities",
+        manualPage: "manuals/devices/audio/brick",
         separatorBefore: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): BrickDeviceBox =>
@@ -149,6 +156,7 @@ export namespace EffectFactories {
         defaultName: "Compressor",
         defaultIcon: IconSymbol.Compressor,
         description: "Reduces the dynamic range by attenuating signals above a threshold",
+        manualPage: "manuals/devices/audio/compressor",
         separatorBefore: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): CompressorDeviceBox =>
@@ -163,6 +171,7 @@ export namespace EffectFactories {
         defaultName: "Cheap Reverb",
         defaultIcon: IconSymbol.Cube,
         description: "Simulates space and depth with reflections",
+        manualPage: "manuals/devices/audio/cheap-reverb",
         separatorBefore: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): ReverbDeviceBox =>
@@ -178,6 +187,7 @@ export namespace EffectFactories {
         defaultName: "Crusher",
         defaultIcon: IconSymbol.Bug,
         description: "Degrates the audio signal",
+        manualPage: "manuals/devices/audio/crusher",
         separatorBefore: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): CrusherDeviceBox =>
@@ -192,6 +202,7 @@ export namespace EffectFactories {
         defaultName: "Fold",
         defaultIcon: IconSymbol.Fold,
         description: "Folds the signal back into audio-range",
+        manualPage: "manuals/devices/audio/fold",
         separatorBefore: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): FoldDeviceBox =>
@@ -206,6 +217,7 @@ export namespace EffectFactories {
         defaultName: "Tidal",
         defaultIcon: IconSymbol.Tidal,
         description: "Shape rhythm and space through volume and pan.",
+        manualPage: "manuals/devices/audio/tidal",
         separatorBefore: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): TidalDeviceBox =>
@@ -221,6 +233,7 @@ export namespace EffectFactories {
         defaultName: "Revamp",
         defaultIcon: IconSymbol.EQ,
         description: "Shapes the frequency balance of the sound",
+        manualPage: "manuals/devices/audio/revamp",
         separatorBefore: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): RevampDeviceBox =>
@@ -235,6 +248,7 @@ export namespace EffectFactories {
         defaultName: "🔇 Create New Modular Audio Effect (inaudible yet)",
         defaultIcon: IconSymbol.Box,
         description: "",
+        manualPage: "manuals/devices/audio/modular",
         separatorBefore: true,
         type: "audio",
         create: ({boxGraph, rootBox, userEditingManager}, hostField, index): ModularDeviceBox => {

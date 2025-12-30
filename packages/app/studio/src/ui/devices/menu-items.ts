@@ -8,6 +8,7 @@ import {StudioService} from "@/service/StudioService"
 import {EffectFactories, FilePickerAcceptTypes, Project} from "@opendaw/studio-core"
 import {VaporisateurDeviceBox} from "@opendaw/studio-boxes"
 import {Files} from "@opendaw/lib-dom"
+import {RouteLocation} from "@opendaw/lib-jsx"
 
 export namespace MenuItems {
     export const forAudioUnitInput = (parent: MenuItem, service: StudioService, deviceHost: DeviceHost): void => {
@@ -15,7 +16,9 @@ export namespace MenuItems {
         const {editing, api} = project
         const audioUnit = deviceHost.audioUnitBoxAdapter()
         const canProcessMidi = deviceHost.inputAdapter.mapOr(input => input.accepts === "midi", false)
+        const manualUrl = deviceHost.inputAdapter.mapOr(input => input.type === "instrument" ? input.manualUrl : "manuals", "manuals")
         parent.addMenuItem(
+            populateMenuItemToNavigateToManual(manualUrl),
             MenuItem.default({
                 label: `Delete '${audioUnit.label}'`,
                 hidden: audioUnit.isOutput
@@ -108,6 +111,7 @@ export namespace MenuItems {
         const {project} = service
         const {editing} = project
         parent.addMenuItem(
+            populateMenuItemToNavigateToManual(device.manualUrl),
             populateMenuItemToDeleteDevice(editing, device),
             populateMenuItemToCreateEffect(service, host, device),
             populateMenuItemToMoveEffect(project, host, device)
@@ -125,6 +129,11 @@ export namespace MenuItems {
             }))
             resolvers.promise.then(newName => editing.modify(() => labelField.setValue(newName)), EmptyExec)
         })
+
+    const populateMenuItemToNavigateToManual = (path: string) => {
+        return MenuItem.default({label: "Navigate to the manual for this device..."})
+            .setTriggerProcedure(() => RouteLocation.get().navigateTo(path))
+    }
 
     const populateMenuItemToDeleteDevice = (editing: BoxEditing, ...devices: ReadonlyArray<EffectDeviceBoxAdapter>) => {
         const label = `Delete '${devices.map(device => device.labelField.getValue()).join(", ")}'`

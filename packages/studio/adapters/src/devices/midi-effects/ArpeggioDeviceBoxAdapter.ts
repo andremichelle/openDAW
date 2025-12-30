@@ -21,6 +21,7 @@ export class ArpeggioDeviceBoxAdapter implements MidiEffectDeviceAdapter {
 
     readonly type = "midi-effect"
     readonly accepts = "midi"
+    readonly manualUrl = "manuals/devices/midi/arpeggio"
 
     readonly #context: BoxAdaptersContext
     readonly #box: ArpeggioDeviceBox

@@ -11,6 +11,7 @@ import {ppqn} from "@opendaw/lib-dsp"
 export class VelocityDeviceBoxAdapter implements MidiEffectDeviceAdapter {
     readonly type = "midi-effect"
     readonly accepts = "midi"
+    readonly manualUrl = "manuals/devices/midi/velocity"
 
     readonly #context: BoxAdaptersContext
     readonly #box: VelocityDeviceBox

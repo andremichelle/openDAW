@@ -13,6 +13,7 @@ import {VaporisateurSettings} from "./VaporisateurSettings"
 export class VaporisateurDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly type = "instrument"
     readonly accepts = "midi"
+    readonly manualUrl = "manuals/devices/instruments/vaporisateur"
 
     readonly #context: BoxAdaptersContext
     readonly #box: VaporisateurDeviceBox

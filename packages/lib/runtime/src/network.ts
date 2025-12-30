@@ -38,6 +38,7 @@ export namespace network {
                         message: "You appear to be offline.",
                         okText: "Retry"
                     })
+                    await Wait.timeSpan(TimeSpan.seconds(1))
                 }
             }
         }

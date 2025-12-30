@@ -11,6 +11,7 @@ import {TrackType} from "../../timeline/TrackType"
 export class TapeDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly type = "instrument"
     readonly accepts = "audio"
+    readonly manualUrl = "manuals/devices/instruments/tape"
 
     readonly #context: BoxAdaptersContext
     readonly #box: TapeDeviceBox

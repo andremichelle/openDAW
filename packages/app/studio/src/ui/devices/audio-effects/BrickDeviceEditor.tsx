@@ -8,10 +8,12 @@ import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {EffectFactories} from "@opendaw/studio-core"
-import {ControlBuilder} from "@/ui/devices/ControlBuilder"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 import {Colors} from "@opendaw/studio-enums"
+import {VolumeSlider} from "@/ui/components/VolumeSlider"
+import {Meters} from "@/ui/devices/audio-effects/Brick/Meters"
+import {ControlIndicator} from "@/ui/components/ControlIndicator"
 
 const className = Html.adoptStyleSheet(css, "BrickDeviceEditor")
 
@@ -24,8 +26,19 @@ type Construct = {
 
 export const BrickDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
-    const {editing, midiLearning} = project
+    const {editing} = project
     const {threshold} = adapter.namedParameter
+
+    // PeakBroadcaster values: [peakL, peakR, rmsL, rmsR]
+    const inputPeaks = new Float32Array(4)
+    const outputPeaks = new Float32Array(4)
+    const reduction = new Float32Array(1)
+    lifecycle.ownAll(
+        project.liveStreamReceiver.subscribeFloats(adapter.address.append(1), v => inputPeaks.set(v)),
+        project.liveStreamReceiver.subscribeFloats(adapter.address, v => outputPeaks.set(v)),
+        project.liveStreamReceiver.subscribeFloats(adapter.address.append(0), v => reduction.set(v))
+    )
+
     return (
         <DeviceEditor lifecycle={lifecycle}
                       project={project}
@@ -33,25 +46,27 @@ export const BrickDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                       populateMenu={parent => MenuItems.forEffectDevice(parent, service, deviceHost, adapter)}
                       populateControls={() => (
                           <div className={className}>
-                              {ControlBuilder.createKnob({
-                                  lifecycle,
-                                  editing,
-                                  midiLearning,
-                                  adapter,
-                                  parameter: threshold,
-                                  anchor: 1.0
-                              })}
-                              <div className="lookahead">
-                                  <h1>Lookahead</h1>
-                                  <Checkbox lifecycle={lifecycle}
-                                            model={EditWrapper.forValue(editing, adapter.box.lookahead)}
-                                            appearance={{
-                                                color: Colors.cream,
-                                                activeColor: Colors.orange,
-                                                framed: true,
-                                                cursor: "pointer"
-                                            }}>5ms</Checkbox>
+                              <div className="slider-section">
+                                  <ControlIndicator lifecycle={lifecycle} parameter={threshold}>
+                                      <VolumeSlider lifecycle={lifecycle}
+                                                    editing={editing}
+                                                    parameter={threshold}/>
+                                  </ControlIndicator>
+                                  <div className="lookahead">
+                                      <Checkbox lifecycle={lifecycle}
+                                                model={EditWrapper.forValue(editing, adapter.box.lookahead)}
+                                                appearance={{
+                                                    color: Colors.cream,
+                                                    activeColor: Colors.orange,
+                                                    framed: true,
+                                                    cursor: "pointer"
+                                                }}>5ms</Checkbox>
+                                  </div>
                               </div>
+                              <Meters lifecycle={lifecycle}
+                                      inputPeaks={inputPeaks}
+                                      outputPeaks={outputPeaks}
+                                      reduction={reduction}/>
                           </div>
                       )}
                       populateMeter={() => (

@@ -11,6 +11,7 @@ import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 export class BrickDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly type = "audio-effect"
     readonly accepts = "audio"
+    readonly manualUrl = "manuals/devices/audio/brick"
 
     readonly #context: BoxAdaptersContext
     readonly #box: BrickDeviceBox
@@ -45,15 +46,13 @@ export class BrickDeviceBoxAdapter implements AudioEffectDeviceAdapter {
         yield {address: this.address, label: this.labelField.getValue(), children: () => Option.None}
     }
 
-    terminate(): void {
-        this.#parametric.terminate()
-    }
+    terminate(): void {this.#parametric.terminate()}
 
     #wrapParameters(box: BrickDeviceBox) {
         return {
             threshold: this.#parametric.createParameter(
                 box.threshold,
-                ValueMapping.linear(-30.0, 0.0),
+                ValueMapping.linear(-24.0, 0.0),
                 StringMapping.decible, "Threshold")
         } as const
     }

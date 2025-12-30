@@ -10,6 +10,7 @@ import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 export class ZeitgeistDeviceBoxAdapter implements MidiEffectDeviceAdapter {
     readonly type = "midi-effect"
     readonly accepts = "midi"
+    readonly manualUrl = "manuals/devices/midi/zeitgeist"
 
     readonly #context: BoxAdaptersContext
     readonly #box: ZeitgeistDeviceBox

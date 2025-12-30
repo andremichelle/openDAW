@@ -10,6 +10,7 @@ import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 export class UnknownAudioEffectDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly type = "audio-effect"
     readonly accepts = "audio"
+    readonly manualUrl = ""
 
     readonly #context: BoxAdaptersContext
     readonly #box: UnknownAudioEffectDeviceBox

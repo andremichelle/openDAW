@@ -12,6 +12,7 @@ import {AutomatableParameterFieldAdapter} from "../../AutomatableParameterFieldA
 export class RevampDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly type = "audio-effect"
     readonly accepts = "audio"
+    readonly manualUrl = "manuals/devices/audio/revamp"
 
     readonly #context: BoxAdaptersContext
     readonly #box: RevampDeviceBox

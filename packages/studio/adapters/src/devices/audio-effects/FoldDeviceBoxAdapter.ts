@@ -11,6 +11,7 @@ import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 export class FoldDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly type = "audio-effect"
     readonly accepts = "audio"
+    readonly manualUrl = "manuals/devices/audio/fold"
 
     readonly #context: BoxAdaptersContext
     readonly #box: FoldDeviceBox

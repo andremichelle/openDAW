@@ -22,6 +22,7 @@ export class DelayDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 
     readonly type = "audio-effect"
     readonly accepts = "audio"
+    readonly manualUrl = "manuals/devices/audio/delay"
 
     readonly #context: BoxAdaptersContext
     readonly #box: DelayDeviceBox

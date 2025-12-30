@@ -9,6 +9,7 @@ import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 export class UnknownMidiEffectDeviceBoxAdapter implements MidiEffectDeviceAdapter {
     readonly type = "midi-effect"
     readonly accepts = "midi"
+    readonly manualUrl = ""
 
     readonly #context: BoxAdaptersContext
     readonly #box: UnknownMidiEffectDeviceBox

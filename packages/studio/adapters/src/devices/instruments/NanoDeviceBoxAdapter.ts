@@ -11,6 +11,7 @@ import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 export class NanoDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly type = "instrument"
     readonly accepts = "midi"
+    readonly manualUrl = "manuals/devices/instruments/nano"
 
     readonly #context: BoxAdaptersContext
     readonly #box: NanoDeviceBox

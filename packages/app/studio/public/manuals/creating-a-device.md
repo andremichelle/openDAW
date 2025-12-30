@@ -2,9 +2,8 @@
 
 ### Disclaimer
 
-This document requires a PR to be included in openDAW. It is not yet an open device API and involves substantial manual work.
-
-This guide documents how to create a complete audio effect device in openDAW. We'll use the "Brick" brickwall limiter as a reference implementation.
+Adding a device to openDAW itself requires a PR. There is not yet an open device API hence adding a new device involves
+significant manual work. This guide documents how to create a complete audio effect device in openDAW.
 
 ## Overview
 
@@ -42,6 +41,7 @@ export const YourDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffec
 ```
 
 **Key points:**
+
 - `DeviceFactory.createAudioEffect()` provides standard fields 1-5 (host, index, label, enabled, minimized)
 - Custom fields start at 10+
 - Use `pointerRules: ParameterPointerRules` for automatable parameters
@@ -121,7 +121,7 @@ export class YourDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
-    *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
+    * labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
         yield {address: this.address, label: this.labelField.getValue(), children: () => Option.None}
     }
 
@@ -378,10 +378,11 @@ import {YourDeviceEditor} from "@/ui/devices/audio-effects/YourDeviceEditor"
 
 // In toAudioEffectDeviceEditor():
 visitYourDeviceBox: (box: YourDeviceBox) => (
-    <YourDeviceEditor lifecycle={lifecycle}
-                      service={service}
-                      adapter={service.project.boxAdapters.adapterFor(box, YourDeviceBoxAdapter)}
-                      deviceHost={deviceHost}/>
+    <YourDeviceEditor lifecycle = {lifecycle}
+service = {service}
+adapter = {service.project.boxAdapters.adapterFor(box, YourDeviceBoxAdapter)}
+deviceHost = {deviceHost}
+/>
 ),
 ```
 
@@ -409,7 +410,8 @@ The device should now appear in the audio effects menu when adding effects to a 
 
 ### Automatable vs Non-Automatable
 
-- **Automatable**: Use `pointerRules: ParameterPointerRules` in schema, wrap with `#parametric.createParameter()` in adapter
+- **Automatable**: Use `pointerRules: ParameterPointerRules` in schema, wrap with `#parametric.createParameter()` in
+  adapter
 - **Non-automatable**: Omit `pointerRules` in schema, access directly via `adapter.box.fieldName`
 
 ### UI Controls
@@ -428,15 +430,15 @@ adapter.box.someField.catchupAndSubscribe(() => {
 
 ## File Summary
 
-| Component | Location |
-|-----------|----------|
-| Schema | `packages/studio/forge-boxes/src/schema/devices/audio-effects/` |
-| Box (generated) | `packages/studio/boxes/src/` |
-| Adapter | `packages/studio/adapters/src/devices/audio-effects/` |
-| Processor | `packages/studio/core-processors/src/devices/audio-effects/` |
-| Editor | `packages/app/studio/src/ui/devices/audio-effects/` |
-| EffectFactories | `packages/studio/core/src/EffectFactories.ts` |
-| EffectBox | `packages/studio/core/src/EffectBox.ts` |
+| Component        | Location                                                        |
+|------------------|-----------------------------------------------------------------|
+| Schema           | `packages/studio/forge-boxes/src/schema/devices/audio-effects/` |
+| Box (generated)  | `packages/studio/boxes/src/`                                    |
+| Adapter          | `packages/studio/adapters/src/devices/audio-effects/`           |
+| Processor        | `packages/studio/core-processors/src/devices/audio-effects/`    |
+| Editor           | `packages/app/studio/src/ui/devices/audio-effects/`             |
+| EffectFactories  | `packages/studio/core/src/EffectFactories.ts`                   |
+| EffectBox        | `packages/studio/core/src/EffectBox.ts`                         |
 | ProcessorFactory | `packages/studio/core-processors/src/DeviceProcessorFactory.ts` |
-| EditorFactory | `packages/app/studio/src/ui/devices/DeviceEditorFactory.tsx` |
-| BoxAdapters | `packages/studio/adapters/src/BoxAdapters.ts` |
+| EditorFactory    | `packages/app/studio/src/ui/devices/DeviceEditorFactory.tsx`    |
+| BoxAdapters      | `packages/studio/adapters/src/BoxAdapters.ts`                   |

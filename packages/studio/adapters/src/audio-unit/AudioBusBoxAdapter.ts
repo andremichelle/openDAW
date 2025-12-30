@@ -10,6 +10,7 @@ import {IconSymbol} from "@opendaw/studio-enums"
 export class AudioBusBoxAdapter implements DeviceBoxAdapter, LabeledAudioOutputsOwner {
     readonly type = "bus"
     readonly accepts = "audio"
+    readonly manualUrl = "manuals" // TODO Write a manual for AudioBus and its purpose
 
     readonly #context: BoxAdaptersContext
     readonly #box: AudioBusBox
@@ -41,7 +42,7 @@ export class AudioBusBoxAdapter implements DeviceBoxAdapter, LabeledAudioOutputs
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
-    *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
+    * labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
         yield {address: this.address, label: this.labelField.getValue(), children: () => Option.None}
     }
 

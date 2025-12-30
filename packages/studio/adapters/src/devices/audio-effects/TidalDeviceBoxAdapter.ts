@@ -22,6 +22,7 @@ export class TidalDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 
     readonly type = "audio-effect"
     readonly accepts = "audio"
+    readonly manualUrl = "manuals/devices/audio/tidal"
 
     readonly #context: BoxAdaptersContext
     readonly #box: TidalDeviceBox

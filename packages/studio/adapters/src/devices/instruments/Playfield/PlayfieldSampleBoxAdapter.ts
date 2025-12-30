@@ -25,6 +25,7 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
     readonly class = "device-host"
     readonly accepts: DeviceAccepts = false
     readonly type = "instrument"
+    readonly manualUrl = "manuals/devices/instruments/playfield"
 
     readonly #terminator = new Terminator()
 

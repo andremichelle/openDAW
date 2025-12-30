@@ -3,18 +3,24 @@
 component
   display: flex
   flex-direction: row
-  align-items: center
-  gap: 1em
+  align-items: stretch
+  gap: 0.5em
   padding: 0.5em
   @include mixins.Control
 
-  > div.lookahead
+  > div.slider-section
     display: flex
     flex-direction: column
     align-items: center
-    gap: 0.25em
+    gap: 0.5em
+    height: 140px
 
-    > h1
+    > .vertical-slider
+      flex: 1
+      width: 24px
+
+    > div.lookahead
+      display: flex
+      flex-direction: column
+      align-items: center
       font-size: 0.625rem
-      color: var(--color-dark)
-      text-transform: uppercase
