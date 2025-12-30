@@ -9,7 +9,7 @@ import {BuildInfo} from "@/BuildInfo"
 
 const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP"]
 const IgnoredErrors = ["ResizeObserver loop completed with undelivered notifications."]
-const UrlPattern = /https?:\/\/[^\s\)]+/g
+const UrlPattern = /https?:\/\/[^\s)]+/g
 
 export class ErrorHandler {
     readonly #terminator = new Terminator()
@@ -74,6 +74,16 @@ export class ErrorHandler {
             Dialogs.info({
                 headline: "Access Denied",
                 message: "The browser blocked access to the file system."
+            }).then(EmptyExec)
+            return true
+        }
+        // Handle Monaco editor worker errors (throws Event objects when workers fail to load)
+        if (reason instanceof Event || (reason instanceof Error && reason.stack?.includes("monaco-editor"))) {
+            console.warn("Monaco editor error (web workers may be unavailable):", reason)
+            event.preventDefault()
+            Dialogs.info({
+                headline: "Editor Warning",
+                message: "The code editor is running in fallback mode. This may cause occasional UI slowdowns."
             }).then(EmptyExec)
             return true
         }
