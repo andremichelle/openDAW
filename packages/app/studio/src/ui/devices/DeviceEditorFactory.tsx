@@ -3,7 +3,7 @@ import {
     ArpeggioDeviceBox,
     AudioBusBox,
     BoxVisitor,
-    BrickDeviceBox,
+    PushDeviceBox,
     CompressorDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
@@ -31,7 +31,7 @@ import {ArpeggioDeviceEditor} from "@/ui/devices/midi-effects/ArpeggioDeviceEdit
 import {
     ArpeggioDeviceBoxAdapter,
     AudioBusBoxAdapter,
-    BrickDeviceBoxAdapter,
+    PushDeviceBoxAdapter,
     CompressorDeviceBoxAdapter,
     CrusherDeviceBoxAdapter,
     DattorroReverbDeviceBoxAdapter,
@@ -74,7 +74,7 @@ import {ZeitgeistDeviceEditor} from "@/ui/devices/midi-effects/ZeitgeistDeviceEd
 import {UnknownEffectDeviceEditor} from "@/ui/devices/UnknownEffectDeviceEditor"
 import {StudioService} from "@/service/StudioService"
 import {SoundfontDeviceEditor} from "@/ui/devices/instruments/SoundfontDeviceEditor"
-import {BrickDeviceEditor} from "@/ui/devices/audio-effects/BrickDeviceEditor"
+import {PushDeviceEditor} from "@/ui/devices/audio-effects/PushDeviceEditor"
 import {CompressorDeviceEditor} from "@/ui/devices/audio-effects/CompressorDeviceEditor"
 import {CrusherDeviceEditor} from "@/ui/devices/audio-effects/CrusherDeviceEditor"
 import {FoldDeviceEditor} from "@/ui/devices/audio-effects/FoldDeviceEditor"
@@ -188,10 +188,10 @@ export namespace DeviceEditorFactory {
                                         adapter={service.project.boxAdapters.adapterFor(box, StereoToolDeviceBoxAdapter)}
                                         deviceHost={deviceHost}/>
             ),
-            visitBrickDeviceBox: (box: BrickDeviceBox) => (
-                <BrickDeviceEditor lifecycle={lifecycle}
+            visitPushDeviceBox: (box: PushDeviceBox) => (
+                <PushDeviceEditor lifecycle={lifecycle}
                                    service={service}
-                                   adapter={service.project.boxAdapters.adapterFor(box, BrickDeviceBoxAdapter)}
+                                   adapter={service.project.boxAdapters.adapterFor(box, PushDeviceBoxAdapter)}
                                    deviceHost={deviceHost}/>
             ),
             visitDelayDeviceBox: (box: DelayDeviceBox) => (

@@ -5,7 +5,7 @@ import {createElement} from "@opendaw/lib-jsx"
 import {Colors} from "@opendaw/studio-enums"
 import {gainToDb} from "@opendaw/lib-dsp"
 
-const className = Html.adoptStyleSheet(css, "BrickMeters")
+const className = Html.adoptStyleSheet(css, "PushMeters")
 
 const height = 140
 const padding = 8

@@ -1,11 +1,11 @@
-import {Address, BooleanField, Propagation, StringField} from "@opendaw/lib-box"
 import {Observer, Option, Subscription, UUID} from "@opendaw/lib-std"
+import {Address, BooleanField, Propagation, StringField} from "@opendaw/lib-box"
+import {IconSymbol} from "@opendaw/studio-enums"
 import {AudioBusBox} from "@opendaw/studio-boxes"
 import {DeviceBoxAdapter, DeviceHost, Devices} from "../DeviceAdapter"
 import {LabeledAudioOutput, LabeledAudioOutputsOwner} from "../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {AudioUnitBoxAdapter} from "./AudioUnitBoxAdapter"
-import {IconSymbol} from "@opendaw/studio-enums"
 
 export class AudioBusBoxAdapter implements DeviceBoxAdapter, LabeledAudioOutputsOwner {
     readonly type = "bus"

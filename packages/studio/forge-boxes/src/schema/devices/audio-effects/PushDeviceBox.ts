@@ -3,9 +3,9 @@ import {Pointers} from "@opendaw/studio-enums"
 import {DeviceFactory} from "../../std/DeviceFactory"
 import {ParameterPointerRules} from "../../std/Defaults"
 
-// Brickwall Limiter - prevents audio from exceeding 0dB
+// Push Limiter - prevents audio from exceeding 0dB
 
-export const BrickDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffect("BrickDeviceBox", {
+export const PushDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffect("PushDeviceBox", {
     10: {type: "boolean", name: "lookahead", value: true},
     11: {
         type: "float32", name: "threshold", pointerRules: ParameterPointerRules,

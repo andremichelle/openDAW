@@ -1,6 +1,6 @@
 import {Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
-import {BrickDeviceBox} from "@opendaw/studio-boxes"
+import {PushDeviceBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
@@ -8,25 +8,25 @@ import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 
-export class BrickDeviceBoxAdapter implements AudioEffectDeviceAdapter {
+export class PushDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly type = "audio-effect"
     readonly accepts = "audio"
-    readonly manualUrl = "manuals/devices/audio/brick"
+    readonly manualUrl = "manuals/devices/audio/push"
 
     readonly #context: BoxAdaptersContext
-    readonly #box: BrickDeviceBox
+    readonly #box: PushDeviceBox
 
     readonly #parametric: ParameterAdapterSet
     readonly namedParameter // let typescript infer the type
 
-    constructor(context: BoxAdaptersContext, box: BrickDeviceBox) {
+    constructor(context: BoxAdaptersContext, box: PushDeviceBox) {
         this.#context = context
         this.#box = box
         this.#parametric = new ParameterAdapterSet(this.#context)
         this.namedParameter = this.#wrapParameters(box)
     }
 
-    get box(): BrickDeviceBox {return this.#box}
+    get box(): PushDeviceBox {return this.#box}
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get indexField(): Int32Field {return this.#box.index}
@@ -48,7 +48,7 @@ export class BrickDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 
     terminate(): void {this.#parametric.terminate()}
 
-    #wrapParameters(box: BrickDeviceBox) {
+    #wrapParameters(box: PushDeviceBox) {
         return {
             threshold: this.#parametric.createParameter(
                 box.threshold,

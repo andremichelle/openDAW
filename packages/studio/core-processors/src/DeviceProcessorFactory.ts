@@ -2,7 +2,7 @@ import {
     ArpeggioDeviceBox,
     AudioBusBox,
     BoxVisitor,
-    BrickDeviceBox,
+    PushDeviceBox,
     CompressorDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
@@ -29,7 +29,7 @@ import {DelayDeviceProcessor} from "./devices/audio-effects/DelayDeviceProcessor
 import {
     ArpeggioDeviceBoxAdapter,
     AudioBusBoxAdapter,
-    BrickDeviceBoxAdapter,
+    PushDeviceBoxAdapter,
     CompressorDeviceBoxAdapter,
     CrusherDeviceBoxAdapter,
     DattorroReverbDeviceBoxAdapter,
@@ -72,7 +72,7 @@ import {InstrumentDeviceProcessor} from "./InstrumentDeviceProcessor"
 import {AudioEffectDeviceProcessor} from "./AudioEffectDeviceProcessor"
 import {UnknownMidiEffectDeviceProcessor} from "./devices/midi-effects/UnknownMidiEffectDeviceProcessor"
 import {SoundfontDeviceProcessor} from "./devices/instruments/SoundfontDeviceProcessor"
-import {BrickDeviceProcessor} from "./devices/audio-effects/BrickDeviceProcessor"
+import {PushDeviceProcessor} from "./devices/audio-effects/PushDeviceProcessor"
 import {CompressorDeviceProcessor} from "./devices/audio-effects/CompressorDeviceProcessor"
 import {CrusherDeviceProcessor} from "./devices/audio-effects/CrusherDeviceProcessor"
 import {FoldDeviceProcessor} from "./devices/audio-effects/FoldDeviceProcessor"
@@ -127,8 +127,8 @@ export namespace AudioEffectDeviceProcessorFactory {
                 new NopDeviceProcessor(context, context.boxAdapters.adapterFor(box, UnknownAudioEffectDeviceBoxAdapter)),
             visitStereoToolDeviceBox: (box: StereoToolDeviceBox): AudioEffectDeviceProcessor =>
                 new StereoToolDeviceProcessor(context, context.boxAdapters.adapterFor(box, StereoToolDeviceBoxAdapter)),
-            visitBrickDeviceBox: (box: BrickDeviceBox): AudioEffectDeviceProcessor =>
-                new BrickDeviceProcessor(context, context.boxAdapters.adapterFor(box, BrickDeviceBoxAdapter)),
+            visitPushDeviceBox: (box: PushDeviceBox): AudioEffectDeviceProcessor =>
+                new PushDeviceProcessor(context, context.boxAdapters.adapterFor(box, PushDeviceBoxAdapter)),
             visitCompressorDeviceBox: (box: CompressorDeviceBox): AudioEffectDeviceProcessor =>
                 new CompressorDeviceProcessor(context, context.boxAdapters.adapterFor(box, CompressorDeviceBoxAdapter)),
             visitDelayDeviceBox: (box: DelayDeviceBox): AudioEffectDeviceProcessor =>

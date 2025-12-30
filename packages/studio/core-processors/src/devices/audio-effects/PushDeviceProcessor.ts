@@ -1,5 +1,5 @@
 import {int, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioEffectDeviceAdapter, BrickDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {AudioEffectDeviceAdapter, PushDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {EngineContext} from "../../EngineContext"
 import {Block, Processor} from "../../processing"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
@@ -14,12 +14,12 @@ const LOOK_AHEAD_SECONDS = 0.005
 // Only tested for 5ms look-ahead
 const MAGIC_HEADROOM = -0.41
 
-export class BrickDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {
+export class PushDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {
     static ID: int = 0 | 0
 
-    readonly #id: int = BrickDeviceProcessor.ID++
+    readonly #id: int = PushDeviceProcessor.ID++
 
-    readonly #adapter: BrickDeviceBoxAdapter
+    readonly #adapter: PushDeviceBoxAdapter
     readonly #output: AudioBuffer
     readonly #inputPeaks: PeakBroadcaster
     readonly #outputPeaks: PeakBroadcaster
@@ -43,7 +43,7 @@ export class BrickDeviceProcessor extends AudioProcessor implements AudioEffectD
     readonly #reductionValue = new Float32Array(1)
     #reductionMin: number = 0.0
 
-    constructor(context: EngineContext, adapter: BrickDeviceBoxAdapter) {
+    constructor(context: EngineContext, adapter: PushDeviceBoxAdapter) {
         super(context)
 
         this.#adapter = adapter

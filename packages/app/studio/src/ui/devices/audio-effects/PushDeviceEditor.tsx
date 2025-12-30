@@ -1,5 +1,5 @@
-import css from "./BrickDeviceEditor.sass?inline"
-import {BrickDeviceBoxAdapter, DeviceHost} from "@opendaw/studio-adapters"
+import css from "./PushDeviceEditor.sass?inline"
+import {PushDeviceBoxAdapter, DeviceHost} from "@opendaw/studio-adapters"
 import {Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
@@ -12,19 +12,19 @@ import {Checkbox} from "@/ui/components/Checkbox"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 import {Colors} from "@opendaw/studio-enums"
 import {VolumeSlider} from "@/ui/components/VolumeSlider"
-import {Meters} from "@/ui/devices/audio-effects/Brick/Meters"
+import {Meters} from "@/ui/devices/audio-effects/Push/Meters"
 import {ControlIndicator} from "@/ui/components/ControlIndicator"
 
-const className = Html.adoptStyleSheet(css, "BrickDeviceEditor")
+const className = Html.adoptStyleSheet(css, "PushDeviceEditor")
 
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
-    adapter: BrickDeviceBoxAdapter
+    adapter: PushDeviceBoxAdapter
     deviceHost: DeviceHost
 }
 
-export const BrickDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
+export const PushDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
     const {editing} = project
     const {threshold} = adapter.namedParameter
@@ -74,6 +74,6 @@ export const BrickDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
                       )}
-                      icon={EffectFactories.AudioNamed.Brick.defaultIcon}/>
+                      icon={EffectFactories.AudioNamed.Push.defaultIcon}/>
     )
 }

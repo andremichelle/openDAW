@@ -13,7 +13,7 @@ import {ZeitgeistDeviceBox} from "./midi-effects/ZeitGeistDeviceBox"
 import {UnknownAudioEffectDevice} from "./audio-effects/UnknownAudioEffectDevice"
 import {UnknownMidiEffectDevice} from "./midi-effects/UnknownMidiEffectDevice"
 import {SoundfontDeviceBox} from "./instruments/SoundfontDeviceBox"
-import {BrickDeviceBox} from "./audio-effects/BrickDeviceBox"
+import {PushDeviceBox} from "./audio-effects/PushDeviceBox"
 import {CompressorDeviceBox} from "./audio-effects/CompressorDeviceBox"
 import {CrusherDeviceBox} from "./audio-effects/CrusherDeviceBox"
 import {FoldDeviceBox} from "./audio-effects/FoldDeviceBox"
@@ -30,7 +30,7 @@ export const DeviceDefinitions = [
     DeviceInterfaceKnobBox,
     ModularDeviceBox,
     StereoToolDeviceBox,
-    BrickDeviceBox,
+    PushDeviceBox,
     CompressorDeviceBox,
     DelayDeviceBox,
     CrusherDeviceBox,
