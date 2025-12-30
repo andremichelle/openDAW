@@ -21,8 +21,7 @@ technische Souveränität legen.
 
 ### Pädagogische Kernfeatures von openDAW
 
-openDAW wurde so gestaltet, dass musikalische Konzepte sichtbar, hörbar und nachvollziehbar werden. Die
-Benutzeroberfläche und Arbeitsweise orientieren sich an etablierten Standards professioneller DAWs. Konzepte wie
+Die Benutzeroberfläche und Arbeitsweise orientieren sich an etablierten Standards professioneller DAWs. Konzepte wie
 Timeline, Mixer, Routing, Automation und MIDI-Editing sind universell übertragbar. Wer openDAW erlernt, kann später
 problemlos auf andere Software wie Ableton Live, Logic Pro oder Cubase umsteigen.
 
@@ -119,7 +118,8 @@ Servern betrieben werden. Der vollständige Quellcode ist auf GitHub verfügbar.
 
 ## Angebot für Bildungseinrichtungen
 
-Wir bieten Schulungen und Unterstützung bei der Servereinrichtung an. Für die Nutzung von openDAW im institutionellen Rahmen fällt eine faire Lizenzgebühr an.
+Wir bieten Schulungen und Unterstützung bei der Servereinrichtung an. Für die Nutzung von openDAW im institutionellen
+Rahmen fällt eine faire Lizenzgebühr an.
 
 ### Kontakt
 
