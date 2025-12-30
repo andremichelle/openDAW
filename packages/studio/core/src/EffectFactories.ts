@@ -1,6 +1,7 @@
 import {UUID} from "@opendaw/lib-std"
 import {
     ArpeggioDeviceBox,
+    BrickDeviceBox,
     CompressorDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
@@ -125,6 +126,20 @@ export namespace EffectFactories {
         create: ({boxGraph}, hostField, index): DattorroReverbDeviceBox =>
             DattorroReverbDeviceBox.create(boxGraph, UUID.generate(), box => {
                 box.label.setValue("Dattorro Reverb")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
+    export const Brick: EffectFactory = {
+        defaultName: "Brick",
+        defaultIcon: IconSymbol.Peak,
+        description: "Brickwall limiter that prevents audio from exceeding 0dB",
+        separatorBefore: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index): BrickDeviceBox =>
+            BrickDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("Brick")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
@@ -256,7 +271,7 @@ export namespace EffectFactories {
 
     export const MidiNamed = {Arpeggio, Pitch, Velocity, Zeitgeist}
     export const AudioNamed = {
-        StereoTool, Compressor, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal
+        StereoTool, Brick, Compressor, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(MidiNamed)
     export const AudioList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(AudioNamed)

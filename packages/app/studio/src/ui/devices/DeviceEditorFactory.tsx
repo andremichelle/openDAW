@@ -3,6 +3,7 @@ import {
     ArpeggioDeviceBox,
     AudioBusBox,
     BoxVisitor,
+    BrickDeviceBox,
     CompressorDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
@@ -30,6 +31,7 @@ import {ArpeggioDeviceEditor} from "@/ui/devices/midi-effects/ArpeggioDeviceEdit
 import {
     ArpeggioDeviceBoxAdapter,
     AudioBusBoxAdapter,
+    BrickDeviceBoxAdapter,
     CompressorDeviceBoxAdapter,
     CrusherDeviceBoxAdapter,
     DattorroReverbDeviceBoxAdapter,
@@ -72,6 +74,7 @@ import {ZeitgeistDeviceEditor} from "@/ui/devices/midi-effects/ZeitgeistDeviceEd
 import {UnknownEffectDeviceEditor} from "@/ui/devices/UnknownEffectDeviceEditor"
 import {StudioService} from "@/service/StudioService"
 import {SoundfontDeviceEditor} from "@/ui/devices/instruments/SoundfontDeviceEditor"
+import {BrickDeviceEditor} from "@/ui/devices/audio-effects/BrickDeviceEditor"
 import {CompressorDeviceEditor} from "@/ui/devices/audio-effects/CompressorDeviceEditor"
 import {CrusherDeviceEditor} from "@/ui/devices/audio-effects/CrusherDeviceEditor"
 import {FoldDeviceEditor} from "@/ui/devices/audio-effects/FoldDeviceEditor"
@@ -184,6 +187,12 @@ export namespace DeviceEditorFactory {
                                         service={service}
                                         adapter={service.project.boxAdapters.adapterFor(box, StereoToolDeviceBoxAdapter)}
                                         deviceHost={deviceHost}/>
+            ),
+            visitBrickDeviceBox: (box: BrickDeviceBox) => (
+                <BrickDeviceEditor lifecycle={lifecycle}
+                                   service={service}
+                                   adapter={service.project.boxAdapters.adapterFor(box, BrickDeviceBoxAdapter)}
+                                   deviceHost={deviceHost}/>
             ),
             visitDelayDeviceBox: (box: DelayDeviceBox) => (
                 <DelayDeviceEditor lifecycle={lifecycle}
