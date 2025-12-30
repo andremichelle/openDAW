@@ -134,7 +134,7 @@ export namespace EffectFactories {
     export const Brick: EffectFactory = {
         defaultName: "Brick",
         defaultIcon: IconSymbol.Peak,
-        description: "Brickwall limiter that prevents audio from exceeding 0dB",
+        description: "Brickwall limiter with boost capabilities",
         separatorBefore: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): BrickDeviceBox =>
@@ -271,7 +271,7 @@ export namespace EffectFactories {
 
     export const MidiNamed = {Arpeggio, Pitch, Velocity, Zeitgeist}
     export const AudioNamed = {
-        StereoTool, Brick, Compressor, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal
+        StereoTool, Compressor, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal, Brick
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(MidiNamed)
     export const AudioList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(AudioNamed)
