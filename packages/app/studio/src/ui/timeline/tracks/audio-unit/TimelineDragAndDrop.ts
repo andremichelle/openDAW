@@ -1,4 +1,4 @@
-import {isDefined, Nullable, Option, panic, UUID} from "@opendaw/lib-std"
+import {isDefined, Nullable, Option, panic, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, Sample, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
@@ -71,9 +71,20 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
         }
         const {uuid: uuidAsString, name} = sample
         const uuid = UUID.parse(uuidAsString)
-        const audioData = await this.#service.sampleManager.getAudioData(uuid)
-        const audioFileBoxFactory = await AudioFileBoxFactory
-            .createModifier(Workers.Transients, boxGraph, audioData, uuid, name)
+        const audioDataResult = await Promises.tryCatch(this.#service.sampleManager.getAudioData(uuid))
+        if (audioDataResult.status === "rejected") {
+            console.warn("Failed to load sample:", audioDataResult.error)
+            await RuntimeNotifier.info({headline: "Sample Error", message: `Failed to load sample '${name}'.`})
+            return
+        }
+        const audioFileBoxResult = await Promises.tryCatch(AudioFileBoxFactory
+            .createModifier(Workers.Transients, boxGraph, audioDataResult.value, uuid, name))
+        if (audioFileBoxResult.status === "rejected") {
+            console.warn("Failed to create audio file:", audioFileBoxResult.error)
+            await RuntimeNotifier.info({headline: "Sample Error", message: `Failed to process sample '${name}'.`})
+            return
+        }
+        const audioFileBoxFactory = audioFileBoxResult.value
         editing.modify(() => {
             let trackBoxAdapter: TrackBoxAdapter
             if (drop === "instrument") {

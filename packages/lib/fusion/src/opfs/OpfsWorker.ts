@@ -17,6 +17,10 @@ export namespace OpfsWorker {
                         handle.truncate(data.length)
                         handle.write(data.buffer as ArrayBuffer, {at: 0})
                         handle.flush()
+                    } catch (reason: any) {
+                        console.error("OPFS write failed:",
+                            reason?.name, reason?.message, reason?.stack ?? "(no stack trace)")
+                        throw reason
                     } finally {
                         handle.close()
                     }
