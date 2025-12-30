@@ -77,6 +77,60 @@ component
         > div.icon-space
           display: none
 
+      > div.input-value
+        width: 100%
+        display: flex
+        column-gap: 0.25em
+        align-items: center
+        padding: 0.5em 0.125em
+        margin: 0.25em 0
+        white-space: nowrap
+        color: color-mix(in srgb, var(--color) 75%, transparent)
+        background-color: color-mix(in srgb, var(--color) 5%, transparent)
+        --color: var(--color-blue)
+
+        > input[type="range"]
+          -webkit-appearance: none
+          appearance: none
+          flex: 1
+          height: 4px
+          margin: 0 0.5em
+          background: transparent
+          cursor: pointer
+          border: none
+          outline: none
+
+          &::-webkit-slider-runnable-track
+            height: 4px
+            background: color-mix(in srgb, var(--color) 10%, transparent)
+            border: none
+
+          &::-webkit-slider-thumb
+            -webkit-appearance: none
+            appearance: none
+            width: 12px
+            height: 12px
+            margin-top: -4px
+            background: var(--color)
+            border-radius: 50%
+            border: none
+
+          &::-moz-range-track
+            height: 4px
+            background: color-mix(in srgb, var(--color) 10%, transparent)
+            border: none
+
+          &::-moz-range-thumb
+            width: 12px
+            height: 12px
+            background: var(--color)
+            border-radius: 50%
+            border: none
+
+        > div.unit
+          min-width: 2em
+          text-align: left
+
       > div.default
         width: 100%
         display: flex

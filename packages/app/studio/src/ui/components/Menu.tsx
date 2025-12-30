@@ -1,5 +1,5 @@
 import css from "./Menu.sass?inline"
-import {DefaultMenuData, HeaderMenuData, MenuItem} from "@/ui/model/menu-item.ts"
+import {DefaultMenuData, HeaderMenuData, InputValueMenuData, MenuItem} from "@/ui/model/menu-item.ts"
 import {createElement, Frag} from "@opendaw/lib-jsx"
 import {int, isDefined, Lifecycle, Nullable, Option, panic, Terminable, Terminator} from "@opendaw/lib-std"
 import {Icon} from "@/ui/components/Icon.tsx"
@@ -30,6 +30,19 @@ export const DefaultMenuDataElement = ({data}: { data: DefaultMenuData }) => (
         <svg classList="children-icon" viewBox="0 0 12 12">
             <path d="M4 2L8 6L4 10"/>
         </svg>
+    </div>
+)
+
+export const ValueSliderMenuDataElement = ({data: {icon, model, name, unit, color}}: { data: InputValueMenuData }) => (
+    <div className="input-value"
+         style={{"--color": color?.toString() ?? Colors.gray.toString()}}>
+        <Icon symbol={icon} style={{margin: "0 0.25em", fontSize: "1.25em"}}/>
+        <div className="name">{name}</div>
+        <input type="range" min="0" max="1" step="any" data-close-on-blur={true} onInit={element => {
+            element.valueAsNumber = model.getValue()
+            element.oninput = () => model.setValue(element.valueAsNumber)
+        }}/>
+        <div className="unit">{unit}</div>
     </div>
 )
 
@@ -220,6 +233,8 @@ export class Menu implements Terminable, Lifecycle {
                                         return <HeaderMenuDataElement data={item.data}/>
                                     } else if (item.data.type === "default") {
                                         return <DefaultMenuDataElement data={item.data}/>
+                                    } else if (item.data.type === "input-value") {
+                                        return <ValueSliderMenuDataElement data={item.data}/>
                                     }
                                 })()}
                             </div>

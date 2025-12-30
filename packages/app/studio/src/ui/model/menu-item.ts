@@ -1,4 +1,4 @@
-import {Arrays, Color, Option, Procedure, Terminable} from "@opendaw/lib-std"
+import {Arrays, Color, MutableObservableValue, Option, Procedure, Terminable} from "@opendaw/lib-std"
 
 import {IconSymbol} from "@opendaw/studio-enums"
 
@@ -10,6 +10,13 @@ export type MenuItemOptions = {
 
 const Root = {type: "root"} as const
 
+export type HeaderMenuData = {
+    type: "header"
+    label: string
+    icon: IconSymbol
+    color?: Color
+}
+
 export type DefaultMenuData = {
     type: "default"
     label: string
@@ -18,16 +25,18 @@ export type DefaultMenuData = {
     icon?: IconSymbol
 }
 
-export type HeaderMenuData = {
-    type: "header"
-    label: string
+export type InputValueMenuData = {
+    type: "input-value"
     icon: IconSymbol
+    model: MutableObservableValue<number>
+    unit: string
+    name: string
     color?: Color
 }
 
 export type MenuRootData = typeof Root
 
-export type MenuData = (DefaultMenuData & MenuItemOptions) | MenuRootData | HeaderMenuData
+export type MenuData = (DefaultMenuData & MenuItemOptions) | MenuRootData | HeaderMenuData | InputValueMenuData
 
 export interface MenuCollector {
     addItems(...items: MenuItem[]): void
@@ -36,12 +45,16 @@ export interface MenuCollector {
 export class MenuItem<DATA extends MenuData = MenuData> {
     static root(): MenuItem<MenuRootData> {return this.#create(Root)}
 
+    static header(properties: Omit<HeaderMenuData, "type"> & MenuItemOptions) {
+        return this.#create({type: "header", ...properties}, properties)
+    }
+
     static default(properties: Omit<DefaultMenuData, "type"> & MenuItemOptions) {
         return this.#create({type: "default", ...properties}, properties)
     }
 
-    static header(properties: Omit<HeaderMenuData, "type"> & MenuItemOptions) {
-        return this.#create({type: "header", ...properties}, properties)
+    static inputValue(properties: Omit<InputValueMenuData, "type"> & MenuItemOptions) {
+        return this.#create({type: "input-value", ...properties}, properties)
     }
 
     static #create<D extends MenuData>(data: D, options?: MenuItemOptions): MenuItem<D> {

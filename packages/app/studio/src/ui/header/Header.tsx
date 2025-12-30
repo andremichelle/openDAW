@@ -16,11 +16,11 @@ import {MidiDevices, StudioPreferences} from "@opendaw/studio-core"
 import {Manual, Manuals} from "@/ui/pages/Manuals"
 import {HorizontalPeakMeter} from "@/ui/components/HorizontalPeakMeter"
 import {gainToDb} from "@opendaw/lib-dsp"
-import {ContextMenu} from "@/ui/ContextMenu"
-import {EngineAddresses, EngineSettings} from "@opendaw/studio-adapters"
+import {EngineAddresses} from "@opendaw/studio-adapters"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {ShortcutTooltip} from "@/ui/shortcuts/ShortcutTooltip"
 import {UndoRedoButtons} from "@/ui/header/UndoRedoButtons"
+import {MetronomeControl} from "@/ui/header/MetronomeControl"
 
 const className = Html.adoptStyleSheet(css, "Header")
 
@@ -71,8 +71,6 @@ export const Header = ({lifecycle, service}: Construct) => {
         }
     })
     const {preferences} = service.engine
-    const {settings} = preferences
-    const {metronome} = settings
     return (
         <header className={className}>
             <MenuButton root={service.menu}
@@ -105,30 +103,7 @@ export const Header = ({lifecycle, service}: Construct) => {
             <hr/>
             <TimeStateDisplay lifecycle={lifecycle} service={service}/>
             <hr/>
-            <Checkbox lifecycle={lifecycle}
-                      onInit={element => lifecycle.own(ContextMenu.subscribe(element, collector =>
-                          collector.addItems(
-                              MenuItem.default({label: "Beat Divider"})
-                                  .setRuntimeChildrenProcedure(parent =>
-                                      parent.addMenuItem(...EngineSettings.BeatSubDivisionOptions
-                                          .map(division => MenuItem.default({
-                                              label: String(division),
-                                              checked: settings.metronome.beatSubDivision === division
-                                          }).setTriggerProcedure(() => metronome.beatSubDivision = division)))),
-                              MenuItem.default({label: "Set Count-In (Bars)"})
-                                  .setRuntimeChildrenProcedure(parent =>
-                                      parent.addMenuItem(...EngineSettings.RecordingCountInBars
-                                          .map(count => MenuItem.default({
-                                              label: String(count),
-                                              checked: count === settings.recording.countInBars
-                                          }).setTriggerProcedure(() => settings.recording.countInBars = count)))))))}
-                      model={preferences.createMutableObservableValue("metronome", "enabled")}
-                      appearance={{
-                          activeColor: Colors.orange,
-                          tooltip: ShortcutTooltip.create("Metronome", GlobalShortcuts["toggle-metronome"].shortcut)
-                      }}>
-                <Icon symbol={IconSymbol.Metronome}/>
-            </Checkbox>
+            <MetronomeControl lifecycle={lifecycle} preferences={preferences}/>
             <hr/>
             <div style={{flex: "1 0 0"}}/>
             {
