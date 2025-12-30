@@ -7,8 +7,8 @@ export const EngineSettingsSchema = z.object({
     metronome: z.object({
         enabled: z.boolean(),
         beatSubDivision: z.union(_BeatSubDivisionOptions.map(value => z.literal(value))),
-        gain: z.number().min(0).max(1)
-    }).default({enabled: false, beatSubDivision: 1, gain: 0.5}),
+        gain: z.number().min(Number.NEGATIVE_INFINITY).max(0)
+    }).default({enabled: false, beatSubDivision: 1, gain: -6.0}),
     playback: z.object({
         timestampEnabled: z.boolean()
     }).default({timestampEnabled: true}),

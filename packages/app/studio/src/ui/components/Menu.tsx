@@ -33,18 +33,36 @@ export const DefaultMenuDataElement = ({data}: { data: DefaultMenuData }) => (
     </div>
 )
 
-export const ValueSliderMenuDataElement = ({data: {icon, model, name, unit, color}}: { data: InputValueMenuData }) => (
-    <div className="input-value"
-         style={{"--color": color?.toString() ?? Colors.gray.toString()}}>
-        <Icon symbol={icon} style={{margin: "0 0.25em", fontSize: "1.25em"}}/>
-        <div className="name">{name}</div>
-        <input type="range" min="0" max="1" step="any" data-close-on-blur={true} onInit={element => {
-            element.valueAsNumber = model.getValue()
-            element.oninput = () => model.setValue(element.valueAsNumber)
-        }}/>
-        <div className="unit">{unit}</div>
-    </div>
-)
+export const ValueSliderMenuDataElement = (
+    {data: {icon, model, valueMapping, stringMapping, name, color, minValueWidth}, lifecycle}: {
+        data: InputValueMenuData,
+        lifecycle: Lifecycle
+    }) => {
+    const valueLabel: HTMLElement = (<div className="value" style={{minWidth: minValueWidth}}/>)
+    const unitLabel: HTMLElement = (<div className="unit"/>)
+    const update = (value: number) => {
+        const {unit, value: string} = stringMapping.x(value)
+        valueLabel.textContent = string
+        unitLabel.textContent = unit
+    }
+    return (
+        <div className="input-value"
+             style={{"--color": color?.toString() ?? Colors.gray.toString()}}>
+            <Icon symbol={icon} style={{margin: "0 0.25em", fontSize: "1.25em"}}/>
+            <div className="name">{name}</div>
+            <input type="range" min="0" max="1" step="any" data-close-on-blur onInit={element => {
+                element.oninput = () => model.setValue(valueMapping.y(element.valueAsNumber))
+                lifecycle.own(model.catchupAndSubscribe((owner) => {
+                    const value = owner.getValue()
+                    update(value)
+                    element.valueAsNumber = valueMapping.x(value)
+                }))
+            }}/>
+            {valueLabel}
+            {unitLabel}
+        </div>
+    )
+}
 
 type MenuHtmlStructure = {
     element: HTMLElement
@@ -216,49 +234,48 @@ export class Menu implements Terminable, Lifecycle {
     #createHtml(): MenuHtmlStructure {
         const scrollUp = <div className="scroll up"><Icon symbol={IconSymbol.RoundUp}/></div>
         const scrollDown = <div className="scroll down"><Icon symbol={IconSymbol.RoundDown}/></div>
-        const container = <div className="container">
-            {
-                this.#item.collectChildren()
-                    .filter((item: MenuItem) => !item.hidden)
-                    .map((item: MenuItem) => {
-                        item.open()
-                        const hasChildren = item.hasChildren
-                        const selectable = item.selectable
-                        const itemElement: HTMLElement = (
-                            <div className="item">
-                                {(() => {
-                                    if (item.data === undefined) {
-                                        return panic("")
-                                    } else if (item.data.type === "header") {
-                                        return <HeaderMenuDataElement data={item.data}/>
-                                    } else if (item.data.type === "default") {
-                                        return <DefaultMenuDataElement data={item.data}/>
-                                    } else if (item.data.type === "input-value") {
-                                        return <ValueSliderMenuDataElement data={item.data}/>
-                                    }
-                                })()}
-                            </div>
-                        )
-                        if (selectable) {
-                            itemElement.classList.add("selectable")
-                        }
-                        if (hasChildren) {
-                            itemElement.classList.add("has-children")
-                        }
-                        itemElement.onpointerenter = () => this.#onPointerEnter(item, itemElement)
-                        itemElement.onpointerleave = (event: PointerEvent) => this.#onPointerLeave(item, itemElement, event)
-                        itemElement.onpointerup = (event: PointerEvent) => {
-                            if (Date.now() - this.#openTime < Menu.MIN_TIME_MS) {return}
-                            this.#onPointerUp(item, itemElement, event)
-                        }
-                        return (
-                            <Frag>
-                                {item.separatorBefore && <hr/>}
-                                {itemElement}
-                            </Frag>
-                        )
-                    })
-            }
+        const container = <div className="container">{
+            this.#item.collectChildren()
+                .filter((item: MenuItem) => !item.hidden)
+                .map((item: MenuItem) => {
+                    item.open()
+                    const hasChildren = item.hasChildren
+                    const selectable = item.selectable
+                    const itemElement: HTMLElement = (
+                        <div className="item">
+                            {(() => {
+                                if (item.data === undefined) {
+                                    return panic("")
+                                } else if (item.data.type === "header") {
+                                    return <HeaderMenuDataElement data={item.data}/>
+                                } else if (item.data.type === "default") {
+                                    return <DefaultMenuDataElement data={item.data}/>
+                                } else if (item.data.type === "input-value") {
+                                    return <ValueSliderMenuDataElement data={item.data} lifecycle={this}/>
+                                }
+                            })()}
+                        </div>
+                    )
+                    if (selectable) {
+                        itemElement.classList.add("selectable")
+                    }
+                    if (hasChildren) {
+                        itemElement.classList.add("has-children")
+                    }
+                    itemElement.onpointerenter = () => this.#onPointerEnter(item, itemElement)
+                    itemElement.onpointerleave = (event: PointerEvent) => this.#onPointerLeave(item, itemElement, event)
+                    itemElement.onpointerup = (event: PointerEvent) => {
+                        if (Date.now() - this.#openTime < Menu.MIN_TIME_MS) {return}
+                        this.#onPointerUp(item, itemElement, event)
+                    }
+                    return (
+                        <Frag>
+                            {item.separatorBefore && <hr/>}
+                            {itemElement}
+                        </Frag>
+                    )
+                })
+        }
         </div>
         const element = (
             <nav className={className} tabIndex={-1} data-close-on-blur={true} data-menu-group-id={this.#groupId}>

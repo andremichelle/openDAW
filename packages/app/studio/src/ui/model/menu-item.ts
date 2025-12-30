@@ -1,4 +1,13 @@
-import {Arrays, Color, MutableObservableValue, Option, Procedure, Terminable} from "@opendaw/lib-std"
+import {
+    Arrays,
+    Color,
+    MutableObservableValue,
+    Option,
+    Procedure,
+    StringMapping,
+    Terminable,
+    ValueMapping
+} from "@opendaw/lib-std"
 
 import {IconSymbol} from "@opendaw/studio-enums"
 
@@ -28,10 +37,12 @@ export type DefaultMenuData = {
 export type InputValueMenuData = {
     type: "input-value"
     icon: IconSymbol
+    valueMapping: ValueMapping<number>
+    stringMapping: StringMapping<number>
     model: MutableObservableValue<number>
-    unit: string
     name: string
     color?: Color
+    minValueWidth?: string
 }
 
 export type MenuRootData = typeof Root

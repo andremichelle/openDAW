@@ -1,5 +1,5 @@
 import {BlockFlag, ProcessInfo} from "./processing"
-import {AudioBuffer, PPQN, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioBuffer, dbToGain, PPQN, RenderQuantum} from "@opendaw/lib-dsp"
 import {assert, Bits, int, isNotNull, Iterables, TAU} from "@opendaw/lib-std"
 import {EngineContext} from "./EngineContext"
 
@@ -17,7 +17,8 @@ export class Metronome {
     process({blocks}: ProcessInfo): void {
         const enabled = this.#context.timeInfo.metronomeEnabled
         const signatureTrack = this.#context.timelineBoxAdapter.signatureTrack
-        const beatSubDivision = this.#context.preferences.settings.metronome.beatSubDivision
+        const metronome = this.#context.preferences.settings.metronome
+        const {beatSubDivision, gain} = metronome
         blocks.forEach(({p0, p1, bpm, s0, s1, flags}) => {
             if (enabled && Bits.every(flags, BlockFlag.transporting)) {
                 for (const [curr, next] of Iterables.pairWise(signatureTrack.iterateAll())) {
@@ -35,7 +36,7 @@ export class Metronome {
                     while (position < regionEnd) {
                         const distanceToEvent = Math.floor(PPQN.pulsesToSamples(position - p0, bpm, sampleRate))
                         const beatIndex = Math.round((position - signatureStart) / stepSize)
-                        this.#clicks.push(new Click(s0 + distanceToEvent, beatIndex % denominator === 0))
+                        this.#clicks.push(new Click(s0 + distanceToEvent, beatIndex % denominator === 0, gain))
                         position += stepSize
                     }
                 }
@@ -55,13 +56,15 @@ export class Metronome {
 
 class Click {
     readonly #frequency: number
+    readonly #gainInDb: number
 
     #position: int = 0 | 0
     #startIndex: int = 0 | 0
 
-    constructor(startIndex: int, isAccent: boolean) {
+    constructor(startIndex: int, isAccent: boolean, gainInDb: number) {
         assert(startIndex >= 0 && startIndex < RenderQuantum, `${startIndex} out of bounds`)
         this.#frequency = isAccent ? 880.0 : 440.0
+        this.#gainInDb = gainInDb
         this.#startIndex = startIndex
     }
 
@@ -69,9 +72,10 @@ class Click {
         const [l, r] = buffer.channels()
         const attack = Math.floor(0.002 * sampleRate)
         const release = Math.floor(0.050 * sampleRate)
+        const gain = dbToGain(this.#gainInDb)
         for (let index = Math.max(this.#startIndex, start); index < end; index++) {
             const env = Math.min(this.#position / attack, 1.0 - (this.#position - attack) / release)
-            const amp = Math.sin(this.#position / sampleRate * TAU * this.#frequency) * 0.25 * env * env
+            const amp = Math.sin(this.#position / sampleRate * TAU * this.#frequency) * gain * env * env
             l[index] += amp
             r[index] += amp
             if (++this.#position > attack + release) {return true}
