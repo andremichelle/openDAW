@@ -109,19 +109,19 @@ export const Header = ({lifecycle, service}: Construct) => {
                       onInit={element => lifecycle.own(ContextMenu.subscribe(element, collector =>
                           collector.addItems(
                               MenuItem.default({label: "Beat Divider"})
-                                  .setRuntimeChildrenProcedure(parent => {
-                                      return parent.addMenuItem(...EngineSettings.BeatSubDivisionOptions
+                                  .setRuntimeChildrenProcedure(parent =>
+                                      parent.addMenuItem(...EngineSettings.BeatSubDivisionOptions
                                           .map(division => MenuItem.default({
                                               label: String(division),
                                               checked: settings.metronome.beatSubDivision === division
-                                          }).setTriggerProcedure(() => metronome.beatSubDivision = division)))
-                                  }),
+                                          }).setTriggerProcedure(() => metronome.beatSubDivision = division)))),
                               MenuItem.default({label: "Set Count-In (Bars)"})
-                                  .setRuntimeChildrenProcedure(parent => parent.addMenuItem(...EngineSettings.RecordingCountInBars
-                                      .map(count => MenuItem.default({
-                                          label: String(count),
-                                          checked: count === settings.recording.countInBars
-                                      }).setTriggerProcedure(() => settings.recording.countInBars = count)))))))}
+                                  .setRuntimeChildrenProcedure(parent =>
+                                      parent.addMenuItem(...EngineSettings.RecordingCountInBars
+                                          .map(count => MenuItem.default({
+                                              label: String(count),
+                                              checked: count === settings.recording.countInBars
+                                          }).setTriggerProcedure(() => settings.recording.countInBars = count)))))))}
                       model={preferences.createMutableObservableValue("metronome", "enabled")}
                       appearance={{
                           activeColor: Colors.orange,
