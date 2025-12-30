@@ -133,7 +133,7 @@ export namespace EffectFactories {
 
     export const Brick: EffectFactory = {
         defaultName: "Brick",
-        defaultIcon: IconSymbol.Peak,
+        defaultIcon: IconSymbol.Brick,
         description: "Brickwall limiter with boost capabilities",
         separatorBefore: false,
         type: "audio",

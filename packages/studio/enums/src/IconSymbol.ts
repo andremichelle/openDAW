@@ -10,6 +10,7 @@ export enum IconSymbol {
     BassGuitar,
     Book,
     Box,
+    Brick,
     Bug,
     Fold,
     Checkbox,
