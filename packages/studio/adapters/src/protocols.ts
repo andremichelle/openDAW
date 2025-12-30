@@ -10,7 +10,6 @@ export interface EngineCommands extends Terminable {
     setPosition(position: ppqn): void
     prepareRecordingState(countIn: boolean): void
     stopRecording(): void
-    setPlaybackTimestampEnabled(enabled: boolean): void
     queryLoadingComplete(): Promise<boolean>
     // throws a test error while processing audio
     panic(): void

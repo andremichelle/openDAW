@@ -1,7 +1,6 @@
 import {
     DefaultObservableValue,
     int,
-    MutableObservableValue,
     Nullable,
     ObservableValue,
     Observer,
@@ -27,7 +26,6 @@ export class EngineFacade implements Engine {
     readonly #terminator: Terminator = new Terminator()
     readonly #lifecycle: Terminator = this.#terminator.own(new Terminator())
     readonly #playbackTimestamp: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
-    readonly #playbackTimestampEnabled: DefaultObservableValue<boolean> = new DefaultObservableValue(true)
     readonly #countInBeatsRemaining: DefaultObservableValue<int> = new DefaultObservableValue(0)
     readonly #position: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
     readonly #bpm: DefaultObservableValue<bpm> = new DefaultObservableValue(12.0)
@@ -48,15 +46,13 @@ export class EngineFacade implements Engine {
         this.#lifecycle.terminate()
         this.#lifecycle.ownAll(
             worklet.playbackTimestamp.catchupAndSubscribe(owner => this.#playbackTimestamp.setValue(owner.getValue())),
-            worklet.playbackTimestampEnabled.catchupAndSubscribe(owner => this.#playbackTimestampEnabled.setValue(owner.getValue())),
             worklet.countInBeatsRemaining.catchupAndSubscribe(owner => this.#countInBeatsRemaining.setValue(owner.getValue())),
             worklet.position.catchupAndSubscribe(owner => this.#position.setValue(owner.getValue())),
             worklet.bpm.catchupAndSubscribe(owner => this.#bpm.setValue(owner.getValue())),
             worklet.isPlaying.catchupAndSubscribe(owner => this.#isPlaying.setValue(owner.getValue())),
             worklet.isRecording.catchupAndSubscribe(owner => this.#isRecording.setValue(owner.getValue())),
             worklet.isCountingIn.catchupAndSubscribe(owner => this.#isCountingIn.setValue(owner.getValue())),
-            worklet.markerState.catchupAndSubscribe(owner => this.#markerState.setValue(owner.getValue())),
-            this.#playbackTimestampEnabled.catchupAndSubscribe(owner => worklet.playbackTimestampEnabled.setValue(owner.getValue()))
+            worklet.markerState.catchupAndSubscribe(owner => this.#markerState.setValue(owner.getValue()))
         )
     }
 
@@ -81,7 +77,6 @@ export class EngineFacade implements Engine {
     get isRecording(): ObservableValue<boolean> {return this.#isRecording}
     get isCountingIn(): ObservableValue<boolean> {return this.#isCountingIn}
     get playbackTimestamp(): ObservableValue<ppqn> {return this.#playbackTimestamp}
-    get playbackTimestampEnabled(): MutableObservableValue<boolean> {return this.#playbackTimestampEnabled}
     get countInBeatsRemaining(): ObservableValue<int> {return this.#countInBeatsRemaining}
     get markerState(): DefaultObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get project(): Project {return this.#worklet.unwrap("No worklet to get project").project}

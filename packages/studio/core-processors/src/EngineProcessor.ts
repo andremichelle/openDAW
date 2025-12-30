@@ -111,7 +111,6 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     #valid: boolean = true // to shut down the engine
     #recordingStartTime: ppqn = 0.0
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
-    #playbackTimestampEnabled: boolean = true
 
     constructor({processorOptions: {syncStreamBuffer, controlFlagsBuffer, project, exportConfiguration, options}}: {
         processorOptions: EngineProcessorAttachment
@@ -200,7 +199,6 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                 setPosition: (position: number): void => this.#setPosition(position),
                 prepareRecordingState: (countIn: boolean): void => this.#prepareRecordingState(countIn),
                 stopRecording: (): void => this.#stopRecording(),
-                setPlaybackTimestampEnabled: (value: boolean) => this.#playbackTimestampEnabled = value,
                 queryLoadingComplete: (): Promise<boolean> =>
                     Promise.resolve(this.#boxGraph.boxes().every(box => box.accept<BoxVisitor<boolean>>({
                         visitAudioFileBox: (box: AudioFileBox) =>
@@ -402,7 +400,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     }
 
     #play(): void {
-        if (this.#playbackTimestampEnabled) {
+        if (this.#preferences.settings.playback.timestampEnabled) {
             this.#timeInfo.position = this.#playbackTimestamp
             this.#midiTransportClock.schedule(MidiData.positionInPPQN(this.#timeInfo.position))
         }
@@ -414,7 +412,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         if (this.#timeInfo.isRecording || this.#timeInfo.isCountingIn) {
             this.#timeInfo.isRecording = false
             this.#timeInfo.isCountingIn = false
-            this.#timeInfo.position = this.#playbackTimestampEnabled ? this.#playbackTimestamp : 0.0
+            this.#timeInfo.position = this.#preferences.settings.playback.timestampEnabled ? this.#playbackTimestamp : 0.0
             this.#midiTransportClock.schedule(MidiData.positionInPPQN(this.#timeInfo.position))
         }
         const wasTransporting = this.#timeInfo.transporting

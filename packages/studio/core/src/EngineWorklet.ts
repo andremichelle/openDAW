@@ -47,7 +47,6 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
 
     readonly #project: Project
     readonly #playbackTimestamp: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
-    readonly #playbackTimestampEnabled: DefaultObservableValue<boolean> = new DefaultObservableValue(true)
     readonly #position: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
     readonly #bpm: DefaultObservableValue<bpm> = new DefaultObservableValue(120.0)
     readonly #isPlaying: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
@@ -113,15 +112,6 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                         dispatcher.dispatchAndForget(this.prepareRecordingState, countIn)
                     }
                     stopRecording() {dispatcher.dispatchAndForget(this.stopRecording)}
-                    setMetronomeEnabled(enabled: boolean): void {
-                        dispatcher.dispatchAndForget(this.setMetronomeEnabled, enabled)
-                    }
-                    setPlaybackTimestampEnabled(enabled: boolean): void {
-                        dispatcher.dispatchAndForget(this.setPlaybackTimestampEnabled, enabled)
-                    }
-                    setCountInBarsTotal(value: int): void {
-                        dispatcher.dispatchAndForget(this.setCountInBarsTotal, value)
-                    }
                     queryLoadingComplete(): Promise<boolean> {
                         return dispatcher.dispatchAndReturn(this.queryLoadingComplete)
                     }
@@ -200,9 +190,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             AnimationFrame.add(() => reader.tryRead()),
             project.liveStreamReceiver.connect(messenger.channel("engine-live-data")),
             this.#preferences.syncWith(messenger.channel("engine-preferences")),
-            new SyncSource<BoxIO.TypeMap>(project.boxGraph, messenger.channel("engine-sync"), false),
-            this.#playbackTimestampEnabled.catchupAndSubscribe(owner =>
-                this.#commands.setPlaybackTimestampEnabled(owner.getValue()))
+            new SyncSource<BoxIO.TypeMap>(project.boxGraph, messenger.channel("engine-sync"), false)
         )
     }
 
@@ -225,7 +213,6 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get position(): ObservableValue<ppqn> {return this.#position}
     get bpm(): ObservableValue<bpm> {return this.#bpm}
     get playbackTimestamp(): MutableObservableValue<number> {return this.#playbackTimestamp}
-    get playbackTimestampEnabled(): MutableObservableValue<boolean> {return this.#playbackTimestampEnabled}
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get project(): Project {return this.#project}
     get preferences(): PreferencesHost<EngineSettings> {return this.#preferences}

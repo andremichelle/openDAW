@@ -24,6 +24,7 @@ type Construct = {
 
 export const TransportGroup = ({lifecycle, service}: Construct) => {
     const {engine, projectProfileService} = service
+    const {preferences: {settings: {playback}}} = engine
     const loop = new DefaultObservableValue(false)
     const recordButton: HTMLElement = (
         <Button lifecycle={lifecycle}
@@ -73,9 +74,8 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
             .addItems(
                 MenuItem.default({
                     label: "Resume from last playback starting position",
-                    checked: engine.playbackTimestampEnabled.getValue()
-                }).setTriggerProcedure(() => engine.playbackTimestampEnabled
-                    .setValue(!engine.playbackTimestampEnabled.getValue()))
+                    checked: playback.timestampEnabled
+                }).setTriggerProcedure(() => playback.timestampEnabled = !playback.timestampEnabled)
             )),
         projectProfileService.catchupAndSubscribe((optProfile: Option<ProjectProfile>) => {
             loopLifecycle.terminate()

@@ -1,13 +1,4 @@
-import {
-    int,
-    MutableObservableValue,
-    Nullable,
-    ObservableValue,
-    Observer,
-    Subscription,
-    Terminable,
-    UUID
-} from "@opendaw/lib-std"
+import {int, Nullable, ObservableValue, Observer, Subscription, Terminable, UUID} from "@opendaw/lib-std"
 import {bpm, ppqn} from "@opendaw/lib-dsp"
 import {ClipNotification, EnginePreferences, NoteSignal} from "@opendaw/studio-adapters"
 import {Project} from "./project"
@@ -37,7 +28,6 @@ export interface Engine extends Terminable {
     get isRecording(): ObservableValue<boolean>
     get isCountingIn(): ObservableValue<boolean>
     get playbackTimestamp(): ObservableValue<ppqn>
-    get playbackTimestampEnabled(): MutableObservableValue<boolean>
     get countInBeatsRemaining(): ObservableValue<number>
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>>
     get project(): Project
