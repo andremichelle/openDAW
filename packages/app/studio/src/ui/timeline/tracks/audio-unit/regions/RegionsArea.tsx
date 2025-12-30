@@ -99,6 +99,12 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             editing.modify(() => selected.forEach(region => region.box.delete()))
             return true
         }),
+        shortcuts.register(RegionsShortcuts["toggle-mute"].shortcut, () => {
+            const selected = regionSelection.selected()
+            if (selected.length === 0) {return false}
+            editing.modify(() => selected.forEach(({box: {mute}}) => mute.toggle()))
+            return true
+        }),
         installRegionContextMenu({timelineBox, element, service, capturing, selection: regionSelection, range}),
         Events.subscribeDblDwn(element, event => {
             const target = capturing.captureEvent(event)

@@ -17,6 +17,7 @@ import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {StudioService} from "@/service/StudioService"
 import {AudioContentModifier, TimelineRange} from "@opendaw/studio-core"
 import {Promises} from "@opendaw/lib-runtime"
+import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 
 type Construct = {
     element: Element
@@ -48,8 +49,11 @@ export const installRegionContextMenu =
                 MenuItem.default({label: "Delete", shortcut: "⌫"})
                     .setTriggerProcedure(() => editing.modify(() => selection.selected().slice()
                         .forEach(adapter => adapter.box.delete()))),
-                MenuItem.default({label: "Mute", checked: region.mute})
-                    .setTriggerProcedure(() => editing.modify(() => {
+                MenuItem.default({
+                    label: "Mute",
+                    checked: region.mute,
+                    shortcut: RegionsShortcuts["toggle-mute"].shortcut.format()
+                }).setTriggerProcedure(() => editing.modify(() => {
                         const newValue = !region.mute
                         return selection.selected().slice().forEach(adapter => adapter.box.mute.setValue(newValue))
                     })),
