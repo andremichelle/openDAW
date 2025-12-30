@@ -55,5 +55,6 @@ export const Manuals: ReadonlyArray<Manual> = [
         ]
     },
     {type: "page", label: "Tech Stack", path: "/manuals/tech-stack", separatorBefore: true},
-    {type: "page", label: "Dev Log", path: "/manuals/dev-log"}
+    {type: "page", label: "Dev Log", path: "/manuals/dev-log"},
+    {type: "page", label: "How to create a device in openDAW?", path: "/manuals/creating-a-device"}
 ]

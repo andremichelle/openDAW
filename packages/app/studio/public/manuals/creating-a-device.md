@@ -1,5 +1,9 @@
 # Creating an Audio Effect Device for openDAW
 
+### Disclaimer
+
+This document requires a PR to be included in openDAW. It is not yet an open device API and involves substantial manual work.
+
 This guide documents how to create a complete audio effect device in openDAW. We'll use the "Brick" brickwall limiter as a reference implementation.
 
 ## Overview
@@ -17,7 +21,7 @@ Creating a device requires these components:
 
 Location: `packages/studio/forge-boxes/src/schema/devices/audio-effects/`
 
-Create a new file `YourDeviceBox.ts`:
+Create a new file **YourDeviceBox.ts**:
 
 ```typescript
 import {BoxSchema} from "@opendaw/lib-box-forge"
@@ -46,7 +50,7 @@ export const YourDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffec
 
 ## Step 2: Export the Schema
 
-Edit `packages/studio/forge-boxes/src/schema/devices/index.ts`:
+Edit **index.ts** at `packages/studio/forge-boxes/src/schema/devices/`:
 
 ```typescript
 import {YourDeviceBox} from "./audio-effects/YourDeviceBox"
@@ -66,13 +70,13 @@ Run from the forge-boxes directory:
 cd packages/studio/forge-boxes && npm run build
 ```
 
-This generates `packages/studio/boxes/src/YourDeviceBox.ts` with typed fields and visitor pattern support.
+This generates **YourDeviceBox.ts** in `packages/studio/boxes/src/` with typed fields and visitor pattern support.
 
 ## Step 4: Create the Adapter
 
 Location: `packages/studio/adapters/src/devices/audio-effects/`
 
-Create `YourDeviceBoxAdapter.ts`:
+Create **YourDeviceBoxAdapter.ts**:
 
 ```typescript
 import {Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
@@ -134,17 +138,11 @@ export class YourDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 }
 ```
 
-**Export the adapter** in `packages/studio/adapters/src/index.ts`:
-
-```typescript
-export * from "./devices/audio-effects/YourDeviceBoxAdapter"
-```
-
 ## Step 5: Create the Processor
 
 Location: `packages/studio/core-processors/src/devices/audio-effects/`
 
-Create `YourDeviceProcessor.ts`:
+Create **YourDeviceProcessor.ts**:
 
 ```typescript
 import {int, Option, Terminable, UUID} from "@opendaw/lib-std"
@@ -234,7 +232,7 @@ export class YourDeviceProcessor extends AudioProcessor implements AudioEffectDe
 
 Location: `packages/app/studio/src/ui/devices/audio-effects/`
 
-Create `YourDeviceEditor.sass`:
+Create **YourDeviceEditor.sass**:
 
 ```sass
 @use "@/mixins"
@@ -248,7 +246,7 @@ component
   @include mixins.Control
 ```
 
-Create `YourDeviceEditor.tsx`:
+Create **YourDeviceEditor.tsx**:
 
 ```tsx
 import css from "./YourDeviceEditor.sass?inline"
@@ -318,7 +316,7 @@ export const YourDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
 
 ### 7.1 EffectFactories
 
-Edit `packages/studio/core/src/EffectFactories.ts`:
+Edit **EffectFactories.ts** at `packages/studio/core/src/`:
 
 ```typescript
 import {YourDeviceBox} from "@opendaw/studio-boxes"
@@ -346,7 +344,7 @@ export const AudioNamed = {
 
 ### 7.2 EffectBox Type
 
-Edit `packages/studio/core/src/EffectBox.ts`:
+Edit **EffectBox.ts** at `packages/studio/core/src/`:
 
 ```typescript
 import {YourDeviceBox} from "@opendaw/studio-boxes"
@@ -357,7 +355,7 @@ export type EffectBox =
 
 ### 7.3 DeviceProcessorFactory
 
-Edit `packages/studio/core-processors/src/DeviceProcessorFactory.ts`:
+Edit **DeviceProcessorFactory.ts** at `packages/studio/core-processors/src/`:
 
 ```typescript
 import {YourDeviceBox} from "@opendaw/studio-boxes"
@@ -371,7 +369,7 @@ visitYourDeviceBox: (box: YourDeviceBox): AudioEffectDeviceProcessor =>
 
 ### 7.4 DeviceEditorFactory
 
-Edit `packages/app/studio/src/ui/devices/DeviceEditorFactory.tsx`:
+Edit **DeviceEditorFactory.tsx** at `packages/app/studio/src/ui/devices/`:
 
 ```typescript
 import {YourDeviceBox} from "@opendaw/studio-boxes"
@@ -389,7 +387,7 @@ visitYourDeviceBox: (box: YourDeviceBox) => (
 
 ### 7.5 BoxAdapters
 
-Edit `packages/studio/adapters/src/BoxAdapters.ts`:
+Edit **BoxAdapters.ts** at `packages/studio/adapters/src/`:
 
 ```typescript
 import {YourDeviceBox} from "@opendaw/studio-boxes"
