@@ -23,9 +23,11 @@ import {Runtime} from "@opendaw/lib-runtime"
 
 const className = Html.adoptStyleSheet(css, "vertical-slider")
 
-const enum MarkerLength {Short, Long}
+export const enum MarkerLength {Short, Long}
 
-const markers: ReadonlyArray<{ length: MarkerLength, decibel: number }> = [
+export type VolumeMarker = { length: MarkerLength, decibel: number }
+
+export const DefaultVolumeMarkers: ReadonlyArray<VolumeMarker> = [
     {length: MarkerLength.Long, decibel: +6.0},
     {length: MarkerLength.Short, decibel: +5.0},
     {length: MarkerLength.Short, decibel: +4.0},
@@ -66,13 +68,45 @@ const markers: ReadonlyArray<{ length: MarkerLength, decibel: number }> = [
     {length: MarkerLength.Long, decibel: -96.0}
 ] as const
 
+export const PushVolumeMarkers: ReadonlyArray<VolumeMarker> = [
+    {length: MarkerLength.Long, decibel: +3.0},
+    {length: MarkerLength.Short, decibel: +2.0},
+    {length: MarkerLength.Short, decibel: +1.0},
+    {length: MarkerLength.Long, decibel: +0.0},
+    {length: MarkerLength.Short, decibel: -1.0},
+    {length: MarkerLength.Short, decibel: -2.0},
+    {length: MarkerLength.Long, decibel: -3.0},
+    {length: MarkerLength.Short, decibel: -4.0},
+    {length: MarkerLength.Short, decibel: -5.0},
+    {length: MarkerLength.Long, decibel: -6.0},
+    {length: MarkerLength.Short, decibel: -7.0},
+    {length: MarkerLength.Short, decibel: -8.0},
+    {length: MarkerLength.Long, decibel: -9.0},
+    {length: MarkerLength.Short, decibel: -10.0},
+    {length: MarkerLength.Short, decibel: -11.0},
+    {length: MarkerLength.Long, decibel: -12.0},
+    {length: MarkerLength.Short, decibel: -13.0},
+    {length: MarkerLength.Short, decibel: -14.0},
+    {length: MarkerLength.Long, decibel: -15.0},
+    {length: MarkerLength.Short, decibel: -16.0},
+    {length: MarkerLength.Short, decibel: -17.0},
+    {length: MarkerLength.Long, decibel: -18.0},
+    {length: MarkerLength.Short, decibel: -19.0},
+    {length: MarkerLength.Short, decibel: -20.0},
+    {length: MarkerLength.Long, decibel: -21.0},
+    {length: MarkerLength.Short, decibel: -22.0},
+    {length: MarkerLength.Short, decibel: -23.0},
+    {length: MarkerLength.Long, decibel: -24.0}
+] as const
+
 type Construct = {
     lifecycle: Lifecycle
     editing: BoxEditing
     parameter: Parameter<number>
+    markers?: ReadonlyArray<VolumeMarker>
 }
 
-export const VolumeSlider = ({lifecycle, editing, parameter}: Construct) => {
+export const VolumeSlider = ({lifecycle, editing, parameter, markers = DefaultVolumeMarkers}: Construct) => {
     const strokeWidth = 1.0 / devicePixelRatio
     const guide: SVGRectElement = (
         <rect width="0.125em"

@@ -1,5 +1,5 @@
 import css from "./PushDeviceEditor.sass?inline"
-import {PushDeviceBoxAdapter, DeviceHost} from "@opendaw/studio-adapters"
+import {DeviceHost, PushDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
@@ -8,7 +8,7 @@ import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {EffectFactories} from "@opendaw/studio-core"
-import {VolumeSlider} from "@/ui/components/VolumeSlider"
+import {PushVolumeMarkers, VolumeSlider} from "@/ui/components/VolumeSlider"
 import {Meters} from "@/ui/devices/audio-effects/Push/Meters"
 import {ControlIndicator} from "@/ui/components/ControlIndicator"
 
@@ -55,12 +55,15 @@ export const PushDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                                           editing.modify(() => adapter.box.lookahead.setValue(
                                               !adapter.box.lookahead.getValue())))
                                   )
-                              }}>Lookahead</div>
+                              }}>Lookahead
+                              </div>
                               <div className="slider-section">
-                                  <ControlIndicator lifecycle={lifecycle} parameter={threshold}>
+                                  <ControlIndicator lifecycle={lifecycle}
+                                                    parameter={threshold}>
                                       <VolumeSlider lifecycle={lifecycle}
                                                     editing={editing}
-                                                    parameter={threshold}/>
+                                                    parameter={threshold}
+                                                    markers={PushVolumeMarkers}/>
                                   </ControlIndicator>
                               </div>
                           </div>
