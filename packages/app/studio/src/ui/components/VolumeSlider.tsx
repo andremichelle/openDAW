@@ -68,7 +68,7 @@ export const DefaultVolumeMarkers: ReadonlyArray<VolumeMarker> = [
     {length: MarkerLength.Long, decibel: -96.0}
 ] as const
 
-export const PushVolumeMarkers: ReadonlyArray<VolumeMarker> = [
+export const MaximizerVolumeMarkers: ReadonlyArray<VolumeMarker> = [
     {length: MarkerLength.Long, decibel: +3.0},
     {length: MarkerLength.Short, decibel: +2.0},
     {length: MarkerLength.Short, decibel: +1.0},
@@ -142,13 +142,11 @@ export const VolumeSlider = ({lifecycle, editing, parameter, markers = DefaultVo
         Html.watchResize(wrapper, () => {
             if (!wrapper.isConnected) {return}
             lineContainer.setAttribute("stroke-width", String(strokeWidth))
-
             const {baseVal: rect} = svg.viewBox
             const {clientWidth, clientHeight} = wrapper
             rect.width = clientWidth
             rect.height = clientHeight
             const em = parseFloat(getComputedStyle(wrapper).fontSize)
-
             guide.x.baseVal.value = CssUtils.calc("50% - 0.0625em", clientWidth, em)
             guide.y.baseVal.value = CssUtils.calc("1em - 1px", clientHeight, em)
             guide.height.baseVal.value = CssUtils.calc("100% - 2em + 1.5px", clientHeight, em)

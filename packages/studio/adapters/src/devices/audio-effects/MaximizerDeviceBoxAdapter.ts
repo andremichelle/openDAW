@@ -1,6 +1,6 @@
 import {Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
-import {PushDeviceBox} from "@opendaw/studio-boxes"
+import {MaximizerDeviceBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
@@ -9,25 +9,25 @@ import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 
-export class PushDeviceBoxAdapter implements AudioEffectDeviceAdapter {
+export class MaximizerDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly type = "audio-effect"
     readonly accepts = "audio"
-    readonly manualUrl = DeviceManualUrls.Push
+    readonly manualUrl = DeviceManualUrls.Maximizer
 
     readonly #context: BoxAdaptersContext
-    readonly #box: PushDeviceBox
+    readonly #box: MaximizerDeviceBox
 
     readonly #parametric: ParameterAdapterSet
     readonly namedParameter // let typescript infer the type
 
-    constructor(context: BoxAdaptersContext, box: PushDeviceBox) {
+    constructor(context: BoxAdaptersContext, box: MaximizerDeviceBox) {
         this.#context = context
         this.#box = box
         this.#parametric = new ParameterAdapterSet(this.#context)
         this.namedParameter = this.#wrapParameters(box)
     }
 
-    get box(): PushDeviceBox {return this.#box}
+    get box(): MaximizerDeviceBox {return this.#box}
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get indexField(): Int32Field {return this.#box.index}
@@ -49,7 +49,7 @@ export class PushDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 
     terminate(): void {this.#parametric.terminate()}
 
-    #wrapParameters(box: PushDeviceBox) {
+    #wrapParameters(box: MaximizerDeviceBox) {
         return {
             threshold: this.#parametric.createParameter(
                 box.threshold,

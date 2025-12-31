@@ -1,5 +1,5 @@
-import css from "./PushDeviceEditor.sass?inline"
-import {DeviceHost, PushDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import css from "./MaximizerDeviceEditor.sass?inline"
+import {DeviceHost, MaximizerDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
@@ -8,20 +8,20 @@ import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {EffectFactories} from "@opendaw/studio-core"
-import {PushVolumeMarkers, VolumeSlider} from "@/ui/components/VolumeSlider"
-import {Meters} from "@/ui/devices/audio-effects/Push/Meters"
+import {MaximizerVolumeMarkers, VolumeSlider} from "@/ui/components/VolumeSlider"
+import {Meters} from "@/ui/devices/audio-effects/Maximizer/Meters"
 import {ControlIndicator} from "@/ui/components/ControlIndicator"
 
-const className = Html.adoptStyleSheet(css, "PushDeviceEditor")
+const className = Html.adoptStyleSheet(css, "MaximizerDeviceEditor")
 
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
-    adapter: PushDeviceBoxAdapter
+    adapter: MaximizerDeviceBoxAdapter
     deviceHost: DeviceHost
 }
 
-export const PushDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
+export const MaximizerDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
     const {editing} = project
     const {threshold} = adapter.namedParameter
@@ -63,7 +63,7 @@ export const PushDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                                       <VolumeSlider lifecycle={lifecycle}
                                                     editing={editing}
                                                     parameter={threshold}
-                                                    markers={PushVolumeMarkers}/>
+                                                    markers={MaximizerVolumeMarkers}/>
                                   </ControlIndicator>
                               </div>
                           </div>
@@ -73,6 +73,6 @@ export const PushDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
                       )}
-                      icon={EffectFactories.AudioNamed.Push.defaultIcon}/>
+                      icon={EffectFactories.AudioNamed.Maximizer.defaultIcon}/>
     )
 }

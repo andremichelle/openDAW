@@ -163,6 +163,6 @@ export namespace StringMapping {
         return isDefined(prefix) ? {value: value * Math.pow(10.0, location * -3.0), prefix} : {value, prefix: ""}
     }
 
-    export const decible = StringMapping.numeric({unit: "db", fractionDigits: 1})
+    export const decible = StringMapping.numeric({unit: "db", fractionDigits: 2})
     export const panning = StringMapping.percent({unit: "%", fractionDigits: 0})
 }

@@ -10,7 +10,7 @@ export enum IconSymbol {
     BassGuitar,
     Book,
     Box,
-    Push,
+    Maximizer,
     Bug,
     Fold,
     Checkbox,
@@ -131,6 +131,7 @@ export enum IconSymbol {
     UserFolder,
     Velocity,
     Vinyl,
+    Volume,
     VUMeter,
     Waveform,
     Zeitgeist

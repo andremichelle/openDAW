@@ -22,7 +22,7 @@ import {
     AudioUnitBox,
     AuxSendBox,
     BoxVisitor,
-    PushDeviceBox,
+    MaximizerDeviceBox,
     CompressorDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
@@ -117,7 +117,7 @@ import {UnknownAudioEffectDeviceBoxAdapter} from "./devices/audio-effects/Unknow
 import {UnknownMidiEffectDeviceBoxAdapter} from "./devices/midi-effects/UnknownMidiEffectDeviceBoxAdapter"
 import {SoundfontDeviceBoxAdapter} from "./devices/instruments/SoundfontDeviceBoxAdapter"
 import {SoundfontFileBoxAdapter} from "./soundfont/SoundfontFileBoxAdapter"
-import {PushDeviceBoxAdapter} from "./devices/audio-effects/PushDeviceBoxAdapter"
+import {MaximizerDeviceBoxAdapter} from "./devices/audio-effects/MaximizerDeviceBoxAdapter"
 import {CompressorDeviceBoxAdapter} from "./devices/audio-effects/CompressorDeviceBoxAdapter"
 import {CrusherDeviceBoxAdapter} from "./devices/audio-effects/CrusherDeviceBoxAdapter"
 import {FoldDeviceBoxAdapter} from "./devices/audio-effects/FoldDeviceBoxAdapter"
@@ -193,7 +193,7 @@ export class BoxAdapters implements Terminable {
             visitAudioRegionBox: (box: AudioRegionBox) => new AudioRegionBoxAdapter(this.#context, box),
             visitAudioUnitBox: (box: AudioUnitBox) => new AudioUnitBoxAdapter(this.#context, box),
             visitAuxSendBox: (box: AuxSendBox): BoxAdapter => new AuxSendBoxAdapter(this.#context, box),
-            visitPushDeviceBox: (box: PushDeviceBox) => new PushDeviceBoxAdapter(this.#context, box),
+            visitMaximizerDeviceBox: (box: MaximizerDeviceBox) => new MaximizerDeviceBoxAdapter(this.#context, box),
             visitCompressorDeviceBox: (box: CompressorDeviceBox) => new CompressorDeviceBoxAdapter(this.#context, box),
             visitCrusherDeviceBox: (box: CrusherDeviceBox) => new CrusherDeviceBoxAdapter(this.#context, box),
             visitDattorroReverbDeviceBox: (box: DattorroReverbDeviceBox) => new DattorroReverbDeviceBoxAdapter(this.#context, box),

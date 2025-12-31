@@ -1,5 +1,5 @@
 import {int, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioEffectDeviceAdapter, PushDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {AudioEffectDeviceAdapter, MaximizerDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {EngineContext} from "../../EngineContext"
 import {Block, Processor} from "../../processing"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
@@ -10,24 +10,24 @@ import {AudioProcessor} from "../../AudioProcessor"
 
 const RELEASE_IN_SECONDS = 0.2
 const LOOK_AHEAD_SECONDS = 0.005
-const MAGIC_HEADROOM = -0.1
+const MAGIC_HEADROOM = -1e-2
 
-export class PushDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {
+export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {
     static ID: int = 0 | 0
 
-    readonly #id: int = PushDeviceProcessor.ID++
+    readonly #id: int = MaximizerDeviceProcessor.ID++
 
-    readonly #adapter: PushDeviceBoxAdapter
+    readonly #adapter: MaximizerDeviceBoxAdapter
     readonly #output: AudioBuffer
     readonly #inputPeaks: PeakBroadcaster
     readonly #outputPeaks: PeakBroadcaster
 
     readonly parameterThreshold: AutomatableParameter<number>
     readonly #buffer: [Float32Array, Float32Array]
+    readonly #threshold: Ramp<number>
+    readonly #reductionValue = new Float32Array(1)
     readonly #releaseCoeff: number
     readonly #lookAheadFrames: int
-    readonly #threshold: Ramp<number> = Ramp.linear(sampleRate, 0.010)
-    readonly #reductionValue = new Float32Array(1)
 
     #position: int = 0 | 0
     #envelope: number = 0.0
@@ -39,7 +39,7 @@ export class PushDeviceProcessor extends AudioProcessor implements AudioEffectDe
 
     #source: Option<AudioBuffer> = Option.None
 
-    constructor(context: EngineContext, adapter: PushDeviceBoxAdapter) {
+    constructor(context: EngineContext, adapter: MaximizerDeviceBoxAdapter) {
         super(context)
 
         this.#adapter = adapter
@@ -47,6 +47,7 @@ export class PushDeviceProcessor extends AudioProcessor implements AudioEffectDe
         this.#inputPeaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address.append(1)))
         this.#outputPeaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
         this.#releaseCoeff = Math.exp(-1.0 / (sampleRate * RELEASE_IN_SECONDS))
+        this.#threshold = Ramp.linear(sampleRate, 0.010)
         this.#lookAheadFrames = Math.ceil(LOOK_AHEAD_SECONDS * sampleRate) | 0
         this.#buffer = [
             new Float32Array(this.#lookAheadFrames),

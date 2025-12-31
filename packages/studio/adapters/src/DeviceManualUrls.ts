@@ -9,7 +9,7 @@ export namespace DeviceManualUrls {
     export const StereoTool = "manuals/devices/audio/stereo-tool"
     export const Delay = "manuals/devices/audio/delay"
     export const DattorroReverb = "manuals/devices/audio/dattorro-reverb"
-    export const Push = "manuals/devices/audio/push"
+    export const Maximizer = "manuals/devices/audio/maximizer"
     export const Compressor = "manuals/devices/audio/compressor"
     export const Reverb = "manuals/devices/audio/cheap-reverb"
     export const Crusher = "manuals/devices/audio/crusher"

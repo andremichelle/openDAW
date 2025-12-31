@@ -1,13 +1,13 @@
 import {UUID} from "@opendaw/lib-std"
 import {
     ArpeggioDeviceBox,
-    PushDeviceBox,
     CompressorDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
     DelayDeviceBox,
     FoldDeviceBox,
     GrooveShuffleBox,
+    MaximizerDeviceBox,
     ModularAudioInputBox,
     ModularAudioOutputBox,
     ModularBox,
@@ -138,16 +138,16 @@ export namespace EffectFactories {
             })
     }
 
-    export const Push: EffectFactory = {
-        defaultName: "Push",
-        defaultIcon: IconSymbol.Push,
-        description: "Brickwall limiter with boost capabilities",
-        manualPage: DeviceManualUrls.Push,
+    export const Maximizer: EffectFactory = {
+        defaultName: "Maximizer",
+        defaultIcon: IconSymbol.Volume,
+        description: "Brickwall limiter with automatic makeup gain",
+        manualPage: DeviceManualUrls.Maximizer,
         separatorBefore: false,
         type: "audio",
-        create: ({boxGraph}, hostField, index): PushDeviceBox =>
-            PushDeviceBox.create(boxGraph, UUID.generate(), box => {
-                box.label.setValue("Push")
+        create: ({boxGraph}, hostField, index): MaximizerDeviceBox =>
+            MaximizerDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("Maximizer")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
@@ -286,7 +286,7 @@ export namespace EffectFactories {
 
     export const MidiNamed = {Arpeggio, Pitch, Velocity, Zeitgeist}
     export const AudioNamed = {
-        StereoTool, Compressor, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal, Push
+        StereoTool, Compressor, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal, Maximizer
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(MidiNamed)
     export const AudioList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(AudioNamed)
