@@ -10,25 +10,27 @@ A brickwall limiter with automatic makeup gain for loudness maximization.
 
 ## 0. Overview
 
-_Maximizer_ is a peak limiter that prevents audio from exceeding -0.1 dB. It applies gain reduction when peaks exceed the threshold, then automatically boosts the output to reach the ceiling.
-
-Example uses:
-
-- Final limiting on the master bus
-- Loudness maximization for streaming platforms
-- Taming transient peaks on individual tracks
+_Maximizer_ is a peak limiter that prevents audio from exceeding 0 dB (with lookahead enabled). It applies gain reduction when peaks exceed the threshold, then automatically boosts the output to reach the ceiling.
 
 ---
 
-## 1. Threshold
+## 1. Thoughts on Loudness
+
+From the 1990s to 2010s, the music industry waged a "loudness war" — crushing dynamics to make records louder. This ended when streaming platforms introduced loudness normalization (around **-14 LUFS**). Over-compressed tracks now get turned _down_, revealing their damaged dynamics.
+
+Use Maximizer for **peak control**, not loudness wars. If you're seeing more than 6 dB of constant reduction, fix your mix first.
+
+---
+
+## 2. Threshold
 
 Level above which limiting begins. Range: **-24 dB to 0 dB**.
 
-Lower threshold = more limiting = louder output. Maximizer automatically applies makeup gain to bring the output up to the -0.1 dB ceiling.
+Lower threshold = more limiting = louder output. Maximizer automatically applies makeup gain to bring the output up to the ceiling.
 
 ---
 
-## 2. Lookahead
+## 3. Lookahead
 
 Enables 5ms lookahead for the envelope detector.
 
@@ -37,7 +39,7 @@ Enables 5ms lookahead for the envelope detector.
 
 ---
 
-## 3. Meters
+## 4. Meters
 
 - **Left pair**: Input level (peak and RMS)
 - **Center bar**: Gain reduction (**0 dB to -24 dB**)
@@ -45,29 +47,17 @@ Enables 5ms lookahead for the envelope detector.
 
 ---
 
-## 4. Preparing Your Mix
+## 5. Preparing Your Mix
 
 For Maximizer to be effective, your mix needs headroom before the limiter.
-
-### 4.1 Peak Headroom
 
 - **-6 dB peaks**: Good headroom for moderate limiting
 - **-3 dB peaks**: Minimal headroom, aggressive limiting required
 - **0 dB peaks**: No headroom, limiter cannot help
 
-### 4.2 Spectral Separation
-
-When multiple elements compete for the same frequencies, they stack and create peaks. A clean mix gives each element its own space:
-
-- Use EQ to carve frequency space for each instrument
-- High-pass filter elements that don't need low frequencies
-- Avoid boosting the same frequencies on multiple tracks
-- Pan elements to create stereo separation
-
 ---
 
-## 5. Technical Notes
+## 6. Technical Notes
 
 - Attack time: 5ms linear ramp (matches lookahead)
 - Release time: 200ms exponential decay
-- Output ceiling: -0.1 dB (prevents inter-sample clipping)

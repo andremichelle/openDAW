@@ -1,4 +1,4 @@
-import {int, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {clamp, int, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioEffectDeviceAdapter, MaximizerDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {EngineContext} from "../../EngineContext"
 import {Block, Processor} from "../../processing"
@@ -10,7 +10,7 @@ import {AudioProcessor} from "../../AudioProcessor"
 
 const RELEASE_IN_SECONDS = 0.2
 const LOOK_AHEAD_SECONDS = 0.005
-const MAGIC_HEADROOM = -1e-2
+const MAGIC_HEADROOM = -1e-3
 
 export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {
     static ID: int = 0 | 0
@@ -141,8 +141,8 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
                 const gain = dbToGain(reductionDb) * dbToGain(MAGIC_HEADROOM - threshold)
                 const out0 = buffer0[this.#position] * gain
                 const out1 = buffer1[this.#position] * gain
-                outL[i] = out0
-                outR[i] = out1
+                outL[i] = clamp(out0, -1.0, +1.0)
+                outR[i] = clamp(out1, -1.0, +1.0)
                 buffer0[this.#position] = inp0
                 buffer1[this.#position] = inp1
                 this.#position = (this.#position + 1) % frames
