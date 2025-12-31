@@ -16,7 +16,7 @@ type Construct = {
 
 export const Meters = ({lifecycle, inputPeaks, outputPeaks, reduction}: Construct) => {
     const meterWidth = 8
-    const meterGap = 2
+    const meterGap = 3
     const labelWidth = 14
     const padding = 8
 
@@ -45,7 +45,7 @@ export const Meters = ({lifecycle, inputPeaks, outputPeaks, reduction}: Construc
               fill={rmsFill} rx="1" ry="1"/>
     ]
 
-    const bgRects: ReadonlyArray<SVGRectElement> = [
+    const backgroundRects: ReadonlyArray<SVGRectElement> = [
         <rect x={labelWidth} y="0" width={meterWidth} fill={backgroundFill} rx="1" ry="1"/>,
         <rect x={labelWidth + meterWidth + meterGap} y="0" width={meterWidth} fill={backgroundFill} rx="1" ry="1"/>,
         <rect x={labelWidth + (meterWidth + meterGap) * 2} y="0" width={meterWidth} fill={backgroundFill} rx="1"
@@ -68,7 +68,7 @@ export const Meters = ({lifecycle, inputPeaks, outputPeaks, reduction}: Construc
     const contentGroup: SVGGElement = (
         <g>
             {labelTexts}
-            {bgRects}
+            {backgroundRects}
             {meterRects}
         </g>
     )
@@ -101,7 +101,7 @@ export const Meters = ({lifecycle, inputPeaks, outputPeaks, reduction}: Construc
             svg.setAttribute("viewBox", `0 0 ${clientWidth} ${clientHeight}`)
             innerHeight = clientHeight - padding * 2
             contentGroup.setAttribute("transform", `translate(0, ${padding})`)
-            bgRects.forEach(rect => rect.height.baseVal.value = innerHeight)
+            backgroundRects.forEach(rect => rect.height.baseVal.value = innerHeight)
             labelTexts.forEach((text, index) => text.setAttribute("y",
                 String(Math.ceil((1.0 - mapping.x(dbLabels[index])) * innerHeight))))
         }),
