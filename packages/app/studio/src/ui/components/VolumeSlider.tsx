@@ -82,17 +82,24 @@ export const VolumeSlider = ({lifecycle, editing, parameter}: Construct) => {
               fill="rgba(0, 0, 0, 0.25)"/>
     )
 
-    const lines: ReadonlyArray<SVGLineElement> = markers.map(({length, decibel}) => {
+    const linesLeft: ReadonlyArray<SVGLineElement> = markers.map(({length, decibel}) => {
         const y = `${(1.0 - parameter.valueMapping.x(decibel)) * 100.0}%`
         return <line x1={length === MarkerLength.Long ? 0 : "25%"}
                      y1={y}
                      y2={y}
-                     stroke={decibel === 0 && Colors.red}/>
+                     stroke={decibel === 0 && Colors.green}/>
+    })
+    const linesRight: ReadonlyArray<SVGLineElement> = markers.map(({decibel}) => {
+        const y = `${(1.0 - parameter.valueMapping.x(decibel)) * 100.0}%`
+        return <line x1="50%"
+                     y1={y}
+                     y2={y}
+                     stroke={decibel === 0 && Colors.green}/>
     })
     const lineContainer: SVGSVGElement = <svg y="1em"
                                               overflow="visible"
-                                              stroke={Colors.dark}
-                                              shape-rendering="crispEdges">{lines}</svg>
+                                              stroke="rgba(255,255,255,0.16)"
+                                              shape-rendering="crispEdges">{linesLeft}{linesRight}</svg>
     const svg: SVGSVGElement = (<svg viewBox="0 0 0 0">{guide}{lineContainer}</svg>)
     const thumb: HTMLElement = (<div className="thumb"/>)
     const wrapper: HTMLDivElement = (<div className={className} data-class="vertical-slider">{svg}{thumb}</div>)
@@ -111,7 +118,15 @@ export const VolumeSlider = ({lifecycle, editing, parameter}: Construct) => {
             guide.x.baseVal.value = CssUtils.calc("50% - 0.0625em", clientWidth, em)
             guide.y.baseVal.value = CssUtils.calc("1em - 1px", clientHeight, em)
             guide.height.baseVal.value = CssUtils.calc("100% - 2em + 1.5px", clientHeight, em)
-            lines.forEach(line => {line.x2.baseVal.value = CssUtils.calc("50% - 0.0625em - 1px", clientWidth, em)})
+            const leftX2 = CssUtils.calc("50% - 0.0625em - 1px", clientWidth, em)
+            const rightX1 = CssUtils.calc("50% + 0.0625em + 1px", clientWidth, em)
+            linesLeft.forEach(line => {line.x2.baseVal.value = leftX2})
+            linesRight.forEach((line, index) => {
+                line.x1.baseVal.value = rightX1
+                line.x2.baseVal.value = markers[index].length === MarkerLength.Long
+                    ? clientWidth
+                    : CssUtils.calc("75%", clientWidth, em)
+            })
             lineContainer.height.baseVal.value = CssUtils.calc("100% - 2em", clientHeight, em)
 
             // attach a new dragging function with updated options

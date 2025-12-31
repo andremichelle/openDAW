@@ -29,39 +29,40 @@ export const Meters = ({lifecycle, inputPeaks, outputPeaks, reduction}: Construc
     const meterRects: ReadonlyArray<SVGRectElement> = [
         <rect x={labelWidth} width={meterWidth} height="0" fill={peakFill} rx="1" ry="1"/>,
         <rect x={labelWidth} width={meterWidth} height="0" fill={rmsFill} rx="1" ry="1"/>,
-        <rect x={labelWidth + meterWidth + meterGap} width={meterWidth} height="0" fill={peakFill}
-              rx="1" ry="1"/>,
-        <rect x={labelWidth + meterWidth + meterGap} width={meterWidth} height="0" fill={rmsFill}
-              rx="1" ry="1"/>,
-        <rect x={labelWidth + (meterWidth + meterGap) * 2} y="0" width={meterWidth} height="0"
-              fill={Colors.blue.toString()}
-              rx="1" ry="1"/>,
-        <rect x={labelWidth + (meterWidth + meterGap) * 2 + meterWidth + meterGap} width={meterWidth} height="0"
-              fill={peakFill} rx="1" ry="1"/>,
-        <rect x={labelWidth + (meterWidth + meterGap) * 2 + meterWidth + meterGap} width={meterWidth} height="0"
-              fill={rmsFill} rx="1" ry="1"/>,
-        <rect x={labelWidth + (meterWidth + meterGap) * 3 + meterWidth + meterGap} width={meterWidth} height="0"
-              fill={peakFill} rx="1" ry="1"/>,
-        <rect x={labelWidth + (meterWidth + meterGap) * 3 + meterWidth + meterGap} width={meterWidth} height="0"
-              fill={rmsFill} rx="1" ry="1"/>
+        <rect x={labelWidth + meterWidth + meterGap}
+              width={meterWidth} height="0" fill={peakFill} rx="1" ry="1"/>,
+        <rect x={labelWidth + meterWidth + meterGap}
+              width={meterWidth} height="0" fill={rmsFill} rx="1" ry="1"/>,
+        <rect x={labelWidth + (meterWidth + meterGap) * 2} y="0"
+              width={meterWidth} height="0" fill={Colors.blue.toString()} rx="1" ry="1"/>,
+        <rect x={labelWidth + (meterWidth + meterGap) * 2 + meterWidth + meterGap}
+              width={meterWidth} height="0" fill={peakFill} rx="1" ry="1"/>,
+        <rect x={labelWidth + (meterWidth + meterGap) * 2 + meterWidth + meterGap}
+              width={meterWidth} height="0" fill={rmsFill} rx="1" ry="1"/>,
+        <rect x={labelWidth + (meterWidth + meterGap) * 3 + meterWidth + meterGap}
+              width={meterWidth} height="0" fill={peakFill} rx="1" ry="1"/>,
+        <rect x={labelWidth + (meterWidth + meterGap) * 3 + meterWidth + meterGap}
+              width={meterWidth} height="0" fill={rmsFill} rx="1" ry="1"/>
     ]
     const backgroundRects: ReadonlyArray<SVGRectElement> = [
-        <rect x={labelWidth} y="0" width={meterWidth} fill={backgroundFill} rx="1" ry="1"/>,
-        <rect x={labelWidth + meterWidth + meterGap} y="0" width={meterWidth} fill={backgroundFill} rx="1" ry="1"/>,
-        <rect x={labelWidth + (meterWidth + meterGap) * 2} y="0" width={meterWidth} fill={backgroundFill} rx="1"
-              ry="1"/>,
-        <rect x={labelWidth + (meterWidth + meterGap) * 2 + meterWidth + meterGap} y="0" width={meterWidth}
+        <rect x={labelWidth} y="0" width={meterWidth}
               fill={backgroundFill} rx="1" ry="1"/>,
-        <rect x={labelWidth + (meterWidth + meterGap) * 3 + meterWidth + meterGap} y="0" width={meterWidth}
-              fill={backgroundFill} rx="1" ry="1"/>
+        <rect x={labelWidth + meterWidth + meterGap} y="0" width={meterWidth}
+              fill={backgroundFill} rx="1" ry="1"/>,
+        <rect x={labelWidth + (meterWidth + meterGap) * 2} y="0" width={meterWidth}
+              fill={backgroundFill} rx="1" ry="1"/>,
+        <rect x={labelWidth + (meterWidth + meterGap) * 2 + meterWidth + meterGap} y="0"
+              width={meterWidth} fill={backgroundFill} rx="1" ry="1"/>,
+        <rect x={labelWidth + (meterWidth + meterGap) * 3 + meterWidth + meterGap} y="0"
+              width={meterWidth} fill={backgroundFill} rx="1" ry="1"/>
     ]
-    const labelTexts: ReadonlyArray<SVGTextElement> = dbLabels.map(db => (
-        <text x={String(labelWidth - 4)}
-              font-size="7px"
-              fill={textFill}
-              alignment-baseline={"middle"}
-              text-anchor="end">{db}</text>
-    ))
+    const labelTexts: ReadonlyArray<SVGTextElement> = dbLabels.map((db, index) => {
+        const last = index === dbLabels.length - 1
+        return (
+            <text x={String(labelWidth - 4)} font-size="7px"
+                  fill={textFill} alignment-baseline={last ? "bottom" : "middle"} text-anchor="end">{db}</text>
+        )
+    })
     const contentGroup: SVGGElement = (
         <g>
             {labelTexts}
@@ -70,11 +71,7 @@ export const Meters = ({lifecycle, inputPeaks, outputPeaks, reduction}: Construc
         </g>
     )
 
-    const svg: SVGSVGElement = (
-        <svg classList={className}>
-            {contentGroup}
-        </svg>
-    )
+    const svg: SVGSVGElement = (<svg classList={className}>{contentGroup}</svg>)
 
     let innerHeight = 0
 
