@@ -41,7 +41,8 @@ export const Manuals: ReadonlyArray<Manual> = [
                     {type: "page", label: "Revamp", path: "/manuals/devices/audio/revamp"},
                     {type: "page", label: "Crusher", path: "/manuals/devices/audio/crusher"},
                     {type: "page", label: "Fold", path: "/manuals/devices/audio/fold"},
-                    {type: "page", label: "Tidal", path: "/manuals/devices/audio/tidal"}
+                    {type: "page", label: "Tidal", path: "/manuals/devices/audio/tidal"},
+                    {type: "page", label: "Maximizer", path: "/manuals/devices/audio/maximizer"}
                 ]
             },
             {
