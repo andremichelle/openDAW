@@ -4,6 +4,7 @@ import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
+import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {TrackType} from "../../timeline/TrackType"
@@ -11,7 +12,7 @@ import {TrackType} from "../../timeline/TrackType"
 export class TapeDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly type = "instrument"
     readonly accepts = "audio"
-    readonly manualUrl = "manuals/devices/instruments/tape"
+    readonly manualUrl = DeviceManualUrls.Tape
 
     readonly #context: BoxAdaptersContext
     readonly #box: TapeDeviceBox

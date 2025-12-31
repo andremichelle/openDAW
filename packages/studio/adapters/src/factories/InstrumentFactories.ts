@@ -14,6 +14,7 @@ import {byte, isDefined, UUID} from "@opendaw/lib-std"
 import {ClassicWaveform} from "@opendaw/lib-dsp"
 import {BoxGraph, Field} from "@opendaw/lib-box"
 import {IconSymbol, Pointers, VoicingMode} from "@opendaw/studio-enums"
+import {DeviceManualUrls} from "../DeviceManualUrls"
 import {InstrumentFactory} from "./InstrumentFactory"
 import {TrackType} from "../timeline/TrackType"
 
@@ -22,7 +23,7 @@ export namespace InstrumentFactories {
         defaultName: "Tape",
         defaultIcon: IconSymbol.Tape,
         description: "Plays audio regions & clips",
-        manualPage: "manuals/devices/instruments/tape",
+        manualPage: DeviceManualUrls.Tape,
         trackType: TrackType.Audio,
         create: (boxGraph: BoxGraph,
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
@@ -44,7 +45,7 @@ export namespace InstrumentFactories {
         defaultName: "Nano",
         defaultIcon: IconSymbol.NanoWave,
         description: "Simple sampler",
-        manualPage: "manuals/devices/instruments/nano",
+        manualPage: DeviceManualUrls.Nano,
         trackType: TrackType.Notes,
         create: (boxGraph: BoxGraph,
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
@@ -84,7 +85,7 @@ export namespace InstrumentFactories {
         defaultName: "Playfield",
         defaultIcon: IconSymbol.Playfield,
         description: "Drum computer",
-        manualPage: "manuals/devices/instruments/playfield",
+        manualPage: DeviceManualUrls.Playfield,
         trackType: TrackType.Notes,
         create: (boxGraph: BoxGraph,
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
@@ -115,7 +116,7 @@ export namespace InstrumentFactories {
         defaultName: "Vaporisateur",
         defaultIcon: IconSymbol.Piano,
         description: "Classic subtractive synthesizer",
-        manualPage: "manuals/devices/instruments/vaporisateur",
+        manualPage: DeviceManualUrls.Vaporisateur,
         trackType: TrackType.Notes,
         create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
@@ -147,7 +148,7 @@ export namespace InstrumentFactories {
         defaultName: "MIDIOutput",
         defaultIcon: IconSymbol.Midi,
         description: "MIDI Output",
-        manualPage: "manuals/devices/instruments/midi-output",
+        manualPage: DeviceManualUrls.MIDIOutput,
         trackType: TrackType.Notes,
         create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
@@ -165,7 +166,7 @@ export namespace InstrumentFactories {
         defaultName: "Soundfont",
         defaultIcon: IconSymbol.SoundFont,
         description: "Soundfont Player",
-        manualPage: "manuals/devices/instruments/soundfont",
+        manualPage: DeviceManualUrls.Soundfont,
         trackType: TrackType.Notes,
         create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,

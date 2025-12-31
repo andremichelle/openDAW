@@ -5,6 +5,7 @@ import {Address, BooleanField, FieldKeys, Int32Field, PointerField, StringField}
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
+import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {AutomatableParameterFieldAdapter} from "../../AutomatableParameterFieldAdapter"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {ModularAdapter} from "../../modular/modular"
@@ -13,7 +14,7 @@ import {DeviceInterfaceKnobAdapter} from "../../modular/user-interface"
 export class ModularDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly type = "audio-effect"
     readonly accepts = "audio"
-    readonly manualUrl = "manuals/devices/audio/modular"
+    readonly manualUrl = DeviceManualUrls.Modular
 
     readonly #context: BoxAdaptersContext
     readonly #box: ModularDeviceBox

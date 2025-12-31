@@ -13,6 +13,7 @@ import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
+import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
@@ -22,7 +23,7 @@ export class MIDIOutputDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     readonly type = "instrument"
     readonly accepts = "midi"
-    readonly manualUrl = "manuals/devices/instruments/midi-output"
+    readonly manualUrl = DeviceManualUrls.MIDIOutput
 
     readonly #context: BoxAdaptersContext
     readonly #box: MIDIOutputDeviceBox

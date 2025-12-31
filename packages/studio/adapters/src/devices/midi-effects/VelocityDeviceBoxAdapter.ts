@@ -4,6 +4,7 @@ import {Address, BooleanField, Int32Field, PointerField, StringField} from "@ope
 import {VelocityDeviceBox} from "@opendaw/studio-boxes"
 import {DeviceHost, Devices, MidiEffectDeviceAdapter} from "../../DeviceAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
+import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {ppqn} from "@opendaw/lib-dsp"
@@ -11,7 +12,7 @@ import {ppqn} from "@opendaw/lib-dsp"
 export class VelocityDeviceBoxAdapter implements MidiEffectDeviceAdapter {
     readonly type = "midi-effect"
     readonly accepts = "midi"
-    readonly manualUrl = "manuals/devices/midi/velocity"
+    readonly manualUrl = DeviceManualUrls.Velocity
 
     readonly #context: BoxAdaptersContext
     readonly #box: VelocityDeviceBox

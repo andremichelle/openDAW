@@ -4,6 +4,7 @@ import {Pointers} from "@opendaw/studio-enums"
 import {Option, UUID} from "@opendaw/lib-std"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
+import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {IndexedBoxAdapterCollection} from "../../IndexedBoxAdapterCollection"
 import {PlayfieldSampleBoxAdapter} from "./Playfield/PlayfieldSampleBoxAdapter"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
@@ -14,7 +15,7 @@ import {LabeledAudioOutput, LabeledAudioOutputsOwner} from "../../LabeledAudioOu
 export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter, LabeledAudioOutputsOwner {
     readonly type = "instrument"
     readonly accepts = "midi"
-    readonly manualUrl = "manuals/devices/instruments/playfield"
+    readonly manualUrl = DeviceManualUrls.Playfield
 
     readonly #context: BoxAdaptersContext
     readonly #box: PlayfieldDeviceBox

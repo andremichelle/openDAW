@@ -4,6 +4,7 @@ import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
+import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
@@ -13,7 +14,7 @@ import {VaporisateurSettings} from "./VaporisateurSettings"
 export class VaporisateurDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly type = "instrument"
     readonly accepts = "midi"
-    readonly manualUrl = "manuals/devices/instruments/vaporisateur"
+    readonly manualUrl = DeviceManualUrls.Vaporisateur
 
     readonly #context: BoxAdaptersContext
     readonly #box: VaporisateurDeviceBox

@@ -4,13 +4,14 @@ import {Address, BooleanField, Int32Field, PointerField, StringField} from "@ope
 import {ZeitgeistDeviceBox} from "@opendaw/studio-boxes"
 import {DeviceHost, Devices, MidiEffectDeviceAdapter} from "../../DeviceAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
+import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {GrooveAdapter} from "../../grooves/GrooveBoxAdapter"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 
 export class ZeitgeistDeviceBoxAdapter implements MidiEffectDeviceAdapter {
     readonly type = "midi-effect"
     readonly accepts = "midi"
-    readonly manualUrl = "manuals/devices/midi/zeitgeist"
+    readonly manualUrl = DeviceManualUrls.Zeitgeist
 
     readonly #context: BoxAdaptersContext
     readonly #box: ZeitgeistDeviceBox

@@ -4,13 +4,14 @@ import {Address, BooleanField, Int32Field, PointerField, StringField} from "@ope
 import {PitchDeviceBox} from "@opendaw/studio-boxes"
 import {DeviceHost, Devices, MidiEffectDeviceAdapter} from "../../DeviceAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
+import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 
 export class PitchDeviceBoxAdapter implements MidiEffectDeviceAdapter {
     readonly type = "midi-effect"
     readonly accepts = "midi"
-    readonly manualUrl = "manuals/devices/midi/pitch"
+    readonly manualUrl = DeviceManualUrls.Pitch
 
     readonly #context: BoxAdaptersContext
     readonly #box: PitchDeviceBox

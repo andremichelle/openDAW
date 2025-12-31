@@ -4,6 +4,7 @@ import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
+import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
@@ -11,7 +12,7 @@ import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 export class NanoDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly type = "instrument"
     readonly accepts = "midi"
-    readonly manualUrl = "manuals/devices/instruments/nano"
+    readonly manualUrl = DeviceManualUrls.Nano
 
     readonly #context: BoxAdaptersContext
     readonly #box: NanoDeviceBox

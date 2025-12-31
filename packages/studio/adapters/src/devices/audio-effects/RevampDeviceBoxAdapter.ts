@@ -5,6 +5,7 @@ import {Pointers} from "@opendaw/studio-enums"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
+import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {AutomatableParameterFieldAdapter} from "../../AutomatableParameterFieldAdapter"
@@ -12,7 +13,7 @@ import {AutomatableParameterFieldAdapter} from "../../AutomatableParameterFieldA
 export class RevampDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly type = "audio-effect"
     readonly accepts = "audio"
-    readonly manualUrl = "manuals/devices/audio/revamp"
+    readonly manualUrl = DeviceManualUrls.Revamp
 
     readonly #context: BoxAdaptersContext
     readonly #box: RevampDeviceBox

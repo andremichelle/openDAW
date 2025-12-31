@@ -6,6 +6,7 @@ import {Fraction} from "@opendaw/lib-dsp"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
+import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 
@@ -22,7 +23,7 @@ export class DelayDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 
     readonly type = "audio-effect"
     readonly accepts = "audio"
-    readonly manualUrl = "manuals/devices/audio/delay"
+    readonly manualUrl = DeviceManualUrls.Delay
 
     readonly #context: BoxAdaptersContext
     readonly #box: DelayDeviceBox
