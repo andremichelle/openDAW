@@ -15,17 +15,17 @@ type Construct = {
 }
 
 export const Meters = ({lifecycle, inputPeaks, outputPeaks, reduction}: Construct) => {
-    const meterWidth = 8
-    const meterGap = 3
+    const meterWidth = 7
+    const meterGap = 4
     const labelWidth = 14
+    const width = meterWidth * 5 + meterGap * 4 + labelWidth
     const padding = 8
-
+    const dbLabels = [3, 0, -3, -6, -9, -12, -15, -18, -21, -24] as const
     const mapping = ValueMapping.linear(-24, 3)
-
     const rmsFill = Colors.blue.toString()
     const peakFill = Colors.blue.opacity(0.3).toString()
+    const textFill = "rgba(255, 255, 255, 0.25)"
     const backgroundFill = Colors.blue.brightness(-66).opacity(0.3).toString()
-
     const meterRects: ReadonlyArray<SVGRectElement> = [
         <rect x={labelWidth} width={meterWidth} height="0" fill={peakFill} rx="1" ry="1"/>,
         <rect x={labelWidth} width={meterWidth} height="0" fill={rmsFill} rx="1" ry="1"/>,
@@ -33,7 +33,8 @@ export const Meters = ({lifecycle, inputPeaks, outputPeaks, reduction}: Construc
               rx="1" ry="1"/>,
         <rect x={labelWidth + meterWidth + meterGap} width={meterWidth} height="0" fill={rmsFill}
               rx="1" ry="1"/>,
-        <rect x={labelWidth + (meterWidth + meterGap) * 2} y="0" width={meterWidth} height="0" fill={Colors.blue}
+        <rect x={labelWidth + (meterWidth + meterGap) * 2} y="0" width={meterWidth} height="0"
+              fill={Colors.blue.toString()}
               rx="1" ry="1"/>,
         <rect x={labelWidth + (meterWidth + meterGap) * 2 + meterWidth + meterGap} width={meterWidth} height="0"
               fill={peakFill} rx="1" ry="1"/>,
@@ -44,7 +45,6 @@ export const Meters = ({lifecycle, inputPeaks, outputPeaks, reduction}: Construc
         <rect x={labelWidth + (meterWidth + meterGap) * 3 + meterWidth + meterGap} width={meterWidth} height="0"
               fill={rmsFill} rx="1" ry="1"/>
     ]
-
     const backgroundRects: ReadonlyArray<SVGRectElement> = [
         <rect x={labelWidth} y="0" width={meterWidth} fill={backgroundFill} rx="1" ry="1"/>,
         <rect x={labelWidth + meterWidth + meterGap} y="0" width={meterWidth} fill={backgroundFill} rx="1" ry="1"/>,
@@ -55,16 +55,13 @@ export const Meters = ({lifecycle, inputPeaks, outputPeaks, reduction}: Construc
         <rect x={labelWidth + (meterWidth + meterGap) * 3 + meterWidth + meterGap} y="0" width={meterWidth}
               fill={backgroundFill} rx="1" ry="1"/>
     ]
-
-    const dbLabels = [3, 0, -3, -6, -9, -12, -15, -18, -21, -24]
     const labelTexts: ReadonlyArray<SVGTextElement> = dbLabels.map(db => (
         <text x={String(labelWidth - 4)}
               font-size="7px"
-              fill={Colors.shadow.toString()}
+              fill={textFill}
               alignment-baseline={"middle"}
               text-anchor="end">{db}</text>
     ))
-
     const contentGroup: SVGGElement = (
         <g>
             {labelTexts}
@@ -97,11 +94,20 @@ export const Meters = ({lifecycle, inputPeaks, outputPeaks, reduction}: Construc
     lifecycle.ownAll(
         Html.watchResize(svg, () => {
             if (!svg.isConnected) {return}
-            const {clientWidth, clientHeight} = svg
-            svg.setAttribute("viewBox", `0 0 ${clientWidth} ${clientHeight}`)
+            const {clientHeight} = svg
+            svg.setAttribute("viewBox", `0 0 ${width} ${clientHeight}`)
             innerHeight = clientHeight - padding * 2
             contentGroup.setAttribute("transform", `translate(0, ${padding})`)
-            backgroundRects.forEach(rect => rect.height.baseVal.value = innerHeight)
+            backgroundRects.forEach((rect, index) => {
+                if (index === 2) {
+                    // Reduction background: 0dB to -24dB only
+                    const zeroDbY = (1.0 - mapping.x(0)) * innerHeight
+                    rect.y.baseVal.value = zeroDbY
+                    rect.height.baseVal.value = innerHeight - zeroDbY
+                } else {
+                    rect.height.baseVal.value = innerHeight
+                }
+            })
             labelTexts.forEach((text, index) => text.setAttribute("y",
                 String(Math.ceil((1.0 - mapping.x(dbLabels[index])) * innerHeight))))
         }),
