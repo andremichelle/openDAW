@@ -1,4 +1,7 @@
 export namespace DeviceManualUrls {
+    // Audio Units
+    export const AudioBus = "manuals/audio-bus"
+
     // MIDI Effects
     export const Arpeggio = "manuals/devices/midi/arpeggio"
     export const Pitch = "manuals/devices/midi/pitch"

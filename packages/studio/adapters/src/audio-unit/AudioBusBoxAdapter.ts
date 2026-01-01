@@ -6,11 +6,12 @@ import {DeviceBoxAdapter, DeviceHost, Devices} from "../DeviceAdapter"
 import {LabeledAudioOutput, LabeledAudioOutputsOwner} from "../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {AudioUnitBoxAdapter} from "./AudioUnitBoxAdapter"
+import {DeviceManualUrls} from "../DeviceManualUrls"
 
 export class AudioBusBoxAdapter implements DeviceBoxAdapter, LabeledAudioOutputsOwner {
     readonly type = "bus"
     readonly accepts = "audio"
-    readonly manualUrl = "manuals" // TODO Write a manual for AudioBus and its purpose
+    readonly manualUrl = DeviceManualUrls.AudioBus
 
     readonly #context: BoxAdaptersContext
     readonly #box: AudioBusBox
