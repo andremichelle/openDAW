@@ -39,7 +39,8 @@ export const PeakMeter = ({lifecycle, peaks, channelWidthInEm, channelOffsetInEm
         const paddingInPX = emInPixels * 0.125
         const mapping = ValueMapping.linear(-60, 6)
         const s0 = `${mapping.x(-18)}`
-        const s1 = `${mapping.x(1)}`
+        const s1 = `${mapping.x(0)}`
+        const s1bar = `${mapping.x(1)}`
         const barsWidth = numChannels * channelWidthPX + (numChannels - 1) * channelOffsetPX
         const width = barsWidth + paddingInPX + emInPixels
         const height = element.clientHeight
@@ -107,8 +108,8 @@ export const PeakMeter = ({lifecycle, peaks, channelWidthInEm, channelOffsetInEm
                                     gradientUnits="userSpaceOnUse">
                         <stop offset={s0} stop-color={Colors.green}/>
                         <stop offset={s0} stop-color={Colors.yellow}/>
-                        <stop offset={s1} stop-color={Colors.yellow}/>
-                        <stop offset={s1} stop-color={Colors.red}/>
+                        <stop offset={s1bar} stop-color={Colors.yellow}/>
+                        <stop offset={s1bar} stop-color={Colors.red}/>
                     </linearGradient>
                 </defs>
                 <rect
