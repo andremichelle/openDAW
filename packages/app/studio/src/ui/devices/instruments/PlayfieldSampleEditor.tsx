@@ -1,15 +1,18 @@
+import css from "./PlayfieldSampleEditor.sass?inline"
 import {Lifecycle, Terminable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
+import {Events, Html} from "@opendaw/lib-dom"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {DeviceHost, InstrumentFactories, NoteLifeCycle, PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
 import {SlotEditor} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotEditor"
-import {Events} from "@opendaw/lib-dom"
 import {Icon} from "@/ui/components/Icon"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {StudioService} from "@/service/StudioService"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
+
+const className = Html.adoptStyleSheet(css, "PlayfieldSampleEditor")
 
 type Construct = {
     lifecycle: Lifecycle
@@ -42,19 +45,17 @@ export const PlayfieldSampleEditor = ({lifecycle, service, adapter, deviceHost}:
                       )}
                       createLabel={() => {
                           const deviceLabel: HTMLElement = (
-                              <span onclick={goDevice}
-                                    style={{
-                                        cursor: "pointer",
-                                        backgroundColor: Colors.green.toString(),
-                                        borderRadius: "2px",
-                                        paddingInline: "0.125em",
-                                        color: "rgba(0, 0, 0, 0.8)"
-                                    }}>{deviceName}</span>
+                              <span className="device-name"
+                                    onclick={goDevice}
+                                    style={{backgroundColor: Colors.green.toString()}}>
+                                  {deviceName}
+                              </span>
                           )
                           const playLabel: HTMLElement = (
-                              <span style={{cursor: "pointer"}}>
-                                  <Icon symbol={IconSymbol.Play} style={{verticalAlign: "middle"}}/> {fileName}
-                              </span>)
+                              <span className="play-label">
+                                  <Icon symbol={IconSymbol.Play}/> {fileName}
+                              </span>
+                          )
                           let noteLifeTime = Terminable.Empty
                           lifecycle.ownAll(
                               Terminable.create(() => noteLifeTime.terminate()),
@@ -69,11 +70,12 @@ export const PlayfieldSampleEditor = ({lifecycle, service, adapter, deviceHost}:
                               Events.subscribe(playLabel, "pointerup", () => noteLifeTime.terminate())
                           )
                           return (
-                              <h1>
+                              <h1 className="playfield-sample-label">
                                   {deviceLabel} {playLabel}
                               </h1>
                           )
                       }}
-                      icon={InstrumentFactories.Playfield.defaultIcon}/>
+                      icon={InstrumentFactories.Playfield.defaultIcon}
+                      className={className}/>
     )
 }

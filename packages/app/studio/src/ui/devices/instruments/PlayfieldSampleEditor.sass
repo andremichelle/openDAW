@@ -1,0 +1,26 @@
+component
+  h1.playfield-sample-label
+    display: flex
+    align-items: center
+    column-gap: 0.5em
+
+    > .device-name
+      cursor: pointer
+      border-radius: 2px
+      padding: 0 0.125em
+      color: rgba(0, 0, 0, 0.8)
+      align-self: center
+
+    > .play-label
+      display: inline-flex
+      align-items: center
+      column-gap: 0.5em
+      cursor: pointer
+
+  .minimized h1.playfield-sample-label
+    > .device-name
+      padding: 0.125em 0
+
+    > .play-label
+      svg
+        transform: rotate(90deg)

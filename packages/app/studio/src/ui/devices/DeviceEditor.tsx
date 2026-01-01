@@ -39,6 +39,7 @@ type Construct = {
     populateMeter: Provider<JsxValue>
     createLabel?: Provider<HTMLElement>
     icon: IconSymbol
+    className?: string
 }
 
 const defaultLabelFactory = (lifecycle: Lifecycle, editing: Editing, labelField: StringField): Provider<JsxValue> =>
@@ -61,12 +62,15 @@ const defaultLabelFactory = (lifecycle: Lifecycle, editing: Editing, labelField:
     )
 
 export const DeviceEditor =
-    ({lifecycle, project, adapter, populateMenu, populateControls, populateMeter, createLabel, icon}: Construct) => {
+    ({
+         lifecycle, project, adapter, populateMenu, populateControls, populateMeter,
+         createLabel, icon, className: customClassName
+     }: Construct) => {
         const {editing} = project
         const {box, type, enabledField, minimizedField, labelField} = adapter
         const color = getColorFor(type)
         return (
-            <div className={className}
+            <div className={Html.buildClassList(className, customClassName)}
                  tabIndex={0}
                  onInit={element => {
                      lifecycle.ownAll(
