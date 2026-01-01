@@ -84,7 +84,11 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                 some: ({project: {editing, timelineBox: {loopArea: {enabled}}}}) => {
                     loop.setValue(enabled.getValue())
                     loopLifecycle.ownAll(
-                        loop.subscribe(owner => editing.modify(() => enabled.setValue(owner.getValue()))),
+                        loop.subscribe(owner => {
+                            if (editing.mustModify()) {
+                                editing.modify(() => enabled.setValue(owner.getValue()))
+                            }
+                        }),
                         enabled.subscribe(owner => loop.setValue(owner.getValue()))
                     )
                 }

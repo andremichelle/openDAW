@@ -111,8 +111,18 @@ export class BoxEditing implements Editing {
         return this.#pending.length <= 0
     }
 
-    // TODO This is an option to clarify, if user actions meant to be run by a modifier or not.
-    //  See ParameterWrapper. Not the nicest solution. Probably coming back to this sooner or later.
+    // TODO This method exists to handle bidirectional sync between UI state and Box state.
+    //  Problem: When a Box field changes (e.g., during undo/redo), reactive subscriptions may fire
+    //  and attempt to call modify() to sync the UI state back to the Box. But since undo/redo
+    //  already has a transaction open (via Modification.inverse/forward calling beginTransaction
+    //  directly), calling modify() would fail with "Transaction already in progress".
+    //  Current workaround: Callers check mustModify() before calling modify(). If false (transaction
+    //  already open), they either skip the call or call setValue directly without recording history.
+    //  See: EditWrapper.forValue, EditWrapper.forAutomatableParameter, TransportGroup loop sync.
+    //  Better solution: Consider having Modification.inverse/forward use the same #modifying flag
+    //  as modify(), or introduce a unified "modification context" that both undo/redo and user
+    //  actions share. This would allow modify() to detect it's being called reactively during
+    //  undo/redo and handle it internally, rather than requiring all callers to guard with mustModify().
     mustModify(): boolean {return !this.#graph.inTransaction()}
 
     modify<R>(modifier: SyncProvider<Maybe<R>>, mark: boolean = true): Option<R> {
