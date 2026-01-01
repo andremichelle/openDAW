@@ -15,6 +15,7 @@ Creating a device requires these components:
 4. **Processor** - DSP logic that processes audio
 5. **Editor** - UI component with controls
 6. **Factory registrations** - Makes the device available in the UI
+7. **Manual** - User-facing documentation for the device
 
 ## Step 1: Create the Schema
 
@@ -67,10 +68,13 @@ export const DeviceDefinitions = [
 Run from the forge-boxes directory:
 
 ```bash
-cd packages/studio/forge-boxes && npm run build
+cd packages/studio/forge-boxes
+npm run build
 ```
 
 This generates **YourDeviceBox.ts** in `packages/studio/boxes/src/` with typed fields and visitor pattern support.
+
+Note: This only generates the TypeScript source files. The full project build (`npm run build` from root) will compile them.
 
 ## Step 4: Create the Adapter
 
@@ -428,6 +432,70 @@ adapter.box.someField.catchupAndSubscribe(() => {
 })
 ```
 
+## Step 9: Create the Device Manual
+
+Each device should have a user-facing manual that documents its purpose and parameters.
+
+### 9.1 Create the Manual File
+
+Location: `packages/app/studio/public/manuals/devices/<category>/`
+
+Categories:
+- `midi/` - MIDI effect devices
+- `audio/` - Audio effect devices
+- `instruments/` - Instrument devices
+
+Create **your-device.md** (use kebab-case):
+
+```markdown
+# Your Device
+
+Brief description of what the device does.
+
+## Parameters
+
+### Some Param
+Controls the intensity of the effect. Range: -30dB to 0dB.
+
+### Some Toggle
+Enables or disables a feature.
+
+## Tips
+
+- Usage tip 1
+- Usage tip 2
+```
+
+### 9.2 Register the Manual URL
+
+Edit **DeviceManualUrls.ts** at `packages/studio/adapters/src/`:
+
+```typescript
+export namespace DeviceManualUrls {
+    // Audio Effects
+    export const YourDevice = "manuals/devices/audio/your-device"
+    // ...
+}
+```
+
+### 9.3 Link in EffectFactories
+
+The manual URL is referenced in the factory definition. Edit **EffectFactories.ts**:
+
+```typescript
+import {DeviceManualUrls} from "@opendaw/studio-adapters"
+
+export const YourDevice: EffectFactory = {
+    defaultName: "Your Device",
+    defaultIcon: IconSymbol.Peak,
+    description: "Description of your device",
+    manualUrl: DeviceManualUrls.YourDevice,  // Add this line
+    // ...
+}
+```
+
+This makes the manual accessible via the device's context menu in the UI.
+
 ## File Summary
 
 | Component        | Location                                                        |
@@ -442,3 +510,5 @@ adapter.box.someField.catchupAndSubscribe(() => {
 | ProcessorFactory | `packages/studio/core-processors/src/DeviceProcessorFactory.ts` |
 | EditorFactory    | `packages/app/studio/src/ui/devices/DeviceEditorFactory.tsx`    |
 | BoxAdapters      | `packages/studio/adapters/src/BoxAdapters.ts`                   |
+| Manual           | `packages/app/studio/public/manuals/devices/<category>/`        |
+| ManualUrls       | `packages/studio/adapters/src/DeviceManualUrls.ts`              |
