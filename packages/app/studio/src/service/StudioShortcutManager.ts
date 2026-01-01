@@ -154,7 +154,9 @@ export namespace StudioShortcutManager {
                 }))),
             gc.register(gs["workspace-next-screen"].shortcut, () => {
                     if (!service.hasProfile) {return}
-                    const keys = Object.entries(DefaultWorkspace).map(([key]) => key as Workspace.ScreenKeys)
+                    const keys: Array<Workspace.ScreenKeys> = Object.entries(DefaultWorkspace)
+                        .map(([key]) => key as Workspace.ScreenKeys)
+                        .filter(key => key !== "dashboard")
                     const screen = service.layout.screen
                     const current = screen.getValue()
                     if (isNull(current) || !keys.includes(current)) {return}
@@ -163,7 +165,9 @@ export namespace StudioShortcutManager {
             ),
             gc.register(gs["workspace-prev-screen"].shortcut, () => {
                     if (!service.hasProfile) {return}
-                    const keys = Object.entries(DefaultWorkspace).map(([key]) => key as Workspace.ScreenKeys)
+                    const keys: Array<Workspace.ScreenKeys> = Objects.entries(DefaultWorkspace)
+                        .map(([key]) => key as Workspace.ScreenKeys)
+                        .filter(key => key !== "dashboard")
                     const screen = service.layout.screen
                     const current = screen.getValue()
                     if (isNull(current) || !keys.includes(current)) {return}
