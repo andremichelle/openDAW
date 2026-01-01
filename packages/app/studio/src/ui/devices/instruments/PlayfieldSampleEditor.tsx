@@ -46,23 +46,15 @@ export const PlayfieldSampleEditor = ({lifecycle, service, adapter, deviceHost}:
                                     style={{
                                         cursor: "pointer",
                                         backgroundColor: Colors.green.toString(),
-                                        height: "1.25em",
-                                        lineHeight: "1.25em",
                                         borderRadius: "2px",
-                                        padding: "0 0.125em",
+                                        paddingInline: "0.125em",
                                         color: "rgba(0, 0, 0, 0.8)"
                                     }}>{deviceName}</span>
                           )
                           const playLabel: HTMLElement = (
-                              <div
-                                  style={{
-                                      display: "inline-flex",
-                                      columnGap: "0.5em",
-                                      alignItems: "center",
-                                      cursor: "pointer"
-                                  }}>
-                                  <Icon symbol={IconSymbol.Play}/> {fileName}
-                              </div>)
+                              <span style={{cursor: "pointer"}}>
+                                  <Icon symbol={IconSymbol.Play} style={{verticalAlign: "middle"}}/> {fileName}
+                              </span>)
                           let noteLifeTime = Terminable.Empty
                           lifecycle.ownAll(
                               Terminable.create(() => noteLifeTime.terminate()),
@@ -77,9 +69,8 @@ export const PlayfieldSampleEditor = ({lifecycle, service, adapter, deviceHost}:
                               Events.subscribe(playLabel, "pointerup", () => noteLifeTime.terminate())
                           )
                           return (
-                              <h1 style={{display: "flex", columnGap: "0.5em", alignItems: "center"}}>
-                                  {deviceLabel}
-                                  {playLabel}
+                              <h1>
+                                  {deviceLabel} {playLabel}
                               </h1>
                           )
                       }}
