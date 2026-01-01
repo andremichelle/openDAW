@@ -49,6 +49,15 @@ export const Timeline = ({lifecycle, service}: Construct) => {
         }),
         engine.isRecording.subscribe(updateRecordingState),
         engine.isCountingIn.subscribe(updateRecordingState),
+        followCursor.subscribe(owner => {
+            if (owner.getValue()) {
+                const range = service.timeline.range
+                const position = engine.position.getValue()
+                if (position < range.unitMin || position > range.unitMax) {
+                    range.moveToUnit(position)
+                }
+            }
+        }),
         engine.position.subscribe((() => {
             let lastPosition: ppqn = 0
             return owner => {
