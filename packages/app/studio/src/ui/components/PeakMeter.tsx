@@ -13,11 +13,20 @@ type Construct = {
     channelOffsetInEm?: number
 }
 
+type PeakHold = {
+    time: number
+    value: number
+}
+
 export const PeakMeter = ({lifecycle, peaks, channelWidthInEm, channelOffsetInEm}: Construct) => {
     const element: HTMLDivElement = <div className={className} data-class="peak-meter"/>
     const channelWidth = channelWidthInEm ?? 0.3
     const channelOffset = channelOffsetInEm ?? 0.125
     const numChannels = peaks.length
+    const peakHolds: ReadonlyArray<PeakHold> = Arrays.create(() => ({
+        time: 0,
+        value: Number.NEGATIVE_INFINITY
+    }), numChannels)
     const gradientID = Html.nextID()
     const animation = lifecycle.own(new Terminator())
     lifecycle.own(Html.watchResize(element, () => {
@@ -30,7 +39,7 @@ export const PeakMeter = ({lifecycle, peaks, channelWidthInEm, channelOffsetInEm
         const paddingInPX = emInPixels * 0.125
         const mapping = ValueMapping.linear(-60, 6)
         const s0 = `${mapping.x(-18)}`
-        const s1 = `${mapping.x(0)}`
+        const s1 = `${mapping.x(1)}`
         const barsWidth = numChannels * channelWidthPX + (numChannels - 1) * channelOffsetPX
         const width = barsWidth + paddingInPX + emInPixels
         const height = element.clientHeight
@@ -57,6 +66,16 @@ export const PeakMeter = ({lifecycle, peaks, channelWidthInEm, channelOffsetInEm
                          rx="1"
                          ry="1"
                          fill={`url(#${gradientID})`}/>
+        }, numChannels)
+        const peakLines: Array<SVGRectElement> = Arrays.create(channelIndex => {
+            const x = (channelWidthPX + channelOffsetPX) * channelIndex + paddingInPX
+            return (<rect classList="peak-hold"
+                          x={x}
+                          y={paddingInPX + trackHeight}
+                          width={channelWidthPX}
+                          height={1}
+                          opacity={0.33}
+                          fill={`url(#${gradientID})`}/>)
         }, numChannels)
         const strokes: SVGGraphicsElement = (
             <g stroke={Colors.dark} stroke-width={1} fill="none"/>
@@ -100,6 +119,7 @@ export const PeakMeter = ({lifecycle, peaks, channelWidthInEm, channelOffsetInEm
                     ry={paddingInPX}/>
                 {backgrounds}
                 {bars}
+                {peakLines}
                 {<g transform={`translate(${barsWidth + paddingInPX + emInPixels * 0.125}, 0)`}>
                     {strokes}
                     {labels}
@@ -107,13 +127,28 @@ export const PeakMeter = ({lifecycle, peaks, channelWidthInEm, channelOffsetInEm
             </svg>
         )
         animation.terminate()
-        animation.own(AnimationFrame.add(() => peaks.forEach((db: number, index: int) => {
-            const bar = bars[index]
-            const ratio = db === Number.NEGATIVE_INFINITY ? 0.0 : mapping.x(db)
-            const barHeight = Math.ceil(trackHeight * ratio)
-            bar.y.baseVal.value = paddingInPX + (trackHeight - barHeight)
-            bar.height.baseVal.value = barHeight
-        })))
+        animation.own(AnimationFrame.add(() => {
+            const now = Date.now()
+            peaks.forEach((db: number, index: int) => {
+                const bar = bars[index]
+                const ratio = db === Number.NEGATIVE_INFINITY ? 0.0 : mapping.x(db)
+                const barHeight = Math.ceil(trackHeight * ratio)
+                bar.y.baseVal.value = paddingInPX + (trackHeight - barHeight)
+                bar.height.baseVal.value = barHeight
+                const peakHold = peakHolds[index]
+                if (peakHold.value <= db) {
+                    peakHold.value = db
+                    peakHold.time = now
+                } else if (now - peakHold.time >= 2000) {
+                    peakHold.value -= 0.25
+                }
+                const peakRatio = peakHold.value === Number.NEGATIVE_INFINITY ? 0.0 : mapping.x(peakHold.value)
+                const peakY = paddingInPX + trackHeight * (1.0 - peakRatio)
+                const peakLine = peakLines[index]
+                peakLine.y.baseVal.value = peakY
+                peakLine.style.display = peakRatio > 0 ? "" : "none"
+            })
+        }))
     }))
     return element
 }
