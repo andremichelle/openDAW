@@ -210,12 +210,10 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                 return fallback(vertex.box)
             })()
             )
-            AnimationFrame.once(() => {
-                element.focus()
-                range.width = contentEditor.clientWidth
-                owner.ifSome(reader =>
-                    range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16))
-            })
+            range.width = contentEditor.clientWidth
+            owner.ifSome(reader =>
+                range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16))
+            AnimationFrame.once(() => element.focus())
         },
         none: () => {
             owner = Option.None

@@ -1,6 +1,6 @@
 import {ClipModifier} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifier.ts"
 import {BoxEditing} from "@opendaw/lib-box"
-import {Arrays, asDefined, clamp, int, Option, panic, Selection, ValueAxis} from "@opendaw/lib-std"
+import {Arrays, asDefined, clamp, int, isDefined, Option, panic, Selection, ValueAxis} from "@opendaw/lib-std"
 import {AnyClipBox, AnyClipBoxAdapter} from "@opendaw/studio-adapters"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {ClipModifyStrategy} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifyStrategy.ts"
@@ -154,6 +154,8 @@ export class ClipMoveModifier implements ClipModifier {
             }
         })
         console.debug("#copy", this.#copy, "#mirroredCopy", this.#mirroredCopy)
+        const userEditingManager = this.#manager.service.project.userEditingManager
+        const editedAdapter = adapters.find(adapter => userEditingManager.timeline.isEditing(adapter.box))
         editing.modify(() => {
             if (this.#copy) {
                 adapters.forEach((adapter) => {
@@ -174,6 +176,11 @@ export class ClipMoveModifier implements ClipModifier {
                     adapter.consolidate()
                 }
             })
+            // After copy, force refresh of editing context to update the selection filter
+            if (this.#copy && isDefined(editedAdapter)) {
+                userEditingManager.timeline.clear()
+                userEditingManager.timeline.edit(editedAdapter.box)
+            }
         })
     }
 
