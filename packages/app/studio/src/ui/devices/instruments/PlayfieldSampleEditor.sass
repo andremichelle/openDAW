@@ -1,6 +1,6 @@
 component
   h1.playfield-sample-label
-    display: flex
+    display: inline-flex
     align-items: center
     column-gap: 0.5em
 
@@ -9,7 +9,6 @@ component
       border-radius: 2px
       padding: 0 0.125em
       color: rgba(0, 0, 0, 0.8)
-      align-self: center
 
     > .play-label
       display: inline-flex
@@ -17,7 +16,9 @@ component
       column-gap: 0.5em
       cursor: pointer
 
-  .minimized h1.playfield-sample-label
+  &.minimized h1.playfield-sample-label
+    align-items: start
+
     > .device-name
       padding: 0.125em 0
 
