@@ -44,6 +44,7 @@ export const ManualPage: PageFactory<StudioService> = ({service, path}: PageCont
                 <BackButton/>
                 <nav>
                     <LocalLink href="/manuals/">⇱</LocalLink>
+                    <hr/>
                     {addManuals(Manuals)}
                 </nav>
             </aside>
