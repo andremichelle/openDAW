@@ -19,7 +19,7 @@ export const Meters = ({lifecycle, inputPeaks, outputPeaks, reduction}: Construc
     const meterGap = 4
     const labelWidth = 14
     const width = meterWidth * 5 + meterGap * 4 + labelWidth
-    const padding = 8
+    const paddingTop = 8
     const dbLabels = [3, 0, -3, -6, -9, -12, -15, -18, -21, -24] as const
     const mapping = ValueMapping.linear(-24, 3)
     const rmsFill = Colors.blue.toString()
@@ -93,8 +93,8 @@ export const Meters = ({lifecycle, inputPeaks, outputPeaks, reduction}: Construc
             if (!svg.isConnected) {return}
             const {clientHeight} = svg
             svg.setAttribute("viewBox", `0 0 ${width} ${clientHeight}`)
-            innerHeight = clientHeight - padding * 2
-            contentGroup.setAttribute("transform", `translate(0, ${padding})`)
+            innerHeight = clientHeight - paddingTop
+            contentGroup.setAttribute("transform", `translate(0, ${paddingTop})`)
             backgroundRects.forEach((rect, index) => {
                 if (index === 2) {
                     // Reduction background: 0dB to -24dB only
