@@ -15,10 +15,13 @@ export namespace MenuItems {
         const {project} = service
         const {editing, api} = project
         const audioUnit = deviceHost.audioUnitBoxAdapter()
-        const canProcessMidi = deviceHost.inputAdapter.mapOr(input => input.accepts === "midi", false)
-        const manualUrl = deviceHost.inputAdapter.mapOr(input => input.type === "instrument" ? input.manualUrl : "manuals", "manuals")
+        const {canProcessMidi, manualUrl, name} = deviceHost.inputAdapter.mapOr(input => ({
+            canProcessMidi: input.type === "instrument",
+            manualUrl: input.manualUrl,
+            name: input.labelField.getValue()
+        }), {canProcessMidi: false, manualUrl: "manuals", name: "Unknown"})
         parent.addMenuItem(
-            populateMenuItemToNavigateToManual(manualUrl),
+            populateMenuItemToNavigateToManual(manualUrl, name),
             MenuItem.default({
                 label: `Delete '${audioUnit.label}'`,
                 hidden: audioUnit.isOutput
@@ -111,7 +114,7 @@ export namespace MenuItems {
         const {project} = service
         const {editing} = project
         parent.addMenuItem(
-            populateMenuItemToNavigateToManual(device.manualUrl),
+            populateMenuItemToNavigateToManual(device.manualUrl, device.labelField.getValue()),
             populateMenuItemToDeleteDevice(editing, device),
             populateMenuItemToCreateEffect(service, host, device),
             populateMenuItemToMoveEffect(project, host, device)
@@ -130,8 +133,8 @@ export namespace MenuItems {
             resolvers.promise.then(newName => editing.modify(() => labelField.setValue(newName)), EmptyExec)
         })
 
-    const populateMenuItemToNavigateToManual = (path: string) => {
-        return MenuItem.default({label: "Navigate to the manual for this device..."})
+    const populateMenuItemToNavigateToManual = (path: string, name: string) => {
+        return MenuItem.default({label: `Visit '${name}' Manual...`})
             .setTriggerProcedure(() => RouteLocation.get().navigateTo(path))
     }
 
