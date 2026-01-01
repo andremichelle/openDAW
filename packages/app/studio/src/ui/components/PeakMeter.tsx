@@ -35,6 +35,18 @@ export const PeakMeter = ({lifecycle, peaks, channelWidthInEm, channelOffsetInEm
         const width = barsWidth + paddingInPX + emInPixels
         const height = element.clientHeight
         const trackHeight = height - paddingInPX * 2
+        const backgroundGradientID = Html.nextID()
+        const backgrounds: Array<SVGRectElement> = Arrays.create(channelIndex => {
+            const x = (channelWidthPX + channelOffsetPX) * channelIndex + paddingInPX
+            return <rect classList="bar-background"
+                         x={x}
+                         y={paddingInPX}
+                         width={channelWidthPX}
+                         height={trackHeight}
+                         rx="1"
+                         ry="1"
+                         fill={`url(#${backgroundGradientID})`}/>
+        }, numChannels)
         const bars: Array<SVGRectElement> = Arrays.create(channelIndex => {
             const x = (channelWidthPX + channelOffsetPX) * channelIndex + paddingInPX
             return <rect classList="bar"
@@ -61,6 +73,15 @@ export const PeakMeter = ({lifecycle, peaks, channelWidthInEm, channelOffsetInEm
         element.appendChild(
             <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height}>
                 <defs>
+                    <linearGradient id={backgroundGradientID}
+                                    x1="0" x2="0"
+                                    y2={paddingInPX} y1={trackHeight}
+                                    gradientUnits="userSpaceOnUse">
+                        <stop offset={s0} stop-color={Colors.green.brightness(-50).opacity(0.03)}/>
+                        <stop offset={s0} stop-color={Colors.yellow.brightness(-50).opacity(0.03)}/>
+                        <stop offset={s1} stop-color={Colors.yellow.brightness(-50).opacity(0.03)}/>
+                        <stop offset={s1} stop-color={Colors.red.brightness(-50).opacity(0.03)}/>
+                    </linearGradient>
                     <linearGradient id={gradientID}
                                     x1="0" x2="0"
                                     y2={paddingInPX} y1={trackHeight}
@@ -77,6 +98,7 @@ export const PeakMeter = ({lifecycle, peaks, channelWidthInEm, channelOffsetInEm
                     height={height}
                     rx={paddingInPX}
                     ry={paddingInPX}/>
+                {backgrounds}
                 {bars}
                 {<g transform={`translate(${barsWidth + paddingInPX + emInPixels * 0.125}, 0)`}>
                     {strokes}
