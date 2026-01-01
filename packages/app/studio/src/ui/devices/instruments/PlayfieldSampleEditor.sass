@@ -9,6 +9,8 @@ component
       border-radius: 2px
       padding: 0 0.125em
       color: rgba(0, 0, 0, 0.8)
+      line-height: 1.25em
+      height: fit-content
 
     > .play-label
       display: inline-flex
@@ -17,10 +19,14 @@ component
       cursor: pointer
 
   &.minimized h1.playfield-sample-label
-    align-items: start
+    display: inline
 
     > .device-name
-      padding: 0.125em 0
+      padding-block: 0.125em
+      padding-inline: 0 4px
+      padding: 0
+      line-height: normal
+      height: auto
 
     > .play-label
       svg
