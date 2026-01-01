@@ -177,6 +177,7 @@ export class ClipMoveModifier implements ClipModifier {
                 }
             })
             // After copy, force refresh of editing context to update the selection filter
+            // TODO this is actually a hack. We can do better, but it's not clear how to do it.'
             if (this.#copy && isDefined(editedAdapter)) {
                 userEditingManager.timeline.clear()
                 userEditingManager.timeline.edit(editedAdapter.box)
