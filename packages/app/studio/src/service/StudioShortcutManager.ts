@@ -1,6 +1,5 @@
 import {
     Arrays,
-    asInstanceOf,
     isDefined,
     isNull,
     JSONValue,
@@ -16,8 +15,7 @@ import {StudioService} from "@/service/StudioService"
 import {DefaultWorkspace} from "@/ui/workspace/Default"
 import {PanelType} from "@/ui/workspace/PanelType"
 import {Workspace} from "@/ui/workspace/Workspace"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
-import {ProjectUtils} from "@opendaw/studio-adapters"
+import {DeviceHost, Devices, ProjectUtils} from "@opendaw/studio-adapters"
 import {StudioDialogs} from "@/service/StudioDialogs"
 import {ContentEditorShortcuts, ContentEditorShortcutsFactory} from "@/ui/shortcuts/ContentEditorShortcuts"
 import {PianoPanelShortcuts, PianoPanelShortcutsFactory} from "@/ui/shortcuts/PianoPanelShortcuts"
@@ -146,12 +144,13 @@ export namespace StudioShortcutManager {
                 service.runIfProject(({editing, timelineBox: {loopArea: {enabled}}}) =>
                     editing.modify(() => enabled.setValue(!enabled.getValue())))),
             gc.register(gs["copy-device"].shortcut, () => service.runIfProject(
-                ({editing, userEditingManager, skeleton}) => userEditingManager.audioUnit.get().ifSome(({box}) => {
-                    const audioUnitBox = asInstanceOf(box, AudioUnitBox)
-                    const copies = editing.modify(() => ProjectUtils
-                        .extractAudioUnits([audioUnitBox], skeleton), false).unwrap()
-                    userEditingManager.audioUnit.edit(copies[0].editing)
-                }))),
+                ({editing, boxAdapters, userEditingManager, skeleton}) => userEditingManager.audioUnit.get()
+                    .ifSome(({box}) => {
+                        const deviceHost: DeviceHost = boxAdapters.adapterFor(box, Devices.isHost)
+                        const copies = editing.modify(() => ProjectUtils
+                            .extractAudioUnits([deviceHost.audioUnitBoxAdapter().box], skeleton), false).unwrap()
+                        userEditingManager.audioUnit.edit(copies[0].editing)
+                    }))),
             gc.register(gs["workspace-next-screen"].shortcut, () => {
                     if (!service.hasProfile) {return}
                     const keys: Array<Workspace.ScreenKeys> = Object.entries(DefaultWorkspace)

@@ -102,7 +102,8 @@ export class RegionMoveModifier implements RegionModifier {
     unselectedModifyStrategy(): RegionModifyStrategy {return this.#unselectedModifyStrategy}
 
     update({clientX, clientY, altKey, shiftKey}: Dragging.Event): void {
-        const adapters = this.#selection.selected()
+        const adapters = this.#selection.selected().filter(adapter => adapter.trackBoxAdapter.nonEmpty())
+        if (adapters.length === 0) {return}
         const maxIndex = this.#manager.numTracks() - 1
         const clientRect = this.#element.getBoundingClientRect()
         const deltaIndex: int = adapters.reduce((delta, adapter) => {
@@ -138,7 +139,8 @@ export class RegionMoveModifier implements RegionModifier {
             if (this.#copy) {this.#dispatchChange()} // reset visuals
             return
         }
-        const adapters = this.#selection.selected()
+        const adapters = this.#selection.selected().filter(adapter => adapter.trackBoxAdapter.nonEmpty())
+        if (adapters.length === 0) {return}
         if (!adapters.every(adapter => {
             const trackIndex = adapter.trackBoxAdapter.unwrap().listIndex + this.#deltaIndex
             const trackAdapter = this.#manager.getByIndex(trackIndex).unwrap().trackBoxAdapter
@@ -193,10 +195,13 @@ export class RegionMoveModifier implements RegionModifier {
     }
 
     #dispatchSameTrackChange(): void {
-        this.#selection.selected().forEach(({trackBoxAdapter}) => trackBoxAdapter.unwrap().regions.dispatchChange())
+        this.#selection.selected().forEach(({trackBoxAdapter}) =>
+            trackBoxAdapter.ifSome(adapter => adapter.regions.dispatchChange()))
     }
+
     #dispatchShiftedTrackChange(deltaIndex: int): void {
-        this.#selection.selected().forEach(({trackBoxAdapter}) => this.#manager
-            .getByIndex(trackBoxAdapter.unwrap().listIndex + deltaIndex).unwrapOrNull()?.trackBoxAdapter?.regions?.dispatchChange())
+        this.#selection.selected().forEach(({trackBoxAdapter}) =>
+            trackBoxAdapter.ifSome(adapter => this.#manager
+                .getByIndex(adapter.listIndex + deltaIndex).unwrapOrNull()?.trackBoxAdapter?.regions?.dispatchChange()))
     }
 }

@@ -66,6 +66,7 @@ export interface DeviceHost extends BoxAdapter, LabeledAudioOutputsOwner {
     get isAudioUnit(): boolean
     get label(): string
 
+    deviceHost(): DeviceHost
     audioUnitBoxAdapter(): AudioUnitBoxAdapter
 }
 
