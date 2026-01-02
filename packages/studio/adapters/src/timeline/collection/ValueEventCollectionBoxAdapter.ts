@@ -3,6 +3,7 @@ import {
     asDefined,
     Curve,
     int,
+    isDefined,
     linear,
     Notifier,
     Observer,
@@ -153,6 +154,16 @@ export class ValueEventCollectionBoxAdapter implements BoxAdapter {
     subscribeChange(observer: Observer<this>): Subscription {return this.#changeNotifier.subscribe(observer)}
 
     createEvent({position, index, value, interpolation}: CreateEventParams): ValueEventBoxAdapter {
+        const existing = this.#adapters.values().find(e => e.position === position && e.index === index)
+        if (isDefined(existing)) {
+            console.warn(`createEvent: DUPLICATE POSITION/INDEX!`, {
+                existingUUID: UUID.toString(existing.uuid),
+                position,
+                index,
+                collectionUUID: UUID.toString(this.#box.address.uuid),
+                stack: new Error().stack
+            })
+        }
         const eventBox = ValueEventBox.create(this.#context.boxGraph, UUID.generate(), box => {
             box.position.setValue(position)
             box.index.setValue(index)
