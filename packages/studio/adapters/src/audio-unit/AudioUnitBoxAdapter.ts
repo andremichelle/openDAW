@@ -79,6 +79,7 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
     get isAudioUnit(): boolean {return true}
     get label(): string {return this.#input.getValue().mapOr(input => input.labelField.getValue(), "")}
 
+    deviceHost(): DeviceHost {return this}
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this}
 
     * labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
