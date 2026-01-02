@@ -79,7 +79,3 @@ Create new `TransientMarkerEditing.ts` file (parallel to `WarpMarkerEditing.ts`)
 1. **Move**: Drag transient to new position (constrained by 50ms min distance)
 2. **Add**: Double-click to create new transient (constrained by 50ms min distance)
 3. **Delete**: Double-click on transient OR keyboard delete OR context menu
-
-## Bugs to Fix First
-
-(To be documented)
