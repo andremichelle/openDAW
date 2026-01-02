@@ -51,9 +51,11 @@ export class RegionClipResolver {
         return () => tasks.forEach(task => task())
     }
 
-    static fromRange(track: TrackBoxAdapter, position: ppqn, complete: ppqn): Exec {
-        // IdentityIncludeOrigin will include selected regions
-        const clipResolver = new RegionClipResolver(RegionModifyStrategies.IdentityIncludeOrigin, track)
+    static fromRange(track: TrackBoxAdapter,
+                     position: ppqn,
+                     complete: ppqn,
+                     strategy: RegionModifyStrategies = RegionModifyStrategies.IdentityIncludeOrigin): Exec {
+        const clipResolver = new RegionClipResolver(strategy, track)
         clipResolver.addMaskRange(position, complete)
         return clipResolver.#createSolver()
     }
@@ -148,8 +150,6 @@ export class RegionClipResolver {
     #createTasksFromMasks(masks: ReadonlyArray<Mask>): ReadonlyArray<ClipTask> {
         const tasks: Array<ClipTask> = []
         masks.forEach(({position, complete}) => {
-            // Iterate from 0 to find all regions that OVERLAP with [position, complete],
-            // not just regions that START within that range
             for (const region of this.#ground.regions.collection.iterateRange(0, complete)) {
                 if (region.position >= complete) {break} // past the mask, done
                 if (region.complete <= position) {continue} // ends before mask, skip
@@ -190,7 +190,6 @@ export class RegionClipResolver {
                     case "start":
                         if (UnionAdapterTypes.isLoopableRegion(region)) {
                             const delta = task.position - region.position
-                            // Capture old values BEFORE changing position (they depend on position for TimeBase.Seconds)
                             const oldDuration = region.duration
                             const oldLoopOffset = region.loopOffset
                             const oldLoopDuration = region.loopDuration
