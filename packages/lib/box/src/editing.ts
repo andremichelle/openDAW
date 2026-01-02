@@ -85,6 +85,7 @@ export class BoxEditing implements Editing {
     undo(): boolean {
         if (!this.canUndo()) {return false}
         if (this.#pending.length > 0) {this.mark()}
+        console.debug("undo")
         const modifications = this.#marked[--this.#historyIndex]
         modifications.toReversed().forEach(step => step.inverse(this.#graph))
         this.#graph.edges().validateRequirements()
@@ -94,6 +95,7 @@ export class BoxEditing implements Editing {
 
     redo(): boolean {
         if (!this.canRedo()) {return false}
+        console.debug("redo")
         this.#marked[this.#historyIndex++].forEach(step => step.forward(this.#graph))
         this.#graph.edges().validateRequirements()
         this.#notifier.notify()
