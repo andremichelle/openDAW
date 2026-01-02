@@ -163,22 +163,29 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                     if (event.shiftKey) {
                         const clientRect = canvas.getBoundingClientRect()
                         const position: ppqn = range.xToUnit(event.clientX - clientRect.left) - reader.offset
-                        return editing.modify(() => reader.content.cut(position, eventMapping).flatMap(event => {
+                        const optCutEvent = editing.modify(() => {
                             selection.deselectAll()
-                            selection.select(event)
-                            return modifyContext.startModifier(ValueMoveModifier.create({
-                                element: canvas,
-                                context,
-                                selection,
-                                snapping,
-                                pointerValue: event.value,
-                                pointerPulse: position,
-                                valueAxis,
-                                eventMapping,
-                                reference: event,
-                                collection: reader.content
-                            }))
-                        }), false).unwrap()
+                            return reader.content.cut(position, eventMapping).match({
+                                none: () => null,
+                                some: event => {
+                                    selection.select(event)
+                                    return event
+                                }
+                            })
+                        }, false).unwrapOrNull()
+                        if (optCutEvent === null) {return Option.None}
+                        return modifyContext.startModifier(ValueMoveModifier.create({
+                            element: canvas,
+                            context,
+                            selection,
+                            snapping,
+                            pointerValue: optCutEvent.value,
+                            pointerPulse: position,
+                            valueAxis,
+                            eventMapping,
+                            reference: optCutEvent,
+                            collection: reader.content
+                        }))
                     }
                 }
                 return Option.None
