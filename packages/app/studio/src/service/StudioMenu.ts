@@ -138,6 +138,16 @@ export const populateStudioMenu = (service: StudioService) => {
                                 })
                         )
                     }),
+                    MenuItem.default({label: "Script Editor", separatorBefore: true})
+                        .setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
+                    MenuItem.default({
+                        label: "Shortcuts",
+                        separatorBefore: true
+                    }).setTriggerProcedure(async () => StudioDialogs.showShortcutManager()),
+                    MenuItem.default({
+                        label: "Preferences",
+                        shortcut: GlobalShortcuts["show-preferences"].shortcut.format()
+                    }).setTriggerProcedure(async () => StudioDialogs.showPreferences()),
                     MenuItem.default({label: "Debug", separatorBefore: true})
                         .setRuntimeChildrenProcedure(parent => {
                             return parent.addMenuItem(
@@ -209,18 +219,7 @@ export const populateStudioMenu = (service: StudioService) => {
                                         }
                                     })
                             )
-                        }),
-                    MenuItem.default({label: "Script Editor", separatorBefore: true})
-                        .setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
-                    MenuItem.default({
-                        label: "Shortcut Manager",
-                        separatorBefore: true
-                    }).setTriggerProcedure(async () => StudioDialogs.showShortcutManager()),
-                    MenuItem.default({
-                        label: "Preferences",
-                        shortcut: GlobalShortcuts["show-preferences"].shortcut.format(),
-                        separatorBefore: true
-                    }).setTriggerProcedure(async () => StudioDialogs.showPreferences())
+                        })
                 )
             }
         )

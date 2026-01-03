@@ -1,4 +1,4 @@
-import {int} from "@opendaw/lib-std"
+import {int, Procedure} from "@opendaw/lib-std"
 import {AuxAudioUnit, GroupAudioUnit, InstrumentAudioUnit, Instruments, OutputAudioUnit, Project} from "../Api"
 import {ApiImpl} from "./ApiImpl"
 import {OutputAudioUnitImpl} from "./OutputAudioUnitImpl"
@@ -30,8 +30,8 @@ export class ProjectImpl implements Project {
         this.#api.openProject(ProjectConverter.toSkeleton(this).boxGraph.toArrayBuffer(), this.name)
     }
 
-    addInstrumentUnit<KEY extends keyof Instruments>(name: KEY, props?: Partial<Instruments[KEY]>): InstrumentAudioUnit {
-        const unit = new InstrumentAudioUnitImpl(name, props)
+    addInstrumentUnit<KEY extends keyof Instruments>(name: KEY, constructorFn?: Procedure<Instruments[KEY]>): InstrumentAudioUnit {
+        const unit = new InstrumentAudioUnitImpl(name, constructorFn)
         this.#instruments.push(unit)
         return unit
     }

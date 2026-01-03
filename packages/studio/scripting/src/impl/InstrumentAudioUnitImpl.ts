@@ -2,7 +2,7 @@ import {AuxAudioUnit, GroupAudioUnit, Instrument, InstrumentAudioUnit, Instrumen
 import {AudioUnitImpl} from "./AudioUnitImpl"
 import {SendImpl} from "./SendImpl"
 import {InstrumentImpl} from "./InstrumentImpl"
-import {Arrays} from "@opendaw/lib-std"
+import {Arrays, Procedure} from "@opendaw/lib-std"
 
 export class InstrumentAudioUnitImpl extends AudioUnitImpl implements InstrumentAudioUnit {
     readonly kind = "instrument" as const
@@ -10,13 +10,13 @@ export class InstrumentAudioUnitImpl extends AudioUnitImpl implements Instrument
 
     instrument: InstrumentImpl
 
-    constructor(instrumentName: keyof Instruments, props?: Partial<Instruments[keyof Instruments]>) {
+    constructor(instrumentName: keyof Instruments, constructorFn?: Procedure<any>) {
         super()
-        this.instrument = new InstrumentImpl(this, instrumentName, props)
+        this.instrument = new InstrumentImpl(this, instrumentName, constructorFn)
     }
 
-    setInstrument(instrumentName: keyof Instruments, props?: Partial<Instruments[keyof Instruments]>): Instrument {
-        this.instrument = new InstrumentImpl(this, instrumentName, props)
+    setInstrument(instrumentName: keyof Instruments, constructorFn?: Procedure<any>): Instrument {
+        this.instrument = new InstrumentImpl(this, instrumentName, constructorFn)
         return this.instrument
     }
 
