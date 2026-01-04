@@ -5,9 +5,11 @@ component
   display: grid
   grid-template-rows: repeat(10, 1fr)
   grid-template-columns: auto auto 2em auto 4em
+  row-gap: 1px
   align-content: start
   position: relative
   @include mixins.Control
+  height: auto
 
   > h3
     font-size: 9px

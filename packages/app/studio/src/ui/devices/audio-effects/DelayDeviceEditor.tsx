@@ -99,7 +99,7 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                   }),
                                   // MAIN DELAY
                                   <h3 style={{
-                                      gridArea: "4 / 3 / 8 / 4",
+                                      gridArea: "3 / 2 / 9 / 4",
                                       "--color": Colors.blue.toString()
                                   }}>DELAY</h3>,
                                   createLabelControlFrag({
@@ -117,18 +117,18 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: cross,
-                                      grid: {u: 4, v: 3}
+                                      grid: {u: 4, v: 2}
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: filter,
-                                      grid: {u: 4, v: 5}
+                                      grid: {u: 4, v: 4}
                                   }),
                                   <section className="feedback"/>,
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: feedback,
-                                      grid: {u: 1, v: 4}
+                                      grid: {u: 4, v: 6}
                                   }),
                                   // LFO
                                   <h3 style={{
