@@ -66,7 +66,7 @@ export class ProjectMigration {
             return promise
         }
         const orphans = boxGraph.findOrphans(rootBox)
-        if(orphans.length > 0) {
+        if (orphans.length > 0) {
             console.debug("Migrate remove orphaned boxes: ", orphans.length)
             boxGraph.beginTransaction()
             orphans.forEach(orphan => orphan.delete())
@@ -290,15 +290,21 @@ export class ProjectMigration {
                 const oldToNewIndex = [20, 19, 16, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
                 const oldMaxIndex = 16
                 const newMaxIndex = 20
-                const oldIndex = box.delay.getValue()
+                const oldIndex = box.delayMusical.getValue()
                 const newIndex = oldToNewIndex[Math.round(clamp(oldIndex, 0, oldMaxIndex))]
                 console.debug(`Migrate 'DelayDeviceBox' delay index from ${oldIndex} to ${newIndex}`)
                 boxGraph.beginTransaction()
-                box.delay.setValue(newIndex)
+                box.delayMusical.setValue(newIndex)
+                box.delayMillis.setValue(0)
+                box.preSyncTimeLeft.setValue(0)
+                box.preMillisTimeLeft.setValue(0)
+                box.preSyncTimeRight.setValue(0)
+                box.preMillisTimeRight.setValue(0)
+
                 box.version.setValue(1)
                 // Migrate automation events targeting the delay field
                 // Automation stores normalized values in [0, 1] range
-                box.delay.pointerHub.incoming().forEach(pointer => {
+                box.delayMusical.pointerHub.incoming().forEach(pointer => {
                     const eventBox = pointer.box.accept<BoxVisitor<ValueEventBox>>({
                         visitValueEventBox: (event) => event
                     })

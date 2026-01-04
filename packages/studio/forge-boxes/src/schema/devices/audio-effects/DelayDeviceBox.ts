@@ -5,7 +5,7 @@ import {DeviceFactory} from "../../std/DeviceFactory"
 
 export const DelayDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffect("DelayDeviceBox", {
     10: {
-        type: "float32", name: "delay", pointerRules: ParameterPointerRules,
+        type: "float32", name: "delay-musical", pointerRules: ParameterPointerRules,
         value: 13, constraints: "any", unit: ""
     },
     11: {
@@ -45,7 +45,7 @@ export const DelayDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffe
         value: 0.0, constraints: {min: 0.0, max: 1000.0, scaling: "linear"}, unit: "ms"
     },
     22: {
-        type: "float32", name: "millis-time", pointerRules: ParameterPointerRules,
+        type: "float32", name: "delay-millis", pointerRules: ParameterPointerRules,
         value: 0.0, constraints: {min: 0.0, max: 1000.0, scaling: "linear"}, unit: "ms"
     },
     23: {

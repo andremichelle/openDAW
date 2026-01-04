@@ -87,11 +87,11 @@ export class DelayDeviceBoxAdapter implements AudioEffectDeviceAdapter {
                 ValueMapping.powerByCenter(100.0, 0.0, DelayDeviceBoxAdapter.MAX_MILLIS_TIME),
                 StringMapping.numeric({unit: "ms", fractionDigits: 1}), "pre ms R"),
             delay: this.#parametric.createParameter(
-                box.delay,
+                box.delayMusical,
                 ValueMapping.linearInteger(0, DelayDeviceBoxAdapter.Fractions.length - 1),
                 DelayDeviceBoxAdapter.FractionsStringMapping, "delay"),
             millisTime: this.#parametric.createParameter(
-                box.millisTime,
+                box.delayMillis,
                 ValueMapping.powerByCenter(100.0, 0.0, DelayDeviceBoxAdapter.MAX_MILLIS_TIME),
                 StringMapping.numeric({unit: "ms", fractionDigits: 1}), "ms"),
             feedback: this.#parametric.createParameter(
