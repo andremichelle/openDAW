@@ -6,7 +6,7 @@ import {PitchPositioner} from "@/ui/timeline/editors/notes/pitch/PitchPositioner
 import {MidiKeys} from "@opendaw/lib-dsp"
 import {ScaleConfig} from "@/ui/timeline/editors/notes/pitch/ScaleConfig.ts"
 import {NoteSignal, NoteStreamReceiver} from "@opendaw/studio-adapters"
-import {Dragging, Events, getFontSizeForHeight, Html} from "@opendaw/lib-dom"
+import {Dragging, Events, Html} from "@opendaw/lib-dom"
 import {Fonts} from "@/ui/Fonts"
 import {CaptureMidi} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
@@ -29,7 +29,8 @@ export const PianoRoll = ({lifecycle, positioner, scale, noteReceiver, capture}:
         const pitchToY = (pitch: int) => positioner.pitchToY(pitch) * devicePixelRatio
         context.textBaseline = "middle"
         context.textAlign = "right"
-        const fontSize = getFontSizeForHeight(context, Fonts.Rubik["font-family"], positioner.noteHeight * 1.375)
+        const fontSize = positioner.noteHeight * 0.95 * devicePixelRatio
+        console.debug("fontSize", fontSize)
         context.font = `${fontSize}px ${Fonts.Rubik["font-family"]}, sans-serif`
         const topNote = positioner.yToPitch(0)
         const bottomNote = positioner.yToPitch(canvas.clientHeight)

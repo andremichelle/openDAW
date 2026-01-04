@@ -21,13 +21,3 @@ export const loadFont = async (properties: FontFaceProperties) => {
         console.error(error)
     }
 }
-
-// suggested by claude.ai to compensate variants on Mac/Windows
-export const getFontSizeForHeight = (context: CanvasRenderingContext2D,
-                                     fontFamily: string,
-                                     fontSize: number): number => {
-    context.font = `${fontSize}px ${fontFamily}, sans-serif`
-    const metrics = context.measureText("M") // Use 'M' or your typical character
-    const actualHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent
-    return (fontSize / actualHeight) * fontSize
-}
