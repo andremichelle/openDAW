@@ -1,9 +1,9 @@
 import css from "./AddParameterButton.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {UUID} from "@opendaw/lib-std"
+import {asInstanceOf, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {MIDIOutputParameterBox, TrackBox} from "@opendaw/studio-boxes"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {MIDIOutputDeviceBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {Project} from "@opendaw/studio-core"
 import {Icon} from "@/ui/components/Icon"
@@ -21,10 +21,16 @@ export const AddParameterButton = ({project: {boxGraph, editing}, adapter}: Cons
              onclick={() => editing.modify(() => {
                  const tracks = adapter.audioUnitBoxAdapter().box.tracks
                  const index = tracks.pointerHub.incoming().length
+
+                 const nextController = Math.min(adapter.box.parameters.pointerHub.filter(Pointers.Parameter)
+                     .reduce((id, {box}) => Math.max(id,
+                         asInstanceOf(box, MIDIOutputParameterBox).controller.getValue() + 1), 64), 127)
+
                  const parameter = MIDIOutputParameterBox.create(
                      boxGraph, UUID.generate(), box => {
                          box.label.setValue("CC")
                          box.owner.refer(adapter.box.parameters)
+                         box.controller.setValue(nextController)
                      })
                  TrackBox.create(boxGraph, UUID.generate(), box => {
                      box.index.setValue(index)
