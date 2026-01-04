@@ -63,13 +63,11 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                           <div className={className}>
                               <h3 style={{
                                   gridArea: "1 / 1 / 5 / 2",
-                                  "--color": Colors.black.toString(),
-                                  color: Colors.dark.toString()
+                                  "--color": Colors.cream.toString(),
                               }}>PRE DELAY L</h3>
                               <h3 style={{
                                   gridArea: "7 / 1 / 11 / 2",
-                                  "--color": Colors.black.toString(),
-                                  color: Colors.dark.toString()
+                                  "--color": Colors.cream.toString(),
                               }}>PRE DELAY R</h3>
                               {[
                                   // PRE DELAY
