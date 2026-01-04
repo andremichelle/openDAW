@@ -4,7 +4,7 @@
 component
   display: grid
   grid-template-rows: repeat(10, 1fr)
-  grid-template-columns: 3.75em repeat(2, 4em)
+  grid-template-columns: 4em repeat(2, 4.5em)
   row-gap: 1px
   align-content: start
   position: relative
@@ -20,7 +20,7 @@ component
     white-space: nowrap
     justify-self: end
     color: rgba(black, 0.8)
-    background-color: color-mix(in srgb, var(--color) 73%, black)
+    background-color: color-mix(in srgb, var(--color) 66%, black)
     position: relative
 
     &::after
@@ -42,9 +42,8 @@ component
     &.head
       height: min-content
       width: 100%
-      align-self: end
-      border-radius: 2px 2px 0 0
-      padding: 1px 4px
+      border-radius: 3px 3px 0 0
+      padding: 3px 4px
 
       &::after
         top: 0
@@ -52,18 +51,18 @@ component
         bottom: 100%
         width: 100%
         height: 32px
-        background: linear-gradient(to bottom, var(--color) -2000%, transparent 32px)
+        background: linear-gradient(to bottom, var(--color) -500%, transparent 32px)
 
   > section
     margin: 0 0 0 0.5em
-    border-left: 1px color-mix(in srgb, var(--color) 5%, transparent) solid
-    background-color: color-mix(in srgb, var(--color) 1%, transparent)
+    background-color: color-mix(in srgb, var(--color) 2%, transparent)
     pointer-events: none
     --color: red
 
     &.lfo
       grid-area: 1 / 2 / 3 / 4
       --color: var(--color-purple)
+      border-radius: 3px 0 0 0
 
     &.delay
       grid-area: 3 / 2 / 9 / 4
@@ -72,6 +71,7 @@ component
     &.mix
       grid-area: 9 / 2 / 11 / 4
       --color: var(--color-green)
+      border-radius: 0 0 0 3px
 
   > div.control
     display: grid
