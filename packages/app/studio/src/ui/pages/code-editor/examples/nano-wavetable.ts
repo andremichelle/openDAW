@@ -100,7 +100,7 @@ const sample = await openDAW.addSample({
 const project = openDAW.newProject("Time")
 project.bpm = 80
 
-const nanoUnit = project.addInstrumentUnit("Nano", {sample})
+const nanoUnit = project.addInstrumentUnit("Nano", x => x.sample = sample)
 nanoUnit.volume = -6
 nanoUnit.addAudioEffect("delay", {
     delay: 4,

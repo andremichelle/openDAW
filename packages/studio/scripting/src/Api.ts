@@ -58,18 +58,39 @@ export interface AudioEffect extends Effect {
 }
 
 export interface DelayEffect extends AudioEffect {
+    // Pre-delay Left
+    /** Pre-delay left sync time index (0-11): Off, 1/16, 1/12, 1/8, 1/6, 3/16, 1/4, 5/16, 1/3, 3/8, 7/16, 1/2 */
+    preSyncTimeLeft: number
+    /** Pre-delay left milliseconds offset (0-500 ms) */
+    preMillisTimeLeft: number
+
+    // Pre-delay Right
+    /** Pre-delay right sync time index (0-11): Off, 1/16, 1/12, 1/8, 1/6, 3/16, 1/4, 5/16, 1/3, 3/8, 7/16, 1/2 */
+    preSyncTimeRight: number
+    /** Pre-delay right milliseconds offset (0-500 ms) */
+    preMillisTimeRight: number
+
+    // Main Delay
     /** Delay time index (0-16): 1/1, 1/2, 1/3, 1/4, 3/16, 1/6, 1/8, 3/32, 1/12, 1/16, 3/64, 1/24, 1/32, 1/48, 1/64, 1/96, 1/128 note fractions */
     delay: number
+    /** Additional delay time in milliseconds (0-500 ms) */
+    millisTime: number
     /** Feedback amount (0.0 to 1.0) */
     feedback: number
     /** Cross-feedback amount (0.0 to 1.0) */
     cross: number
-    /** Filter cutoff frequency */
+    /** LFO speed in Hz (0.1 to 25) */
+    lfoSpeed: number
+    /** LFO depth in milliseconds (0-50 ms) */
+    lfoDepth: number
+    /** Filter cutoff (-1.0 = lowpass, 0.0 = off, 1.0 = highpass) */
     filter: number
-    /** Wet (processed) signal level (0.0 to 1.0) */
-    wet: number
-    /** Dry (original) signal level (0.0 to 1.0) */
+
+    // Mix
+    /** Dry (original) signal level in dB */
     dry: number
+    /** Wet (processed) signal level in dB */
+    wet: number
 }
 
 export interface AudioEffects {

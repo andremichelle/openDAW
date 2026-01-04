@@ -1,51 +1,84 @@
-import {assert, int, nextPowOf2, unitValue, ValueMapping} from "@opendaw/lib-std"
-import {BiquadCoeff, BiquadMono, BiquadProcessor, StereoMatrix} from "@opendaw/lib-dsp"
+import {bipolar, int, nextPowOf2, panic, unitValue, ValueMapping} from "@opendaw/lib-std"
+import {BiquadCoeff, BiquadMono, BiquadProcessor, Delay, Smooth, StereoMatrix} from "@opendaw/lib-dsp"
+
+const LIMITER_ATTACK_MS = 50.0
+const LIMITER_RELEASE_MS = 250.0
 
 export class DelayDeviceDsp {
-    static readonly #FilterMapping: ValueMapping<number> = ValueMapping.exponential(20.0 / sampleRate, 20000.0 / sampleRate)
+    static readonly FilterMapping: ValueMapping<number> = ValueMapping.exponential(20.0 / sampleRate, 20000.0 / sampleRate)
 
     readonly #delaySize: int
+    readonly #delayMask: int
     readonly #delayBuffer: StereoMatrix.Channels
     readonly #biquad: [BiquadProcessor, BiquadProcessor]
     readonly #biquadCoeff: BiquadCoeff
     readonly #interpolationLength: int
 
-    feedback: unitValue = 0.7
+    readonly #preDelayL: Delay
+    readonly #preDelayR: Delay
+    readonly #preDelayBuf: [Float32Array, Float32Array]
+    readonly #lfoDepthSmoother: Smooth
+    readonly #envelopeAttack: number
+    readonly #envelopeRelease: number
+
+    #currentOffset: number = 0.0
+    #delayLinePosition: int = 0 | 0
+    #targetOffset: number = 0.0
+    #deltaOffset: number = 0.0
+    #alphaPosition: int = 0 | 0
+    #envelope: number = 0.0
+    feedback: unitValue = 0.5
     cross: unitValue = 0.0
+    lfoPhaseIncr: number = 0.0
+    #lfoPhase: number = 0.0
+    lfoDepth: number = 0.0
     wet: number = 0.75
     dry: number = 0.75
+    #processed: boolean = false
 
-    #deltaOffset = 0.0
-    #writePosition: int = 0 | 0
-    #currentOffset: int = 0 | 0
-    #targetOffset = 0.0
-    #alphaPosition = 0 | 0
-    #processed = false
-    #interpolating = false
-
-    constructor(maxFrames: int, interpolationLength: int) {
+    constructor(maxFrames: int) {
         const pow2Size = nextPowOf2(maxFrames)
 
         this.#delaySize = pow2Size
+        this.#delayMask = pow2Size - 1
         this.#delayBuffer = [new Float32Array(pow2Size), new Float32Array(pow2Size)]
         this.#biquad = [new BiquadMono(), new BiquadMono()]
         this.#biquadCoeff = new BiquadCoeff()
-        this.#interpolationLength = interpolationLength
+        this.#interpolationLength = Math.floor(0.5 * sampleRate)
+        this.#preDelayL = new Delay(maxFrames, this.#interpolationLength)
+        this.#preDelayR = new Delay(maxFrames, this.#interpolationLength)
+        this.#preDelayBuf = [new Float32Array(128), new Float32Array(128)]
+        this.#lfoDepthSmoother = new Smooth(0.003, sampleRate)
+        this.#envelopeAttack = Math.exp(-1.0 / (sampleRate * LIMITER_ATTACK_MS))
+        this.#envelopeRelease = Math.exp(-1.0 / (sampleRate * LIMITER_RELEASE_MS))
     }
 
     reset(): void {
-        this.#writePosition = 0
+        this.#delayLinePosition = 0
+        this.#preDelayL.clear()
+        this.#preDelayR.clear()
         if (this.#processed) {
             this.#biquad.forEach(biquad => biquad.reset())
             this.#delayBuffer.forEach(delay => delay.fill(0.0))
             this.#processed = false
-            this.#interpolating = false
+            this.#envelope = 0.0
+            this.#lfoPhase = 0.0
         }
         this.#initDelayTime()
     }
 
+    set preDelayLeftOffset(value: number) {
+        this.#preDelayL.offset = Math.max(0, Math.min(value, this.#delaySize - 1))
+    }
+
+    set preDelayRightOffset(value: number) {
+        this.#preDelayR.offset = Math.max(0, Math.min(value, this.#delaySize - 1))
+    }
+
     set offset(value: number) {
-        assert(0 <= value && value < this.#delaySize, "Out of bounds")
+        if (value < 0 || value >= this.#delaySize) {
+            panic(`DelayDeviceDsp offset ${value} out of bounds [0, ${this.#delaySize})`)
+        }
         if (this.#targetOffset === value) {return}
         this.#targetOffset = value
         if (this.#processed) {
@@ -56,110 +89,92 @@ export class DelayDeviceDsp {
     }
     get offset(): number {return this.#targetOffset}
 
-    set filter(value: number) {
+    set filter(value: bipolar) {
         if (value === 0.0) {
             this.#biquadCoeff.identity()
         } else if (value > 0.0) {
-            this.#biquadCoeff.setHighpassParams(DelayDeviceDsp.#FilterMapping.y(value))
+            this.#biquadCoeff.setHighpassParams(DelayDeviceDsp.FilterMapping.y(value))
         } else if (value < 0.0) {
-            this.#biquadCoeff.setLowpassParams(DelayDeviceDsp.#FilterMapping.y(1.0 + value))
+            this.#biquadCoeff.setLowpassParams(DelayDeviceDsp.FilterMapping.y(1.0 + value))
         }
     }
+
+    setLfoDepth(value: number): void {this.lfoDepth = value}
 
     process(input: StereoMatrix.Channels, output: StereoMatrix.Channels, fromIndex: int, toIndex: int): void {
-        if (this.#interpolating) {
-            this.#processInterpolate(input, output, fromIndex, toIndex)
-        } else {
-            this.#processSteady(input, output, fromIndex, toIndex)
-        }
-        this.#processed = true
-    }
-
-    #processSteady(input: StereoMatrix.Channels, output: StereoMatrix.Channels, fromIndex: int, toIndex: int): void {
-        const delayMask = this.#delaySize - 1
-        const delayBuffer = this.#delayBuffer
-        const feedback = this.feedback
-        const pWetLevel = this.wet
-        const pDryLevel = this.dry
-        let writePosition = this.#writePosition
-        let readPosition: int = writePosition - Math.floor(this.#currentOffset)
-        if (readPosition < 0) {readPosition += this.#delaySize}
         const iL = input[0]
         const iR = input[1]
         const oL = output[0]
         const oR = output[1]
-        const bL = this.#biquad[0]
-        const bR = this.#biquad[1]
-        const dL = delayBuffer[0]
-        const dR = delayBuffer[1]
-        for (let i: int = fromIndex; i < toIndex; ++i) {
-            const inpL = iL[i]
-            const inpR = iR[i]
-            // the magic number prevents filter from getting unstable (beginner's fix)
-            const dReadL = bL.processFrame(this.#biquadCoeff, dL[readPosition] * 0.96)
-            const dReadR = bR.processFrame(this.#biquadCoeff, dR[readPosition] * 0.96)
-            const diff = this.cross * (dReadR - dReadL)
-            const crossL = dReadL + diff
-            const crossR = dReadR - diff
-            dL[writePosition] = (inpL + crossL) * feedback + 1.0e-18 - 1.0e-18
-            dR[writePosition] = (inpR + crossR) * feedback + 1.0e-18 - 1.0e-18
-            oL[i] = crossL * pWetLevel + inpL * pDryLevel
-            oR[i] = crossR * pWetLevel + inpR * pDryLevel
-            readPosition = ++readPosition & delayMask
-            writePosition = ++writePosition & delayMask
-        }
-        this.#writePosition = writePosition
-    }
 
-    #processInterpolate(input: StereoMatrix.Channels, output: StereoMatrix.Channels, fromIndex: int, toIndex: int): void {
-        const delayMask = this.#delaySize - 1
-        const delayBuffer = this.#delayBuffer
+        this.#preDelayL.process(this.#preDelayBuf[0], iL, fromIndex, toIndex)
+        this.#preDelayR.process(this.#preDelayBuf[1], iR, fromIndex, toIndex)
+
+        const cross = this.cross
+        const pass = 1.0 - cross
+
+        const delayMask = this.#delayMask
+        const delaySize = this.#delaySize
         const feedback = this.feedback
         const pWetLevel = this.wet
         const pDryLevel = this.dry
-        let writePosition = this.#writePosition
-        for (let i: int = fromIndex; i < toIndex; ++i) {
-            if (0 < this.#alphaPosition) {
+        const biquadL = this.#biquad[0]
+        const biquaR = this.#biquad[1]
+        const biquadCoeff = this.#biquadCoeff
+        const [delayBufL, delayBufR] = this.#delayBuffer
+
+        for (let i = fromIndex; i < toIndex; ++i) {
+            if (this.#alphaPosition > 0) {
                 this.#currentOffset += this.#deltaOffset
                 this.#alphaPosition--
             } else {
                 this.#currentOffset = this.#targetOffset
-                this.#interpolating = false
             }
-            let readPosition: int = writePosition - this.#currentOffset
-            if (readPosition < 0) {
-                readPosition += this.#delaySize
+            const lfoDepth = this.#lfoDepthSmoother.process(this.lfoDepth)
+            const lfoValue = 2.0 * Math.abs(this.#lfoPhase - 0.5) * lfoDepth
+            this.#lfoPhase += this.lfoPhaseIncr
+            if (this.#lfoPhase >= 1.0) {
+                this.#lfoPhase -= 1.0
             }
-            const readPositionInt = readPosition | 0
-            const alpha = readPosition - readPositionInt
-            const inpL = input[0][i]
-            const inpR = input[1][i]
-            const d00 = delayBuffer[0][readPositionInt]
-            const d10 = delayBuffer[1][readPositionInt]
-            const d0 = this.#biquad[0].processFrame(this.#biquadCoeff,
-                (d00 + alpha * (delayBuffer[0][(readPositionInt + 1) & delayMask] - d00)) * 0.96)
-            const d1 = this.#biquad[1].processFrame(this.#biquadCoeff,
-                (d10 + alpha * (delayBuffer[1][(readPositionInt + 1) & delayMask] - d10)) * 0.96)
-            delayBuffer[0][writePosition] = inpL + d0 * feedback + 1.0e-18 - 1.0e-18
-            delayBuffer[1][writePosition] = inpR + d0 * feedback + 1.0e-18 - 1.0e-18
-            output[0][i] = d0 * pWetLevel + inpL * pDryLevel
-            output[1][i] = d1 * pWetLevel + inpR * pDryLevel
-            writePosition = ++writePosition & delayMask
+            let readFloat = this.#delayLinePosition - (this.#currentOffset + lfoDepth - lfoValue)
+            if (readFloat < 0.0) {readFloat += delaySize}
+            const readInt0 = readFloat | 0
+            const readInt1 = (readInt0 + 1) & delayMask
+            const alpha = readFloat - readInt0
+            const l0 = delayBufL[readInt0 & delayMask]
+            const r0 = delayBufR[readInt0 & delayMask]
+            let readDelayL = l0 + alpha * (delayBufL[readInt1] - l0)
+            let readDelayR = r0 + alpha * (delayBufR[readInt1] - r0)
+            const abs = Math.max(Math.abs(readDelayL), Math.abs(readDelayR))
+            this.#envelope = abs > this.#envelope
+                ? this.#envelopeAttack * (this.#envelope - abs) + abs
+                : this.#envelopeRelease * (this.#envelope - abs) + abs
+            if (this.#envelope > 1.0) {
+                readDelayL /= this.#envelope
+                readDelayR /= this.#envelope
+            }
+            const processedL = biquadL.processFrame(biquadCoeff, (readDelayL * pass + readDelayR * cross) * 0.96)
+            const processedR = biquaR.processFrame(biquadCoeff, (readDelayR * pass + readDelayL * cross) * 0.96)
+            delayBufL[this.#delayLinePosition] = this.#preDelayBuf[0][i] + processedL * feedback + 1.0e-18 - 1.0e-18
+            delayBufR[this.#delayLinePosition] = this.#preDelayBuf[1][i] + processedR * feedback + 1.0e-18 - 1.0e-18
+            oL[i] = iL[i] * pDryLevel + processedL * pWetLevel
+            oR[i] = iR[i] * pDryLevel + processedR * pWetLevel
+            this.#delayLinePosition = (this.#delayLinePosition + 1) & delayMask
+            delayBufL[this.#delayLinePosition] = 0.0
+            delayBufR[this.#delayLinePosition] = 0.0
         }
-        this.#writePosition = writePosition
+        this.#processed = true
     }
 
     #initDelayTime(): void {
         this.#currentOffset = this.#targetOffset
         this.#alphaPosition = 0
-        this.#interpolating = false
     }
 
     #updateDelayTime(): void {
         if (this.#targetOffset !== this.#currentOffset) {
             this.#alphaPosition = this.#interpolationLength
             this.#deltaOffset = (this.#targetOffset - this.#currentOffset) / this.#alphaPosition
-            this.#interpolating = true
         }
     }
 }
