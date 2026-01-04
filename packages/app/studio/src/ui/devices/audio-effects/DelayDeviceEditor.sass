@@ -1,11 +1,10 @@
+@use "@/colors"
 @use "@/mixins"
 
 component
   display: grid
   grid-template-rows: repeat(10, 1fr)
-  grid-template-columns: min-content repeat(4, auto) 4em
-  column-gap: 2px
-  row-gap: 2px
+  grid-template-columns: repeat(6, auto) 4em
   align-content: start
   position: relative
   @include mixins.Control
@@ -14,6 +13,7 @@ component
     font-size: 9px
     font-weight: 400
     letter-spacing: 0.3px
+    padding: 0 1px
     text-align: center
     writing-mode: vertical-rl
     rotate: 180deg
@@ -26,43 +26,32 @@ component
     &::after
       top: 0
       right: 100%
-      width: 12px
+      width: 64px
       content: ''
       height: 100%
       position: absolute
-      background: linear-gradient(to left, var(--color) -1000%, transparent 12px)
+      background: linear-gradient(to left, var(--color) -2000%, transparent 64px)
 
-  > section.delay
-    grid-area: 4 / 3 / 8 / -1
+  > section.loop
+    grid-area: 5 / 5 / 7 / -1
     border-radius: 2px
-    outline: 1px solid var(--color-green)
+    //outline: 0.5px solid hsla(200, 40%, 70%, 0.12)
+    @include colors.panel-background-dark
     position: relative
 
-    &::after
-      top: 0
-      right: 0
-      content: "DELAY"
-      color: rgba(black, 0.8)
-      padding: 1px 1px 1px 2px
-      border-radius: 0 0 0 2px
-      background-color: var(--color-green)
-      position: absolute
-      font-size: 9px
-      font-weight: 400
-      letter-spacing: 0.3px
-
   > div.control
-    padding: 3px 0 0 0
     display: grid
     grid-template-rows: auto auto
     row-gap: 1px
     white-space: nowrap
     justify-content: center
+    padding: 2px 2px 0 2px
 
     > h3
       font-size: 9px
       height: 12px
       letter-spacing: 0.5px
       text-align: center
+      text-transform: capitalize
       color: var(--color-shadow)
       z-index: 1

@@ -63,11 +63,11 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                           <div className={className}>
                               <h3 style={{
                                   gridArea: "1 / 1 / 5 / 2",
-                                  "--color": Colors.orange.toString()
+                                  "--color": Colors.shadow.toString()
                               }}>PRE DELAY L</h3>
                               <h3 style={{
                                   gridArea: "7 / 1 / 11 / 2",
-                                  "--color": Colors.orange.toString()
+                                  "--color": Colors.shadow.toString()
                               }}>PRE DELAY R</h3>
                               {[
                                   // PRE DELAY
@@ -96,33 +96,37 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                       grid: {u: 1, v: 8}
                                   }),
                                   // MAIN DELAY
-                                  <section className="delay"/>,
+                                  <h3 style={{
+                                      gridArea: "4 / 3 / 8 / 4",
+                                      "--color": Colors.green.toString()
+                                  }}>DELAY</h3>,
+                                  <section className="loop"/>,
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: delay,
                                       name: "sync",
-                                      grid: {u: 2, v: 3}
+                                      grid: {u: 3, v: 3}
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: millisTime,
                                       name: "millis",
-                                      grid: {u: 2, v: 5}
+                                      grid: {u: 3, v: 5}
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: cross,
-                                      grid: {u: 3, v: 4}
-                                  }),
-                                  createLabelControlFrag({
-                                      lifecycle: lifecycle,
-                                      parameter: filter,
                                       grid: {u: 4, v: 4}
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
-                                      parameter: feedback,
+                                      parameter: filter,
                                       grid: {u: 5, v: 4}
+                                  }),
+                                  createLabelControlFrag({
+                                      lifecycle: lifecycle,
+                                      parameter: feedback,
+                                      grid: {u: 6, v: 4}
                                   }),
                                   // LFO
                                   <h3 style={{
@@ -144,7 +148,7 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                   }),
                                   // MIX
                                   <h3 style={{
-                                      gridArea: "9 / 4 / 11 / 5",
+                                      gridArea: "9 / 4 / -1 / 5",
                                       justifySelf: "end",
                                       "--color": Colors.blue.toString()
                                   }}>MIX</h3>,
