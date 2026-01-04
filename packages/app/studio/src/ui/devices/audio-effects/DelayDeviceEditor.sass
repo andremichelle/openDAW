@@ -1,4 +1,36 @@
 @use "@/mixins"
 
 component
-  @include mixins.ControlLayout(5)
+  display: grid
+  grid-template-rows: repeat(5, 1fr)
+  grid-template-columns: min-content repeat(4, auto)
+  column-gap: 2px
+  row-gap: 2px
+  align-content: start
+  position: relative
+  @include mixins.Control
+
+  > h3
+    font-size: 9px
+    letter-spacing: 0.5px
+    text-align: center
+    color: var(--color-orange)
+    writing-mode: vertical-rl
+    rotate: 180deg
+    white-space: nowrap
+
+  > div.control
+    padding: 3px 0 0 0
+    display: grid
+    grid-template-rows: auto auto
+    row-gap: 1px
+    white-space: nowrap
+    justify-content: center
+
+    > h3
+      font-size: 9px
+      height: 12px
+      letter-spacing: 0.5px
+      text-align: center
+      color: var(--color-shadow)
+      z-index: 1
