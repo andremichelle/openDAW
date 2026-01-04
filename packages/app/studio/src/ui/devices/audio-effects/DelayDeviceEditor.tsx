@@ -126,7 +126,8 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: filter,
-                                      grid: {u: 2, v: 4}
+                                      grid: {u: 2, v: 4},
+                                      threshold: 0.5
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
