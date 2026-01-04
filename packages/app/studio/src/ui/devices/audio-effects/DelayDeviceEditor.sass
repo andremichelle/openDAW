@@ -56,14 +56,14 @@ component
 
   > section
     margin: 0 0 0 0.5em
-    background-color: color-mix(in srgb, var(--color) 3%, transparent)
+    border-left: 1px color-mix(in srgb, var(--color) 5%, transparent) solid
+    background-color: color-mix(in srgb, var(--color) 1%, transparent)
     pointer-events: none
     --color: red
 
     &.lfo
       grid-area: 1 / 2 / 3 / 4
       --color: var(--color-purple)
-      border-radius: 4px 0 0 0
 
     &.delay
       grid-area: 3 / 2 / 9 / 4
@@ -72,7 +72,6 @@ component
     &.mix
       grid-area: 9 / 2 / 11 / 4
       --color: var(--color-green)
-      border-radius: 0 0 0 4px
 
   > div.control
     display: grid
