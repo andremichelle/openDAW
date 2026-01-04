@@ -64,13 +64,13 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                               <h3 className="head"
                                   style={{
                                       gridArea: "1 / 1 / 2 / 2",
-                                      "--color": Colors.cream.toString()
-                                  }}>PRE DELAY L</h3>
+                                      "--color": Colors.shadow.toString()
+                                  }}>DELAY L</h3>
                               <h3 className="head"
                                   style={{
                                       gridArea: "6 / 1 / 7 / 2",
-                                      "--color": Colors.cream.toString()
-                                  }}>PRE DELAY R</h3>
+                                      "--color": Colors.shadow.toString()
+                                  }}>DELAY R</h3>
                               <section className="lfo"/>
                               <section className="delay"/>
                               <section className="mix"/>
@@ -101,7 +101,7 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                       grid: {u: 0, v: 8}
                                   }),
                                   // MAIN DELAY
-                                  <h3 className="rotated"
+                                  <h3 className="rotated delay"
                                       style={{
                                           gridArea: "3 / -1 / 9 / -1",
                                           "--color": Colors.blue.toString()
@@ -134,7 +134,7 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                       grid: {u: 2, v: 6}
                                   }),
                                   // LFO
-                                  <h3 className="rotated"
+                                  <h3 className="rotated lfo"
                                       style={{
                                           gridArea: "1 / -1 / 3 / -1",
                                           justifySelf: "end",
@@ -153,7 +153,7 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                       grid: {u: 2, v: 0}
                                   }),
                                   // MIX
-                                  <h3 className="rotated"
+                                  <h3 className="rotated mix"
                                       style={{
                                           gridArea: "9 / -1 / -1 / -1",
                                           justifySelf: "end",

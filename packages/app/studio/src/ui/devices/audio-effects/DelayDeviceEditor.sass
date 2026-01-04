@@ -14,7 +14,7 @@ component
   > h3
     font-size: 9px
     font-weight: 400
-    letter-spacing: 0.3px
+    letter-spacing: 0.2px
     padding: 0 1px
     text-align: center
     white-space: nowrap
@@ -32,7 +32,12 @@ component
       writing-mode: vertical-rl
       width: 1.5em
       justify-self: end
-      border-radius: 0 2px 2px 0
+
+    &.lfo
+      border-radius: 0 3px 0 0
+
+    &.mix
+      border-radius: 0 0 3px 0
 
     &.head
       height: min-content
@@ -51,13 +56,13 @@ component
 
   > section
     margin: 0 0 0 0.5em
-    background: color-mix(in srgb, var(--color) 3%, transparent)
+    background-color: color-mix(in srgb, var(--color) 2.5%, transparent)
     --color: red
 
     &.lfo
       grid-area: 1 / 2 / 3 / 4
       --color: var(--color-purple)
-      border-radius: 8px 0 0 0
+      border-radius: 4px 0 0 0
 
     &.delay
       grid-area: 3 / 2 / 9 / 4
@@ -66,7 +71,7 @@ component
     &.mix
       grid-area: 9 / 2 / 11 / 4
       --color: var(--color-green)
-      border-radius: 0 0 0 8px
+      border-radius: 0 0 0 4px
 
   > div.control
     display: grid
