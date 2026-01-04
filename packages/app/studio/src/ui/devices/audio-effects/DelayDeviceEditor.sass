@@ -25,17 +25,17 @@ component
     justify-self: end
     border-radius: 0 2px 2px 0
     color: rgba(black, 0.8)
-    background-color: var(--color)
+    background-color: color-mix(in srgb, var(--color) 75%, black)
     position: relative
 
     &::after
       top: 0
       right: 100%
-      width: 128px
+      width: 64px
       content: ''
       height: 100%
       position: absolute
-      background: linear-gradient(to left, var(--color) -2000%, transparent 128px)
+      background: linear-gradient(to left, var(--color) -2000%, transparent 64px)
 
   > div.control
     display: grid
