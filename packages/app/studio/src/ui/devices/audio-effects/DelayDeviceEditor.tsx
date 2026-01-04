@@ -128,7 +128,7 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: feedback,
-                                      grid: {u: 5, v: 4}
+                                      grid: {u: 1, v: 4}
                                   }),
                                   // LFO
                                   <h3 style={{
