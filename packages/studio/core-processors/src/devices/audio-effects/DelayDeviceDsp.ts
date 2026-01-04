@@ -118,10 +118,10 @@ export class DelayDeviceDsp {
         const feedback = this.feedback
         const pWetLevel = this.wet
         const pDryLevel = this.dry
-        const biquadL = this.#biquad[0]
-        const biquaR = this.#biquad[1]
         const biquadCoeff = this.#biquadCoeff
+        const [biquadL, biquadR] = this.#biquad
         const [delayBufL, delayBufR] = this.#delayBuffer
+        const [preDelayBufL, preDelayBufR] = this.#preDelayBuf
 
         for (let i = fromIndex; i < toIndex; ++i) {
             if (this.#alphaPosition > 0) {
@@ -154,9 +154,9 @@ export class DelayDeviceDsp {
                 readDelayR /= this.#envelope
             }
             const processedL = biquadL.processFrame(biquadCoeff, (readDelayL * pass + readDelayR * cross) * 0.96)
-            const processedR = biquaR.processFrame(biquadCoeff, (readDelayR * pass + readDelayL * cross) * 0.96)
-            delayBufL[this.#delayLinePosition] = this.#preDelayBuf[0][i] + processedL * feedback + 1.0e-18 - 1.0e-18
-            delayBufR[this.#delayLinePosition] = this.#preDelayBuf[1][i] + processedR * feedback + 1.0e-18 - 1.0e-18
+            const processedR = biquadR.processFrame(biquadCoeff, (readDelayR * pass + readDelayL * cross) * 0.96)
+            delayBufL[this.#delayLinePosition] = preDelayBufL[i] + processedL * feedback + 1.0e-18 - 1.0e-18
+            delayBufR[this.#delayLinePosition] = preDelayBufR[i] + processedR * feedback + 1.0e-18 - 1.0e-18
             oL[i] = iL[i] * pDryLevel + processedL * pWetLevel
             oR[i] = iR[i] * pDryLevel + processedR * pWetLevel
             this.#delayLinePosition = (this.#delayLinePosition + 1) & delayMask

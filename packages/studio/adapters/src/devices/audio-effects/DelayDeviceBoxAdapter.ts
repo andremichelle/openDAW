@@ -22,9 +22,9 @@ export class DelayDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     static FractionsStringMapping = StringMapping.indices("",
         this.Fractions.map(([n, d]) => n === 0 ? "Off" : `${n}/${d}`))
 
-    static readonly MAX_MILLIS_TIME = 500.0
+    static readonly MAX_MILLIS_TIME = 1000.0
     static readonly LFO_SPEED_MIN = 0.1
-    static readonly LFO_SPEED_MAX = 25.0
+    static readonly LFO_SPEED_MAX = 5.0
     static readonly LFO_DEPTH_MAX = 50.0
 
     readonly type = "audio-effect"
