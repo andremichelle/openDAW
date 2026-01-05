@@ -10,8 +10,9 @@ export const EngineSettingsSchema = z.object({
         gain: z.number().min(Number.NEGATIVE_INFINITY).max(0)
     }).default({enabled: false, beatSubDivision: 1, gain: -6.0}),
     playback: z.object({
-        timestampEnabled: z.boolean()
-    }).default({timestampEnabled: true}),
+        timestampEnabled: z.boolean(),
+        pauseOnLoopDisabled: z.boolean()
+    }).default({timestampEnabled: true, pauseOnLoopDisabled: false}),
     recording: z.object({
         countInBars: z.union(_RecordingCountInBars.map(value => z.literal(value)))
     }).default({countInBars: 1})

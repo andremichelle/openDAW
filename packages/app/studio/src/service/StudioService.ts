@@ -370,7 +370,7 @@ export class StudioService implements ProjectEnv {
                         this.switchScreen(screen)
                     }
                 }
-                this.engine.setWorklet(project.startAudioWorklet(restart, {pauseOnLoopDisabled: false}))
+                this.engine.setWorklet(project.startAudioWorklet(restart, {}))
                 lifeTime.ownAll(
                     project,
                     snapping.registerSignatureTrackAdapter(project.timelineBoxAdapter.signatureTrack),

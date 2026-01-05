@@ -75,7 +75,11 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                 MenuItem.default({
                     label: "Resume from last playback starting position",
                     checked: playback.timestampEnabled
-                }).setTriggerProcedure(() => playback.timestampEnabled = !playback.timestampEnabled)
+                }).setTriggerProcedure(() => playback.timestampEnabled = !playback.timestampEnabled),
+                MenuItem.default({
+                    label: "Pause playback on loop end if loop is disabled",
+                    checked: playback.pauseOnLoopDisabled
+                }).setTriggerProcedure(() => playback.pauseOnLoopDisabled = !playback.pauseOnLoopDisabled)
             )),
         projectProfileService.catchupAndSubscribe((optProfile: Option<ProjectProfile>) => {
             loopLifecycle.terminate()

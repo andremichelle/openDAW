@@ -27,7 +27,6 @@ export class BlockRenderer implements Terminable {
     readonly #context: EngineContext
 
     readonly #callbacks: SetMultimap<ppqn, Exec>
-    readonly #pauseOnLoopDisabled: boolean = true
 
     #bpmChanged: boolean = false
     #currentMarker: Nullable<[MarkerBoxAdapter, int]> = null
@@ -36,7 +35,7 @@ export class BlockRenderer implements Terminable {
     #optTempoAutomation: Option<ValueEventCollectionBoxAdapter> = Option.None
     #bpm: bpm
 
-    constructor(context: EngineContext, options?: { pauseOnLoopDisabled?: boolean }) {
+    constructor(context: EngineContext) {
         this.#context = context
 
         const {timelineBoxAdapter} = context
@@ -59,7 +58,6 @@ export class BlockRenderer implements Terminable {
             })
         )
 
-        this.#pauseOnLoopDisabled = options?.pauseOnLoopDisabled ?? false
         this.#callbacks = new SetMultimap()
     }
 
@@ -80,7 +78,8 @@ export class BlockRenderer implements Terminable {
     process(procedure: Procedure<ProcessInfo>): void {
         let markerChanged = false
 
-        const {timeInfo, timelineBoxAdapter: {box: timelineBox, markerTrack}} = this.#context
+        const {timeInfo, timelineBoxAdapter: {box: timelineBox, markerTrack}, preferences: {settings}} = this.#context
+        const pauseOnLoopDisabled = settings.playback.pauseOnLoopDisabled
         const transporting = timeInfo.transporting
         if (transporting) {
             const blocks: Array<Block> = []
@@ -139,7 +138,7 @@ export class BlockRenderer implements Terminable {
                 const {isRecording, isCountingIn} = this.#context.timeInfo // TODO We need a concept for loops in recording
                 const {from, to, enabled} = timelineBox.loopArea
                 const loopEnabled = enabled.getValue()
-                if ((loopEnabled && !(isRecording || isCountingIn)) || this.#pauseOnLoopDisabled) {
+                if ((loopEnabled && !(isRecording || isCountingIn)) || pauseOnLoopDisabled) {
                     const loopTo = to.getValue()
                     if (p0 < loopTo && p1 > loopTo && loopTo < actionPosition) {
                         action = {type: "loop", target: from.getValue()}
@@ -209,7 +208,7 @@ export class BlockRenderer implements Terminable {
                     switch (action.type) {
                         case "loop": {
                             advanceToEvent()
-                            if (this.#pauseOnLoopDisabled) {
+                            if (pauseOnLoopDisabled) {
                                 this.#context.timeInfo.pause()
                                 releaseBlock()
                             } else {
