@@ -3,13 +3,12 @@
 
 component
   display: grid
-  grid-template-rows: repeat(10, 1fr)
+  grid-template-rows: repeat(10, 17px)
   grid-template-columns: 4em repeat(2, 4.5em)
   row-gap: 1px
   align-content: start
   position: relative
   @include mixins.Control
-  height: auto
 
   > h3
     font-size: 9px
@@ -30,7 +29,6 @@ component
     &.rotated
       line-height: 1.375em
       writing-mode: vertical-rl
-      width: 1.5em
       justify-self: end
 
     &.lfo
