@@ -17,9 +17,7 @@ export class PreferencesHost<SETTINGS extends object> implements Preferences<SET
     readonly #terminator = new Terminator()
     readonly #object: VirtualObject<SETTINGS>
 
-    constructor(settings: SETTINGS) {
-        this.#object = this.#terminator.own(new VirtualObject(settings))
-    }
+    constructor(settings: SETTINGS) {this.#object = this.#terminator.own(new VirtualObject(settings))}
 
     get settings(): SETTINGS {return this.#object.proxy}
 

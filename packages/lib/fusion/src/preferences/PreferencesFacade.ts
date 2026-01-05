@@ -40,6 +40,10 @@ export class PreferencesFacade<SETTINGS extends object> implements Preferences<S
         return this.#object.subscribe(observer, ...path)
     }
 
+    subscribeAll(observer: Observer<keyof SETTINGS>): Subscription {
+        return this.#object.subscribeAll(observer)
+    }
+
     catchupAndSubscribe<P extends PathTuple<SETTINGS>>(
         observer: Observer<ValueAtPath<SETTINGS, P>>, ...path: P): Subscription {
         return this.#object.catchupAndSubscribe(observer, ...path)

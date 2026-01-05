@@ -21,6 +21,7 @@ import {
 import {Engine} from "./Engine"
 import {EngineWorklet} from "./EngineWorklet"
 import {Project} from "./project"
+import {Preferences} from "@opendaw/lib-fusion"
 
 export class EngineFacade implements Engine {
     readonly #terminator: Terminator = new Terminator()
@@ -34,11 +35,13 @@ export class EngineFacade implements Engine {
     readonly #isCountingIn: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
-    readonly #preferencesFacade: PreferencesFacade<EngineSettings> = new PreferencesFacade(EngineSettingsSchema.parse({}))
+    readonly #preferencesFacade: PreferencesFacade<EngineSettings>
 
     #worklet: Option<EngineWorklet> = Option.None
 
-    constructor() {}
+    constructor() {
+        this.#preferencesFacade = Preferences.facade("engine-preferences", EngineSettingsSchema)
+    }
 
     setWorklet(worklet: EngineWorklet) {
         this.#worklet = Option.wrap(worklet)
