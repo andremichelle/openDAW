@@ -64,14 +64,12 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                               <h3 className="head"
                                   style={{
                                       gridArea: "1 / 1 / 2 / 2",
-                                      "--color": "rgba(255, 255, 255, 0.08)",
-                                      color: Colors.shadow.toString()
+                                      "--color": "rgba(255, 255, 255, 0.6)",
                                   }}>DELAY L</h3>
                               <h3 className="head"
                                   style={{
                                       gridArea: "6 / 1 / 7 / 2",
-                                      "--color": "rgba(255, 255, 255, 0.08)",
-                                      color: Colors.shadow.toString()
+                                      "--color": "rgba(255, 255, 255, 0.6)",
                                   }}>DELAY R</h3>
                               <section className="lfo"/>
                               <section className="delay"/>

@@ -44,18 +44,18 @@ component
       width: 100%
       border-radius: 3px 3px 0 0
       padding: 3px 4px
+      border-bottom: 1px rgba(black, 0.3) solid
 
       &::after
-        top: 0
         left: 0
-        bottom: 100%
+        bottom: -24px
         width: 100%
-        height: 32px
-        background: linear-gradient(to bottom, var(--color) -500%, transparent 32px)
+        height: 24px
+        background: linear-gradient(to bottom, var(--color) -1500%, transparent 24px)
 
   > section
     margin: 0 0 0 0.5em
-    background-color: color-mix(in srgb, var(--color) 2%, transparent)
+    background-color: color-mix(in srgb, var(--color) 3%, transparent)
     pointer-events: none
     --color: red
 
