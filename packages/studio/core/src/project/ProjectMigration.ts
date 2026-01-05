@@ -7,6 +7,7 @@ import {
     BoxVisitor,
     CaptureAudioBox,
     CaptureMidiBox,
+    DelayDeviceBox,
     GrooveShuffleBox,
     MIDIOutputBox,
     MIDIOutputDeviceBox,
@@ -18,7 +19,7 @@ import {
     VaporisateurDeviceBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
-import {asDefined, asInstanceOf, clamp, Float, Subscription, UUID, ValueOwner} from "@opendaw/lib-std"
+import {asDefined, asInstanceOf, clamp, Float, isDefined, Subscription, UUID, ValueOwner} from "@opendaw/lib-std"
 import {AudioPlayback, AudioUnitType} from "@opendaw/studio-enums"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {Field} from "@opendaw/lib-box"
@@ -65,7 +66,7 @@ export class ProjectMigration {
             return promise
         }
         const orphans = boxGraph.findOrphans(rootBox)
-        if(orphans.length > 0) {
+        if (orphans.length > 0) {
             console.debug("Migrate remove orphaned boxes: ", orphans.length)
             boxGraph.beginTransaction()
             orphans.forEach(orphan => orphan.delete())
@@ -278,6 +279,45 @@ export class ProjectMigration {
                     box.version.setValue(2)
                     boxGraph.endTransaction()
                 }
+            },
+            visitDelayDeviceBox: (box: DelayDeviceBox): void => {
+                // Version 0: old descending array (17 values)
+                // Version 1: new ascending array with off (21 values)
+                if (box.version.getValue() !== 0) {return}
+                // Old descending: 1/1, 1/2, 1/3, 1/4, 3/16, 1/6, 1/8, 3/32, 1/12, 1/16, 3/64, 1/24, 1/32, 1/48, 1/64, 1/96, 1/128
+                // New ascending: off, 1/128, 1/96, 1/64, 1/48, 1/32, 1/24, 3/64, 1/16, 1/12, 3/32, 1/8, 1/6, 3/16, 1/4, 5/16, 1/3, 3/8, 7/16, 1/2, 1/1
+                // Mapping: old[i] fraction -> find the same fraction in the new array
+                const oldToNewIndex = [20, 19, 16, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
+                const oldMaxIndex = 16
+                const newMaxIndex = 20
+                const oldIndex = box.delayMusical.getValue()
+                const newIndex = oldToNewIndex[Math.round(clamp(oldIndex, 0, oldMaxIndex))]
+                console.debug(`Migrate 'DelayDeviceBox' delay index from ${oldIndex} to ${newIndex}`)
+                boxGraph.beginTransaction()
+                box.delayMusical.setValue(newIndex)
+                box.delayMillis.setValue(0)
+                box.preSyncTimeLeft.setValue(0)
+                box.preMillisTimeLeft.setValue(0)
+                box.preSyncTimeRight.setValue(0)
+                box.preMillisTimeRight.setValue(0)
+
+                box.version.setValue(1)
+                // Migrate automation events targeting the delay field
+                // Automation stores normalized values in [0, 1] range
+                box.delayMusical.pointerHub.incoming().forEach(pointer => {
+                    const eventBox = pointer.box.accept<BoxVisitor<ValueEventBox>>({
+                        visitValueEventBox: (event) => event
+                    })
+                    if (isDefined(eventBox)) {
+                        const oldNormalized = eventBox.value.getValue()
+                        const oldEventIndex = Math.round(oldNormalized * oldMaxIndex)
+                        const newEventIndex = oldToNewIndex[clamp(oldEventIndex, 0, oldMaxIndex)]
+                        const newNormalized = newEventIndex / newMaxIndex
+                        console.debug(`  Migrate automation: ${oldNormalized.toFixed(4)} (idx ${oldEventIndex}) -> ${newNormalized.toFixed(4)} (idx ${newEventIndex})`)
+                        eventBox.value.setValue(newNormalized)
+                    }
+                })
+                boxGraph.endTransaction()
             }
         }))
     }

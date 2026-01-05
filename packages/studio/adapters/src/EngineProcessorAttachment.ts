@@ -1,6 +1,6 @@
 import {int, Option} from "@opendaw/lib-std"
 
-export type ProcessorOptions = { pauseOnLoopDisabled?: boolean }
+export type ProcessorOptions = {}
 
 // This is the type for passing over information to the main audio-worklet
 export type EngineProcessorAttachment = {

@@ -190,34 +190,38 @@ export class NoteSequencer implements NoteEventSource, Terminable {
 
     * #processClip(clip: NoteClipBoxAdapter, p0: ppqn, p1: ppqn): IterableIterator<Id<NoteEvent>> {
         if (clip.optCollection.isEmpty()) {return}
+        const truncateNotesAtRegionEnd = this.#context.preferences.settings.playback.truncateNotesAtRegionEnd
         const collection = clip.optCollection.unwrap()
         const clipDuration = clip.duration
         const clipStart = quantizeFloor(p0, clipDuration)
         const clipEnd = clipStart + clipDuration
+        const truncateEnd = truncateNotesAtRegionEnd ? clipDuration : Number.POSITIVE_INFINITY
         if (p1 > clipEnd) {
-            yield* this.#processCollection(collection, p0, clipEnd, clipStart)
-            yield* this.#processCollection(collection, clipEnd, p1, clipEnd)
+            yield* this.#processCollection(collection, p0 - clipStart, clipEnd - clipStart, clipStart, truncateEnd)
+            yield* this.#processCollection(collection, 0, p1 - clipEnd, clipEnd, truncateEnd)
         } else {
-            yield* this.#processCollection(collection, p0, p1, clipStart)
+            yield* this.#processCollection(collection, p0 - clipStart, p1 - clipStart, clipStart, truncateEnd)
         }
     }
 
     * #processRegions(trackBoxAdapter: TrackBoxAdapter, p0: ppqn, p1: ppqn): IterableIterator<Id<NoteEvent>> {
+        const truncateNotesAtRegionEnd = this.#context.preferences.settings.playback.truncateNotesAtRegionEnd
         for (const region of trackBoxAdapter.regions.collection.iterateRange(p0, p1)) {
             if (this.#context.ignoresRegion(region.address.uuid)
                 || region.mute || !isInstanceOf(region, NoteRegionBoxAdapter)) {continue}
             const optCollection = region.optCollection
             if (optCollection.isEmpty()) {continue}
             const collection = optCollection.unwrap()
-            for (const {resultStart, resultEnd, rawStart} of LoopableRegion.locateLoops(region, p0, p1)) {
-                yield* this.#processCollection(collection, resultStart, resultEnd, rawStart)
+            for (const {resultStart, resultEnd, rawStart, rawEnd} of LoopableRegion.locateLoops(region, p0, p1)) {
+                const end = truncateNotesAtRegionEnd
+                    ? Math.min(rawEnd, region.complete)
+                    : Number.POSITIVE_INFINITY
+                yield* this.#processCollection(collection, resultStart - rawStart, resultEnd - rawStart, rawStart, end - rawStart)
             }
         }
     }
 
-    * #processCollection(collection: NoteEventCollectionBoxAdapter, start: ppqn, end: ppqn, delta: ppqn): IterableIterator<Id<NoteEvent>> {
-        const localStart = start - delta
-        const localEnd = end - delta
+    * #processCollection(collection: NoteEventCollectionBoxAdapter, localStart: ppqn, localEnd: ppqn, delta: ppqn, end: ppqn): IterableIterator<Id<NoteEvent>> {
         for (const source of collection.events.iterateRange(localStart - collection.maxDuration, localEnd)) {
             if (!NoteEvent.isOfType(source)) {continue}
             const {position, duration, chance, playCount, playCurve} = source
@@ -240,7 +244,8 @@ export class NoteSequencer implements NoteEventSource, Terminable {
                 }
             } else {
                 if (localStart <= position && position < localEnd) {
-                    const event: Id<NoteEvent> = NoteLifecycleEvent.startWith(source, position + delta)
+                    const duration = Math.min(source.duration, end - position)
+                    const event: Id<NoteEvent> = NoteLifecycleEvent.startWith(source, position + delta, duration)
                     this.#retainer.addAndRetain({...event})
                     yield event
                 }

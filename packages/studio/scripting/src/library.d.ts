@@ -1,3 +1,5 @@
+// noinspection JSUnusedGlobalSymbols
+
 declare class TypedArray {
     readonly buffer: ArrayBuffer
     readonly byteOffset: number
@@ -168,23 +170,67 @@ interface IteratorYieldResult<TYield> {
     done?: false
     value: TYield
 }
+
 interface IteratorReturnResult<TReturn> {
     done: true
     value: TReturn
 }
+
 type IteratorResult<T, TReturn = any> = IteratorYieldResult<T> | IteratorReturnResult<TReturn>
+
 interface Iterator<T, TReturn = any, TNext = undefined> {
     next(...args: [] | [TNext]): IteratorResult<T, TReturn>
     return?(value?: TReturn): IteratorResult<T, TReturn>
     throw?(e?: any): IteratorResult<T, TReturn>
 }
+
 interface Iterable<T> {
     [Symbol.iterator](): Iterator<T>
 }
+
 interface IterableIterator<T> extends Iterator<T> {
     [Symbol.iterator](): IterableIterator<T>
 }
+
 interface SymbolConstructor {
     readonly iterator: symbol
+    readonly unscopables: symbol
 }
+
 declare var Symbol: SymbolConstructor
+
+type Partial<T> = { [P in keyof T]?: T[P] }
+type Required<T> = { [P in keyof T]-?: T[P] }
+type Readonly<T> = { readonly [P in keyof T]: T[P] }
+type Pick<T, K extends keyof T> = { [P in K]: T[P] }
+type Omit<T, K extends keyof any> = Pick<T, Exclude<keyof T, K>>
+type Record<K extends keyof any, T> = { [P in K]: T }
+type Exclude<T, U> = T extends U ? never : T
+type Extract<T, U> = T extends U ? T : never
+type NonNullable<T> = T extends null | undefined ? never : T
+type ReturnType<T extends (...args: any) => any> = T extends (...args: any) => infer R ? R : any
+type Parameters<T extends (...args: any) => any> = T extends (...args: infer P) => any ? P : never
+type Awaited<T> = T extends null | undefined ? T : T extends object & {
+    then(onfulfilled: infer F, ...args: infer _): any
+} ? F extends ((value: infer V, ...args: infer _) => any) ? Awaited<V> : never : T
+
+interface ReadonlyArray<T> {
+    readonly length: number
+    readonly [n: number]: T
+    concat(...items: (T | ConcatArray<T>)[]): T[]
+    every(callbackfn: (value: T, index: number, array: readonly T[]) => boolean): boolean
+    filter(callbackfn: (value: T, index: number, array: readonly T[]) => boolean): T[]
+    find(callbackfn: (value: T, index: number, array: readonly T[]) => boolean): T | undefined
+    findIndex(callbackfn: (value: T, index: number, array: readonly T[]) => boolean): number
+    forEach(callbackfn: (value: T, index: number, array: readonly T[]) => void): void
+    includes(value: T, fromIndex?: number): boolean
+    indexOf(value: T, fromIndex?: number): number
+    join(separator?: string): string
+    lastIndexOf(value: T, fromIndex?: number): number
+    map<U>(callbackfn: (value: T, index: number, array: readonly T[]) => U): U[]
+    reduce(callbackfn: (prev: T, curr: T, index: number, array: readonly T[]) => T): T
+    reduceRight(callbackfn: (prev: T, curr: T, index: number, array: readonly T[]) => T): T
+    slice(start?: number, end?: number): T[]
+    some(callbackfn: (value: T, index: number, array: readonly T[]) => boolean): boolean
+    [Symbol.iterator](): IterableIterator<T>
+}

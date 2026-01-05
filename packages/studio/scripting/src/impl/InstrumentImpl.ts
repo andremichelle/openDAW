@@ -1,15 +1,18 @@
+import {Procedure} from "@opendaw/lib-std"
 import {Instrument, InstrumentAudioUnit, Instruments} from "../Api"
 import {InstrumentFactories} from "@opendaw/studio-adapters"
+
+type AnyInstrumentConstructor = Procedure<Instruments[keyof Instruments]>
 
 export class InstrumentImpl implements Instrument {
     readonly audioUnit: InstrumentAudioUnit
     readonly name: InstrumentFactories.Keys
 
-    readonly props?: Partial<Instruments[keyof Instruments]>
+    readonly constructorFn?: AnyInstrumentConstructor
 
-    constructor(audioUnit: InstrumentAudioUnit, name: keyof Instruments, props?: Partial<Instruments[keyof Instruments]>) {
+    constructor(audioUnit: InstrumentAudioUnit, name: keyof Instruments, constructorFn?: AnyInstrumentConstructor) {
         this.audioUnit = audioUnit
         this.name = name
-        this.props = props
+        this.constructorFn = constructorFn
     }
 }

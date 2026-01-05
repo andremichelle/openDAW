@@ -11,15 +11,21 @@ import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 
 export class DelayDeviceBoxAdapter implements AudioEffectDeviceAdapter {
-    static OffsetFractions = Fraction.builder()
-        .add([1, 1]).add([1, 2]).add([1, 3]).add([1, 4])
-        .add([3, 16]).add([1, 6]).add([1, 8]).add([3, 32])
-        .add([1, 12]).add([1, 16]).add([3, 64]).add([1, 24])
-        .add([1, 32]).add([1, 48]).add([1, 64])
-        .add([1, 96]).add([1, 128])
-        .asDescendingArray()
+    static Fractions = Fraction.builder()
+        .add([0, 1]).add([1, 128]).add([1, 96]).add([1, 64])
+        .add([1, 48]).add([1, 32]).add([1, 24]).add([3, 64])
+        .add([1, 16]).add([1, 12]).add([3, 32]).add([1, 8])
+        .add([1, 6]).add([3, 16]).add([1, 4]).add([5, 16])
+        .add([1, 3]).add([3, 8]).add([7, 16]).add([1, 2]).add([1, 1])
+        .asAscendingArray()
 
-    static OffsetStringMapping = StringMapping.indices("", this.OffsetFractions.map(([n, d]) => `${n}/${d}`))
+    static FractionsStringMapping = StringMapping.indices("",
+        this.Fractions.map(([n, d]) => n === 0 ? "Off" : `${n}/${d}`))
+
+    static readonly MAX_MILLIS_TIME = 1000.0
+    static readonly LFO_SPEED_MIN = 0.1
+    static readonly LFO_SPEED_MAX = 5.0
+    static readonly LFO_DEPTH_MAX = 50.0
 
     readonly type = "audio-effect"
     readonly accepts = "audio"
@@ -54,7 +60,7 @@ export class DelayDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
-    *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
+    * labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
         yield {address: this.address, label: this.labelField.getValue(), children: () => Option.None}
     }
 
@@ -64,10 +70,30 @@ export class DelayDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 
     #wrapParameters(box: DelayDeviceBox) {
         return {
+            preSyncTimeLeft: this.#parametric.createParameter(
+                box.preSyncTimeLeft,
+                ValueMapping.linearInteger(0, DelayDeviceBoxAdapter.Fractions.length - 1),
+                DelayDeviceBoxAdapter.FractionsStringMapping, "pre sync L"),
+            preMillisTimeLeft: this.#parametric.createParameter(
+                box.preMillisTimeLeft,
+                ValueMapping.powerByCenter(100.0, 0.0, DelayDeviceBoxAdapter.MAX_MILLIS_TIME),
+                StringMapping.numeric({unit: "ms", fractionDigits: 1}), "pre ms L"),
+            preSyncTimeRight: this.#parametric.createParameter(
+                box.preSyncTimeRight,
+                ValueMapping.linearInteger(0, DelayDeviceBoxAdapter.Fractions.length - 1),
+                DelayDeviceBoxAdapter.FractionsStringMapping, "pre sync R"),
+            preMillisTimeRight: this.#parametric.createParameter(
+                box.preMillisTimeRight,
+                ValueMapping.powerByCenter(100.0, 0.0, DelayDeviceBoxAdapter.MAX_MILLIS_TIME),
+                StringMapping.numeric({unit: "ms", fractionDigits: 1}), "pre ms R"),
             delay: this.#parametric.createParameter(
-                box.delay,
-                ValueMapping.linearInteger(0, DelayDeviceBoxAdapter.OffsetFractions.length - 1),
-                DelayDeviceBoxAdapter.OffsetStringMapping, "delay"),
+                box.delayMusical,
+                ValueMapping.linearInteger(0, DelayDeviceBoxAdapter.Fractions.length - 1),
+                DelayDeviceBoxAdapter.FractionsStringMapping, "delay"),
+            millisTime: this.#parametric.createParameter(
+                box.delayMillis,
+                ValueMapping.powerByCenter(100.0, 0.0, DelayDeviceBoxAdapter.MAX_MILLIS_TIME),
+                StringMapping.numeric({unit: "ms", fractionDigits: 1}), "ms"),
             feedback: this.#parametric.createParameter(
                 box.feedback,
                 ValueMapping.unipolar(),
@@ -76,6 +102,14 @@ export class DelayDeviceBoxAdapter implements AudioEffectDeviceAdapter {
                 box.cross,
                 ValueMapping.unipolar(),
                 StringMapping.numeric({unit: "%", fractionDigits: 0}), "cross"),
+            lfoSpeed: this.#parametric.createParameter(
+                box.lfoSpeed,
+                ValueMapping.exponential(DelayDeviceBoxAdapter.LFO_SPEED_MIN, DelayDeviceBoxAdapter.LFO_SPEED_MAX),
+                StringMapping.numeric({unit: "Hz", fractionDigits: 2}), "lfo speed"),
+            lfoDepth: this.#parametric.createParameter(
+                box.lfoDepth,
+                ValueMapping.power(4.0, 0.0, DelayDeviceBoxAdapter.LFO_DEPTH_MAX),
+                StringMapping.numeric({unit: "ms", fractionDigits: 1}), "lfo depth"),
             filter: this.#parametric.createParameter(
                 box.filter,
                 ValueMapping.bipolar(),

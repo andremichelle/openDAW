@@ -148,7 +148,7 @@ export class ProjectProfileService {
     async loadFile() {
         try {
             const [file] = await Files.open({types: [FilePickerAcceptTypes.ProjectFileType]})
-            const project = Project.load(this.#env, await file.arrayBuffer())
+            const project = await Project.loadAnyVersion(this.#env, await file.arrayBuffer())
             this.#setProfile(UUID.generate(), project, ProjectMeta.init(file.name), Option.None)
         } catch (error) {
             if (!Errors.isAbort(error)) {

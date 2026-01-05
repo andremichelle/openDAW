@@ -59,6 +59,29 @@ class Exponential implements ValueMapping<number> {
     floating(): boolean {return true}
 }
 
+class Power implements ValueMapping<number> {
+    readonly #exp: number
+    readonly #min: number
+    readonly #max: number
+    readonly #range: number
+
+    constructor(exp: number, min: number, max: number) {
+        assert(min !== max, "Power min === max")
+        this.#exp = exp
+        this.#min = min
+        this.#max = max
+        this.#range = max - min
+    }
+    x(y: number): unitValue {
+        return y <= this.#min ? 0.0 : y >= this.#max ? 1.0 : Math.pow((y - this.#min) / this.#range, 1.0 / this.#exp)
+    }
+    y(x: unitValue): number {
+        return x <= 0.0 ? this.#min : x >= 1.0 ? this.#max : this.#min + Math.pow(x, this.#exp) * this.#range
+    }
+    clamp(y: number): number {return Math.min(this.#max, Math.max(this.#min, y))}
+    floating(): boolean {return true}
+}
+
 class Values<T> implements ValueMapping<T> {
     readonly #values: ReadonlyArray<T>
 
@@ -127,6 +150,12 @@ export namespace ValueMapping {
     export const linear = (min: number, max: number): ValueMapping<number> => new Linear(min, max)
     export const linearInteger = (min: int, max: int): ValueMapping<int> => new LinearInteger(min, max)
     export const exponential = (min: number, max: number): ValueMapping<number> => new Exponential(min, max)
+    export const power = (exp: number, min: number, max: number): ValueMapping<number> => new Power(exp, min, max)
+    export const powerByCenter = (center: number, min: number, max: number): ValueMapping<number> => {
+        const exp = Math.log((max - min) / (center - min)) / Math.log(2.0)
+        if (Number.isNaN(exp)) {throw new Error(`powerByCenter: invalid center=${center}, min=${min}, max=${max}`)}
+        return new Power(exp, min, max)
+    }
     export const values = <T>(values: ReadonlyArray<T>): ValueMapping<T> => new Values<T>(values)
     export const decibel = (min: number, mid: number, max: number): ValueMapping<number> => new Decibel(min, mid, max)
     const Bool = new class implements ValueMapping<boolean> {

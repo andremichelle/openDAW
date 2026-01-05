@@ -21,8 +21,6 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
     @Lazy
     static get(): SampleStorage {return new SampleStorage()}
 
-    static async cleanDeprecated() {Workers.Opfs.delete("samples/v1").catch(EmptyExec)}
-
     private constructor() {super(SampleStorage.Folder)}
 
     async save({uuid, audio, peaks, meta}: SampleStorage.NewSample): Promise<void> {

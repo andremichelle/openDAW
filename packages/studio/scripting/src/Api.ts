@@ -1,8 +1,21 @@
-import {AudioData, Chord, dbToGain, FFT, gainToDb, Interpolation, midiToHz, PPQN, ppqn} from "@opendaw/lib-dsp"
-import {bipolar, float, int, Nullable, unitValue} from "@opendaw/lib-std"
+import {
+    AudioData,
+    Chord,
+    ClassicWaveform,
+    dbToGain,
+    FFT,
+    gainToDb,
+    Interpolation,
+    midiToHz,
+    PPQN,
+    ppqn
+} from "@opendaw/lib-dsp"
+import {bipolar, float, int, Nullable, Procedure, unitValue} from "@opendaw/lib-std"
 import {Sample} from "@opendaw/studio-adapters"
+import {VoicingMode} from "@opendaw/studio-enums"
 
-export {PPQN, FFT, Chord, Sample, dbToGain, gainToDb, midiToHz}
+export {PPQN, FFT, Chord, Sample, dbToGain, gainToDb, midiToHz, ClassicWaveform, VoicingMode}
+export type {Procedure}
 
 export enum AudioPlayback {NoWarp = 0, PitchStretch = 1, /* TODO TimeStretch*/}
 
@@ -45,18 +58,39 @@ export interface AudioEffect extends Effect {
 }
 
 export interface DelayEffect extends AudioEffect {
+    // Pre-delay Left
+    /** Pre-delay left sync time index (0-11): Off, 1/16, 1/12, 1/8, 1/6, 3/16, 1/4, 5/16, 1/3, 3/8, 7/16, 1/2 */
+    preSyncTimeLeft: number
+    /** Pre-delay left milliseconds offset (0-500 ms) */
+    preMillisTimeLeft: number
+
+    // Pre-delay Right
+    /** Pre-delay right sync time index (0-11): Off, 1/16, 1/12, 1/8, 1/6, 3/16, 1/4, 5/16, 1/3, 3/8, 7/16, 1/2 */
+    preSyncTimeRight: number
+    /** Pre-delay right milliseconds offset (0-500 ms) */
+    preMillisTimeRight: number
+
+    // Main Delay
     /** Delay time index (0-16): 1/1, 1/2, 1/3, 1/4, 3/16, 1/6, 1/8, 3/32, 1/12, 1/16, 3/64, 1/24, 1/32, 1/48, 1/64, 1/96, 1/128 note fractions */
     delay: number
+    /** Additional delay time in milliseconds (0-500 ms) */
+    millisTime: number
     /** Feedback amount (0.0 to 1.0) */
     feedback: number
     /** Cross-feedback amount (0.0 to 1.0) */
     cross: number
-    /** Filter cutoff frequency */
+    /** LFO speed in Hz (0.1 to 25) */
+    lfoSpeed: number
+    /** LFO depth in milliseconds (0-50 ms) */
+    lfoDepth: number
+    /** Filter cutoff (-1.0 = lowpass, 0.0 = off, 1.0 = highpass) */
     filter: number
-    /** Wet (processed) signal level (0.0 to 1.0) */
-    wet: number
-    /** Dry (original) signal level (0.0 to 1.0) */
+
+    // Mix
+    /** Dry (original) signal level in dB */
     dry: number
+    /** Wet (processed) signal level in dB */
+    wet: number
 }
 
 export interface AudioEffects {
@@ -234,8 +268,83 @@ export interface MIDIInstrument extends Instrument {}
 
 export interface AudioInstrument extends Instrument {}
 
-/** Wavetable synthesizer instrument */
-export interface Vaporisateur extends MIDIInstrument {}
+/** Vaporisateur oscillator configuration */
+export interface VaporisateurOscillator {
+    /** Waveform type (sine, triangle, saw, square) */
+    waveform: ClassicWaveform
+    /** Volume in decibels */
+    volume: number
+    /** Octave offset (-3 to 3) */
+    octave: int
+    /** Fine-tuning in cents (-1200 to 1200) */
+    tune: float
+}
+
+/** Vaporisateur LFO configuration */
+export interface VaporisateurLFO {
+    /** LFO waveform type (sine, triangle, saw, square) */
+    waveform: ClassicWaveform
+    /** LFO rate in Hz (0.0001 to 30) */
+    rate: float
+    /** Sync LFO to tempo */
+    sync: boolean
+    /** LFO modulation amount to pitch (-1.0 to 1.0) */
+    targetTune: bipolar
+    /** LFO modulation amount to filter cutoff (-1.0 to 1.0) */
+    targetCutoff: bipolar
+    /** LFO modulation amount to volume (-1.0 to 1.0) */
+    targetVolume: bipolar
+}
+
+/** Vaporisateur noise generator configuration */
+export interface VaporisateurNoise {
+    /** Attack time in seconds (0.001 to 5.0) */
+    attack: float
+    /** Hold time in seconds (0.001 to 5.0) */
+    hold: float
+    /** Release time in seconds (0.001 to 5.0) */
+    release: float
+    /** Volume in decibels */
+    volume: number
+}
+
+/** Classic subtractive synthesizer instrument */
+export interface Vaporisateur extends MIDIInstrument {
+    /** Filter cutoff frequency in Hz (20 to 20000) */
+    cutoff: float
+    /** Filter resonance (0.01 to 10.0) */
+    resonance: float
+    /** Filter order/poles (1, 2, 3 or 4) */
+    filterOrder: 1 | 2 | 3 | 4
+    /** Filter envelope modulation amount (-1.0 to 1.0) */
+    filterEnvelope: bipolar
+    /** Filter keyboard tracking amount (-1.0 to 1.0) */
+    filterKeyboard: bipolar
+    /** Amplitude envelope attack time in seconds (0.001 to 5.0) */
+    attack: float
+    /** Amplitude envelope decay time in seconds (0.001 to 5.0) */
+    decay: float
+    /** Amplitude envelope sustain level (0.0 to 1.0) */
+    sustain: unitValue
+    /** Amplitude envelope release time in seconds (0.001 to 5.0) */
+    release: float
+    /** Voice mode (monophonic or polyphonic) */
+    voicingMode: VoicingMode
+    /** Glide/portamento time (0.0 to 1.0) */
+    glideTime: unitValue
+    /** Number of unison voices (1, 3 or 5) */
+    unisonCount: 1 | 3 | 5
+    /** Unison detune amount in cents (1 to 1200) */
+    unisonDetune: float
+    /** Unison stereo spread (0.0 to 1.0) */
+    unisonStereo: unitValue
+    /** LFO configuration */
+    lfo: VaporisateurLFO
+    /** Two oscillators */
+    oscillators: [VaporisateurOscillator, VaporisateurOscillator]
+    /** Noise generator configuration */
+    noise: VaporisateurNoise
+}
 
 /** Sample-based playback instrument */
 export interface Playfield extends MIDIInstrument {}
@@ -272,7 +381,7 @@ export interface Project {
     /** Time signature (e.g., 4/4, 3/4) */
     timeSignature: { numerator: int, denominator: int }
     /** Add an instrument track to the project */
-    addInstrumentUnit<KEY extends keyof Instruments>(name: KEY, props?: Partial<Instruments[KEY]>): InstrumentAudioUnit
+    addInstrumentUnit<KEY extends keyof Instruments>(name: KEY, constructor?: Procedure<Instruments[KEY]>): InstrumentAudioUnit
     /** Add an auxiliary effects track */
     addAuxUnit(props?: Partial<Pick<AuxAudioUnit, "label">>): AuxAudioUnit
     /** Add a group track for mixing multiple units */

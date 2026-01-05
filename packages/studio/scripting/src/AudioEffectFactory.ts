@@ -10,7 +10,7 @@ export class AudioEffectFactory {
         switch (effect.key) {
             case "delay": {
                 return DelayDeviceBox.create(boxGraph, UUID.generate(), box => {
-                    box.delay.setValue(effect.delay)
+                    box.delayMusical.setValue(effect.delay)
                     box.feedback.setValue(effect.feedback)
                     box.cross.setValue(effect.cross)
                     box.filter.setValue(effect.filter)
