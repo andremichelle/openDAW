@@ -1,4 +1,5 @@
 import {DefaultObservableValue, Errors, Option, panic, RuntimeNotifier} from "@opendaw/lib-std"
+import {AudioData} from "@opendaw/lib-dsp"
 import {
     AudioOfflineRenderer,
     AudioUtils,
@@ -154,12 +155,10 @@ export namespace Mixdowns {
         for (let stemIndex = 0; stemIndex < numStems; stemIndex++) {
             const l = buffer.getChannelData(stemIndex * 2)
             const r = buffer.getChannelData(stemIndex * 2 + 1)
-            const file = WavFile.encodeFloats({
-                frames: [l, r],
-                sampleRate: buffer.sampleRate,
-                numberOfFrames: buffer.length,
-                numberOfChannels: buffer.numberOfChannels
-            })
+            const audioData = AudioData.create(buffer.sampleRate, buffer.length, 2)
+            audioData.frames[0].set(l)
+            audioData.frames[1].set(r)
+            const file = WavFile.encodeFloats(audioData)
             zip.file(`${trackNames[stemIndex]}.wav`, file, {binary: true})
         }
         const {status, value: arrayBuffer, error} = await Promises.tryCatch(zip.generateAsync({

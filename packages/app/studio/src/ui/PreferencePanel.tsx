@@ -25,6 +25,7 @@ const Labels: { [K in keyof StudioSettings]: string } = {
     "time-display": "Time Display",
     "footer-show-fps-meter": "🪲 Show FPS meter",
     "footer-show-build-infos": "🪲 Show Build Informations",
+    "footer-show-samples-memory": "🪲 Show samples in memory",
     "enable-beta-features": "☢️ Enable Experimental Features"
 }
 

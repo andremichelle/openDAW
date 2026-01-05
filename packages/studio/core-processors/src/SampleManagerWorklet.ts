@@ -37,6 +37,13 @@ export class SampleManagerWorklet implements SampleLoaderManager {
         return this.#set.getOrCreate(uuid, uuid => new AudioLoaderWorklet(uuid, this.#engineToClient))
     }
 
-    remove(_uuid: UUID.Bytes) {}
-    invalidate(_uuid: UUID.Bytes) {}
+    remove(uuid: UUID.Bytes): void {
+        console.debug("remove", UUID.toString(uuid))
+        this.#set.removeByKey(uuid)
+        console.debug("now", this.#set.size(), "items")
+    }
+
+    register(_uuid: UUID.Bytes): Terminable {return Terminable.Empty}
+
+    invalidate(_uuid: UUID.Bytes): void {}
 }

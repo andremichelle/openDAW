@@ -1,6 +1,6 @@
 import {InaccessibleProperty} from "@opendaw/lib-std"
 import {Api} from "@opendaw/studio-scripting"
-import {FFT, midiToHz, PPQN} from "@opendaw/lib-dsp"
+import {AudioData, FFT, midiToHz, PPQN} from "@opendaw/lib-dsp"
 
 const openDAW: Api = InaccessibleProperty("Not to be executed.")
 
@@ -82,20 +82,16 @@ for (let i = 0; i < WAVETABLE_SIZE; i++) {
 }
 
 const gain = 0.7 / max
-const framesLeft = new Float32Array(WAVETABLE_SIZE)
-const framesRight = new Float32Array(WAVETABLE_SIZE)
+const audioData = AudioData.create(sampleRate, WAVETABLE_SIZE, 2)
+const framesLeft = audioData.frames[0]
+const framesRight = audioData.frames[1]
 
 for (let i = 0; i < WAVETABLE_SIZE; i++) {
     framesLeft[i] = real[i] * gain
     framesRight[i] = real[(i + WAVETABLE_SIZE / 2) % WAVETABLE_SIZE] * gain
 }
 
-const sample = await openDAW.addSample({
-    frames: [framesLeft, framesRight],
-    numberOfFrames: WAVETABLE_SIZE,
-    numberOfChannels: 2,
-    sampleRate
-}, "Lush Chorus Pad")
+const sample = await openDAW.addSample(audioData, "Lush Chorus Pad")
 
 const project = openDAW.newProject("Time")
 project.bpm = 80

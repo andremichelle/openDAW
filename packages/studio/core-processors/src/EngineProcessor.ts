@@ -17,7 +17,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {BoxGraph, createSyncTarget} from "@opendaw/lib-box"
+import {BoxGraph, createSyncTarget, DeleteUpdate} from "@opendaw/lib-box"
 import {AudioFileBox, BoxIO, BoxVisitor} from "@opendaw/studio-boxes"
 import {EngineContext} from "./EngineContext"
 import {TimeInfo} from "./TimeInfo"
@@ -112,7 +112,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     #recordingStartTime: ppqn = 0.0
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
 
-    constructor({processorOptions: {syncStreamBuffer, controlFlagsBuffer, project, exportConfiguration, options}}: {
+    constructor({processorOptions: {syncStreamBuffer, controlFlagsBuffer, project, exportConfiguration}}: {
         processorOptions: EngineProcessorAttachment
     } & AudioNodeOptions) {
         super()
@@ -159,7 +159,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#metronome = new Metronome(this)
         this.#midiTransportClock = new MIDITransportClock(this, this.#rootBoxAdapter)
         this.#audioOutputBufferRegistry = new AudioOutputBufferRegistry()
-        this.#renderer = this.#terminator.own(new BlockRenderer(this, options))
+        this.#renderer = this.#terminator.own(new BlockRenderer(this))
         this.#ignoredRegions = UUID.newSet<UUID.Bytes>(uuid => uuid)
         this.#stateSender = SyncStream.writer(EngineStateSchema(), syncStreamBuffer, x => {
             const {transporting, isCountingIn, isRecording, position} = this.#timeInfo
@@ -272,6 +272,13 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                 },
                 onRemove: ({uuid}) => this.#audioUnits.removeByKey(uuid).terminate(),
                 onReorder: EmptyExec
+            }),
+            this.#boxGraph.subscribeToAllUpdates({
+                onUpdate: (update) => {
+                    if (update instanceof DeleteUpdate && update.name === AudioFileBox.ClassName) {
+                        this.#sampleManager.remove(update.uuid)
+                    }
+                }
             })
         )
 

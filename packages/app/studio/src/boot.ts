@@ -21,7 +21,7 @@ import {ErrorHandler} from "@/errors/ErrorHandler.ts"
 import {
     AudioWorklets,
     CloudAuthManager,
-    DefaultSampleLoaderManager,
+    GlobalSampleLoaderManager,
     DefaultSoundfontLoaderManager,
     OpenSampleAPI,
     OpenSoundfontAPI,
@@ -68,9 +68,9 @@ export const boot = async ({workersUrl, workletsUrl}: { workersUrl: string, work
                 console.debug(`AudioContext resumed (${context.state})`)), {capture: true, once: true})
     }
     const audioDevices = await AudioOutputDevice.create(context)
-    const sampleManager = new DefaultSampleLoaderManager({
+    const sampleManager = new GlobalSampleLoaderManager({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[AudioData, SampleMetaData]> =>
-            OpenSampleAPI.get().load(context, uuid, progress)
+            OpenSampleAPI.get().load(uuid, progress)
     })
     const soundfontManager = new DefaultSoundfontLoaderManager({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[ArrayBuffer, SoundfontMetaData]> =>

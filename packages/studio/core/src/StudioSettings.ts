@@ -10,6 +10,7 @@ export const StudioSettingsSchema = z.object({
     "auto-open-clips": z.boolean().default(true),
     "auto-create-output-compressor": z.boolean().default(true),
     "footer-show-fps-meter": z.boolean().default(false),
+    "footer-show-samples-memory": z.boolean().default(false),
     "footer-show-build-infos": z.boolean().default(false),
     "normalize-mouse-wheel": z.boolean().default(false),
     "time-display": z.object({

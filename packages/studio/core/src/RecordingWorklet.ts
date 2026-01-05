@@ -104,20 +104,16 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
         const totalSamples: int = this.#limitSamples
         const sample_rate = this.context.sampleRate
         const numberOfChannels = this.channelCount
-        const frames = mergeChunkPlanes(this.#output, RenderQuantum, this.#output.length * RenderQuantum)
+        const mergedFrames = mergeChunkPlanes(this.#output, RenderQuantum, this.#output.length * RenderQuantum)
             .map(frame => frame.slice(-totalSamples))
-        const audioData: AudioData = {
-            sampleRate: sample_rate,
-            numberOfChannels,
-            numberOfFrames: totalSamples,
-            frames
-        }
+        const audioData = AudioData.create(sample_rate, totalSamples, numberOfChannels)
+        mergedFrames.forEach((frame, i) => audioData.frames[i].set(frame))
         this.#data = Option.wrap(audioData)
         const shifts = SamplePeaks.findBestFit(totalSamples)
         const peaks = await Workers
-            .Peak.generateAsync(Progress.Empty, shifts, frames, totalSamples, numberOfChannels)
+            .Peak.generateAsync(Progress.Empty, shifts, audioData.frames, totalSamples, numberOfChannels)
         this.#peaks = Option.wrap(SamplePeaks.from(new ByteArrayInput(peaks)))
-        const bpm = BPMTools.detect(frames[0], sample_rate)
+        const bpm = BPMTools.detect(audioData.frames[0], sample_rate)
         const duration = totalSamples / sample_rate
         const meta: SampleMetaData = {name: "Recording", bpm, sample_rate, duration, origin: "recording"}
         const sample: SampleStorage.NewSample = {

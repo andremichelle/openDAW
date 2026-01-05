@@ -43,13 +43,13 @@ export namespace WavFile {
         }
         const numberOfFrames = Math.floor(dataSize / blockAlign)
         const interleaved = new Float32Array(buffer, dataOffset, numberOfFrames * numberOfChannels)
-        const frames = Arrays.create(() => new Float32Array(numberOfFrames), numberOfChannels)
+        const audioData = AudioData.create(sampleRate, numberOfFrames, numberOfChannels)
         for (let i = 0, w = 0; i < numberOfFrames; i++) {
             for (let c = 0; c < numberOfChannels; c++) {
-                frames[c][i] = interleaved[w++]
+                audioData.frames[c][i] = interleaved[w++]
             }
         }
-        return {frames, sampleRate, numberOfFrames, numberOfChannels}
+        return audioData
     }
 
     export const encodeFloats = (audio: AudioData | AudioBuffer, maxLength: int = Number.MAX_SAFE_INTEGER): ArrayBuffer => {

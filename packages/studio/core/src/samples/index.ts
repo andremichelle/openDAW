@@ -1,5 +1,5 @@
 export * from "./DefaultSampleLoader"
-export * from "./DefaultSampleLoaderManager"
+export * from "./GlobalSampleLoaderManager"
 export * from "./OpenSampleAPI"
 export * from "./SampleAPI"
 export * from "./SampleProvider"

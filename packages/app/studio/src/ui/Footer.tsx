@@ -9,6 +9,7 @@ import {FooterLabel} from "@/service/FooterLabel"
 import {ProjectMeta, StudioPreferences} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
 import {UserCounter} from "@/UserCounter"
+import {AudioData} from "@opendaw/lib-dsp"
 
 const className = Html.adoptStyleSheet(css, "footer")
 
@@ -81,6 +82,21 @@ export const Footer = ({lifecycle, service}: Construct) => {
                                  lifeSpan.terminate()
                              }
                          }, "footer-show-fps-meter"))
+                     }}>0
+            </article>
+            <article title="Samples"
+                     onInit={element => {
+                         const lifeSpan = lifecycle.own(new Terminator())
+                         lifecycle.own(StudioPreferences.catchupAndSubscribe(show => {
+                             element.classList.toggle("hidden", !show)
+                             if (show) {
+                                 lifeSpan.own(Runtime.scheduleInterval(() => {
+                                     element.textContent = AudioData.count().toString()
+                                 }, 1000))
+                             } else {
+                                 lifeSpan.terminate()
+                             }
+                         }, "footer-show-samples-memory"))
                      }}>0
             </article>
             <div style={{display: "contents"}}

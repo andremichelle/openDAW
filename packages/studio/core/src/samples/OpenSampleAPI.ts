@@ -1,5 +1,4 @@
 import {
-    Arrays,
     asDefined,
     DefaultObservableValue,
     Lazy,
@@ -16,6 +15,7 @@ import {SampleAPI} from "@opendaw/studio-core"
 import {base64Credentials, OpenDAWHeaders} from "../OpenDAWHeaders"
 import {z} from "zod"
 import {AudioData} from "@opendaw/lib-dsp"
+import {WavFile} from "../WavFile"
 
 // Standard openDAW samples (considered to be non-removable)
 export class OpenSampleAPI implements SampleAPI {
@@ -24,15 +24,6 @@ export class OpenSampleAPI implements SampleAPI {
 
     @Lazy
     static get(): OpenSampleAPI {return new OpenSampleAPI()}
-
-    static fromAudioBuffer(buffer: AudioBuffer): AudioData {
-        return {
-            frames: Arrays.create(channel => buffer.getChannelData(channel), buffer.numberOfChannels),
-            sampleRate: buffer.sampleRate,
-            numberOfFrames: buffer.length,
-            numberOfChannels: buffer.numberOfChannels
-        }
-    }
 
     private constructor() {}
 
@@ -50,7 +41,7 @@ export class OpenSampleAPI implements SampleAPI {
         return Object.freeze({...sample, origin: "openDAW"})
     }
 
-    async load(context: AudioContext, uuid: UUID.Bytes, progress: Procedure<unitValue>): Promise<[AudioData, Sample]> {
+    async load(uuid: UUID.Bytes, progress: Procedure<unitValue>): Promise<[AudioData, Sample]> {
         console.debug(`load ${UUID.toString(uuid)}`)
         return this.get(uuid)
             .then(({uuid, name, bpm}) => Promises.retry(() => network
@@ -74,15 +65,17 @@ export class OpenSampleAPI implements SampleAPI {
                         reader.read().then(nextChunk, reject)
                     })
                 })
-                .then(arrayBuffer => context.decodeAudioData(arrayBuffer))
-                .then(audioBuffer => ([OpenSampleAPI.fromAudioBuffer(audioBuffer), {
-                    uuid,
-                    bpm,
-                    name,
-                    duration: audioBuffer.duration,
-                    sample_rate: audioBuffer.sampleRate,
-                    origin: "openDAW"
-                }])))
+                .then(arrayBuffer => {
+                    const audioData = WavFile.decodeFloats(arrayBuffer)
+                    return [audioData, {
+                        uuid,
+                        bpm,
+                        name,
+                        duration: audioData.numberOfFrames / audioData.sampleRate,
+                        sample_rate: audioData.sampleRate,
+                        origin: "openDAW"
+                    }] as [AudioData, Sample]
+                }))
     }
 
     async upload(arrayBuffer: ArrayBuffer, metaData: SampleMetaData): Promise<void> {

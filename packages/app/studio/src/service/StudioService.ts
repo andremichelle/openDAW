@@ -41,7 +41,7 @@ import {
     AudioWorklets,
     CloudAuthManager,
     DawProjectService,
-    DefaultSampleLoaderManager,
+    GlobalSampleLoaderManager,
     DefaultSoundfontLoaderManager,
     EngineFacade,
     EngineWorklet,
@@ -116,7 +116,7 @@ export class StudioService implements ProjectEnv {
     constructor(readonly audioContext: AudioContext,
                 readonly audioWorklets: AudioWorklets,
                 readonly audioDevices: AudioOutputDevice,
-                readonly sampleManager: DefaultSampleLoaderManager,
+                readonly sampleManager: GlobalSampleLoaderManager,
                 readonly soundfontManager: DefaultSoundfontLoaderManager,
                 readonly cloudAuthManager: CloudAuthManager,
                 readonly buildInfo: BuildInfo) {
