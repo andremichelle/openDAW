@@ -25,7 +25,6 @@ import {
     DefaultSoundfontLoaderManager,
     OpenSampleAPI,
     OpenSoundfontAPI,
-    SampleStorage,
     Workers
 } from "@opendaw/studio-core"
 import {AudioData} from "@opendaw/lib-dsp"
@@ -90,7 +89,7 @@ export const boot = async ({workersUrl, workletsUrl}: { workersUrl: string, work
     }, errorHandler)
     Surface.subscribeKeyboard("keydown", event => ShortcutManager.get().handleEvent(event), Number.MAX_SAFE_INTEGER)
     document.querySelector("#preloader")?.remove()
-        replaceChildren(surface.ground, App(service))
+    replaceChildren(surface.ground, App(service))
     AnimationFrame.start(window)
     installCursors()
     RuntimeNotifier.install({
@@ -139,8 +138,4 @@ export const boot = async ({workersUrl, workletsUrl}: { workersUrl: string, work
             await Promises.tryCatch(showStoragePersistDialog())
         }
     }
-    // delete obsolete indexedDB
-    try {indexedDB.deleteDatabase("audio-file-cache")} catch (_: any) {}
-    // delete obsolete samples
-    SampleStorage.cleanDeprecated().then()
 }
