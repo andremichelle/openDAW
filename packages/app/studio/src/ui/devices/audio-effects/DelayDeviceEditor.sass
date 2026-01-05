@@ -4,11 +4,17 @@
 component
   display: grid
   grid-template-rows: repeat(10, 17px)
-  grid-template-columns: 4em 0px repeat(2, 4.5em)
+  grid-template-columns: 4em repeat(2, 4.5em)
   row-gap: 1px
   align-content: start
   position: relative
   @include mixins.Control
+
+  > div.outline
+    grid-area: 1 / 1 / -1 / 2
+    outline: 1px rgba(white, 0.04) solid
+    outline-offset: -1px
+    border-radius: 3px
 
   > h3
     font-size: 9px
@@ -40,9 +46,10 @@ component
     &.head
       height: min-content
       width: 100%
-      border-radius: 3px 1px 0 0
       padding: 1px 4px
-      border-bottom: 1px rgba(black, 0.3) solid
+
+      &:first-of-type
+        border-radius: 3px 3px 0 0
 
       &::after
         left: 0
@@ -59,18 +66,20 @@ component
     --color: red
 
     &.lfo
-      grid-area: 1 / 3 / 3 / 5
+      grid-area: 1 / 2 / 3 / 4
       --color: var(--color-purple)
-      border-radius: 1px 0 0 0
+      border-top: 1px color-mix(in srgb, var(--color) 6%, transparent) solid
+      border-radius: 3px 0 0 0
 
     &.delay
-      grid-area: 3 / 3 / 9 / 5
+      grid-area: 3 / 2 / 9 / 4
       --color: var(--color-blue)
 
     &.mix
-      grid-area: 9 / 3 / 11 / 5
+      grid-area: 9 / 2 / 11 / 4
       --color: var(--color-green)
-      border-radius: 0 0 0 1px
+      border-radius: 0 0 0 3px
+      border-bottom: 1px color-mix(in srgb, var(--color) 6%, transparent) solid
 
   > div.control
     display: grid

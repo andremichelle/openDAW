@@ -61,15 +61,16 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                       populateMenu={parent => MenuItems.forEffectDevice(parent, service, deviceHost, adapter)}
                       populateControls={() => (
                           <div className={className}>
+                              <div className="outline"/>
                               <h3 className="head"
                                   style={{
                                       gridArea: "1 / 1 / 2 / 2",
-                                      "--color": "rgba(255, 255, 255, 0.6)",
+                                      "--color": "rgba(255, 255, 255, 0.6)"
                                   }}>DELAY L</h3>
                               <h3 className="head"
                                   style={{
                                       gridArea: "6 / 1 / 7 / 2",
-                                      "--color": "rgba(255, 255, 255, 0.6)",
+                                      "--color": "rgba(255, 255, 255, 0.6)"
                                   }}>DELAY R</h3>
                               <section className="lfo"/>
                               <section className="delay"/>
@@ -110,29 +111,29 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                       lifecycle: lifecycle,
                                       parameter: delay,
                                       name: "sync",
-                                      grid: {u: 2, v: 3}
+                                      grid: {u: 1, v: 3}
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: millisTime,
                                       name: "millis",
-                                      grid: {u: 2, v: 5}
+                                      grid: {u: 1, v: 5}
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: cross,
-                                      grid: {u: 3, v: 2}
+                                      grid: {u: 2, v: 2}
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: filter,
-                                      grid: {u: 3, v: 4},
+                                      grid: {u: 2, v: 4},
                                       threshold: 0.5
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: feedback,
-                                      grid: {u: 3, v: 6}
+                                      grid: {u: 2, v: 6}
                                   }),
                                   // LFO
                                   <h3 className="rotated lfo"
@@ -145,13 +146,13 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                       lifecycle: lifecycle,
                                       parameter: lfoSpeed,
                                       name: "Speed",
-                                      grid: {u: 2, v: 0}
+                                      grid: {u: 1, v: 0}
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: lfoDepth,
                                       name: "Depth",
-                                      grid: {u: 3, v: 0}
+                                      grid: {u: 2, v: 0}
                                   }),
                                   // MIX
                                   <h3 className="rotated mix"
@@ -163,12 +164,12 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: dry,
-                                      grid: {u: 2, v: 8}
+                                      grid: {u: 1, v: 8}
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: wet,
-                                      grid: {u: 3, v: 8}
+                                      grid: {u: 2, v: 8}
                                   })
                               ]}
                           </div>
