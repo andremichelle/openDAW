@@ -36,7 +36,7 @@ export namespace RegionCapturing {
                 }
                 const x0 = range.unitToX(region.position)
                 const x1 = range.unitToX(region.complete)
-                if (x1 - x0 <= PointerRadiusDistance * 4) {
+                if (x1 - x0 <= PointerRadiusDistance * 2) {
                     // too small to have other sensitive areas
                     return {type: "region", part: "position", region}
                 }

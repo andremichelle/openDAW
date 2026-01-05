@@ -8,14 +8,25 @@ export const EngineSettingsSchema = z.object({
         enabled: z.boolean(),
         beatSubDivision: z.union(_BeatSubDivisionOptions.map(value => z.literal(value))),
         gain: z.number().min(Number.NEGATIVE_INFINITY).max(0)
-    }).default({enabled: false, beatSubDivision: 1, gain: -6.0}),
+    }).default({
+        enabled: false,
+        beatSubDivision: 1,
+        gain: -6.0
+    }),
     playback: z.object({
         timestampEnabled: z.boolean(),
-        pauseOnLoopDisabled: z.boolean()
-    }).default({timestampEnabled: true, pauseOnLoopDisabled: false}),
+        pauseOnLoopDisabled: z.boolean(),
+        truncateNotesAtRegionEnd: z.boolean()
+    }).default({
+        timestampEnabled: true,
+        pauseOnLoopDisabled: false,
+        truncateNotesAtRegionEnd: false
+    }),
     recording: z.object({
         countInBars: z.union(_RecordingCountInBars.map(value => z.literal(value)))
-    }).default({countInBars: 1})
+    }).default({
+        countInBars: 1
+    })
 })
 
 export type EngineSettings = z.infer<typeof EngineSettingsSchema>
