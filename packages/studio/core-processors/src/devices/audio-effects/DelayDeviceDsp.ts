@@ -44,7 +44,7 @@ export class DelayDeviceDsp {
         this.#delayBuffer = [new Float32Array(pow2Size), new Float32Array(pow2Size)]
         this.#biquad = [new BiquadMono(), new BiquadMono()]
         this.#biquadCoeff = new BiquadCoeff()
-        this.#interpolationLength = Math.floor(0.5 * sampleRate)
+        this.#interpolationLength = Math.floor(0.250 * sampleRate)
         this.#preDelayL = new Delay(maxFrames, this.#interpolationLength)
         this.#preDelayR = new Delay(maxFrames, this.#interpolationLength)
         this.#preDelayBuf = [new Float32Array(128), new Float32Array(128)]

@@ -110,29 +110,29 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                       lifecycle: lifecycle,
                                       parameter: delay,
                                       name: "sync",
-                                      grid: {u: 1, v: 3}
+                                      grid: {u: 2, v: 3}
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: millisTime,
                                       name: "millis",
-                                      grid: {u: 1, v: 5}
+                                      grid: {u: 2, v: 5}
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: cross,
-                                      grid: {u: 2, v: 2}
+                                      grid: {u: 3, v: 2}
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: filter,
-                                      grid: {u: 2, v: 4},
+                                      grid: {u: 3, v: 4},
                                       threshold: 0.5
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: feedback,
-                                      grid: {u: 2, v: 6}
+                                      grid: {u: 3, v: 6}
                                   }),
                                   // LFO
                                   <h3 className="rotated lfo"
@@ -145,13 +145,13 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                       lifecycle: lifecycle,
                                       parameter: lfoSpeed,
                                       name: "Speed",
-                                      grid: {u: 1, v: 0}
+                                      grid: {u: 2, v: 0}
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: lfoDepth,
                                       name: "Depth",
-                                      grid: {u: 2, v: 0}
+                                      grid: {u: 3, v: 0}
                                   }),
                                   // MIX
                                   <h3 className="rotated mix"
@@ -163,12 +163,12 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: dry,
-                                      grid: {u: 1, v: 8}
+                                      grid: {u: 2, v: 8}
                                   }),
                                   createLabelControlFrag({
                                       lifecycle: lifecycle,
                                       parameter: wet,
-                                      grid: {u: 2, v: 8}
+                                      grid: {u: 3, v: 8}
                                   })
                               ]}
                           </div>
