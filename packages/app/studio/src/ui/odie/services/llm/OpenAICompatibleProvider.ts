@@ -61,6 +61,13 @@ export class OpenAICompatibleProvider implements LLMProvider {
             const models = await this.fetchModels()
             // Special check for Ollama / Local
             if (models.length === 0) {
+                // Check if we hit a CORS error (Browser enforcement)
+                if (this.debugLog.includes("Failed to fetch") || this.debugLog.includes("NetworkError")) {
+                    return {
+                        ok: false,
+                        message: "Network Error. If using Ollama, ensure `OLLAMA_ORIGINS=\"*\"` is set in your environment variables."
+                    }
+                }
                 return { ok: false, message: "Connected, but no models found." }
             }
             return { ok: true, message: `Connected! Found: ${models.join(", ")}` }
@@ -252,15 +259,26 @@ export class OpenAICompatibleProvider implements LLMProvider {
                         try {
                             // DEBUG: Log Raw Stream Chunk to catch malformed JSON from Local Models
                             // console.log("[Stream Raw]", jsonStr) 
+                            if (jsonStr.startsWith("{")) console.log("[Stream Raw]", jsonStr.substring(0, 50)) // Log preview
                             const parsed = JSON.parse(jsonStr)
 
                             // 1. OpenAI / Ollama (Chat Endpoint)
                             const choice = parsed.choices?.[0]
                             const delta = choice?.delta
 
-                            // Content
+                            // Content (Standard)
                             if (delta?.content) {
                                 accumulatedText += delta.content
+                                responseText.setValue(accumulatedText)
+                            }
+                            // DeepSeek / Qwen "Thinking" (Standardized in some proxies)
+                            if (delta?.thinking) {
+                                accumulatedText += delta.thinking
+                                responseText.setValue(accumulatedText)
+                            }
+                            // DeepSeek Reason (another variant)
+                            if (delta?.reasoning_content) {
+                                accumulatedText += delta.reasoning_content
                                 responseText.setValue(accumulatedText)
                             }
 
@@ -284,6 +302,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
                                 responseText.setValue(accumulatedText)
                             }
                             const ollamaMessage = parsed.message // /api/chat (Non-streaming fallback)
+
+                            // [ANTIGRAVITY] Support "Thinking" Models (Qwen/DeepSeek)
+                            if (ollamaMessage?.thinking) {
+                                // We append thinking as regular text for now to ensure visibility
+                                accumulatedText += ollamaMessage.thinking
+                                responseText.setValue(accumulatedText)
+                            }
+
                             if (ollamaMessage?.content) {
                                 accumulatedText += ollamaMessage.content
                                 responseText.setValue(accumulatedText)
@@ -347,7 +373,21 @@ export class OpenAICompatibleProvider implements LLMProvider {
             } catch (e: any) {
                 this.debugLog += `[Fatal] ${e.message}\n`
                 console.error(e)
-                responseText.setValue(`Error: ${e.message}`)
+
+                // [ANTIGRAVITY] Enhanced CORS/Network Error Detection
+                const isCORSorNetworkError = e instanceof TypeError || e.message === "Failed to fetch" || e.message.includes("NetworkError")
+
+                if (isCORSorNetworkError && (targetUrl.includes("localhost") || targetUrl.includes("127.0.0.1"))) {
+                    responseText.setValue(
+                        `🚫 **Connection Blocked (CORS)**\n\n` +
+                        `The browser blocked the request to Ollama at \`${targetUrl}\`.\n\n` +
+                        `**To fix**, run Ollama with:\n` +
+                        `\`\`\`bash\nOLLAMA_ORIGINS="*" ollama serve\n\`\`\`\n` +
+                        `_Or use the '/api/ollama' proxy if available._`
+                    )
+                } else {
+                    responseText.setValue(`Error: ${e.message}`)
+                }
             }
         }
 
@@ -416,9 +456,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
             // Strategy 2: Ollama Standard (/api/tags)
             // Ollama usually runs on port 11434, root is often just http://localhost:11434
             // If user passed .../v1 or .../api/chat, strip it.
+            // If user passed .../v1 or .../api/chat, strip it.
             const rootUrl = baseUrl
-                .replace("/v1/chat/completions", "")
-                .replace("/api/chat", "")
+                .replace(/\/v1\/chat\/completions\/?$/, "")
+                .replace(/\/api\/chat\/?$/, "")
                 .replace(/\/v1\/?$/, "")
             const targetUrl2 = `${rootUrl}/api/tags`
             log += `\n\n[Strategy 2] GET ${targetUrl2}`
@@ -449,6 +490,49 @@ export class OpenAICompatibleProvider implements LLMProvider {
                 }
             } catch (e: any) {
                 log += `\nError: ${e.message}`
+            }
+
+            // Strategy 3: Auto-Detect / Fallback (The "Magic" Fix)
+            // If we haven't found models yet, and we are Ollama, try known standard endpoints regardless of config.
+            if (foundModels.size === 0 && this.id === "ollama") {
+                const fallbacks = [
+                    "/api/ollama", // Proxy-First: Avoid CORS
+                    "http://localhost:11434", // Direct: Fallback
+                ]
+
+                for (const fallbackBase of fallbacks) {
+                    // Avoid re-testing the configured base if it matches
+                    const cleanBase = baseUrl.replace(/\/api\/chat\/?$/, "").replace(/\/v1\/?$/, "")
+                    if (fallbackBase === cleanBase) continue
+
+                    const fallbackUrl = `${fallbackBase}/api/tags`
+                    log += `\n\n[Strategy 3] Auto-Detect GET ${fallbackUrl}`
+
+                    try {
+                        const controller3 = new AbortController()
+                        const timeout3 = setTimeout(() => controller3.abort(), 2000) // Fast fail
+                        const res = await fetch(fallbackUrl, { signal: controller3.signal })
+                        clearTimeout(timeout3)
+
+                        log += `\nStatus: ${res.status}`
+                        if (res.ok) {
+                            const text = await res.text()
+                            const data = JSON.parse(text)
+                            if (Array.isArray(data.models)) {
+                                data.models.forEach((m: any) => foundModels.add(m.name || m.id || m.model))
+                                if (foundModels.size > 0) {
+                                    log += `\n🎯 Auto-Detect Success! Switching baseUrl to: ${fallbackBase}`
+                                    // [ANTIGRAVITY] AUTO-HEAL: Update the instance URL so chat works
+                                    // Note: This overrides the user's bad config for this session.
+                                    this.config.baseUrl = fallbackBase
+                                    break // Stop trying fallbacks
+                                }
+                            }
+                        }
+                    } catch (e: any) {
+                        log += `\nFallback Error: ${e.message}`
+                    }
+                }
             }
 
         } catch (e: any) {

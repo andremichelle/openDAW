@@ -11,6 +11,7 @@ import { chatHistory } from "./services/ChatHistoryService"
 import { OdieTools } from "./services/OdieToolDefinitions"
 import { commandRegistry } from "./services/OdieCommandRegistry"
 import { Dialogs } from "@/ui/components/dialogs"
+import { OdieToolExecutor, ExecutorContext } from "./services/OdieToolExecutor"
 
 
 export class OdieService {
@@ -47,6 +48,7 @@ export class OdieService {
     readonly showHistory = new DefaultObservableValue<boolean>(false)
 
     readonly ai = new AIService()
+    private toolExecutor = new OdieToolExecutor()
 
 
 
@@ -75,6 +77,33 @@ export class OdieService {
             this.messages.subscribe(() => {
                 this.saveCurrentSession()
             })
+
+            // [ANTIGRAVITY] Model Indicator Sync
+            // React to provider changes to update the UI badge
+            this.ai.activeProviderId.subscribe(observer => {
+                const id = observer.getValue()
+                let label = "Unknown"
+                if (!id || typeof id !== "string") {
+                    label = "AI"
+                } else if (id === "gemini") label = "Gemini"
+                else if (id === "gemini-3") label = "Gemini 3"
+                else if (id === "ollama") {
+                    // For Ollama, try to show the actual model name, or "Local"
+                    const config = this.ai.getConfig("ollama")
+                    label = config.modelId || "Local"
+                }
+                else label = id.charAt(0).toUpperCase() + id.slice(1)
+
+                this.activeModelName.setValue(label)
+            })
+            // Initial Sync
+            const currentId = this.ai.activeProviderId.getValue()
+            if (currentId === "ollama") {
+                const config = this.ai.getConfig("ollama")
+                this.activeModelName.setValue(config.modelId || "Local")
+            } else if (currentId === "gemini-3") {
+                this.activeModelName.setValue("Gemini 3")
+            }
 
 
 
@@ -229,7 +258,7 @@ export class OdieService {
                     trackCount: this.studio.project.rootBoxAdapter.audioUnits.adapters().length,
                     trackList: trackList,
                     selectionSummary: this.safeInspectSelection(),
-                    loopEnabled: this.studio.transport.loop().getValue(),
+                    loopEnabled: this.studio.transport.loop.getValue(),
                     // [ANTIGRAVITY] Smart Focus Hints
                     focusHints: {
                         selectedTrack: selectedTrack,
@@ -308,351 +337,46 @@ export class OdieService {
                         for (const call of finalMsg.tool_calls) {
                             try {
                                 let success = false
-                                const args = call.arguments || {} // Defensive fallback
-
-                                switch (call.name) {
-                                    // --- PROJECT ---
-                                    case "project_create":
-                                        await this.appControl.createProject()
-                                        successes.push("✅ Created new project")
-                                        success = true
-                                        break
-                                    case "project_load":
-                                        success = await this.appControl.loadProject()
-                                        if (success) successes.push("📂 Opened Project Browser")
-                                        break
-                                    case "project_export_mix":
-                                        success = await this.appControl.exportMixdown()
-                                        if (success) successes.push("💿 Export initiated (Dialog)")
-                                        break
-                                    case "project_export_stems":
-                                        success = await this.appControl.exportStems()
-                                        if (success) successes.push("💿 Export Stems initiated (Dialog)")
-                                        break
-
-                                    // --- TRANSPORT ---
-                                    case "transport_play":
-                                        await this.appControl.play()
-                                        successes.push("▶️ Playing")
-                                        success = true
-                                        break
-                                    case "transport_stop":
-                                        await this.appControl.stop()
-                                        successes.push("⏹️ Stopped")
-                                        success = true
-                                        break
-                                    case "transport_loop":
-                                        await this.appControl.setLoop(Boolean(args.enabled))
-                                        successes.push(`🔁 Loop ${args.enabled ? "enabled" : "disabled"}`)
-                                        success = true
-                                        break
-                                    case "transport_set_bpm": {
-                                        const bpm = parseFloat(String(args.bpm))
-                                        success = await this.appControl.setBpm(bpm)
-                                        if (success) successes.push(`🎵 BPM set to ${bpm}`)
-                                        else failures.push(`🎵 BPM ${bpm} is out of range. Valid range: 20-999.`)
-                                        break
-                                    }
-                                    case "transport_set_time_signature": {
-                                        const num = parseInt(String(args.numerator))
-                                        const denom = parseInt(String(args.denominator))
-                                        success = await this.appControl.setTimeSignature(num, denom)
-                                        if (success) successes.push(`⏱️ Sig set to ${num}/${denom}`)
-                                        break
-                                    }
-
-                                    case "notes_add": {
-                                        // Expect args to have track and notes
-                                        const track = args.trackName as string
-                                        const notes = args.notes as { pitch: number, startTime: number, duration: number, velocity: number }[]
-                                        const result = await this.appControl.addMidiNotes(track, notes)
-                                        if (result.success) successes.push(`✅ Added ${notes.length} MIDI notes to "${track}"`)
-                                        else failures.push(`❌ Failed to add notes to "${track}": ${result.reason}`)
-                                        break
-                                    }
-                                    case "recording_start":
-                                        await this.appControl.record(args.countIn !== false)
-                                        successes.push("🔴 Recording")
-                                        success = true
-                                        break
-                                    case "recording_stop":
-                                        await this.appControl.stopRecording()
-                                        successes.push("⏹️ Recording Stopped")
-                                        success = true
-                                        break
-
-                                    // --- GENERATIVE UI ---
-                                    case "render_interface":
-                                        // Hydrate the observable
-                                        this.genUiPayload.setValue(args as any)
-                                        successes.push("✨ Generated Interface: " + args.title)
-                                        this.visible.setValue(true) // Ensure sidebar is open
-                                        success = true
-                                        break
-
-                                    // --- EDITING ---
-                                    case "region_split": {
-                                        const result = await this.appControl.splitRegion(args.trackName, parseFloat(String(args.time || 0)))
-                                        success = result.success
-                                        if (success) successes.push("✂️ Region split")
-                                        else failures.push(`✂️ Split failed: ${result.reason || "Unknown error"}`)
-                                        break
-                                    }
-                                    case "region_move": {
-                                        const result = await this.appControl.moveRegion(args.trackName, parseFloat(String(args.time)), parseFloat(String(args.newTime)))
-                                        success = result.success
-                                        if (success) successes.push("↔️ Region moved")
-                                        else failures.push(`↔️ Move failed: ${result.reason || "Unknown error"}`)
-                                        break
-                                    }
-                                    case "region_copy": {
-                                        const result = await this.appControl.copyRegion(args.trackName, parseFloat(String(args.time)), parseFloat(String(args.newTime)))
-                                        success = result.success
-                                        if (success) successes.push("👯 Region copied")
-                                        else failures.push(`👯 Copy failed: ${result.reason || "Unknown error"}`)
-                                        break
-                                    }
-
-                                    // --- MIXER ---
-                                    case "mixer_volume": {
-                                        const result = await this.appControl.setVolume(args.trackName, parseFloat(String(args.db)))
-                                        success = result.success
-                                        if (success) successes.push(`🔊 ${args.trackName} → ${args.db}dB`)
-                                        else failures.push(`🔊 Volume failed: ${result.reason || "Unknown error"}`)
-                                        break
-                                    }
-                                    case "mixer_pan": {
-                                        const result = await this.appControl.setPan(args.trackName, parseFloat(String(args.pan)))
-                                        success = result.success
-                                        if (success) successes.push(`↔️ ${args.trackName} pan → ${args.pan}`)
-                                        else failures.push(`↔️ Pan failed: ${result.reason || "Unknown error"}`)
-                                        break
-                                    }
-                                    case "mixer_mute": {
-                                        const result = await this.appControl.mute(args.trackName, Boolean(args.muted))
-                                        success = result.success
-                                        if (success) successes.push(`${args.muted ? "🔇" : "🔊"} ${args.trackName} ${args.muted ? "muted" : "unmuted"}`)
-                                        else failures.push(`🔇 Mute failed: ${result.reason || "Unknown error"}`)
-                                        break
-                                    }
-                                    case "mixer_solo": {
-                                        const result = await this.appControl.solo(args.trackName, Boolean(args.soloed))
-                                        success = result.success
-                                        if (success) successes.push(`${args.soloed ? "🎤" : "👥"} ${args.trackName} ${args.soloed ? "soloed" : "unsoloed"}`)
-                                        else failures.push(`🎤 Solo failed: ${result.reason || "Unknown error"}`)
-                                        break
-                                    }
-                                    case "mixer_add_send": {
-                                        const result = await this.appControl.addSend(args.trackName, args.auxName, args.db)
-                                        success = result.success
-                                        if (success) successes.push(`🔊 Sent ${args.trackName} to ${args.auxName} @ ${args.db || -6}dB`)
-                                        else failures.push(`❌ Failed to add send: ${result.reason}`)
-                                        break
-                                    }
-                                    case "mixer_add_effect": {
-                                        const result = await this.appControl.addEffect(args.trackName, args.effectType)
-                                        success = result.success
-                                        if (success) successes.push(`✨ Added ${args.effectType} to ${args.trackName}`)
-                                        else failures.push(`❌ Failed to add effect: ${result.reason}`)
-                                        break
-                                    }
-                                    case "mixer_set_routing": {
-                                        const result = await this.appControl.setRouting(args.sourceName, args.targetBusName)
-                                        success = result.success
-                                        if (success) successes.push(`🔀 Routed ${args.sourceName} → ${args.targetBusName}`)
-                                        else failures.push(`❌ Failed to set routing: ${result.reason}`)
-                                        break
-                                    }
-
-                                    // --- ARRANGEMENT ---
-                                    case "arrangement_add_track":
-                                        const addTrackResult = await this.appControl.addTrack(args.type, args.name)
-                                        success = addTrackResult.success
-                                        if (success) successes.push(`✅ Added ${args.type} track: "${args.name}"`)
-                                        else failures.push(`❌ Failed: ${addTrackResult.reason}`)
-                                        break
-                                    case "arrangement_add_bus": {
-                                        const result = await this.appControl.addAuxTrack(args.name)
-                                        success = result.success
-                                        if (success) successes.push(`✅ Added Bus: "${args.name}"`)
-                                        else failures.push(`❌ Failed to add bus: ${result.reason}`)
-                                        break
-                                    }
-                                    case "arrangement_add_midi_effect": {
-                                        const result = await this.appControl.addMidiEffect(args.trackName, args.effectType)
-                                        success = result.success
-                                        if (success) successes.push(`🎹 Added MIDI Effect: ${args.effectType} on ${args.trackName}`)
-                                        else failures.push(`❌ Failed to add MIDI effect: ${result.reason}`)
-                                        break
-                                    }
-                                    case "arrangement_delete_track":
-                                        success = await this.appControl.deleteTrack(args.name)
-                                        if (success) successes.push(`🗑️ Deleted track: "${args.name}"`)
-                                        break
-                                    case "arrangement_list_tracks": {
-                                        const tracks = await this.appControl.listTracks()
-                                        if (tracks.length === 0) {
-                                            successes.push("📋 No tracks found.")
-                                        } else {
-                                            const list = tracks.map(t => `- 🎹 **${t}**`).join("\n")
-                                            successes.push(`📋 **Project Tracks:**\n${list}`)
-                                        }
-                                        success = true
-                                        break
-                                    }
-
-                                    // --- VIEW ---
-                                    case "view_switch":
-                                        success = await this.appControl.switchScreen(args.screen)
-                                        if (success) successes.push(`👁️ Switched to ${args.screen} view`)
-                                        break
-                                    case "view_toggle_keyboard":
-                                        await this.appControl.toggleKeyboard()
-                                        successes.push("🎹 Toggled on-screen keyboard")
-                                        success = true
-                                        break
-
-                                    // --- ANALYSIS ---
-                                    case "inspect_selection": {
-                                        const analysis = this.appControl.inspectSelection()
-                                        // [ANTIGRAVITY] User-friendly output, hide technical JSON
-                                        // AI still sees the data in history for context
-                                        try {
-                                            const data = JSON.parse(analysis)
-                                            const items = Array.isArray(data) ? data : [data]
-                                            const trackCount = items.filter((i: any) => i.type === "track").length
-                                            const regionCount = items.filter((i: any) => i.type === "region").length
-                                            const deviceCount = items.filter((i: any) => i.type === "device" || i.type === "unknown").length
-
-                                            if (items.length === 0) {
-                                                successes.push("🧐 Nothing selected right now.")
-                                            } else {
-                                                let summary = "🧐 Selection: "
-                                                const parts: string[] = []
-                                                if (trackCount > 0) parts.push(`${trackCount} track${trackCount > 1 ? 's' : ''}`)
-                                                if (regionCount > 0) parts.push(`${regionCount} region${regionCount > 1 ? 's' : ''}`)
-                                                if (deviceCount > 0) parts.push(`${deviceCount} item${deviceCount > 1 ? 's' : ''}`)
-                                                summary += parts.join(", ")
-                                                successes.push(summary)
-                                            }
-                                        } catch {
-                                            // Fallback if not JSON
-                                            successes.push("🧐 Selection analyzed.")
-                                        }
-                                        success = true
-                                        break
-                                    }
-                                    case "analyze_track": {
-                                        let trackName = args.trackName
-                                        if (!trackName) {
-                                            // [ANTIGRAVITY] Robust Fallback: Try to use selected track from context
-                                            trackName = this.ai.contextService.state.getValue().focus.selectedTrackName || undefined
-                                            if (!trackName) throw new Error("Missing 'trackName' argument (and no track selected)")
-                                            console.log(`🧠 [Odie Fallback] Missing trackName, using selected: ${trackName}`)
-                                        }
-                                        // Run analysis but only show friendly message to user
-                                        void this.appControl.analyzeTrack(trackName)
-                                        // [ANTIGRAVITY] User-friendly output
-                                        successes.push(`🧐 Analyzed ${trackName}. Check details in my response.`)
-                                        success = true
-                                        break
-                                    }
-
-                                    // --- COMPREHENSIVE SIGNAL CHAIN API ---
-                                    case "get_track_details": {
-                                        let trackName = args.trackName as string | undefined
-                                        if (!trackName) {
-                                            // [ANTIGRAVITY] 3-tier Smart Inference
-                                            const trackList = this.safeListTracks()
-                                            const userQuery = text.toLowerCase()
-
-                                            // Tier 1: Track name explicitly mentioned in current query
-                                            trackName = trackList.find((t: string) =>
-                                                userQuery.includes(t.toLowerCase())
-                                            )
-
-                                            // Tier 2: Currently selected track in UI
-                                            if (!trackName) {
-                                                const selected = this.ai.contextService.state.getValue().focus.selectedTrackName
-                                                if (selected && trackList.includes(selected)) {
-                                                    trackName = selected
-                                                    console.log(`🧠 [Odie Inference] Using selected track: "${trackName}"`)
-                                                }
-                                            }
-
-                                            // Tier 3: Recently discussed track from conversation
-                                            if (!trackName) {
-                                                const recentMessages = this.messages.getValue().slice(-6)
-                                                for (const msg of recentMessages.reverse()) {
-                                                    if (!msg.content) continue
-                                                    const msgLower = msg.content.toLowerCase()
-                                                    const foundTrack = trackList.find(t => msgLower.includes(t.toLowerCase()))
-                                                    if (foundTrack) {
-                                                        trackName = foundTrack
-                                                        console.log(`🧠 [Odie Inference] Using recently discussed track: "${trackName}"`)
-                                                        break
-                                                    }
-                                                }
-                                            }
-
-                                            if (!trackName) {
-                                                throw new Error(`No track specified. Use get_project_overview first to see which tracks have effects, then call get_track_details with a specific trackName. Available tracks: ${trackList.join(", ")}`)
-                                            }
-                                            console.log(`🧠 [Odie Inference] Extracted track name "${trackName}" from user query`)
-                                        }
-                                        const details = this.appControl.getTrackDetails(trackName)
-                                        console.log(`🎛️ [Track Details] ${trackName}:`, details)
-                                        // Feed result back to AI for explanation
-                                        analysisResults.push({ name: "get_track_details", result: details })
-                                        successes.push(`🔍 Analyzing signal chain for "${trackName}"...`)
-                                        success = true
-                                        break
-                                    }
-                                    case "get_project_overview": {
-                                        const overview = this.appControl.getProjectOverview()
-                                        console.log(`📊 [Project Overview]:`, overview)
-                                        // Feed result back to AI for explanation
-                                        analysisResults.push({ name: "get_project_overview", result: overview })
-                                        successes.push(`📊 Analyzing project...`)
-                                        success = true
-                                        break
-                                    }
-                                    case "set_device_param": {
-                                        const { trackName, deviceType, deviceIndex, paramPath, value } = args
-                                        if (!trackName || !deviceType || !paramPath || value === undefined) {
-                                            throw new Error("Missing required arguments for set_device_param")
-                                        }
-                                        const result = await this.appControl.setDeviceParam(
-                                            trackName,
-                                            deviceType,
-                                            deviceIndex ?? 0,
-                                            paramPath,
-                                            value
-                                        )
-                                        if (result.success) {
-                                            successes.push(`🎛️ ${result.reason}`)
-                                            success = true
-                                        } else {
-                                            throw new Error(result.reason)
-                                        }
-                                        break
-                                    }
-
-                                    case "verify_action": {
-                                        const result = await this.appControl.verifyAction(args.action, args.expectedChange)
-                                        analysisResults.push({ name: "verify_action", result })
-                                        successes.push(`🔬 Verifying action: ${args.action}...`)
-                                        success = true
-                                        break
-                                    }
-
-                                    // --- CREATIVE ---
-                                    // [ANTIGRAVITY] Native Mode - No Tool Handling needed for images.
 
 
-                                    default:
-                                        console.warn("Unknown tool:", call.name)
+                                // [ANTIGRAVITY] Refactored Tool Execution
+                                const executorContext: ExecutorContext = {
+                                    studio: this.studio!,
+                                    appControl: this.appControl,
+                                    ai: this.ai,
+                                    setGenUiPayload: (payload: any) => this.genUiPayload.setValue(payload),
+                                    setSidebarVisible: (visible: boolean) => this.visible.setValue(visible),
+                                    contextState: this.ai.contextService.state.getValue(),
+                                    recentMessages: this.messages.getValue()
                                 }
+
+                                const result = await this.toolExecutor.execute(call, executorContext)
+
+                                if (result.userMessage) {
+                                    if (result.success) successes.push(result.userMessage)
+                                    else failures.push(result.userMessage)
+                                }
+
+                                if (result.systemError) {
+                                    errors.push(result.systemError)
+                                    // Mirror behavior: Show dialog for errors
+                                    // Though OdieToolExecutor doesn't do UI, we do it here if it's an error
+                                    if (result.systemError.startsWith("❌")) {
+                                        // Simple heuristic to extract msg
+                                        Dialogs.info({
+                                            headline: `Odie Failed: ${call.name}`,
+                                            message: result.systemError.replace("❌ Error: ", "")
+                                        })
+                                    }
+                                }
+
+                                if (result.analysisData) {
+                                    analysisResults.push({ name: call.name, result: result.analysisData })
+                                    success = true
+                                } else {
+                                    success = result.success
+                                }
+
 
                                 if (!success && call.name !== "arrangement_list_tracks") {
                                     // [ANTIGRAVITY] Legacy generic hints removed.

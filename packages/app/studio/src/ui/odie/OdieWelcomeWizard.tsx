@@ -129,10 +129,7 @@ export const OdieWelcomeWizard = ({ service, onComplete, onClose }: { service: O
             if (!ollama) return
 
             try {
-                const cfg = service.ai.getConfig("ollama")
-                if (!cfg.baseUrl || cfg.baseUrl.includes("/v1")) {
-                    ollama.configure({ ...cfg, baseUrl: "/api/ollama/api/chat" })
-                }
+
 
                 // Strictly typed fetchModels check
                 const models = (ollama.fetchModels) ? await ollama.fetchModels() : []
@@ -155,23 +152,42 @@ export const OdieWelcomeWizard = ({ service, onComplete, onClose }: { service: O
 
                     btnUse.style.display = "block"
                 } else {
-                    statusText.innerText = "No Models Found"
+                    statusText.innerText = "Connection Failed"
                     statusText.style.color = "#fbbf24"
 
                     // Specific Help for "No Models"
                     const badge = uiScope.querySelector("#ollama-model-badge") as HTMLElement
+
+                    const debugLog = (ollama as any).debugLog || ""
+                    const isCORS = debugLog.includes("Failed to fetch") || debugLog.includes("NetworkError")
+
                     if (badge) {
                         badge.style.display = "block"
-                        badge.style.background = "rgba(251, 191, 36, 0.1)"
-                        badge.style.color = "#fbbf24"
-                        badge.style.border = "1px solid rgba(251, 191, 36, 0.2)"
-                        badge.innerHTML = `
-                            <div style="font-size:10px; margin-bottom:4px">MISSING BRAIN</div>
-                            <div style="font-size:11px; font-family:monospace; background:rgba(0,0,0,0.3); padding:4px; border-radius:4px; display:flex; gap:8px; align-items:center">
-                                ollama pull qwen2.5-coder
-                                <button style="background:#fbbf24; color:black; border:none; border-radius:3px; font-size:9px; padding:2px 6px; cursor:pointer" onclick="navigator.clipboard.writeText('ollama pull qwen2.5-coder')">COPY</button>
-                            </div>
-                         `
+
+                        if (isCORS) {
+                            badge.style.background = "rgba(239, 68, 68, 0.1)"
+                            badge.style.color = "#ef4444"
+                            badge.style.border = "1px solid rgba(239, 68, 68, 0.2)"
+                            badge.innerHTML = `
+                                <div style="font-size:10px; margin-bottom:4px">🚫 CONNECTION BLOCKED</div>
+                                <div style="font-size:10px; opacity:0.8; max-width:200px; line-height:1.4">
+                                   Browser cannot reach Ollama.
+                                   <br>Set env var: <code>OLLAMA_ORIGINS="*"</code>
+                                </div>
+                             `
+                        } else {
+                            // Genuine "No Models" case
+                            badge.style.background = "rgba(251, 191, 36, 0.1)"
+                            badge.style.color = "#fbbf24"
+                            badge.style.border = "1px solid rgba(251, 191, 36, 0.2)"
+                            badge.innerHTML = `
+                                <div style="font-size:10px; margin-bottom:4px">MISSING BRAIN</div>
+                                <div style="font-size:11px; font-family:monospace; background:rgba(0,0,0,0.3); padding:4px; border-radius:4px; display:flex; gap:8px; align-items:center">
+                                    ollama pull qwen2.5-coder
+                                    <button style="background:#fbbf24; color:black; border:none; border-radius:3px; font-size:9px; padding:2px 6px; cursor:pointer" onclick="navigator.clipboard.writeText('ollama pull qwen2.5-coder')">COPY</button>
+                                </div>
+                             `
+                        }
                         badge.style.padding = "8px"
                     }
 

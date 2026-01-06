@@ -33,7 +33,7 @@ export class AIService {
         this.providers.push(new OpenAICompatibleProvider(
             "ollama",
             "Ollama (Local)",
-            "/api/ollama/api/chat",
+            "http://localhost:11434",
             false
         ))
 
@@ -173,18 +173,12 @@ ${ODIE_MOLECULAR_KNOWLEDGE}
             // AUTO-MIGRATION: Fix Mixed Content and Path issues for existing users
             const ollamaConfig = this.configMap.get("ollama")
             if (ollamaConfig) {
-                if (ollamaConfig.baseUrl === "http://localhost:11434/v1" ||
-                    ollamaConfig.baseUrl === "/api/ollama/v1" ||
-                    ollamaConfig.baseUrl === "/api/ollama/v1/chat/completions" ||
-                    ollamaConfig.baseUrl === "/api/chat") {
-                    console.warn("Migrating Ollama config to use Secure Proxy (Native)...")
-                    ollamaConfig.baseUrl = "/api/ollama/api/chat"
-                    this.configMap.set("ollama", ollamaConfig)
-                    this.saveSettings()
-                }
-                else if (ollamaConfig.baseUrl && ollamaConfig.baseUrl.includes("openrouter.ai")) {
+                // [ANTIGRAVITY] Fix: Reverted strict localhost enforcement.
+                // We trust the user's config. The provider will now attempt auto-detection.
+
+                if (ollamaConfig.baseUrl && ollamaConfig.baseUrl.includes("openrouter.ai")) {
                     console.warn("Correcting corrupted Ollama config...")
-                    ollamaConfig.baseUrl = "/api/ollama/v1/chat/completions"
+                    ollamaConfig.baseUrl = "https://openrouter.ai/api/v1/chat/completions" // Correct OpenRouter endpoint
                     this.configMap.set("ollama", ollamaConfig)
                     this.saveSettings()
                 }
