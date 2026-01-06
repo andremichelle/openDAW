@@ -10,6 +10,16 @@ export interface CommandDef {
     execute: CommandHandler
 }
 
+interface KeyStatus {
+    key: string
+    status: 'ready' | 'exhausted' | 'invalid' | 'unknown'
+    isActive: boolean
+}
+
+interface ProviderWithKeyStatuses {
+    getKeyStatuses(): KeyStatus[]
+}
+
 export class OdieCommandRegistry {
     private commands = new Map<string, CommandDef>()
 
@@ -124,7 +134,7 @@ export class OdieCommandRegistry {
             usage: "/set-pad [trackName] [padIndex] [sampleQuery]",
             execute: async (s, args) => {
                 const trackName = args[0]
-                const padIndex = parseInt(args[1])
+                const padIndex = parseInt(args[1], 10)
                 const query = args.slice(2).join(" ")
                 if (!trackName || isNaN(padIndex) || !query) return "❌ Usage: /set-pad [trackName] [padIndex] [sampleQuery]"
                 if (!s.appControl) return "❌ Nervous System Disconnected"
@@ -267,8 +277,8 @@ Direct control over the Studio and Chat.
             usage: "/effect [track] [type]",
             execute: async (s, args) => {
                 if (args.length < 2) return "❌ Usage: /effect [track] [type]"
-                const type = args.pop()! // Last arg is type
-                const track = args.join(" ") // Rest is track name
+                const type = args[args.length - 1]
+                const track = args.slice(0, -1).join(" ")
 
                 if (!s.appControl) return "❌ Nervous System Disconnected"
                 const res = await s.appControl.addEffect(track, type)
@@ -282,8 +292,8 @@ Direct control over the Studio and Chat.
             usage: "/meff [track] [type]",
             execute: async (s, args) => {
                 if (args.length < 2) return "❌ Usage: /meff [track] [type]"
-                const type = args.pop()! // Last arg is type
-                const track = args.join(" ") // Rest is track name
+                const type = args[args.length - 1]
+                const track = args.slice(0, -1).join(" ")
 
                 if (!s.appControl) return "❌ Nervous System Disconnected"
                 const res = await s.appControl.addMidiEffect(track, type)
@@ -314,7 +324,7 @@ Direct control over the Studio and Chat.
                     return "⚠️ Key status not available for current provider."
                 }
 
-                const statuses = (provider as any).getKeyStatuses()
+                const statuses = (provider as ProviderWithKeyStatuses).getKeyStatuses()
                 if (!statuses || statuses.length === 0) {
                     return "📭 No API keys in library. Add keys in Settings."
                 }
@@ -332,9 +342,9 @@ Direct control over the Studio and Chat.
                     report += `| ${i + 1} | ${k.key} | ${statusIcon} ${k.status.toUpperCase()} | ${activeIcon} |\n`
                 }
 
-                const ready = statuses.filter((k: any) => k.status === 'ready' || k.status === 'unknown').length
-                const exhausted = statuses.filter((k: any) => k.status === 'exhausted').length
-                const invalid = statuses.filter((k: any) => k.status === 'invalid').length
+                const ready = statuses.filter((k) => k.status === 'ready' || k.status === 'unknown').length
+                const exhausted = statuses.filter((k) => k.status === 'exhausted').length
+                const invalid = statuses.filter((k) => k.status === 'invalid').length
 
                 report += `\n**Summary:** ${ready} Ready, ${exhausted} Exhausted, ${invalid} Invalid`
                 return report
