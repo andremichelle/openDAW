@@ -76,8 +76,8 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
                 const {count} = ref.unwrap()
                 if (count <= 1) {
                     this.#refCounts.removeByKey(uuid)
-                    this.#loaders.removeByKey(uuid)
-                    this.#cache.removeByKey(uuid)
+                    this.#loaders.removeByKeyIfExist(uuid)
+                    this.#cache.removeByKeyIfExist(uuid)
                 } else {
                     ref.unwrap().count--
                 }
