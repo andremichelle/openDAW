@@ -125,7 +125,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
                     if (!model) {
                         this.debugLog += `[Fatal] No models found on server. Cannot proceed.\n`
-                        responseText.setValue("⚠️ Connected to Ollama, but no models found. Please run 'ollama pull llama3' or check your installed models.")
+                        responseText.setValue("⚠️ Connected to Ollama, but no models found.\n👉 Please run: `ollama pull qwen2.5-coder`")
                         return
                     }
                 }
@@ -438,11 +438,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
                         log += `\nBody: ${JSON.stringify(data, null, 2).slice(0, 500)}...`
 
                         if (Array.isArray(data.models)) {
-                            data.models.forEach((m: any) => foundModels.add(m.name))
+                            // Support 'name' (Ollama) and 'id' (Generic)
+                            data.models.forEach((m: any) => foundModels.add(m.name || m.id || m.model))
                         }
                     } catch (err) {
                         log += `\nParse Error: ${text.slice(0, 200)}`
                     }
+                } else {
+                    log += `\nResponse Not OK: ${res.status}`
                 }
             } catch (e: any) {
                 log += `\nError: ${e.message}`

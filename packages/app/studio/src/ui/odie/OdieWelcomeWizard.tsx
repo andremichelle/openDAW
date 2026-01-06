@@ -157,12 +157,38 @@ export const OdieWelcomeWizard = ({ service, onComplete, onClose }: { service: O
                 } else {
                     statusText.innerText = "No Models Found"
                     statusText.style.color = "#fbbf24"
+
+                    // Specific Help for "No Models"
+                    const badge = uiScope.querySelector("#ollama-model-badge") as HTMLElement
+                    if (badge) {
+                        badge.style.display = "block"
+                        badge.style.background = "rgba(251, 191, 36, 0.1)"
+                        badge.style.color = "#fbbf24"
+                        badge.style.border = "1px solid rgba(251, 191, 36, 0.2)"
+                        badge.innerHTML = `
+                            <div style="font-size:10px; margin-bottom:4px">MISSING BRAIN</div>
+                            <div style="font-size:11px; font-family:monospace; background:rgba(0,0,0,0.3); padding:4px; border-radius:4px; display:flex; gap:8px; align-items:center">
+                                ollama pull qwen2.5-coder
+                                <button style="background:#fbbf24; color:black; border:none; border-radius:3px; font-size:9px; padding:2px 6px; cursor:pointer" onclick="navigator.clipboard.writeText('ollama pull qwen2.5-coder')">COPY</button>
+                            </div>
+                         `
+                        badge.style.padding = "8px"
+                    }
+
                     btnUse.style.display = "none"
                 }
             } catch (e) {
                 statusText.innerText = "Not Found"
                 statusText.style.color = "#ef4444"
                 btnUse.style.display = "none"
+            }
+        }
+
+        // --- Helper: Factory Reset ---
+        const factoryReset = () => {
+            if (confirm("⚠️ RESET ODIE?\n\nThis will wipe your chat history, settings, and profile to simulate a fresh install.\n\nAre you sure?")) {
+                localStorage.clear()
+                location.reload()
             }
         }
 
@@ -184,6 +210,15 @@ export const OdieWelcomeWizard = ({ service, onComplete, onClose }: { service: O
                     >✕</button>
                 )}
                 <div style={S.stepDots}>
+                    {/* Ghost Button for Factory Reset (Debug) */}
+                    <div
+                        onclick={factoryReset}
+                        title="Debug: Factory Reset"
+                        style={{
+                            width: "10px", height: "10px", borderRadius: "50%", background: "transparent",
+                            cursor: "pointer", marginRight: "20px"
+                        }}
+                    />
                     {[1, 2, 3].map(s => { // 3 Steps now
                         const active = s === currentStep
                         // Visuals...
