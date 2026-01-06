@@ -1,0 +1,1051 @@
+import { DefaultObservableValue } from "@opendaw/lib-std"
+import type { StudioService } from "../../service/StudioService"
+import { AIService } from "./services/AIService"
+
+
+import { Message } from "./services/llm/LLMProvider"
+import { OdieAppControl } from "./services/OdieAppControl"
+import { odiePersona } from "./services/OdiePersonaService"
+import { schoolStore } from "./services/SchoolStore"
+import { chatHistory } from "./services/ChatHistoryService"
+import { OdieTools } from "./services/OdieToolDefinitions"
+import { commandRegistry } from "./services/OdieCommandRegistry"
+import { Dialogs } from "@/ui/components/dialogs"
+
+
+export class OdieService {
+    // State
+    readonly messages = new DefaultObservableValue<Message[]>([])
+    readonly open = new DefaultObservableValue<boolean>(false)
+    readonly width = new DefaultObservableValue<number>(450)
+    readonly visible = new DefaultObservableValue<boolean>(false) // Helper for 'open' + 'width > 0'
+
+    // [ANTIGRAVITY] Activity State for UI
+    readonly isGenerating = new DefaultObservableValue<boolean>(false)
+    readonly activeModelName = new DefaultObservableValue<string>("Gemini")
+    readonly activityStatus = new DefaultObservableValue<string>("Ready")
+
+    // [ANTIGRAVITY] The Loom (Generative UI) State
+    // Holds the current "Hologram" payload to be rendered
+    readonly genUiPayload = new DefaultObservableValue<import("./genui/GenUISchema").GenUIPayload | null>(null)
+
+    // [ANTIGRAVITY] Diagnostic Port (Glass Box)
+    // Allows external rigs to see exactly what context the brain received
+    readonly lastDebugInfo = new DefaultObservableValue<{
+        systemPrompt: string
+        projectContext: any
+        userQuery: string
+        timestamp: number
+    } | null>(null)
+
+
+
+    // View State: "wizard" | "chat" | "settings"
+    readonly viewState = new DefaultObservableValue<"wizard" | "chat" | "settings">("wizard")
+
+    // UI Toggles
+    readonly showHistory = new DefaultObservableValue<boolean>(false)
+
+    readonly ai = new AIService()
+
+
+
+    // The Nervous System
+    // We lazily import the AppControl to avoid circular dependencies with Studio/InstrumentFactories
+    public appControl?: OdieAppControl
+
+    public studio?: StudioService
+
+    constructor() {
+        // [ANTIGRAVITY] Expose for Debugging/Extraction
+        ; (window as any).odie = this;
+
+        try {
+            // Initialize View State
+            if (this.ai.wizardCompleted.getValue()) {
+                this.viewState.setValue("chat")
+            }
+
+            // Auto-Open if wizard not done
+            if (!this.ai.wizardCompleted.getValue()) {
+                // this.toggle() // Maybe too aggressive? Let user click.
+            }
+
+            // Auto-Save History
+            this.messages.subscribe(() => {
+                this.saveCurrentSession()
+            })
+
+
+
+        } catch (e) {
+            console.error("🔥 OdieService Constructor CRASH:", e)
+        }
+    }
+
+
+
+
+    toggle() {
+        this.visible.setValue(!this.visible.getValue())
+    }
+
+    setWidth(width: number) {
+        this.width.setValue(Math.max(300, Math.min(width, 1000)))
+    }
+
+    async connectStudio(studio: StudioService) {
+        this.studio = studio
+        this.ai.setStudio(studio)
+        // 🔌 Wire the Nervous System
+        console.log("🔌 Odie: Connecting to Studio (Dynamic)...")
+        try {
+            console.log("🔍 Debug: Checking OdieAppControl symbol:", OdieAppControl);
+            if (!OdieAppControl) {
+                console.error("❌ CRTICAL: OdieAppControl import is undefined!");
+                throw new Error("OdieAppControl is undefined (Circular Dependency?)");
+            }
+            this.appControl = new OdieAppControl(studio)
+            console.log("✅ OdieAppControl Instantiated Successfully:", this.appControl);
+        } catch (e) {
+            console.error("❌ Failed to load OdieAppControl:", e);
+            (window as any).__ODIE_LOAD_ERROR__ = e;
+        }
+    }
+
+    async sendMessage(text: string) {
+        // --- 1. Command Interception (Slash Commands) ---
+        if (text.startsWith("/")) {
+            const [cmd, ...args] = text.trim().split(" ")
+            if (commandRegistry.has(cmd)) {
+
+                // Add User Msg IMMEDIATELY
+                const userMsg: Message = { id: Date.now().toString(), role: "user", content: text, timestamp: Date.now() }
+                const currentStart = this.messages.getValue()
+                this.messages.setValue([...currentStart, userMsg])
+
+                // Execute
+                const result = await commandRegistry.execute(cmd, args, this)
+
+                if (result) {
+                    // Add System Msg (Feedback)
+                    const sysMsg: Message = { id: (Date.now() + 1).toString(), role: "model", content: result, timestamp: Date.now() }
+                    const currentPostExec = this.messages.getValue()
+                    this.messages.setValue([...currentPostExec, sysMsg])
+                }
+                return
+            }
+        }
+
+        // --- 1.5 Fast Path (Natural Language Interceptor) ---
+        // [ANTIGRAVITY] Optimization: Zero-Latency routing for common commands
+        // This makes "play" work as fast as "/play"
+        const fastPathMap: Array<[RegExp, string, (match: RegExpMatchArray) => string[]]> = [
+            [/^play$/i, "/play", () => []],
+            [/^start$/i, "/play", () => []],
+            [/^stop$/i, "/stop", () => []],
+            [/^pause$/i, "/stop", () => []],
+            [/^record$/i, "/record", () => []],
+            [/^list$/i, "/list", () => []],
+            [/^list tracks$/i, "/list", () => []],
+            [/^add (.*) track$/i, "/add", (m) => [m[1]]], // "add synth track" -> /add synth
+            [/^add (.*)$/i, "/add", (m) => [m[1]]], // "add synth" -> /add synth
+            [/^new project$/i, "/new", () => []],
+            [/^clear$/i, "/new", () => []],
+        ]
+
+        for (const [regex, cmd, getArgs] of fastPathMap) {
+            const match = text.trim().match(regex)
+            if (match) {
+                console.log(`⚡ [Odie FastPath] Intercepted "${text}" -> ${cmd}`)
+                const services = commandRegistry
+                if (services.has(cmd)) {
+                    // UI Feedback: Show user message
+                    const userMsg: Message = { id: Date.now().toString(), role: "user", content: text, timestamp: Date.now() }
+                    const currentStart = this.messages.getValue()
+                    this.messages.setValue([...currentStart, userMsg])
+
+                    // Execute
+                    const args = getArgs(match)
+                    const result = await commandRegistry.execute(cmd, args, this)
+
+                    if (result) {
+                        const sysMsg: Message = { id: (Date.now() + 1).toString(), role: "model", content: result, timestamp: Date.now() }
+                        const currentPostExec = this.messages.getValue()
+                        this.messages.setValue([...currentPostExec, sysMsg])
+                    }
+                    return
+                }
+            }
+        }
+
+        // --- 2. Normal AI Flow ---
+        const userMsg: Message = { id: crypto.randomUUID(), role: "user", content: text, timestamp: Date.now() }
+        const startMsgs = this.messages.getValue()
+        this.messages.setValue([...startMsgs, userMsg])
+
+        // Placeholder for streaming response
+        const assistantMsg: Message = { id: crypto.randomUUID(), role: "model", content: "", timestamp: Date.now() }
+        this.messages.setValue([...startMsgs, userMsg, assistantMsg])
+
+        // 🔊 Primer: Wake up AudioContext on user gesture
+        if (this.studio?.audioContext?.state === "suspended") {
+            console.log("🔊 Odie resuming AudioContext...")
+            this.studio.audioContext.resume().then(() => {
+                console.log("🔊 AudioContext Resumed")
+            })
+        }
+
+        try {
+            // Fix: Pass full history, not just text
+            // --- Cortex Injection: Dynamic Personal & Memory ---
+            const provider = this.ai.getActiveProvider()
+            const config = provider ? this.ai.getConfig(provider.id) : {}
+
+            // [ANTIGRAVITY] Smart Track Focus - Help AI understand context
+            const focusState = this.ai.contextService.state.getValue().focus
+            const trackList = this.safeListTracks()
+
+            // Get currently selected track (if valid)
+            const selectedTrack = focusState.selectedTrackName && trackList.includes(focusState.selectedTrackName)
+                ? focusState.selectedTrackName
+                : null
+
+            // Find recently discussed track from conversation history
+            const recentMessages = this.messages.getValue().slice(-6) // Last 6 messages
+            let recentlyDiscussedTrack: string | null = null
+            for (const msg of recentMessages.reverse()) {
+                if (!msg.content) continue
+                const msgLower = msg.content.toLowerCase()
+                const foundTrack = trackList.find(t => msgLower.includes(t.toLowerCase()))
+                if (foundTrack) {
+                    recentlyDiscussedTrack = foundTrack
+                    break
+                }
+            }
+
+            const projectContext = {
+                userQuery: text,
+                modelId: config.modelId,
+                providerId: provider ? provider.id : undefined,
+                forceAgentMode: config.forceAgentMode,
+                project: (this.studio && this.studio.hasProfile) ? {
+                    bpm: this.studio.project.timelineBox.bpm.getValue(),
+                    genre: this.studio.profile.meta.name,
+                    trackCount: this.studio.project.rootBoxAdapter.audioUnits.adapters().length,
+                    trackList: trackList,
+                    selectionSummary: this.safeInspectSelection(),
+                    loopEnabled: this.studio.transport.loop().getValue(),
+                    // [ANTIGRAVITY] Smart Focus Hints
+                    focusHints: {
+                        selectedTrack: selectedTrack,
+                        recentlyDiscussedTrack: recentlyDiscussedTrack,
+                        hint: selectedTrack
+                            ? `User currently has "${selectedTrack}" selected. If they refer to "the track" or "it", they likely mean this.`
+                            : recentlyDiscussedTrack
+                                ? `We were recently discussing "${recentlyDiscussedTrack}". If the user refers to "it" or "the track", they might mean this.`
+                                : "No track is currently focused. Ask the user which track if their question is track-specific."
+                    }
+                } : undefined,
+                activeLesson: schoolStore.currentLesson.getValue() ? {
+                    id: schoolStore.currentLesson.getValue()!.id,
+                    title: schoolStore.currentLesson.getValue()!.title,
+                    content: schoolStore.currentLesson.getValue()!.content
+                } : undefined
+            }
+
+            console.log("🧠 OdieService: Context Payload", projectContext)
+
+            // Generate the Brain's instruction for this turn
+            const systemPrompt = await odiePersona.generateSystemPrompt(projectContext)
+
+            // [ANTIGRAVITY] Cognitive Preset Injection
+            const focus = await import("./services/OdieFocusService").then(m => m.odieFocus.getFocus())
+            // @ts-ignore - Accessing private logic for consistent behavior
+            const roleAny = odiePersona["mapFocusToRole"](projectContext, focus)
+            const cognitiveProfile = odiePersona.getCognitiveProfile(roleAny)
+
+            // Inject into Context for debug visibility & Provider consumption
+            if (cognitiveProfile) {
+                (projectContext as any).thinkingLevel = cognitiveProfile.thinkingLevel
+            }
+
+            const systemMsg: Message = { id: "system-turn", role: "system", content: systemPrompt, timestamp: Date.now() }
+
+            // Filter out old system messages and inject the fresh one
+            const cleanHistory = [...startMsgs, userMsg].filter(m => m.role !== "system")
+            const history = [systemMsg, ...cleanHistory]
+
+            // [ANTIGRAVITY] DIAGNOSTIC PORT: Update Debug Info
+            // This is the "Glass Box" snapshot
+            this.lastDebugInfo.setValue({
+                systemPrompt: systemPrompt,
+                projectContext: projectContext,
+                userQuery: text,
+                timestamp: Date.now()
+            })
+
+            // -- WIRED NERVOUS SYSTEM --
+            // We pass OdieTools to the LLM.
+            // onFinal is called when the message finishes. We check for tool calls there.
+            // [ANTIGRAVITY] DUAL-BRAIN: Passing projectContext so Image Model can "See" the music context.
+
+            // Status Callback: Propagate Gemini status updates to UI
+            const handleStatus = (status: string, model?: string) => {
+                this.activityStatus.setValue(status)
+                if (model) this.activeModelName.setValue(model)
+            }
+
+            this.isGenerating.setValue(true) // START THINKING
+            const stream = await this.ai.streamChat(history, projectContext, OdieTools, async (finalMsg) => {
+                this.isGenerating.setValue(false) // STOP THINKING
+                this.activityStatus.setValue("Ready") // Reset status
+                this.activeModelName.setValue("Gemini") // Reset model label
+                console.log("⚡ Odie Reflex Arc: Final Message Received:", finalMsg)
+
+                if (finalMsg.tool_calls && finalMsg.tool_calls.length > 0) {
+                    this.isGenerating.setValue(true) // RE-THINKING (TOOL EXECUTION)
+                    const successes: string[] = []  // For display, no AI follow-up
+                    const failures: string[] = []   // For structured tool errors
+                    const errors: string[] = []     // For AI follow-up
+                    const analysisResults: { name: string; result: string }[] = [] // For analysis tools that need AI interpretation
+                    if (this.appControl) {
+                        console.log("⚡ Odie Reflex Arc: Executing Tool Calls...", finalMsg.tool_calls)
+
+                        for (const call of finalMsg.tool_calls) {
+                            try {
+                                let success = false
+                                const args = call.arguments || {} // Defensive fallback
+
+                                switch (call.name) {
+                                    // --- PROJECT ---
+                                    case "project_create":
+                                        await this.appControl.createProject()
+                                        successes.push("✅ Created new project")
+                                        success = true
+                                        break
+                                    case "project_load":
+                                        success = await this.appControl.loadProject()
+                                        if (success) successes.push("📂 Opened Project Browser")
+                                        break
+                                    case "project_export_mix":
+                                        success = await this.appControl.exportMixdown()
+                                        if (success) successes.push("💿 Export initiated (Dialog)")
+                                        break
+                                    case "project_export_stems":
+                                        success = await this.appControl.exportStems()
+                                        if (success) successes.push("💿 Export Stems initiated (Dialog)")
+                                        break
+
+                                    // --- TRANSPORT ---
+                                    case "transport_play":
+                                        await this.appControl.play()
+                                        successes.push("▶️ Playing")
+                                        success = true
+                                        break
+                                    case "transport_stop":
+                                        await this.appControl.stop()
+                                        successes.push("⏹️ Stopped")
+                                        success = true
+                                        break
+                                    case "transport_loop":
+                                        await this.appControl.setLoop(Boolean(args.enabled))
+                                        successes.push(`🔁 Loop ${args.enabled ? "enabled" : "disabled"}`)
+                                        success = true
+                                        break
+                                    case "transport_set_bpm": {
+                                        const bpm = parseFloat(String(args.bpm))
+                                        success = await this.appControl.setBpm(bpm)
+                                        if (success) successes.push(`🎵 BPM set to ${bpm}`)
+                                        else failures.push(`🎵 BPM ${bpm} is out of range. Valid range: 20-999.`)
+                                        break
+                                    }
+                                    case "transport_set_time_signature": {
+                                        const num = parseInt(String(args.numerator))
+                                        const denom = parseInt(String(args.denominator))
+                                        success = await this.appControl.setTimeSignature(num, denom)
+                                        if (success) successes.push(`⏱️ Sig set to ${num}/${denom}`)
+                                        break
+                                    }
+
+                                    case "notes_add": {
+                                        // Expect args to have track and notes
+                                        const track = args.trackName as string
+                                        const notes = args.notes as { pitch: number, startTime: number, duration: number, velocity: number }[]
+                                        const result = await this.appControl.addMidiNotes(track, notes)
+                                        if (result.success) successes.push(`✅ Added ${notes.length} MIDI notes to "${track}"`)
+                                        else failures.push(`❌ Failed to add notes to "${track}": ${result.reason}`)
+                                        break
+                                    }
+                                    case "recording_start":
+                                        await this.appControl.record(args.countIn !== false)
+                                        successes.push("🔴 Recording")
+                                        success = true
+                                        break
+                                    case "recording_stop":
+                                        await this.appControl.stopRecording()
+                                        successes.push("⏹️ Recording Stopped")
+                                        success = true
+                                        break
+
+                                    // --- GENERATIVE UI ---
+                                    case "render_interface":
+                                        // Hydrate the observable
+                                        this.genUiPayload.setValue(args as any)
+                                        successes.push("✨ Generated Interface: " + args.title)
+                                        this.visible.setValue(true) // Ensure sidebar is open
+                                        success = true
+                                        break
+
+                                    // --- EDITING ---
+                                    case "region_split": {
+                                        const result = await this.appControl.splitRegion(args.trackName, parseFloat(String(args.time || 0)))
+                                        success = result.success
+                                        if (success) successes.push("✂️ Region split")
+                                        else failures.push(`✂️ Split failed: ${result.reason || "Unknown error"}`)
+                                        break
+                                    }
+                                    case "region_move": {
+                                        const result = await this.appControl.moveRegion(args.trackName, parseFloat(String(args.time)), parseFloat(String(args.newTime)))
+                                        success = result.success
+                                        if (success) successes.push("↔️ Region moved")
+                                        else failures.push(`↔️ Move failed: ${result.reason || "Unknown error"}`)
+                                        break
+                                    }
+                                    case "region_copy": {
+                                        const result = await this.appControl.copyRegion(args.trackName, parseFloat(String(args.time)), parseFloat(String(args.newTime)))
+                                        success = result.success
+                                        if (success) successes.push("👯 Region copied")
+                                        else failures.push(`👯 Copy failed: ${result.reason || "Unknown error"}`)
+                                        break
+                                    }
+
+                                    // --- MIXER ---
+                                    case "mixer_volume": {
+                                        const result = await this.appControl.setVolume(args.trackName, parseFloat(String(args.db)))
+                                        success = result.success
+                                        if (success) successes.push(`🔊 ${args.trackName} → ${args.db}dB`)
+                                        else failures.push(`🔊 Volume failed: ${result.reason || "Unknown error"}`)
+                                        break
+                                    }
+                                    case "mixer_pan": {
+                                        const result = await this.appControl.setPan(args.trackName, parseFloat(String(args.pan)))
+                                        success = result.success
+                                        if (success) successes.push(`↔️ ${args.trackName} pan → ${args.pan}`)
+                                        else failures.push(`↔️ Pan failed: ${result.reason || "Unknown error"}`)
+                                        break
+                                    }
+                                    case "mixer_mute": {
+                                        const result = await this.appControl.mute(args.trackName, Boolean(args.muted))
+                                        success = result.success
+                                        if (success) successes.push(`${args.muted ? "🔇" : "🔊"} ${args.trackName} ${args.muted ? "muted" : "unmuted"}`)
+                                        else failures.push(`🔇 Mute failed: ${result.reason || "Unknown error"}`)
+                                        break
+                                    }
+                                    case "mixer_solo": {
+                                        const result = await this.appControl.solo(args.trackName, Boolean(args.soloed))
+                                        success = result.success
+                                        if (success) successes.push(`${args.soloed ? "🎤" : "👥"} ${args.trackName} ${args.soloed ? "soloed" : "unsoloed"}`)
+                                        else failures.push(`🎤 Solo failed: ${result.reason || "Unknown error"}`)
+                                        break
+                                    }
+                                    case "mixer_add_send": {
+                                        const result = await this.appControl.addSend(args.trackName, args.auxName, args.db)
+                                        success = result.success
+                                        if (success) successes.push(`🔊 Sent ${args.trackName} to ${args.auxName} @ ${args.db || -6}dB`)
+                                        else failures.push(`❌ Failed to add send: ${result.reason}`)
+                                        break
+                                    }
+                                    case "mixer_add_effect": {
+                                        const result = await this.appControl.addEffect(args.trackName, args.effectType)
+                                        success = result.success
+                                        if (success) successes.push(`✨ Added ${args.effectType} to ${args.trackName}`)
+                                        else failures.push(`❌ Failed to add effect: ${result.reason}`)
+                                        break
+                                    }
+                                    case "mixer_set_routing": {
+                                        const result = await this.appControl.setRouting(args.sourceName, args.targetBusName)
+                                        success = result.success
+                                        if (success) successes.push(`🔀 Routed ${args.sourceName} → ${args.targetBusName}`)
+                                        else failures.push(`❌ Failed to set routing: ${result.reason}`)
+                                        break
+                                    }
+
+                                    // --- ARRANGEMENT ---
+                                    case "arrangement_add_track":
+                                        const addTrackResult = await this.appControl.addTrack(args.type, args.name)
+                                        success = addTrackResult.success
+                                        if (success) successes.push(`✅ Added ${args.type} track: "${args.name}"`)
+                                        else failures.push(`❌ Failed: ${addTrackResult.reason}`)
+                                        break
+                                    case "arrangement_add_bus": {
+                                        const result = await this.appControl.addAuxTrack(args.name)
+                                        success = result.success
+                                        if (success) successes.push(`✅ Added Bus: "${args.name}"`)
+                                        else failures.push(`❌ Failed to add bus: ${result.reason}`)
+                                        break
+                                    }
+                                    case "arrangement_add_midi_effect": {
+                                        const result = await this.appControl.addMidiEffect(args.trackName, args.effectType)
+                                        success = result.success
+                                        if (success) successes.push(`🎹 Added MIDI Effect: ${args.effectType} on ${args.trackName}`)
+                                        else failures.push(`❌ Failed to add MIDI effect: ${result.reason}`)
+                                        break
+                                    }
+                                    case "arrangement_delete_track":
+                                        success = await this.appControl.deleteTrack(args.name)
+                                        if (success) successes.push(`🗑️ Deleted track: "${args.name}"`)
+                                        break
+                                    case "arrangement_list_tracks": {
+                                        const tracks = await this.appControl.listTracks()
+                                        if (tracks.length === 0) {
+                                            successes.push("📋 No tracks found.")
+                                        } else {
+                                            const list = tracks.map(t => `- 🎹 **${t}**`).join("\n")
+                                            successes.push(`📋 **Project Tracks:**\n${list}`)
+                                        }
+                                        success = true
+                                        break
+                                    }
+
+                                    // --- VIEW ---
+                                    case "view_switch":
+                                        success = await this.appControl.switchScreen(args.screen)
+                                        if (success) successes.push(`👁️ Switched to ${args.screen} view`)
+                                        break
+                                    case "view_toggle_keyboard":
+                                        await this.appControl.toggleKeyboard()
+                                        successes.push("🎹 Toggled on-screen keyboard")
+                                        success = true
+                                        break
+
+                                    // --- ANALYSIS ---
+                                    case "inspect_selection": {
+                                        const analysis = this.appControl.inspectSelection()
+                                        // [ANTIGRAVITY] User-friendly output, hide technical JSON
+                                        // AI still sees the data in history for context
+                                        try {
+                                            const data = JSON.parse(analysis)
+                                            const items = Array.isArray(data) ? data : [data]
+                                            const trackCount = items.filter((i: any) => i.type === "track").length
+                                            const regionCount = items.filter((i: any) => i.type === "region").length
+                                            const deviceCount = items.filter((i: any) => i.type === "device" || i.type === "unknown").length
+
+                                            if (items.length === 0) {
+                                                successes.push("🧐 Nothing selected right now.")
+                                            } else {
+                                                let summary = "🧐 Selection: "
+                                                const parts: string[] = []
+                                                if (trackCount > 0) parts.push(`${trackCount} track${trackCount > 1 ? 's' : ''}`)
+                                                if (regionCount > 0) parts.push(`${regionCount} region${regionCount > 1 ? 's' : ''}`)
+                                                if (deviceCount > 0) parts.push(`${deviceCount} item${deviceCount > 1 ? 's' : ''}`)
+                                                summary += parts.join(", ")
+                                                successes.push(summary)
+                                            }
+                                        } catch {
+                                            // Fallback if not JSON
+                                            successes.push("🧐 Selection analyzed.")
+                                        }
+                                        success = true
+                                        break
+                                    }
+                                    case "analyze_track": {
+                                        let trackName = args.trackName
+                                        if (!trackName) {
+                                            // [ANTIGRAVITY] Robust Fallback: Try to use selected track from context
+                                            trackName = this.ai.contextService.state.getValue().focus.selectedTrackName || undefined
+                                            if (!trackName) throw new Error("Missing 'trackName' argument (and no track selected)")
+                                            console.log(`🧠 [Odie Fallback] Missing trackName, using selected: ${trackName}`)
+                                        }
+                                        // Run analysis but only show friendly message to user
+                                        void this.appControl.analyzeTrack(trackName)
+                                        // [ANTIGRAVITY] User-friendly output
+                                        successes.push(`🧐 Analyzed ${trackName}. Check details in my response.`)
+                                        success = true
+                                        break
+                                    }
+
+                                    // --- COMPREHENSIVE SIGNAL CHAIN API ---
+                                    case "get_track_details": {
+                                        let trackName = args.trackName as string | undefined
+                                        if (!trackName) {
+                                            // [ANTIGRAVITY] 3-tier Smart Inference
+                                            const trackList = this.safeListTracks()
+                                            const userQuery = text.toLowerCase()
+
+                                            // Tier 1: Track name explicitly mentioned in current query
+                                            trackName = trackList.find((t: string) =>
+                                                userQuery.includes(t.toLowerCase())
+                                            )
+
+                                            // Tier 2: Currently selected track in UI
+                                            if (!trackName) {
+                                                const selected = this.ai.contextService.state.getValue().focus.selectedTrackName
+                                                if (selected && trackList.includes(selected)) {
+                                                    trackName = selected
+                                                    console.log(`🧠 [Odie Inference] Using selected track: "${trackName}"`)
+                                                }
+                                            }
+
+                                            // Tier 3: Recently discussed track from conversation
+                                            if (!trackName) {
+                                                const recentMessages = this.messages.getValue().slice(-6)
+                                                for (const msg of recentMessages.reverse()) {
+                                                    if (!msg.content) continue
+                                                    const msgLower = msg.content.toLowerCase()
+                                                    const foundTrack = trackList.find(t => msgLower.includes(t.toLowerCase()))
+                                                    if (foundTrack) {
+                                                        trackName = foundTrack
+                                                        console.log(`🧠 [Odie Inference] Using recently discussed track: "${trackName}"`)
+                                                        break
+                                                    }
+                                                }
+                                            }
+
+                                            if (!trackName) {
+                                                throw new Error(`No track specified. Use get_project_overview first to see which tracks have effects, then call get_track_details with a specific trackName. Available tracks: ${trackList.join(", ")}`)
+                                            }
+                                            console.log(`🧠 [Odie Inference] Extracted track name "${trackName}" from user query`)
+                                        }
+                                        const details = this.appControl.getTrackDetails(trackName)
+                                        console.log(`🎛️ [Track Details] ${trackName}:`, details)
+                                        // Feed result back to AI for explanation
+                                        analysisResults.push({ name: "get_track_details", result: details })
+                                        successes.push(`🔍 Analyzing signal chain for "${trackName}"...`)
+                                        success = true
+                                        break
+                                    }
+                                    case "get_project_overview": {
+                                        const overview = this.appControl.getProjectOverview()
+                                        console.log(`📊 [Project Overview]:`, overview)
+                                        // Feed result back to AI for explanation
+                                        analysisResults.push({ name: "get_project_overview", result: overview })
+                                        successes.push(`📊 Analyzing project...`)
+                                        success = true
+                                        break
+                                    }
+                                    case "set_device_param": {
+                                        const { trackName, deviceType, deviceIndex, paramPath, value } = args
+                                        if (!trackName || !deviceType || !paramPath || value === undefined) {
+                                            throw new Error("Missing required arguments for set_device_param")
+                                        }
+                                        const result = await this.appControl.setDeviceParam(
+                                            trackName,
+                                            deviceType,
+                                            deviceIndex ?? 0,
+                                            paramPath,
+                                            value
+                                        )
+                                        if (result.success) {
+                                            successes.push(`🎛️ ${result.reason}`)
+                                            success = true
+                                        } else {
+                                            throw new Error(result.reason)
+                                        }
+                                        break
+                                    }
+
+                                    case "verify_action": {
+                                        const result = await this.appControl.verifyAction(args.action, args.expectedChange)
+                                        analysisResults.push({ name: "verify_action", result })
+                                        successes.push(`🔬 Verifying action: ${args.action}...`)
+                                        success = true
+                                        break
+                                    }
+
+                                    // --- CREATIVE ---
+                                    // [ANTIGRAVITY] Native Mode - No Tool Handling needed for images.
+
+
+                                    default:
+                                        console.warn("Unknown tool:", call.name)
+                                }
+
+                                if (!success && call.name !== "arrangement_list_tracks") {
+                                    // [ANTIGRAVITY] Legacy generic hints removed.
+                                    // We now rely on specific error messages in 'failures' array.
+                                    // errors.push(`❌ Failed: ${call.name}.`)
+                                }
+                            } catch (e) {
+                                console.error("Tool Execution Failed", e)
+                                const errMsg = (e instanceof Error) ? e.message : String(e)
+                                errors.push(`❌ Error: ${call.name} - ${errMsg}`)
+
+                                // 🚨 VISIBLE ERROR REPORTING FOR USER
+                                Dialogs.info({
+                                    headline: `Odie Failed: ${call.name}`,
+                                    message: errMsg
+                                })
+                            }
+                        }
+                    }
+
+                    // --- FEEDBACK LOOP (AGENTIC RECURSION) ---
+                    if (errors.length > 0) {
+                        // ERRORS occurred - trigger full AI follow-up to explain
+                        const feedbackMsg: Message = {
+                            id: crypto.randomUUID(),
+                            role: "system",
+                            content: errors.join("\n"),
+                            timestamp: Date.now()
+                        }
+
+                        // 1. Replace the orphan placeholder with feedback, preserve ID for follow-up stream
+                        const currentMessages = this.messages.getValue()
+                        const originalIdx = currentMessages.findIndex(m => m.id === assistantMsg.id)
+
+                        // Insert feedbackMsg before the placeholder, and keep the placeholder for the follow-up
+                        if (originalIdx !== -1) {
+                            const newMessages = [...currentMessages]
+                            newMessages.splice(originalIdx, 0, feedbackMsg)
+                            this.messages.setValue(newMessages)
+                        } else {
+                            this.messages.setValue([...currentMessages, feedbackMsg])
+                        }
+
+                        // 2. Recurse: Send Tool Output back to Brain
+                        console.log("🧠 Odie Agentic Loop: Sending feedback to model...")
+                        const nextHistory = [...history, finalMsg, feedbackMsg]
+
+                        const nextStream = this.ai.streamChat(nextHistory, undefined, OdieTools, async () => {
+                            console.log("✅ Odie Agentic Loop: Turn Complete")
+                        })
+
+                        nextStream.subscribe(obs => {
+                            const newText = obs.getValue()
+                            const all = this.messages.getValue()
+                            const targetIdx = all.findIndex(m => m.id === assistantMsg.id)
+                            if (targetIdx === -1) return
+
+                            const newAll = [...all]
+                            newAll[targetIdx] = {
+                                ...newAll[targetIdx],
+                                content: newText || "..."
+                            }
+                            this.messages.setValue(newAll)
+                        })
+                    } else if (analysisResults.length > 0) {
+                        // ANALYSIS tools need AI follow-up to explain results
+                        // Create proper function response messages for each result
+                        const functionResponseMsgs: Message[] = analysisResults.map(ar => ({
+                            id: crypto.randomUUID(),
+                            role: "function" as const,
+                            name: ar.name,
+                            content: ar.result,
+                            timestamp: Date.now()
+                        }))
+
+                        // Show "Analyzing..." status first
+                        const currentMessages = this.messages.getValue()
+                        const originalIdx = currentMessages.findIndex(m => m.id === assistantMsg.id)
+                        if (originalIdx !== -1) {
+                            const newMessages = [...currentMessages]
+                            newMessages[originalIdx] = { ...newMessages[originalIdx], content: successes.join("\n") }
+                            this.messages.setValue(newMessages)
+                        }
+
+                        // Send function responses back to AI for interpretation
+                        // Per Gemini spec: Model's tool call -> functionResponse(s) -> Model explains
+                        // Allow render_widget for Gen UI, but exclude analysis tools to prevent loops
+                        const renderOnlyTools = OdieTools.filter(t => t.name === "render_widget")
+                        console.log("🧠 Odie Analysis Loop: Sending function responses to model for explanation...")
+                        const nextHistory = [...history, finalMsg, ...functionResponseMsgs]
+
+                        let lastStreamContent = ""
+                        const nextStream = this.ai.streamChat(nextHistory, undefined, renderOnlyTools, async (finalResponse) => {
+                            console.log("✅ Odie Analysis Loop: Explanation Complete")
+                            console.log("🔬 [Analysis Loop] Final response:", {
+                                hasContent: !!finalResponse.content,
+                                contentLength: finalResponse.content?.length || 0,
+                                hasToolCalls: !!(finalResponse.tool_calls && finalResponse.tool_calls.length > 0),
+                                toolCalls: finalResponse.tool_calls?.map(tc => tc.name)
+                            })
+
+                            // If no content was streamed but we completed, check for empty response
+                            // Use Gen UI to show clickable track options for better UX!
+                            if (!lastStreamContent && !finalResponse.content) {
+                                const trackList = this.safeListTracks().filter(t => t !== "Output")
+                                const genUIFallback = `I analyzed the data but need more context. Which track's reverb would you like to fix?\n\n\`\`\`json
+${JSON.stringify({
+                                    ui_component: "step_list",
+                                    data: {
+                                        title: "Select a track:",
+                                        steps: trackList.map(t => `🎚️ ${t}`)
+                                    }
+                                }, null, 2)}
+\`\`\`\n\n*Tap a track above, or type the name to continue!*`
+
+                                const all = this.messages.getValue()
+                                const targetIdx = all.findIndex(m => m.id === assistantMsg.id)
+                                if (targetIdx !== -1) {
+                                    const newAll = [...all]
+                                    newAll[targetIdx] = {
+                                        ...newAll[targetIdx],
+                                        content: genUIFallback
+                                    }
+                                    this.messages.setValue(newAll)
+                                }
+                            }
+                        })
+
+                        nextStream.subscribe(obs => {
+                            const newText = obs.getValue()
+                            lastStreamContent = newText || ""
+                            console.log(`🔄 [Analysis Loop] Stream update received:`, newText?.substring(0, 100) || "(empty)")
+                            const all = this.messages.getValue()
+                            const targetIdx = all.findIndex(m => m.id === assistantMsg.id)
+                            if (targetIdx === -1) {
+                                console.warn("⚠️ [Analysis Loop] Target message not found in messages array!")
+                                return
+                            }
+
+                            const newAll = [...all]
+                            newAll[targetIdx] = {
+                                ...newAll[targetIdx],
+                                content: newText || "Analyzing..."
+                            }
+                            this.messages.setValue(newAll)
+                        })
+                    } else if (successes.length > 0 || failures.length > 0) {
+                        // SUCCESS or PARTIAL - tools executed, display results
+                        const parts = [...successes, ...failures]
+                        const brief = parts.join("\n") + " [[STATUS: OK]]"
+                        const all = this.messages.getValue()
+                        const targetIdx = all.findIndex(m => m.id === assistantMsg.id)
+                        if (targetIdx !== -1) {
+                            const newAll = [...all]
+                            newAll[targetIdx] = {
+                                ...newAll[targetIdx],
+                                content: brief
+                            }
+                            this.messages.setValue(newAll)
+                            console.log("✅ Odie Silent Success: Tools executed, brief confirmation sent.")
+                        }
+                    }
+                }
+
+                // [ANTIGRAVITY] DONE THINKING
+                this.isGenerating.setValue(false)
+
+                // [ANTIGRAVITY] SIGNAL DISPATCH - Event Driven Test Rig
+                this.studio?.odieEvents.notify({
+                    type: "thought-complete",
+                    content: this.messages.getValue().at(-1)?.content || ""
+                })
+
+            }, handleStatus)
+
+            // Subscribe to the stream (ObservableValue emits itself on change)
+            // CRITICAL: Update by message ID, not position, to prevent overwriting other messages (e.g., /verify report)
+            const targetMsgId = assistantMsg.id
+            const disposer = stream.subscribe((observable) => {
+                const newText = observable.getValue()
+
+                const all = this.messages.getValue()
+                const targetIdx = all.findIndex(m => m.id === targetMsgId)
+                if (targetIdx === -1) return // Message was removed, stop updating
+
+                const newAll = [...all]
+                newAll[targetIdx] = {
+                    ...newAll[targetIdx],
+                    content: newText || "..."
+                }
+                this.messages.setValue(newAll)
+            })
+            // We should store disposer to clean up later, but for now just silence the lint
+            void disposer
+
+        } catch (e) {
+            console.error("Chat Error", e)
+            const all = this.messages.getValue()
+            const newAll = [...all]
+            newAll[newAll.length - 1] = {
+                ...newAll[newAll.length - 1],
+                role: "model",
+                content: `Error: ${(e instanceof Error) ? e.message : String(e)}`
+            }
+            this.messages.setValue(newAll)
+
+            // [ANTIGRAVITY] ERROR STOP
+            this.isGenerating.setValue(false)
+        }
+    }
+
+    // --- HISTORY MANAGEMENT ---
+
+    private activeSessionId: string | null = null
+
+    public startNewChat() {
+        this.activeSessionId = crypto.randomUUID()
+        this.messages.setValue([])
+
+        // Initial Greeting
+        // this.messages.setValue([{ id: "init", role: "model", content: "New session started.", timestamp: Date.now() }])
+    }
+
+    public loadSession(sessionId: string) {
+        const session = chatHistory.getSession(sessionId)
+        if (session) {
+            this.activeSessionId = session.id
+            this.messages.setValue(session.messages)
+        }
+    }
+
+    private saveCurrentSession() {
+        if (!this.activeSessionId) {
+            this.activeSessionId = crypto.randomUUID()
+        }
+
+        const msgs = this.messages.getValue()
+        if (msgs.length === 0) return
+
+        // Auto-Title based on first user message
+        const firstUserMsg = msgs.find(m => m.role === "user")
+        const title = firstUserMsg ? firstUserMsg.content.slice(0, 30) + (firstUserMsg.content.length > 30 ? "..." : "") : "New Chat"
+
+        chatHistory.saveSession({
+            id: this.activeSessionId,
+            title: title,
+            timestamp: Date.now(),
+            messages: msgs
+        })
+    }
+
+    private safeListTracks(): string[] {
+        try {
+            return this.appControl ? this.appControl.listTracks() : []
+        } catch (e) {
+            return []
+        }
+    }
+
+    private safeInspectSelection(): string {
+        try {
+            return this.appControl ? this.appControl.inspectSelection() : ""
+        } catch (e) {
+            return ""
+        }
+    }
+
+    /**
+     * [A2UI] Handle Widget Action
+     * Bridges Gen UI widget interactions (like knob adjustments) to OdieAppControl.
+     * Adds a confirmation message to the chat.
+     */
+    async handleWidgetAction(action: {
+        type: string
+        name: string
+        componentId: string
+        context: {
+            param?: string
+            // [Universal Control]
+            deviceType?: "mixer" | "effect" | "instrument"
+            deviceIndex?: number
+            paramPath?: string
+            // ---
+            trackName?: string
+            value?: number | string
+            previousValue?: number
+            _targetGridId?: string // Check for our new hidden ID
+        }
+    }) {
+        if (!this.appControl) {
+            console.warn("🧠 [Gen UI] Widget action received but no appControl available")
+            return
+        }
+
+        const { param, trackName, value, _targetGridId, deviceType, deviceIndex, paramPath } = action.context
+
+        try {
+            let result: { success: boolean; reason?: string } | undefined
+            let feedbackMessage = ""
+
+            if (action.name === "knob_adjust" && typeof value === 'number') {
+                if (param === "volume" && trackName) {
+                    result = await this.appControl.setVolume(trackName, value)
+                    feedbackMessage = result?.success
+                        ? `✓ ${trackName} volume set`
+                        : `✗ Failed to set volume`
+                } else if (param === "pan" && trackName) {
+                    result = await this.appControl.setPan(trackName, value)
+                    feedbackMessage = result?.success
+                        ? `✓ ${trackName} pan set`
+                        : `✗ Failed to set pan`
+                } else if (deviceType && paramPath && trackName) {
+                    // [Universal Control] Generic Parameter
+                    result = await this.appControl.setDeviceParam(
+                        trackName,
+                        deviceType,
+                        // Default to 0 if undefined (safe for instruments/mixer, logic handles effects)
+                        deviceIndex ?? 0,
+                        paramPath,
+                        value
+                    )
+                    feedbackMessage = result?.success
+                        // E.g. "✓ frequency set" (cleaner than full path in toast)
+                        ? `✓ ${paramPath.split('.').pop()} set`
+                        : `✗ Failed: ${result?.reason || "Unknown error"}`
+
+                    console.log(`🎛️ [Gen UI] Universal: ${trackName} ${deviceType}[${deviceIndex}] ${paramPath} -> ${value}`)
+                } else {
+                    // Fallback for legacy "param" without deviceType (should be handled by vol/pan checks above)
+                    // If we get here, it's a truly unknown parameter
+                    feedbackMessage = `? ${param || "param"} adjusted`
+                    console.warn(`🎛️ [Gen UI] Unhandled parameter: ${param} (No deviceType provided)`)
+                }
+
+                // [TRANSIENT FEEDBACK UPDATE]
+                // If we have a Grid Target, DO NOT SPAM CHAT. Show toast instead.
+                if (_targetGridId) {
+                    const gridEl = document.getElementById(_targetGridId)
+                    const toastEl = gridEl?.querySelector(".grid-status-toast") as HTMLElement
+
+                    if (toastEl) {
+                        toastEl.textContent = feedbackMessage.replace("✓ ", "") // Make it cleaner
+                        toastEl.style.opacity = "1"
+
+                        // Clear debounce
+                        // @ts-ignore
+                        clearTimeout(gridEl._toastTimeout)
+                        // @ts-ignore
+                        gridEl._toastTimeout = setTimeout(() => {
+                            toastEl.style.opacity = "0"
+                        }, 2000)
+
+                        // RETURN EARLY - DO NOT ADD TO CHAT
+                        return
+                    }
+                }
+            } else if (action.name === "step_select") {
+                // Handle List Selection -> Continue Conversation
+                const selection = action.context.value
+                console.log(`📋 [Gen UI] User selected step: ${selection}`)
+
+                // Add user message to chat to mimic them typing it
+                this.sendMessage(String(selection))
+            }
+
+            // Fallback: Add feedback message to chat if not handled by toast
+            if (feedbackMessage) {
+                const msgs = [...this.messages.getValue()]
+                msgs.push({
+                    id: crypto.randomUUID(),
+                    role: "system",
+                    content: feedbackMessage,
+                    timestamp: Date.now()
+                })
+                this.messages.setValue(msgs)
+            }
+
+        } catch (e) {
+            console.error("🧠 [Gen UI] Widget action failed:", e)
+        }
+    }
+
+}
+
+// [ANTIGRAVITY] SINGLETON EXPORT
+// Moving this here to prevent circular dependencies with UI components
+export const odieService = new OdieService()
+// @ts-ignore
+window.odieService = odieService

@@ -1,23 +1,23 @@
 import "./main.sass"
-import {App} from "@/ui/App.tsx"
-import {panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
-import {StudioService} from "@/service/StudioService"
-import {SampleMetaData, SoundfontMetaData} from "@opendaw/studio-adapters"
-import {Dialogs} from "@/ui/components/dialogs.tsx"
-import {installCursors} from "@/ui/Cursors.ts"
-import {BuildInfo} from "./BuildInfo"
-import {Surface} from "@/ui/surface/Surface.tsx"
-import {replaceChildren} from "@opendaw/lib-jsx"
-import {ContextMenu} from "@/ui/ContextMenu.ts"
-import {testFeatures} from "@/features.ts"
-import {MissingFeature} from "@/ui/MissingFeature.tsx"
-import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
-import {showStoragePersistDialog} from "@/AppDialogs"
-import {Promises} from "@opendaw/lib-runtime"
-import {AnimationFrame, Browser, ShortcutManager} from "@opendaw/lib-dom"
-import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
-import {FontLoader} from "@/ui/FontLoader"
-import {ErrorHandler} from "@/errors/ErrorHandler.ts"
+import { App } from "@/ui/App.tsx"
+import { panic, Progress, RuntimeNotification, RuntimeNotifier, UUID } from "@opendaw/lib-std"
+import { StudioService } from "@/service/StudioService"
+import { SampleMetaData, SoundfontMetaData } from "@opendaw/studio-adapters"
+import { Dialogs } from "@/ui/components/dialogs.tsx"
+import { installCursors } from "@/ui/Cursors.ts"
+import { BuildInfo } from "./BuildInfo"
+import { Surface } from "@/ui/surface/Surface.tsx"
+import { replaceChildren } from "@opendaw/lib-jsx"
+import { ContextMenu } from "@/ui/ContextMenu.ts"
+import { testFeatures } from "@/features.ts"
+import { MissingFeature } from "@/ui/MissingFeature.tsx"
+import { UpdateMessage } from "@/ui/UpdateMessage.tsx"
+import { showStoragePersistDialog } from "@/AppDialogs"
+import { Promises } from "@opendaw/lib-runtime"
+import { AnimationFrame, Browser, ShortcutManager } from "@opendaw/lib-dom"
+import { AudioOutputDevice } from "@/audio/AudioOutputDevice"
+import { FontLoader } from "@/ui/FontLoader"
+import { ErrorHandler } from "@/errors/ErrorHandler.ts"
 import {
     AudioWorklets,
     CloudAuthManager,
@@ -27,17 +27,17 @@ import {
     OpenSoundfontAPI,
     Workers
 } from "@opendaw/studio-core"
-import {AudioData} from "@opendaw/lib-dsp"
-import {StudioShortcutManager} from "@/service/StudioShortcutManager"
+import { AudioData } from "@opendaw/lib-dsp"
+import { StudioShortcutManager } from "@/service/StudioShortcutManager"
 
 const loadBuildInfo = async () => fetch(`/build-info.json?v=${Date.now()}`)
     .then(x => x.json())
     .then(x => BuildInfo.parse(x))
 
-export const boot = async ({workersUrl, workletsUrl}: { workersUrl: string, workletsUrl: string }) => {
+export const boot = async ({ workersUrl, workletsUrl }: { workersUrl: string, workletsUrl: string }) => {
     console.debug("booting...")
     console.debug(location.origin)
-    const {status, value: buildInfo} = await Promises.tryCatch(loadBuildInfo())
+    const { status, value: buildInfo } = await Promises.tryCatch(loadBuildInfo())
     if (status === "rejected") {
         alert("Error loading build info. Please reload the page.")
         return
@@ -49,14 +49,14 @@ export const boot = async ({workersUrl, workletsUrl}: { workersUrl: string, work
     const testFeaturesResult = await Promises.tryCatch(testFeatures())
     if (testFeaturesResult.status === "rejected") {
         document.querySelector("#preloader")?.remove()
-        replaceChildren(document.body, MissingFeature({error: testFeaturesResult.error}))
+        replaceChildren(document.body, MissingFeature({ error: testFeaturesResult.error }))
         return
     }
     console.debug("isLocalHost", Browser.isLocalHost())
     console.debug("agent", Browser.userAgent)
     const sampleRate = Browser.isFirefox() ? undefined : 48000
     console.debug("requesting custom sampleRate", sampleRate ?? "'No (Firefox)'")
-    const context = new AudioContext({sampleRate, latencyHint: 0})
+    const context = new AudioContext({ sampleRate, latencyHint: 0 })
     console.debug(`AudioContext state: ${context.state}, sampleRate: ${context.sampleRate}`)
     const audioWorklets = await Promises.tryCatch(AudioWorklets.createFor(context))
     if (audioWorklets.status === "rejected") {
@@ -65,7 +65,7 @@ export const boot = async ({workersUrl, workletsUrl}: { workersUrl: string, work
     if (context.state === "suspended") {
         window.addEventListener("click",
             async () => await context.resume().then(() =>
-                console.debug(`AudioContext resumed (${context.state})`)), {capture: true, once: true})
+                console.debug(`AudioContext resumed (${context.state})`)), { capture: true, once: true })
     }
     const audioDevices = await AudioOutputDevice.create(context)
     const sampleManager = new DefaultSampleLoaderManager({
@@ -83,6 +83,7 @@ export const boot = async ({workersUrl, workletsUrl}: { workersUrl: string, work
     const service: StudioService = new StudioService(context, audioWorklets.value, audioDevices,
         sampleManager, soundfontManager, cloudAuthManager, buildInfo)
     StudioShortcutManager.install(service)
+
     const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand())
     const surface = Surface.main({
         config: (surface: Surface) => surface.own(ContextMenu.install(surface.owner))
@@ -94,7 +95,7 @@ export const boot = async ({workersUrl, workletsUrl}: { workersUrl: string, work
     installCursors()
     RuntimeNotifier.install({
         info: (request) => Dialogs.info(request),
-        approve: (request) => Dialogs.approve({...request, reverse: true}),
+        approve: (request) => Dialogs.approve({ ...request, reverse: true }),
         progress: (request): RuntimeNotification.ProgressUpdater => Dialogs.progress(request)
     })
     if (buildInfo.env === "production" && !Browser.isLocalHost()) {
@@ -120,8 +121,8 @@ export const boot = async ({workersUrl, workletsUrl}: { workersUrl: string, work
             }
         }, 5_000)
         const checkUpdates = setInterval(async () => {
-            if (!navigator.onLine) {return}
-            const {status, value: newBuildInfo} = await Promises.tryCatch(loadBuildInfo())
+            if (!navigator.onLine) { return }
+            const { status, value: newBuildInfo } = await Promises.tryCatch(loadBuildInfo())
             if (status === "resolved" && newBuildInfo.uuid !== undefined && newBuildInfo.uuid !== buildInfo.uuid) {
                 document.body.prepend(UpdateMessage())
                 console.warn("A new version is online.")

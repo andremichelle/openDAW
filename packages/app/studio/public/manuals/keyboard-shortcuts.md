@@ -1,3 +1,12 @@
+---
+title: Keyboard Shortcuts
+category: Studio Manual
+tags:
+  - manual
+  - Studio Manual
+  - keyboard-shortcuts
+desc: Documentation
+---
 # Keyboard Shortcuts
 
 Most shortcuts can be listed and customized in the [Shortcut Manager](action://open-shortcut-manager).

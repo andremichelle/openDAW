@@ -39,5 +39,9 @@
   "packageManager": "npm@11.4.2",
   "workspaces": [
     "packages/**/*"
-  ]
+  ],
+  "dependencies": {
+    "idb": "^8.0.3",
+    "mermaid": "^11.12.2"
+  }
 }
