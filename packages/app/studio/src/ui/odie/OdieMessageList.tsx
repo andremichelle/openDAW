@@ -1,6 +1,6 @@
 import { createElement } from "@opendaw/lib-jsx"
 import { Message } from "./services/llm/LLMProvider"
-import { OdieService, odieService } from "./OdieService"
+import { OdieService } from "./OdieService"
 import { Terminator } from "@opendaw/lib-std"
 import MarkdownIt from "markdown-it"
 import mermaid from "mermaid"
@@ -232,7 +232,7 @@ const MARKDOWN_STYLES = `
     .odie-think-dot:nth-child(2) { animation-delay: -0.16s; }
 `
 
-const MessageBubble = ({ message, onRetry }: { message: Message, onRetry?: (text: string) => void }) => {
+const MessageBubble = ({ message, onRetry, onWidgetAction }: { message: Message, onRetry?: (text: string) => void, onWidgetAction?: (action: any) => void }) => {
     const isUser = message.role === "user"
     const isModel = message.role === "model"
     const isThinking = isModel && !message.content
@@ -313,7 +313,7 @@ const MessageBubble = ({ message, onRetry }: { message: Message, onRetry?: (text
                                         <div key={index} className="odie-widget-container" style={{ pointerEvents: "auto" }}>
                                             {OdieRenderEngine.render(fragment, (action: any) => {
                                                 // Bridge widget actions to OdieService
-                                                odieService.handleWidgetAction(action)
+                                                if (onWidgetAction) onWidgetAction(action)
                                             })}
                                         </div>
                                     )
@@ -601,7 +601,8 @@ export const OdieMessageList = ({ service }: ListProps) => {
                 // Pass a callback for Retry
                 container.appendChild(MessageBubble({
                     message: msg,
-                    onRetry: (text) => service.sendMessage(text)
+                    onRetry: (text) => service.sendMessage(text),
+                    onWidgetAction: (action) => service.handleWidgetAction(action)
                 }))
             })
 

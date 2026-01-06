@@ -153,9 +153,9 @@ export class OdieAppControl {
             // Verification: Fire event for the App Reporting System
             this.studio.odieEvents.notify({ type: "track-added", name, kind: t })
             return { success: true, message: `Added ${t} track '${name}'` }
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error("addTrack failed", e)
-            return { success: false, reason: e.message }
+            return { success: false, reason: e instanceof Error ? e.message : String(e) }
         }
     }
 
@@ -176,9 +176,10 @@ export class OdieAppControl {
 
             this.studio.odieEvents.notify({ type: "track-added", name, kind: "aux" })
             return { success: true, message: `Added Aux Track "${name}"` }
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error("[Odie] addAuxTrack Exception:", e)
-            return { success: false, reason: `addAuxTrack Exception: ${e.message}` }
+            const msg = e instanceof Error ? e.message : String(e)
+            return { success: false, reason: `addAuxTrack Exception: ${msg}` }
         }
     }
 
@@ -212,8 +213,9 @@ export class OdieAppControl {
                     this.studio.odieEvents.notify({ type: "effect-added", track: trackName, effect: "send" })
                     return { success: true }
 
-                } catch (e: any) {
-                    return { success: false, reason: `addSend failed: ${e.message}` }
+                } catch (e: unknown) {
+                    const msg = e instanceof Error ? e.message : String(e)
+                    return { success: false, reason: `addSend failed: ${msg}` }
                 }
             },
             none: () => Promise.resolve({ success: false, reason: `Source Track "${trackName}" not found` })
@@ -235,8 +237,9 @@ export class OdieAppControl {
                         sourceAdapter.box.output.refer(targetBusAdapter.box.input)
                     })
                     return { success: true, message: `Routed ${sourceName} to ${targetBusName}` }
-                } catch (e: any) {
-                    return { success: false, reason: `setRouting failed: ${e.message}` }
+                } catch (e: unknown) {
+                    const msg = e instanceof Error ? e.message : String(e)
+                    return { success: false, reason: `setRouting failed: ${msg}` }
                 }
             },
             none: () => Promise.resolve({ success: false, reason: `Source "${sourceName}" not found` })

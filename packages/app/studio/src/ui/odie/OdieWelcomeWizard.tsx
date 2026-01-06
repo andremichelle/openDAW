@@ -125,6 +125,7 @@ export const OdieWelcomeWizard = ({ service, onComplete, onClose }: { service: O
             statusText.innerText = "Pinging..."
             statusText.style.color = "#94a3b8"
 
+            // @ts-ignore
             const ollama = service.ai.getProvider("ollama") as any
             if (!ollama) return
 
@@ -134,8 +135,8 @@ export const OdieWelcomeWizard = ({ service, onComplete, onClose }: { service: O
                     ollama.configure({ ...cfg, baseUrl: "/api/ollama/api/chat" })
                 }
 
-                // @ts-ignore
-                const models = await ollama.fetchModels()
+                // Strictly typed fetchModels check
+                const models = (ollama.fetchModels) ? await ollama.fetchModels() : []
                 if (models && models.length > 0) {
                     const bestModel = models[0]
                     const validation = checkModelTier(bestModel)

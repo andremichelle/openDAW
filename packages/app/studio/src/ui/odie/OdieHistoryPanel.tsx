@@ -127,8 +127,8 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
     const binding = chatHistory.sessions.subscribe(() => redraw())
 
     // Cleanup helper attached to container
-    // @ts-ignore
-    container.cleanup = () => binding.terminate()
+    const cleanupContainer = container as HTMLElement & { cleanup?: () => void }
+    cleanupContainer.cleanup = () => binding.terminate()
 
     return container
 }

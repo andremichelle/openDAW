@@ -244,7 +244,7 @@ class OdiePersonaService {
         return parts.join("\n");
     }
 
-    private mapFocusToRole(context: OdieContext, focus: FocusContext): keyof typeof ROLE_MINDSETS {
+    public mapFocusToRole(context: OdieContext, focus: FocusContext): keyof typeof ROLE_MINDSETS {
         const query = (context.userQuery || "").toLowerCase();
 
         // 1. Explicit Intent (User Query Override)

@@ -188,13 +188,7 @@ export class OdieService {
         const assistantMsg: Message = { id: crypto.randomUUID(), role: "model", content: "", timestamp: Date.now() }
         this.messages.setValue([...startMsgs, userMsg, assistantMsg])
 
-        // 🔊 Primer: Wake up AudioContext on user gesture
-        if (this.studio?.audioContext?.state === "suspended") {
-            console.log("🔊 Odie resuming AudioContext...")
-            this.studio.audioContext.resume().then(() => {
-                console.log("🔊 AudioContext Resumed")
-            })
-        }
+
 
         try {
             // Fix: Pass full history, not just text
@@ -261,8 +255,7 @@ export class OdieService {
 
             // [ANTIGRAVITY] Cognitive Preset Injection
             const focus = await import("./services/OdieFocusService").then(m => m.odieFocus.getFocus())
-            // @ts-ignore - Accessing private logic for consistent behavior
-            const roleAny = odiePersona["mapFocusToRole"](projectContext, focus)
+            const roleAny = odiePersona.mapFocusToRole(projectContext, focus)
             const cognitiveProfile = odiePersona.getCognitiveProfile(roleAny)
 
             // Inject into Context for debug visibility & Provider consumption
@@ -1044,8 +1037,4 @@ ${JSON.stringify({
 
 }
 
-// [ANTIGRAVITY] SINGLETON EXPORT
-// Moving this here to prevent circular dependencies with UI components
-export const odieService = new OdieService()
-// @ts-ignore
-window.odieService = odieService
+

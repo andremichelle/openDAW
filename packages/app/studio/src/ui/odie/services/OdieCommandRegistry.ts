@@ -20,6 +20,10 @@ interface ProviderWithKeyStatuses {
     getKeyStatuses(): KeyStatus[]
 }
 
+function isProviderWithKeyStatuses(p: any): p is ProviderWithKeyStatuses {
+    return p && typeof (p as any).getKeyStatuses === 'function'
+}
+
 export class OdieCommandRegistry {
     private commands = new Map<string, CommandDef>()
 
@@ -320,11 +324,12 @@ Direct control over the Studio and Chat.
             usage: "/keys",
             execute: async (s, _args) => {
                 const provider = s.ai.getActiveProvider()
-                if (!provider || !('getKeyStatuses' in provider)) {
+
+                if (!isProviderWithKeyStatuses(provider)) {
                     return "⚠️ Key status not available for current provider."
                 }
 
-                const statuses = (provider as ProviderWithKeyStatuses).getKeyStatuses()
+                const statuses = provider.getKeyStatuses()
                 if (!statuses || statuses.length === 0) {
                     return "📭 No API keys in library. Add keys in Settings."
                 }
