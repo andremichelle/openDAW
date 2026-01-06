@@ -124,11 +124,9 @@ export const Footer = ({lifecycle, service}: Construct) => {
                      }, "footer-show-build-infos"))
                  }}/>
             <article title="Users"
-                     onInit={async element => {
+                     onInit={element => {
                          const counter = new UserCounter("https://api.opendaw.studio/users/user-counter.php")
-                         element.textContent = String(await counter.start())
-                         setInterval(async () => element.textContent = String(await counter.updateUserCount()), 30000)
-                         window.addEventListener("beforeunload", () => counter.stop())
+                         counter.subscribe(count => element.textContent = String(count))
                      }}>#
             </article>
             <div style={{display: "contents"}}
