@@ -45,10 +45,10 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
     }
 
     remove(uuid: UUID.Bytes): void {
-        this.#refCounts.removeByKey(uuid)
-        this.#loaders.removeByKey(uuid)
-        this.#cache.removeByKey(uuid)
-        this.#pending.removeByKey(uuid)
+        this.#refCounts.removeByKeyIfExist(uuid)
+        this.#loaders.removeByKeyIfExist(uuid)
+        this.#cache.removeByKeyIfExist(uuid)
+        this.#pending.removeByKeyIfExist(uuid)
     }
 
     invalidate(uuid: UUID.Bytes): void {

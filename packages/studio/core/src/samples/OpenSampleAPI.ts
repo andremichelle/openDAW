@@ -35,9 +35,15 @@ export class OpenSampleAPI implements SampleAPI {
 
     async get(uuid: UUID.Bytes): Promise<Sample> {
         const url = `${OpenSampleAPI.ApiRoot}/get.php?uuid=${UUID.toString(uuid)}`
-        const sample: Sample = await Promises.retry(() => network.limitFetch(url, OpenDAWHeaders)
-            .then(x => x.json().then(x => Sample.parse(x))))
-            .then(x => {if ("error" in x) {return panic(x.error)} else {return x}})
+        const response = await Promises.retry(() => network.limitFetch(url, OpenDAWHeaders))
+        if (!response.ok) {
+            return panic(`Sample not found: ${UUID.toString(uuid)}`)
+        }
+        const json = await response.json()
+        if ("error" in json) {
+            return panic(json.error)
+        }
+        const sample = Sample.parse(json)
         return Object.freeze({...sample, origin: "openDAW"})
     }
 
