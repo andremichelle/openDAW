@@ -27,7 +27,7 @@ type PendingLoad = {
 
 export class GlobalSampleLoaderManager implements SampleLoaderManager, SampleProvider {
     readonly #provider: SampleProvider
-    readonly #loaders: SortedSet<UUID.Bytes, DefaultSampleLoader>
+    readonly #loaders: SortedSet<UUID.Bytes, SampleLoader>
     readonly #refCounts: SortedSet<UUID.Bytes, RefCount>
     readonly #cache: SortedSet<UUID.Bytes, CachedSample>
     readonly #pending: SortedSet<UUID.Bytes, PendingLoad>
@@ -56,7 +56,9 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
         this.#pending.removeByKey(uuid)
         this.#loaders.opt(uuid).ifSome(loader => {
             loader.invalidate()
-            this.#load(loader)
+            if (loader instanceof DefaultSampleLoader) {
+                this.#load(loader)
+            }
         })
     }
 
@@ -84,9 +86,7 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
     }
 
     record(loader: SampleLoader): void {
-        if (loader instanceof DefaultSampleLoader) {
-            this.#loaders.add(loader)
-        }
+        this.#loaders.add(loader)
     }
 
     getOrCreate(uuid: UUID.Bytes): SampleLoader {
