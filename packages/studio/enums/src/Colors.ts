@@ -9,14 +9,14 @@ export const Colors = {
     orange: new Color(31, 100, 73),
     red: new Color(354, 100, 65),
     purple: new Color(314, 100, 78),
-    bright: new Color(197, 0, 100),
-    gray: new Color(197, 31, 85),
+    bright: new Color(197, 5, 95),
+    gray: new Color(197, 31, 80),
     dark: new Color(197, 15, 60),
     shadow: new Color(197, 10, 45),
     black: new Color(197, 10, 16),
     background: new Color(197, 6, 7),
     panelBackground: new Color(197, 14, 10),
-    panelBackgroundBright: new Color(197, 16, 14),
+    panelBackgroundBright: new Color(197, 10, 20),
     panelBackgroundDark: new Color(197, 14, 9)
 }
 
