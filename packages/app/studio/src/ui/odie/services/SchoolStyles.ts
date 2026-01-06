@@ -166,7 +166,17 @@ export const OdieSchoolStyles = `
     padding: 16px 24px; border-radius: 8px; margin: 24px 0; color: #bfdbfe; font-style: italic;
 }
 .school-content code, .school-content pre {
-    font-family: 'JetBrains Mono', monospace; font-size: 14px; color: #e2e8f0; border: 1px solid rgba(255,255,255,0.1);
+    font-family: 'JetBrains Mono', monospace; 
+    font-size: 14px; 
+    color: #e2e8f0; 
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(0,0,0,0.3);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.school-content pre {
+    padding: 16px;
+    overflow-x: auto;
 }
 
 /* EMBEDDED MENUS (Direct Navigation) */

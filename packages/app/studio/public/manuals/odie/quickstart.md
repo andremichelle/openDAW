@@ -15,7 +15,7 @@ desc: Get up and running with Odie in 5 minutes.
 ## 📘 1. Concepts: The "Sidecar" UI
 
 Odie lives in a collapsable **Sidecar Panel** on the right side of the screen.
-This ensures it never blocks your timeline or mixer view. You can toggle it via the **Robot Icon** <img style="width:16px;vertical-align:middle" src="/icons/odie-logo.png" /> in the main header.
+This ensures it never blocks your timeline or mixer view. You can toggle it via the **Robot Icon** ![Robot Icon](/icons/odie-logo.png) in the main header.
 
 ---
 
@@ -78,4 +78,4 @@ Congratulations. You just performed a **Verified App Control** action.
 | **Text** | ⌨️ | Default. Type naturally. Shift+Enter for new lines. |
 | **Slash** | `/` | Power user commands (e.g., `/clear`, `/verify`). |
 
-[Next: The Chat Interface](./03-chat-interface.md)
+[Next: The Chat Interface](./chat-interface.md)
