@@ -17,7 +17,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {BoxGraph, createSyncTarget, DeleteUpdate} from "@opendaw/lib-box"
+import {BoxGraph, createSyncTarget, DeleteUpdate, NewUpdate} from "@opendaw/lib-box"
 import {AudioFileBox, BoxIO, BoxVisitor} from "@opendaw/studio-boxes"
 import {EngineContext} from "./EngineContext"
 import {TimeInfo} from "./TimeInfo"
@@ -76,7 +76,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     readonly #timeInfo: TimeInfo
     readonly #engineToClient: EngineToClient
     readonly #boxAdapters: BoxAdapters
-    readonly #sampleManager: SampleLoaderManager
+    readonly #sampleManager: SampleManagerWorklet
     readonly #soundfontManager: SoundfontLoaderManager
     readonly #audioUnits: SortedSet<UUID.Bytes, AudioUnit>
     readonly #rootBoxAdapter: RootBoxAdapter
@@ -144,7 +144,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                 }
                 ready() {dispatcher.dispatchAndForget(this.ready)}
             })
-        this.#sampleManager = new SampleManagerWorklet(this.#engineToClient)
+        this.#sampleManager = this.#terminator.own(new SampleManagerWorklet(this.#engineToClient))
         this.#soundfontManager = new SoundfontManagerWorklet(this.#engineToClient)
         this.#audioUnits = UUID.newSet(unit => unit.adapter.uuid)
         this.#parameterFieldAdapters = new ParameterFieldAdapters()
@@ -273,13 +273,22 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                 onRemove: ({uuid}) => this.#audioUnits.removeByKey(uuid).terminate(),
                 onReorder: EmptyExec
             }),
-            this.#boxGraph.subscribeToAllUpdates({
-                onUpdate: (update) => {
-                    if (update instanceof DeleteUpdate && update.name === AudioFileBox.ClassName) {
-                        this.#sampleManager.remove(update.uuid)
+            (() => {
+                for (const box of this.#boxGraph.boxes()) {
+                    if (box instanceof AudioFileBox) {
+                        this.#sampleManager.getOrCreate(box.address.uuid)
                     }
                 }
-            })
+                return this.#boxGraph.subscribeToAllUpdates({
+                    onUpdate: (update) => {
+                        if (update instanceof NewUpdate && update.name === AudioFileBox.ClassName) {
+                            this.#sampleManager.getOrCreate(update.uuid)
+                        } else if (update instanceof DeleteUpdate && update.name === AudioFileBox.ClassName) {
+                            this.#sampleManager.remove(update.uuid)
+                        }
+                    }
+                })
+            })()
         )
 
         this.#stemExports = Option.wrap(exportConfiguration).match({

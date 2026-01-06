@@ -4,12 +4,13 @@ import {
     panic,
     Procedure,
     safeExecute,
+    SortedSet,
     Terminable,
     TerminableOwner,
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {BoxEditing, BoxGraph} from "@opendaw/lib-box"
+import {BoxEditing, BoxGraph, DeleteUpdate, NewUpdate} from "@opendaw/lib-box"
 import {
     AudioBusBox,
     AudioFileBox,
@@ -92,6 +93,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     }
 
     readonly #terminator = new Terminator()
+    readonly #sampleRegistrations: SortedSet<UUID.Bytes, { uuid: UUID.Bytes, terminable: Terminable }>
 
     readonly #env: ProjectEnv
     readonly boxGraph: BoxGraph<BoxIO.TypeMap>
@@ -142,12 +144,24 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.captureDevices = this.#terminator.own(new CaptureDevices(this))
         this.mixer = new Mixer(this.rootBoxAdapter.audioUnits)
 
-        // TODO We are probably doing that from the outside
-        if (this.userInterfaceBoxes.length === 1) {
-            this.follow(this.userInterfaceBoxes[0])
-        }
-
         console.debug(`Project was created on ${this.rootBoxAdapter.created.toString()}`)
+
+        this.#sampleRegistrations = UUID.newSet(({uuid}) => uuid)
+
+        for (const box of this.boxGraph.boxes()) {
+            if (box instanceof AudioFileBox) {
+                this.#registerSample(box.address.uuid)
+            }
+        }
+        this.#terminator.own(this.boxGraph.subscribeToAllUpdates({
+            onUpdate: (update) => {
+                if (update instanceof NewUpdate && update.name === AudioFileBox.ClassName) {
+                    this.#registerSample(update.uuid)
+                } else if (update instanceof DeleteUpdate && update.name === AudioFileBox.ClassName) {
+                    this.#unregisterSample(update.uuid)
+                }
+            }
+        }))
     }
 
     startAudioWorklet(restart?: RestartWorklet, options?: ProcessorOptions): EngineWorklet {
@@ -269,7 +283,17 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     }
 
     terminate(): void {
-        console.debug("Project terminated")
+        this.#sampleRegistrations.forEach(({terminable}) => terminable.terminate())
+        this.#sampleRegistrations.clear()
         this.#terminator.terminate()
+    }
+
+    #registerSample(uuid: UUID.Bytes): void {
+        const terminable = this.sampleManager.register(uuid)
+        this.#sampleRegistrations.add({uuid, terminable})
+    }
+
+    #unregisterSample(uuid: UUID.Bytes): void {
+        this.#sampleRegistrations.removeByKey(uuid).terminable.terminate()
     }
 }

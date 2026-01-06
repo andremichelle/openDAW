@@ -51,7 +51,6 @@ export class AudioFileBoxAdapter implements BoxAdapter {
         })
 
         this.#terminator.ownAll(
-            this.#context.sampleManager.register(this.#box.address.uuid),
             box.transientMarkers.pointerHub.catchupAndSubscribe({
                 onAdded: (pointer: PointerField) => {
                     const marker = this.#context.boxAdapters.adapterFor(pointer.box, TransientMarkerBoxAdapter)

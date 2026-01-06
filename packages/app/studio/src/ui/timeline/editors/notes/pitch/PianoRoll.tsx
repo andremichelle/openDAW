@@ -30,7 +30,6 @@ export const PianoRoll = ({lifecycle, positioner, scale, noteReceiver, capture}:
         context.textBaseline = "middle"
         context.textAlign = "right"
         const fontSize = positioner.noteHeight * 0.95 * devicePixelRatio
-        console.debug("fontSize", fontSize)
         context.font = `${fontSize}px ${Fonts.Rubik["font-family"]}, sans-serif`
         const topNote = positioner.yToPitch(0)
         const bottomNote = positioner.yToPitch(canvas.clientHeight)

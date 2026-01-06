@@ -64,7 +64,6 @@ export class EngineFacade implements Engine {
     releaseWorklet(): void {
         this.#preferencesFacade.releaseHost()
         this.#lifecycle.terminate()
-        this.#worklet.ifSome(worklet => worklet.terminate())
         this.#worklet = Option.None
     }
 
