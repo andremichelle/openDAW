@@ -18,14 +18,22 @@ export class OdieCommandRegistry {
             id: "/play",
             description: "Start Transport",
             usage: "/play",
-            execute: async (s) => { s.appControl?.play(); return "▶️ Playing" }
+            execute: async (s) => {
+                if (!s.appControl) return "❌ Nervous System Disconnected"
+                s.appControl.play()
+                return "▶️ Playing"
+            }
         })
 
         this.register({
             id: "/stop",
             description: "Stop Transport",
             usage: "/stop",
-            execute: async (s) => { s.appControl?.stop(); return "⏹️ Stopped" }
+            execute: async (s) => {
+                if (!s.appControl) return "❌ Nervous System Disconnected"
+                s.appControl.stop()
+                return "⏹️ Stopped"
+            }
         })
 
         this.register({
@@ -33,8 +41,9 @@ export class OdieCommandRegistry {
             description: "Start Recording",
             usage: "/record [countIn? (true/false, default: true)]",
             execute: async (s, args) => {
+                if (!s.appControl) return "❌ Nervous System Disconnected"
                 const countIn = args[0] !== "false" && args[0] !== "no"
-                s.appControl?.record(countIn)
+                s.appControl.record(countIn)
                 return countIn ? "🔴 Recording (Count-In)" : "🔴 Recording (Immediate)"
             }
         })
@@ -257,9 +266,10 @@ Direct control over the Studio and Chat.
             description: "Add an audio effect to a track",
             usage: "/effect [track] [type]",
             execute: async (s, args) => {
-                const track = args[0]
-                const type = args[1]
-                if (!track || !type) return "❌ Usage: /effect [track] [type]"
+                if (args.length < 2) return "❌ Usage: /effect [track] [type]"
+                const type = args.pop()! // Last arg is type
+                const track = args.join(" ") // Rest is track name
+
                 if (!s.appControl) return "❌ Nervous System Disconnected"
                 const res = await s.appControl.addEffect(track, type)
                 return res.success ? `✅ ${res.message}` : `❌ ${res.reason}`
@@ -271,9 +281,10 @@ Direct control over the Studio and Chat.
             description: "Add a MIDI effect to a track",
             usage: "/meff [track] [type]",
             execute: async (s, args) => {
-                const track = args[0]
-                const type = args[1]
-                if (!track || !type) return "❌ Usage: /meff [track] [type]"
+                if (args.length < 2) return "❌ Usage: /meff [track] [type]"
+                const type = args.pop()! // Last arg is type
+                const track = args.join(" ") // Rest is track name
+
                 if (!s.appControl) return "❌ Nervous System Disconnected"
                 const res = await s.appControl.addMidiEffect(track, type)
                 return res.success ? `✅ ${res.message}` : `❌ ${res.reason}`
