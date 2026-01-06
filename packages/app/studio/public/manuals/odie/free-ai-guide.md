@@ -49,7 +49,7 @@ If a key hits a limit (Error 429), Odie **instantly** switches to the next healt
 ## 🔒 3. Privacy & Cost
 
 *   **Zero Cost**: As long as you stay within the free tier of each key, you pay $0.
-*   **Local Storage**: Your keys are encrypted in your browser (`localStorage`). They are **never** sent to OpenDAW servers or anyone else. You own the keys.
+*   **Local Storage**: Your keys are **stored locally** in your browser (`localStorage`). They are **never** sent to OpenDAW servers or anyone else. You own the keys.
 
 > [!TIP]
 > **Recommended**: add at least **3 keys** for a smooth, uninterrupted "Flow State" experience.

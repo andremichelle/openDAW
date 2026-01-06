@@ -32,7 +32,7 @@ Odie requires a neural backend to function.
 2.  Locate the **Provider** section.
 3.  Choose **Google Gemini** (Recommended) or **Custom**.
 4.  Paste your API Key.
-    *   *Security Note*: Keys are encrypted and stored in `localStorage`. They are never sent to OpenDAW servers.
+    *   *Security Note*: Keys are **securely stored** in `localStorage`. They are never sent to OpenDAW servers.
 
 ![System Configuration](../assets/odie_system_config.png)
 *Fig: The System Config modal where you manage your neural backend.*

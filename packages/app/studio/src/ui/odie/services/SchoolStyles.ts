@@ -165,6 +165,7 @@ export const OdieSchoolStyles = `
     background: rgba(59, 130, 246, 0.1); border-left: 4px solid #3b82f6;
     padding: 16px 24px; border-radius: 8px; margin: 24px 0; color: #bfdbfe; font-style: italic;
 }
+.school-content code, .school-content pre {
     font-family: 'JetBrains Mono', monospace; font-size: 14px; color: #e2e8f0; border: 1px solid rgba(255,255,255,0.1);
 }
 
