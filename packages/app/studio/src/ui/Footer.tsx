@@ -84,7 +84,7 @@ export const Footer = ({lifecycle, service}: Construct) => {
                          }, "footer-show-fps-meter"))
                      }}>0
             </article>
-            <article title="Samples"
+            <article title="Samples (GC)"
                      onInit={element => {
                          const lifeSpan = lifecycle.own(new Terminator())
                          lifecycle.own(StudioPreferences.catchupAndSubscribe(show => {
