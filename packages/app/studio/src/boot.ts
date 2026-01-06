@@ -23,6 +23,7 @@ import {
     CloudAuthManager,
     GlobalSampleLoaderManager,
     DefaultSoundfontLoaderManager,
+    OfflineEngineRenderer,
     OpenSampleAPI,
     OpenSoundfontAPI,
     Workers
@@ -34,7 +35,9 @@ const loadBuildInfo = async () => fetch(`/build-info.json?v=${Date.now()}`)
     .then(x => x.json())
     .then(x => BuildInfo.parse(x))
 
-export const boot = async ({workersUrl, workletsUrl}: { workersUrl: string, workletsUrl: string }) => {
+export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
+    workersUrl: string, workletsUrl: string, offlineEngineUrl: string
+}) => {
     console.debug("booting...")
     console.debug(location.origin)
     const {status, value: buildInfo} = await Promises.tryCatch(loadBuildInfo())
@@ -46,6 +49,7 @@ export const boot = async ({workersUrl, workletsUrl}: { workersUrl: string, work
     await FontLoader.load()
     await Workers.install(workersUrl)
     AudioWorklets.install(workletsUrl)
+    OfflineEngineRenderer.install(offlineEngineUrl)
     const testFeaturesResult = await Promises.tryCatch(testFeatures())
     if (testFeaturesResult.status === "rejected") {
         document.querySelector("#preloader")?.remove()

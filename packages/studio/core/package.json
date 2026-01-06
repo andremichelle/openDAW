@@ -17,12 +17,14 @@
             "default": "./dist/ffmpeg/FFmpegWorker.js"
         },
         "./workers-main.js": "./dist/workers-main.js",
-        "./processors.js": "./dist/processors.js"
+        "./processors.js": "./dist/processors.js",
+        "./offline-engine.js": "./dist/offline-engine.js"
     },
     "files": [
         "dist/**",
         "dist/workers-main.js",
         "dist/processors.js",
+        "dist/offline-engine.js",
         "dist/ffmpeg/FFmpegWorker.js"
     ],
     "scripts": {

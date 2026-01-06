@@ -1,6 +1,6 @@
 import {asDefined, int, Option} from "@opendaw/lib-std"
 import {ExportStemsConfiguration, ProcessorOptions, RingBuffer} from "@opendaw/studio-adapters"
-import {Project} from "./project/Project"
+import {Project} from "./project"
 import {EngineWorklet} from "./EngineWorklet"
 import {MeterWorklet} from "./MeterWorklet"
 import {RecordingWorklet} from "./RecordingWorklet"
@@ -10,6 +10,10 @@ export class AudioWorklets {
     static install(url: string): void {
         console.debug(`WorkletUrl: '${url}'`)
         this.#workletUrl = Option.wrap(url)
+    }
+
+    static get processorsUrl(): string {
+        return this.#workletUrl.unwrap("WorkletUrl is missing (call 'install' first)")
     }
 
     static #workletUrl: Option<string> = Option.None

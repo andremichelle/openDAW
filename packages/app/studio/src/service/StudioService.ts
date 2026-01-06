@@ -41,11 +41,12 @@ import {
     AudioWorklets,
     CloudAuthManager,
     DawProjectService,
-    GlobalSampleLoaderManager,
     DefaultSoundfontLoaderManager,
     EngineFacade,
     EngineWorklet,
     FilePickerAcceptTypes,
+    GlobalSampleLoaderManager,
+    OfflineEngineRenderer,
     Project,
     ProjectEnv,
     ProjectMeta,
@@ -56,7 +57,8 @@ import {
     SampleService,
     SoundfontService,
     StudioPreferences,
-    TimelineRange
+    TimelineRange,
+    WavFile
 } from "@opendaw/studio-core"
 import {ProjectDialogs} from "@/project/ProjectDialogs"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
@@ -200,6 +202,28 @@ export class StudioService implements ProjectEnv {
             .ifSome(async (profile) => {
                 await this.audioContext.suspend()
                 await Mixdowns.exportMixdown(profile)
+                this.audioContext.resume().then()
+            })
+    }
+
+    async exportMixdownWorker() {
+        return this.#projectProfileService.getValue()
+            .ifSome(async (profile) => {
+                const sampleRate = 48000
+                await this.audioContext.suspend()
+                const renderer = await OfflineEngineRenderer.create(profile.project, sampleRate)
+                const frames = await renderer.render({
+                    onProgress: seconds => console.debug("rendering mixdown", seconds)
+                })
+                renderer.terminate()
+                const file = WavFile.encodeFloats({
+                    sampleRate,
+                    numberOfChannels: 2,
+                    numberOfFrames: frames[0].length,
+                    frames: frames as unknown as ReadonlyArray<Float32Array<SharedArrayBuffer>>
+                })
+                await RuntimeNotifier.info({headline: "Save", message: "Exporting mixdown as wav file..."})
+                await Files.save(file, FilePickerAcceptTypes.WavFiles)
                 this.audioContext.resume().then()
             })
     }
