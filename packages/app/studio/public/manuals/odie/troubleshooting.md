@@ -50,8 +50,7 @@ You don't need to leave the app to read the manual.
 1.  Click the **Book Icon** ("Help") in the header.
 2.  Use the **Knowledge Base** to search for commands or concepts.
 
-![Knowledge Base](../assets/odie_knowledge_base.png)
-*Fig: The interactive Knowledge Base with real-time search.*
+
 
 ## 💪 4. Task: Running Diagnostics
 
