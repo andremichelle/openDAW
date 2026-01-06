@@ -8,7 +8,7 @@ export const OdieButton = ({ service, lifecycle }: { service: StudioService, lif
     return (
         <Checkbox
             lifecycle={lifecycle}
-            model={service.odieService.visible}
+            model={service.layout.odieVisible}
             appearance={{
                 activeColor: Colors.purple,
                 tooltip: "Odie AI Assistant",

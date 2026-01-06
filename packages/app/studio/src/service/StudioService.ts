@@ -81,7 +81,8 @@ const snapping = new Snapping(range)
 
 export class StudioService implements ProjectEnv {
     readonly layout = {
-        screen: new DefaultObservableValue<Nullable<Workspace.ScreenKeys>>("default")
+        screen: new DefaultObservableValue<Nullable<Workspace.ScreenKeys>>("default"),
+        odieVisible: new DefaultObservableValue(false)
     } as const
     readonly timeline = {
         range,
@@ -103,7 +104,21 @@ export class StudioService implements ProjectEnv {
     readonly samplePlayback: SamplePlayback
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
-    readonly odieService: OdieService
+    private _odieService: Option<OdieService> = Option.None
+
+    getOdie(): OdieService {
+        return this._odieService.match({
+            some: s => s,
+            none: () => {
+                const s = new OdieService()
+                s.connectStudio(this)
+                this._odieService = Option.wrap(s)
+                return s
+            }
+        })
+    }
+
+    get odieService(): OdieService { return this.getOdie() }
 
     readonly #softwareKeyboardLifeCycle = new Terminator()
     readonly #signals = new Notifier<StudioSignal>()
@@ -138,9 +153,8 @@ export class StudioService implements ProjectEnv {
         this.#populateSpotlightData()
         this.#configBeforeUnload()
         this.#checkRecovery()
+        this.#checkRecovery()
         this.#listenPreferences()
-        this.odieService = new OdieService()
-        this.odieService.connectStudio(this)
     }
 
     get sampleRate(): number { return this.audioContext.sampleRate }

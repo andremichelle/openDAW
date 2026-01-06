@@ -75,8 +75,13 @@ export interface ToolResult {
  * 2. Always check safety (e.g. isPlaying).
  * 3. Return explicit success/failure messages where useful.
  */
+import { OdieTransport } from "./OdieTransport"
+
 export class OdieAppControl {
-    constructor(private studio: StudioService) { }
+    readonly transport: OdieTransport
+    constructor(private studio: StudioService) {
+        this.transport = new OdieTransport(studio)
+    }
 
     // --- 👁️ THE EYES (Arrangement) ---
 
@@ -250,27 +255,20 @@ export class OdieAppControl {
     // --- 🫀 THE HEART (Transport) ---
 
     async play() {
-        if (!this.studio.engine.isPlaying.getValue()) {
-            this.studio.engine.play()
-        }
+        this.transport.play()
     }
 
     async stop() {
-        this.studio.engine.stop(false)
+        this.transport.stop()
     }
 
     async record(countIn: boolean = true): Promise<boolean> {
-        if (!this.studio.engine.isRecording.getValue()) {
-            this.studio.engine.prepareRecordingState(countIn)
-            this.studio.engine.play()
-        }
+        this.transport.record(countIn)
         return true
     }
 
     async stopRecording(): Promise<boolean> {
-        if (this.studio.engine.isRecording.getValue()) {
-            this.studio.engine.stopRecording()
-        }
+        this.transport.stopRecording()
         return true
     }
 
@@ -279,16 +277,8 @@ export class OdieAppControl {
         if (bars < 1) bars = 1
         if (bars > 4) bars = 4
 
-        try {
-            this.studio.project.editing.modify(() => {
-                // this.studio.engine.countInBarsTotal.setValue(bars)
-                console.warn("TODO: countInBarsTotal removed upstream")
-            })
-            return true
-        } catch (e) {
-            console.error(e)
-            return false
-        }
+        console.warn("[Odie] CountIn not supported by current Engine Transport Facade.")
+        return true
     }
 
     async selectTrack(name: string): Promise<boolean> {
@@ -302,53 +292,18 @@ export class OdieAppControl {
     }
 
     async setLoop(enabled: boolean): Promise<boolean> {
-        this.studio.transport.loop.setValue(enabled)
+        this.transport.setLoop(enabled)
         return true
     }
 
     async setBpm(bpm: number): Promise<boolean> {
-        if (!this.studio.hasProfile) return false
         console.log(`[Odie] Setting BPM to ${bpm}...`)
-
-        // [ANTIGRAVITY] Strict Range Validation - REJECT invalid values
-        if (bpm < 20 || bpm > 999) {
-            console.warn(`[Odie] BPM ${bpm} out of valid range (20-999). Rejecting.`)
-            return false
-        }
-
-        try {
-            this.studio.project.editing.modify(() => {
-                this.studio.project.timelineBox.bpm.setValue(bpm)
-            })
-            return this.studio.project.timelineBox.bpm.getValue() === bpm
-        } catch (e) {
-            console.error("Failed to set BPM", e)
-            return false
-        }
+        return this.transport.setBpm(bpm)
     }
 
     async setTimeSignature(numerator: number, denominator: number): Promise<boolean> {
-        if (!this.studio.hasProfile) return false
         console.log(`[Odie] Setting Time Signature to ${numerator}/${denominator}...`)
-        // Range Safety (matching UI clamp)
-        numerator = Math.max(1, Math.min(numerator, 32))
-        denominator = Math.max(1, Math.min(denominator, 32))
-
-        try {
-            // Use timelineBox.signature for consistency with the UI and tests
-            const signature = this.studio.project.timelineBox.signature
-
-            this.studio.project.editing.modify(() => {
-                signature.nominator.setValue(numerator)
-                signature.denominator.setValue(denominator)
-            })
-
-            return signature.nominator.getValue() === numerator &&
-                signature.denominator.getValue() === denominator
-        } catch (e) {
-            console.error("Failed to set Time Signature", e)
-            return false
-        }
+        return this.transport.setTimeSignature(numerator, denominator)
     }
 
     // --- 👐 THE HANDS (Mixer) ---
@@ -484,7 +439,7 @@ export class OdieAppControl {
 
     async splitRegion(trackName: string, time?: number): Promise<ToolResult> {
         // Default to current playhead if no time specified
-        const splitTime = time ?? this.studio.engine.position.getValue()
+        const splitTime = time ?? this.transport.position
 
         return this.findRegion(trackName, splitTime).match<Promise<ToolResult>>({
             some: async (region) => {
@@ -1836,15 +1791,7 @@ export class OdieAppControl {
         })
     }
 
-    transport(action: string): void {
-        if (!this.studio.hasProfile) return
-        switch (action.toLowerCase()) {
-            case "play": this.studio.engine.play(); break;
-            case "stop": this.studio.engine.stop(); break;
-            case "record": this.studio.runIfProject(p => p.startRecording(true)); break;
-            case "rewind": this.studio.engine.stop(true); break;
-        }
-    }
+
 
     async newProject(): Promise<ToolResult> {
         try {

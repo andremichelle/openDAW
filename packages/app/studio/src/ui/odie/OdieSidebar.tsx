@@ -165,19 +165,20 @@ const HeaderAction = (props: { icon: any, title: string, onclick: () => void }) 
 
 export const OdieSidebar = ({ service }: { service: StudioService }) => {
     const lifecycle = new Terminator()
-    const odieService = service.odieService
-
+    let odieService: any = null // Lazy loaded
 
     // History Panel State
     let historyPanel: HTMLElement | null = null
 
     const toggleExpand = () => {
+        if (!odieService) return
         const current = odieService.width.getValue()
         // Toggle between standard (450) and wide (800)
         odieService.setWidth(current > 500 ? 450 : 800)
     }
 
     const toggleHistory = () => {
+        if (!odieService) return
         if (historyPanel) {
             historyPanel.remove()
             historyPanel = null
@@ -192,14 +193,9 @@ export const OdieSidebar = ({ service }: { service: StudioService }) => {
                         }
                     }
                 })
-                // Find main area (chat context) roughly by class or just append to container.
-                // The container has flex row: [MainArea] [Rail] (Swapped). 
-                // We want it INSIDE MainArea, which is the 1st child of container.firstChild
-                // Let's try to query it or just append to container.firstChild (mainArea wrapper)
                 const mainArea = container.firstChild?.firstChild as HTMLElement
                 if (mainArea) {
                     mainArea.appendChild(historyPanel)
-                    // Ensure relative positioning on mainArea so absolute child works
                     if (getComputedStyle(mainArea).position === "static") {
                         mainArea.style.position = "relative"
                     }
@@ -212,12 +208,14 @@ export const OdieSidebar = ({ service }: { service: StudioService }) => {
         return <div style={S.rail}>
             {/* Top Group: Identity & Knowledge */}
             <RailBtn icon={<IconProfile color="#a855f7" />} label="Profile" color="#a855f7" onclick={() => {
+                if (!odieService) return
                 import("./OdieProfileModal").then(({ OdieProfileModal }) => {
                     const overlay = OdieProfileModal({ onClose: () => overlay.remove() })
                     document.body.appendChild(overlay)
                 })
             }} />
             <RailBtn icon={<IconSchool color="#f472b6" />} label="Academy" color="#f472b6" onclick={() => {
+                if (!odieService) return
                 import("./OdieSchoolModal").then(({ OdieSchoolModal }) => {
                     const overlay = OdieSchoolModal({ service: odieService, onClose: () => overlay.remove() })
                     document.body.appendChild(overlay)
@@ -231,12 +229,13 @@ export const OdieSidebar = ({ service }: { service: StudioService }) => {
             <div style={S.separator}></div>
 
             <RailBtn icon={<IconSparkles color="#22c55e" />} label="New Chat" color="#22c55e" onclick={() => {
-                odieService.startNewChat()
+                if (odieService) odieService.startNewChat()
             }} />
 
             <RailBtn icon={<IconHistory color="#eab308" />} label="History" color="#eab308" onclick={toggleHistory} />
 
             <RailBtn icon={<IconSettings color="#64748b" />} label="System" color="#64748b" onclick={() => {
+                if (!odieService) return
                 import("./components/OdieModalFrame").then(({ OdieModalFrame }) => {
                     import("./OdieSettings").then(({ OdieSettings }) => {
                         let overlay: HTMLElement
@@ -297,25 +296,13 @@ export const OdieSidebar = ({ service }: { service: StudioService }) => {
             <HeaderAction
                 icon={<IconClose color="#e0f2fe" />}
                 title="Close"
-                onclick={() => odieService.visible.setValue(false)}
+                onclick={() => service.layout.odieVisible.setValue(false)}
             />
         </div>
     </div>
 
     const messageListContainer = <div style={{ flex: "1", display: "flex", flexDirection: "column", overflow: "hidden", padding: "0" }}></div>
-
-    // Lazy load the message list
-    import("./OdieMessageList").then(({ OdieMessageList }) => {
-        const list = OdieMessageList({ service: odieService })
-        messageListContainer.appendChild(list)
-    })
-
-    // Lazy load input
     const inputContainer = <div style={{ flexShrink: "0" }}></div>
-    import("./OdieInput").then(({ OdieInput }) => {
-        const input = OdieInput({ service: odieService })
-        inputContainer.appendChild(input)
-    })
 
     const mainArea = <div style={S.chatContainer}>
         {header}
@@ -360,9 +347,34 @@ export const OdieSidebar = ({ service }: { service: StudioService }) => {
         </div>
     </div> as HTMLElement
 
+    const initOdie = () => {
+        if (odieService) return
+        console.log("🤖 Booting Odie lazy...")
+        odieService = service.getOdie()
+
+        // Load Children Components
+        import("./OdieMessageList").then(({ OdieMessageList }) => {
+            const list = OdieMessageList({ service: odieService })
+            messageListContainer.appendChild(list)
+        })
+
+        import("./OdieInput").then(({ OdieInput }) => {
+            const input = OdieInput({ service: odieService })
+            inputContainer.appendChild(input)
+        })
+
+        // Subscribe to WIDTH changes
+        lifecycle.own(odieService.width.subscribe((observer: any) => {
+            if (service.layout.odieVisible.getValue()) {
+                container.style.width = observer.getValue() + "px"
+            }
+        }))
+    }
+
     // Toggle Logic
     const updateVisibility = (visible: boolean) => {
         if (visible) {
+            initOdie()
             container.style.display = "block"
             requestAnimationFrame(() => {
                 const w = odieService.width.getValue()
@@ -376,19 +388,11 @@ export const OdieSidebar = ({ service }: { service: StudioService }) => {
         }
     }
 
-    lifecycle.own(odieService.visible.subscribe((observer: any) => updateVisibility(observer.getValue())))
-
-    // Subscribe to WIDTH changes too!
-    lifecycle.own(odieService.width.subscribe((observer: any) => {
-        if (odieService.visible.getValue()) {
-            container.style.width = observer.getValue() + "px"
-        }
-    }))
+    lifecycle.own(service.layout.odieVisible.subscribe((observer: any) => updateVisibility(observer.getValue())))
 
     // Initial check
-    if (odieService.visible.getValue()) {
-        container.style.display = "block"
-        container.style.width = odieService.width.getValue() + "px"
+    if (service.layout.odieVisible.getValue()) {
+        updateVisibility(true)
     }
 
     return container
