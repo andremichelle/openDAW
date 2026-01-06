@@ -37,15 +37,20 @@ const loadBuildInfo = async () => fetch(`/build-info.json?v=${Date.now()}`)
 export const boot = async ({ workersUrl, workletsUrl }: { workersUrl: string, workletsUrl: string }) => {
     console.debug("booting...")
     console.debug(location.origin)
+    console.debug("boot: step 1 - load build info")
     const { status, value: buildInfo } = await Promises.tryCatch(loadBuildInfo())
     if (status === "rejected") {
         alert("Error loading build info. Please reload the page.")
         return
     }
     console.debug("buildInfo", buildInfo)
+    console.debug("boot: step 2 - load fonts")
     await FontLoader.load()
+    console.debug("boot: step 3 - install workers")
     await Workers.install(workersUrl)
+    console.debug("boot: step 4 - install audio worklets")
     AudioWorklets.install(workletsUrl)
+    console.debug("boot: step 5 - test features")
     const testFeaturesResult = await Promises.tryCatch(testFeatures())
     if (testFeaturesResult.status === "rejected") {
         document.querySelector("#preloader")?.remove()
@@ -58,16 +63,20 @@ export const boot = async ({ workersUrl, workletsUrl }: { workersUrl: string, wo
     console.debug("requesting custom sampleRate", sampleRate ?? "'No (Firefox)'")
     const context = new AudioContext({ sampleRate, latencyHint: 0 })
     console.debug(`AudioContext state: ${context.state}, sampleRate: ${context.sampleRate}`)
+    console.debug("boot: step 6 - create audio worklets (context)")
     const audioWorklets = await Promises.tryCatch(AudioWorklets.createFor(context))
     if (audioWorklets.status === "rejected") {
         return panic(audioWorklets.error)
     }
+    console.debug("boot: step 7 - wait for resume if suspended")
     if (context.state === "suspended") {
         window.addEventListener("click",
             async () => await context.resume().then(() =>
                 console.debug(`AudioContext resumed (${context.state})`)), { capture: true, once: true })
     }
+    console.debug("boot: step 8 - audio devices")
     const audioDevices = await AudioOutputDevice.create(context)
+    console.debug("boot: step 9 - loading managers")
     const sampleManager = new DefaultSampleLoaderManager({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[AudioData, SampleMetaData]> =>
             OpenSampleAPI.get().load(context, uuid, progress)

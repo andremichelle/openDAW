@@ -125,8 +125,7 @@ export const OdieWelcomeWizard = ({ service, onComplete, onClose }: { service: O
             statusText.innerText = "Pinging..."
             statusText.style.color = "#94a3b8"
 
-            // @ts-ignore
-            const ollama = service.ai.getProvider("ollama") as any
+            const ollama = service.ai.getProvider("ollama")
             if (!ollama) return
 
             try {

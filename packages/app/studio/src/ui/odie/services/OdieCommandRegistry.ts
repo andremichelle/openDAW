@@ -251,6 +251,19 @@ Direct control over the Studio and Chat.
         })
 
         this.register({
+            id: "/purge",
+            description: "Factory Reset (Clear Data & Reload)",
+            usage: "/purge",
+            execute: async (_s) => {
+                // [ANTIGRAVITY] Nuclear Option for Testing Onboarding
+                console.log("☢️ PURGING ODIE DATA & RELOADING...")
+                localStorage.clear()
+                location.reload()
+                return "☢️ Goodbye."
+            }
+        })
+
+        this.register({
             id: "/verify3ui",
             description: "Test GenUI Rendering",
             usage: "/verify3ui",

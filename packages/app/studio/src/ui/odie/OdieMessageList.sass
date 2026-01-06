@@ -1,0 +1,360 @@
+
+
+component
+    display: flex
+    flex-direction: column
+    overflow-y: auto
+    min-height: 0
+    padding: 20px
+    background: rgba(15, 23, 42, 0.6)
+    backdrop-filter: blur(12px)
+    gap: 8px
+    position: relative
+    scroll-behavior: smooth
+    width: 100%
+    flex: 1
+
+.EmptyState
+    text-align: center
+    opacity: 0.4
+    margin-top: 40%
+    color: #94a3b8
+
+    .RobotIcon
+        font-size: 64px
+        margin-bottom: 16px
+        filter: drop-shadow(0 0 20px rgba(96, 165, 250, 0.2))
+
+    .Title
+        font-weight: 500
+        letter-spacing: 1px
+
+    .Subtitle
+        font-size: 12px
+        margin-top: 8px
+
+    .ActionContainer
+        margin-top: 32px
+        
+    .ExportButton
+        background: transparent
+        border: 1px solid rgba(255,255,255,0.1)
+        color: rgba(255,255,255,0.3)
+        font-size: 10px
+        padding: 4px 8px
+        border-radius: 4px
+        cursor: pointer
+        
+        &:hover
+            background: rgba(255,255,255,0.05)
+            color: rgba(255,255,255,0.5)
+
+// Markdown Styles (moved from MARKDOWN_STYLES string)
+.odie-markdown 
+    line-height: 1.6 
+    font-size: 14px 
+    color: #e2e8f0 
+    user-select: text
+    -webkit-user-select: text
+    cursor: text
+    
+    /* Headings */
+    h1, h2, h3 
+        color: #f8fafc
+        margin-top: 1em
+        margin-bottom: 0.5em
+        font-weight: 700
+        letter-spacing: -0.02em
+    
+    h1 
+        font-size: 1.4em
+        border-bottom: 1px solid rgba(255,255,255,0.1)
+        padding-bottom: 4px
+    h2 
+        font-size: 1.2em
+    h3 
+        font-size: 1.1em
+        color: #94a3b8
+    
+    /* Paragraphs */
+    p 
+        margin-top: 0
+        margin-bottom: 0.8em
+        &:last-child 
+            margin-bottom: 0
+    
+    /* Spans */
+    strong 
+        color: #f472b6
+        font-weight: 600
+        text-shadow: 0 0 10px rgba(244, 114, 182, 0.2)
+    em 
+        color: #cbd5e1
+        font-style: italic
+    
+    /* Links */
+    a 
+        color: #38bdf8 
+        text-decoration: none 
+        border-bottom: 1px solid rgba(56, 189, 248, 0.3)
+        transition: all 0.2s
+        font-weight: 500
+        
+        &:hover 
+            color: #7dd3fc 
+            border-bottom-color: #7dd3fc
+            text-shadow: 0 0 8px rgba(56, 189, 248, 0.4)
+    
+    /* Lists */
+    ul, ol 
+        margin-left: 1.2em
+        margin-bottom: 1em
+        padding-left: 0
+    li 
+        margin-bottom: 0.3em
+        &::marker 
+            color: #64748b
+    
+    /* Code Inline */
+    code 
+        background: rgba(15, 23, 42, 0.6) 
+        border: 1px solid rgba(255,255,255,0.1)
+        padding: 2px 5px 
+        border-radius: 4px 
+        font-family: 'JetBrains Mono', 'Fira Code', monospace 
+        font-size: 0.85em
+        color: #e2e8f0
+    
+    /* Code Blocks */
+    pre 
+        background: #0b0f19 
+        padding: 16px 
+        border-radius: 8px 
+        overflow-x: auto 
+        margin: 12px 0
+        border: 1px solid rgba(255,255,255,0.08)
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.3)
+
+        code
+            background: transparent
+            padding: 0
+            border: none
+            color: #e2e8f0
+            font-size: 0.85em
+            text-shadow: none
+    
+    /* Blockquotes */
+    blockquote 
+        border-left: 3px solid #6366f1 
+        padding: 4px 12px
+        margin: 12px 0
+        font-style: italic
+        background: linear-gradient(to right, rgba(99, 102, 241, 0.1), transparent)
+        border-radius: 0 4px 4px 0
+        color: #cbd5e1
+
+    /* Tables */
+    table
+        width: 100%
+        border-collapse: collapse
+        margin: 16px 0
+        background: rgba(255, 255, 255, 0.02)
+        border-radius: 8px
+        overflow: hidden
+
+    th
+        text-align: left
+        padding: 12px
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1)
+        color: #94a3b8
+        font-weight: 600
+        font-size: 0.9em
+        text-transform: uppercase
+        letter-spacing: 0.05em
+        background: rgba(0, 0, 0, 0.2)
+
+    td
+        padding: 12px
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05)
+        vertical-align: top
+
+    tr:last-child td
+        border-bottom: none
+    tr:hover td
+        background: rgba(255, 255, 255, 0.02)
+
+    /* AI Generated Images */
+    img
+        max-width: 100%
+        height: auto
+        border-radius: 12px
+        margin: 12px 0
+        cursor: pointer
+        transition: transform 0.2s, box-shadow 0.2s
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3)
+
+        &:hover
+            transform: scale(1.02)
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5)
+
+// Image Modal
+.odie-image-modal
+    position: fixed
+    top: 0
+    left: 0
+    right: 0
+    bottom: 0
+    background: rgba(0, 0, 0, 0.9)
+    display: flex
+    flex-direction: column
+    align-items: center
+    justify-content: center
+    z-index: 10000
+    padding: 20px
+
+    img
+        max-width: 90vw
+        max-height: 80vh
+        border-radius: 8px
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5)
+
+.odie-image-modal-actions
+    display: flex
+    gap: 16px
+    margin-top: 20px
+
+.odie-image-modal-btn
+    background: rgba(255, 255, 255, 0.1)
+    border: 1px solid rgba(255, 255, 255, 0.2)
+    color: #fff
+    padding: 10px 20px
+    border-radius: 8px
+    cursor: pointer
+    font-size: 14px
+    transition: all 0.2s
+
+    &:hover
+        background: rgba(255, 255, 255, 0.2)
+        transform: translateY(-2px)
+
+// Thinking Animation
+@keyframes odie-think
+    0%, 100% 
+        opacity: 0.3
+        transform: scale(0.8)
+    50% 
+        opacity: 1
+        transform: scale(1)
+
+.odie-think-dot
+    display: inline-block
+    width: 6px
+    height: 6px
+    background: currentColor
+    border-radius: 50%
+    margin: 0 2px
+    animation: odie-think 1.4s infinite both
+
+    &:nth-child(1) 
+        animation-delay: -0.32s
+    &:nth-child(2) 
+        animation-delay: -0.16s
+
+// Message Bubble Styles
+.MessageEntry
+    display: flex
+    flex-direction: column
+    width: 100%
+
+    &.User
+        align-items: flex-end
+    &.Odie
+        align-items: flex-start
+
+    .AvatarLabel
+        font-size: 10px
+        margin-bottom: 4px
+        opacity: 0.5
+        font-weight: 600
+        letter-spacing: 0.5px
+    
+    &.User .AvatarLabel
+        margin-left: 0
+        margin-right: 12px
+    
+    &.Odie .AvatarLabel
+        margin-left: 12px
+        margin-right: 0
+
+.MessageBubble
+    padding: 12px 16px
+    margin-bottom: 16px
+    font-size: 14px
+    line-height: 1.5
+    position: relative
+    transition: transform 0.2s ease
+    font-family: 'Inter', sans-serif
+
+    &.User
+        align-self: flex-end
+        background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)
+        color: #f8fafc
+        border: none
+        margin-left: 20%
+        margin-right: 0
+        border-radius: 16px 16px 2px 16px
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2)
+        max-width: 80%
+        width: auto
+
+    &.Odie
+        align-self: flex-start
+        background: #1e293b
+        color: #e2e8f0
+        border: 1px solid rgba(255,255,255,0.1)
+        margin-left: 0
+        margin-right: 0
+        border-radius: 16px 16px 16px 2px
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2)
+        width: 100%
+
+.ThinkingContainer
+    display: flex
+    align-items: center
+    gap: 2px
+    padding: 4px 0
+
+.ActionRow
+    display: flex
+    gap: 8px
+    margin-top: 8px
+    padding-top: 4px
+    border-top: 1px solid rgba(255,255,255,0.1)
+    justify-content: flex-end
+    opacity: 0.8
+
+    &.Odie
+        justify-content: flex-start
+        gap: 12px
+        margin-top: 12px
+        padding-top: 8px
+        border-top: 1px solid rgba(255,255,255,0.05)
+        opacity: 0.6
+
+.ActionButton
+    background: none
+    border: none
+    cursor: pointer
+    color: inherit
+    font-size: 12px
+    display: flex
+    align-items: center
+    gap: 4px
+    padding: 2px 4px
+    border-radius: 4px
+    transition: all 0.2s
+    opacity: 0.7
+
+    &:hover
+        opacity: 1
+        background: rgba(255,255,255,0.05)

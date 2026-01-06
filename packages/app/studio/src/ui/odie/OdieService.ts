@@ -851,11 +851,29 @@ ${JSON.stringify({
         } catch (e) {
             console.error("Chat Error", e)
             const all = this.messages.getValue()
+            const errMsg = (e instanceof Error) ? e.message : String(e)
             const newAll = [...all]
+            let content = `Error: ${errMsg}`
+
+            // [ANTIGRAVITY] Intercept 404 / Model Not Found (Sync Error)
+            if (errMsg.includes("404") || errMsg.includes("Not Found") || errMsg.includes("Failed to fetch")) {
+                content = "```json\n" + JSON.stringify({
+                    ui_component: "error_card",
+                    data: {
+                        title: "Connection Failed",
+                        message: "We couldn't connect to the AI service. Please check your settings and ensure the local server is running.",
+                        actions: [
+                            { label: "⚙️ Open Settings", id: "open_settings" },
+                            { label: "↻ Retry", id: "retry_connection" }
+                        ]
+                    }
+                }, null, 2) + "\n```"
+            }
+
             newAll[newAll.length - 1] = {
                 ...newAll[newAll.length - 1],
                 role: "model",
-                content: `Error: ${(e instanceof Error) ? e.message : String(e)}`
+                content: content
             }
             this.messages.setValue(newAll)
 
@@ -940,6 +958,7 @@ ${JSON.stringify({
             value?: number | string
             previousValue?: number
             _targetGridId?: string // Check for our new hidden ID
+            actionId?: string
         }
     }) {
         if (!this.appControl) {
@@ -1016,6 +1035,8 @@ ${JSON.stringify({
 
                 // Add user message to chat to mimic them typing it
                 this.sendMessage(String(selection))
+            } else if (action.name === "error_action" && action.context.actionId) {
+                this.handleErrorAction(action.context.actionId)
             }
 
             // Fallback: Add feedback message to chat if not handled by toast
@@ -1032,6 +1053,16 @@ ${JSON.stringify({
 
         } catch (e) {
             console.error("🧠 [Gen UI] Widget action failed:", e)
+        }
+    }
+
+    private async handleErrorAction(actionId: string) {
+        if (actionId === "open_settings") {
+            this.viewState.setValue("settings")
+            // Visual feedback handled by view switch
+        } else if (actionId === "retry_connection") {
+            // Re-validate logic could go here
+            this.sendMessage("retry connection")
         }
     }
 

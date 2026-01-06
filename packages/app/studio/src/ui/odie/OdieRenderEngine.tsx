@@ -357,6 +357,61 @@ const ControlGrid = ({ data, onAction }: WidgetProps<{ title?: string, controls:
     )
 }
 
+const ErrorCard = ({ data, onAction }: WidgetProps<{ title: string, message: string, actions: { label: string, id: string }[] }> & { onAction?: (action: any) => void }) => {
+    return (
+        <div className="odie-widget-error" style={{
+            background: "rgba(220, 38, 38, 0.15)", // Red tint
+            border: "1px solid rgba(220, 38, 38, 0.4)",
+            borderRadius: "8px",
+            padding: "16px",
+            margin: "12px 0"
+        }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                <div style={{ fontSize: "1.2em" }}>⚠️</div>
+                <div style={{ color: "#fca5a5", fontWeight: "bold", fontSize: "0.95em" }}>{data.title}</div>
+            </div>
+
+            <div style={{
+                fontSize: "0.9em",
+                color: "#e5e7eb",
+                marginBottom: "16px",
+                lineHeight: "1.4"
+            }}>
+                {data.message}
+            </div>
+
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {data.actions.map((action, i) => (
+                    <button key={i}
+                        style={{
+                            background: "rgba(0,0,0,0.3)",
+                            border: "1px solid rgba(255,255,255,0.1)",
+                            borderRadius: "4px",
+                            padding: "6px 12px",
+                            color: "white",
+                            cursor: "pointer",
+                            fontSize: "0.85em",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            transition: "all 0.2s"
+                        }}
+                        onmouseenter={(e: any) => e.target.style.background = "rgba(255,255,255,0.1)"}
+                        onmouseleave={(e: any) => e.target.style.background = "rgba(0,0,0,0.3)"}
+                        onmousedown={(e: any) => {
+                            e.stopPropagation()
+                            e.preventDefault()
+                            if (onAction) onAction({ name: "error_action", context: { actionId: action.id } })
+                        }}
+                    >
+                        {action.label}
+                    </button>
+                ))}
+            </div>
+        </div>
+    )
+}
+
 const ImageGallery = ({ data }: WidgetProps<{ url: string, prompt: string }>) => {
     return (
         <div className="odie-widget-image" style={{ margin: "8px 0", borderRadius: "8px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)" }}>
@@ -541,6 +596,7 @@ export const OdieRenderEngine = {
                 return <StepList data={payload.data} onAction={onAction} />
             case "midi_grid": return <MidiGrid data={payload.data} />
             case "image_gallery": return <ImageGallery data={payload.data} />
+            case "error_card": return <ErrorCard data={payload.data} onAction={onAction} />
             default: return <div style={{ color: "red", fontSize: "0.8em" }}>Unknown Widget: {payload.component}</div>
         }
     }

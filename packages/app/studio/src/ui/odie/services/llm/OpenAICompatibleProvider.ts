@@ -496,7 +496,16 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
             // Not Found (Model or Endpoint)
             if (status === 404) {
-                return `🔍 **Not Found**\n\nThe model or endpoint isn't available. Check Settings.`
+                return "```json\n" + JSON.stringify({
+                    ui_component: "error_card",
+                    data: {
+                        title: "Model Not Found",
+                        message: "We couldn't connect to the configured AI model. Please check that Ollama is running and the model is installed.",
+                        actions: [
+                            { label: "⚙️ Open Settings", id: "open_settings" }
+                        ]
+                    }
+                }, null, 2) + "\n```"
             }
 
             // Server Errors

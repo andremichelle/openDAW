@@ -1,4 +1,4 @@
-import { StudioService } from "../../../service/StudioService"
+import type { StudioService } from "../../../service/StudioService"
 
 
 /**
