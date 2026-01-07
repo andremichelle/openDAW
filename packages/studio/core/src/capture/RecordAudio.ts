@@ -1,6 +1,5 @@
-import {int, Option, Progress, quantizeFloor, Terminable, Terminator, UUID} from "@opendaw/lib-std"
-import {AudioData, BPMTools, dbToGain, ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
-import {SamplePeaks} from "@opendaw/lib-fusion"
+import {int, Option, quantizeFloor, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {dbToGain, ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
 import {
     AudioFileBox,
     AudioPitchStretchBox,
@@ -9,13 +8,11 @@ import {
     ValueEventCollectionBox,
     WarpMarkerBox
 } from "@opendaw/studio-boxes"
-import {ColorCodes, SampleLoaderManager, SampleMetaData, TrackType} from "@opendaw/studio-adapters"
+import {ColorCodes, SampleLoaderManager, TrackType} from "@opendaw/studio-adapters"
 import {Project} from "../project"
 import {RecordingWorklet} from "../RecordingWorklet"
 import {Capture} from "./Capture"
 import {RecordTrack} from "./RecordTrack"
-import {SampleStorage} from "../samples"
-import {Workers} from "../Workers"
 
 export namespace RecordAudio {
     type RecordAudioContext = {
@@ -33,7 +30,6 @@ export namespace RecordAudio {
         trackBox: TrackBox
         regionBox: AudioRegionBox
         warpMarkerBox: WarpMarkerBox
-        waveformOffsetAtCreation: number
     }
 
     export const start = (
@@ -64,7 +60,6 @@ export namespace RecordAudio {
 
         let fileBox: Option<AudioFileBox> = Option.None
         let currentTake: Option<TakeData> = Option.None
-        const allTakes: Array<TakeData> = []
         let lastPosition: ppqn = 0
         let currentWaveformOffset: number = outputLatency
 
@@ -103,9 +98,7 @@ export namespace RecordAudio {
             })
             capture.addRecordedRegion(regionBox)
             project.selection.select(regionBox)
-            const take: TakeData = {trackBox, regionBox, warpMarkerBox, waveformOffsetAtCreation: waveformOffset}
-            allTakes.push(take)
-            return take
+            return {trackBox, regionBox, warpMarkerBox}
         }
 
         const finalizeTake = (take: TakeData, loopDurationPPQN: ppqn) => {
@@ -124,64 +117,6 @@ export namespace RecordAudio {
             currentTake = Option.wrap(createTakeRegion(position, currentWaveformOffset, true))
         }
 
-        const splitTakes = async (fullAudio: AudioData) => {
-            const {sampleRate: sr, numberOfChannels} = fullAudio
-            const takeData: Array<{
-                take: TakeData,
-                takeUuid: UUID.Bytes,
-                segmentLength: number,
-                durationSeconds: number
-            }> = []
-            for (let i = 0; i < allTakes.length; i++) {
-                const take = allTakes[i]
-                const {regionBox, waveformOffsetAtCreation} = take
-                if (!regionBox.isAttached()) {continue}
-                const duration = regionBox.duration.getValue()
-                const durationSeconds = tempoMap.intervalToSeconds(0, duration)
-                const segmentStartSamples = Math.floor(waveformOffsetAtCreation * sr)
-                const segmentEndSamples = Math.floor((waveformOffsetAtCreation + durationSeconds) * sr)
-                const segmentLength = segmentEndSamples - segmentStartSamples
-                if (segmentLength <= 0) {continue}
-                const segmentAudio = AudioData.create(sr, segmentLength, numberOfChannels)
-                for (let ch = 0; ch < numberOfChannels; ch++) {
-                    const sourceFrame = fullAudio.frames[ch]
-                    const targetFrame = segmentAudio.frames[ch]
-                    for (let s = 0; s < segmentLength; s++) {
-                        targetFrame[s] = sourceFrame[segmentStartSamples + s] ?? 0
-                    }
-                }
-                const shifts = SamplePeaks.findBestFit(segmentLength)
-                const peaks = await Workers.Peak.generateAsync(
-                    Progress.Empty, shifts, segmentAudio.frames, segmentLength, numberOfChannels)
-                const takeUuid = UUID.generate()
-                const bpm = BPMTools.detect(segmentAudio.frames[0], sr)
-                const meta: SampleMetaData = {
-                    name: `Recording Take ${i + 1}`,
-                    bpm,
-                    sample_rate: sr,
-                    duration: segmentLength / sr,
-                    origin: "recording"
-                }
-                await SampleStorage.get().save({uuid: takeUuid, audio: segmentAudio, peaks: peaks as ArrayBuffer, meta})
-                takeData.push({take, takeUuid, segmentLength, durationSeconds})
-            }
-            editing.modify(() => {
-                for (let i = 0; i < takeData.length; i++) {
-                    const {take, takeUuid, segmentLength, durationSeconds} = takeData[i]
-                    const {regionBox, warpMarkerBox} = take
-                    const newFileBox = AudioFileBox.create(boxGraph, takeUuid, box => {
-                        box.fileName.setValue(`Recording-Take-${i + 1}`)
-                        box.endInSeconds.setValue(segmentLength / sr)
-                    })
-                    regionBox.file.refer(newFileBox)
-                    regionBox.waveformOffset.setValue(outputLatency)
-                    warpMarkerBox.seconds.setValue(durationSeconds)
-                }
-                fileBox.ifSome(fb => fb.delete())
-            }, false)
-            sampleManager.remove(originalUuid)
-        }
-
         terminator.ownAll(
             Terminable.create(() => {
                 if (recordingWorklet.numberOfFrames === 0 || fileBox.isEmpty()) {
@@ -194,15 +129,6 @@ export namespace RecordAudio {
                             (currentWaveformOffset + tempoMap.intervalToSeconds(0, duration.getValue())) * sampleRate))
                     })
                     fileBox.ifSome(fb => fb.endInSeconds.setValue(recordingWorklet.numberOfFrames / sampleRate))
-                    if (allTakes.length > 1) {
-                        recordingWorklet.subscribe(state => {
-                            if (state.type === "loaded") {
-                                recordingWorklet.data.ifSome(fullAudio => {
-                                    splitTakes(fullAudio).catch(err => console.warn("Failed to split takes:", err))
-                                })
-                            }
-                        })
-                    }
                 }
             }),
             engine.position.catchupAndSubscribe(owner => {
