@@ -6,6 +6,7 @@ import {Project} from "./project"
 import {AudioWorklets} from "./AudioWorklets"
 
 export namespace AudioOfflineRenderer {
+    /* Deprecated */
     export const start = async (source: Project,
                                 optExportConfiguration: Option<ExportStemsConfiguration>,
                                 progress: Progress.Handler,

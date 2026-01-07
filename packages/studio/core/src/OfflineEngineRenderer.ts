@@ -1,33 +1,18 @@
 import {Errors, int, isDefined, Option, panic, Progress, Terminator, UUID} from "@opendaw/lib-std"
 import {AudioData, ppqn} from "@opendaw/lib-dsp"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
-import {EngineCommands, EngineToClient, ExportStemsConfiguration, NoteSignal} from "@opendaw/studio-adapters"
+import {
+    EngineCommands,
+    EngineToClient,
+    ExportStemsConfiguration,
+    NoteSignal,
+    OfflineEngineInitializeConfig,
+    OfflineEngineProtocol,
+    OfflineEngineRenderConfig
+} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 import {AudioWorklets} from "./AudioWorklets"
 import type {SoundFont2} from "soundfont2"
-
-interface InitializeConfig {
-    sampleRate: number
-    numberOfChannels: number
-    processorsUrl: string
-    syncStreamBuffer: SharedArrayBuffer
-    controlFlagsBuffer: SharedArrayBuffer
-    project: ArrayBufferLike
-    exportConfiguration?: ExportStemsConfiguration
-}
-
-interface RenderConfig {
-    silenceThresholdDb?: number
-    silenceDurationSeconds?: number
-    maxDurationSeconds?: number
-}
-
-interface OfflineEngineProtocol {
-    initialize(enginePort: MessagePort, progressPort: MessagePort, config: InitializeConfig): Promise<void>
-    render(config: RenderConfig): Promise<Float32Array[]>
-    step(samples: number): Promise<Float32Array[]>
-    stop(): void
-}
 
 export namespace OfflineEngineRenderer {
     let workerUrl: Option<string> = Option.None
@@ -50,16 +35,15 @@ export namespace OfflineEngineRenderer {
         if (numStems === 0) {return panic("Nothing to export")}
         const numberOfChannels = numStems * 2
         const {promise, reject, resolve} = Promise.withResolvers<AudioData>()
-
         const worker = new Worker(getWorkerUrl(), {type: "module"})
         const messenger = Messenger.for(worker)
         const protocol = Communicator.sender<OfflineEngineProtocol>(
             messenger.channel("offline-engine"),
             dispatcher => new class implements OfflineEngineProtocol {
-                initialize(enginePort: MessagePort, progressPort: MessagePort, config: InitializeConfig): Promise<void> {
+                initialize(enginePort: MessagePort, progressPort: MessagePort, config: OfflineEngineInitializeConfig): Promise<void> {
                     return dispatcher.dispatchAndReturn(this.initialize, enginePort, progressPort, config)
                 }
-                render(config: RenderConfig): Promise<Float32Array[]> {
+                render(config: OfflineEngineRenderConfig): Promise<Float32Array[]> {
                     return dispatcher.dispatchAndReturn(this.render, config)
                 }
                 step(samples: number): Promise<Float32Array[]> {
@@ -162,9 +146,7 @@ export namespace OfflineEngineRenderer {
             project: projectCopy.toArrayBuffer(),
             exportConfiguration: optExportConfiguration.unwrapOrUndefined()
         })
-
         engineCommands.play()
-
         protocol.render({}).then(channels => {
             if (cancelled) {return}
             terminator.terminate()
@@ -182,7 +164,6 @@ export namespace OfflineEngineRenderer {
                 reject(reason)
             }
         })
-
         return promise
     }
 }

@@ -7,6 +7,10 @@ export class TimeSpan {
     static readonly minutes = (value: number) => new TimeSpan(value * TimeSpan.#MILLI_SECONDS_PER_MINUTE)
     static readonly hours = (value: number) => new TimeSpan(value * TimeSpan.#MILLI_SECONDS_PER_HOUR)
     static readonly days = (value: number) => new TimeSpan(value * TimeSpan.#MILLI_SECONDS_PER_DAY)
+    static readonly toHHMMSS = (seconds: number) =>
+        ((seconds / 3600 | 0) + 100).toString().slice(1) + ":" +
+        (((seconds / 60 | 0) % 60) + 100).toString().slice(1) + ":" +
+        ((seconds % 60) + 100).toString().slice(1)
 
     static readonly #MILLI_SECONDS_PER_SECOND = 1_000
     static readonly #MILLI_SECONDS_PER_MINUTE = 60_000

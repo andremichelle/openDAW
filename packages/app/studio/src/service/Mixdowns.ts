@@ -1,11 +1,10 @@
-import {DefaultObservableValue, Errors, Option, panic, RuntimeNotifier} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, Option, panic, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
 import {AudioData} from "@opendaw/lib-dsp"
 import {
-    AudioOfflineRenderer,
-    AudioUtils,
     ExternalLib,
     FFmpegConverter,
     FFmpegWorker,
+    OfflineEngineRenderer,
     ProjectMeta,
     ProjectProfile,
     WavFile
@@ -18,14 +17,13 @@ import {Dialogs} from "@/ui/components/dialogs"
 export namespace Mixdowns {
     export const exportMixdown = async ({project, meta}: ProjectProfile): Promise<void> => {
         const abortController = new AbortController()
-        const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({
             headline: "Rendering mixdown...",
-            progress,
             cancel: () => abortController.abort()
         })
-        const result = await Promises.tryCatch(AudioOfflineRenderer
-            .start(project, Option.None, x => progress.setValue(x), abortController.signal))
+        const progress = (seconds: number) => dialog.message = `Progress: ${TimeSpan.toHHMMSS(seconds)}`
+        const result = await Promises.tryCatch(OfflineEngineRenderer
+            .start(project, Option.None, progress, abortController.signal))
         dialog.terminate()
         if (result.status === "rejected") {
             if (!Errors.isAbort(result.error)) {
@@ -33,7 +31,7 @@ export namespace Mixdowns {
             }
             return
         }
-        const buffer: AudioBuffer = result.value
+        const audioData: AudioData = result.value
         const {resolve, reject, promise} = Promise.withResolvers<void>()
         const {status, error} = await Promises.tryCatch(Dialogs.show({
             headline: "Encode Mixdown",
@@ -43,17 +41,17 @@ export namespace Mixdowns {
                 {
                     text: "Mp3", onClick: handler => {
                         handler.close()
-                        saveMp3File(buffer, meta).then(resolve, reject)
+                        saveMp3File(audioData, meta).then(resolve, reject)
                     }, primary: false
                 }, {
                     text: "Flac", onClick: handler => {
                         handler.close()
-                        saveFlacFile(buffer, meta).then(resolve, reject)
+                        saveFlacFile(audioData, meta).then(resolve, reject)
                     }, primary: false
                 }, {
                     text: "Wav", onClick: handler => {
                         handler.close()
-                        saveWavFile(buffer, meta).then(resolve, reject)
+                        saveWavFile(audioData, meta).then(resolve, reject)
                     }, primary: true
                 }
             ]
@@ -68,16 +66,16 @@ export namespace Mixdowns {
     export const exportStems = async ({project, meta}: ProjectProfile,
                                       config: ExportStemsConfiguration): Promise<void> => {
         const abortController = new AbortController()
-        const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({
             headline: "Rendering mixdown...",
-            progress,
             cancel: () => abortController.abort()
         })
-        const {status, value, error: renderError} = await Promises.tryCatch(AudioOfflineRenderer
-            .start(project, Option.wrap(config), x => progress.setValue(x), abortController.signal))
+        const progress = (seconds: number) => dialog.message = `Progress: ${TimeSpan.toHHMMSS(seconds)}`
+        const {status, value, error: renderError} = await Promises.tryCatch(OfflineEngineRenderer
+            .start(project, Option.wrap(config), progress, abortController.signal))
         dialog.terminate()
         if (status === "rejected") {
+            if (Errors.isAbort(renderError)) {return}
             await RuntimeNotifier.info({headline: "Export Failed", message: String(renderError)})
             return
         }
@@ -89,39 +87,38 @@ export namespace Mixdowns {
         }
     }
 
-    const saveWavFile = async (buffer: AudioBuffer, meta: ProjectMeta) => {
-        const silentSample = AudioUtils.findLastNonSilentSample(buffer)
+    const saveWavFile = async (audioData: AudioData, meta: ProjectMeta) => {
         return saveFileAfterAsync({
-            buffer: WavFile.encodeFloats(buffer, silentSample),
+            buffer: WavFile.encodeFloats(audioData),
             headline: "Save Wav",
             suggestedName: `${meta.name}.wav`
         })
     }
 
-    const saveMp3File = async (buffer: AudioBuffer, meta: ProjectMeta) => {
+    const saveMp3File = async (audioData: AudioData, meta: ProjectMeta) => {
         const ffmpeg = await loadFFmepg()
         return encodeAndSaveFile({
             converter: ffmpeg.mp3Converter(),
             fileExtension: "mp3",
             fileType: "Mp3",
             fileName: meta.name,
-            buffer: buffer
+            audioData
         })
     }
 
-    const saveFlacFile = async (buffer: AudioBuffer, meta: ProjectMeta) => {
+    const saveFlacFile = async (audioData: AudioData, meta: ProjectMeta) => {
         const ffmpeg = await loadFFmepg()
         return encodeAndSaveFile({
             converter: ffmpeg.flacConverter(),
             fileExtension: "flac",
             fileType: "Flac",
             fileName: meta.name,
-            buffer: buffer
+            audioData
         })
     }
 
-    const encodeAndSaveFile = async ({buffer, converter, fileType, fileExtension, fileName}: {
-        buffer: AudioBuffer,
+    const encodeAndSaveFile = async ({audioData, converter, fileType, fileExtension, fileName}: {
+        audioData: AudioData,
         converter: FFmpegConverter<unknown>,
         fileType: string,
         fileExtension: string,
@@ -129,8 +126,7 @@ export namespace Mixdowns {
     }) => {
         const progress = new DefaultObservableValue(0.0)
         const progressDialog = RuntimeNotifier.progress({headline: `Encoding ${fileType}...`, progress})
-        const silentSample = AudioUtils.findLastNonSilentSample(buffer)
-        const flac = await converter.convert(new Blob([WavFile.encodeFloats(buffer, silentSample)]),
+        const flac = await converter.convert(new Blob([WavFile.encodeFloats(audioData)]),
             value => progress.setValue(value))
         progressDialog.terminate()
         return saveFileAfterAsync({
@@ -140,7 +136,7 @@ export namespace Mixdowns {
         })
     }
 
-    const saveZipFile = async (buffer: AudioBuffer, meta: ProjectMeta, trackNames: ReadonlyArray<string>) => {
+    const saveZipFile = async (audioData: AudioData, meta: ProjectMeta, trackNames: ReadonlyArray<string>) => {
         const libResult = await ExternalLib.JSZip()
         if (libResult.status === "rejected") {
             await RuntimeNotifier.info({
@@ -150,15 +146,15 @@ export namespace Mixdowns {
             return Promise.reject(libResult.error)
         }
         const dialog = RuntimeNotifier.progress({headline: "Creating Zip File..."})
-        const numStems = buffer.numberOfChannels >> 1
+        const numStems = audioData.numberOfChannels >> 1
         const zip = new libResult.value()
         for (let stemIndex = 0; stemIndex < numStems; stemIndex++) {
-            const l = buffer.getChannelData(stemIndex * 2)
-            const r = buffer.getChannelData(stemIndex * 2 + 1)
-            const audioData = AudioData.create(buffer.sampleRate, buffer.length, 2)
-            audioData.frames[0].set(l)
-            audioData.frames[1].set(r)
-            const file = WavFile.encodeFloats(audioData)
+            const l = audioData.frames[stemIndex * 2]
+            const r = audioData.frames[stemIndex * 2 + 1]
+            const stemData = AudioData.create(audioData.sampleRate, audioData.numberOfFrames, 2)
+            stemData.frames[0].set(l)
+            stemData.frames[1].set(r)
+            const file = WavFile.encodeFloats(stemData)
             zip.file(`${trackNames[stemIndex]}.wav`, file, {binary: true})
         }
         const {status, value: arrayBuffer, error} = await Promises.tryCatch(zip.generateAsync({
