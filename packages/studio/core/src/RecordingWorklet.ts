@@ -41,7 +41,7 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
     #limitSamples: int = Number.POSITIVE_INFINITY
     #state: SampleLoaderState = {type: "record"}
 
-    constructor(context: BaseAudioContext, config: RingBuffer.Config, outputLatency: number) {
+    constructor(context: BaseAudioContext, config: RingBuffer.Config) {
         super(context, "recording-processor", {
             numberOfInputs: 1,
             channelCount: config.numberOfChannels,
@@ -56,12 +56,8 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
         this.#reader = RingBuffer.reader(config, array => {
             if (this.#isRecording) {
                 this.#output.push(array)
-                const latencyInSamples = (outputLatency * this.context.sampleRate) | 0
-                if (this.numberOfFrames >= latencyInSamples) {
-                    this.#peakWriter.append(array)
-                }
-                const need = this.numberOfFrames - latencyInSamples
-                if (need >= this.#limitSamples) {
+                this.#peakWriter.append(array)
+                if (this.numberOfFrames >= this.#limitSamples) {
                     this.#finalize().catch(error => console.warn(error))
                 }
             }

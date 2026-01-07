@@ -135,10 +135,10 @@ export class BlockRenderer implements Terminable {
                     }
                 }
                 // --- LOOP SECTION ---
-                const {isRecording, isCountingIn} = this.#context.timeInfo // TODO We need a concept for loops in recording
+                const {isCountingIn} = this.#context.timeInfo
                 const {from, to, enabled} = timelineBox.loopArea
                 const loopEnabled = enabled.getValue()
-                if ((loopEnabled && !(isRecording || isCountingIn)) || pauseOnLoopDisabled) {
+                if ((loopEnabled && !isCountingIn) || pauseOnLoopDisabled) {
                     const loopTo = to.getValue()
                     if (p0 < loopTo && p1 > loopTo && loopTo < actionPosition) {
                         action = {type: "loop", target: from.getValue()}

@@ -4,13 +4,15 @@ import {TrackType} from "@opendaw/studio-adapters"
 import {BoxEditing} from "@opendaw/lib-box"
 
 export namespace RecordTrack {
-    export const findOrCreate = (editing: BoxEditing, audioUnitBox: AudioUnitBox, type: TrackType): TrackBox => {
+    export const findOrCreate = (editing: BoxEditing, audioUnitBox: AudioUnitBox, type: TrackType, forceCreate: boolean = false): TrackBox => {
         let index: int = 0 | 0
         for (const trackBox of audioUnitBox.tracks.pointerHub.incoming()
             .map(({box}) => asInstanceOf(box, TrackBox))) {
-            const hasNoRegions = trackBox.regions.pointerHub.isEmpty()
-            const acceptsNotes = trackBox.type.getValue() === type
-            if (hasNoRegions && acceptsNotes) {return trackBox}
+            if (!forceCreate) {
+                const hasNoRegions = trackBox.regions.pointerHub.isEmpty()
+                const matchesType = trackBox.type.getValue() === type
+                if (hasNoRegions && matchesType) {return trackBox}
+            }
             index = Math.max(index, trackBox.index.getValue())
         }
         return editing.modify(() => TrackBox.create(audioUnitBox.graph, UUID.generate(), box => {
