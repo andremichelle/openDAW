@@ -10,7 +10,7 @@ const originalConsole = { ...console };
 
 // Mock Fetch
 const mockFetchHistory: string[] = [];
-global.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
+global.fetch = async (url: RequestInfo | URL) => {
     const urlStr = url.toString();
     mockFetchHistory.push(urlStr);
 
@@ -44,7 +44,7 @@ class TestProvider {
         const baseUrl = this.baseUrl || ""
         if (!baseUrl) return []
 
-        const foundModels: Set<string> = new Set()
+
 
         // ... (Strategy 1 omitted for brevity as bug was in Strategy 2) ...
 

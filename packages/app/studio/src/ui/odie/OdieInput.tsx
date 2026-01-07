@@ -59,59 +59,109 @@ export const OdieInput = ({ service }: inputProps) => {
     setTimeout(() => { if (document.body.contains(textarea)) textarea.focus() }, 100)
 
 
-    // --- STATUS BAR ELEMENTS ---
+    // ==========================================
+    // STATUS BAR (REBUILT - KISS PRINCIPLE)
+    // One function. One call. One result.
+    // ==========================================
+
     const statusDot = <div className="status-dot"></div> as HTMLElement
-    const providerLabel = <span className="provider-label">GEMINI</span> as HTMLElement
-    const activityLabel = <span className="activity-label">Ready</span> as HTMLElement
+    const providerLabel = <span className="provider-label">...</span> as HTMLElement
+    const activityLabel = <span className="activity-label">...</span> as HTMLElement
 
-
-    // --- LIFECYCLE & SUBSCRIPTIONS ---
-    const lifecycle = new Terminator()
-
-    // 1. Activity Monitor
-    const updateStatus = (isThinking: boolean) => {
-        statusDot.classList.toggle("thinking", isThinking)
-        statusDot.classList.toggle("connected", !isThinking)
+    // Single function to update indicator (pure, no side effects)
+    const setIndicator = (state: "checking" | "connected" | "disconnected" | "thinking", label: string) => {
+        statusDot.className = "status-dot " + state
+        activityLabel.innerText = label
+        activityLabel.classList.toggle("active", state !== "connected")
     }
 
-    // Initialize State Immediately (Crucial for "Connected on Load")
-    updateStatus(service.isGenerating.getValue())
+    // Get display name for provider (with model name for Ollama)
+    const getProviderDisplayName = (providerId: string): string => {
+        if (providerId === "ollama") {
+            const config = service.ai.getConfig("ollama")
+            const modelId = config?.modelId
+            if (modelId) {
+                // Format: "LOCAL: qwen3:30b" → cleaner display
+                return `LOCAL: ${modelId.toUpperCase()}`
+            }
+            return "LOCAL"
+        }
+        if (providerId === "gemini-3") return "GEMINI 3"
+        if (providerId === "gemini") return "GEMINI"
+        return providerId.toUpperCase()
+    }
 
+    // THE CORE FUNCTION: Check provider and validate connection
+    const refreshStatus = async () => {
+        const providerId = service.ai.activeProviderId.getValue()
+        const provider = service.ai.getActiveProvider()
+
+        // Update provider name immediately
+        providerLabel.innerText = getProviderDisplayName(providerId)
+
+        // Show checking state
+        setIndicator("checking", "Checking...")
+
+        if (!provider) {
+            setIndicator("disconnected", "No Provider")
+            return
+        }
+
+        // Validate the connection
+        if (typeof provider.validate === "function") {
+            try {
+                const result = await provider.validate()
+                console.log(`🔍 [Status] ${providerId}: ${result.ok ? "✅" : "❌"} ${result.message}`)
+                setIndicator(
+                    result.ok ? "connected" : "disconnected",
+                    result.ok ? "Ready" : "No API"
+                )
+            } catch (e) {
+                console.error(`🔍 [Status] ${providerId}: Error`, e)
+                setIndicator("disconnected", "Error")
+            }
+        } else {
+            // No validation available - assume connected
+            console.log(`🔍 [Status] ${providerId}: No validate method, assuming connected`)
+            setIndicator("connected", "Ready")
+        }
+    }
+
+    // --- LIFECYCLE (MINIMAL) ---
+    const lifecycle = new Terminator()
+
+    // 1. Thinking state (during generation)
     lifecycle.own(service.isGenerating.subscribe(obs => {
-        updateStatus(obs.getValue())
+        if (obs.getValue()) {
+            setIndicator("thinking", "Thinking...")
+        } else {
+            // After generation completes, re-check connection
+            refreshStatus()
+        }
     }))
 
-    // 2. Activity Detail Monitor
-    lifecycle.own(service.activityStatus.subscribe(obs => {
-        const status = obs.getValue()
-        activityLabel.innerText = status
-        activityLabel.classList.toggle("active", status !== "Ready")
+    // 2. Provider change → re-validate
+    lifecycle.own(service.ai.activeProviderId.subscribe(() => {
+        refreshStatus()
     }))
 
-    // 3. Provider/Model Monitor
-    lifecycle.own(service.activeModelName.subscribe(obs => {
-        let name = obs.getValue()
-        if (name.includes("gemini-3-flash")) name = "Gemini • 3 Flash"
-        else if (name.includes("gemini-2.5-flash-image")) name = "Gemini • Nano Banana"
-        providerLabel.innerText = name.toUpperCase()
-    }))
-
-    // 4. Focus Monitor
+    // 3. Panel open → initial check
     lifecycle.own(service.visible.subscribe(visible => {
         if (visible) {
-            // Trigger Boot Animation
-            statusDot.classList.add("booting")
-            setTimeout(() => {
-                statusDot.classList.remove("booting")
-                // Double-check state to ensure we land on the correct color
-                updateStatus(service.isGenerating.getValue())
-            }, 600)
-
+            refreshStatus()
             setTimeout(() => {
                 if (document.body.contains(textarea)) textarea.focus()
             }, 50)
         }
     }))
+
+    // Initial state (sync, before any async)
+    providerLabel.innerText = getProviderDisplayName(service.ai.activeProviderId.getValue())
+    setIndicator("checking", "...")
+
+    // Trigger initial validation
+    refreshStatus()
+
 
     // -- Container --
     const container = <div className={className}>

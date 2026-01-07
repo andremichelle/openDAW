@@ -9,8 +9,11 @@ import { OdieSchoolStyles } from "./services/SchoolStyles"
 import { OdieChat } from "./OdieChat"
 
 const CATEGORY_COLORS: Record<string, string> = {
-    "songwriting": "#ec4899", "production": "#8b5cf6", "mixing": "#3b82f6",
-    "mastering": "#ef4444", "theory": "#f59e0b"
+    "songwriting": "#a855f7", // Purple
+    "production": "#3b82f6",  // Blue
+    "mixing": "#22c55e",      // Green
+    "mastering": "#ef4444",   // Red
+    "theory": "#f59e0b"       // Amber
 }
 
 export const OdieSchoolModal = ({ service, onClose }: { service: any, onClose: () => void }) => {

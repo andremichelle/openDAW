@@ -26,6 +26,11 @@ export class OdieService {
     readonly activeModelName = new DefaultObservableValue<string>("Gemini")
     readonly activityStatus = new DefaultObservableValue<string>("Ready")
 
+    // [ANTIGRAVITY] Connection State for Status Indicator
+    // Values: "unknown" | "connected" | "disconnected" | "checking"
+    // Start with "checking" so UI shows yellow until validation completes
+    readonly connectionStatus = new DefaultObservableValue<"unknown" | "connected" | "disconnected" | "checking">("checking")
+
     // [ANTIGRAVITY] The Loom (Generative UI) State
     // Holds the current "Hologram" payload to be rendered
     readonly genUiPayload = new DefaultObservableValue<import("./genui/GenUISchema").GenUIPayload | null>(null)
@@ -95,6 +100,9 @@ export class OdieService {
                 else label = id.charAt(0).toUpperCase() + id.slice(1)
 
                 this.activeModelName.setValue(label)
+
+                // [ANTIGRAVITY] Re-validate connection when provider changes
+                this.validateConnection()
             })
             // Initial Sync
             const currentId = this.ai.activeProviderId.getValue()
@@ -105,6 +113,9 @@ export class OdieService {
                 this.activeModelName.setValue("Gemini 3")
             }
 
+            // [ANTIGRAVITY] Initial connection validation on boot
+            this.validateConnection()
+
 
 
         } catch (e) {
@@ -112,7 +123,37 @@ export class OdieService {
         }
     }
 
+    // [ANTIGRAVITY] Validate API Connection for active provider
+    async validateConnection(): Promise<void> {
+        console.log("🔍 [Connection] Starting validation...")
+        this.connectionStatus.setValue("checking")
+        const providerId = this.ai.activeProviderId.getValue()
+        const provider = this.ai.getActiveProvider()
 
+        console.log(`🔍 [Connection] Provider: ${providerId}, has validate: ${typeof provider?.validate === "function"}`)
+
+        if (!provider) {
+            console.log("🔍 [Connection] No provider found → disconnected")
+            this.connectionStatus.setValue("disconnected")
+            return
+        }
+
+        // Check if provider has a validate method
+        if (typeof provider.validate === "function") {
+            try {
+                const result = await provider.validate()
+                console.log(`🔍 [Connection] ${providerId}: ${result.ok ? "✅ Connected" : "❌ Disconnected"} - ${result.message}`)
+                this.connectionStatus.setValue(result.ok ? "connected" : "disconnected")
+            } catch (e) {
+                console.error(`🔍 [Connection] ${providerId}: Validation failed`, e)
+                this.connectionStatus.setValue("disconnected")
+            }
+        } else {
+            // No validate method - assume connected (rare case)
+            console.log(`🔍 [Connection] ${providerId}: No validate method → connected (assumed)`)
+            this.connectionStatus.setValue("connected")
+        }
+    }
 
 
     toggle() {
@@ -741,10 +782,9 @@ ${JSON.stringify({
                         toastEl.style.opacity = "1"
 
                         // Clear debounce
-                        // @ts-ignore
-                        clearTimeout(gridEl._toastTimeout)
-                        // @ts-ignore
-                        gridEl._toastTimeout = setTimeout(() => {
+                        const grid = gridEl as any
+                        clearTimeout(grid._toastTimeout)
+                        grid._toastTimeout = setTimeout(() => {
                             toastEl.style.opacity = "0"
                         }, 2000)
 

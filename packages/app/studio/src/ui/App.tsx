@@ -8,6 +8,7 @@ import { AutomationPage } from "@/ui/pages/AutomationPage.tsx"
 import { SampleUploadPage } from "@/ui/pages/SampleUploadPage.tsx"
 import { Footer } from "@/ui/Footer"
 import { OdieSidebar } from "@/ui/odie/OdieSidebar"
+import { OdiePage } from "@/ui/pages/OdiePage"
 import { ManualPage } from "@/ui/pages/ManualPage"
 import { ColorsPage } from "@/ui/pages/ColorsPage"
 import { Header } from "@/ui/header/Header"
@@ -36,6 +37,7 @@ export const App = (service: StudioService) => {
                 )}
                 routes={[
                     { path: "/", factory: WorkspacePage },
+                    { path: "/odie/*", factory: OdiePage },
                     { path: "/manuals/*", factory: ManualPage },
                     { path: "/imprint", factory: ImprintPage },
                     { path: "/privacy", factory: PrivacyPage },

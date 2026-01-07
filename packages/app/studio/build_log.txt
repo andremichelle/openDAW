@@ -1,0 +1,188 @@
+e8de045a-3e7b-429a-a0a4-cdedd393f383
+vite v7.3.0 building client environment for production...
+Build info written to: /Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/public/build-info.json
+transforming...
+
+grid16.svg referenced in grid16.svg didn't resolve at build time, it will remain unchanged to be resolved at runtime
+✓ 2870 modules transformed.
+
+✨ [vite-plugin-compression]:algorithm=brotliCompress - compressed file successfully: 
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/OdieHistoryPanel.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br               2.78kb / brotliCompress: 1.11kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/OdieInput.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                      5.57kb / brotliCompress: 1.95kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/apex.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                           3.79kb / brotliCompress: 1.53kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/_baseUniq.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                      8.43kb / brotliCompress: 3.22kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/arc.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            3.46kb / brotliCompress: 1.32kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/abap.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                           13.76kb / brotliCompress: 4.53kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/SoundFont2.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                     35.48kb / brotliCompress: 7.36kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/assets/workers-main-hoCVjVv5.js.br                                        28.56kb / brotliCompress: 9.21kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/FFmpegWorker.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                   4.09kb / brotliCompress: 1.44kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/assets/worker-BAOIWoxA.js.br                                              2.51kb / brotliCompress: 1.05kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/bicep.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                          2.41kb / brotliCompress: 0.85kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/bat.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            1.73kb / brotliCompress: 0.78kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/cameligo.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                       2.07kb / brotliCompress: 0.87kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/auth-callback.html.br                                                     3.31kb / brotliCompress: 0.93kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/chunk-TZMSLE5B.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                 1.51kb / brotliCompress: 0.64kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/c4Diagram-YG6GDRKO.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br             68.79kb / brotliCompress: 15.54kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/chunk-B4BG7PRW.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                 44.50kb / brotliCompress: 11.84kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/clojure.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                        9.35kb / brotliCompress: 3.20kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/coffee.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         3.44kb / brotliCompress: 1.16kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/cpp.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            5.11kb / brotliCompress: 1.84kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/csp.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            1.32kb / brotliCompress: 0.46kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/chunk-DI55MBZ5.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                 35.65kb / brotliCompress: 10.18kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/css.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            4.33kb / brotliCompress: 1.23kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/cypher.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         3.24kb / brotliCompress: 1.27kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/csharp.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         4.35kb / brotliCompress: 1.54kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/dagre-6UL2VRFP.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                 11.25kb / brotliCompress: 3.66kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/defaultLocale.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                  4.52kb / brotliCompress: 1.97kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/dart.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                           4.08kb / brotliCompress: 1.47kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/diagram-QEK2KX5R.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br               6.17kb / brotliCompress: 2.24kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/diagram-S2PKOQOG.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br               4.60kb / brotliCompress: 1.69kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/cssMode.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                        32.40kb / brotliCompress: 7.81kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/ecl.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            5.15kb / brotliCompress: 1.94kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/dockerfile.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                     1.76kb / brotliCompress: 0.58kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/diagram-PSM6KHXK.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br               16.01kb / brotliCompress: 5.01kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/flow9.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                          1.70kb / brotliCompress: 0.76kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/elixir.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         9.95kb / brotliCompress: 2.23kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/freemarker2.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                    15.76kb / brotliCompress: 3.50kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/erDiagram-Q2GNP2WA.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br             25.00kb / brotliCompress: 7.47kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/flowDiagram-NV44I4VS.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br           59.42kb / brotliCompress: 15.62kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/go.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                             2.52kb / brotliCompress: 1.02kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/fsharp.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         2.85kb / brotliCompress: 1.18kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/gitGraphDiagram-NY62KEGX.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br       24.01kb / brotliCompress: 6.53kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/graphql.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                        2.14kb / brotliCompress: 0.88kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/html.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                           4.93kb / brotliCompress: 1.23kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/handlebars.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                     6.65kb / brotliCompress: 1.41kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/graph.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                          9.35kb / brotliCompress: 2.90kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/index.62f2da7b-1f3d-4820-af5d-16de04f52b232.js.br                         3.11kb / brotliCompress: 1.15kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/index.html.br                                                             6.30kb / brotliCompress: 1.00kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/hcl.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            3.44kb / brotliCompress: 1.32kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/ini.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            1.01kb / brotliCompress: 0.48kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/java.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                           3.08kb / brotliCompress: 1.23kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/index.62f2da7b-1f3d-4820-af5d-16de04f52b233.js.br                         46.68kb / brotliCompress: 6.77kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/index.62f2da7b-1f3d-4820-af5d-16de04f52b23.css.br                         2.62kb / brotliCompress: 0.78kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/htmlMode.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                       32.94kb / brotliCompress: 7.91kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/isObjectLike.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                   37.30kb / brotliCompress: 11.16kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/julia.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                          6.91kb / brotliCompress: 2.33kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/journeyDiagram-XKPGCS4Q.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br        23.35kb / brotliCompress: 7.41kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/kanban-definition-3W4ZIXB7.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br     20.03kb / brotliCompress: 6.30kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/kotlin.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         3.29kb / brotliCompress: 1.29kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/less.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                           3.74kb / brotliCompress: 1.27kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/linear.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         5.68kb / brotliCompress: 2.08kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/lexon.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                          2.31kb / brotliCompress: 0.83kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/infoDiagram-WHAUD3N6.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br           1.05kb / brotliCompress: 0.42kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/liquid.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         3.90kb / brotliCompress: 1.46kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/markdown.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                       3.63kb / brotliCompress: 1.22kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/jsonMode.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                       41.60kb / brotliCompress: 10.60kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/lua.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            2.00kb / brotliCompress: 0.83kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/mdx.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            4.78kb / brotliCompress: 1.28kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/mysql.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                          10.94kb / brotliCompress: 3.48kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/m3.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                             2.68kb / brotliCompress: 1.16kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/monaco-setup.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                   4.58kb / brotliCompress: 1.65kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/layout.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         28.50kb / brotliCompress: 9.23kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/msdax.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                          4.73kb / brotliCompress: 1.66kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/mips.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                           2.45kb / brotliCompress: 0.99kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/mindmap-definition-VGOIOE7T.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br    20.75kb / brotliCompress: 6.42kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/perl.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                           7.99kb / brotliCompress: 2.69kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/pascaligo.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                      1.89kb / brotliCompress: 0.80kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/ordinal.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                        1.26kb / brotliCompress: 0.54kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/objective-c.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                    2.28kb / brotliCompress: 0.92kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/php.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            7.77kb / brotliCompress: 1.78kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/pieDiagram-ADFJNKIX.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br            5.60kb / brotliCompress: 2.09kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/pascal.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         2.86kb / brotliCompress: 1.20kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/pla.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            1.57kb / brotliCompress: 0.58kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/pgsql.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                          13.08kb / brotliCompress: 3.80kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/powershell.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                     3.13kb / brotliCompress: 1.17kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/protobuf.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                       8.77kb / brotliCompress: 1.83kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/postiats.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                       7.61kb / brotliCompress: 2.16kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/python.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         4.13kb / brotliCompress: 1.51kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/r.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                              2.99kb / brotliCompress: 1.10kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/powerquery.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                     16.48kb / brotliCompress: 4.12kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/monaco-setup.62f2da7b-1f3d-4820-af5d-16de04f52b232.js.br                  24.43kb / brotliCompress: 5.22kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/razor.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                          8.60kb / brotliCompress: 2.03kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/qsharp.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         3.05kb / brotliCompress: 1.25kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/redshift.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                       11.46kb / brotliCompress: 3.67kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/rust.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                           3.99kb / brotliCompress: 1.64kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/redis.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                          3.41kb / brotliCompress: 1.29kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/sb.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                             1.72kb / brotliCompress: 0.75kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/ruby.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                           8.24kb / brotliCompress: 2.30kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/quadrantDiagram-AYHSOK5B.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br       33.41kb / brotliCompress: 8.35kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/restructuredtext.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br               3.75kb / brotliCompress: 1.22kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/pug.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            4.65kb / brotliCompress: 1.47kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/scheme.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         1.66kb / brotliCompress: 0.74kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/scala.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                          7.08kb / brotliCompress: 1.86kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/shell.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                          2.93kb / brotliCompress: 1.07kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/sankeyDiagram-TZEHDZUN.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br         21.90kb / brotliCompress: 7.26kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/requirementDiagram-UZGBJVZJ.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br    29.71kb / brotliCompress: 7.84kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/sparql.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         2.43kb / brotliCompress: 1.00kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/sophia.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         2.63kb / brotliCompress: 1.08kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/solidity.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                       18.10kb / brotliCompress: 2.50kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/scss.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                           6.19kb / brotliCompress: 1.54kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/sql.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            9.99kb / brotliCompress: 3.28kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/systemverilog.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                  7.37kb / brotliCompress: 2.42kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/st.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                             7.16kb / brotliCompress: 1.94kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/twig.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                           5.76kb / brotliCompress: 1.34kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/tcl.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            3.42kb / brotliCompress: 1.21kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/stateDiagram-FKZM4ZOC.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br          10.72kb / brotliCompress: 3.30kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/typescript.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                     5.32kb / brotliCompress: 1.92kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/typespec.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                       2.67kb / brotliCompress: 0.98kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/tsMode.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                         23.35kb / brotliCompress: 5.85kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/xml.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                            2.39kb / brotliCompress: 0.86kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/swift.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                          4.73kb / brotliCompress: 1.74kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/vb.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                             5.58kb / brotliCompress: 1.82kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/wgsl.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                           7.09kb / brotliCompress: 2.34kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/yaml.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                           3.95kb / brotliCompress: 1.36kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/xychartDiagram-PRI3JC2R.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br        39.62kb / brotliCompress: 9.81kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/timeline-definition-IT6M3QCI.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br   23.34kb / brotliCompress: 7.36kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/blockDiagram-VD42YOAC.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br          70.57kb / brotliCompress: 17.67kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/cose-bilkent-S5V4N54A.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br          80.09kb / brotliCompress: 19.17kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/ganttDiagram-JELNMOA3.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br          66.77kb / brotliCompress: 19.88kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/editor.62f2da7b-1f3d-4820-af5d-16de04f52b23.css.br                        138.05kb / brotliCompress: 18.77kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/jszip.min.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                      94.70kb / brotliCompress: 25.97kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/sequenceDiagram-WL72ISMW.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br       95.84kb / brotliCompress: 21.94kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/architectureDiagram-VXUJARFQ.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br   145.59kb / brotliCompress: 35.19kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/graph-runtime.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                  140.88kb / brotliCompress: 40.05kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/assets/editor.worker-CHMq8uMJ.js.br                                       244.90kb / brotliCompress: 60.60kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/katex.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                          259.27kb / brotliCompress: 62.26kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/treemap-KMMF4GRG.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br               365.95kb / brotliCompress: 76.39kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/OdieMessageList.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                462.24kb / brotliCompress: 109.08kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/cytoscape.esm.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                  431.37kb / brotliCompress: 116.53kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/assets/ScriptWorker-DjXHD3MO.js.br                                        618.08kb / brotliCompress: 107.51kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/processors.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                     894.83kb / brotliCompress: 150.17kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/index.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                          2105.63kb / brotliCompress: 452.82kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/editor.main.62f2da7b-1f3d-4820-af5d-16de04f52b23.js.br                    3586.79kb / brotliCompress: 716.77kb
+dist//Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/assets/ts.worker-C0NX-1he.js.br                                           5891.95kb / brotliCompress: 973.18kb
+
+
+✗ Build failed in 15.02s
+error during build:
+[vite:css] [sass] Undefined mixin.
+   ╷
+14 │         @include colors.text-bright
+   │         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   ╵
+  src/ui/odie/setup/OdieSetup.sass 14:9  root stylesheet
+file: /Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/packages/app/studio/src/ui/odie/setup/OdieSetup.sass?inline
+
+[sass] Undefined mixin.
+   ╷
+14 │         @include colors.text-bright
+   │         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   ╵
+  src/ui/odie/setup/OdieSetup.sass 14:9  root stylesheet
+
+Error: Undefined mixin.
+   ╷
+14 │         @include colors.text-bright
+   │         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   ╵
+  src/ui/odie/setup/OdieSetup.sass 14:9  root stylesheet
+    at Object.wrapException (/Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/node_modules/sass/sass.dart.js:2337:47)
+    at /Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/node_modules/sass/sass.dart.js:89531:25
+    at _wrapJsFunctionForAsync_closure.$protected (/Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/node_modules/sass/sass.dart.js:5005:15)
+    at _wrapJsFunctionForAsync_closure.call$2 (/Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/node_modules/sass/sass.dart.js:38505:12)
+    at Object._asyncStartSync (/Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/node_modules/sass/sass.dart.js:4969:20)
+    at _EvaluateVisitor2._applyMixin$body$_EvaluateVisitor0 (/Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/node_modules/sass/sass.dart.js:89589:16)
+    at _EvaluateVisitor2._async_evaluate0$_applyMixin$5 (/Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/node_modules/sass/sass.dart.js:89517:19)
+    at /Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/node_modules/sass/sass.dart.js:89609:48
+    at _wrapJsFunctionForAsync_closure.$protected (/Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/node_modules/sass/sass.dart.js:5005:15)
+    at _wrapJsFunctionForAsync_closure.call$2 (/Users/daniellebarkman/VERY_QUANTUM/VQ_PROJECTS/OpenDAW-AI-project/openDAW-next/node_modules/sass/sass.dart.js:38505:12)

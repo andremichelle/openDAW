@@ -30,12 +30,18 @@ export class AIService {
         this.providers.push(new Gemini3Provider())
 
         // 3. Ollama (Local)
-        this.providers.push(new OpenAICompatibleProvider(
+        const ollama = new OpenAICompatibleProvider(
             "ollama",
             "Ollama (Local)",
             "http://localhost:11434",
             false
-        ))
+        )
+        // [ANTIGRAVITY] Auto-Heal Persistence Wiring
+        ollama.onConfigChange = (newConfig) => {
+            console.log(`[AIService] Persisting Auto-Healed Config for ${ollama.id}`)
+            this.setConfig(ollama.id, newConfig)
+        }
+        this.providers.push(ollama)
 
         this.loadSettings()
     }
@@ -167,7 +173,8 @@ ${ODIE_MOLECULAR_KNOWLEDGE}
             if (active && this.providers.find(p => p.id === active)) {
                 this.activeProviderId.setValue(active)
             } else {
-                this.activeProviderId.setValue("ollama")
+                // [ANTIGRAVITY] Default to Gemini for new users (Local is power-user option)
+                this.activeProviderId.setValue("gemini")
             }
 
             // AUTO-MIGRATION: Fix Mixed Content and Path issues for existing users
@@ -175,6 +182,14 @@ ${ODIE_MOLECULAR_KNOWLEDGE}
             if (ollamaConfig) {
                 // [ANTIGRAVITY] Fix: Reverted strict localhost enforcement.
                 // We trust the user's config. The provider will now attempt auto-detection.
+
+                if (!ollamaConfig.baseUrl || ollamaConfig.baseUrl.trim() === "") {
+                    // Empty config? Default to standard Ollama.
+                    // [ANTIGRAVITY] Use Proxy Path to avoid CORS in dev
+                    ollamaConfig.baseUrl = "/api/ollama/api/chat"
+                    this.configMap.set("ollama", ollamaConfig)
+                    this.saveSettings()
+                }
 
                 if (ollamaConfig.baseUrl && ollamaConfig.baseUrl.includes("openrouter.ai")) {
                     console.warn("Correcting corrupted Ollama config...")
@@ -222,19 +237,10 @@ ${ODIE_MOLECULAR_KNOWLEDGE}
                 }
             })
 
-            const currentActive = this.getActiveProvider()
-            if (currentActive) {
-                const cfg = this.configMap.get(currentActive.id)
-                // Infinity Library Support: Check library, then legacy key
-                const hasKey = cfg?.apiKey || (cfg?.keyLibrary && cfg.keyLibrary.length > 0)
-
-                if (currentActive.requiresKey && !hasKey) {
-                    console.warn(`Active provider '${currentActive.id}' missing key. Falling back to Ollama.`)
-                    this.setActiveProvider("ollama")
-                }
-            } else {
-                this.setActiveProvider("ollama")
-            }
+            // [ANTIGRAVITY] REMOVED: Auto-fallback to Ollama if no key
+            // This was overriding user's saved provider choice!
+            // The connection indicator will show "No API" if key is missing - that's the correct UX.
+            // Users can then add a key or switch providers themselves.
 
         } catch (e) {
             console.error("Failed to load AI settings", e)

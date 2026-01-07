@@ -1,4 +1,9 @@
 import { createElement } from "@opendaw/lib-jsx"
+import { Html } from "@opendaw/lib-dom"
+import css from "./OdieDialog.sass?inline"
+
+// [ANTIGRAVITY] Adopt Standard Studio Styles
+const className = Html.adoptStyleSheet(css, "odie-dialog")
 
 export interface OdieModalProps {
     title: string
@@ -8,138 +13,79 @@ export interface OdieModalProps {
     width?: string
     height?: string
     position?: "center" | "right"
-    headerContent?: any // New prop for custom header controls
-}
-
-// --- MORRIS DESIGN SYSTEM ---
-const DS = {
-    overlay: {
-        position: "fixed", top: "0", left: "0", width: "100vw", height: "100vh",
-        background: "rgba(0, 0, 0, 0.6)",
-        backdropFilter: "blur(8px)",
-        zIndex: "9999",
-        display: "flex", justifyContent: "center", alignItems: "center",
-        opacity: "0", transition: "opacity 0.3s ease-out" // Animation Hook
-    },
-    frame: {
-        position: "relative",
-        background: "rgba(20, 20, 25, 0.95)",
-        border: "1px solid rgba(255, 255, 255, 0.08)",
-        borderRadius: "24px",
-        boxShadow: "0 40px 80px -20px rgba(0, 0, 0, 0.8)",
-        display: "flex", flexDirection: "column",
-        overflow: "hidden",
-        transform: "scale(0.95) translateY(20px)", transition: "all 0.3s cubic-bezier(0.16, 1, 0.3, 1)" // Apple-like spring
-    },
-    header: {
-        height: "72px",
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "0 32px",
-        borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
-        background: "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%)"
-    },
-    titleGroup: { display: "flex", alignItems: "center", gap: "16px" },
-    iconBox: {
-        width: "32px", height: "32px", borderRadius: "10px",
-        background: "rgba(255, 255, 255, 0.1)",
-        display: "flex", justifyContent: "center", alignItems: "center", fontSize: "18px"
-    },
-    titleText: {
-        fontSize: "20px", fontWeight: "700", letterSpacing: "0.5px", color: "white",
-        fontFamily: "'Inter', sans-serif"
-    },
-    closeBtn: {
-        background: "transparent", border: "none", color: "rgba(255,255,255,0.4)",
-        fontSize: "24px", cursor: "pointer", transition: "color 0.2s"
-    },
-    content: {
-        flex: "1",
-        overflowY: "auto",
-        padding: "0" // Let children decide padding
-    }
+    headerContent?: any
 }
 
 export const OdieModalFrame = (props: OdieModalProps) => {
+    const isDocked = props.position === "right"
 
-    const content = <div style={DS.content}>
+    const content = <div className="content">
         {props.children}
     </div> as HTMLElement
 
-    const header = <div style={DS.header}>
-        <div style={DS.titleGroup}>
-            {props.icon && <div className="odie-modal-icon" style={DS.iconBox}>{props.icon}</div>}
-            <div className="odie-modal-title" style={DS.titleText}>{props.title}</div>
+    const header = <div className="header">
+        <div className="title-group">
+            {props.icon && <div className="icon-box">{props.icon}</div>}
+            <div className="title-text">{props.title}</div>
         </div>
 
-        {/* Custom Header Content (Nav/Search) */}
         {props.headerContent && <div style={{ flex: "1", display: "flex", justifyContent: "center" }}>
             {props.headerContent}
         </div>}
 
-        <button style={DS.closeBtn}
-            onmouseover={(e: any) => e.target.style.color = "white"}
-            onmouseout={(e: any) => e.target.style.color = "rgba(255,255,255,0.4)"}
+        <button className="close-btn"
             onclick={() => close()}
         >✕</button>
     </div>
 
-    // Dynamic Styles based on docking
-    const isDocked = props.position === "right";
+    // Dynamic classes/styles for the frame
+    const frameClass = Html.buildClassList(className, "component", isDocked && "docked")
+    const frameStyle: any = {}
 
-    // OVERLAY: If docked, we don't want a backdrop blocking the rest of the screen? 
-    // Actually for "Sidebar Mode" we usually want to interact with the DAW.
-    // So the overlay should be *pointer-events: none* for the background, but active for the modal?
-    // Or we just position the modal to the right.
+    // Legacy prop support (though standard CSS handles most now)
+    if (props.width) frameStyle.width = props.width
+    if (props.height && !isDocked) frameStyle.height = props.height
 
-    const overlayStyle = {
-        ...DS.overlay,
-        justifyContent: isDocked ? "flex-end" : "center", // Push to right
-        background: isDocked ? "transparent" : DS.overlay.background, // Invisible overlay if docked
-        pointerEvents: isDocked ? "none" : "auto" // Let clicks pass through to DAW on the left
-    }
-
-    const frameStyle = {
-        ...DS.frame,
-        width: props.width || "900px",
-        height: isDocked ? "100vh" : (props.height || "80vh"), // Use prop or default
-        borderRadius: isDocked ? "0" : "24px",
-        borderRight: "none",
-        borderTop: "none",
-        borderBottom: "none",
-        transform: isDocked ? "translateX(100%)" : "scale(0.95) translateY(20px)",
-        pointerEvents: "auto"
-    }
-
-    const frame = <div className="odie-modal-frame" style={frameStyle} onclick={(e: Event) => e.stopPropagation()}>
+    const frame = <div className={frameClass} style={frameStyle} onclick={(e: Event) => e.stopPropagation()}>
         {header}
         {content}
     </div> as HTMLElement
 
-    // Add class for title updates
-    if (props.title) {
-        // We need to inject the class into the header construction
-        // Re-defining header to be safer
-    }
-
-    const overlay = <div style={overlayStyle} onclick={() => !isDocked && close()}>
+    const overlayClass = Html.buildClassList(className, "overlay", isDocked && "docked")
+    const overlay = <div className={overlayClass} onclick={() => !isDocked && close()}>
         {frame}
     </div> as HTMLElement
 
     const close = () => {
         // Animate Out
         overlay.style.opacity = "0"
-        frame.style.transform = isDocked ? "translateX(100%)" : "scale(0.95) translateY(20px)"
+        // Use CSS classes or simple transforms for exit? 
+        // We replicate existing behavior for safety
+        frame.style.transform = isDocked ? "translateX(100%)" : "translateY(10px) scale(0.98)"
+
         setTimeout(() => {
             if (overlay.parentNode) overlay.parentNode.removeChild(overlay)
             props.onClose()
-        }, 300)
+        }, 200)
     }
 
     // Animate In
     requestAnimationFrame(() => {
         overlay.style.opacity = "1"
-        frame.style.transform = isDocked ? "translateX(0)" : "scale(1) translateY(0)"
+        // The CSS animation 'slide-up' might conflict if we manually set transform here.
+        // But OdieDialog.sass doesn't define the animation on .component automatically yet, 
+        // or we rely on the transition defined in .overlay?
+        // Let's stick to the simple manual transition for the Entrance to match Exit logic.
+        // Actually, CSS transitions are cleaner.
+        // Ideally we'd toggle a class "visible". 
+        // But for now, let's just use the JS hook as before to ensure it works.
+        // The SASS didn't define transition on .component, so let's add inline transition just for entrance
+        frame.style.transition = "transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
+        frame.style.transform = isDocked ? "translateX(0)" : "translateY(0) scale(1)"
     })
+
+    // Set initial state for animation
+    frame.style.transform = isDocked ? "translateX(100%)" : "translateY(10px) scale(0.98)"
 
     return overlay
 }

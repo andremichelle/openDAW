@@ -1,0 +1,69 @@
+@use "@/colors"
+@use "@/mixins"
+
+component
+  flex: 1
+  padding: 1.5em 0 1.5em 1.5em
+  display: grid
+  grid-template-columns: auto 1fr
+  column-gap: 1em
+  overflow: hidden
+  line-height: 1em
+  color: var(--color-dark)
+  @include colors.panel-background
+
+  > aside
+    display: flex
+    flex-direction: column
+    row-gap: 0.75em
+    overflow: hidden auto
+    padding-right: 2em
+
+    > nav
+      display: flex
+      flex-direction: column
+      row-gap: 0.25em
+      font-size: 0.75rem
+      left: -1em
+      position: relative
+      padding-left: 1em
+
+      a
+        display: block
+        color: inherit
+        padding: 4px 8px
+        border-radius: 4px
+        text-decoration: none
+        
+        &:hover
+          color: var(--color-bright)
+          background-color: rgba(255, 255, 255, 0.05)
+
+        &.active
+          cursor: default
+          color: var(--color-orange)
+          background-color: rgba(255, 255, 255, 0.05)
+
+  hr
+    width: 100%
+    height: 1px
+    border: none
+    background-color: var(--color-black)
+    margin: 1em 0
+
+  > div.content
+    padding-left: 1.5em
+    display: flex
+    flex-direction: column
+    row-gap: 0.75em
+    overflow: hidden auto
+    // Ensure content takes full available space
+    flex: 1
+    width: 100%
+
+    @include mixins.markdown
+
+    // Add specific overrides for form elements if needed, but stick to mixins
+    input, select, textarea
+        @include mixins.form-element
+

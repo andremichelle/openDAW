@@ -7,6 +7,7 @@ import {
     int,
     Notifier,
     Nullable,
+    ObservableValue,
     Observer,
     Option,
     Provider,
@@ -78,6 +79,20 @@ range.maxUnits = PPQN.fromSignature(128, 1)
 range.showUnitInterval(0, PPQN.fromSignature(9, 1))
 
 const snapping = new Snapping(range)
+
+export interface Transport {
+    play: () => void
+    pause: () => void
+    stop: () => void
+    record: () => void
+    togglePlay: () => void
+    toggleRecord: () => void
+    isPlaying: ObservableValue<boolean>
+    isRecording: ObservableValue<boolean>
+    position: ObservableValue<number>
+    setPosition: (pos: number) => void
+    loop: ObservableValue<boolean>
+}
 
 export class StudioService implements ProjectEnv {
     readonly layout = {
@@ -163,7 +178,7 @@ export class StudioService implements ProjectEnv {
     get projectProfileService(): ProjectProfileService { return this.#projectProfileService }
 
     readonly odieEvents = new Notifier<any>()
-    get transport() {
+    get transport(): Transport {
         const self = this
         return {
             play: () => self.engine.play(),
@@ -178,8 +193,11 @@ export class StudioService implements ProjectEnv {
             setPosition: (pos: number) => self.engine.setPosition(pos),
             get loop() {
                 return self.optProject.match({
-                    none: () => new DefaultObservableValue(false),
-                    some: p => p.timelineBox.loopArea.enabled as any
+                    some: (p) => {
+                        // Patching missing loop property issue
+                        return (p.timelineBox as any).loop || new DefaultObservableValue(false)
+                    },
+                    none: () => new DefaultObservableValue(false)
                 })
             }
         }

@@ -17,6 +17,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     private config: ProviderConfig = {}
 
+    // [ANTIGRAVITY] Callback for persistence
+    public onConfigChange?: (newConfig: ProviderConfig) => void
+
     // Cache for capabilities to avoid spamming /api/show
     private capabilityCache = new Map<string, ModelCapabilities>()
 
@@ -122,7 +125,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
                         if (models.length > 0) {
                             model = models[0]
                             this.debugLog += `[Auto-Detect] Success. Using: ${model}\n`
+                            this.debugLog += `[Auto-Detect] Success. Using: ${model}\n`
                             this.config.modelId = model
+                            // [ANTIGRAVITY] Persist the auto-detected model
+                            if (this.onConfigChange) this.onConfigChange({ ...this.config })
                         } else {
                             this.debugLog += `[Auto-Detect] Failed. No models found.\n`
                         }
@@ -489,7 +495,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
                     log += `\nResponse Not OK: ${res.status}`
                 }
             } catch (e: any) {
-                log += `\nError: ${e.message}`
+                const isNetwork = e.message.includes("fetch") || e.name === "TypeError"
+                const hint = isNetwork ? " (Check CORS/OLLAMA_ORIGINS)" : ""
+                log += `\nError: ${e.message}${hint}`
             }
 
             // Strategy 3: Auto-Detect / Fallback (The "Magic" Fix)
@@ -525,6 +533,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
                                     // [ANTIGRAVITY] AUTO-HEAL: Update the instance URL so chat works
                                     // Note: This overrides the user's bad config for this session.
                                     this.config.baseUrl = fallbackBase
+                                    // [ANTIGRAVITY] AUTO-HEAL: Persist the working URL
+                                    if (this.onConfigChange) this.onConfigChange({ ...this.config })
+                                    break // Stop trying fallbacks
                                     break // Stop trying fallbacks
                                 }
                             }

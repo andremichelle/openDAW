@@ -1,0 +1,115 @@
+@use "@/mixins"
+
+.overlay
+  position: fixed
+  top: 0
+  left: 0
+  width: 100vw
+  height: 100vh
+  background: rgba(0, 0, 0, 0.4)
+  // Standard studio blur
+  backdrop-filter: blur(2px)
+  z-index: 9999
+  display: flex
+  justify-content: center
+  align-items: center
+  opacity: 0
+  transition: opacity 0.2s ease-out
+
+  &.docked
+    justify-content: flex-end
+    background: transparent
+    backdrop-filter: none
+    pointer-events: none // Let clicks pass through
+    
+    .component
+      pointer-events: auto // Re-enable for the panel itself
+
+.component
+  @include mixins.floating(false)
+  
+  // Override floating mixin defaults for Studio Standard
+  background: #1e1e1e // Fallback
+  background: var(--color-panel-bg)
+  border: 1px solid var(--color-edge)
+  box-shadow: var(--shadow-floating)
+  border-radius: 6px // Standard Studio Radius
+  
+  display: flex
+  flex-direction: column
+  overflow: hidden
+  
+  // Default sizes (can be overridden by style prop)
+  min-width: 400px
+  max-width: 90vw
+  max-height: 90vh
+
+  &.docked
+    border-radius: 0
+    border-right: none
+    border-top: none
+    border-bottom: none
+    height: 100vh !important
+    transform: none !important
+    box-shadow: -5px 0 20px rgba(0,0,0,0.3)
+
+  .header
+    height: 48px
+    display: flex
+    align-items: center
+    justify-content: space-between
+    padding: 0 16px
+    background: var(--color-panel-header)
+    border-bottom: 1px solid var(--color-edge)
+    flex-shrink: 0
+
+    .title-group
+      display: flex
+      align-items: center
+      gap: 10px
+      
+      .icon-box
+        display: flex
+        align-items: center
+        justify-content: center
+        width: 24px
+        height: 24px
+        color: var(--color-text-dim)
+      
+      .title-text
+        font-family: var(--font-ui)
+        font-size: 13px
+        font-weight: 600
+        color: var(--color-text)
+        letter-spacing: 0.02em
+
+    .close-btn
+      background: none
+      border: none
+      color: var(--color-icon)
+      cursor: pointer
+      padding: 4px
+      border-radius: 4px
+      display: flex
+      align-items: center
+      justify-content: center
+      transition: all 0.1s
+      
+      &:hover
+        background: var(--color-hover)
+        color: var(--color-text-highlight)
+
+  .content
+    flex: 1
+    overflow-y: auto
+    position: relative
+    display: flex
+    flex-direction: column
+    
+    // Ensure scrollbars are standard
+    &::-webkit-scrollbar
+      width: 8px
+      background: transparent
+    &::-webkit-scrollbar-thumb
+      background: var(--color-scroll-thumb)
+      border-radius: 4px

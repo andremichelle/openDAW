@@ -1,4 +1,4 @@
-
+@use "sass:color"
 // -- Variables --
 $color-slate-800: #1e293b
 $color-slate-400: #94a3b8
@@ -91,6 +91,15 @@ component
         
         &.booting
             animation: boot-up 0.6s ease-out forwards
+        
+        &.disconnected
+            background: #ef4444
+            box-shadow: 0 0 8px #ef4444
+        
+        &.checking
+            background: #f59e0b
+            box-shadow: 0 0 8px #f59e0b
+            animation: pulse 1s infinite
 
     .provider-label
         font-size: 11px
@@ -153,7 +162,7 @@ component
 
     &:hover
         transform: scale(1.1)
-        background: lighten($color-blue-500, 5%)
+        background: color.adjust($color-blue-500, $lightness: 5%)
 
 @keyframes pulse
     0% 

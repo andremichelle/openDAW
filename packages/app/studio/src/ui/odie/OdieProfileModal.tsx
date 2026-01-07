@@ -1,6 +1,10 @@
 import { createElement } from "@opendaw/lib-jsx"
 import { OdieModalFrame } from "./components/OdieModalFrame"
 import { userService } from "./services/UserService"
+import { DefaultObservableValue, ObservableValue, Terminator } from "@opendaw/lib-std"
+import { Button } from "@/ui/components/Button"
+import { TextInput } from "@/ui/components/TextInput"
+import { Colors } from "@opendaw/studio-enums"
 
 const S = {
     layout: {
@@ -14,10 +18,10 @@ const S = {
     },
     avatar: {
         width: "120px", height: "120px", borderRadius: "50%",
-        background: "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
+        background: "rgba(255, 255, 255, 0.05)",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
         display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: "48px", marginBottom: "24px",
-        boxShadow: "0 0 40px rgba(168, 85, 247, 0.4)"
+        fontSize: "48px", marginBottom: "24px"
     },
     main: { padding: "40px", overflowY: "auto" },
     section: { marginBottom: "32px" },
@@ -46,6 +50,20 @@ const S = {
 
 export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
     // -- STATE --
+    const lifecycle = new Terminator()
+    const nameModel = new DefaultObservableValue<string>(userService.dna.getValue().name)
+    const locationModel = new DefaultObservableValue<string>(userService.dna.getValue().identity.location)
+    const genreModel = new DefaultObservableValue<string>(userService.dna.getValue().sonicFingerprint.primaryGenre)
+    const vibesModel = new DefaultObservableValue<string>(userService.dna.getValue().sonicFingerprint.vibeKeywords.join(", "))
+    const influencesModel = new DefaultObservableValue<string>(userService.dna.getValue().influences.join(", "))
+
+    // Sync to UserService
+    nameModel.subscribe((v: ObservableValue<string>) => userService.update({ name: v.getValue() }))
+    locationModel.subscribe((v: ObservableValue<string>) => userService.update({ identity: { ...userService.dna.getValue().identity, location: v.getValue() } }))
+    genreModel.subscribe((v: ObservableValue<string>) => userService.update({ sonicFingerprint: { ...userService.dna.getValue().sonicFingerprint, primaryGenre: v.getValue() } }))
+    vibesModel.subscribe((v: ObservableValue<string>) => userService.update({ sonicFingerprint: { ...userService.dna.getValue().sonicFingerprint, vibeKeywords: v.getValue().split(",").map(s => s.trim()) } }))
+    influencesModel.subscribe((v: ObservableValue<string>) => userService.update({ influences: v.getValue().split(",").map(s => s.trim()) }))
+
     // We need a simple re-render mechanic for tabs
     const container = <div style={{ height: "100%", width: "100%" }}></div> as HTMLElement
     let activeTab = "identity" // identity | sound | studio | goals
@@ -82,9 +100,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
             tabContent = <div>
                 <div style={S.section}>
                     <label style={S.label}>Artist Name / Alias</label>
-                    <input type="text" value={dna.name} style={S.input}
-                        onchange={(e: any) => { userService.update({ name: e.target.value }); render() }}
-                    />
+                    <TextInput lifecycle={lifecycle} model={nameModel} />
                 </div>
                 <div style={S.section}>
                     <label style={S.label}>Primary Role</label>
@@ -96,9 +112,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
                 </div>
                 <div style={S.section}>
                     <label style={S.label}>Location (City/Planet)</label>
-                    <input type="text" value={dna.identity.location} style={S.input}
-                        onchange={(e: any) => userService.update({ identity: { ...dna.identity, location: e.target.value } })}
-                    />
+                    <TextInput lifecycle={lifecycle} model={locationModel} />
                 </div>
                 <div style={S.section}>
                     <label style={S.label}>Experience Level</label>
@@ -117,24 +131,15 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
             tabContent = <div>
                 <div style={S.section}>
                     <label style={S.label}>Primary Genre</label>
-                    <input type="text" value={dna.sonicFingerprint.primaryGenre} style={S.input}
-                        placeholder="e.g. Melodic Techno"
-                        onchange={(e: any) => userService.update({ sonicFingerprint: { ...dna.sonicFingerprint, primaryGenre: e.target.value } })}
-                    />
+                    <TextInput lifecycle={lifecycle} model={genreModel} />
                 </div>
                 <div style={S.section}>
                     <label style={S.label}>Vibe Keywords (Comma separated)</label>
-                    <input type="text" value={dna.sonicFingerprint.vibeKeywords.join(", ")} style={S.input}
-                        placeholder="e.g. Ethereal, Dark, Gritty"
-                        onchange={(e: any) => userService.update({ sonicFingerprint: { ...dna.sonicFingerprint, vibeKeywords: e.target.value.split(",").map((s: string) => s.trim()) } })}
-                    />
+                    <TextInput lifecycle={lifecycle} model={vibesModel} />
                 </div>
                 <div style={S.section}>
                     <label style={S.label}>Key Influences</label>
-                    <textarea style={{ ...S.input, height: "80px", resize: "none" }}
-                        placeholder="e.g. Hans Zimmer, Skrillex, Daft Punk..."
-                        onchange={(e: any) => userService.update({ influences: e.target.value.split(",").map((s: string) => s.trim()) })}
-                    >{dna.influences.join(", ")}</textarea>
+                    <TextInput lifecycle={lifecycle} model={influencesModel} />
                 </div>
             </div>
         }
@@ -189,13 +194,13 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
                 </div>
 
                 <div style={{ marginTop: "auto", width: "100%" }}>
-                    <button style={{
-                        width: "100%", padding: "12px", background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
-                        border: "none", borderRadius: "8px", color: "white", fontWeight: "600", cursor: "pointer",
-                        display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
-                    }} onclick={() => alert("Odie Interview Mode coming soon! Chat with Odie to auto-fill this.")}>
+                    <Button
+                        lifecycle={lifecycle}
+                        appearance={{ framed: true, color: Colors.blue }}
+                        style={{ width: "100%", padding: "12px", height: "40px" }}
+                        onClick={() => alert("Odie Interview Mode coming soon! Chat with Odie to auto-fill this.")}>
                         <span>🎤</span> Interview Me
-                    </button>
+                    </Button>
                 </div>
             </div>
 

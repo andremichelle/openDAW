@@ -135,6 +135,39 @@ export class Gemini3Provider implements LLMProvider {
         return imagePatterns.some(pattern => pattern.test(text))
     }
 
+    // [ANTIGRAVITY] Validate API Connection (matching GeminiProvider behavior)
+    async validate(): Promise<{ ok: boolean, message: string, status?: 'valid' | 'exhausted' | 'invalid' }> {
+        if (this.keyRing.length === 0) return { ok: false, message: "No API Keys provided", status: 'invalid' }
+
+        try {
+            // Validate the CURRENT key using the Reasoning Model
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${Gemini3Provider.REASONING_MODEL}?key=${this.currentKey}`
+            const response = await fetch(url)
+
+            if (response.ok) {
+                return { ok: true, message: `✓ Valid (Library: ${this.keyRing.length} Key${this.keyRing.length > 1 ? 's' : ''})`, status: 'valid' }
+            }
+
+            // Parse error for smart classification
+            const err = await response.json()
+            const rawMsg = err.error?.message || response.statusText
+
+            // Quota Exhausted
+            if (response.status === 429 || rawMsg.includes('Quota') || rawMsg.includes('RESOURCE_EXHAUSTED')) {
+                return { ok: false, message: "⏳ Daily quota exhausted. Resets at midnight PT.", status: 'exhausted' }
+            }
+
+            // Invalid API Key
+            if (rawMsg.includes('API key not valid') || rawMsg.includes('API_KEY_INVALID')) {
+                return { ok: false, message: "🔑 Invalid API key. Please check and try again.", status: 'invalid' }
+            }
+
+            return { ok: false, message: rawMsg, status: 'invalid' }
+        } catch (e) {
+            return { ok: false, message: (e instanceof Error) ? e.message : String(e), status: 'invalid' }
+        }
+    }
+
     streamChat(
         messages: Message[],
         context?: unknown,
