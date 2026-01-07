@@ -50,7 +50,7 @@ export class AudioFileBoxAdapter implements BoxAdapter {
             return promise
         })
 
-        this.#terminator.own(
+        this.#terminator.ownAll(
             box.transientMarkers.pointerHub.catchupAndSubscribe({
                 onAdded: (pointer: PointerField) => {
                     const marker = this.#context.boxAdapters.adapterFor(pointer.box, TransientMarkerBoxAdapter)

@@ -21,8 +21,9 @@ import { ErrorHandler } from "@/errors/ErrorHandler.ts"
 import {
     AudioWorklets,
     CloudAuthManager,
-    DefaultSampleLoaderManager,
+    GlobalSampleLoaderManager,
     DefaultSoundfontLoaderManager,
+    OfflineEngineRenderer,
     OpenSampleAPI,
     OpenSoundfontAPI,
     Workers
@@ -34,7 +35,9 @@ const loadBuildInfo = async () => fetch(`/build-info.json?v=${Date.now()}`)
     .then(x => x.json())
     .then(x => BuildInfo.parse(x))
 
-export const boot = async ({ workersUrl, workletsUrl }: { workersUrl: string, workletsUrl: string }) => {
+export const boot = async ({ workersUrl, workletsUrl, offlineEngineUrl }: {
+    workersUrl: string, workletsUrl: string, offlineEngineUrl: string
+}) => {
     console.debug("booting...")
     console.debug(location.origin)
     console.debug("boot: step 1 - load build info")
@@ -50,7 +53,7 @@ export const boot = async ({ workersUrl, workletsUrl }: { workersUrl: string, wo
     await Workers.install(workersUrl)
     console.debug("boot: step 4 - install audio worklets")
     AudioWorklets.install(workletsUrl)
-    console.debug("boot: step 5 - test features")
+    OfflineEngineRenderer.install(offlineEngineUrl)
     const testFeaturesResult = await Promises.tryCatch(testFeatures())
     if (testFeaturesResult.status === "rejected") {
         document.querySelector("#preloader")?.remove()
@@ -76,10 +79,9 @@ export const boot = async ({ workersUrl, workletsUrl }: { workersUrl: string, wo
     }
     console.debug("boot: step 8 - audio devices")
     const audioDevices = await AudioOutputDevice.create(context)
-    console.debug("boot: step 9 - loading managers")
-    const sampleManager = new DefaultSampleLoaderManager({
+    const sampleManager = new GlobalSampleLoaderManager({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[AudioData, SampleMetaData]> =>
-            OpenSampleAPI.get().load(context, uuid, progress)
+            OpenSampleAPI.get().load(uuid, progress)
     })
     const soundfontManager = new DefaultSoundfontLoaderManager({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[ArrayBuffer, SoundfontMetaData]> =>

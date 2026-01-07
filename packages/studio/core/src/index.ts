@@ -12,6 +12,7 @@ export * from "./ysync"
 
 export * from "./AudioDevices"
 export * from "./AudioOfflineRenderer"
+export * from "./OfflineEngineRenderer"
 export * from "./AudioUtils"
 export * from "./EffectBox"
 export * from "./EffectFactory"

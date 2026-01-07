@@ -1,17 +1,17 @@
-import {AudioOfflineRenderer, AudioUtils, ProjectBundle, ProjectProfile, WavFile} from "@opendaw/studio-core"
-import {isDefined, Option, panic, Procedure, Progress} from "@opendaw/lib-std"
+import {OfflineEngineRenderer, ProjectBundle, ProjectProfile, WavFile} from "@opendaw/studio-core"
+import {isDefined, Option, panic, Procedure, Progress, TimeSpan} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 
 export namespace PublishMusic {
     export const publishMusic = async (profile: ProjectProfile, progress: Progress.Handler, log: Procedure<string>): Promise<string> => {
-        const [bundleProgress, mixdownProgress, ffmpegProgress, convertProgress, uploadProgress] = Progress.split(progress, 5)
+        const [bundleProgress, ffmpegProgress, convertProgress, uploadProgress] = Progress.split(progress, 5)
         log("Preparing project for upload...")
         const bundleResult = await Promises.tryCatch(ProjectBundle.encode(profile.copyForUpload(), bundleProgress))
         if (bundleResult.status === "rejected") {
             return panic(bundleResult.error)
         }
-        log("Mixdown audio...")
-        const mixdownResult = await Promises.tryCatch(AudioOfflineRenderer.start(profile.project, Option.None, mixdownProgress))
+        const renderProgress = (seconds: number) => `Mixdown audio...(${log(TimeSpan.toHHMMSS(seconds))})`
+        const mixdownResult = await Promises.tryCatch(OfflineEngineRenderer.start(profile.project, Option.None, renderProgress))
         if (mixdownResult.status === "rejected") {
             return panic(mixdownResult.error)
         }
@@ -23,9 +23,8 @@ export namespace PublishMusic {
             return panic(ffmpegResult.error)
         }
         log("Converting to MP3...")
-        const silentSample = AudioUtils.findLastNonSilentSample(mixdownResult.value)
         const mp3File = await ffmpegResult.value.mp3Converter()
-            .convert(new Blob([WavFile.encodeFloats(mixdownResult.value, silentSample)]), convertProgress)
+            .convert(new Blob([WavFile.encodeFloats(mixdownResult.value)]), convertProgress)
         const formData = new FormData()
         formData.append("mixdown", new Blob([mp3File], {type: "audio/mpeg"}), "mixdown.mp3")
         formData.append("bundle", new Blob([bundleResult.value], {type: "application/zip"}), "project.odb")

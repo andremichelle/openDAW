@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/lib-box",
-    "version": "0.0.63",
+    "version": "0.0.64",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
@@ -23,8 +23,8 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@opendaw/lib-runtime": "^0.0.62",
-        "@opendaw/lib-std": "^0.0.62"
+        "@opendaw/lib-runtime": "^0.0.63",
+        "@opendaw/lib-std": "^0.0.63"
     },
     "devDependencies": {
         "@opendaw/eslint-config": "^0.0.27",

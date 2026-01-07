@@ -63,6 +63,11 @@ export const populateStudioMenu = (service: StudioService) => {
                         .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                             MenuItem.default({label: "Mixdown...", selectable: service.hasProfile})
                                 .setTriggerProcedure(() => service.exportMixdown()),
+                            MenuItem.default({
+                                label: "Mixdown [Worker]...",
+                                selectable: service.hasProfile,
+                                hidden: !Browser.isLocalHost()
+                            }).setTriggerProcedure(() => service.exportMixdownWorker()),
                             MenuItem.default({label: "Stems...", selectable: service.hasProfile})
                                 .setTriggerProcedure(() => service.exportStems()),
                             MenuItem.default({label: "Project Bundle...", selectable: service.hasProfile})

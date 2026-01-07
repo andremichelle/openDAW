@@ -22,7 +22,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
             <div className={`connection-status ${statusClass}`}>
                 <div style={{
                     minWidth: "8px", height: "8px", borderRadius: "50%",
-                    background: "currentColor", opacity: 0.8
+                    background: "currentColor", opacity: "0.8"
                 }} />
                 <div style={{ flex: "1", wordBreak: "break-word" }}>
                     {status === 'checking' ? "Verifying connection..." : displayMessage}
@@ -204,7 +204,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
                     service.ai.resetWizard();
                     location.reload()
                 }
-            }} style={{ color: "var(--color-red)", background: "transparent", border: "none", fontSize: "11px", cursor: "pointer", opacity: 0.7 }}>Reset Wizard</button>
+            }} style={{ color: "var(--color-red)", background: "transparent", border: "none", fontSize: "11px", cursor: "pointer", opacity: "0.7" }}>Reset Wizard</button>
             <button onclick={onBack} className="btn-primary">Done</button>
         </div> as HTMLElement
 

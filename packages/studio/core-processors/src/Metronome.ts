@@ -8,11 +8,7 @@ export class Metronome {
     readonly #output = new AudioBuffer()
     readonly #clicks: Click[] = []
 
-    constructor(context: EngineContext) {
-        this.#context = context
-
-        console.debug("Metronome")
-    }
+    constructor(context: EngineContext) {this.#context = context}
 
     process({blocks}: ProcessInfo): void {
         const enabled = this.#context.timeInfo.metronomeEnabled

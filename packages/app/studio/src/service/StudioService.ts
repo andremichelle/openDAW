@@ -43,11 +43,12 @@ import {
     AudioWorklets,
     CloudAuthManager,
     DawProjectService,
-    DefaultSampleLoaderManager,
     DefaultSoundfontLoaderManager,
     EngineFacade,
     EngineWorklet,
     FilePickerAcceptTypes,
+    GlobalSampleLoaderManager,
+    OfflineEngineRenderer,
     Project,
     ProjectEnv,
     ProjectMeta,
@@ -58,7 +59,8 @@ import {
     SampleService,
     SoundfontService,
     StudioPreferences,
-    TimelineRange
+    TimelineRange,
+    WavFile
 } from "@opendaw/studio-core"
 import { ProjectDialogs } from "@/project/ProjectDialogs"
 import { AudioUnitBox } from "@opendaw/studio-boxes"
@@ -149,7 +151,7 @@ export class StudioService implements ProjectEnv {
     constructor(readonly audioContext: AudioContext,
         readonly audioWorklets: AudioWorklets,
         readonly audioDevices: AudioOutputDevice,
-        readonly sampleManager: DefaultSampleLoaderManager,
+        readonly sampleManager: GlobalSampleLoaderManager,
         readonly soundfontManager: DefaultSoundfontLoaderManager,
         readonly cloudAuthManager: CloudAuthManager,
         readonly buildInfo: BuildInfo) {
@@ -269,6 +271,22 @@ export class StudioService implements ProjectEnv {
             .ifSome(async (profile) => {
                 await this.audioContext.suspend()
                 await Mixdowns.exportMixdown(profile)
+            })
+    }
+
+    async exportMixdownWorker() {
+        return this.#projectProfileService.getValue()
+            .ifSome(async (profile) => {
+                await this.audioContext.suspend()
+                const audioData = await OfflineEngineRenderer.start(
+                    profile.project,
+                    Option.None,
+                    progress => console.debug("rendering mixdown", progress)
+                )
+                const file = WavFile.encodeFloats(audioData)
+                await RuntimeNotifier.info({ headline: "Save", message: "Exporting mixdown as wav file..." })
+                await Files.save(file, FilePickerAcceptTypes.WavFiles)
+                this.audioContext.resume().then()
             })
     }
 

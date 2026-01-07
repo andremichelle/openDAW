@@ -113,13 +113,13 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             const settings = stream.getAudioTracks().at(0)?.getSettings()
             if (isDefined(settings)) {
                 const deviceId = this.deviceId.getValue().unwrapOrUndefined()
-                if (isUndefined(deviceId) || deviceId === settings.deviceId) {
+                if (deviceId === settings.deviceId) {
                     return Promise.resolve()
                 }
             }
         }
         this.#stopStream()
-        const deviceId = this.deviceId.getValue().unwrapOrUndefined()
+        const deviceId = this.deviceId.getValue().unwrapOrElse("default")
         const channelCount = this.#requestChannels.unwrapOrElse(1)
         return AudioDevices.requestStream({
             deviceId: {exact: deviceId},
@@ -132,12 +132,12 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             const track = tracks.at(0)
             const settings = track?.getSettings()
             const gotDeviceId = settings?.deviceId
-            console.debug(`new stream. device requested: ${stream.id}, got: ${gotDeviceId ?? "Default"}. channelCount requested: ${channelCount}, got: ${settings?.channelCount}`)
-            if (isUndefined(deviceId) || deviceId === gotDeviceId) {
+            console.debug(`new stream. device requested: ${deviceId}, got: ${gotDeviceId ?? "unknown"}. channelCount requested: ${channelCount}, got: ${settings?.channelCount}`)
+            if (deviceId === "default" || deviceId === gotDeviceId) {
                 this.#stream.wrap(stream)
             } else {
                 stream.getAudioTracks().forEach(track => track.stop())
-                return Errors.warn(`Could not find audio device with id: '${deviceId} in ${gotDeviceId}'`)
+                return Errors.warn(`Could not find audio device with id: '${deviceId}' (got: '${gotDeviceId}')`)
             }
         })
     }

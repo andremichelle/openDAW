@@ -40,6 +40,7 @@ describe("DawProjectExport", () => {
             }
             remove(_uuid: UUID.Bytes): void {return panic("Method not implemented.")}
             invalidate(_uuid: UUID.Bytes): void {return panic("Method not implemented.")}
+            register(_uuid: UUID.Bytes): Terminable {return Terminable.Empty}
         }
         const skeleton = ProjectSkeleton.decode(arrayBuffer)
         const schema = DawProjectExporter.write(skeleton, sampleManager, {

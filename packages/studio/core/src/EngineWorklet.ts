@@ -238,7 +238,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     }
 
     terminate(): void {
-        console.debug("WORKLET.terminate")
+        this.#commands.terminate()
         this.#terminator.terminate()
         this.disconnect()
     }

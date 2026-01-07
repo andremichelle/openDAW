@@ -135,7 +135,11 @@ export class Shortcut {
         ) {
             return Option.None
         }
-        return Option.wrap(new Shortcut(code, Keyboard.isControlKey(event), event.shiftKey, event.altKey))
+        // For letters, use event.key to get the layout-independent character
+        const effectiveCode = code.startsWith("Key")
+            ? `Key${event.key.toUpperCase()}`
+            : code
+        return Option.wrap(new Shortcut(effectiveCode, Keyboard.isControlKey(event), event.shiftKey, event.altKey))
     }
 
     static readonly #keyNames: Record<string, string | [mac: string, other: string]> = {
@@ -201,8 +205,15 @@ export class Shortcut {
     }
 
     matches(event: KeyboardEvent): boolean {
-        const codeMatches = event.code === this.#code
-            || (this.#code === Key.DeleteAction && Keyboard.isDelete(event))
+        let codeMatches: boolean
+        if (this.#code.startsWith("Key")) {
+            // For letters, use event.key to respect keyboard layout (e.g. QWERTZ)
+            const expectedLetter = this.#code.slice(3).toLowerCase()
+            codeMatches = event.key.toLowerCase() === expectedLetter
+        } else {
+            codeMatches = event.code === this.#code
+                || (this.#code === Key.DeleteAction && Keyboard.isDelete(event))
+        }
         return codeMatches
             && this.#ctrl === Keyboard.isControlKey(event)
             && this.#shift === event.shiftKey

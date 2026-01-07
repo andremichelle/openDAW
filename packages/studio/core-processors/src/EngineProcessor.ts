@@ -17,7 +17,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {BoxGraph, createSyncTarget} from "@opendaw/lib-box"
+import {BoxGraph, createSyncTarget, DeleteUpdate, NewUpdate} from "@opendaw/lib-box"
 import {AudioFileBox, BoxIO, BoxVisitor} from "@opendaw/studio-boxes"
 import {EngineContext} from "./EngineContext"
 import {TimeInfo} from "./TimeInfo"
@@ -76,7 +76,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     readonly #timeInfo: TimeInfo
     readonly #engineToClient: EngineToClient
     readonly #boxAdapters: BoxAdapters
-    readonly #sampleManager: SampleLoaderManager
+    readonly #sampleManager: SampleManagerWorklet
     readonly #soundfontManager: SoundfontLoaderManager
     readonly #audioUnits: SortedSet<UUID.Bytes, AudioUnit>
     readonly #rootBoxAdapter: RootBoxAdapter
@@ -112,7 +112,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     #recordingStartTime: ppqn = 0.0
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
 
-    constructor({processorOptions: {syncStreamBuffer, controlFlagsBuffer, project, exportConfiguration, options}}: {
+    constructor({processorOptions: {syncStreamBuffer, controlFlagsBuffer, project, exportConfiguration}}: {
         processorOptions: EngineProcessorAttachment
     } & AudioNodeOptions) {
         super()
@@ -144,7 +144,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                 }
                 ready() {dispatcher.dispatchAndForget(this.ready)}
             })
-        this.#sampleManager = new SampleManagerWorklet(this.#engineToClient)
+        this.#sampleManager = this.#terminator.own(new SampleManagerWorklet(this.#engineToClient))
         this.#soundfontManager = new SoundfontManagerWorklet(this.#engineToClient)
         this.#audioUnits = UUID.newSet(unit => unit.adapter.uuid)
         this.#parameterFieldAdapters = new ParameterFieldAdapters()
@@ -159,7 +159,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#metronome = new Metronome(this)
         this.#midiTransportClock = new MIDITransportClock(this, this.#rootBoxAdapter)
         this.#audioOutputBufferRegistry = new AudioOutputBufferRegistry()
-        this.#renderer = this.#terminator.own(new BlockRenderer(this, options))
+        this.#renderer = this.#terminator.own(new BlockRenderer(this))
         this.#ignoredRegions = UUID.newSet<UUID.Bytes>(uuid => uuid)
         this.#stateSender = SyncStream.writer(EngineStateSchema(), syncStreamBuffer, x => {
             const {transporting, isCountingIn, isRecording, position} = this.#timeInfo
@@ -272,7 +272,23 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                 },
                 onRemove: ({uuid}) => this.#audioUnits.removeByKey(uuid).terminate(),
                 onReorder: EmptyExec
-            })
+            }),
+            (() => {
+                for (const box of this.#boxGraph.boxes()) {
+                    if (box instanceof AudioFileBox) {
+                        this.#sampleManager.getOrCreate(box.address.uuid)
+                    }
+                }
+                return this.#boxGraph.subscribeToAllUpdates({
+                    onUpdate: (update) => {
+                        if (update instanceof NewUpdate && update.name === AudioFileBox.ClassName) {
+                            this.#sampleManager.getOrCreate(update.uuid)
+                        } else if (update instanceof DeleteUpdate && update.name === AudioFileBox.ClassName) {
+                            this.#sampleManager.remove(update.uuid)
+                        }
+                    }
+                })
+            })()
         )
 
         this.#stemExports = Option.wrap(exportConfiguration).match({

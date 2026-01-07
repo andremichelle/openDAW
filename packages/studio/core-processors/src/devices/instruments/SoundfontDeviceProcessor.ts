@@ -111,6 +111,11 @@ export class SoundfontDeviceProcessor extends AudioProcessor implements Instrume
         this.#peakBroadcaster.process(this.#audioOutput.getChannel(0), this.#audioOutput.getChannel(1))
     }
 
+    terminate(): void {
+        super.terminate()
+        this.#loader = Option.None
+    }
+
     toString(): string {return `{SoundfontDevice}`}
 
     #isMatching(pitch: byte, velocity: byte, zone: PresetZone | InstrumentZone): boolean {

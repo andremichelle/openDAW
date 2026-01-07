@@ -1,41 +1,20 @@
-import {int} from "@opendaw/lib-std"
+import {int, Notifier, Procedure} from "@opendaw/lib-std"
 import {Browser} from "@opendaw/lib-dom"
 
 export class UserCounter {
     readonly #sessionId: string
     readonly #apiUrl: string
-
-    #heartbeatInterval: number | null = null
+    readonly #notifier: Notifier<int> = new Notifier()
 
     constructor(apiUrl: string) {
         this.#sessionId = Browser.id()
         this.#apiUrl = apiUrl
+        this.#sendHeartbeat().finally()
     }
 
-    start(): Promise<int> {
-        this.#heartbeatInterval = window.setInterval(() => this.#sendHeartbeat(), 45000)
-        return this.#sendHeartbeat()
-    }
+    subscribe(observer: Procedure<int>) {return this.#notifier.subscribe(observer)}
 
-    stop(): void {
-        if (this.#heartbeatInterval) {
-            clearInterval(this.#heartbeatInterval)
-            this.#heartbeatInterval = null
-        }
-    }
-
-    async updateUserCount(): Promise<number> {
-        try {
-            const response = await fetch(this.#apiUrl)
-            const data = await response.json()
-            return data.count || 0
-        } catch (error) {
-            console.warn("Failed to get user count:", error)
-            return 0
-        }
-    }
-
-    async #sendHeartbeat() {
+    async #sendHeartbeat(): Promise<void> {
         try {
             const response = await fetch(this.#apiUrl, {
                 method: "POST",
@@ -43,10 +22,11 @@ export class UserCounter {
                 body: JSON.stringify({sessionId: this.#sessionId})
             })
             const data = await response.json()
-            return data.count
+            this.#notifier.notify(data.count)
         } catch (error) {
             console.warn("Failed to send heartbeat:", error)
-            return 0
+        } finally {
+            setTimeout(() => this.#sendHeartbeat(), 60000)
         }
     }
 }

@@ -33,11 +33,9 @@ export class SampleService extends AssetService<Sample> {
         if (audioResult.status === "rejected") {return Promise.reject(name)}
         const {value: audioBuffer} = audioResult
         console.debug(`Imported ${audioBuffer.duration.toFixed(1)} seconds`)
-        const audioData: AudioData = {
-            sampleRate: audioBuffer.sampleRate,
-            numberOfFrames: audioBuffer.length,
-            numberOfChannels: audioBuffer.numberOfChannels,
-            frames: Arrays.create(index => audioBuffer.getChannelData(index), audioBuffer.numberOfChannels)
+        const audioData = AudioData.create(audioBuffer.sampleRate, audioBuffer.length, audioBuffer.numberOfChannels)
+        for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
+            audioData.frames[i].set(audioBuffer.getChannelData(i))
         }
         const shifts = SamplePeaks.findBestFit(audioData.numberOfFrames)
         const peaks = await Workers.Peak.generateAsync(
