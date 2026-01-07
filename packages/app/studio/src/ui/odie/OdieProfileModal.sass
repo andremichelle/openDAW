@@ -1,0 +1,184 @@
+@use "@/mixins"
+@use "@/colors"
+
+component
+    display: grid
+    grid-template-columns: 300px 1fr
+    height: 100%
+
+    // Sidebar
+    .sidebar
+        background: rgba(0,0,0,0.2)
+        border-right: 1px solid rgba(255,255,255,0.05)
+        padding: 32px
+        display: flex
+        flex-direction: column
+        align-items: center
+        text-align: center
+
+    .avatar
+        width: 120px
+        height: 120px
+        border-radius: 50%
+        background: rgba(255, 255, 255, 0.05)
+        border: 1px solid rgba(255, 255, 255, 0.1)
+        display: flex
+        align-items: center
+        justify-content: center
+        font-size: 48px
+        margin-bottom: 24px
+        color: var(--color-bright)
+
+    .info-name
+        font-size: 16px
+        font-weight: 700
+        margin-bottom: 4px
+        color: var(--color-bright)
+
+    .info-level
+        font-size: 11px
+        color: var(--color-gray)
+        margin-bottom: 24px
+
+    .nav-list
+        width: 100%
+        text-align: left
+
+    .nav-item
+        padding: 12px 16px
+        border-radius: 8px
+        background: transparent
+        color: var(--color-gray)
+        cursor: pointer
+        display: flex
+        align-items: center
+        gap: 12px
+        font-weight: 400
+        transition: all 0.2s
+        margin-bottom: 4px
+
+        &:hover
+            color: var(--color-bright)
+            background: rgba(255,255,255,0.05)
+
+        &.active
+            background: rgba(255,255,255,0.1)
+            color: var(--color-bright)
+            font-weight: 600
+
+        .icon
+            font-size: 18px
+
+    // Main Content
+    .main
+        padding: 40px
+        overflow-y: auto
+
+        h2
+            font-size: 20px
+            font-weight: 700
+            margin-bottom: 24px
+            color: var(--color-bright)
+            border-bottom: 1px solid rgba(255,255,255,0.1)
+            padding-bottom: 16px
+
+    .section
+        margin-bottom: 32px
+
+    .label
+        font-size: 11px
+        text-transform: uppercase
+        letter-spacing: 1px
+        font-weight: 700
+        color: var(--color-gray)
+        margin-bottom: 8px
+        display: block
+
+    // Standardized Input
+    .profile-input
+        width: 100%
+        margin-bottom: 16px
+
+        // Override internal TextInput styles
+        :global(.TextInput) &
+            // No specific override needed if we apply class to the component
+        
+        // If applying to the wrapper of TextInput (which is what className prop does usually, let's check TextInput.tsx again)
+        // TextInput.tsx: <div className={Html.buildClassList(defaultClassName, className)}> {input} </div>
+        // So .profile-input IS the wrapper.
+        
+        > div[contenteditable]
+            color: var(--color-bright) !important
+            background-color: rgba(0,0,0,0.3) !important
+            padding: 12px 12px !important
+            font-size: 13px !important
+            height: auto !important
+            border-radius: 4px !important
+            text-align: left !important
+            box-shadow: none !important
+            border: 1px solid rgba(255,255,255,0.1) !important
+
+            &:focus
+                border-color: var(--color-blue) !important
+                background-color: rgba(0,0,0,0.5) !important
+    
+    // Native select and textarea (legacy input-area renamed)
+    .native-input
+        @include mixins.Input
+        width: 100%
+        padding: 12px !important
+        font-family: inherit
+        background: rgba(0,0,0,0.3)
+        margin-bottom: 16px
+        resize: none
+        height: auto !important
+        color: var(--color-bright) !important
+        border: 1px solid rgba(255,255,255,0.1) !important
+        border-radius: 4px !important
+        font-size: 13px !important  
+
+        &:focus
+             border-color: var(--color-blue) !important
+             background-color: rgba(0,0,0,0.5) !important
+
+    .input-textarea
+        @extend .native-input
+        min-height: 100px
+
+    .input-hint
+        font-size: 12px
+        color: var(--color-gray)
+        margin-bottom: 8px
+
+    // Level Grid
+    .level-grid
+        display: grid
+        grid-template-columns: 1fr 1fr 1fr 1fr
+        gap: 8px
+        margin-bottom: 16px
+
+    .level-btn
+        background: rgba(255,255,255,0.05)
+        border: 1px solid transparent
+        border-radius: 8px
+        padding: 12px
+        text-align: center
+        cursor: pointer
+        color: var(--color-gray)
+        font-size: 13px
+        font-weight: 500
+        transition: all 0.2s
+
+        &:hover
+            background: rgba(255,255,255,0.1)
+
+        &.active
+            background: var(--color-blue)
+            color: white
+            border-color: rgba(255,255,255,0.2)
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3)
+
+    // Interview Button Area
+    .action-area
+        margin-top: auto
+        width: 100%

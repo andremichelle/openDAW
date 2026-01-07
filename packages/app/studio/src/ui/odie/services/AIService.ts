@@ -1,6 +1,5 @@
 import { DefaultObservableValue, ObservableValue } from "@opendaw/lib-std"
 import { LLMProvider, Message, ProviderConfig } from "./llm/LLMProvider"
-import { GeminiProvider } from "./llm/GeminiProvider"
 import { Gemini3Provider } from "./llm/Gemini3Provider"
 import { OpenAICompatibleProvider } from "./llm/OpenAICompatibleProvider"
 import { ContextService } from "./ContextService"
@@ -23,10 +22,7 @@ export class AIService {
     constructor() {
         // Register Providers (The Dual Core Strategy)
 
-        // 1. Gemini V1 (Legacy / Stable / System 1)
-        this.providers.push(new GeminiProvider())
-
-        // 2. Gemini V3 (Cognitive / Experimental / System 2)
+        // 1. Google Gemini (Standard Intelligence & Vision)
         this.providers.push(new Gemini3Provider())
 
         // 3. Ollama (Local)
@@ -213,21 +209,7 @@ ${ODIE_MOLECULAR_KNOWLEDGE}
                 this.saveSettings()
             }
 
-            // [ANTIGRAVITY] Fix 5: Cognitive Key Link
-            // Ensure Gemini 3 inherits keys from Gemini Standard if missing
-            const stdConfig = this.configMap.get("gemini")
-            const v3Config = this.configMap.get("gemini-3") || {}
 
-            const stdHasKeys = stdConfig && (stdConfig.apiKey || (stdConfig.keyLibrary && stdConfig.keyLibrary.length > 0))
-            const v3HasKeys = v3Config.apiKey || (v3Config.keyLibrary && v3Config.keyLibrary.length > 0)
-
-            if (stdHasKeys && !v3HasKeys) {
-                console.log("🧠 Odie Neural Link: Syncing keys from Standard to Cognitive brain...")
-                v3Config.apiKey = stdConfig.apiKey
-                v3Config.keyLibrary = stdConfig.keyLibrary ? [...stdConfig.keyLibrary] : []
-                this.configMap.set("gemini-3", v3Config)
-                this.saveSettings()
-            }
 
 
             this.providers.forEach(p => {

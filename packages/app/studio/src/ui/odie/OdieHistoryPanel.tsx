@@ -19,32 +19,30 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
     }
 
     // Main Container
-    const container = <div style={{
-        position: "absolute",
-        top: "0", left: "0", bottom: "0",
-        width: "280px",
-        background: "rgba(15, 23, 42, 0.95)",
-        backdropFilter: "blur(10px)",
-        borderRight: "1px solid rgba(255,255,255,0.1)",
-        zIndex: "200",
+    const container = <div className="HistoryPanel" style={{
+        flex: "1",
         display: "flex", flexDirection: "column",
-        animation: "slideInLeft 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-        boxShadow: "4px 0 20px rgba(0,0,0,0.5)"
+        background: "var(--bg-surface-0)",
+        overflow: "hidden"
     }}>
         <style>{`
-            @keyframes slideInLeft { from { transform: translateX(-20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-            .history-item:hover { background: rgba(255,255,255,0.05); }
+            .history-item:hover { background: var(--bg-surface-2); }
         `}</style>
     </div> as HTMLElement
 
     // Header
     const header = <div style={{
-        padding: "20px",
-        borderBottom: "1px solid rgba(255,255,255,0.1)",
-        display: "flex", justifyContent: "space-between", alignItems: "center"
+        padding: "16px",
+        borderBottom: "1px solid var(--border-dim)",
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        flexShrink: "0"
     }}>
-        <div style={{ fontWeight: "700", fontSize: "16px", color: "#f1f5f9" }}>History</div>
-        <button onclick={onClose} style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "18px" }}>✕</button>
+        <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)" }}>History</div>
+        <button onclick={onClose} style={{
+            background: "none", border: "none",
+            color: "var(--text-secondary)", cursor: "pointer", fontSize: "16px",
+            padding: "4px", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center"
+        }}>✕</button>
     </div>
     container.appendChild(header)
 
@@ -69,29 +67,31 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
 
                 sessions.forEach(session => {
                     const item = <div className="history-item" style={{
-                        padding: "10px 8px", borderRadius: "8px",
-                        cursor: "pointer", display: "flex", flexDirection: "column", gap: "4px",
-                        transition: "background 0.1s"
+                        padding: "10px 12px", borderRadius: "6px",
+                        cursor: "pointer", display: "flex", flexDirection: "column", gap: "2px",
+                        transition: "background 0.1s",
+                        margin: "0 0 2px 0",
+                        color: "var(--text-primary)"
                     }}
                         onclick={() => {
                             service.loadSession(session.id)
-                            onClose() // Close panel on selection? Or keep open? Let's close for now.
+                            onClose() // Switches back to chat
                         }}>
-                        <div style={{ fontSize: "13px", color: "#e2e8f0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        <div style={{ fontSize: "13px", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {session.title || "Untitled Chat"}
                         </div>
-                        <div style={{ fontSize: "11px", color: "#64748b", display: "flex", justifyContent: "space-between" }}>
+                        <div style={{ fontSize: "11px", color: "var(--text-tertiary)", display: "flex", justifyContent: "space-between" }}>
                             <span>{new Date(session.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                             <span
-                                style={{ color: "#ef4444", opacity: "0", transition: "opacity 0.2s", fontSize: "12px", cursor: "pointer" }}
+                                style={{ color: "var(--color-red)", opacity: "0", transition: "opacity 0.2s", fontSize: "12px", cursor: "pointer" }}
                                 onclick={(e: any) => {
                                     e.stopPropagation()
                                     const target = e.target as HTMLElement
                                     // Switch to confirm mode
                                     if (target.innerText === "🗑") {
-                                        target.innerText = "Sure? Delete"
+                                        target.innerText = "Confirm?"
                                         target.style.opacity = "1"
-                                        target.style.color = "#f87171"
+                                        target.style.color = "var(--color-red)"
 
                                         // Auto-cancel after 3s
                                         setTimeout(() => {

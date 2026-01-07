@@ -2,7 +2,8 @@ import { Lifecycle } from "@opendaw/lib-std"
 import { StudioService } from "@/service/StudioService"
 import { createElement } from "@opendaw/lib-jsx"
 import { Checkbox } from "@/ui/components/Checkbox"
-import { Colors } from "@opendaw/studio-enums"
+import { Colors, IconSymbol } from "@opendaw/studio-enums"
+import { Icon } from "@/ui/components/Icon"
 
 export const OdieButton = ({ service, lifecycle }: { service: StudioService, lifecycle: Lifecycle }) => {
     return (
@@ -14,7 +15,7 @@ export const OdieButton = ({ service, lifecycle }: { service: StudioService, lif
                 tooltip: "Odie AI Assistant",
                 cursor: "pointer"
             }}>
-            <span style={{ fontSize: "1.25em", lineHeight: "1" }}>🤖</span>
+            <Icon symbol={IconSymbol.Robot} style={{ fontSize: "1.25em", lineHeight: "1" }} />
         </Checkbox>
     )
 }

@@ -54,7 +54,7 @@ export class OdieTransport {
     }
 
     setLoop(enabled: boolean): void {
-        (this.studio.transport.loop as any).setValue(enabled)
+        this.studio.transport.setLoop(enabled)
     }
 
     // --- Timeline Configuration ---

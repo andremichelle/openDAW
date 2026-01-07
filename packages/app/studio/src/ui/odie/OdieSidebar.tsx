@@ -1,11 +1,12 @@
-import { createElement, LocalLink } from "@opendaw/lib-jsx"
-import { Terminator, DefaultObservableValue } from "@opendaw/lib-std"
+import { createElement } from "@opendaw/lib-jsx"
+import { Terminator } from "@opendaw/lib-std"
 import { StudioService } from "@/service/StudioService"
 import { Html } from "@opendaw/lib-dom"
+import { OdieService } from "./OdieService"
+import { OdieProfileModal } from "./OdieProfileModal"
 
 // --- STYLES ---
 import css from "./OdieSidebar.sass?inline"
-// ... (imports)
 const className = Html.adoptStyleSheet(css, "OdieSidebar")
 
 
@@ -14,13 +15,6 @@ const IconProfile = () => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
         <circle cx="12" cy="7" r="4"></circle>
-    </svg>
-)
-
-const IconSchool = () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
-        <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
     </svg>
 )
 
@@ -59,14 +53,7 @@ const IconClose = () => (
     </svg>
 )
 
-const RailBtn = (props: { icon: any, label: string, variant: string, onclick?: () => void, href?: string }) => {
-    if (props.href) {
-        // LocalLink does not support title/tooltip directly yet
-        return <LocalLink href={props.href} className={`RailBtn ${props.variant}`}>
-            {props.icon}
-            <span>{props.label}</span>
-        </LocalLink>
-    }
+const RailBtn = (props: { icon: any, label: string, variant: string, onclick?: () => void }) => {
     return <button className={`RailBtn ${props.variant}`}
         title={props.label}
         onclick={props.onclick}
@@ -83,36 +70,62 @@ const HeaderAction = (props: { icon: any, title: string, onclick: () => void }) 
     {props.icon}
 </button>
 
-import { OdieService } from "./OdieService"
-import { OdieSettingsView } from "./settings/OdieSettingsView"
 
-export const OdieSidebar = ({ service }: { service: StudioService }) => {
-    const lifecycle = new Terminator()
-    let odieService: OdieService | null = null // Lazy loaded
+export const OdieSidebar = (props: { service: StudioService, lifecycle: Terminator }) => {
+    const { service, lifecycle } = props
+    let odieService: OdieService | undefined
 
-    // UI States
-    const showingSettings = new DefaultObservableValue(false)
+    // -- VIEW CONTAINERS --
+    // We keep Chat view persistent to maintain scroll/input state
+    const chatView = <div className="ChatContainer" style={{ display: "flex", flex: "1", flexDirection: "column", overflow: "hidden" }}></div>
+    const historyView = <div className="HistoryContainer" style={{ display: "none", flex: "1", flexDirection: "column", overflow: "hidden" }}></div>
 
-    const renderRail = () => {
-        return <div className={className}>
-            {/* Top Group: Identity & Knowledge */}
-            <RailBtn icon={<IconProfile />} label="Profile" variant="profile" href="/odie/profile" />
-            <RailBtn icon={<IconSchool />} label="Academy" variant="academy" href="/odie/academy" />
+    // -- RAIL BUTTONS --
+    const renderRail = () => (<div className="OdieRail">
+        {/* Top Group: Identity & Knowledge */}
+        <RailBtn icon={<IconProfile />} label="Profile" variant="profile" onclick={() => {
+            if (!odieService) return
+            const modal = OdieProfileModal({ onClose: () => modal.remove() })
+            document.body.appendChild(modal)
+        }} />
 
-            <div style={{ flex: "1" }}></div>
+        <div style={{ flex: "1" }}></div>
 
-            <RailBtn icon={<IconSettings />} label="Setup" variant="setup" href="/odie/setup" />
+        <div className="Separator"></div>
 
-            <div className="Separator"></div>
+        <RailBtn icon={<IconSparkles />} label="New Chat" variant="newchat" onclick={() => {
+            if (odieService) odieService.startNewChat()
+        }} />
 
-            <RailBtn icon={<IconSparkles />} label="New Chat" variant="newchat" onclick={() => {
-                if (odieService) odieService.startNewChat()
-            }} />
+        <RailBtn icon={<IconHistory />} label="History" variant="history" onclick={() => {
+            if (!odieService) return
+            // Toggle Logic handled by subscription below, we just flip the state
+            odieService.showHistory.setValue(!odieService.showHistory.getValue())
+        }} />
 
-            <RailBtn icon={<IconHistory />} label="History" variant="history" href="/odie/history" />
-            <RailBtn icon={<IconSettings />} label="Settings" variant="settings" href="/odie/settings" />
-        </div>
-    }
+        <RailBtn icon={<IconSettings />} label="Settings" variant="settings" onclick={() => {
+            if (!odieService) return
+            import("./components/OdieModalFrame").then(({ OdieModalFrame }) => {
+                import("./OdieSettings").then(({ OdieSettings }) => {
+                    let overlay: HTMLElement
+                    const modalLifecycle = new Terminator()
+                    const close = () => {
+                        overlay.remove()
+                        modalLifecycle.terminate()
+                    }
+                    const settingsContent = OdieSettings({ service: odieService!, lifecycle: modalLifecycle, onBack: close, isEmbedded: false })
+                    overlay = OdieModalFrame({
+                        title: "System Config",
+                        icon: "⚙️",
+                        width: "800px",
+                        onClose: close,
+                        children: settingsContent
+                    })
+                    document.body.appendChild(overlay)
+                })
+            })
+        }} />
+    </div>);
 
     const header = <div className="Header">
         {/* Clean Title Area */}
@@ -126,7 +139,6 @@ export const OdieSidebar = ({ service }: { service: StudioService }) => {
             <HeaderAction
                 icon={<IconExpand />}
                 title="Expand"
-                // Re-implement expand logic simpler or remove if unused, but keeping the button for now
                 onclick={() => {
                     if (odieService) {
                         const current = odieService.width.getValue()
@@ -145,14 +157,14 @@ export const OdieSidebar = ({ service }: { service: StudioService }) => {
     const messageListContainer = <div style={{ flex: "1", display: "flex", flexDirection: "column", overflow: "hidden", padding: "0" }}></div>
     const inputContainer = <div style={{ flexShrink: "0" }}></div>
 
-    const mainArea = <div className="ChatContainer">
-        {header}
-        {messageListContainer}
-        {inputContainer}
-    </div>
+    // Assemble Chat View
+    chatView.appendChild(header)
+    chatView.appendChild(messageListContainer)
+    chatView.appendChild(inputContainer)
+
 
     // OVERLAY CONTAINER
-    const container = <div id="odie-sidebar" className="OdieOverlay">
+    const container = <div id="odie-sidebar" className={`${className} OdieOverlay`}>
         {/* THE LOOM HUD - Floating Sidecar */}
         <div className="sidecar-container">
             {/* <OdieGenUIPanel lifecycle={lifecycle} service={odieService} /> */}
@@ -160,24 +172,11 @@ export const OdieSidebar = ({ service }: { service: StudioService }) => {
 
         <div className="inner-layout">
             <div style={{ display: "flex", flexGrow: "1", overflow: "hidden", position: "relative" }}> {/* Flex wrapper */}
-                {mainArea}
+                {chatView}
+                {historyView}
 
-                {/* Settings Overlay */}
-                {(() => {
-                    const overlayContainer = document.createElement("div")
-                    // Reactive rendering
-                    lifecycle.own(showingSettings.subscribe(show => {
-                        overlayContainer.innerHTML = ""
-                        if (show && odieService) {
-                            overlayContainer.appendChild(OdieSettingsView({
-                                lifecycle,
-                                odieService: odieService!,
-                                onClose: () => showingSettings.setValue(false)
-                            }))
-                        }
-                    }))
-                    return overlayContainer
-                })()}
+                {/* Settings Overlay Removed */}
+                {/* We are now initiating settings via the button directly */}
             </div>
             {renderRail()}
         </div>
@@ -189,62 +188,45 @@ export const OdieSidebar = ({ service }: { service: StudioService }) => {
         console.log("🤖 Booting Odie lazy...")
         odieService = service.getOdie()
 
-        // Load Children Components
-        import("./OdieMessageList").then(({ OdieMessageList }) => {
+        // Load Children Components (Parallel Boot)
+        Promise.all([
+            import("./OdieMessageList"),
+            import("./OdieInput"),
+            import("./OdieHistoryPanel")
+        ]).then(([{ OdieMessageList }, { OdieInput }, { OdieHistoryPanel }]) => {
             if (!odieService) return
+
+            // 1. Mount Chat
             const list = OdieMessageList({ service: odieService })
             messageListContainer.appendChild(list)
-        })
 
-        import("./OdieInput").then(({ OdieInput }) => {
-            if (!odieService) return
             const input = OdieInput({ service: odieService })
             inputContainer.appendChild(input)
+
+            // 2. Mount History (Persistently mounted but hidden)
+            const historyPanel = OdieHistoryPanel({
+                service: odieService,
+                onClose: () => odieService?.showHistory.setValue(false)
+            })
+            historyView.appendChild(historyPanel)
         })
-
-        // [ANTIGRAVITY] Onboarding Wizard Trigger
-        // DISABLED for standard /odie/setup page flow
-        /*
-        // Check if wizard is needed. Subscribe to keep UI in sync (restart wizard support)
-        let wizardOverlay: HTMLElement | null = null
-
-        const updateWizard = (isComplete: boolean) => {
-            if (!isComplete && !wizardOverlay && odieService) {
-                import("./OdieWelcomeWizard").then(({ OdieWelcomeWizard }) => {
-                    // Re-check state after async import
-                    if (!odieService || odieService.ai.wizardCompleted.getValue()) {
-                        return
-                    }
-                    if (wizardOverlay) return // Safety check
-
-                    const onComplete = () => {
-                        if (odieService) odieService.ai.completeWizard()
-                    }
-                    const onClose = () => {
-                        if (wizardOverlay) {
-                            wizardOverlay.remove()
-                            wizardOverlay = null
-                        }
-                    }
-                    wizardOverlay = OdieWelcomeWizard({ service: odieService, onComplete, onClose })
-                    document.body.appendChild(wizardOverlay)
-                })
-            } else if (isComplete && wizardOverlay) {
-                wizardOverlay.remove()
-                wizardOverlay = null
-            }
-        }
-
-        lifecycle.own(odieService.ai.wizardCompleted.subscribe(observer => updateWizard(observer.getValue())))
-
-        // [ANTIGRAVITY] Force immediate check because subscribe() doesn't fire on init in this framework
-        updateWizard(odieService.ai.wizardCompleted.getValue())
-        */
 
         // Subscribe to WIDTH changes
         lifecycle.own(odieService.width.subscribe((observer: any) => {
             if (service.layout.odieVisible.getValue()) {
                 container.style.width = observer.getValue() + "px"
+            }
+        }))
+
+        // Subscribe to History Toggle (Synchronous & Safe)
+        lifecycle.own(odieService.showHistory.subscribe((observer: any) => {
+            const show = observer.getValue()
+            if (show) {
+                chatView.style.display = "none"
+                historyView.style.display = "flex"
+            } else {
+                chatView.style.display = "flex"
+                historyView.style.display = "none"
             }
         }))
     }
@@ -276,3 +258,4 @@ export const OdieSidebar = ({ service }: { service: StudioService }) => {
 
     return container
 }
+

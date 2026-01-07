@@ -57,6 +57,11 @@ export interface MidiNoteDef {
     velocity: number
 }
 
+// Local Interface for safely accessing 'defaultName' if not in upstream
+interface NamedInstrumentFactory extends InstrumentFactory {
+    defaultName: string
+}
+
 /** Structured tool result for better error reporting */
 export interface ToolResult {
     success: boolean
@@ -126,7 +131,10 @@ export class OdieAppControl {
             // [VERIFIED ARCHITECTURE] InstrumentFactories is a Namespace. 
             // We must iterate over the 'Named' object values and check 'defaultName'.
             const factories = Object.values(InstrumentFactories.Named)
-            const match = factories.find(f => (f as any).defaultName.toLowerCase() === t)
+            const match = factories.find(f => {
+                // Safeguard against factories explicitly not matching the interface
+                return "defaultName" in f && (f as NamedInstrumentFactory).defaultName.toLowerCase() === t
+            })
 
             if (match) {
                 factory = match as InstrumentFactory
@@ -471,6 +479,7 @@ export class OdieAppControl {
             some: async (region) => {
                 try {
                     this.studio.project.editing.modify(() => {
+                        // RegionBox base class is not exported, casting to any for position access
                         (region.box as any).position.setValue(ppqnNewTime)
                     })
                     return { success: true }
@@ -557,7 +566,8 @@ export class OdieAppControl {
         return this.findAudioUnitAdapter(trackName).match<Promise<ToolResult>>({
             some: async (adapter) => {
                 // START ROBUST TRACK FINDING
-                const tracksCollection = adapter.tracks as any
+                // Use generic access or cast to known structure
+                const tracksCollection: any = adapter.tracks
                 let track: any = undefined
 
                 if (Array.isArray(tracksCollection)) {

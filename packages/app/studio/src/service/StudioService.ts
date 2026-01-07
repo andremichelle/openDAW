@@ -92,6 +92,7 @@ export interface Transport {
     position: ObservableValue<number>
     setPosition: (pos: number) => void
     loop: ObservableValue<boolean>
+    setLoop: (enabled: boolean) => void
 }
 
 export class StudioService implements ProjectEnv {
@@ -199,6 +200,14 @@ export class StudioService implements ProjectEnv {
                     },
                     none: () => new DefaultObservableValue(false)
                 })
+            },
+            setLoop: (enabled: boolean) => {
+                self.optProject.ifSome(p => {
+                    const loop = (p.timelineBox as any).loop
+                    if (loop && typeof loop.setValue === "function") {
+                        loop.setValue(enabled)
+                    }
+                })
             }
         }
     }
@@ -260,7 +269,6 @@ export class StudioService implements ProjectEnv {
             .ifSome(async (profile) => {
                 await this.audioContext.suspend()
                 await Mixdowns.exportMixdown(profile)
-                this.audioContext.resume().then()
             })
     }
 
@@ -284,7 +292,6 @@ export class StudioService implements ProjectEnv {
                 ExportStemsConfiguration.sanitizeExportNamesInPlace(config)
                 await this.audioContext.suspend()
                 await Mixdowns.exportStems(profile, config)
-                this.audioContext.resume().then(EmptyExec, EmptyExec)
             })
     }
 

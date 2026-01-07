@@ -90,15 +90,6 @@ export const ROLE_MINDSETS = {
         - "Inter-Sample Peaks (ISP): The D/A converter will clip even if the file says -0.1dB."
         - "Dither: Randomized noise to linearize quantization error at the noise floor."
         - "LUFS vs RMS: LUFS measures 'Perceived Loudness' (K-Weighting). Trust LUFS."
-    `,
-    'Mentor': `
-        **MODE**: The Studio Mentor.
-        **FOCUS**: Growth, Technique, Encouragement.
-        **AXIOMS**:
-        - "Your Ears are the final judge, not the meter."
-        - "Scaffolding: Support the user, then fade away. Let them own the victory."
-        - "The Socratic Mirror: Don't just give answers. Guide them to the solution."
-        - "Show, Don't Tell: Demonstrate the concept. Don't lecture."
     `
 };
 

@@ -7,6 +7,8 @@ import mermaid from "mermaid"
 import { odieFeedback } from "./services/OdieFeedbackService"
 
 import { OdieRenderEngine } from "./OdieRenderEngine"
+import { IconSymbol } from "@opendaw/studio-enums"
+import { Icon } from "@/ui/components/Icon"
 
 // Initialize Mermaid
 mermaid.initialize({
@@ -106,7 +108,7 @@ const MessageBubble = ({ message, onRetry, onWidgetAction }: { message: Message,
                 {isUser && (
                     <div className="ActionRow">
                         <ActionButton
-                            icon="📋"
+                            symbol={IconSymbol.NotePad}
                             label="Copy"
                             onClick={(e) => {
                                 navigator.clipboard.writeText(message.content)
@@ -114,7 +116,7 @@ const MessageBubble = ({ message, onRetry, onWidgetAction }: { message: Message,
                             }}
                         />
                         <ActionButton
-                            icon="↻"
+                            symbol={IconSymbol.Undo}
                             label="Retry"
                             onClick={(e) => {
                                 if (onRetry) onRetry(message.content)
@@ -128,7 +130,7 @@ const MessageBubble = ({ message, onRetry, onWidgetAction }: { message: Message,
                 {!isUser && !isThinking && (
                     <div className="ActionRow Odie">
                         <ActionButton
-                            icon="📋"
+                            symbol={IconSymbol.NotePad}
                             label="Copy"
                             onClick={(e) => {
                                 navigator.clipboard.writeText(message.content)
@@ -136,7 +138,7 @@ const MessageBubble = ({ message, onRetry, onWidgetAction }: { message: Message,
                             }}
                         />
                         <ActionButton
-                            icon="👍"
+                            symbol={IconSymbol.Connected}
                             onClick={(e) => {
                                 odieFeedback.log({
                                     userMessage: "Unknown (Contextual)",
@@ -147,7 +149,7 @@ const MessageBubble = ({ message, onRetry, onWidgetAction }: { message: Message,
                             }}
                         />
                         <ActionButton
-                            icon="👎"
+                            symbol={IconSymbol.Disconnected}
                             onClick={(e) => {
                                 odieFeedback.log({
                                     userMessage: "Unknown (Contextual)",
@@ -158,7 +160,7 @@ const MessageBubble = ({ message, onRetry, onWidgetAction }: { message: Message,
                             }}
                         />
                         <ActionButton
-                            icon="💬"
+                            symbol={IconSymbol.Help}
                             label="Feedback"
                             onClick={(e) => {
                                 const fb = prompt("How can we improve this response?")
@@ -198,14 +200,14 @@ const triggerGlow = (element: HTMLElement, color: string = "#3b82f6") => {
     }, 200)
 }
 
-const ActionButton = ({ icon, label, onClick }: { icon: string, label?: string, onClick: (e: any) => void }) => {
+const ActionButton = ({ symbol, label, onClick }: { symbol: IconSymbol, label?: string, onClick: (e: any) => void }) => {
     return (
         <button
             className="ActionButton"
             onclick={onClick}
-            title={label || icon}
+            title={label || IconSymbol.toName(symbol)}
         >
-            <span>{icon}</span> {label}
+            <Icon symbol={symbol} /> {label && <span>{label}</span>}
         </button>
     )
 }
@@ -227,7 +229,7 @@ const showImageModal = (imageSrc: string) => {
     // Download button
     const downloadBtn = document.createElement('button')
     downloadBtn.className = 'odie-image-modal-btn'
-    downloadBtn.innerHTML = '⬇️ Download Image'
+    downloadBtn.innerHTML = 'Download Image'
     downloadBtn.onclick = () => {
         const link = document.createElement('a')
         link.href = imageSrc
@@ -238,7 +240,7 @@ const showImageModal = (imageSrc: string) => {
     // Close button
     const closeBtn = document.createElement('button')
     closeBtn.className = 'odie-image-modal-btn'
-    closeBtn.innerHTML = '✕ Close'
+    closeBtn.innerHTML = 'Close'
     closeBtn.onclick = () => modal.remove()
 
     actions.appendChild(downloadBtn)
@@ -305,7 +307,7 @@ export const OdieMessageList = ({ service }: ListProps) => {
 
         if (messages.length === 0) {
             const emptyState = <div className="EmptyState">
-                <div className="RobotIcon">🤖</div>
+                <div className="RobotIcon"><Icon symbol={IconSymbol.Robot} style={{ fontSize: "2em" }} /></div>
                 <div className="Title">ODIE ONLINE</div>
                 <div className="Subtitle">Awaiting Input...</div>
 
@@ -315,7 +317,7 @@ export const OdieMessageList = ({ service }: ListProps) => {
                         onclick={() => odieFeedback.export().then(count => alert(`Exported ${count} feedback logs.`))}
                         className="ExportButton"
                     >
-                        ⬇ Export Logs
+                        Export Logs
                     </button>
                 </div>
             </div>

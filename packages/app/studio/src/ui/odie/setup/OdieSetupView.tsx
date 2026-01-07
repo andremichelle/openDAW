@@ -21,6 +21,7 @@ const IconServer = () => (
 const IconUser = () => (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
 )
+
 const IconEdit = () => (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></svg>
 )
@@ -32,6 +33,9 @@ const IconMusic = () => (
 )
 const IconSliders = () => (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="4" y1="21" y2="14" /><line x1="4" x2="4" y1="10" y2="3" /><line x1="12" x2="12" y1="21" y2="12" /><line x1="12" x2="12" y1="8" y2="3" /><line x1="20" x2="20" y1="21" y2="16" /><line x1="20" x2="20" y1="12" y2="3" /><line x1="1" x2="7" y1="14" y2="14" /><line x1="9" x2="15" y1="8" y2="8" /><line x1="17" x2="23" y1="16" y2="16" /></svg>
+)
+const IconTarget = () => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg>
 )
 
 // Helper for dynamic rendering
@@ -129,9 +133,9 @@ export const OdieSetupView = ({ service }: { service: OdieService }) => {
     const updateGuidance = (modelId: string) => {
         const isLarge = modelId.toLowerCase().includes("70b") || modelId.toLowerCase().includes("large")
         const isMed = modelId.toLowerCase().includes("14b") || modelId.toLowerCase().includes("32b")
-        if (isLarge) ollamaGuidance.setValue("⚠️ High RAM requirement. 64GB+ recommended.")
-        else if (isMed) ollamaGuidance.setValue("💡 Medium RAM recommended. 32GB recommended.")
-        else ollamaGuidance.setValue("✅ Optimized for standard computers.")
+        if (isLarge) ollamaGuidance.setValue("STATUS: High RAM requirement. 64GB+ recommended.")
+        else if (isMed) ollamaGuidance.setValue("STATUS: Medium RAM recommended. 32GB recommended.")
+        else ollamaGuidance.setValue("STATUS: Optimized for standard computers.")
     }
 
     const finishSetup = () => {
@@ -160,7 +164,11 @@ export const OdieSetupView = ({ service }: { service: OdieService }) => {
                             <h3>Cloud Power</h3>
                             <div className="badge blue">RECOMMENDED</div>
                         </div>
-                        <p>Fast, smart, and effectively <strong>Infinite</strong>. Google Gemini offers a generous free tier.</p>
+                        <p>Powered by Google Gemini. Fast, smart, and effectively <strong>Infinite</strong>.</p>
+
+                        <div style={{ fontSize: "0.65rem", color: "var(--color-text-3)", padding: "8px", background: "rgba(255,255,255,0.03)", borderRadius: "6px", marginBottom: "1rem", border: "1px solid var(--color-edge)", lineHeight: "1.4" }}>
+                            <b>Privacy Note:</b> Free Tier data (outside EEA/UK) is anonymized and used to improve Google products. Use a <b>Paid Key</b> or <b>Local AI</b> for total privacy.
+                        </div>
 
                         {/* Details Panel */}
                         <div style={{ marginTop: "auto" }}>
@@ -213,7 +221,7 @@ export const OdieSetupView = ({ service }: { service: OdieService }) => {
                             <div className="card-icon green"><IconServer /></div>
                             <h3>Local Brain</h3>
                         </div>
-                        <p>Runs on your hardware. <strong>100% private</strong>. No internet required.</p>
+                        <p>Ollama execution. <strong>100% private</strong>. Runs on your hardware.</p>
 
                         <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: "1rem" }}>
                             <div className="status-panel">
@@ -235,7 +243,7 @@ export const OdieSetupView = ({ service }: { service: OdieService }) => {
                                     if (models.length === 0) return (
                                         <div style={{ marginTop: "0.5rem" }}>
                                             <a href="https://ollama.com/download" target="_blank" style={{ fontSize: "0.75rem", color: "var(--color-blue-400)", display: "flex", alignItems: "center", gap: "4px" }} onClick={(e: any) => e.stopPropagation()}>
-                                                📥 Download Ollama
+                                                Download Ollama
                                             </a>
                                         </div>
                                     )
@@ -258,11 +266,11 @@ export const OdieSetupView = ({ service }: { service: OdieService }) => {
 
                                 {/* Errors */}
                                 {ObserverView(lifecycle, ollamaErrorType, (type) => {
-                                    if (type === "cors") return <div style={{ color: "var(--color-red-500)", fontSize: "0.75rem", marginTop: "0.5rem", padding: "6px", background: "rgba(239,68,68,0.1)", borderRadius: "4px" }}>🚫 <b>BLOCKED</b>: Browser security.<br />Set env var: <code>OLLAMA_ORIGINS="*"</code></div>
+                                    if (type === "cors") return <div style={{ color: "var(--color-red-500)", fontSize: "0.75rem", marginTop: "0.5rem", padding: "6px", background: "rgba(239,68,68,0.1)", borderRadius: "4px" }}><b>BLOCKED</b>: Browser security.<br />Set env var: <code>OLLAMA_ORIGINS="*"</code></div>
                                     if (type === "missing") return (
                                         <div style={{ color: "var(--color-orange-500)", fontSize: "0.75rem", marginTop: "0.5rem" }}>
                                             MISSING BRAIN. Run in terminal:
-                                            <div style={{ background: "rgba(0,0,0,0.3)", padding: "4px", borderRadius: "4px", fontFamily: "monospace", marginTop: "2px", userSelect: "all" }}>ollama pull qwen2.5-coder</div>
+                                            <div style={{ background: "rgba(0,0,0,0.3)", padding: "4px", borderRadius: "4px", fontFamily: "monospace", marginTop: "2px", userSelect: "all" }}>ollama run qwen3-coder:7b</div>
                                         </div>
                                     )
                                     return null
@@ -270,7 +278,16 @@ export const OdieSetupView = ({ service }: { service: OdieService }) => {
                             </div>
 
                             <div style={{ fontSize: "0.7rem", color: "var(--color-green-400)", padding: "8px", background: "rgba(16, 185, 129, 0.1)", borderRadius: "6px", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
-                                🛡️ <b>DAW Safety Verified</b>: Odie runs on a separate process path. Your audio engine is always priority #1.
+                                <b>DAW Safety Verified</b>: Odie runs on a separate process path. Your audio engine is always priority #1.
+                            </div>
+
+                            <div style={{ borderTop: "1px solid var(--color-edge)", paddingTop: "0.5rem" }}>
+                                <div style={{ fontSize: "0.7rem", fontWeight: "bold", color: "var(--color-text-3)", marginBottom: "0.5rem", textTransform: "uppercase" }}>Elite Recommendations</div>
+                                <div style={{ fontSize: "0.65rem", display: "flex", flexDirection: "column", gap: "4px", color: "var(--color-text-2)" }}>
+                                    <div>• <b>Speed:</b> Qwen3-Coder 7B <span style={{ color: "var(--color-text-3)" }}>(8-16GB RAM)</span></div>
+                                    <div>• <b>Balance:</b> Qwen3-Coder 14B <span style={{ color: "var(--color-text-3)" }}>(32GB RAM)</span></div>
+                                    <div>• <b>Advanced:</b> Qwen3-Coder 32B <span style={{ color: "var(--color-text-3)" }}>(64GB+ RAM)</span></div>
+                                </div>
                             </div>
 
                             {ObserverView(lifecycle, scanStatus, (s) => (
@@ -298,7 +315,6 @@ export const OdieSetupView = ({ service }: { service: OdieService }) => {
             <div className="wizard-grid three-col" style={{ marginBottom: "2rem" }}>
                 {[
                     { icon: <IconSliders />, title: "The Operator", desc: "Control the studio.", examples: ["Set BPM to 128", "Export mixdown"] },
-                    { icon: <IconUser />, title: "The Mentor", desc: "Audio engineering expert.", examples: ["Explain compression", "How do I EQ vocals?"] },
                     { icon: <IconMusic />, title: "The Creative", desc: "Musical collaborator.", examples: ["Give me chord ideas", "Write lyrics"] }
                 ].map((card: any) => (
                     <div className="wizard-card">
@@ -377,15 +393,16 @@ export const OdieSetupView = ({ service }: { service: OdieService }) => {
                     )
                 } else {
                     // --- PROFILE EDITOR (MANUAL MODE - FLATTENED) ---
-                    const dna = userService.dna.getValue()
 
-                    const renderTabBtn = (id: string, label: string) => {
+                    const renderTabBtn = (id: string, label: string, icon: any) => {
                         return ObserverView(lifecycle, activeProfileTab, (current) => (
                             <div
                                 className={`tab ${current === id ? "active" : ""}`}
                                 onClick={() => activeProfileTab.setValue(id)}
+                                style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
                             >
-                                {label}
+                                <div style={{ transform: "scale(0.8)", opacity: current === id ? "1" : "0.5" }}>{icon}</div>
+                                <span>{label}</span>
                             </div>
                         ))
                     }
@@ -399,123 +416,137 @@ export const OdieSetupView = ({ service }: { service: OdieService }) => {
                                     <Button lifecycle={lifecycle} onClick={() => manualMode.setValue(false)} appearance={{ framed: false }}>Back</Button>
                                 </div>
                                 <div className="tabs">
-                                    {renderTabBtn("identity", "Identity")}
-                                    {renderTabBtn("sound", "Sound")}
-                                    {renderTabBtn("studio", "Studio")}
-                                    {renderTabBtn("goals", "Goals")}
+                                    {renderTabBtn("identity", "Identity", <IconUser />)}
+                                    {renderTabBtn("sound", "Sound", <IconMusic />)}
+                                    {renderTabBtn("studio", "Studio", <IconSliders />)}
+                                    {renderTabBtn("goals", "Goals", <IconTarget />)}
                                 </div>
                             </div>
 
                             {/* FORM AREA */}
                             <div style={{ flex: "1", overflowY: "auto", paddingBottom: "2rem" }}>
-                                {ObserverView(lifecycle, activeProfileTab, (tab) => {
-                                    if (tab === "identity") return (
-                                        <div style={{ maxWidth: "600px" }}>
-                                            <div className="form-group">
-                                                <label>Name / Alias</label>
-                                                <TextInput lifecycle={lifecycle} model={nameModel} />
-                                            </div>
+                                {(() => {
+                                    const combined = new DefaultObservableValue({ tab: activeProfileTab.getValue(), dna: userService.dna.getValue() })
+                                    lifecycle.own(activeProfileTab.subscribe(obs => combined.setValue({ tab: obs.getValue(), dna: userService.dna.getValue() })))
+                                    lifecycle.own(userService.dna.subscribe(obs => combined.setValue({ tab: activeProfileTab.getValue(), dna: obs.getValue() })))
 
-                                            <div className="form-group">
-                                                <label>Experience Level</label>
-                                                <div className="level-selector">
-                                                    {["beginner", "intermediate", "advanced", "pro"].map(l => (
-                                                        <div
-                                                            className={`level-btn ${dna.level === l ? "active" : ""}`}
-                                                            onClick={() => { userService.update({ level: l as UserLevel }); activeProfileTab.setValue("identity"); }}
-                                                        >
-                                                            {l.charAt(0).toUpperCase() + l.slice(1)}
-                                                        </div>
-                                                    ))}
+                                    return ObserverView(lifecycle, combined, ({ tab, dna }) => {
+                                        if (tab === "identity") return (
+                                            <div style={{ maxWidth: "600px" }}>
+                                                <div className="form-group">
+                                                    <label>Name / Alias</label>
+                                                    <TextInput lifecycle={lifecycle} model={nameModel} />
+                                                </div>
+
+                                                <div className="form-group">
+                                                    <label>Experience Level</label>
+                                                    <div className="level-selector">
+                                                        {["beginner", "intermediate", "advanced", "pro"].map(l => (
+                                                            <div
+                                                                className={`level-btn ${dna.level === l ? "active" : ""}`}
+                                                                onClick={() => { userService.update({ level: l as UserLevel }); activeProfileTab.setValue("identity"); }}
+                                                            >
+                                                                {l.charAt(0).toUpperCase() + l.slice(1)}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                <div className="form-group">
+                                                    <label>Role</label>
+                                                    <select
+                                                        onChange={(e: any) => userService.update({ identity: { ...dna.identity, role: e.target.value as any } })}
+                                                        value={dna.identity.role}
+                                                    >
+                                                        {["producer", "songwriter", "mixer", "sound_designer", "artist"].map(r =>
+                                                            <option value={r}>{r.toUpperCase().replace("_", " ")}</option>
+                                                        )}
+                                                    </select>
+                                                </div>
+
+                                                <div className="form-group">
+                                                    <label>Location</label>
+                                                    <input type="text"
+                                                        value={dna.identity.location}
+                                                        onChange={(e: any) => userService.update({ identity: { ...dna.identity, location: e.target.value } })}
+                                                        placeholder="Where are you based?"
+                                                        style={{ width: "100%", padding: "8px", background: "var(--color-bg-3)", border: "1px solid var(--color-edge)", color: "white", borderRadius: "4px" }}
+                                                    />
                                                 </div>
                                             </div>
-
-                                            <div className="form-group">
-                                                <label>Role</label>
-                                                <select
-                                                    onChange={(e: any) => userService.update({ identity: { ...dna.identity, role: e.target.value as any } })}
-                                                    value={dna.identity.role}
-                                                >
-                                                    {["producer", "songwriter", "mixer", "sound_designer", "artist"].map(r =>
-                                                        <option value={r}>{r.toUpperCase().replace("_", " ")}</option>
-                                                    )}
-                                                </select>
+                                        )
+                                        // ... Simpler logic for other tabs ...
+                                        if (tab === "sound") return (
+                                            <div style={{ maxWidth: "600px" }}>
+                                                <div className="form-group">
+                                                    <label>Primary Genre</label>
+                                                    <input type="text" value={dna.sonicFingerprint.primaryGenre}
+                                                        placeholder="e.g. Melodic Techno"
+                                                        onChange={(e: any) => userService.update({ sonicFingerprint: { ...dna.sonicFingerprint, primaryGenre: e.target.value } })}
+                                                    />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label>Secondary Genres</label>
+                                                    <input type="text" value={dna.sonicFingerprint.secondaryGenres.join(", ")}
+                                                        placeholder="e.g. Bass Music, Ambient"
+                                                        onChange={(e: any) => userService.update({ sonicFingerprint: { ...dna.sonicFingerprint, secondaryGenres: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) } })}
+                                                    />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label>Vibe Keywords</label>
+                                                    <input type="text" value={dna.sonicFingerprint.vibeKeywords.join(", ")}
+                                                        placeholder="Use comma separated list..."
+                                                        onChange={(e: any) => userService.update({ sonicFingerprint: { ...dna.sonicFingerprint, vibeKeywords: e.target.value.split(",").map((s: string) => s.trim()) } })}
+                                                    />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label>Key Influences</label>
+                                                    <input type="text" value={dna.influences.join(", ")}
+                                                        placeholder="Daft Punk, Hans Zimmer..."
+                                                        onChange={(e: any) => userService.update({ influences: e.target.value.split(",").map((s: string) => s.trim()) })}
+                                                        style={{ width: "100%", padding: "8px", background: "var(--color-bg-3)", border: "1px solid var(--color-edge)", color: "white", borderRadius: "4px" }}
+                                                    />
+                                                </div>
                                             </div>
-
-                                            <div className="form-group">
-                                                <label>Location</label>
-                                                <input type="text"
-                                                    value={dna.identity.location}
-                                                    onChange={(e: any) => userService.update({ identity: { ...dna.identity, location: e.target.value } })}
-                                                    placeholder="Where are you based?"
-                                                    style={{ width: "100%", padding: "8px", background: "var(--color-bg-3)", border: "1px solid var(--color-edge)", color: "white", borderRadius: "4px" }}
-                                                />
+                                        )
+                                        if (tab === "studio") return (
+                                            <div style={{ maxWidth: "600px" }}>
+                                                <div className="form-group">
+                                                    <label>Workflow Preference</label>
+                                                    <select
+                                                        onChange={(e: any) => userService.update({ techRider: { ...dna.techRider, workflow: e.target.value as any } })}
+                                                        value={dna.techRider.workflow}
+                                                    >
+                                                        <option value="in-the-box">Software Only</option>
+                                                        <option value="hybrid">Hybrid</option>
+                                                        <option value="outboard-heavy">Analog Heavy</option>
+                                                    </select>
+                                                </div>
+                                                <div className="form-group">
+                                                    <label>Key Gear / VSTs</label>
+                                                    <textarea
+                                                        style={{ height: "100px", width: "100%", padding: "8px", background: "var(--color-bg-3)", border: "1px solid var(--color-edge)", color: "white", borderRadius: "4px" }}
+                                                        placeholder="Moog Sub37, Serum, UAD..."
+                                                        onChange={(e: any) => userService.update({ techRider: { ...dna.techRider, integrations: e.target.value.split(",").map((s: string) => s.trim()) } })}
+                                                    >{dna.techRider.integrations.join(", ")}</textarea>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )
-                                    // ... Simpler logic for other tabs ...
-                                    if (tab === "sound") return (
-                                        <div style={{ maxWidth: "600px" }}>
-                                            <div className="form-group">
-                                                <label>Primary Genre</label>
-                                                <input type="text" value={dna.sonicFingerprint.primaryGenre}
-                                                    onChange={(e: any) => userService.update({ sonicFingerprint: { ...dna.sonicFingerprint, primaryGenre: e.target.value } })}
-                                                />
+                                        )
+                                        if (tab === "goals") return (
+                                            <div style={{ maxWidth: "600px" }}>
+                                                <div className="form-group">
+                                                    <label>Current Goals</label>
+                                                    <textarea
+                                                        style={{ height: "150px" }}
+                                                        placeholder="What are you working towards? (e.g. 'Finish my first EP', 'Master compression')"
+                                                        onChange={(e: any) => userService.update({ goals: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })}
+                                                    >{dna.goals.join(", ")}</textarea>
+                                                </div>
                                             </div>
-                                            <div className="form-group">
-                                                <label>Vibe Keywords</label>
-                                                <input type="text" value={dna.sonicFingerprint.vibeKeywords.join(", ")}
-                                                    placeholder="Use comma separated list..."
-                                                    onChange={(e: any) => userService.update({ sonicFingerprint: { ...dna.sonicFingerprint, vibeKeywords: e.target.value.split(",").map((s: string) => s.trim()) } })}
-                                                />
-                                            </div>
-                                            <div className="form-group">
-                                                <label>Key Influences</label>
-                                                <input type="text" value={dna.influences.join(", ")}
-                                                    placeholder="Daft Punk, Hans Zimmer..."
-                                                    onChange={(e: any) => userService.update({ influences: e.target.value.split(",").map((s: string) => s.trim()) })}
-                                                    style={{ width: "100%", padding: "8px", background: "var(--color-bg-3)", border: "1px solid var(--color-edge)", color: "white", borderRadius: "4px" }}
-                                                />
-                                            </div>
-                                        </div>
-                                    )
-                                    if (tab === "studio") return (
-                                        <div style={{ maxWidth: "600px" }}>
-                                            <div className="form-group">
-                                                <label>Workflow Preference</label>
-                                                <select
-                                                    onChange={(e: any) => userService.update({ techRider: { ...dna.techRider, workflow: e.target.value as any } })}
-                                                    value={dna.techRider.workflow}
-                                                >
-                                                    <option value="in-the-box">Software Only</option>
-                                                    <option value="hybrid">Hybrid</option>
-                                                    <option value="outboard-heavy">Analog Heavy</option>
-                                                </select>
-                                            </div>
-                                            <div className="form-group">
-                                                <label>Key Gear / VSTs</label>
-                                                <textarea
-                                                    style={{ height: "100px", width: "100%", padding: "8px", background: "var(--color-bg-3)", border: "1px solid var(--color-edge)", color: "white", borderRadius: "4px" }}
-                                                    placeholder="Moog Sub37, Serum, UAD..."
-                                                    onChange={(e: any) => userService.update({ techRider: { ...dna.techRider, integrations: e.target.value.split(",").map((s: string) => s.trim()) } })}
-                                                >{dna.techRider.integrations.join(", ")}</textarea>
-                                            </div>
-                                        </div>
-                                    )
-                                    if (tab === "goals") return (
-                                        <div style={{ maxWidth: "600px" }}>
-                                            <div className="form-group">
-                                                <label>Creative Goals</label>
-                                                <textarea
-                                                    style={{ height: "150px" }}
-                                                    placeholder="I want to finish an EP..."
-                                                    onChange={(e: any) => userService.update({ goals: e.target.value.split(",").map((s: string) => s.trim()) })}
-                                                >{dna.goals.join(", ")}</textarea>
-                                            </div>
-                                        </div>
-                                    )
-                                    return <div></div>
-                                })}
+                                        )
+                                        return <div></div>
+                                    })
+                                })()}
                             </div>
 
                             <div style={{ borderTop: "1px solid var(--color-edge)", paddingTop: "16px" }}>

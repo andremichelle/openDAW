@@ -6,7 +6,6 @@ import { AIService } from "./services/AIService"
 import { Message } from "./services/llm/LLMProvider"
 import { OdieAppControl } from "./services/OdieAppControl"
 import { odiePersona } from "./services/OdiePersonaService"
-import { schoolStore } from "./services/SchoolStore"
 import { chatHistory } from "./services/ChatHistoryService"
 import { OdieTools } from "./services/OdieToolDefinitions"
 import { commandRegistry } from "./services/OdieCommandRegistry"
@@ -310,11 +309,6 @@ export class OdieService {
                                 ? `We were recently discussing "${recentlyDiscussedTrack}". If the user refers to "it" or "the track", they might mean this.`
                                 : "No track is currently focused. Ask the user which track if their question is track-specific."
                     }
-                } : undefined,
-                activeLesson: schoolStore.currentLesson.getValue() ? {
-                    id: schoolStore.currentLesson.getValue()!.id,
-                    title: schoolStore.currentLesson.getValue()!.title,
-                    content: schoolStore.currentLesson.getValue()!.content
                 } : undefined
             }
 

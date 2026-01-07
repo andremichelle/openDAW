@@ -33,9 +33,9 @@ export class OdieCommandRegistry {
             description: "Start Transport",
             usage: "/play",
             execute: async (s) => {
-                if (!s.appControl) return "❌ Nervous System Disconnected"
+                if (!s.appControl) return "[ERR] Nervous System Disconnected"
                 s.appControl.play()
-                return "▶️ Playing"
+                return "[PLAY] Playing"
             }
         })
 
@@ -44,9 +44,9 @@ export class OdieCommandRegistry {
             description: "Stop Transport",
             usage: "/stop",
             execute: async (s) => {
-                if (!s.appControl) return "❌ Nervous System Disconnected"
+                if (!s.appControl) return "[ERR] Nervous System Disconnected"
                 s.appControl.stop()
-                return "⏹️ Stopped"
+                return "[STOP] Stopped"
             }
         })
 
@@ -55,10 +55,10 @@ export class OdieCommandRegistry {
             description: "Start Recording",
             usage: "/record [countIn? (true/false, default: true)]",
             execute: async (s, args) => {
-                if (!s.appControl) return "❌ Nervous System Disconnected"
+                if (!s.appControl) return "[ERR] Nervous System Disconnected"
                 const countIn = args[0] !== "false" && args[0] !== "no"
                 s.appControl.record(countIn)
-                return countIn ? "🔴 Recording (Count-In)" : "🔴 Recording (Immediate)"
+                return countIn ? "[REC] Recording (Count-In)" : "[REC] Recording (Immediate)"
             }
         })
 
@@ -72,10 +72,10 @@ export class OdieCommandRegistry {
                 const type = args[0] || "synth"
                 const name = args.slice(1).join(" ") || "New Track"
 
-                if (!s.appControl) return "❌ Nervous System Disconnected"
+                if (!s.appControl) return "[ERR] Nervous System Disconnected"
 
                 const result = await s.appControl.addTrack(type, name)
-                return result.success ? `✅ ${result.message}` : `❌ ${result.reason}`
+                return result.success ? `[OK] ${result.message}` : `❌ ${result.reason}`
             }
         })
 
@@ -84,9 +84,9 @@ export class OdieCommandRegistry {
             description: "Start a new project (Reset)",
             usage: "/new",
             execute: async (s) => {
-                if (!s.appControl) return "❌ Nervous System Disconnected"
+                if (!s.appControl) return "[ERR] Nervous System Disconnected"
                 await s.appControl.newProject()
-                return "✨ New Project Created (Reset)"
+                return "[NEW] New Project Created (Reset)"
             }
         })
 
@@ -95,10 +95,10 @@ export class OdieCommandRegistry {
             description: "List available samples",
             usage: "/samples",
             execute: async (s) => {
-                if (!s.appControl) return "❌ Nervous System Disconnected"
+                if (!s.appControl) return "[ERR] Nervous System Disconnected"
                 const samples = await s.appControl.listSamples()
-                if (samples.length === 0) return "📭 No samples found."
-                let report = "## 🔊 Available Samples\n\n"
+                if (samples.length === 0) return "(Empty) No samples found."
+                let report = "## SAMPLES Available Samples\n\n"
                 report += samples.map(s => `- ${s.name}`).join("\n")
                 return report
             }
@@ -109,10 +109,10 @@ export class OdieCommandRegistry {
             description: "List available soundfonts",
             usage: "/soundfonts",
             execute: async (s) => {
-                if (!s.appControl) return "❌ Nervous System Disconnected"
+                if (!s.appControl) return "[ERR] Nervous System Disconnected"
                 const sfs = await s.appControl.listSoundfonts()
-                if (sfs.length === 0) return "📭 No soundfonts found."
-                let report = "## 🎹 Available Soundfonts\n\n"
+                if (sfs.length === 0) return "(Empty) No soundfonts found."
+                let report = "## SOUNDFONTS Available Soundfonts\n\n"
                 report += sfs.map(s => `- ${s.name}`).join("\n")
                 return report
             }
@@ -125,10 +125,10 @@ export class OdieCommandRegistry {
             execute: async (s, args) => {
                 const trackName = args[0]
                 const query = args.slice(1).join(" ")
-                if (!trackName || !query) return "❌ Usage: /set-nano [trackName] [sampleQuery]"
-                if (!s.appControl) return "❌ Nervous System Disconnected"
+                if (!trackName || !query) return "[ERR] Usage: /set-nano [trackName] [sampleQuery]"
+                if (!s.appControl) return "[ERR] Nervous System Disconnected"
                 const res = await s.appControl.setNanoSample(trackName, query)
-                return res.success ? `✅ ${res.message}` : `❌ ${res.reason}`
+                return res.success ? `[OK] ${res.message}` : `[ERR] ${res.reason}`
             }
         })
 
@@ -140,10 +140,10 @@ export class OdieCommandRegistry {
                 const trackName = args[0]
                 const padIndex = parseInt(args[1], 10)
                 const query = args.slice(2).join(" ")
-                if (!trackName || isNaN(padIndex) || !query) return "❌ Usage: /set-pad [trackName] [padIndex] [sampleQuery]"
-                if (!s.appControl) return "❌ Nervous System Disconnected"
+                if (!trackName || isNaN(padIndex) || !query) return "[ERR] Usage: /set-pad [trackName] [padIndex] [sampleQuery]"
+                if (!s.appControl) return "[ERR] Nervous System Disconnected"
                 const res = await s.appControl.setPlayfieldPad(trackName, padIndex, query)
-                return res.success ? `✅ ${res.message}` : `❌ ${res.reason}`
+                return res.success ? `[OK] ${res.message}` : `[ERR] ${res.reason}`
             }
         })
 
@@ -154,10 +154,10 @@ export class OdieCommandRegistry {
             execute: async (s, args) => {
                 const trackName = args[0]
                 const query = args.slice(1).join(" ")
-                if (!trackName || !query) return "❌ Usage: /set-sf [trackName] [soundfontQuery]"
-                if (!s.appControl) return "❌ Nervous System Disconnected"
+                if (!trackName || !query) return "[ERR] Usage: /set-sf [trackName] [soundfontQuery]"
+                if (!s.appControl) return "[ERR] Nervous System Disconnected"
                 const res = await s.appControl.setSoundfont(trackName, query)
-                return res.success ? `✅ ${res.message}` : `❌ ${res.reason}`
+                return res.success ? `[OK] ${res.message}` : `[ERR] ${res.reason}`
             }
         })
 
@@ -165,9 +165,9 @@ export class OdieCommandRegistry {
             id: "/help",
             description: "List commands",
             usage: "/help",
-            execute: async () => `## 🎹 Odie User Manual
+            execute: async () => `## ODIE USER MANUAL
 
-### 🗣️ Natural Language (The Brain)
+### Natural Language (The Brain)
 Odie understands music production context. Just ask naturally:
 
 | Category | Examples |
@@ -179,37 +179,37 @@ Odie understands music production context. Just ask naturally:
 
 ---
 
-### ⚡ Slash Commands (Precision Tools)
+### Precision Tools (Slash Commands)
 Direct control over the Studio and Chat.
 
-#### 🎛️ Transport & Project
+#### Transport & Project
 | Command | Description |
 | :--- | :--- |
-| \`/play\` | ▶️ **Play** |
-| \`/stop\` | ⏹️ **Stop** |
-| \`/record\` | 🔴 **Record** (Add \`false\` to skip count-in) |
-| \`/new\` | ✨ **New Project** (Reset Studio) |
+| \`/play\` | [PLAY] **Play** |
+| \`/stop\` | [STOP] **Stop** |
+| \`/record\` | [REC] **Record** (Add \`false\` to skip count-in) |
+| \`/new\` | [NEW] **New Project** (Reset Studio) |
 
-#### 🎚️ Tracks & Effects
+#### Tracks & Effects
 | Command | Description |
 | :--- | :--- |
 | \`/add [type]\` | **Add Track** (e.g. \`/add audio\`, \`/add drums\`) |
-| \`/list\` | 📜 **List All Tracks** |
+| \`/list\` | [LIST] **List All Tracks** |
 | \`/effect [track] [type]\` | **Add Audio FX** (e.g. \`/effect Bass Reverb\`) |
 | \`/meff [track] [type]\` | **Add MIDI FX** (e.g. \`/meff Keys Arpeggiator\`) |
 
-#### 📂 Assets (Power User)
+#### Assets (Power User)
 | Command | Description |
 | :--- | :--- |
-| \`/samples\` | 📂 **List Samples** |
-| \`/soundfonts\` | 🎹 **List Soundfonts** |
+| \`/samples\` | [SAMPLES] **List Samples** |
+| \`/soundfonts\` | [SOUNDFONTS] **List Soundfonts** |
 | \`/set-nano [track] [query]\` | **Load Sampler** (Direct Load) |
 | \`/set-sf [track] [query]\` | **Load Soundfont** (Direct Load) |
 
-#### 💬 Chat Control
+#### Chat Control
 | Command | Description |
 | :--- | :--- |
-| \`/clear\` | 🧹 **Wipe Chat History** |
+| \`/clear\` | [WIPE] **Wipe Chat History** |
 `
         })
 
@@ -218,13 +218,13 @@ Direct control over the Studio and Chat.
             id: "/dev",
             description: "Show Developer Commands",
             usage: "/dev",
-            execute: async () => `## 🛠️ Developer Tools
+            execute: async () => `## DEVELOPER TOOLS
 
 | Command | Description |
 | :--- | :--- |
-| \`/debug\` | 🕷️ **Dump State** (Console Log) |
-| \`/verify3ui\` | 🧪 **Test GenUI** (Render Widgets) |
-| \`/keys\` | 🔑 **API Key Status** |
+| \`/debug\` | [DEBUG] Dump State (Console Log) |
+| \`/verify3ui\` | [TEST] Test GenUI (Render Widgets) |
+| \`/keys\` | [KEYS] API Key Status |
 `
         })
 
@@ -235,7 +235,7 @@ Direct control over the Studio and Chat.
             usage: "/clear",
             execute: async (s) => {
                 s.messages.setValue([])
-                return "🧹 Chat History Cleared."
+                return "[WIPE] Chat History Cleared."
             }
         })
 
@@ -245,8 +245,8 @@ Direct control over the Studio and Chat.
             usage: "/debug",
             execute: async (s) => {
                 const info = s.lastDebugInfo.getValue()
-                console.log("🕷️ [Odie Debug Dump]", info)
-                return "🕷️ Debug info dumped to Chrome Console."
+                console.log("[DEBUG] Odie Debug Dump", info)
+                return "[DEBUG] Debug info dumped to Chrome Console."
             }
         })
 
@@ -256,10 +256,10 @@ Direct control over the Studio and Chat.
             usage: "/purge",
             execute: async (_s) => {
                 // [ANTIGRAVITY] Nuclear Option for Testing Onboarding
-                console.log("☢️ PURGING ODIE DATA & RELOADING...")
+                console.log("[PURGE] PURGING ODIE DATA...")
                 localStorage.clear()
                 location.reload()
-                return "☢️ Goodbye."
+                return "[PURGE] Goodbye."
             }
         })
 
@@ -283,7 +283,7 @@ Direct control over the Studio and Chat.
                     }
                 })
                 s.visible.setValue(true)
-                return "🧪 GenUI Test Payload Injected."
+                return "[TEST] GenUI Test Payload Injected."
             }
         })
 
@@ -293,13 +293,13 @@ Direct control over the Studio and Chat.
             description: "Add an audio effect to a track",
             usage: "/effect [track] [type]",
             execute: async (s, args) => {
-                if (args.length < 2) return "❌ Usage: /effect [track] [type]"
+                if (args.length < 2) return "[ERR] Usage: /effect [track] [type]"
                 const type = args[args.length - 1]
                 const track = args.slice(0, -1).join(" ")
 
-                if (!s.appControl) return "❌ Nervous System Disconnected"
+                if (!s.appControl) return "[ERR] Nervous System Disconnected"
                 const res = await s.appControl.addEffect(track, type)
-                return res.success ? `✅ ${res.message}` : `❌ ${res.reason}`
+                return res.success ? `[OK] ${res.message}` : `[ERR] ${res.reason}`
             }
         })
 
@@ -308,13 +308,13 @@ Direct control over the Studio and Chat.
             description: "Add a MIDI effect to a track",
             usage: "/meff [track] [type]",
             execute: async (s, args) => {
-                if (args.length < 2) return "❌ Usage: /meff [track] [type]"
+                if (args.length < 2) return "[ERR] Usage: /meff [track] [type]"
                 const type = args[args.length - 1]
                 const track = args.slice(0, -1).join(" ")
 
-                if (!s.appControl) return "❌ Nervous System Disconnected"
+                if (!s.appControl) return "[ERR] Nervous System Disconnected"
                 const res = await s.appControl.addMidiEffect(track, type)
-                return res.success ? `✅ ${res.message}` : `❌ ${res.reason}`
+                return res.success ? `[OK] ${res.message}` : `[ERR] ${res.reason}`
             }
         })
 
@@ -323,10 +323,10 @@ Direct control over the Studio and Chat.
             description: "List all tracks",
             usage: "/list",
             execute: async (s) => {
-                if (!s.appControl) return "❌ Nervous System Disconnected"
+                if (!s.appControl) return "[ERR] Nervous System Disconnected"
                 const tracks = s.appControl.listTracks()
-                if (tracks.length === 0) return "📭 No tracks."
-                return "## 🎚️ Tracks\n" + tracks.map((t, i) => `${i + 1}. **${t}**`).join("\n")
+                if (tracks.length === 0) return "(Empty) No tracks."
+                return "## TRACKS List\n" + tracks.map((t, i) => `${i + 1}. **${t}**`).join("\n")
             }
         })
 
@@ -339,24 +339,24 @@ Direct control over the Studio and Chat.
                 const provider = s.ai.getActiveProvider()
 
                 if (!isProviderWithKeyStatuses(provider)) {
-                    return "⚠️ Key status not available for current provider."
+                    return "[WARN] Key status not available for current provider."
                 }
 
                 const statuses = provider.getKeyStatuses()
                 if (!statuses || statuses.length === 0) {
-                    return "📭 No API keys in library. Add keys in Settings."
+                    return "(Empty) No API keys in library. Add keys in Settings."
                 }
 
-                let report = "## 🔑 Infinity API Library\n\n"
+                let report = "## KEYS Infinity API Library\n\n"
                 report += "| # | Key | Status | Active |\n"
                 report += "|---|-----|--------|--------|\n"
 
                 for (let i = 0; i < statuses.length; i++) {
                     const k = statuses[i]
-                    const statusIcon = k.status === 'ready' ? '✅' :
-                        k.status === 'exhausted' ? '⏳' :
-                            k.status === 'invalid' ? '❌' : '❔'
-                    const activeIcon = k.isActive ? '⟵ **ACTIVE**' : ''
+                    const statusIcon = k.status === 'ready' ? '[OK]' :
+                        k.status === 'exhausted' ? '[WAIT]' :
+                            k.status === 'invalid' ? '[ERR]' : '[?]'
+                    const activeIcon = k.isActive ? ' <--- ACTIVE' : ''
                     report += `| ${i + 1} | ${k.key} | ${statusIcon} ${k.status.toUpperCase()} | ${activeIcon} |\n`
                 }
 

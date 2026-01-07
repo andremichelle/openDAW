@@ -1,3 +1,5 @@
+import css from "./OdieProfileModal.sass?inline"
+
 import { createElement } from "@opendaw/lib-jsx"
 import { OdieModalFrame } from "./components/OdieModalFrame"
 import { userService } from "./services/UserService"
@@ -5,48 +7,9 @@ import { DefaultObservableValue, ObservableValue, Terminator } from "@opendaw/li
 import { Button } from "@/ui/components/Button"
 import { TextInput } from "@/ui/components/TextInput"
 import { Colors } from "@opendaw/studio-enums"
+import { Html } from "@opendaw/lib-dom"
 
-const S = {
-    layout: {
-        display: "grid", gridTemplateColumns: "300px 1fr", height: "100%"
-    },
-    sidebar: {
-        background: "rgba(0,0,0,0.2)",
-        borderRight: "1px solid rgba(255,255,255,0.05)",
-        padding: "32px",
-        display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center"
-    },
-    avatar: {
-        width: "120px", height: "120px", borderRadius: "50%",
-        background: "rgba(255, 255, 255, 0.05)",
-        border: "1px solid rgba(255, 255, 255, 0.1)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: "48px", marginBottom: "24px"
-    },
-    main: { padding: "40px", overflowY: "auto" },
-    section: { marginBottom: "32px" },
-    label: {
-        fontSize: "11px", textTransform: "uppercase", letterSpacing: "1px", fontWeight: "700",
-        color: "#94a3b8", marginBottom: "8px", display: "block"
-    },
-    input: {
-        width: "100%", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.1)",
-        borderRadius: "8px", padding: "12px", color: "white", fontSize: "14px",
-        marginBottom: "16px", fontFamily: "Inter, sans-serif"
-    },
-    levelGrid: {
-        display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "8px", marginBottom: "16px"
-    },
-    levelBtn: {
-        background: "rgba(255,255,255,0.05)", border: "1px solid transparent",
-        borderRadius: "8px", padding: "12px", textAlign: "center", cursor: "pointer",
-        color: "#cbd5e1", fontSize: "13px", fontWeight: "500", transition: "all 0.2s"
-    },
-    levelBtnActive: {
-        background: "#3b82f6", color: "white", borderColor: "#60a5fa",
-        boxShadow: "0 4px 12px rgba(59, 130, 246, 0.3)"
-    }
-}
+const className = Html.adoptStyleSheet(css, "OdieProfileModal")
 
 export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
     // -- STATE --
@@ -57,16 +20,18 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
     const vibesModel = new DefaultObservableValue<string>(userService.dna.getValue().sonicFingerprint.vibeKeywords.join(", "))
     const influencesModel = new DefaultObservableValue<string>(userService.dna.getValue().influences.join(", "))
 
+    // View State
+    const activeTab$ = new DefaultObservableValue<string>("identity") // identity | sound | studio | goals
+
     // Sync to UserService
-    nameModel.subscribe((v: ObservableValue<string>) => userService.update({ name: v.getValue() }))
-    locationModel.subscribe((v: ObservableValue<string>) => userService.update({ identity: { ...userService.dna.getValue().identity, location: v.getValue() } }))
-    genreModel.subscribe((v: ObservableValue<string>) => userService.update({ sonicFingerprint: { ...userService.dna.getValue().sonicFingerprint, primaryGenre: v.getValue() } }))
-    vibesModel.subscribe((v: ObservableValue<string>) => userService.update({ sonicFingerprint: { ...userService.dna.getValue().sonicFingerprint, vibeKeywords: v.getValue().split(",").map(s => s.trim()) } }))
-    influencesModel.subscribe((v: ObservableValue<string>) => userService.update({ influences: v.getValue().split(",").map(s => s.trim()) }))
+    lifecycle.own(nameModel.subscribe((v: ObservableValue<string>) => userService.update({ name: v.getValue() })))
+    lifecycle.own(locationModel.subscribe((v: ObservableValue<string>) => userService.update({ identity: { ...userService.dna.getValue().identity, location: v.getValue() } })))
+    lifecycle.own(genreModel.subscribe((v: ObservableValue<string>) => userService.update({ sonicFingerprint: { ...userService.dna.getValue().sonicFingerprint, primaryGenre: v.getValue() } })))
+    lifecycle.own(vibesModel.subscribe((v: ObservableValue<string>) => userService.update({ sonicFingerprint: { ...userService.dna.getValue().sonicFingerprint, vibeKeywords: v.getValue().split(",").map(s => s.trim()) } })))
+    lifecycle.own(influencesModel.subscribe((v: ObservableValue<string>) => userService.update({ influences: v.getValue().split(",").map(s => s.trim()) })))
 
     // We need a simple re-render mechanic for tabs
-    const container = <div style={{ height: "100%", width: "100%" }}></div> as HTMLElement
-    let activeTab = "identity" // identity | sound | studio | goals
+    const container = <div className={Html.buildClassList(className, "layout")}></div> as HTMLElement
 
     // Reactive binding: We read generic DNA, but writes go to UserService
     const getDna = () => userService.dna.getValue()
@@ -74,22 +39,15 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
     const render = () => {
         container.innerHTML = ""
         const dna = getDna()
+        const activeTab = activeTab$.getValue()
 
         // -- SIDEBAR ACTIONS --
-        const renderTabBtn = (id: string, label: string, icon: string) => {
+        const renderTabBtn = (id: string, label: string) => {
             const isActive = activeTab === id
             return <div
-                onclick={() => { activeTab = id; render() }}
-                style={{
-                    padding: "12px 16px", borderRadius: "8px",
-                    background: isActive ? "rgba(255,255,255,0.1)" : "transparent",
-                    color: isActive ? "white" : "#94a3b8",
-                    cursor: "pointer", display: "flex", alignItems: "center", gap: "12px",
-                    fontWeight: isActive ? "600" : "400", transition: "all 0.2s",
-                    marginBottom: "4px"
-                }}
+                onclick={() => activeTab$.setValue(id)}
+                className={`nav-item ${isActive ? 'active' : ''}`}
             >
-                <span style={{ fontSize: "18px" }}>{icon}</span>
                 <span>{label}</span>
             </div>
         }
@@ -98,27 +56,27 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
         let tabContent
         if (activeTab === "identity") {
             tabContent = <div>
-                <div style={S.section}>
-                    <label style={S.label}>Artist Name / Alias</label>
-                    <TextInput lifecycle={lifecycle} model={nameModel} />
+                <div className="section">
+                    <label className="label">Artist Name / Alias</label>
+                    <TextInput lifecycle={lifecycle} model={nameModel} className="profile-input" />
                 </div>
-                <div style={S.section}>
-                    <label style={S.label}>Primary Role</label>
-                    <select style={S.input} onchange={(e: any) => userService.update({ identity: { ...dna.identity, role: e.target.value } })}>
+                <div className="section">
+                    <label className="label">Primary Role</label>
+                    <select className="native-input" onchange={(e: any) => userService.update({ identity: { ...dna.identity, role: e.target.value } })}>
                         {["producer", "songwriter", "mixer", "sound_designer", "artist"].map(r =>
                             <option value={r} selected={dna.identity.role === r}>{r.toUpperCase().replace("_", " ")}</option>
                         )}
                     </select>
                 </div>
-                <div style={S.section}>
-                    <label style={S.label}>Location (City/Planet)</label>
-                    <TextInput lifecycle={lifecycle} model={locationModel} />
+                <div className="section">
+                    <label className="label">Location (City/Planet)</label>
+                    <TextInput lifecycle={lifecycle} model={locationModel} className="profile-input" />
                 </div>
-                <div style={S.section}>
-                    <label style={S.label}>Experience Level</label>
-                    <div style={S.levelGrid}>
+                <div className="section">
+                    <label className="label">Experience Level</label>
+                    <div className="level-grid">
                         {["beginner", "intermediate", "advanced", "pro"].map(l => (
-                            <div style={dna.level === l ? { ...S.levelBtn, ...S.levelBtnActive } : S.levelBtn}
+                            <div className={`level-btn ${dna.level === l ? 'active' : ''}`}
                                 onclick={() => { userService.update({ level: l as any }); render() }}>
                                 {l.charAt(0).toUpperCase() + l.slice(1)}
                             </div>
@@ -129,37 +87,37 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
         }
         else if (activeTab === "sound") {
             tabContent = <div>
-                <div style={S.section}>
-                    <label style={S.label}>Primary Genre</label>
-                    <TextInput lifecycle={lifecycle} model={genreModel} />
+                <div className="section">
+                    <label className="label">Primary Genre</label>
+                    <TextInput lifecycle={lifecycle} model={genreModel} className="profile-input" />
                 </div>
-                <div style={S.section}>
-                    <label style={S.label}>Vibe Keywords (Comma separated)</label>
-                    <TextInput lifecycle={lifecycle} model={vibesModel} />
+                <div className="section">
+                    <label className="label">Vibe Keywords (Comma separated)</label>
+                    <TextInput lifecycle={lifecycle} model={vibesModel} className="profile-input" />
                 </div>
-                <div style={S.section}>
-                    <label style={S.label}>Key Influences</label>
-                    <TextInput lifecycle={lifecycle} model={influencesModel} />
+                <div className="section">
+                    <label className="label">Key Influences</label>
+                    <TextInput lifecycle={lifecycle} model={influencesModel} className="profile-input" />
                 </div>
             </div>
         }
         else if (activeTab === "studio") {
             tabContent = <div>
-                <div style={S.section}>
-                    <label style={S.label}>Workflow Preference</label>
-                    <select style={S.input} onchange={(e: any) => userService.update({ techRider: { ...dna.techRider, workflow: e.target.value } })}>
+                <div className="section">
+                    <label className="label">Workflow Preference</label>
+                    <select className="native-input" onchange={(e: any) => userService.update({ techRider: { ...dna.techRider, workflow: e.target.value } })}>
                         <option value="in-the-box" selected={dna.techRider.workflow === "in-the-box"}>In-The-Box (Software Only)</option>
                         <option value="hybrid" selected={dna.techRider.workflow === "hybrid"}>Hybrid (Hardware + Software)</option>
                         <option value="outboard-heavy" selected={dna.techRider.workflow === "outboard-heavy"}>Outboard Heavy (Analog)</option>
                         <option value="recording-focus" selected={dna.techRider.workflow === "recording-focus"}>Recording Focus (Live Instruments)</option>
                     </select>
                 </div>
-                <div style={S.section}>
-                    <label style={S.label}>Studio Integrations (Hardware / Key VSTs)</label>
-                    <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "8px" }}>
+                <div className="section">
+                    <label className="label">Studio Integrations (Hardware / Key VSTs)</label>
+                    <div className="input-hint">
                         Tell Odie what else is in your studio (e.g. Moog Sub37, Serum, Push 2).
                     </div>
-                    <textarea style={{ ...S.input, height: "100px", resize: "none" }}
+                    <textarea className="input-textarea"
                         placeholder="List your key gear..."
                         onchange={(e: any) => userService.update({ techRider: { ...dna.techRider, integrations: e.target.value.split(",").map((s: string) => s.trim()) } })}
                     >{dna.techRider.integrations.join(", ")}</textarea>
@@ -168,9 +126,9 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
         }
         else if (activeTab === "goals") {
             tabContent = <div>
-                <div style={S.section}>
-                    <label style={S.label}>Current Goals</label>
-                    <textarea style={{ ...S.input, height: "120px", resize: "none" }}
+                <div className="section">
+                    <label className="label">Current Goals</label>
+                    <textarea className="input-textarea" style={{ height: "120px" }}
                         placeholder="What are you working towards? (e.g. Finish an EP, Learn Sound Design)"
                         onchange={(e: any) => userService.update({ goals: e.target.value.split(",").map((s: string) => s.trim()) })}
                     >{dna.goals.join(", ")}</textarea>
@@ -179,54 +137,66 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
         }
 
         // -- LAYOUT ASSEMBLY --
-        const layout = <div style={S.layout}>
-            {/* Sidebar */}
-            <div style={S.sidebar}>
-                <div style={S.avatar}>{dna.name.charAt(0).toUpperCase()}</div>
-                <div style={{ fontSize: "16px", fontWeight: "700", marginBottom: "4px" }}>{dna.name}</div>
-                <div style={{ fontSize: "11px", color: "#64748b", marginBottom: "24px" }}>{dna.level.toUpperCase()}</div>
-
-                <div style={{ width: "100%", textAlign: "left" }}>
-                    {renderTabBtn("identity", "Identity", "🆔")}
-                    {renderTabBtn("sound", "Sonic Profile", "🌊")}
-                    {renderTabBtn("studio", "Tech Rider", "🎛️")}
-                    {renderTabBtn("goals", "Goals", "🚀")}
-                </div>
-
-                <div style={{ marginTop: "auto", width: "100%" }}>
-                    <Button
-                        lifecycle={lifecycle}
-                        appearance={{ framed: true, color: Colors.blue }}
-                        style={{ width: "100%", padding: "12px", height: "40px" }}
-                        onClick={() => alert("Odie Interview Mode coming soon! Chat with Odie to auto-fill this.")}>
-                        <span>🎤</span> Interview Me
-                    </Button>
-                </div>
-            </div>
-
-            {/* Main Content Area */}
-            <div style={S.main}>
-                <h2 style={{ fontSize: "20px", fontWeight: "700", marginBottom: "24px", color: "white", borderBottom: "1px solid #333", paddingBottom: "16px" }}>
-                    {activeTab === "identity" && "Artist Identity"}
-                    {activeTab === "sound" && "Sonic Fingerprint"}
-                    {activeTab === "studio" && "Technical Rider"}
-                    {activeTab === "goals" && "Career Goals"}
-                </h2>
-                {tabContent}
-            </div>
+        const avatar = <div className="avatar">{dna.name.charAt(0).toUpperCase()}</div>
+        const info = <div>
+            <div className="info-name">{dna.name}</div>
+            <div className="info-level">{dna.level.toUpperCase()}</div>
         </div>
 
-        container.appendChild(layout)
+        const sidebar = <div className="sidebar">
+            {avatar}
+            {info}
+
+            <div className="nav-list">
+                {renderTabBtn("identity", "Identity")}
+                {renderTabBtn("sound", "Sonic Profile")}
+                {renderTabBtn("studio", "Tech Rider")}
+                {renderTabBtn("goals", "Goals")}
+            </div>
+
+            <div className="action-area">
+                <Button
+                    lifecycle={lifecycle}
+                    appearance={{ framed: true, color: Colors.blue }}
+                    /* Style override is needed for Button wrapper specific width */
+                    style={{ width: "100%", padding: "12px", height: "40px" }}
+                    onClick={() => alert("Odie Interview Mode coming soon! Chat with Odie to auto-fill this.")}>
+                    Interview Me
+                </Button>
+            </div>
+        </div> as HTMLElement
+
+        // Main Content Area
+        const main = <div className="main">
+            <h2>
+                {activeTab === "identity" && "Artist Identity"}
+                {activeTab === "sound" && "Sonic Fingerprint"}
+                {activeTab === "studio" && "Technical Rider"}
+                {activeTab === "goals" && "Career Goals"}
+            </h2>
+            {tabContent}
+        </div> as HTMLElement
+
+        container.appendChild(sidebar)
+        container.appendChild(main)
     }
+
+    // Reactive Refresh
+    lifecycle.own(activeTab$.subscribe(() => render()))
+    // Also re-render if user details change (which they do via the updates)
+    // In a real app we might want to subscribe to userService.dna, but here updates are local-optimistic via models
 
     // Initial Render
     render()
 
     return OdieModalFrame({
         title: "Artist Passport",
-        icon: "🛂", // Passport Icon
         width: "850px",
-        onClose,
+        height: "600px",
+        onClose: () => {
+            lifecycle.terminate()
+            onClose()
+        },
         children: container
     })
 }

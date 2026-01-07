@@ -1,7 +1,6 @@
 import { DefaultObservableValue } from "@opendaw/lib-std"
 
 export type UserLevel = "beginner" | "intermediate" | "advanced" | "pro"
-export type LearningStyle = "theory" | "practical" | "visual" | "mixed"
 
 export interface SonicFingerprint {
     primaryGenre: string
@@ -28,7 +27,6 @@ export interface UserDNA {
     techRider: TechRider
     goals: string[] // e.g. ["learn_mixing", "finish_album"]
     influences: string[] // e.g. ["Daft Punk", "Hans Zimmer"]
-    learningStyle: LearningStyle
 }
 
 const DEFAULT_DNA: UserDNA = {
@@ -38,8 +36,7 @@ const DEFAULT_DNA: UserDNA = {
     sonicFingerprint: { primaryGenre: "Electronic", secondaryGenres: [], vibeKeywords: [] },
     techRider: { daw: "OpenDAW", integrations: [], workflow: "in-the-box" },
     goals: ["Create great music"],
-    influences: [],
-    learningStyle: "mixed"
+    influences: []
 }
 
 export class UserService {

@@ -5,7 +5,6 @@ import { KNOWLEDGE_MODULES } from "../data/OdieKnowledgeBase"; // [ANTIGRAVITY] 
 
 
 import { userService } from "./UserService";
-// import { knowledgeService } from "./KnowledgeService"; // [ANTIGRAVITY] Deprecated for Smart Context
 
 export interface OdieContext {
     project?: {
@@ -21,11 +20,6 @@ export interface OdieContext {
     modelId?: string;
     providerId?: string;
     forceAgentMode?: boolean;
-    activeLesson?: {
-        id: string;
-        title: string;
-        content: string;
-    }
 }
 
 class OdiePersonaService {
@@ -125,17 +119,10 @@ class OdiePersonaService {
 
         // 3. The Active Focus (Current Hat)
         const currentFocus = odieFocus.getFocus();
-        // Override Role if School is active
-        const role = context.activeLesson ? 'Mentor' : this.mapFocusToRole(context, currentFocus);
+        const role = this.mapFocusToRole(context, currentFocus);
 
         parts.push(`\n### 🎯 Current Focus Mode: ${role}`);
         parts.push("While you have access to all knowledge, prioritize the mindset above for this interaction.");
-
-        // If Mentor (School), inject specific teacher mindset enforcement
-        if (role === 'Mentor') {
-            parts.push(`High Priority: The user is learning RIGHT NOW. Your job is to facilitate that learning.`)
-            parts.push(`Refuse to be distracted. If the user asks off-topic questions, answer briefly and steer back to the lesson.`)
-        }
 
         // 2.1 User Profile (Cortex Injection)
         parts.push(userService.getPromptContext())
@@ -180,17 +167,6 @@ class OdiePersonaService {
             console.log("🎯 Capability Injection for model:", context.modelId, caps)
         }
 
-
-        // 2.3 Active Lesson Context (The Dynamic Teacher)
-        if (context.activeLesson) {
-            parts.push(`\n### 🎓 Active Lesson: ${context.activeLesson.title}`)
-            parts.push(`User is currently viewing this lesson. Here is the current content fragment:`)
-            parts.push(`--- BEGIN LESSON ---\n${context.activeLesson.content.substring(0, 1000)}...\n--- END LESSON ---`)
-
-            parts.push(`\nIMPORTANT: You are the AUTHOR of this lesson. It is a "Living Document".`)
-            parts.push(`- If the user asks for clarification, simpler terms, or specific genre examples (e.g. "Explain for EDM"), you MUST use the 'update_lesson_content' tool to REWRITE the lesson.`)
-            parts.push(`- Do not just explain it in chat. Update the actual document so the user can read it.`)
-        }
 
         // 3. The Genre Context (Style)
         if (context.project) {
@@ -282,8 +258,6 @@ class OdiePersonaService {
                 return { thinkingLevel: 'medium' }; // Technical precision required
             case 'Mastering':
                 return { thinkingLevel: 'high' }; // Deep analysis, physics calculation
-            case 'Mentor':
-                return { thinkingLevel: 'high' }; // Educational, thorough explanation
             default:
                 return { thinkingLevel: 'medium' };
         }
