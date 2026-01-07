@@ -163,7 +163,8 @@ export namespace RecordAudio {
                     editing.modify(() => {
                         if (regionBox.isAttached()) {
                             const {duration, loopDuration} = regionBox
-                            const distanceInPPQN = Math.floor(currentPosition - regionBox.position.getValue())
+                            const maxDuration = loopEnabled ? loopTo - regionBox.position.getValue() : Infinity
+                            const distanceInPPQN = Math.min(maxDuration, Math.floor(currentPosition - regionBox.position.getValue()))
                             duration.setValue(distanceInPPQN)
                             loopDuration.setValue(distanceInPPQN)
                             warpMarkerBox.position.setValue(distanceInPPQN)

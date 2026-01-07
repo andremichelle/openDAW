@@ -98,7 +98,8 @@ export namespace RecordMidi {
                 editing.modify(() => {
                     if (regionBox.isAttached() && collection.isAttached()) {
                         const {position: regionPosition, duration, loopDuration} = regionBox
-                        const newDuration = quantizeCeil(writePosition, beats) - regionPosition.getValue()
+                        const maxDuration = loopEnabled ? loopTo - regionPosition.getValue() : Infinity
+                        const newDuration = Math.min(maxDuration, quantizeCeil(writePosition, beats) - regionPosition.getValue())
                         duration.setValue(newDuration)
                         loopDuration.setValue(newDuration)
                         for (const {event, take, creationOffset} of activeNotes.values()) {
