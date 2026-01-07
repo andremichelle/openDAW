@@ -125,7 +125,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
                         if (models.length > 0) {
                             model = models[0]
                             this.debugLog += `[Auto-Detect] Success. Using: ${model}\n`
-                            this.debugLog += `[Auto-Detect] Success. Using: ${model}\n`
+
                             this.config.modelId = model
                             // [ANTIGRAVITY] Persist the auto-detected model
                             if (this.onConfigChange) this.onConfigChange({ ...this.config })
@@ -423,8 +423,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
         try {
             // Adjust URL: If it ends in /chat/completions, strip it to find root
             let cleanUrl = baseUrl.replace("/chat/completions", "")
-            if (cleanUrl.endsWith("/v1")) cleanUrl = cleanUrl
-            else if (!cleanUrl.endsWith("/v1")) cleanUrl = cleanUrl.endsWith("/") ? `${cleanUrl}v1` : `${cleanUrl}/v1`
+            if (!cleanUrl.endsWith("/v1")) {
+                cleanUrl = cleanUrl.endsWith("/") ? `${cleanUrl}v1` : `${cleanUrl}/v1`
+            }
 
             const targetUrl = `${cleanUrl}/models`
             log += `\n[Strategy 1] GET ${targetUrl}`
@@ -536,7 +537,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
                                     // [ANTIGRAVITY] AUTO-HEAL: Persist the working URL
                                     if (this.onConfigChange) this.onConfigChange({ ...this.config })
                                     break // Stop trying fallbacks
-                                    break // Stop trying fallbacks
+
                                 }
                             }
                         }

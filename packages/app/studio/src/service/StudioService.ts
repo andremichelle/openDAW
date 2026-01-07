@@ -171,7 +171,7 @@ export class StudioService implements ProjectEnv {
         this.#populateSpotlightData()
         this.#configBeforeUnload()
         this.#checkRecovery()
-        this.#checkRecovery()
+
         this.#listenPreferences()
     }
 

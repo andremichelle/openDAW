@@ -175,7 +175,7 @@ export const OdieSetupView = ({ service }: { service: OdieService }) => {
                             <div className="status-panel" style={{ fontSize: "0.8rem", marginBottom: "1rem" }}>
                                 <div style={{ fontSize: "0.7rem", fontWeight: "bold", color: "var(--color-blue-400)", marginBottom: "0.5rem", textTransform: "uppercase" }}>Quick Setup</div>
                                 <div style={{ marginBottom: "0.5rem" }}>
-                                    1. <a href="https://aistudio.google.com/app/apikey" target="_blank" style={{ color: "white", textDecoration: "underline" }} onClick={(e: any) => e.stopPropagation()}>Get Free Gemini API Key</a>
+                                    1. <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style={{ color: "white", textDecoration: "underline" }} onClick={(e: any) => e.stopPropagation()}>Get Free Gemini API Key</a>
                                 </div>
                                 <div style={{ display: "flex", gap: "0.5rem" }}>
                                     <input
@@ -242,7 +242,7 @@ export const OdieSetupView = ({ service }: { service: OdieService }) => {
                                 {ObserverView(lifecycle, ollamaModels, (models: string[]) => {
                                     if (models.length === 0) return (
                                         <div style={{ marginTop: "0.5rem" }}>
-                                            <a href="https://ollama.com/download" target="_blank" style={{ fontSize: "0.75rem", color: "var(--color-blue-400)", display: "flex", alignItems: "center", gap: "4px" }} onClick={(e: any) => e.stopPropagation()}>
+                                            <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.75rem", color: "var(--color-blue-400)", display: "flex", alignItems: "center", gap: "4px" }} onClick={(e: any) => e.stopPropagation()}>
                                                 Download Ollama
                                             </a>
                                         </div>

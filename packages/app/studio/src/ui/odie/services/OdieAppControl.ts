@@ -1793,7 +1793,7 @@ export class OdieAppControl {
 
                     this.studio.odieEvents.notify({ type: "note-added", track: trackName, pitch, start })
                     return { success: true, message: `Added note ${pitch} to '${trackName}' at bar ${start}` }
-                    return { success: false, reason: "Transaction completed but note verification failed." }
+
 
                 } catch (e: any) {
                     console.error("addNote failed", e)
