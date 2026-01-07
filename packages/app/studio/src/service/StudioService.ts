@@ -209,19 +209,13 @@ export class StudioService implements ProjectEnv {
     async exportMixdownWorker() {
         return this.#projectProfileService.getValue()
             .ifSome(async (profile) => {
-                const sampleRate = 48000
                 await this.audioContext.suspend()
-                const renderer = await OfflineEngineRenderer.create(profile.project, sampleRate)
-                const frames = await renderer.render({
-                    onProgress: seconds => console.debug("rendering mixdown", seconds)
-                })
-                renderer.terminate()
-                const file = WavFile.encodeFloats({
-                    sampleRate,
-                    numberOfChannels: 2,
-                    numberOfFrames: frames[0].length,
-                    frames: frames as unknown as ReadonlyArray<Float32Array<SharedArrayBuffer>>
-                })
+                const audioData = await OfflineEngineRenderer.start(
+                    profile.project,
+                    Option.None,
+                    progress => console.debug("rendering mixdown", progress)
+                )
+                const file = WavFile.encodeFloats(audioData)
                 await RuntimeNotifier.info({headline: "Save", message: "Exporting mixdown as wav file..."})
                 await Files.save(file, FilePickerAcceptTypes.WavFiles)
                 this.audioContext.resume().then()
