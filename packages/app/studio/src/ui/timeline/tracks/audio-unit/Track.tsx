@@ -36,7 +36,10 @@ export const Track = ({lifecycle, service, trackManager, audioUnitBoxAdapter, tr
                         range={service.timeline.range}/>
         </div>
     )
-    lifecycle.own(trackBoxAdapter.indexField
-        .catchupAndSubscribe(owner => element.style.gridRow = String(owner.getValue() + 1)))
+    const {indexField, box: {enabled}} = trackBoxAdapter
+    lifecycle.ownAll(
+        indexField.catchupAndSubscribe(owner => element.style.gridRow = String(owner.getValue() + 1)),
+        enabled.catchupAndSubscribe(owner => element.classList.toggle("mute", !owner.getValue()))
+    )
     return element
 }

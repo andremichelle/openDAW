@@ -62,6 +62,7 @@ export namespace RecordAudio {
         let currentTake: Option<TakeData> = Option.None
         let lastPosition: ppqn = 0
         let currentWaveformOffset: number = outputLatency
+        let takeNumber: int = 0
 
         const {tempoMap, env: {audioContext: {sampleRate}}} = project
         const {loopArea} = timelineBox
@@ -78,6 +79,7 @@ export namespace RecordAudio {
         }
 
         const createTakeRegion = (position: ppqn, waveformOffset: number, forceNewTrack: boolean): TakeData => {
+            takeNumber++
             const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Audio, forceNewTrack)
             const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
             const stretchBox = AudioPitchStretchBox.create(boxGraph, UUID.generate())
@@ -92,7 +94,7 @@ export namespace RecordAudio {
                 box.position.setValue(position)
                 box.hue.setValue(ColorCodes.forTrackType(TrackType.Audio))
                 box.timeBase.setValue(TimeBase.Musical)
-                box.label.setValue("Recording")
+                box.label.setValue(`Take ${takeNumber}`)
                 box.playMode.refer(stretchBox)
                 box.waveformOffset.setValue(waveformOffset)
             })
@@ -102,14 +104,16 @@ export namespace RecordAudio {
         }
 
         const finalizeTake = (take: TakeData, loopDurationPPQN: ppqn) => {
-            const {regionBox, warpMarkerBox} = take
+            const {trackBox, regionBox, warpMarkerBox} = take
             if (regionBox.isAttached()) {
                 regionBox.duration.setValue(loopDurationPPQN)
                 regionBox.loopDuration.setValue(loopDurationPPQN)
-                regionBox.mute.setValue(true)
                 const seconds = tempoMap.intervalToSeconds(0, loopDurationPPQN)
                 warpMarkerBox.position.setValue(loopDurationPPQN)
                 warpMarkerBox.seconds.setValue(seconds)
+            }
+            if (trackBox.isAttached()) {
+                trackBox.enabled.setValue(false)
             }
         }
 

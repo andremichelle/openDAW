@@ -1,4 +1,4 @@
-import {byte, Notifier, Option, quantizeCeil, quantizeFloor, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {byte, int, Notifier, Option, quantizeCeil, quantizeFloor, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
 import {ColorCodes, NoteSignal, TrackType} from "@opendaw/studio-adapters"
@@ -38,8 +38,10 @@ export namespace RecordMidi {
         let currentTake: Option<TakeData> = Option.None
         let lastPosition: ppqn = 0
         let positionOffset: ppqn = 0
+        let takeNumber: int = 0
 
         const createTakeRegion = (position: ppqn, forceNewTrack: boolean): TakeData => {
+            takeNumber++
             const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Notes, forceNewTrack)
             const collection = NoteEventCollectionBox.create(boxGraph, UUID.generate())
             const regionBox = NoteRegionBox.create(boxGraph, UUID.generate(), box => {
@@ -47,6 +49,7 @@ export namespace RecordMidi {
                 box.events.refer(collection.owners)
                 box.position.setValue(position)
                 box.hue.setValue(ColorCodes.forTrackType(TrackType.Notes))
+                box.label.setValue(`Take ${takeNumber}`)
             })
             capture.addRecordedRegion(regionBox)
             project.selection.select(regionBox)
@@ -55,11 +58,13 @@ export namespace RecordMidi {
         }
 
         const finalizeTake = (take: TakeData, loopDurationPPQN: ppqn) => {
-            const {regionBox} = take
+            const {trackBox, regionBox} = take
             if (regionBox.isAttached()) {
                 regionBox.duration.setValue(loopDurationPPQN)
                 regionBox.loopDuration.setValue(loopDurationPPQN)
-                regionBox.mute.setValue(true)
+            }
+            if (trackBox.isAttached()) {
+                trackBox.enabled.setValue(false)
             }
         }
 
