@@ -1,4 +1,4 @@
-import {ByteArrayInput, int, Option, Progress, quantizeFloor, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {int, Option, Progress, quantizeFloor, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {AudioData, BPMTools, dbToGain, ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
 import {SamplePeaks} from "@opendaw/lib-fusion"
 import {
@@ -37,7 +37,16 @@ export namespace RecordAudio {
     }
 
     export const start = (
-        {recordingWorklet, mediaStream, sampleManager, audioContext, project, capture, gainDb, outputLatency}: RecordAudioContext)
+        {
+            recordingWorklet,
+            mediaStream,
+            sampleManager,
+            audioContext,
+            project,
+            capture,
+            gainDb,
+            outputLatency
+        }: RecordAudioContext)
         : Terminable => {
         const terminator = new Terminator()
         const beats = PPQN.fromSignature(1, project.timelineBox.signature.denominator.getValue())
