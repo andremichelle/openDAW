@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/studio-core",
-    "version": "0.0.90",
+    "version": "0.0.91",
     "license": "LGPL-3.0-or-later",
     "publishConfig": {
         "access": "public"
@@ -56,7 +56,7 @@
         "@ffmpeg/ffmpeg": "^0.12.15",
         "@ffmpeg/util": "^0.12.2",
         "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/studio-core-processors": "^0.0.76",
+        "@opendaw/studio-core-processors": "^0.0.77",
         "@opendaw/studio-core-workers": "^0.0.69",
         "@opendaw/studio-forge-boxes": "^0.0.67",
         "@opendaw/typescript-config": "^0.0.28"
