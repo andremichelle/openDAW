@@ -214,10 +214,12 @@ export const NoteEditor =
                         PointerField.decodeWith({
                             map: (_pointer: PointerField, _newAddress: Option<Address>): Option<Address> => Option.wrap(address)
                         }, () => {
-                            notes.map(note => NoteEventBox.create(boxGraph, UUID.generate(), box => {
+                            selection.deselectAll()
+                            const adapters = notes.map(note => boxAdapters.adapterFor(NoteEventBox.create(boxGraph, UUID.generate(), box => {
                                 box.fromJSON(note)
                                 box.position.setValue(box.position.getValue() - min + Math.max(0, position - reader.offset))
-                            }))
+                            }), NoteEventBoxAdapter))
+                            selection.select(...adapters)
                         })
                     })
                     engine.setPosition(Math.max(0, position - reader.offset) + reader.offset + (max - min))
