@@ -119,7 +119,7 @@ export const TimeAxis = ({lifecycle, service, snapping, range, mapper}: Construc
         signatureTrack.subscribe(painter.requestUpdate)
     )
     return (
-        <div className={className}>
+        <div className={className} tabIndex={-1} onmousedown={event => event.preventDefault()}>
             {canvas}
             <DblClckTextInput resolversFactory={() => {
                 const resolvers = Promise.withResolvers<string>()
