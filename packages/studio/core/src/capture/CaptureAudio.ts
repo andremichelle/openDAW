@@ -120,10 +120,10 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             }
         }
         this.#stopStream()
-        const deviceId = this.deviceId.getValue().unwrapOrElse("default")
+        const deviceId = this.deviceId.getValue().unwrapOrUndefined()
         const channelCount = this.#requestChannels.unwrapOrElse(1)
         return AudioDevices.requestStream({
-            deviceId: {exact: deviceId},
+            deviceId: isDefined(deviceId) ? {exact: deviceId} : undefined,
             echoCancellation: false,
             noiseSuppression: false,
             autoGainControl: false,
@@ -133,8 +133,8 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             const track = tracks.at(0)
             const settings = track?.getSettings()
             const gotDeviceId = settings?.deviceId
-            console.debug(`new stream. device requested: ${deviceId}, got: ${gotDeviceId ?? "unknown"}. channelCount requested: ${channelCount}, got: ${settings?.channelCount}`)
-            if (deviceId === "default" || deviceId === gotDeviceId) {
+            console.debug(`new stream. device requested: ${deviceId ?? "default"}, got: ${gotDeviceId ?? "unknown"}. channelCount requested: ${channelCount}, got: ${settings?.channelCount}`)
+            if (isUndefined(deviceId) || deviceId === gotDeviceId) {
                 this.#stream.wrap(stream)
             } else {
                 stream.getAudioTracks().forEach(track => track.stop())
