@@ -23,9 +23,11 @@ export const EngineSettingsSchema = z.object({
         truncateNotesAtRegionEnd: false
     }),
     recording: z.object({
-        countInBars: z.union(_RecordingCountInBars.map(value => z.literal(value)))
+        countInBars: z.union(_RecordingCountInBars.map(value => z.literal(value))),
+        allowTakes: z.boolean()
     }).default({
-        countInBars: 1
+        countInBars: 1,
+        allowTakes: false
     })
 })
 

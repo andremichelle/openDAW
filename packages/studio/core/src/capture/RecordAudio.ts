@@ -141,7 +141,8 @@ export namespace RecordAudio {
                 const loopEnabled = loopArea.enabled.getValue()
                 const loopFrom = loopArea.from.getValue()
                 const loopTo = loopArea.to.getValue()
-                if (loopEnabled && currentTake.nonEmpty() && currentPosition < lastPosition) {
+                const allowTakes = project.engine.preferences.settings.recording.allowTakes
+                if (loopEnabled && allowTakes && currentTake.nonEmpty() && currentPosition < lastPosition) {
                     editing.modify(() => {
                         currentTake.ifSome(take => {
                             const actualDurationPPQN = take.regionBox.duration.getValue()
@@ -164,7 +165,7 @@ export namespace RecordAudio {
                     editing.modify(() => {
                         if (regionBox.isAttached()) {
                             const {duration, loopDuration} = regionBox
-                            const maxDuration = loopEnabled ? loopTo - regionBox.position.getValue() : Infinity
+                            const maxDuration = loopEnabled && allowTakes ? loopTo - regionBox.position.getValue() : Infinity
                             const distanceInPPQN = Math.min(maxDuration, Math.floor(currentPosition - regionBox.position.getValue()))
                             duration.setValue(distanceInPPQN)
                             loopDuration.setValue(distanceInPPQN)

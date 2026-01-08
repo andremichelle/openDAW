@@ -40,7 +40,10 @@ export namespace Preferences {
         if (isDefined(stored)) {
             const {status, value} = tryCatch(() => JSON.parse(stored))
             if (status === "success") {
-                return zod.parse(value)
+                const result = zod.safeParse(value)
+                if (result.success) {
+                    return result.data
+                }
             }
         }
         return zod.parse({})

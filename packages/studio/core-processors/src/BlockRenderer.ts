@@ -80,6 +80,7 @@ export class BlockRenderer implements Terminable {
 
         const {timeInfo, timelineBoxAdapter: {box: timelineBox, markerTrack}, preferences: {settings}} = this.#context
         const pauseOnLoopDisabled = settings.playback.pauseOnLoopDisabled
+        const allowTakes = settings.recording.allowTakes
         const transporting = timeInfo.transporting
         if (transporting) {
             const blocks: Array<Block> = []
@@ -138,7 +139,7 @@ export class BlockRenderer implements Terminable {
                 const {isCountingIn} = this.#context.timeInfo
                 const {from, to, enabled} = timelineBox.loopArea
                 const loopEnabled = enabled.getValue()
-                if ((loopEnabled && !isCountingIn) || pauseOnLoopDisabled) {
+                if ((loopEnabled && !isCountingIn && (!timeInfo.isRecording || allowTakes)) || pauseOnLoopDisabled) {
                     const loopTo = to.getValue()
                     if (p0 < loopTo && p1 > loopTo && loopTo < actionPosition) {
                         action = {type: "loop", target: from.getValue()}
