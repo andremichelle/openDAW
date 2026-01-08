@@ -1,3 +1,12 @@
+---
+title: Recording
+category: Studio Manual
+tags:
+  - manual
+  - Studio Manual
+  - recording
+desc: Documentation
+---
 # Recording
 
 ## Capture

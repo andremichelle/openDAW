@@ -41,7 +41,31 @@ The source code for openDAW is available under **AGPL v3 (or later)**
 
 ---
 
+## 🤖 Enter Odie: The AI Co-Pilot
+
+**This repository includes the Alpha release of Odie, a native AI Sidecar for OpenDAW.**
+
+Odie is not just a chatbot. It is a context-aware production assistant designed to keep you in the "Flow State". It lives inside the Studio, observing your session and helping you control the DAW, learn the tools, and generate ideas.
+
+### The Ecosystem
+
+*   **🧠 Dual-Brain Architecture**: A safe, observer-based system that uses `KnowledgeService` to "see" your session (Tempo, Tracks, Selection) without risking the stability of the Audio Engine.
+*   **🎨 GenUI Engine**: Generative UI widgets (Smart Knobs, Comparison Tables) rendered directly in the chat stream.
+*   **🎓 Odie Arts Academy**: A native Learning Management System with "Click-to-Execute" lessons. Ask *"Teach me sidechaining"* and Odie will open the compressor for you.
+*   **🎭 Adaptive Personas**: Switch modes between **Songwriting**, **Production**, **Mixing**, **Mastering**, and **Theory**.
+
+### Philosophy: Native & Private
+We deliberately rejected external "Agent" servers (MCP) to prioritize user privacy and stability.
+*   **Zero-Config**: No Python servers or terminal hacking required.
+*   **Strict Safety**: Odie uses a strictly typed bridge. It cannot delete files or break your OS.
+*   **Local-First**: Chat history is stored locally.
+
+> **Try it**: Click the 🤖 Robot Icon in the header to initialize Odie.
+
+---
+
 ## Huge Shoutout To The Incredible openDAW Community!
+
 
 To everyone who has contributed feedback, reported bugs, suggested improvements, or helped spread the word — thank you!
 Your support is shaping openDAW into something truly powerful!
@@ -251,3 +275,5 @@ terms apply automatically.
 ## License
 
 [AGPL v3 (or later)](https://www.gnu.org/licenses/agpl-3.0.txt) © 2025 André Michelle
+
+<!-- Trigger Simulation -->

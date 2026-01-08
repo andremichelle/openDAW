@@ -88,6 +88,7 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
     terminate(): void {
         this.#reader.stop()
         this.#isRecording = false
+        this.#data = Option.None
         this.#terminator.terminate()
     }
 
