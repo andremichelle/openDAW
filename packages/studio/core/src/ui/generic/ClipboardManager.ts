@@ -1,13 +1,9 @@
 import {Client, JSONValue, Option, Subscription, Terminable} from "@opendaw/lib-std"
-import {Events, Key, Shortcut} from "@opendaw/lib-dom"
+import {Events, ReservedShortcuts} from "@opendaw/lib-dom"
 import {ContextMenu} from "./ContextMenu"
 import {MenuItem} from "./menu-item"
 
 const CLIPBOARD_PREFIX = "OPENDAW:1:"
-
-const CopyShortcut = Shortcut.of(Key.KeyC, {ctrl: true})
-const CutShortcut = Shortcut.of(Key.KeyX, {ctrl: true})
-const PasteShortcut = Shortcut.of(Key.KeyV, {ctrl: true})
 
 export type ClipboardEntry<T extends string = string, D extends JSONValue = JSONValue> = {
     readonly type: T
@@ -87,17 +83,17 @@ export namespace ClipboardManager {
                 collector.addItems(
                     MenuItem.default({
                         label: "Cut",
-                        shortcut: CutShortcut.format(),
+                        shortcut: ReservedShortcuts.Cut.format(),
                         selectable: handler.canCut(client)
                     }).setTriggerProcedure(performCut),
                     MenuItem.default({
                         label: "Copy",
-                        shortcut: CopyShortcut.format(),
+                        shortcut: ReservedShortcuts.Copy.format(),
                         selectable: handler.canCopy(client)
                     }).setTriggerProcedure(performCopy),
                     MenuItem.default({
                         label: "Paste",
-                        shortcut: PasteShortcut.format(),
+                        shortcut: ReservedShortcuts.Paste.format(),
                         selectable: canPaste
                     }).setTriggerProcedure(performPaste)
                 )

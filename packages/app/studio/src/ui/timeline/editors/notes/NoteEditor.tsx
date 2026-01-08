@@ -9,6 +9,7 @@ import {
     JSONValue,
     Lifecycle,
     Option,
+    Terminable,
     UUID
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
@@ -145,16 +146,30 @@ export const NoteEditor =
             </div>
         )
         const shortcuts = ShortcutManager.get().createContext(element, "NoteEditor (Main)")
+        const copyNotes = (): Option<ClipboardNotes> => {
+            const min = selection.selected().reduce((minDelta, {position}) =>
+                Math.min(minDelta, position), Number.POSITIVE_INFINITY)
+            const max = selection.selected().reduce((maxDelta, {complete}) =>
+                Math.max(maxDelta, complete), Number.NEGATIVE_INFINITY)
+            if (min === Number.POSITIVE_INFINITY || max === Number.NEGATIVE_INFINITY) {return Option.None}
+            const notes = selection.selected()
+                .map(adapter => adapter.box.toJSON())
+                .filter(json => isNotUndefined(json))
+            if (notes.length === 0) {return Option.None}
+            engine.setPosition(max)
+            return Option.wrap({
+                type: "notes",
+                data: {notes, min, max}
+            })
+        }
         lifecycle.ownAll(
             shortcuts,
             shortcuts.register(NoteEditorShortcuts["toggle-step-recording"].shortcut,
                 () => stepRecording.setValue(!stepRecording.getValue())),
             stepRecording.catchupAndSubscribe(owner => document.querySelectorAll("[data-component='cursor']")
                 .forEach(cursor => cursor.classList.toggle("step-recording", owner.getValue()))),
-            {
-                terminate: () => document.querySelectorAll("[data-component='cursor']")
-                    .forEach(cursor => cursor.classList.remove("step-recording"))
-            },
+            Terminable.create(() => document.querySelectorAll("[data-component='cursor']")
+                .forEach(cursor => cursor.classList.remove("step-recording"))),
             capture.subscribeNotes(signal => {
                 if (engine.isPlaying.getValue() || !stepRecording.getValue()) {return}
                 if (NoteSignal.isOn(signal)) {
@@ -182,23 +197,14 @@ export const NoteEditor =
                 canCut: (_client: Client): boolean => !engine.isPlaying.getValue() && selection.nonEmpty(),
                 canPaste: (entry: ClipboardEntry, _client: Client): boolean =>
                     !engine.isPlaying.getValue() && entry.type === "notes",
-                copy: (): Option<ClipboardNotes> => {
-                    const min = selection.selected().reduce((minDelta, {position}) =>
-                        Math.min(minDelta, position), Number.POSITIVE_INFINITY)
-                    const max = selection.selected().reduce((maxDelta, {complete}) =>
-                        Math.max(maxDelta, complete), Number.NEGATIVE_INFINITY)
-                    if (min === Number.POSITIVE_INFINITY || max === Number.NEGATIVE_INFINITY) {return Option.None}
-                    const notes = selection.selected()
-                        .map(adapter => adapter.box.toJSON())
-                        .filter(json => isNotUndefined(json))
-                    if (notes.length === 0) {return Option.None}
-                    engine.setPosition(max)
-                    return Option.wrap({
-                        type: "notes",
-                        data: {notes, min, max}
+                copy: copyNotes,
+                cut: (): Option<ClipboardNotes> => {
+                    const result = copyNotes()
+                    result.ifSome(() => {
+                        editing.modify(() => selection.selected().forEach(adapter => adapter.box.delete()))
                     })
+                    return result
                 },
-                cut: (): Option<ClipboardNotes> => Option.None,
                 paste: (entry: ClipboardEntry): void => {
                     if (entry.type !== "notes" || engine.isPlaying.getValue()) {return}
                     const {data: {notes, min, max}} = entry as ClipboardNotes

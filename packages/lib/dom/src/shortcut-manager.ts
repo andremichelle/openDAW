@@ -93,6 +93,10 @@ export class ShortcutContext implements Terminable {
     get entries(): ReadonlyArray<ShortcutEntry> {return this.#entries}
 
     register(shortcut: Shortcut, consume: Provider<Maybe<boolean> | unknown>, options?: ShortcutOptions): Subscription {
+        if (ReservedShortcuts.isReserved(shortcut)) {
+            console.warn(`Shortcut ${shortcut.format().join("")} is reserved and cannot be overridden`)
+            return Terminable.Empty
+        }
         const entry: ShortcutEntry = {shortcut, consume, options: options ?? ShortcutOptions.Default}
         const index = BinarySearch.leftMostMapped(
             this.#entries, entry.options.priority ?? 0, NumberComparator, ({options: {priority}}) => priority ?? 0)
@@ -139,7 +143,9 @@ export class Shortcut {
         const effectiveCode = code.startsWith("Key")
             ? `Key${event.key.toUpperCase()}`
             : code
-        return Option.wrap(new Shortcut(effectiveCode, Keyboard.isControlKey(event), event.shiftKey, event.altKey))
+        const shortcut = new Shortcut(effectiveCode, Keyboard.isControlKey(event), event.shiftKey, event.altKey)
+        if (ReservedShortcuts.isReserved(shortcut)) {return Option.None}
+        return Option.wrap(shortcut)
     }
 
     static readonly #keyNames: Record<string, string | [mac: string, other: string]> = {
@@ -278,4 +284,14 @@ type ShortcutEntry = {
     readonly shortcut: Shortcut
     readonly consume: Provider<Maybe<boolean> | unknown>
     readonly options: ShortcutOptions
+}
+
+export namespace ReservedShortcuts {
+    export const Copy = Shortcut.of(Key.KeyC, {ctrl: true})
+    export const Cut = Shortcut.of(Key.KeyX, {ctrl: true})
+    export const Paste = Shortcut.of(Key.KeyV, {ctrl: true})
+
+    const all: ReadonlyArray<Shortcut> = [Copy, Cut, Paste]
+
+    export const isReserved = (shortcut: Shortcut): boolean => all.some(reserved => reserved.equals(shortcut))
 }
