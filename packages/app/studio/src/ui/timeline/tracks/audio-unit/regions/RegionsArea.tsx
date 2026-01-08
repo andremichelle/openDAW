@@ -1,8 +1,10 @@
 import css from "./RegionsArea.sass?inline"
 import {
     clamp,
+    Client,
     DefaultObservableValue,
     EmptyExec,
+    JSONValue,
     Lifecycle,
     Nullable,
     Option,
@@ -41,7 +43,7 @@ import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@open
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
-import {TimelineRange} from "@opendaw/studio-core"
+import {ClipboardManager, TimelineRange} from "@opendaw/studio-core"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 
 const className = Html.adoptStyleSheet(css, "RegionsArea")
@@ -106,6 +108,24 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             return true
         }),
         installRegionContextMenu({timelineBox, element, service, capturing, selection: regionSelection, range}),
+        ClipboardManager.install<JSONValue>(element, {
+            canCopy({clientX, clientY}: Client): boolean {
+                return capturing.capturePoint(clientX, clientY)?.type === "region"
+            },
+            canCut({clientX, clientY}: Client): boolean {
+                return capturing.capturePoint(clientX, clientY)?.type === "region"
+            },
+            canPaste(_entry: JSONValue, {clientX, clientY}: Client): boolean {
+                return capturing.capturePoint(clientX, clientY)?.type === "track"
+            },
+            copy(): Option<JSONValue> {
+                return Option.None
+            },
+            cut(): Option<JSONValue> {
+                return Option.None
+            },
+            paste(_entry: JSONValue): void {}
+        }),
         Events.subscribeDblDwn(element, event => {
             const target = capturing.captureEvent(event)
             if (target === null) {return}

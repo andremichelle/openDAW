@@ -1,6 +1,6 @@
 import {Client, Option, Subscription} from "@opendaw/lib-std"
 import {Events} from "@opendaw/lib-dom"
-import {MenuItem} from "./menu-item"
+import {MenuItem, MenuRootData} from "./menu-item"
 
 export namespace ContextMenu {
     export const CONTEXT_MENU_EVENT_TYPE = "--context-menu" as const
@@ -16,26 +16,32 @@ export namespace ContextMenu {
     class CollectorImpl implements Collector {
         static collecting: Option<CollectorImpl> = Option.None
 
-        readonly root = MenuItem.root()
+        readonly #root = MenuItem.root()
+
+        #chain: Promise<void> = Promise.resolve()
 
         #hasItems: boolean = false
         #separatorBefore: boolean = false
 
         constructor(readonly client: Client) {}
 
+        get root(): MenuItem<MenuRootData> {return this.#root}
         get hasItems(): boolean {return this.#hasItems}
 
         readonly addItems = (...items: MenuItem[]): this => {
             items.forEach((item: MenuItem) => {
                 if (item.hidden) {return}
                 if (this.#separatorBefore) {item.addSeparatorBefore()}
-                this.root.addMenuItem(item)
+                this.#root.addMenuItem(item)
                 this.#hasItems = true
                 this.#separatorBefore = false
             })
             this.#separatorBefore = true
             return this
         }
+
+        readonly appendToChain = (fn: () => void | Promise<void>): unknown => this.#chain = this.#chain.then(fn)
+        readonly waitForChain = (): Promise<void> => this.#chain
 
         abort(): void {CollectorImpl.collecting = Option.None}
     }
@@ -48,10 +54,11 @@ export namespace ContextMenu {
             }
             mouseEvent.preventDefault()
             const event: Event = new Event(CONTEXT_MENU_EVENT_TYPE, {bubbles: true, composed: true, cancelable: true})
-            CollectorImpl.collecting = Option.wrap(new CollectorImpl(mouseEvent))
+            const collector = new CollectorImpl(mouseEvent)
+            CollectorImpl.collecting = Option.wrap(collector)
             mouseEvent.target?.dispatchEvent(event)
+            await collector.waitForChain()
             if (CollectorImpl.collecting.nonEmpty()) {
-                const collector = CollectorImpl.collecting.unwrap()
                 if (collector.hasItems) {
                     menuFactory(collector.root, mouseEvent)
                 }
@@ -60,7 +67,9 @@ export namespace ContextMenu {
         }, {capture: true})
     }
 
-    export const subscribe = (target: EventTarget, collect: (collector: Collector) => void): Subscription =>
+    export const subscribe = (target: EventTarget, collect: (collector: Collector) => void | Promise<void>): Subscription =>
         Events.subscribeAny(target, CONTEXT_MENU_EVENT_TYPE, () =>
-            CollectorImpl.collecting.ifSome((collector: CollectorImpl) => collect(collector)), {capture: false})
+            CollectorImpl.collecting.ifSome((collector: CollectorImpl) => {
+                collector.appendToChain(() => collect(collector))
+            }), {capture: false})
 }
