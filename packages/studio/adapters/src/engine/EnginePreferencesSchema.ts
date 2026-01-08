@@ -27,7 +27,7 @@ export const EngineSettingsSchema = z.object({
         allowTakes: z.boolean()
     }).default({
         countInBars: 1,
-        allowTakes: false
+        allowTakes: true
     })
 })
 
