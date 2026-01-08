@@ -1,11 +1,21 @@
 import css from "./NoteEditor.sass?inline"
 import {Html, ShortcutManager} from "@opendaw/lib-dom"
-import {DefaultObservableValue, int, isInstanceOf, Lifecycle, Terminable, UUID} from "@opendaw/lib-std"
+import {
+    Client,
+    DefaultObservableValue,
+    int,
+    isInstanceOf,
+    isNotUndefined,
+    JSONValue,
+    Lifecycle,
+    Option,
+    UUID
+} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {PitchEditor} from "@/ui/timeline/editors/notes/pitch/PitchEditor.tsx"
 import {PitchPositioner} from "@/ui/timeline/editors/notes/pitch/PitchPositioner.ts"
-import {CaptureMidi, TimelineRange} from "@opendaw/studio-core"
+import {CaptureMidi, ClipboardEntry, ClipboardManager, TimelineRange} from "@opendaw/studio-core"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {NoteEventBox} from "@opendaw/studio-boxes"
 import {PianoRoll} from "@/ui/timeline/editors/notes/pitch/PianoRoll.tsx"
@@ -23,6 +33,7 @@ import {NotePropertyVelocity, PropertyAccessor} from "@/ui/timeline/editors/note
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {createPitchMenu} from "@/ui/timeline/editors/notes/pitch/PitchMenu.ts"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
+import {ppqn} from "@opendaw/lib-dsp"
 
 const className = Html.adoptStyleSheet(css, "NoteEditor")
 
@@ -34,6 +45,8 @@ type Construct = {
     snapping: Snapping
     reader: NoteEventOwnerReader
 }
+
+type ClipboardNotes = ClipboardEntry<"notes", { notes: Array<JSONValue>, min: ppqn, max: ppqn }>
 
 const scale = new ScaleConfig()
 
@@ -77,7 +90,6 @@ export const NoteEditor =
                              project={project}
                              boxAdapters={boxAdapters}
                              range={range}
-                             editing={editing}
                              snapping={snapping}
                              positioner={pitchPositioner}
                              scale={scale}
@@ -164,7 +176,42 @@ export const NoteEditor =
                         engine.setPosition(position + duration)
                     }
                 }
-            }), Terminable.Empty
+            }),
+            ClipboardManager.install<ClipboardNotes>(element, {
+                canCopy: (_client: Client): boolean => !engine.isPlaying.getValue() && selection.nonEmpty(),
+                canCut: (_client: Client): boolean => !engine.isPlaying.getValue() && selection.nonEmpty(),
+                canPaste: (entry: ClipboardEntry, _client: Client): boolean =>
+                    !engine.isPlaying.getValue() && entry.type === "notes",
+                copy: (): Option<ClipboardNotes> => {
+                    const min = selection.selected().reduce((minDelta, {position}) =>
+                        Math.min(minDelta, position), Number.POSITIVE_INFINITY)
+                    const max = selection.selected().reduce((maxDelta, {complete}) =>
+                        Math.max(maxDelta, complete), Number.NEGATIVE_INFINITY)
+                    if (min === Number.POSITIVE_INFINITY || max === Number.NEGATIVE_INFINITY) {return Option.None}
+                    const notes = selection.selected()
+                        .map(adapter => adapter.box.toJSON())
+                        .filter(json => isNotUndefined(json))
+                    if (notes.length === 0) {return Option.None}
+                    engine.setPosition(max)
+                    return Option.wrap({
+                        type: "notes",
+                        data: {notes, min, max}
+                    })
+                },
+                cut: (): Option<ClipboardNotes> => Option.None,
+                paste: (entry: ClipboardEntry): void => {
+                    if (entry.type !== "notes" || engine.isPlaying.getValue()) {return}
+                    const {data: {notes, min, max}} = entry as ClipboardNotes
+                    const position = engine.position.getValue()
+                    editing.modify(() => {
+                        notes.map(note => NoteEventBox.create(boxGraph, UUID.generate(), box => {
+                            box.fromJSON(note)
+                            box.position.setValue(box.position.getValue() + position - min)
+                        }))
+                    })
+                    engine.setPosition(position + (max - min))
+                }
+            })
         )
         return element
     }

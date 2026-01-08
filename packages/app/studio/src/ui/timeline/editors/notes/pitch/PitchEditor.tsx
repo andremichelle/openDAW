@@ -37,7 +37,6 @@ import {installContextMenu} from "@/ui/timeline/editors/notes/pitch/PitchContext
 import {NoteEventBox} from "@opendaw/studio-boxes"
 import {NoteCreateModifier} from "@/ui/timeline/editors/notes/NoteCreateModifier.ts"
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
-import {BoxEditing} from "@opendaw/lib-box"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
 import {PPQN, ppqn} from "@opendaw/lib-dsp"
@@ -58,7 +57,6 @@ type Construct = {
     project: Project
     boxAdapters: BoxAdapters
     range: TimelineRange
-    editing: BoxEditing
     snapping: Snapping
     positioner: PitchPositioner
     scale: ScaleConfig
@@ -70,10 +68,11 @@ type Construct = {
 }
 
 export const PitchEditor = ({
-                                lifecycle, project, boxAdapters, range, editing, snapping,
+                                lifecycle, project, boxAdapters, range, snapping,
                                 positioner, scale, selection, modifyContext, reader, stepRecording
                             }: Construct) => {
     let previewNote: Nullable<{ pitch: byte, position: ppqn, duration: ppqn, velocity: unitValue }> = null
+    const {editing} = project
     const canvas: HTMLCanvasElement = <canvas tabIndex={-1}/>
     const capturing = createPitchEventCapturing(canvas, positioner, range, reader)
     const locator = createPitchSelectionLocator(reader, range, positioner.valueAxis, capturing)

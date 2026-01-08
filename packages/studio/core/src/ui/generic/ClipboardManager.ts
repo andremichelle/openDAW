@@ -9,25 +9,32 @@ const CopyShortcut = Shortcut.of(Key.KeyC, {ctrl: true})
 const CutShortcut = Shortcut.of(Key.KeyX, {ctrl: true})
 const PasteShortcut = Shortcut.of(Key.KeyV, {ctrl: true})
 
-export interface ClipboardHandler<T extends JSONValue> {
+export type ClipboardEntry<T extends string = string, D extends JSONValue = JSONValue> = {
+    readonly type: T
+    readonly data: D
+}
+
+export interface ClipboardHandler<E extends ClipboardEntry> {
     canCopy(client: Client): boolean
     canCut(client: Client): boolean
-    canPaste(entry: T, client: Client): boolean
-    copy(): Option<T>
-    cut(): Option<T>
-    paste(entry: T): void
+    canPaste(entry: ClipboardEntry, client: Client): boolean
+    copy(): Option<E>
+    cut(): Option<E>
+    paste(entry: ClipboardEntry): void
 }
 
 export namespace ClipboardManager {
-    let fallbackEntry: Option<JSONValue> = Option.None
+    type AnyEntry = ClipboardEntry
 
-    const encode = (entry: JSONValue): string => `${CLIPBOARD_PREFIX}${JSON.stringify(entry)}`
-    const decode = <T extends JSONValue>(text: string): Option<T> => text.startsWith(CLIPBOARD_PREFIX)
-        ? Option.tryCatch(() => JSON.parse(text.slice(CLIPBOARD_PREFIX.length)) as T)
+    let fallbackEntry: Option<AnyEntry> = Option.None
+
+    const encode = (entry: AnyEntry): string => `${CLIPBOARD_PREFIX}${JSON.stringify(entry)}`
+    const decode = (text: string): Option<AnyEntry> => text.startsWith(CLIPBOARD_PREFIX)
+        ? Option.tryCatch(() => JSON.parse(text.slice(CLIPBOARD_PREFIX.length)) as AnyEntry)
         : Option.None
 
-    export const install = <T extends JSONValue>(element: HTMLElement, handler: ClipboardHandler<T>): Subscription => {
-        const writeEntry = (entry: T): void => {
+    export const install = <E extends AnyEntry>(element: HTMLElement, handler: ClipboardHandler<E>): Subscription => {
+        const writeEntry = (entry: E): void => {
             fallbackEntry = Option.wrap(entry)
             navigator.clipboard?.writeText(encode(entry)).catch(() => {})
         }
@@ -35,11 +42,11 @@ export namespace ClipboardManager {
         const performCut = (): void => handler.cut().ifSome(writeEntry)
         const performPaste = async (): Promise<void> => {
             const text = await Option.async(navigator.clipboard.readText())
-            const entry = text.flatMap(decode<T>)
+            const entry = text.flatMap(decode)
             if (entry.nonEmpty()) {
                 handler.paste(entry.unwrap())
             } else {
-                (fallbackEntry as Option<T>).ifSome(entry => handler.paste(entry))
+                fallbackEntry.ifSome(entry => handler.paste(entry))
             }
         }
         return Terminable.many(
@@ -59,12 +66,12 @@ export namespace ClipboardManager {
             }),
             Events.subscribe(element, "paste", (event: ClipboardEvent) => {
                 const text = event.clipboardData?.getData("text/plain") ?? ""
-                const entry = decode<T>(text)
+                const entry = decode(text)
                 if (entry.nonEmpty()) {
                     event.preventDefault()
                     handler.paste(entry.unwrap())
                 } else {
-                    (fallbackEntry as Option<T>).ifSome(entry => {
+                    fallbackEntry.ifSome(entry => {
                         event.preventDefault()
                         handler.paste(entry)
                     })
@@ -73,9 +80,9 @@ export namespace ClipboardManager {
             ContextMenu.subscribe(element, async collector => {
                 const {client} = collector
                 const text = await Option.async(navigator.clipboard.readText())
-                const entry = text.flatMap(decode<T>)
+                const entry = text.flatMap(decode)
                 const canPaste = entry.map(entry => handler.canPaste(entry, client))
-                    .unwrapOrElse(() => (fallbackEntry as Option<T>)
+                    .unwrapOrElse(() => fallbackEntry
                         .map(entry => handler.canPaste(entry, client)).unwrapOrElse(false))
                 collector.addItems(
                     MenuItem.default({

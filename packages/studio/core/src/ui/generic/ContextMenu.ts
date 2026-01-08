@@ -40,14 +40,16 @@ export namespace ContextMenu {
             return this
         }
 
-        readonly appendToChain = (fn: () => void | Promise<void>): unknown => this.#chain = this.#chain.then(fn)
+        readonly appendToChain = (fn: () => unknown): void => {
+            this.#chain = this.#chain.then(async () => {await fn()})
+        }
         readonly waitForChain = (): Promise<void> => this.#chain
 
         abort(): void {CollectorImpl.collecting = Option.None}
     }
 
-    export const install = (owner: WindowProxy, menuFactory: MenuFactory): Subscription => {
-        return Events.subscribe(owner, "contextmenu", async (mouseEvent: MouseEvent) => {
+    export const install = (owner: WindowProxy, menuFactory: MenuFactory): Subscription =>
+        Events.subscribe(owner, "contextmenu", async (mouseEvent: MouseEvent) => {
             if (CollectorImpl.collecting.nonEmpty()) {
                 console.warn("One context-menu is still populating (abort)")
                 return
@@ -65,9 +67,8 @@ export namespace ContextMenu {
                 CollectorImpl.collecting = Option.None
             }
         }, {capture: true})
-    }
 
-    export const subscribe = (target: EventTarget, collect: (collector: Collector) => void | Promise<void>): Subscription =>
+    export const subscribe = (target: EventTarget, collect: (collector: Collector) => unknown): Subscription =>
         Events.subscribeAny(target, CONTEXT_MENU_EVENT_TYPE, () =>
             CollectorImpl.collecting.ifSome((collector: CollectorImpl) => {
                 collector.appendToChain(() => collect(collector))
