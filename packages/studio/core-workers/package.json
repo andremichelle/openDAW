@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/studio-core-workers",
-    "version": "0.0.69",
+    "version": "0.0.70",
     "license": "LGPL-3.0-or-later",
     "private": true,
     "exports": {
@@ -16,7 +16,7 @@
         "@opendaw/lib-dsp": "^0.0.64",
         "@opendaw/lib-runtime": "^0.0.64",
         "@opendaw/lib-std": "^0.0.64",
-        "@opendaw/studio-adapters": "^0.0.74",
+        "@opendaw/studio-adapters": "^0.0.75",
         "@opendaw/studio-boxes": "^0.0.67",
         "@opendaw/studio-enums": "^0.0.56"
     },
