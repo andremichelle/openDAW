@@ -10,7 +10,7 @@ import {
     Vertex
 } from "@opendaw/lib-box"
 import * as Y from "yjs"
-import {asDefined, asInstanceOf, assert, isDefined, JSONValue, UUID} from "@opendaw/lib-std"
+import {asDefined, assert, isDefined, isInstanceOf, JSONValue, UUID} from "@opendaw/lib-std"
 
 export namespace YMapper {
     export const createBoxMap = (box: Box): Y.Map<unknown> => {
@@ -21,21 +21,27 @@ export namespace YMapper {
     }
 
     export const applyFromBoxMap = (box: Box, source: Y.Map<unknown>): void => {
-        const writeBranch = (vertex: Vertex, map: Y.Map<unknown>) => {
+        const apply = (vertex: Vertex, map: Y.Map<unknown>) => {
             vertex.fields().forEach(field => {
                 const value: unknown = map.get(String(field.fieldKey))
                 field.accept({
-                    visitArrayField: <FIELD extends Field>(field: ArrayField<FIELD>) =>
-                        writeBranch(field, asInstanceOf(value, Y.Map)),
-                    visitObjectField: <FIELDS extends Fields>(field: ObjectField<FIELDS>) =>
-                        writeBranch(field, asInstanceOf(value, Y.Map)),
+                    visitArrayField: <FIELD extends Field>(field: ArrayField<FIELD>) => {
+                        if (isInstanceOf(value, Y.Map)) {
+                            apply(field, value)
+                        }
+                    },
+                    visitObjectField: <FIELDS extends Fields>(field: ObjectField<FIELDS>) => {
+                        if (isInstanceOf(value, Y.Map)) {
+                            apply(field, value)
+                        }
+                    },
                     // those will panic if the type is a mismatch
                     visitPointerField: (field: PointerField) => field.fromJSON(value as JSONValue),
                     visitPrimitiveField: (field: PrimitiveField) => field.fromJSON(value as JSONValue)
                 })
             })
         }
-        writeBranch(box, source)
+        apply(box, source)
     }
 
     export const pathToAddress = ([uuidAsString, _, ...fieldKeysFromPath]: ReadonlyArray<string | number>, leafKey: string): Address => {
