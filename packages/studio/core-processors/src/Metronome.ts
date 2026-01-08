@@ -32,7 +32,7 @@ export class Metronome {
                     while (position < regionEnd) {
                         const distanceToEvent = Math.floor(PPQN.pulsesToSamples(position - p0, bpm, sampleRate))
                         const beatIndex = Math.round((position - signatureStart) / stepSize)
-                        this.#clicks.push(new Click(s0 + distanceToEvent, beatIndex % denominator === 0, gain))
+                        this.#clicks.push(new Click(s0 + distanceToEvent, beatIndex % curr.nominator === 0, gain))
                         position += stepSize
                     }
                 }
