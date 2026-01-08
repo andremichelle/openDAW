@@ -1,5 +1,4 @@
-import {ContextMenu} from "@/ui/ContextMenu"
-import {MenuItem} from "@/ui/model/menu-item"
+import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
 import {ElementCapturing} from "@/ui/canvas/capturing"

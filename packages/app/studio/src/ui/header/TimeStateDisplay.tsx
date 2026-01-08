@@ -9,8 +9,7 @@ import {MusicalUnitDisplay} from "@/ui/header/MusicalUnitDisplay"
 import {AbsoluteUnitDisplay} from "@/ui/header/AbsoluteUnitDisplay"
 import {TempoControl} from "@/ui/header/TempoControl"
 import {MeterControl} from "@/ui/header/MeterControl"
-import {ContextMenu} from "@/ui/ContextMenu"
-import {MenuItem} from "@/ui/model/menu-item"
+import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "TimeStateDisplay")

@@ -1,4 +1,4 @@
-import {MenuItem} from "@/ui/model/menu-item"
+import {MenuItem} from "@opendaw/studio-core"
 import {ColorCodes, TrackType} from "@opendaw/studio-adapters"
 import {Procedure} from "@opendaw/lib-std"
 

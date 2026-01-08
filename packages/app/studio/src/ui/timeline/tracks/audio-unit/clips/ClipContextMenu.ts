@@ -1,5 +1,4 @@
-import {ContextMenu} from "@/ui/ContextMenu.ts"
-import {MenuItem} from "@/ui/model/menu-item.ts"
+import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {AnyClipBoxAdapter, AudioClipBoxAdapter} from "@opendaw/studio-adapters"
 import {EmptyExec, Procedure, Selection, UUID} from "@opendaw/lib-std"

@@ -7,7 +7,7 @@ import {DeviceHost, InstrumentFactories, Soundfont, SoundfontDeviceBoxAdapter} f
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
-import {MenuItem} from "@/ui/model/menu-item"
+import {MenuItem} from "@opendaw/studio-core"
 import type {Preset} from "soundfont2"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {Icon} from "@/ui/components/Icon"

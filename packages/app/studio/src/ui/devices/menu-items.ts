@@ -1,5 +1,5 @@
 import {DeviceHost, Devices, EffectDeviceBoxAdapter, PresetDecoder, PresetEncoder} from "@opendaw/studio-adapters"
-import {MenuItem} from "@/ui/model/menu-item.ts"
+import {MenuItem} from "@opendaw/studio-core"
 import {BoxEditing, PrimitiveField, PrimitiveValues, StringField} from "@opendaw/lib-box"
 import {EmptyExec, isInstanceOf, panic, RuntimeNotifier} from "@opendaw/lib-std"
 import {Surface} from "@/ui/surface/Surface"

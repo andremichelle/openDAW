@@ -12,11 +12,11 @@ import {
     YService
 } from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
-import {MenuItem} from "@/ui/model/menu-item"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {SyncLogService} from "@/service/SyncLogService"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {StudioDialogs} from "@/service/StudioDialogs"
+import {MenuItem} from "@opendaw/studio-core"
 
 export const populateStudioMenu = (service: StudioService) => {
     const Global = GlobalShortcuts

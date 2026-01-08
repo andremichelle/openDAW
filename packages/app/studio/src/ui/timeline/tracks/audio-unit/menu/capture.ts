@@ -1,4 +1,4 @@
-import {MenuItem} from "@/ui/model/menu-item"
+import {MenuItem} from "@opendaw/studio-core"
 import {Arrays, int, isInstanceOf, Option} from "@opendaw/lib-std"
 import {CaptureAudioBox} from "@opendaw/studio-boxes"
 import {IconSymbol} from "@opendaw/studio-enums"

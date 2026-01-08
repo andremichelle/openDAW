@@ -15,11 +15,10 @@ import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {Icon} from "@/ui/components/Icon"
 import {ControlIndicator} from "@/ui/components/ControlIndicator"
 import {AutoGainButton} from "@/ui/devices/audio-effects/StereoTool/AutoGainButton"
-import {MenuItem} from "@/ui/model/menu-item"
+import {EffectFactories, MenuItem} from "@opendaw/studio-core"
 import {Mixing} from "@opendaw/lib-dsp"
 import {MenuItems} from "../menu-items"
 import {StudioService} from "@/service/StudioService"
-import {EffectFactories} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "StereoToolDeviceEditor")
 

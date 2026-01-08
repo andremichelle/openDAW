@@ -15,7 +15,7 @@ import {HeadersArea} from "@/ui/timeline/tracks/audio-unit/headers/HeadersArea"
 import {Icon} from "@/ui/components/Icon"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {MenuItem} from "@/ui/model/menu-item"
+import {MenuItem} from "@opendaw/studio-core"
 import {DefaultInstrumentFactory} from "@/ui/defaults/DefaultInstrumentFactory"
 
 const className = Html.adoptStyleSheet(css, "AudioUnitsTimeline")

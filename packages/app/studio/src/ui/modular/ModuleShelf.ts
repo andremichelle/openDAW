@@ -1,4 +1,4 @@
-import {MenuItem} from "@/ui/model/menu-item.ts"
+import {MenuItem} from "@opendaw/studio-core"
 import {ModuleDelayBox, ModuleGainBox, ModuleMultiplierBox} from "@opendaw/studio-boxes"
 import {quantizeRound, UUID} from "@opendaw/lib-std"
 import {Camera} from "@/ui/modular/Camera.ts"

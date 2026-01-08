@@ -4,7 +4,7 @@ import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {DeviceHost, InstrumentFactories, PlayfieldDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {MenuItem} from "@/ui/model/menu-item"
+import {MenuItem} from "@opendaw/studio-core"
 import {SlotGrid} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotGrid"
 import {StudioService} from "@/service/StudioService"
 

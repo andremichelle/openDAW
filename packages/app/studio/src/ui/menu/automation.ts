@@ -1,5 +1,4 @@
-import {ContextMenu} from "@/ui/ContextMenu.ts"
-import {MenuItem} from "@/ui/model/menu-item.ts"
+import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {AudioUnitTracks, AutomatableParameterFieldAdapter, TrackType} from "@opendaw/studio-adapters"
 import {BoxEditing, PrimitiveValues} from "@opendaw/lib-box"
 import {MIDILearning} from "@opendaw/studio-core"

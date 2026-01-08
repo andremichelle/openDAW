@@ -3,7 +3,7 @@ import {Editing, Errors, Lifecycle, ObservableValue, panic, Procedure, Provider}
 import {createElement, Group, JsxValue} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
-import {MenuItem} from "@/ui/model/menu-item"
+import {MenuItem} from "@opendaw/studio-core"
 import {DeviceBoxAdapter, DeviceType, EffectDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {DebugMenus} from "@/ui/menu/debug.ts"
 import {DragDevice} from "@/ui/AnyDragData"

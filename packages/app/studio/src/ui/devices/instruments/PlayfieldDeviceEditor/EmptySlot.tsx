@@ -9,7 +9,7 @@ import {NoteLabel} from "@/ui/devices/instruments/PlayfieldDeviceEditor/NoteLabe
 import {Icon} from "@/ui/components/Icon"
 import {NoteStreamReceiver} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {ContextMenu} from "@/ui/ContextMenu"
+import {ContextMenu} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "EmptySlot")
 

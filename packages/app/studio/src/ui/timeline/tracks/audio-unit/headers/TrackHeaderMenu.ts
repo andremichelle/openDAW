@@ -1,4 +1,4 @@
-import {MenuItem} from "@/ui/model/menu-item"
+import {MenuItem} from "@opendaw/studio-core"
 import {isInstanceOf, Procedure, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {AudioUnitBoxAdapter, DeviceAccepts, ProjectUtils, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {DebugMenus} from "@/ui/menu/debug"

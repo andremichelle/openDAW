@@ -1,7 +1,6 @@
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {EmptyExec, Selection, Terminable} from "@opendaw/lib-std"
-import {ContextMenu} from "@/ui/ContextMenu.ts"
-import {MenuItem} from "@/ui/model/menu-item.ts"
+import {AudioContentModifier, ContextMenu, MenuItem, TimelineRange} from "@opendaw/studio-core"
 import {AnyRegionBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {RegionCaptureTarget} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
 import {TimelineBox} from "@opendaw/studio-boxes"
@@ -15,7 +14,6 @@ import {BPMTools} from "@opendaw/lib-dsp"
 import {Browser} from "@opendaw/lib-dom"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {StudioService} from "@/service/StudioService"
-import {AudioContentModifier, TimelineRange} from "@opendaw/studio-core"
 import {Promises} from "@opendaw/lib-runtime"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 
@@ -54,9 +52,9 @@ export const installRegionContextMenu =
                     checked: region.mute,
                     shortcut: RegionsShortcuts["toggle-mute"].shortcut.format()
                 }).setTriggerProcedure(() => editing.modify(() => {
-                        const newValue = !region.mute
-                        return selection.selected().slice().forEach(adapter => adapter.box.mute.setValue(newValue))
-                    })),
+                    const newValue = !region.mute
+                    return selection.selected().slice().forEach(adapter => adapter.box.mute.setValue(newValue))
+                })),
                 ColorMenu.createItem(hue => editing.modify(() =>
                     selection.selected().slice().forEach(adapter => adapter.box.hue.setValue(hue)))),
                 MenuItem.default({label: "Rename"})

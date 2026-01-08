@@ -9,7 +9,7 @@ import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Html} from "@opendaw/lib-dom"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {MenuItem} from "@/ui/model/menu-item"
+import {MenuItem} from "@opendaw/studio-core"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {ShortcutTooltip} from "@/ui/shortcuts/ShortcutTooltip"
 

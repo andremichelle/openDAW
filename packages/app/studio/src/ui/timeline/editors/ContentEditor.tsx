@@ -31,7 +31,7 @@ import {FlexSpacer} from "@/ui/components/FlexSpacer.tsx"
 import {PPQN} from "@opendaw/lib-dsp"
 import {AudioEditor} from "@/ui/timeline/editors/audio/AudioEditor.tsx"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {MenuItem} from "@/ui/model/menu-item.ts"
+import {MenuItem} from "@opendaw/studio-core"
 import {EditorMenuCollector} from "@/ui/timeline/editors/EditorMenuCollector.ts"
 
 import {ClipReader} from "@/ui/timeline/editors/ClipReader.ts"

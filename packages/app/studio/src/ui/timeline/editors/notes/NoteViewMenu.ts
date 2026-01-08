@@ -1,4 +1,4 @@
-import {MenuCollector, MenuItem} from "@/ui/model/menu-item.ts"
+import {MenuCollector, MenuItem} from "@opendaw/studio-core"
 import {Procedure} from "@opendaw/lib-std"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {EventCollection} from "@opendaw/lib-dsp"

@@ -8,21 +8,21 @@ import {installCursors} from "@/ui/Cursors.ts"
 import {BuildInfo} from "./BuildInfo"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {replaceChildren} from "@opendaw/lib-jsx"
-import {ContextMenu} from "@/ui/ContextMenu.ts"
+import {ContextMenu} from "@opendaw/studio-core"
 import {testFeatures} from "@/features.ts"
 import {MissingFeature} from "@/ui/MissingFeature.tsx"
 import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
 import {showStoragePersistDialog} from "@/AppDialogs"
 import {Promises} from "@opendaw/lib-runtime"
-import {AnimationFrame, Browser, ShortcutManager} from "@opendaw/lib-dom"
+import {AnimationFrame, Browser, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
 import {
     AudioWorklets,
     CloudAuthManager,
-    GlobalSampleLoaderManager,
     DefaultSoundfontLoaderManager,
+    GlobalSampleLoaderManager,
     OfflineEngineRenderer,
     OpenSampleAPI,
     OpenSoundfontAPI,
@@ -30,6 +30,7 @@ import {
 } from "@opendaw/studio-core"
 import {AudioData} from "@opendaw/lib-dsp"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
+import {Menu} from "@/ui/components/Menu"
 
 const loadBuildInfo = async () => fetch(`/build-info.json?v=${Date.now()}`)
     .then(x => x.json())
@@ -89,7 +90,15 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
     StudioShortcutManager.install(service)
     const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand())
     const surface = Surface.main({
-        config: (surface: Surface) => surface.own(ContextMenu.install(surface.owner))
+        config: (surface: Surface) => surface.own(ContextMenu.install(surface.owner, (menuItem, {clientX, clientY}) => {
+            Html.unfocus(surface.owner)
+            const offset = 2
+            const x: number = clientX - offset
+            const y: number = clientY
+            const menu = Menu.create(menuItem)
+            menu.moveTo(x, y)
+            menu.attach(Surface.get(surface.owner).flyout)
+        }))
     }, errorHandler)
     Surface.subscribeKeyboard("keydown", event => ShortcutManager.get().handleEvent(event), Number.MAX_SAFE_INTEGER)
     document.querySelector("#preloader")?.remove()

@@ -1,5 +1,5 @@
 import css from "./Menu.sass?inline"
-import {DefaultMenuData, HeaderMenuData, InputValueMenuData, MenuItem} from "@/ui/model/menu-item.ts"
+import {DefaultMenuData, HeaderMenuData, InputValueMenuData, MenuItem} from "@opendaw/studio-core"
 import {createElement, Frag} from "@opendaw/lib-jsx"
 import {int, isDefined, Lifecycle, Nullable, Option, panic, Terminable, Terminator} from "@opendaw/lib-std"
 import {Icon} from "@/ui/components/Icon.tsx"

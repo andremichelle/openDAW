@@ -1,6 +1,6 @@
 import css from "./MenuButton.sass?inline"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
-import {MenuItem} from "@/ui/model/menu-item.ts"
+import {MenuItem} from "@opendaw/studio-core"
 import {Menu} from "@/ui/components/Menu.tsx"
 import {Color, getOrProvide, isDefined, Option, Procedure, ValueOrProvider} from "@opendaw/lib-std"
 import {Surface} from "@/ui/surface/Surface.tsx"

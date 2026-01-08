@@ -4,10 +4,9 @@ import {
     TransientMarkerBoxAdapter,
     WarpMarkerBoxAdapter
 } from "@opendaw/studio-adapters"
-import {Project, TimelineRange} from "@opendaw/studio-core"
+import {ContextMenu, Project, TimelineRange} from "@opendaw/studio-core"
 import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader"
 import {WarpMarkerBox} from "@opendaw/studio-boxes"
-import {ContextMenu} from "@/ui/ContextMenu"
 import {
     clamp,
     isNotNull,
@@ -20,7 +19,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {MenuItem} from "@/ui/model/menu-item"
+import {MenuItem} from "@opendaw/studio-core"
 import {DebugMenus} from "@/ui/menu/debug"
 import {WarpMarkerUtils} from "@/ui/timeline/editors/audio/WarpMarkerUtils"
 import {Dragging, Events, Keyboard} from "@opendaw/lib-dom"

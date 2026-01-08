@@ -4,7 +4,7 @@ import {AudioBusFactory, AudioUnitBoxAdapter, AuxSendBoxAdapter} from "@opendaw/
 import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {AuxSend} from "@/ui/mixer/AuxSend.tsx"
 import {createElement} from "@opendaw/lib-jsx"
-import {MenuItem} from "@/ui/model/menu-item.ts"
+import {MenuItem} from "@opendaw/studio-core"
 import {AuxSendBox} from "@opendaw/studio-boxes"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Icon} from "../components/Icon"

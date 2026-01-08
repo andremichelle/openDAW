@@ -1,7 +1,6 @@
 import {Lifecycle, StringMapping, ValueMapping} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {ContextMenu} from "@/ui/ContextMenu"
-import {MenuItem} from "@/ui/model/menu-item"
+import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {EnginePreferences, EngineSettings} from "@opendaw/studio-adapters"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {ShortcutTooltip} from "@/ui/shortcuts/ShortcutTooltip"

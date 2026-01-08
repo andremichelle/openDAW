@@ -1,4 +1,4 @@
-import {MenuItem, MenuRootData} from "@/ui/model/menu-item.ts"
+import {MenuItem, MenuRootData} from "@opendaw/studio-core"
 
 export interface EditorMenuCollector {
     viewMenu: MenuItem<MenuRootData>

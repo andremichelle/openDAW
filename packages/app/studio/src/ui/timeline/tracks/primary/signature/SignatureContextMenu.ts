@@ -1,5 +1,4 @@
-import {ContextMenu} from "@/ui/ContextMenu"
-import {MenuItem} from "@/ui/model/menu-item"
+import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {ElementCapturing} from "@/ui/canvas/capturing"
 import {Parsing, SignatureEvent, SignatureTrackAdapter} from "@opendaw/studio-adapters"
 import {EmptyExec} from "@opendaw/lib-std"

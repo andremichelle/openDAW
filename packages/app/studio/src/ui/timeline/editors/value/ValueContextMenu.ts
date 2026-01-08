@@ -1,5 +1,4 @@
-import {ContextMenu} from "@/ui/ContextMenu.ts"
-import {MenuItem} from "@/ui/model/menu-item.ts"
+import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {BoxEditing} from "@opendaw/lib-box"
 import {Objects, Selection} from "@opendaw/lib-std"
