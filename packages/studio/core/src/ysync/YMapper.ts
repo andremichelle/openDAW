@@ -10,7 +10,7 @@ import {
     Vertex
 } from "@opendaw/lib-box"
 import * as Y from "yjs"
-import {asDefined, assert, isDefined, isInstanceOf, JSONValue, UUID} from "@opendaw/lib-std"
+import {asDefined, assert, isDefined, isInstanceOf, isNotUndefined, JSONValue, UUID} from "@opendaw/lib-std"
 
 export namespace YMapper {
     export const createBoxMap = (box: Box): Y.Map<unknown> => {
@@ -35,9 +35,12 @@ export namespace YMapper {
                             apply(field, value)
                         }
                     },
-                    // those will panic if the type is a mismatch
-                    visitPointerField: (field: PointerField) => field.fromJSON(value as JSONValue),
-                    visitPrimitiveField: (field: PrimitiveField) => field.fromJSON(value as JSONValue)
+                    visitPointerField: (field: PointerField) => {
+                        if (isNotUndefined(value)) {field.fromJSON(value as JSONValue)}
+                    },
+                    visitPrimitiveField: (field: PrimitiveField) => {
+                        if (isNotUndefined(value)) {field.fromJSON(value as JSONValue)}
+                    }
                 })
             })
         }
