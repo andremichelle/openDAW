@@ -33,12 +33,37 @@ class TestTimeStretchConfig {
 
 function createMockAudioData(durationSeconds: number, sampleRate: number = 44100): AudioData {
     const numberOfFrames = Math.round(durationSeconds * sampleRate)
-    const frames = [new Float32Array(numberOfFrames), new Float32Array(numberOfFrames)]
+    const data = AudioData.create(sampleRate, numberOfFrames, 2)
+    const [left, right] = data.frames
     for (let i = 0; i < numberOfFrames; i++) {
-        frames[0][i] = Math.sin(2 * Math.PI * 440 * i / sampleRate)
-        frames[1][i] = frames[0][i]
+        left[i] = Math.sin(2 * Math.PI * 440 * i / sampleRate)
+        right[i] = left[i]
     }
-    return {sampleRate, numberOfFrames, numberOfChannels: 2, frames}
+    return data
+}
+
+function createConstantAudioData(durationSeconds: number, value: number, sampleRate: number = 44100): AudioData {
+    const numberOfFrames = Math.round(durationSeconds * sampleRate)
+    const data = AudioData.create(sampleRate, numberOfFrames, 2)
+    const [left, right] = data.frames
+    for (let i = 0; i < numberOfFrames; i++) {
+        left[i] = value
+        right[i] = value
+    }
+    return data
+}
+
+function createSegmentedAudioData(durationSeconds: number, splitAtSeconds: number, valueBefore: number, valueAfter: number, sampleRate: number = 44100): AudioData {
+    const numberOfFrames = Math.round(durationSeconds * sampleRate)
+    const data = AudioData.create(sampleRate, numberOfFrames, 2)
+    const [left, right] = data.frames
+    const splitAtFrame = Math.round(splitAtSeconds * sampleRate)
+    for (let i = 0; i < numberOfFrames; i++) {
+        const value = i < splitAtFrame ? valueBefore : valueAfter
+        left[i] = value
+        right[i] = value
+    }
+    return data
 }
 
 function createTransients(positions: number[]): EventCollection<TestTransientMarker> {
@@ -1227,14 +1252,7 @@ describe("TimeStretchSequencer", () => {
         it("should maintain consistent amplitude when transitioning from OnceVoice to looping voice", () => {
             // Use constant amplitude 1.0 signal for easy measurement
             const sampleRate = 44100
-            const durationSeconds = 4.0
-            const numberOfFrames = Math.round(durationSeconds * sampleRate)
-            const frames = [new Float32Array(numberOfFrames), new Float32Array(numberOfFrames)]
-            for (let i = 0; i < numberOfFrames; i++) {
-                frames[0][i] = 1.0
-                frames[1][i] = 1.0
-            }
-            const data = {sampleRate, numberOfFrames, numberOfChannels: 2, frames}
+            const data = createConstantAudioData(4.0, 1.0, sampleRate)
 
             const transients = createTransients([0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5])
             const warpMarkers = createWarpMarkers([
@@ -1341,14 +1359,7 @@ describe("TimeStretchSequencer", () => {
             // If both voices are at same position and crossfading correctly: output = 1.0
             // If positions differ or no crossfade: output could be 2.0 (both adding)
             const sampleRate = 44100
-            const durationSeconds = 4.0
-            const numberOfFrames = Math.round(durationSeconds * sampleRate)
-            const frames = [new Float32Array(numberOfFrames), new Float32Array(numberOfFrames)]
-            for (let i = 0; i < numberOfFrames; i++) {
-                frames[0][i] = 0.5  // Constant 0.5 so doubling would give 1.0
-                frames[1][i] = 0.5
-            }
-            const data = {sampleRate, numberOfFrames, numberOfChannels: 2, frames}
+            const data = createConstantAudioData(4.0, 0.5, sampleRate) // Constant 0.5 so doubling would give 1.0
 
             const transients = createTransients([0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5])
             const warpMarkers = createWarpMarkers([
@@ -1448,14 +1459,7 @@ describe("TimeStretchSequencer", () => {
         it("should reach full amplitude at the transient, not after", () => {
             // Use constant amplitude signal so we can measure fade progress
             const sampleRate = 44100
-            const durationSeconds = 2.0
-            const numberOfFrames = Math.round(durationSeconds * sampleRate)
-            const frames = [new Float32Array(numberOfFrames), new Float32Array(numberOfFrames)]
-            for (let i = 0; i < numberOfFrames; i++) {
-                frames[0][i] = 1.0
-                frames[1][i] = 1.0
-            }
-            const data = {sampleRate, numberOfFrames, numberOfChannels: 2, frames}
+            const data = createConstantAudioData(2.0, 1.0, sampleRate)
 
             // Transient at 0.5 seconds
             const transients = createTransients([0, 0.5, 1.0])
@@ -1548,19 +1552,9 @@ describe("TimeStretchSequencer", () => {
             // Test that the new voice reaches full amplitude exactly when transient hits
             // Use distinct audio content for each segment to identify which voice is active
             const sampleRate = 44100
-            const durationSeconds = 2.0
-            const numberOfFrames = Math.round(durationSeconds * sampleRate)
-            const frames = [new Float32Array(numberOfFrames), new Float32Array(numberOfFrames)]
-
             // Segment 1 (0-0.5s): value = 0.3
             // Segment 2 (0.5-1.0s): value = 0.7
-            const transientAtSamples = 0.5 * sampleRate
-            for (let i = 0; i < numberOfFrames; i++) {
-                const value = i < transientAtSamples ? 0.3 : 0.7
-                frames[0][i] = value
-                frames[1][i] = value
-            }
-            const data = {sampleRate, numberOfFrames, numberOfChannels: 2, frames}
+            const data = createSegmentedAudioData(2.0, 0.5, 0.3, 0.7, sampleRate)
 
             const transients = createTransients([0, 0.5, 1.0])
             const warpMarkers = createWarpMarkers([
@@ -1577,7 +1571,6 @@ describe("TimeStretchSequencer", () => {
             const bpm = 180
             const ppqnPerSecond = 960 * bpm / 60
             const ppqnPerSample = ppqnPerSecond / sampleRate
-            const fadeLengthSamples = Math.round(0.020 * sampleRate) // 882 samples
 
             const blockSize = 128
             let currentPpqn = 0
@@ -1685,14 +1678,7 @@ describe("TimeStretchSequencer", () => {
         it("should have no zero-amplitude samples when lowering BPM from 95 to 60", () => {
             // Use constant amplitude signal so gaps are obvious
             const sampleRate = 44100
-            const durationSeconds = 4.0
-            const numberOfFrames = Math.round(durationSeconds * sampleRate)
-            const frames = [new Float32Array(numberOfFrames), new Float32Array(numberOfFrames)]
-            for (let i = 0; i < numberOfFrames; i++) {
-                frames[0][i] = 1.0
-                frames[1][i] = 1.0
-            }
-            const data = {sampleRate, numberOfFrames, numberOfChannels: 2, frames}
+            const data = createConstantAudioData(4.0, 1.0, sampleRate)
 
             const transients = createTransients([0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5])
             const warpMarkers = createWarpMarkers([
@@ -1752,7 +1738,7 @@ describe("TimeStretchSequencer", () => {
             ppqnPerSample = ppqnPerSecond / sampleRate
 
             // Process 1 second at 60 BPM
-            const secondPhaseSamples = Math.round(sampleRate * 1.0)
+            const secondPhaseSamples = sampleRate
             let secondPhaseProcessed = 0
             while (secondPhaseProcessed < secondPhaseSamples) {
                 output.clear()
