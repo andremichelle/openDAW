@@ -1,5 +1,5 @@
 import {Promises} from "@opendaw/lib-runtime"
-import {Arrays, Errors} from "@opendaw/lib-std"
+import {Arrays, Errors, Optional} from "@opendaw/lib-std"
 import {ConstrainDOM} from "@opendaw/lib-dom"
 
 export class AudioDevices {
@@ -39,7 +39,7 @@ export class AudioDevices {
 
     static get inputs(): ReadonlyArray<MediaDeviceInfo> {return this.#inputs}
 
-    static get defaultInput(): MediaDeviceInfo | undefined {
+    static get defaultInput(): Optional<MediaDeviceInfo> {
         return this.#inputs.find(device => device.deviceId === "default") ?? this.#inputs.at(0)
     }
 }
