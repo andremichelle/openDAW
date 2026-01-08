@@ -141,12 +141,13 @@ export namespace RecordAudio {
                 const loopEnabled = loopArea.enabled.getValue()
                 const loopFrom = loopArea.from.getValue()
                 const loopTo = loopArea.to.getValue()
-                const loopDurationPPQN = loopTo - loopFrom
-                const loopDurationSeconds = tempoMap.intervalToSeconds(loopFrom, loopTo)
                 if (loopEnabled && currentTake.nonEmpty() && currentPosition < lastPosition) {
                     editing.modify(() => {
-                        currentTake.ifSome(take => finalizeTake(take, loopDurationPPQN))
-                        currentWaveformOffset += loopDurationSeconds
+                        currentTake.ifSome(take => {
+                            const actualDurationPPQN = take.regionBox.duration.getValue()
+                            finalizeTake(take, actualDurationPPQN)
+                            currentWaveformOffset += tempoMap.intervalToSeconds(0, actualDurationPPQN)
+                        })
                         startNewTake(loopFrom)
                     }, false)
                 }
