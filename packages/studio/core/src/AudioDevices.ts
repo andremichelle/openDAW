@@ -38,4 +38,8 @@ export class AudioDevices {
     static #inputs: ReadonlyArray<MediaDeviceInfo> = Arrays.empty()
 
     static get inputs(): ReadonlyArray<MediaDeviceInfo> {return this.#inputs}
+
+    static get defaultInput(): MediaDeviceInfo | undefined {
+        return this.#inputs.find(device => device.deviceId === "default") ?? this.#inputs.at(0)
+    }
 }

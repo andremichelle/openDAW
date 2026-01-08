@@ -120,7 +120,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             }
         }
         this.#stopStream()
-        const deviceId = this.deviceId.getValue().unwrapOrUndefined()
+        const deviceId = this.deviceId.getValue().unwrapOrUndefined() ?? AudioDevices.defaultInput?.deviceId
         const channelCount = this.#requestChannels.unwrapOrElse(1)
         return AudioDevices.requestStream({
             deviceId: isDefined(deviceId) ? {exact: deviceId} : undefined,
