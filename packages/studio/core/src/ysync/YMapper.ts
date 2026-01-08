@@ -10,7 +10,16 @@ import {
     Vertex
 } from "@opendaw/lib-box"
 import * as Y from "yjs"
-import {asDefined, assert, isDefined, isInstanceOf, isNotUndefined, JSONValue, UUID} from "@opendaw/lib-std"
+import {
+    asDefined,
+    assert,
+    isDefined,
+    isInstanceOf,
+    isNotUndefined,
+    isUndefined,
+    JSONValue,
+    UUID
+} from "@opendaw/lib-std"
 
 export namespace YMapper {
     export const createBoxMap = (box: Box): Y.Map<unknown> => {
@@ -22,8 +31,10 @@ export namespace YMapper {
 
     export const applyFromBoxMap = (box: Box, source: Y.Map<unknown>): void => {
         const apply = (vertex: Vertex, map: Y.Map<unknown>) => {
-            vertex.fields().forEach(field => {
-                const value: unknown = map.get(String(field.fieldKey))
+            const record = vertex.record()
+            map.forEach((value, key) => {
+                const field = record[key]
+                if (isUndefined(field)) {return}
                 field.accept({
                     visitArrayField: <FIELD extends Field>(field: ArrayField<FIELD>) => {
                         if (isInstanceOf(value, Y.Map)) {
