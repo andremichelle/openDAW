@@ -180,7 +180,7 @@ export class PointerField<P extends PointerTypes = PointerTypes> extends Field<U
                 some: decoder => decoder.map(this, address)
             })
         } else {
-            return panic(`Pointer: Type mismatch. value (${typeof value}) must be a string.`)
+            return panic(`Pointer at (${this.address}) has type mismatch. value (${value}) must be a string, but is ${typeof value}.`)
         }
     }
 }
