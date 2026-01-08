@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/studio-core",
-    "version": "0.0.88",
+    "version": "0.0.89",
     "license": "LGPL-3.0-or-later",
     "publishConfig": {
         "access": "public"
