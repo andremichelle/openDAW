@@ -79,7 +79,7 @@ export class ClipMoveModifier implements ClipModifier {
     selectedModifyStrategy(): ClipModifyStrategy {return this.#selectedModifyStrategy}
     unselectedModifyStrategy(): ClipModifyStrategy {return this.#unselectedModifyStrategy}
 
-    update({clientX, clientY, altKey, shiftKey}: Dragging.Event): void {
+    update({clientX, clientY, ctrlKey, shiftKey}: Dragging.Event): void {
         const clipIndex: int = this.#xAxis.axisToValue(clientX)
         const trackIndex: int = this.#yAxis.axisToValue(clientY)
         const maxTrackIndex = this.#manager.numTracks() - 1
@@ -102,8 +102,8 @@ export class ClipMoveModifier implements ClipModifier {
             this.#trackDelta = trackDelta
             change = true
         }
-        if (this.#copy !== altKey) {
-            this.#copy = altKey
+        if (this.#copy !== ctrlKey) {
+            this.#copy = ctrlKey
             change = true
         }
         if (this.#mirroredCopy !== shiftKey) {

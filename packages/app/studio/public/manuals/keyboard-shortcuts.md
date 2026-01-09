@@ -11,17 +11,15 @@ Most shortcuts can be listed and customized in the [Shortcut Manager](action://o
 
 ### Timeline Regions
 
-* Hold ⌥ and drag to copy a region / clip
-* Hold ⌥+Shift and drag to copy a region / clip as mirrored
+* Hold ⌘ and drag to copy a region / clip
+* Hold ⌘+Shift and drag to copy a region / clip as mirrored
 * Hold Shift and scroll wheel to zoom horizontally
-* Hold ⌘ and click to cut a region
-* Hold ⌘+Shift and click to cut a region without consolidating
+* Hold ⌥ and click to cut a region
+* Hold ⌥+Shift and click to cut a region without consolidating
 
 ### Notes
 
-* Hold ⌥ and drag to copy notes
-* Hold Shift and drag to repeat notes
-* Hold ⌘ and drag to draw notes
+* Hold ⌘ and drag to copy notes
 
 ### Note Properties (Velocity/Expression)
 
@@ -30,11 +28,10 @@ Most shortcuts can be listed and customized in the [Shortcut Manager](action://o
 
 ### Automation
 
-* Hold ⌘ and drag to draw automation
-* Hold ⌥ and drag to copy points
+* Hold ⌘ and drag to copy points
+* Hold ⌥ while dragging to freeze value (move position only)
 * Hold Shift and click on curve to create a new point
 * Hold Shift while dragging to disable value snapping
-* Hold Ctrl while dragging to freeze value (move position only)
 
 ### Value Dragging (Knobs, Faders)
 
