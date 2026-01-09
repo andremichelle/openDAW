@@ -2,6 +2,7 @@ import {describe, expect, it} from "vitest"
 import {BoxGraph} from "@opendaw/lib-box"
 import {isDefined, Option, UUID} from "@opendaw/lib-std"
 import {BoxIO, BoxVisitor, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
+import {migrateValueEventCollection} from "./MigrateValueEventCollection"
 
 const createTestSetup = () => {
     const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
@@ -24,7 +25,7 @@ const createEvent = (boxGraph: BoxGraph<BoxIO.TypeMap>, collection: ValueEventCo
     return event
 }
 
-const getEvents = (collection: ValueEventCollectionBox): Array<{ position: number, index: number, value: number }> => {
+const getEvents = (collection: ValueEventCollectionBox): Array<{position: number, index: number, value: number}> => {
     return collection.events.pointerHub.incoming()
         .map(pointer => pointer.box.accept<BoxVisitor<ValueEventBox>>({
             visitValueEventBox: (box) => box
@@ -41,53 +42,7 @@ const getEvents = (collection: ValueEventCollectionBox): Array<{ position: numbe
         }))
 }
 
-const migrateValueEventCollection = (boxGraph: BoxGraph<BoxIO.TypeMap>, collectionBox: ValueEventCollectionBox) => {
-    const events = collectionBox.events.pointerHub.incoming()
-        .map(pointer => pointer.box.accept<BoxVisitor<ValueEventBox>>({
-            visitValueEventBox: (eventBox) => eventBox
-        }))
-        .filter(isDefined)
-        .sort((a, b) => {
-            const positionDiff = a.position.getValue() - b.position.getValue()
-            return positionDiff !== 0 ? positionDiff : a.index.getValue() - b.index.getValue()
-        })
-    if (events.length === 0) {return}
-    const toDelete: Array<ValueEventBox> = []
-    const toFix: Array<{ event: ValueEventBox, index: number }> = []
-    let first: ValueEventBox = events[0]
-    let last: ValueEventBox = events[0]
-    let count = 1
-    const flush = () => {
-        if (count === 1) {
-            if (first.index.getValue() !== 0) {toFix.push({event: first, index: 0})}
-        } else {
-            if (first.index.getValue() !== 0) {toFix.push({event: first, index: 0})}
-            if (last.index.getValue() !== 1) {toFix.push({event: last, index: 1})}
-        }
-    }
-    for (let i = 1; i < events.length; i++) {
-        const event = events[i]
-        if (event.position.getValue() === first.position.getValue()) {
-            if (count >= 2) {toDelete.push(last)}
-            last = event
-            count++
-        } else {
-            flush()
-            first = event
-            last = event
-            count = 1
-        }
-    }
-    flush()
-    if (toDelete.length > 0 || toFix.length > 0) {
-        boxGraph.beginTransaction()
-        toFix.forEach(({event, index}) => event.index.setValue(index))
-        toDelete.forEach(event => event.delete())
-        boxGraph.endTransaction()
-    }
-}
-
-describe("ProjectMigration.visitValueEventCollectionBox", () => {
+describe("migrateValueEventCollection", () => {
     describe("single event at position", () => {
         it("should keep single event with index 0 unchanged", () => {
             const {boxGraph, collection} = createTestSetup()
