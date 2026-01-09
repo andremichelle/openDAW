@@ -4,7 +4,7 @@ A sample-based drum machine and sampler with a grid of pads, each mapped to a MI
 
 ---
 
-![screenshot](playfield.png)
+![screenshot](playfield.webp)
 
 ---
 
@@ -64,7 +64,7 @@ Click the {icon:Focus} icon on any pad to open the detailed sample editor.
 
 ---
 
-![screenshot](playfield-sample.png)
+![screenshot](playfield-sample.webp)
 
 ---
 

@@ -4,7 +4,7 @@ A minimal sample playback instrument. Load a single sample and play it chromatic
 
 ---
 
-![screenshot](nano.png)
+![screenshot](nano.webp)
 
 ---
 

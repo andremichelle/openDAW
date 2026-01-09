@@ -4,7 +4,7 @@ An Audio Bus is a virtual channel that groups multiple audio sources for collect
 
 ---
 
-![screenshot](audio-bus.png)
+![screenshot](audio-bus.webp)
 
 ---
 

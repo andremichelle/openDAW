@@ -5,7 +5,7 @@ connected by curves that control how a parameter changes over time.
 
 ---
 
-![screenshot](automation.png)
+![screenshot](automation.webp)
 
 ---
 

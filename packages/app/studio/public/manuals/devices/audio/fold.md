@@ -4,7 +4,7 @@ A wavefolding distortion effect with oversampling for clean, harmonic-rich satur
 
 ---
 
-![screenshot](fold.png)
+![screenshot](fold.webp)
 
 ---
 

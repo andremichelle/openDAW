@@ -4,7 +4,7 @@ A lightweight algorithmic reverb based on the classic Freeverb design.
 
 ---
 
-![screenshot](reverb.png)
+![screenshot](reverb.webp)
 
 ---
 

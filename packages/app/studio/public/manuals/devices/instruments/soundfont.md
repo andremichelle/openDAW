@@ -4,7 +4,7 @@ A sample-based instrument that plays Soundfont (.sf2) files, the widely-used for
 
 ---
 
-![screenshot](soundfont.png)
+![screenshot](soundfont.webp)
 
 ---
 

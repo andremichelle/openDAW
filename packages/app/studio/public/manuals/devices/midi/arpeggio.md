@@ -4,7 +4,7 @@ A tempo-synced arpeggiator that cycles through held notes in various patterns.
 
 ---
 
-![screenshot](arpeggio.png)
+![screenshot](arpeggio.webp)
 
 ---
 

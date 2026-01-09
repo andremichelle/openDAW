@@ -4,7 +4,7 @@ A utility effect for adjusting volume, panning, stereo width, and channel manipu
 
 ---
 
-![screenshot](stereotool.png)
+![screenshot](stereotool.webp)
 
 ---
 

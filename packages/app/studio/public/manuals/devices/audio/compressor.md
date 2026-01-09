@@ -4,7 +4,7 @@ A dynamic range compressor with auto-adaptive features, lookahead, and sidechain
 
 ---
 
-![screenshot](compressor.png)
+![screenshot](compressor.webp)
 
 ---
 

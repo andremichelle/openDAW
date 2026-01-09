@@ -4,7 +4,7 @@ Routes MIDI data to external hardware synthesizers, drum machines, or other MIDI
 
 ---
 
-![screenshot](midioutput.png)
+![screenshot](midioutput.webp)
 
 ---
 

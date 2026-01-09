@@ -4,7 +4,7 @@ A MIDI note transposition effect with octave, semitone, and fine-tuning control.
 
 ---
 
-![screenshot](pitch.png)
+![screenshot](pitch.webp)
 
 ---
 

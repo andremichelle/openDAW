@@ -4,7 +4,7 @@ A tempo-synced tremolo effect with customizable waveshape and stereo phase contr
 
 ---
 
-![screenshot](tidal.png)
+![screenshot](tidal.webp)
 
 ---
 

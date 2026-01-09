@@ -4,7 +4,7 @@ A groove/shuffle effect that applies swing timing to MIDI notes.
 
 ---
 
-![screenshot](zeitgeist.png)
+![screenshot](zeitgeist.webp)
 
 ---
 

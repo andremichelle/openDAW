@@ -4,7 +4,7 @@ A stereo delay with tempo sync or free-running mode, stereo pre-delay, crossfeed
 
 ---
 
-![screenshot](delay.png)
+![screenshot](delay.webp)
 
 ---
 

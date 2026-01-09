@@ -4,7 +4,7 @@ A high-quality plate reverb based on Jon Dattorro's classic algorithm with modul
 
 ---
 
-![screenshot](dattorro-reverb.png)
+![screenshot](dattorro-reverb.webp)
 
 ---
 

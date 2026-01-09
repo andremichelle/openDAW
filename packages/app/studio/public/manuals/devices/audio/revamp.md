@@ -4,7 +4,7 @@ A 7-band parametric equalizer with real-time spectrum analysis.
 
 ---
 
-![screenshot](revamp.png)
+![screenshot](revamp.webp)
 
 ---
 

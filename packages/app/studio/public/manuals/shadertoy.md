@@ -6,6 +6,10 @@ Create real-time visuals for your music using GLSL shaders. The editor supports 
 
 ---
 
+![screenshot](shadertoy.webp)
+
+---
+
 ## 0. Overview
 
 The Shadertoy panel lets you write fragment shaders that respond to audio and MIDI data from your project. Audio spectrum and waveform data arrive via `iChannel0`, and MIDI data is available through helper functions.

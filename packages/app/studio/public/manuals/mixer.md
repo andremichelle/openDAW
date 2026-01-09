@@ -4,7 +4,7 @@ The mixer provides a comprehensive view of all audio-units in your project, allo
 
 ---
 
-![screenshot](mixer.png)
+![screenshot](mixer.webp)
 
 ---
 

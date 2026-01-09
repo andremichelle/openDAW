@@ -4,7 +4,7 @@ A tape machine playback instrument that visualizes audio regions from the track 
 
 ---
 
-![screenshot](tape.png)
+![screenshot](tape.webp)
 
 ---
 

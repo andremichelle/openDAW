@@ -5,7 +5,7 @@ pads, leads, basses, and sound design.
 
 ---
 
-![screenshot](vaporisateur.png)
+![screenshot](vaporisateur.webp)
 
 ---
 

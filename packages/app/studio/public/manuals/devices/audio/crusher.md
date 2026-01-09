@@ -4,7 +4,7 @@ A bit crusher and sample rate reducer for lo-fi and distortion effects.
 
 ---
 
-![screenshot](crusher.png)
+![screenshot](crusher.webp)
 
 ---
 

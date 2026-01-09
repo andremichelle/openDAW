@@ -4,7 +4,7 @@ A brickwall limiter with automatic makeup gain for loudness maximization.
 
 ---
 
-![screenshot](maximizer.png)
+![screenshot](maximizer.webp)
 
 ---
 
