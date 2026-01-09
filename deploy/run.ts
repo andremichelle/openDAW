@@ -19,12 +19,25 @@ const envFolder = isMainBranch ? "main" : "dev"
 const readBuildInfo = () => JSON.parse(fs.readFileSync(buildInfoPath, "utf8"))
 const createRootHtaccess = (mainReleaseDir: string, devReleaseDir: string) => `# openDAW
 #
-Header set Access-Control-Allow-Origin "https://localhost:8080"
-Header set Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE"
-Header set Access-Control-Allow-Headers "Authorization, Content-Type, X-Requested-With"
-Header set Access-Control-Allow-Credentials "true"
-Header set Cross-Origin-Opener-Policy "same-origin"
-Header set Cross-Origin-Embedder-Policy "require-corp"
+<IfModule mod_headers.c>
+  <IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Dynamic CORS: Allow opendaw.studio, dev.opendaw.studio, and localhost:8080-8089
+    RewriteCond %{HTTP:Origin} ^(https://opendaw\\.studio|https://dev\\.opendaw\\.studio|https://localhost:808[0-9])$ [NC]
+    RewriteRule .* - [E=ORIGIN_ALLOWED:%{HTTP:Origin}]
+  </IfModule>
+
+  Header set Access-Control-Allow-Origin "%{ORIGIN_ALLOWED}e" env=ORIGIN_ALLOWED
+  Header set Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE"
+  Header set Access-Control-Allow-Headers "Authorization, Content-Type, X-Requested-With"
+  Header set Access-Control-Allow-Credentials "true"
+  Header set Cross-Origin-Opener-Policy "same-origin"
+  Header set Cross-Origin-Embedder-Policy "require-corp"
+  Header set Cross-Origin-Resource-Policy "cross-origin"
+  Header always set Vary "Origin"
+</IfModule>
 
 RewriteEngine On
 RewriteBase /
