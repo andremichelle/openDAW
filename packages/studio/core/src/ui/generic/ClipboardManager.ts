@@ -1,7 +1,7 @@
 import {Client, JSONValue, Option, Subscription, Terminable} from "@opendaw/lib-std"
 import {Events, ReservedShortcuts} from "@opendaw/lib-dom"
 import {ContextMenu} from "./ContextMenu"
-import {MenuItem} from "./menu-item"
+import {MenuItem} from "./MenuItems"
 
 const CLIPBOARD_PREFIX = "OPENDAW:1:"
 
