@@ -44,6 +44,7 @@ export const renderRegions = (context: CanvasRenderingContext2D,
         const optTrack = tracks.getByIndex(strategy.translateTrackIndex(index))
         if (optTrack.isEmpty()) {return}
         const trackBoxAdapter = optTrack.unwrap().trackBoxAdapter
+        const trackDisabled = !trackBoxAdapter.enabled.getValue()
         const regions = strategy.iterateRange(trackBoxAdapter.regions.collection, unitMin, unitMax)
         const dpr = devicePixelRatio
 
@@ -63,7 +64,7 @@ export const renderRegions = (context: CanvasRenderingContext2D,
 
             const {
                 labelColor, labelBackground, contentColor, contentBackground, loopStrokeColor
-            } = RegionPaintBucket.create(region, region.isSelected && !filterSelected)
+            } = RegionPaintBucket.create(region, region.isSelected && !filterSelected, trackDisabled)
 
             context.clearRect(x0Int, 0, xnInt, height)
             context.fillStyle = labelBackground
