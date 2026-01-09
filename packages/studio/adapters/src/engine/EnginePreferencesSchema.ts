@@ -31,7 +31,7 @@ export const EngineSettingsSchema = z.object({
         olderTakeScope: z.union(_OlderTakeScopeOptions.map(value => z.literal(value)))
     }).default({
         countInBars: 1,
-        allowTakes: true,
+        allowTakes: location.hostname === "localhost" || location.hostname === "dev.opendaw.studio",
         olderTakeAction: "disable-track",
         olderTakeScope: "previous-only"
     })

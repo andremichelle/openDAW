@@ -30,24 +30,45 @@ export namespace WavFile {
         if (fmtOffset < 0 || dataOffset < 0) {
             return panic("Missing fmt or data chunk")
         }
-        const audioFormat = view.getUint16(fmtOffset, true)  // 3 = IEEE float
+        const audioFormat = view.getUint16(fmtOffset, true)  // 1 = PCM, 3 = IEEE float
         const numberOfChannels = view.getUint16(fmtOffset + 2, true)
         const sampleRate = view.getUint32(fmtOffset + 4, true)
         const blockAlign = view.getUint16(fmtOffset + 12, true)
         const bitsPerSample = view.getUint16(fmtOffset + 14, true)
-        if (audioFormat !== 3 || bitsPerSample !== 32) {
-            return panic("Expected 32-bit float WAV (format 3)")
-        }
-        if (blockAlign !== numberOfChannels * 4) {
+        const bytesPerSample = bitsPerSample / 8
+        if (blockAlign !== numberOfChannels * bytesPerSample) {
             return panic("Invalid block alignment")
         }
         const numberOfFrames = Math.floor(dataSize / blockAlign)
-        const interleaved = new Float32Array(buffer, dataOffset, numberOfFrames * numberOfChannels)
         const audioData = AudioData.create(sampleRate, numberOfFrames, numberOfChannels)
-        for (let i = 0, w = 0; i < numberOfFrames; i++) {
-            for (let c = 0; c < numberOfChannels; c++) {
-                audioData.frames[c][i] = interleaved[w++]
+        if (audioFormat === 3 && bitsPerSample === 32) {
+            // 32-bit float
+            const interleaved = new Float32Array(buffer, dataOffset, numberOfFrames * numberOfChannels)
+            for (let i = 0, w = 0; i < numberOfFrames; i++) {
+                for (let c = 0; c < numberOfChannels; c++) {
+                    audioData.frames[c][i] = interleaved[w++]
+                }
             }
+        } else if (audioFormat === 1 && bitsPerSample === 16) {
+            // 16-bit PCM
+            for (let i = 0, offset = dataOffset; i < numberOfFrames; i++) {
+                for (let c = 0; c < numberOfChannels; c++) {
+                    audioData.frames[c][i] = view.getInt16(offset, true) / 32768
+                    offset += 2
+                }
+            }
+        } else if (audioFormat === 1 && bitsPerSample === 24) {
+            // 24-bit PCM
+            for (let i = 0, offset = dataOffset; i < numberOfFrames; i++) {
+                for (let c = 0; c < numberOfChannels; c++) {
+                    const low = view.getUint16(offset, true)
+                    const high = view.getInt8(offset + 2)
+                    audioData.frames[c][i] = (high * 65536 + low) / 8388608
+                    offset += 3
+                }
+            }
+        } else {
+            return panic(`Unsupported WAV format: ${audioFormat}, ${bitsPerSample}-bit`)
         }
         return audioData
     }

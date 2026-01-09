@@ -53,6 +53,9 @@ export class OpenSampleAPI implements SampleAPI {
             .then(({uuid, name, bpm}) => Promises.retry(() => network
                 .limitFetch(`${OpenSampleAPI.FileRoot}/${uuid}`, OpenDAWHeaders))
                 .then(response => {
+                    if (!response.ok) {
+                        return panic(`Failed to fetch sample ${uuid}: ${response.status} ${response.statusText}`)
+                    }
                     const total = parseInt(response.headers.get("Content-Length") ?? "0")
                     let loaded = 0
                     return new Promise<ArrayBuffer>((resolve, reject) => {
