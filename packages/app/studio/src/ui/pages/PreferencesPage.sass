@@ -15,12 +15,16 @@ component
     color: var(--color-blue)
 
   > div.sections
+    flex: 1
     display: flex
     column-gap: 2em
+    overflow: hidden
 
     > section
       flex: 1 1 0
-      font-size: 0.875em
+      display: flex
+      flex-direction: column
+      overflow: hidden
 
       > h2
         margin-bottom: 0.5em

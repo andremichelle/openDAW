@@ -87,7 +87,10 @@ export const PreferencePanel = <ROOT_SETTINGS, SETTINGS = ROOT_SETTINGS>(
                         )
                     }
                     case "number": {
-                        const fieldOptions = options?.[pKey] as ReadonlyArray<{ value: number; label: string }> | undefined
+                        const fieldOptions = options?.[pKey] as ReadonlyArray<{
+                            value: number;
+                            label: string
+                        }> | undefined
                         if (fieldOptions) {
                             return (
                                 <div className="select-field">
@@ -112,12 +115,15 @@ export const PreferencePanel = <ROOT_SETTINGS, SETTINGS = ROOT_SETTINGS>(
                             <div className="number-field">
                                 <span style={{color: Colors.shadow.toString()}}>{label}</span>
                                 <hr/>
-                                <NumberInput lifecycle={lifecycle} model={createModel()} maxChars={6} className="big"/>
+                                <NumberInput lifecycle={lifecycle} model={createModel()} maxChars={4} className="big"/>
                             </div>
                         )
                     }
                     case "string": {
-                        const fieldOptions = options?.[pKey] as ReadonlyArray<{ value: string; label: string }> | undefined
+                        const fieldOptions = options?.[pKey] as ReadonlyArray<{
+                            value: string;
+                            label: string
+                        }> | undefined
                         if (fieldOptions) {
                             return (
                                 <div className="select-field">

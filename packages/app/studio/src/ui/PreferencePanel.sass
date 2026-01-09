@@ -2,7 +2,7 @@ component
   display: flex
   flex-direction: column
   row-gap: 0.25em
-  font-size: 0.875em
+  font-size: 0.75em
 
   label
     flex: 1
@@ -74,12 +74,11 @@ component
         background: rgba(black, 0.2)
 
   .accordion
-    margin-top: 0.5em
     margin-bottom: 0.5em
 
     > summary
       cursor: pointer
-      padding: 0.5em 0
+      padding: 0.25em 0
       font-weight: 500
       list-style: none
       display: flex
@@ -89,7 +88,7 @@ component
       &::before
         content: "▶"
         font-size: 0.6em
-        transition: transform 0.2s ease
+        transition: transform 0.1s ease
 
     &[open] > summary::before
       transform: rotate(90deg)
@@ -98,3 +97,4 @@ component
       margin-left: 1em
       padding-left: 1em
       border-left: 1px solid rgba(white, 0.1)
+      font-size: 1em

@@ -2,10 +2,13 @@ import css from "./PreferencesPage.sass?inline"
 import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {BackButton} from "@/ui/pages/BackButton"
-import {Html} from "@opendaw/lib-dom"
+import {Html, ShortcutDefinitions} from "@opendaw/lib-dom"
 import {NestedLabels, PreferencePanel} from "@/ui/PreferencePanel"
 import {FpsOptions, StudioPreferences, StudioSettings} from "@opendaw/studio-core"
 import {EngineSettings} from "@opendaw/studio-adapters"
+import {StudioShortcutManager} from "@/service/StudioShortcutManager"
+import {Notifier, Objects} from "@opendaw/lib-std"
+import {ShortcutManagerView} from "@/ui/components/ShortcutManagerView"
 
 const className = Html.adoptStyleSheet(css, "PreferencesPage")
 
@@ -85,6 +88,10 @@ const EngineSettingsOptions = {
 }
 
 export const PreferencesPage: PageFactory<StudioService> = ({lifecycle, service}: PageContext<StudioService>) => {
+    const updateNotifier = new Notifier<void>()
+    const contexts: StudioShortcutManager.ShortcutsMap = {}
+    Objects.entries(StudioShortcutManager.Contexts).forEach(([key, shortcuts]) =>
+        contexts[key] = ShortcutDefinitions.copy(shortcuts.workingDefinition))
     return (
         <div className={className}>
             <BackButton/>
@@ -106,7 +113,9 @@ export const PreferencesPage: PageFactory<StudioService> = ({lifecycle, service}
                 </section>
                 <section>
                     <h2>Shortcuts</h2>
-                    <p>Keyboard shortcuts will be displayed here.</p>
+                    <ShortcutManagerView lifecycle={lifecycle}
+                                         contexts={contexts}
+                                         updateNotifier={updateNotifier}/>
                 </section>
             </div>
         </div>

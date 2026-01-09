@@ -39,7 +39,6 @@ export const ShortcutManagerView = ({lifecycle, contexts, updateNotifier}: Const
                          }}>
                     <summary>
                         <h3>{Strings.hyphenToCamelCase(key)}</h3>
-                        <hr/>
                     </summary>
                     <div className="shortcuts">
                         {Objects.entries(shortcuts).map(([key, entry]) => (
