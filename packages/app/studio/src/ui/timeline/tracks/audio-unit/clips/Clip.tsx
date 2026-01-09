@@ -77,7 +77,7 @@ export const Clip = ({lifecycle, project, adapter, gridColumn}: Construct) => {
             label.textContent = adapter.label.length === 0 ? "◻" : adapter.label
             element.style.setProperty("--hue", String(adapter.hue))
             element.classList.toggle("mirrored", adapter.isMirrowed)
-            element.classList.toggle("muted", adapter.box.mute.getValue() || !adapter.trackBoxAdapter.unwrap().enabled.getValue())
+            element.classList.toggle("muted", adapter.box.mute.getValue() || adapter.trackBoxAdapter.mapOr(track => !track.enabled.getValue(), false))
             painter.requestUpdate()
         }),
         adapter.catchupAndSubscribeSelected(owner => element.classList.toggle("selected", owner.getValue())),
