@@ -6,6 +6,7 @@ import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {
     CloudBackup,
     FilePickerAcceptTypes,
+    MenuItem,
     ProjectSignals,
     StudioPreferences,
     Workers,
@@ -16,7 +17,6 @@ import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {SyncLogService} from "@/service/SyncLogService"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {StudioDialogs} from "@/service/StudioDialogs"
-import {MenuItem} from "@opendaw/studio-core"
 
 export const populateStudioMenu = (service: StudioService) => {
     const Global = GlobalShortcuts
@@ -152,7 +152,7 @@ export const populateStudioMenu = (service: StudioService) => {
                     MenuItem.default({
                         label: "Preferences",
                         shortcut: GlobalShortcuts["show-preferences"].shortcut.format()
-                    }).setTriggerProcedure(async () => StudioDialogs.showPreferences()),
+                    }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/preferences")),
                     MenuItem.default({label: "Debug", separatorBefore: true})
                         .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                             MenuItem.header({label: "Debugging", icon: IconSymbol.System}),

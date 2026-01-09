@@ -17,6 +17,7 @@ import {CodeEditorPage} from "@/ui/pages/CodeEditorPage"
 import {OpenBundlePage} from "@/ui/pages/OpenBundlePage"
 import {UsersPage} from "@/ui/pages/UsersPage"
 import {PrivacyPage} from "@/ui/pages/PrivacyPage"
+import {PreferencesPage} from "@/ui/pages/PreferencesPage"
 import {TestPage} from "@/ui/pages/TestPage"
 
 export const App = (service: StudioService) => {
@@ -35,6 +36,7 @@ export const App = (service: StudioService) => {
                 routes={[
                     {path: "/", factory: WorkspacePage},
                     {path: "/manuals/*", factory: ManualPage},
+                    {path: "/preferences", factory: PreferencesPage},
                     {path: "/imprint", factory: ImprintPage},
                     {path: "/privacy", factory: PrivacyPage},
                     {path: "/icons", factory: IconsPage},

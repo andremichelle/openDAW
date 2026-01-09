@@ -64,6 +64,9 @@ export default defineConfig(({command}) => {
             fs: {
                 // Allow serving files from the entire workspace
                 allow: [resolve(__dirname, "../../../")]
+            },
+            hmr: {
+                overlay: false
             }
         },
         preview: {

@@ -16,12 +16,12 @@ import {DefaultWorkspace} from "@/ui/workspace/Default"
 import {PanelType} from "@/ui/workspace/PanelType"
 import {Workspace} from "@/ui/workspace/Workspace"
 import {DeviceHost, Devices, ProjectUtils} from "@opendaw/studio-adapters"
-import {StudioDialogs} from "@/service/StudioDialogs"
 import {ContentEditorShortcuts, ContentEditorShortcutsFactory} from "@/ui/shortcuts/ContentEditorShortcuts"
 import {PianoPanelShortcuts, PianoPanelShortcutsFactory} from "@/ui/shortcuts/PianoPanelShortcuts"
 import {RegionsShortcuts, RegionsShortcutsFactory} from "@/ui/shortcuts/RegionsShortcuts"
 import {NoteEditorShortcuts, NoteEditorShortcutsFactory} from "@/ui/shortcuts/NoteEditorShortcuts"
 import {SoftwareMIDIShortcuts, SoftwareMIDIShortcutsFactory} from "@/ui/shortcuts/SoftwareMIDIShortcuts"
+import {RouteLocation} from "@opendaw/lib-jsx"
 
 export namespace StudioShortcutManager {
     const localStorageKey = "shortcuts"
@@ -180,7 +180,7 @@ export namespace StudioShortcutManager {
             gc.register(gs["workspace-screen-project"].shortcut, () => service.runIfProject(() => service.switchScreen("project"))),
             gc.register(gs["workspace-screen-meter"].shortcut, () => service.runIfProject(() => service.switchScreen("meter"))),
             gc.register(gs["workspace-screen-shadertoy"].shortcut, () => service.runIfProject(() => service.switchScreen("shadertoy"))),
-            gc.register(gs["show-preferences"].shortcut, () => StudioDialogs.showPreferences())
+            gc.register(gs["show-preferences"].shortcut, () => RouteLocation.get().navigateTo("/preferences"))
         )
     }
 }

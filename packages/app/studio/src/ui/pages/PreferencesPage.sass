@@ -1,0 +1,27 @@
+@use "@/colors"
+@use "@/mixins"
+
+component
+  flex: 1
+  padding: 1.5em
+  display: flex
+  flex-direction: column
+  row-gap: 1em
+  overflow: hidden
+  color: var(--color-dark)
+  @include colors.panel-background
+
+  > h1
+    color: var(--color-blue)
+
+  > div.sections
+    display: flex
+    column-gap: 2em
+
+    > section
+      flex: 1 1 0
+      font-size: 0.875em
+
+      > h2
+        margin-bottom: 0.5em
+        color: var(--color-orange)

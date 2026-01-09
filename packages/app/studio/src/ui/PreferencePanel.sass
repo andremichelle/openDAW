@@ -1,13 +1,15 @@
 component
   display: flex
   flex-direction: column
-  row-gap: 0.75em
+  row-gap: 0.25em
+  font-size: 0.875em
 
   label
     flex: 1
     display: flex
     align-items: center
     column-gap: 0.5em
+    padding: 0
 
     > span
       white-space: nowrap
@@ -20,3 +22,79 @@ component
 
     > svg
       font-size: 18px
+
+  .number-field
+    display: flex
+    align-items: center
+    column-gap: 0.5em
+
+    > span
+      white-space: nowrap
+      color: var(--color-shadow)
+
+    > hr
+      flex: 1
+      background: rgba(white, 0.04)
+      border: none
+      height: 1px
+
+    > .big
+      font-size: 1em
+
+  .select-field
+    display: flex
+    align-items: center
+    column-gap: 0.5em
+
+    > span
+      white-space: nowrap
+      color: var(--color-shadow)
+
+    > hr
+      flex: 1
+      background: rgba(white, 0.04)
+      border: none
+      height: 1px
+
+    [data-class="radio-group"]
+      display: flex
+      gap: 0.25em
+
+      > label
+        padding: 0.25em 0.5em
+        border-radius: 3px
+        font-size: 1em
+        color: var(--color-shadow)
+        white-space: nowrap
+        width: auto
+        min-width: auto
+
+      > input:checked + label
+        color: var(--color-blue)
+        background: rgba(black, 0.2)
+
+  .accordion
+    margin-top: 0.5em
+    margin-bottom: 0.5em
+
+    > summary
+      cursor: pointer
+      padding: 0.5em 0
+      font-weight: 500
+      list-style: none
+      display: flex
+      align-items: center
+      gap: 0.5em
+
+      &::before
+        content: "▶"
+        font-size: 0.6em
+        transition: transform 0.2s ease
+
+    &[open] > summary::before
+      transform: rotate(90deg)
+
+    > component
+      margin-left: 1em
+      padding-left: 1em
+      border-left: 1px solid rgba(white, 0.1)
