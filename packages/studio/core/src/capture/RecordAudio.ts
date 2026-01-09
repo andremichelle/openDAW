@@ -1,4 +1,4 @@
-import {int, Option, quantizeFloor, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, int, Option, quantizeFloor, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {dbToGain, ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
 import {
     AudioFileBox,
@@ -8,7 +8,7 @@ import {
     ValueEventCollectionBox,
     WarpMarkerBox
 } from "@opendaw/studio-boxes"
-import {ColorCodes, SampleLoaderManager, TrackType} from "@opendaw/studio-adapters"
+import {ColorCodes, SampleLoaderManager, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
 import {Project} from "../project"
 import {RecordingWorklet} from "../RecordingWorklet"
 import {Capture} from "./Capture"
@@ -64,7 +64,7 @@ export namespace RecordAudio {
         let currentWaveformOffset: number = outputLatency
         let takeNumber: int = 0
 
-        const {tempoMap, env: {audioContext: {sampleRate}}} = project
+        const {tempoMap, env: {audioContext: {sampleRate}}, engine: {preferences: {settings: {recording}}}} = project
         const {loopArea} = timelineBox
 
         const createFileBox = () => {
@@ -112,8 +112,36 @@ export namespace RecordAudio {
                 warpMarkerBox.position.setValue(loopDurationPPQN)
                 warpMarkerBox.seconds.setValue(seconds)
             }
-            if (trackBox.isAttached()) {
-                trackBox.enabled.setValue(false)
+            const {olderTakeAction, olderTakeScope} = recording
+            if (olderTakeScope === "all") {
+                for (const track of capture.audioUnitBox.tracks.pointerHub.incoming()
+                    .map(({box}) => asInstanceOf(box, TrackBox))) {
+                    const trackType = track.type.getValue()
+                    if (trackType === TrackType.Value || trackType === TrackType.Undefined) {continue}
+                    if (track === trackBox) {continue}
+                    if (olderTakeAction === "disable-track") {
+                        if (track.isAttached()) {
+                            track.enabled.setValue(false)
+                        }
+                    } else {
+                        for (const region of track.regions.pointerHub.incoming()
+                            .map(({box}) => UnionBoxTypes.asRegionBox(box))) {
+                            if (region.isAttached()) {
+                                region.mute.setValue(true)
+                            }
+                        }
+                    }
+                }
+            } else {
+                if (olderTakeAction === "disable-track") {
+                    if (trackBox.isAttached()) {
+                        trackBox.enabled.setValue(false)
+                    }
+                } else {
+                    if (regionBox.isAttached()) {
+                        regionBox.mute.setValue(true)
+                    }
+                }
             }
         }
 
