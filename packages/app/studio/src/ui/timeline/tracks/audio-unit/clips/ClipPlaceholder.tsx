@@ -1,8 +1,7 @@
 import {DefaultObservableValue, isDefined, Lifecycle, Nullable, Terminator} from "@opendaw/lib-std"
-import {createElement, Group} from "@opendaw/lib-jsx"
+import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {AnyClipBoxAdapter} from "@opendaw/studio-adapters"
 import {Clip} from "@/ui/timeline/tracks/audio-unit/clips/Clip.tsx"
-import {Html} from "@opendaw/lib-dom"
 import {Project} from "@opendaw/studio-core"
 
 type Construct = {
@@ -17,14 +16,19 @@ export const ClipPlaceholder = ({lifecycle, project, adapter, gridColumn}: Const
     const terminator = lifecycle.own(new Terminator())
     lifecycle.own(
         adapter.catchupAndSubscribe(owner => {
-            Html.empty(element)
             terminator.terminate()
             const adapter = owner.getValue()
             if (isDefined(adapter)) {
-                element.appendChild(<Clip lifecycle={terminator} project={project} adapter={adapter}
-                                          gridColumn={gridColumn}/>)
+                replaceChildren(element,
+                    <Clip lifecycle={terminator}
+                          project={project}
+                          adapter={adapter}
+                          gridColumn={gridColumn}/>
+                )
             } else {
-                element.appendChild(<div className="placeholder" style={{gridColumn}}/>)
+                replaceChildren(element,
+                    <div className="placeholder" style={{gridColumn}}/>
+                )
             }
         }))
     return element

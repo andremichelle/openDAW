@@ -77,10 +77,12 @@ export const Clip = ({lifecycle, project, adapter, gridColumn}: Construct) => {
             label.textContent = adapter.label.length === 0 ? "◻" : adapter.label
             element.style.setProperty("--hue", String(adapter.hue))
             element.classList.toggle("mirrored", adapter.isMirrowed)
-            element.classList.toggle("muted", adapter.box.mute.getValue())
+            element.classList.toggle("muted", adapter.box.mute.getValue() || !adapter.trackBoxAdapter.unwrap().enabled.getValue())
             painter.requestUpdate()
         }),
-        adapter.catchupAndSubscribeSelected(owner => element.classList.toggle("selected", owner.getValue()))
+        adapter.catchupAndSubscribeSelected(owner => element.classList.toggle("selected", owner.getValue())),
+        adapter.trackBoxAdapter.unwrap().enabled.catchupAndSubscribe(owner =>
+            element.classList.toggle("muted", adapter.box.mute.getValue() || !owner.getValue()))
     )
     const running = lifecycle.own(new Terminator())
     lifecycle.own(engine.subscribeClipNotification((notification: ClipNotification) => {
