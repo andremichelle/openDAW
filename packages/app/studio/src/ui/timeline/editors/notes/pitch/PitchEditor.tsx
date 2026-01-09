@@ -38,7 +38,7 @@ import {NoteEventBox} from "@opendaw/studio-boxes"
 import {NoteCreateModifier} from "@/ui/timeline/editors/notes/NoteCreateModifier.ts"
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
+import {CssUtils, Dragging, Events, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {PPQN, ppqn} from "@opendaw/lib-dsp"
 import {Surface} from "@/ui/surface/Surface"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
@@ -116,7 +116,7 @@ export const PitchEditor = ({
             }))
         }, {permanentUpdates: true}),
         Dragging.attach(canvas, event => {
-            if (!Keyboard.isControlKey(event)) {return Option.None}
+            if (!event.altKey) {return Option.None}
             const target = capturing.captureEvent(event)
             if (target !== null) {return Option.None}
             const clientRect = canvas.getBoundingClientRect()
@@ -281,7 +281,7 @@ export const PitchEditor = ({
         modifyContext.subscribeUpdate(renderer.requestUpdate),
         Events.subscribe(canvas, "pointermove", event => {
             canvas.focus({preventScroll: true})
-            if (Keyboard.isControlKey(event) && event.buttons === 0) {
+            if (event.altKey && event.buttons === 0) {
                 updatePreview()
             }
         }),
@@ -291,7 +291,7 @@ export const PitchEditor = ({
         }),
         installCursor(canvas, capturing, {
             get: (target, event) =>
-                target === null ? Keyboard.isControlKey(event) && event.buttons === 0
+                target === null ? event.altKey && event.buttons === 0
                     ? Cursor.Pencil
                     : null : CursorMap[target.type]
         }),
@@ -300,7 +300,7 @@ export const PitchEditor = ({
             renderer.requestUpdate()
         }),
         Events.subscribe(canvas, "keydown", event => {
-            if (Keyboard.isControlKey(event)) {
+            if (event.altKey) {
                 updatePreview()
                 return
             }

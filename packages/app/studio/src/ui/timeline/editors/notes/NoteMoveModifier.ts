@@ -101,7 +101,7 @@ export class NoteMoveModifier implements NoteModifier {
     selectedModifyStrategy(): NoteModifyStrategy {return this.#selectedModifyStrategy}
     unselectedModifyStrategy(): NoteModifyStrategy {return NoteModifyStrategy.Identity}
 
-    update({clientX, clientY, altKey, shiftKey}: Dragging.Event): void {
+    update({clientX, clientY, ctrlKey, shiftKey}: Dragging.Event): void {
         const clientRect = this.#element.getBoundingClientRect()
         const deltaPitch: int = this.#positioner
             .yToPitch(clientY - clientRect.top) - this.#pointerPitch
@@ -117,8 +117,8 @@ export class NoteMoveModifier implements NoteModifier {
             this.#pitchChanged.notify(this.#reference.pitch + deltaPitch)
             change = true
         }
-        if (this.#copy !== altKey) {
-            this.#copy = altKey
+        if (this.#copy !== ctrlKey) {
+            this.#copy = ctrlKey
             change = true
         }
         if (change) {this.#dispatchChange()}

@@ -1,84 +1,99 @@
-import {asInstanceOf, int, ObservableValue, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {DragAndDrop} from "@/ui/DragAndDrop"
-import {AnyDragData} from "@/ui/AnyDragData"
-import {PlayfieldSampleBox} from "@opendaw/studio-boxes"
-import {Keyboard} from "@opendaw/lib-dom"
-import {PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
+import {byte, int, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {AudioFileBox, PlayfieldDeviceBox, PlayfieldSampleBox} from "@opendaw/studio-boxes"
 import {Project} from "@opendaw/studio-core"
+import {DragAndDrop} from "@/ui/DragAndDrop"
+import {AnyDragData, DragDevice} from "@/ui/AnyDragData"
+import {PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
 
 export namespace SlotDragAndDrop {
-    type Construct = {
-        element: HTMLElement
-        project: Project
-        sample: Option<PlayfieldSampleBoxAdapter>
-        octave: ObservableValue<int>
-        semitone: int
+    const findSampleByIndex = (project: Project, index: int): Option<PlayfieldSampleBox> => {
+        for (const box of project.boxGraph.boxes()) {
+            if (box instanceof PlayfieldSampleBox && box.index.getValue() === index) {
+                return Option.wrap(box)
+            }
+        }
+        return Option.None
     }
 
-    export const install = ({element, project, sample, octave, semitone}: Construct): Terminable => {
-        const uuid = sample.mapOr(({address}) => address.toString(), "")
-        return Terminable.many(
-            DragAndDrop.installSource(element, () => ({
-                type: "playfield-slot",
-                index: octave.getValue() * 12 + semitone,
-                uuid
-            })),
-            DragAndDrop.installTarget(element, {
-                drag: (_event: DragEvent, dragData: AnyDragData): boolean => {
-                    if (dragData.type !== "playfield-slot") {return false}
-                    return uuid !== dragData.uuid
-                },
-                drop: (event: DragEvent, dragData: AnyDragData): void => {
-                    if (dragData.type !== "playfield-slot") {return}
-                    if (uuid === dragData.uuid) {return}
-                    const {editing, boxGraph, boxAdapters} = project
-                    const copyMode = Keyboard.isCopyKey(event)
-                    const resolveBox = (uuid: string): Option<PlayfieldSampleBox> => uuid === ""
-                        ? Option.None
-                        : boxGraph
-                            .findBox(UUID.parse(uuid))
-                            .assert(() => `Could not find box for ${uuid}`)
-                            .map(box => asInstanceOf(box, PlayfieldSampleBox))
-                    const target = resolveBox(uuid)
-                    const source = resolveBox(dragData.uuid)
-                    const newIndex = octave.getValue() * 12 + semitone
-                    if (target.isEmpty()) {
-                        if (source.nonEmpty()) {
-                            if (copyMode) {
-                                editing.modify(() => boxAdapters.adapterFor(source.unwrap(), PlayfieldSampleBoxAdapter)
-                                    .copyToIndex(newIndex))
-                            } else {
-                                editing.modify(() => source.unwrap().index.setValue(newIndex))
-                            }
-                        } else {
-                            // else: move or copy empty slot to empty slot has no effect
-                        }
-                    } else {
-                        if (source.isEmpty()) {
-                            if (copyMode) {
-                                editing.modify(() => target.unwrap().delete())
-                            } else {
-                                editing.modify(() => target.unwrap().index.setValue(dragData.index))
-                            }
-                        } else {
-                            editing.modify(() => {
-                                if (copyMode) {
-                                    target.unwrap().delete()
-                                    boxAdapters.adapterFor(source.unwrap(), PlayfieldSampleBoxAdapter)
-                                        .copyToIndex(newIndex)
-                                } else {
-                                    source.unwrap().index.setValue(newIndex)
-                                    target.unwrap().index.setValue(dragData.index)
-                                }
-                            })
-                        }
-                    }
-                },
-                enter: (allowDrop: boolean): void => {
-                    if (allowDrop) {element.classList.add("swap")}
-                },
-                leave: (): void => element.classList.remove("swap")
+    const executeCopy = (project: Project, sourceIndex: int, targetIndex: int): void => {
+        if (sourceIndex === targetIndex) {return}
+        const {editing, boxGraph} = project
+        const source = findSampleByIndex(project, sourceIndex)
+        const target = findSampleByIndex(project, targetIndex)
+        source.ifSome(sourceBox => {
+            editing.modify(() => {
+                // If target has a sample, delete it first
+                target.ifSome(targetBox => targetBox.delete())
+                // Get the source file (AudioFileBox)
+                const sourceFile = sourceBox.file.targetVertex
+                    .map(vertex => vertex.box instanceof AudioFileBox ? vertex.box : null)
+                // Get the device box and its samples hub
+                const deviceBox = sourceBox.device.targetVertex
+                    .map(vertex => vertex.box instanceof PlayfieldDeviceBox ? vertex.box : null)
+                if (sourceFile.nonEmpty() && deviceBox.nonEmpty()) {
+                    PlayfieldSampleBox.create(boxGraph, UUID.generate(), box => {
+                        box.file.refer(sourceFile.unwrap())
+                        box.device.refer(deviceBox.unwrap().samples)
+                        box.index.setValue(targetIndex)
+                    })
+                }
             })
-        )
+        })
+    }
+
+    const executeSwap = (project: Project, sourceIndex: int, targetIndex: int): void => {
+        if (sourceIndex === targetIndex) {return}
+        const {editing} = project
+        const source = findSampleByIndex(project, sourceIndex)
+        const target = findSampleByIndex(project, targetIndex)
+        editing.modify(() => {
+            if (source.nonEmpty() && target.isEmpty()) {
+                source.unwrap().index.setValue(targetIndex)
+            } else if (source.isEmpty() && target.nonEmpty()) {
+                target.unwrap().index.setValue(sourceIndex)
+            } else if (source.nonEmpty() && target.nonEmpty()) {
+                source.unwrap().index.setValue(targetIndex)
+                target.unwrap().index.setValue(sourceIndex)
+            }
+        })
+    }
+
+    type SourceConstruct = {
+        element: HTMLElement
+        sample: PlayfieldSampleBoxAdapter
+        getSlotIndex: () => int
+    }
+
+    export const installSource = ({element, sample, getSlotIndex}: SourceConstruct): Terminable => {
+        return DragAndDrop.installSource(element, () => ({
+            type: "playfield-slot",
+            index: getSlotIndex() as byte,
+            uuid: sample.address.uuid.toString()
+        } satisfies DragDevice))
+    }
+
+    type TargetConstruct = {
+        element: HTMLElement
+        project: Project
+        getSlotIndex: () => int
+    }
+
+    export const installTarget = ({element, project, getSlotIndex}: TargetConstruct): Terminable => {
+        return DragAndDrop.installTarget(element, {
+            drag: (_event: DragEvent, data: AnyDragData): boolean => {
+                return data.type === "playfield-slot" && data.index !== getSlotIndex()
+            },
+            drop: (event: DragEvent, data: AnyDragData): void => {
+                if (data.type !== "playfield-slot") {return}
+                const targetIndex = getSlotIndex()
+                if (event.altKey) {
+                    executeCopy(project, data.index, targetIndex)
+                } else {
+                    executeSwap(project, data.index, targetIndex)
+                }
+            },
+            enter: (allowDrop: boolean) => element.classList.toggle("drop-target", allowDrop),
+            leave: () => element.classList.remove("drop-target")
+        })
     }
 }

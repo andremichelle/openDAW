@@ -85,7 +85,7 @@ export const BusySlot = ({
         <Icon symbol={IconSymbol.Focus} className="edit"/>
     )
     const element: HTMLElement = (
-        <div className={className} tabIndex={-1} draggable>
+        <div className={className} tabIndex={-1} data-slot-index={octave.getValue() * 12 + semitone}>
             {header}
             <div className="waveform">
                 {waveform}
@@ -150,12 +150,19 @@ export const BusySlot = ({
                     }
                 }
             })),
-        SlotDragAndDrop.install({
+        octave.catchupAndSubscribe(owner => {
+            const slotIndex = owner.getValue() * 12 + semitone
+            element.setAttribute("data-slot-index", String(slotIndex))
+        }),
+        SlotDragAndDrop.installSource({
+            element,
+            sample,
+            getSlotIndex: () => octave.getValue() * 12 + semitone
+        }),
+        SlotDragAndDrop.installTarget({
             element,
             project: service.project,
-            sample: Option.wrap(sample),
-            octave,
-            semitone
+            getSlotIndex: () => octave.getValue() * 12 + semitone
         }),
         Events.subscribe(iconEdit, "click", () => userEditingManager.audioUnit.edit(sample.box)),
         Events.subscribe(header, "pointerdown", (event: PointerEvent) => {

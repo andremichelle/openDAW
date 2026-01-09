@@ -10,7 +10,7 @@ import {
     Terminable
 } from "@opendaw/lib-std"
 import {AnyDragData, DragFile} from "@/ui/AnyDragData"
-import {Events, Keyboard} from "@opendaw/lib-dom"
+import {Events} from "@opendaw/lib-dom"
 
 export namespace DragAndDrop {
     let dragging: Option<AnyDragData> = Option.None
@@ -86,7 +86,7 @@ export namespace DragAndDrop {
                     some: data => {
                         if (process.drag(event, data)) {
                             event.preventDefault()
-                            dataTransfer.dropEffect = Keyboard.isCopyKey(event) || data.copy === true ? "copy" : "move"
+                            dataTransfer.dropEffect = event.altKey || data.copy === true ? "copy" : "move"
                         }
                     }
                 })

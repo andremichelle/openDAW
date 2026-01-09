@@ -5,7 +5,6 @@ export namespace Keyboard {
         ctrlKey: boolean,
         metaKey: boolean
     }) => Browser.isMacOS() ? metaKey : ctrlKey
-    export const isCopyKey = ({altKey}: { altKey: boolean }) => altKey
     export const isDelete = (event: KeyboardEvent) => event.code === "Delete" || event.code === "Backspace"
     export const isSelectAll = (event: KeyboardEvent) => isControlKey(event) && !event.shiftKey && event.code === "KeyA"
     export const isDeselectAll = (event: KeyboardEvent) => isControlKey(event) && event.shiftKey && event.code === "KeyA"

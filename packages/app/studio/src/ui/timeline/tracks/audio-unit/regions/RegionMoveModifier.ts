@@ -101,7 +101,7 @@ export class RegionMoveModifier implements RegionModifier {
     selectedModifyStrategy(): RegionModifyStrategy {return this.#selectedModifyStrategy}
     unselectedModifyStrategy(): RegionModifyStrategy {return this.#unselectedModifyStrategy}
 
-    update({clientX, clientY, altKey, shiftKey}: Dragging.Event): void {
+    update({clientX, clientY, ctrlKey, shiftKey}: Dragging.Event): void {
         const adapters = this.#selection.selected().filter(adapter => adapter.trackBoxAdapter.nonEmpty())
         if (adapters.length === 0) {return}
         const maxIndex = this.#manager.numTracks() - 1
@@ -123,8 +123,8 @@ export class RegionMoveModifier implements RegionModifier {
             this.#deltaIndex = deltaIndex
             change = true
         }
-        if (this.#copy !== altKey) {
-            this.#copy = altKey
+        if (this.#copy !== ctrlKey) {
+            this.#copy = ctrlKey
             change = true
         }
         if (this.#mirroredCopy !== shiftKey) {

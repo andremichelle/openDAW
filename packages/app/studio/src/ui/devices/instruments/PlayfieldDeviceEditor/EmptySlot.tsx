@@ -1,6 +1,6 @@
 import css from "./EmptySlot.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {int, Lifecycle, ObservableValue, Option} from "@opendaw/lib-std"
+import {int, Lifecycle, ObservableValue} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {SampleSelector} from "@/ui/devices/SampleSelector"
@@ -30,7 +30,7 @@ export const EmptySlot = (
         </div>
     )
     const element: HTMLElement = (
-        <div className={className}>
+        <div className={className} data-slot-index={octave.getValue() * 12 + semitone}>
             <header/>
             {browseButton}
             <footer>
@@ -39,12 +39,14 @@ export const EmptySlot = (
         </div>
     )
     lifecycle.ownAll(
-        SlotDragAndDrop.install({
+        octave.catchupAndSubscribe(owner => {
+            const slotIndex = owner.getValue() * 12 + semitone
+            element.setAttribute("data-slot-index", String(slotIndex))
+        }),
+        SlotDragAndDrop.installTarget({
             element,
             project,
-            sample: Option.None,
-            octave,
-            semitone
+            getSlotIndex: () => octave.getValue() * 12 + semitone
         }),
         sampleSelector.configureDrop(element),
         sampleSelector.configureBrowseClick(browseButton),

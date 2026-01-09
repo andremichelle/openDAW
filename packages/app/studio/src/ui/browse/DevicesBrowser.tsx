@@ -71,8 +71,7 @@ const createInstrumentList = (lifecycle: Lifecycle, project: Project) => (
         lifecycle.ownAll(
             DragAndDrop.installSource(element, () => ({
                 type: "instrument",
-                device: key as InstrumentFactories.Keys,
-                copy: true
+                device: key as InstrumentFactories.Keys
             } satisfies DragDevice)),
             TextTooltip.simple(element, () => {
                 const {bottom, left} = element.getBoundingClientRect()

@@ -140,7 +140,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 } else {
                     return Option.None
                 }
-            } else if (target.type === "region" && Keyboard.isControlKey(event)) {
+            } else if (target.type === "region" && event.altKey) {
                 if (!regionSelection.isSelected(target.region)) {
                     regionSelection.deselectAll()
                     regionSelection.select(target.region)
@@ -222,13 +222,13 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             get: (target: Nullable<RegionCaptureTarget>, event: CursorEvent) => {
                 const units = snapping.xToUnitRound(event.clientX - element.getBoundingClientRect().left)
                 markerPosition.setValue(
-                    Keyboard.isControlKey(event) && target !== null && target.type === "region"
+                    event.altKey && target !== null && target.type === "region"
                     && target.region.position < units && units < target.region.complete
                         ? units
                         : null)
                 return target === null || target.type === "track"
                     ? null
-                    : Keyboard.isControlKey(event)
+                    : event.altKey
                         ? Cursor.Scissors
                         : CursorMap[target.part]
             },

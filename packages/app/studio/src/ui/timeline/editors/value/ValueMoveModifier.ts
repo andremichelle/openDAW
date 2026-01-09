@@ -125,7 +125,7 @@ export class ValueMoveModifier implements ValueModifier {
     }
     readContentDuration(owner: ValueEventOwnerReader): number {return owner.contentDuration}
     update(event: Dragging.Event): void {
-        const {clientX, clientY, altKey, ctrlKey: freezeMode, shiftKey} = event
+        const {clientX, clientY, altKey: freezeMode, ctrlKey, shiftKey} = event
         const clientRect = this.#element.getBoundingClientRect()
         const localX = clientX - clientRect.left
         const localY = clientY - clientRect.top
@@ -159,8 +159,8 @@ export class ValueMoveModifier implements ValueModifier {
             this.#deltaValue = deltaValue
             change = true
         }
-        if (this.#copy !== altKey) {
-            this.#copy = altKey
+        if (this.#copy !== ctrlKey) {
+            this.#copy = ctrlKey
             change = true
         }
         if (this.#snapValue !== snapValue) {

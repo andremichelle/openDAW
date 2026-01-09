@@ -34,7 +34,7 @@ import {installValueInput} from "@/ui/timeline/editors/ValueInput.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {installEditorBody} from "../EditorBody"
 import {ValueContentDurationModifier} from "./ValueContentDurationModifier"
-import {Dragging, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
+import {Dragging, Events, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {ValueTooltip} from "./ValueTooltip"
 import {ValueEventEditing} from "./ValueEventEditing"
 import {TimelineRange} from "@opendaw/studio-core"
@@ -107,7 +107,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
             let lastDownTime = 0
             return (event: PointerEvent) => {
                 const target: Nullable<ValueCaptureTarget> = capturing.captureEvent(event)
-                const controlKey = Keyboard.isControlKey(event)
+                const altKey = event.altKey
                 const now = Date.now()
                 const dblclck = now - lastDownTime < Events.DOUBLE_DOWN_THRESHOLD
                 lastDownTime = now
@@ -150,7 +150,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                     }
                 }
                 if (target === null) {
-                    if (controlKey) {
+                    if (altKey) {
                         return modifyContext.startModifier(ValuePaintModifier.create({
                             element: canvas,
                             reader,
@@ -260,7 +260,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
         installCursor(canvas, capturing, {
             get: (target, event) => {
                 const onCurve = target?.type === "curve" || target?.type === "midpoint"
-                const controlKey = Keyboard.isControlKey(event) && event.buttons === 0
+                const controlKey = event.altKey && event.buttons === 0
                 if (target === null) {
                     if (controlKey) {return Cursor.Pencil}
                 } else if (target.type === "event") {
