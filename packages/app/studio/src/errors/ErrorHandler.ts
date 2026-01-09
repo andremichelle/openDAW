@@ -9,6 +9,7 @@ import {BuildInfo} from "@/BuildInfo"
 
 const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP"]
 const IgnoredErrors = ["ResizeObserver loop completed with undelivered notifications."]
+const MonacoPatterns = ["monaco-editor", "vs/base/common/errors"]
 const UrlPattern = /https?:\/\/[^\s)]+/g
 
 export class ErrorHandler {
@@ -42,9 +43,20 @@ export class ErrorHandler {
         return null
     }
 
+    #looksLikeMonacoError(message?: string, stack?: string, filename?: string): boolean {
+        const sources = [message, stack, filename].filter(Boolean).join(" ")
+        return MonacoPatterns.some(pattern => sources.includes(pattern))
+    }
+
     #tryIgnore(event: Event): boolean {
         if (event instanceof ErrorEvent && IgnoredErrors.includes(event.message)) {
             console.warn(event.message)
+            event.preventDefault()
+            return true
+        }
+        // Handle Monaco editor errors from error events
+        if (event instanceof ErrorEvent && this.#looksLikeMonacoError(event.message, event.error?.stack, event.filename)) {
+            console.warn("Monaco editor error:", event.message, event.filename)
             event.preventDefault()
             return true
         }
@@ -78,13 +90,9 @@ export class ErrorHandler {
             return true
         }
         // Handle Monaco editor worker errors (throws Event objects when workers fail to load)
-        if (reason instanceof Event || (reason instanceof Error && reason.stack?.includes("monaco-editor"))) {
+        if (reason instanceof Event || (reason instanceof Error && this.#looksLikeMonacoError(reason.message, reason.stack))) {
             console.warn("Monaco editor error (web workers may be unavailable):", reason)
             event.preventDefault()
-            Dialogs.info({
-                headline: "Editor Warning",
-                message: "The code editor is running in fallback mode. This may cause occasional UI slowdowns."
-            }).then(EmptyExec)
             return true
         }
         return false
