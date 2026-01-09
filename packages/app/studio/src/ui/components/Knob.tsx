@@ -68,13 +68,20 @@ export const Knob = ({lifecycle, value, anchor, color, design}: Construct) => {
     }
     const svg: SVGSVGElement = (
         <svg viewBox={`0 0 ${width} ${height}`} classList={className}>
+            <defs>
+                <linearGradient id="knob-rim" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="white"/>
+                    <stop offset="100%" stop-color="black"/>
+                </linearGradient>
+            </defs>
             <g fill="none"
                stroke="currentColor"
                stroke-linecap="butt"
                stroke-width={trackWidth}
                transform={`translate(${radius}, ${radius})`}>
-                <circle r={radius * max} stroke="none" fill="currentColor" classList="light"/>
+                <circle r={radius * max * 1.1} stroke="none" fill="black" classList="shadow" cy={radius * 0.1}/>
                 <circle r={radius * max} stroke="none" fill="currentColor"/>
+                <circle r={radius * max} stroke="url(#knob-rim)" stroke-opacity="0.5" fill="none"/>
                 <path stroke="currentColor" stroke-opacity={1 / 3}
                       d={Svg.pathBuilder()
                           .circleSegment(0, 0, trackRadius, angleMin, angleMax)
