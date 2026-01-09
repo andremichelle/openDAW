@@ -81,7 +81,7 @@ export const Footer = ({lifecycle, service}: Construct) => {
                              } else {
                                  lifeSpan.terminate()
                              }
-                         }, "footer-show-fps-meter"))
+                         }, "debug", "footer-show-fps-meter"))
                      }}>0
             </article>
             <article title="Samples (GC)"
@@ -96,7 +96,7 @@ export const Footer = ({lifecycle, service}: Construct) => {
                              } else {
                                  lifeSpan.terminate()
                              }
-                         }, "footer-show-samples-memory"))
+                         }, "debug", "footer-show-samples-memory"))
                      }}>0
             </article>
             <div style={{display: "contents"}}
@@ -121,7 +121,7 @@ export const Footer = ({lifecycle, service}: Construct) => {
                              replaceChildren(element)
                              lifeSpan.terminate()
                          }
-                     }, "footer-show-build-infos"))
+                     }, "debug", "footer-show-build-infos"))
                  }}/>
             <article title="Users"
                      onInit={element => {

@@ -1,6 +1,6 @@
 # Keyboard Shortcuts
 
-Most shortcuts can be listed and customized in the [Shortcut Manager](action://open-shortcut-manager).
+Most shortcuts can be listed and customized in the [Shortcut Manager](action://open-preferences).
 
 ## Modifier Keys
 

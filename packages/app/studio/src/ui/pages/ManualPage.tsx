@@ -1,16 +1,14 @@
 import css from "./ManualPage.sass?inline"
-import {Await, createElement, Frag, LocalLink, PageContext, PageFactory} from "@opendaw/lib-jsx"
+import {Await, createElement, Frag, LocalLink, PageContext, PageFactory, RouteLocation} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {BackButton} from "@/ui/pages/BackButton"
 import {Markdown} from "@/ui/Markdown"
 import {Manual, Manuals} from "@/ui/pages/Manuals"
 import {Html} from "@opendaw/lib-dom"
-import {MenuItem} from "@opendaw/studio-core"
+import {CloudBackup, MenuItem} from "@opendaw/studio-core"
 import {EmptyExec, panic} from "@opendaw/lib-std"
 import {network} from "@opendaw/lib-runtime"
-import {StudioDialogs} from "@/service/StudioDialogs"
-import {CloudBackup} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "ManualPage")
 
@@ -55,7 +53,7 @@ export const ManualPage: PageFactory<StudioService> = ({service, path}: PageCont
                     failure={(error) => `Unknown request (${error.reason})`}
                     loading={() => <ThreeDots/>}
                     success={text => <Markdown text={text} actions={{
-                        "open-shortcut-manager": () => StudioDialogs.showShortcutManager(),
+                        "open-preferences": () => RouteLocation.get().navigateTo("/preferences"),
                         "backup-google-drive": () => CloudBackup.backup(service.cloudAuthManager, "GoogleDrive").catch(EmptyExec),
                         "backup-dropbox": () => CloudBackup.backup(service.cloudAuthManager, "Dropbox").catch(EmptyExec)
                     }}/>}

@@ -46,7 +46,6 @@ import {
     EngineWorklet,
     FilePickerAcceptTypes,
     GlobalSampleLoaderManager,
-    OfflineEngineRenderer,
     Project,
     ProjectEnv,
     ProjectMeta,
@@ -57,8 +56,7 @@ import {
     SampleService,
     SoundfontService,
     StudioPreferences,
-    TimelineRange,
-    WavFile
+    TimelineRange
 } from "@opendaw/studio-core"
 import {ProjectDialogs} from "@/project/ProjectDialogs"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
@@ -202,22 +200,6 @@ export class StudioService implements ProjectEnv {
             .ifSome(async (profile) => {
                 await this.audioContext.suspend()
                 await Mixdowns.exportMixdown(profile)
-                this.audioContext.resume().then()
-            })
-    }
-
-    async exportMixdownWorker() {
-        return this.#projectProfileService.getValue()
-            .ifSome(async (profile) => {
-                await this.audioContext.suspend()
-                const audioData = await OfflineEngineRenderer.start(
-                    profile.project,
-                    Option.None,
-                    progress => console.debug("rendering mixdown", progress)
-                )
-                const file = WavFile.encodeFloats(audioData)
-                await RuntimeNotifier.info({headline: "Save", message: "Exporting mixdown as wav file..."})
-                await Files.save(file, FilePickerAcceptTypes.WavFiles)
                 this.audioContext.resume().then()
             })
     }
@@ -448,7 +430,7 @@ export class StudioService implements ProjectEnv {
         StudioPreferences.catchupAndSubscribe(value =>
             Dragging.usePointerLock = value && Browser.isChrome(), "dragging-use-pointer-lock")
         StudioPreferences.catchupAndSubscribe(value =>
-            document.body.classList.toggle("experimental-visible", value), "enable-beta-features")
+            document.body.classList.toggle("experimental-visible", value), "debug", "enable-beta-features")
         StudioPreferences.catchupAndSubscribe(value =>
             document.body.classList.toggle("help-hidden", !value), "visible-help-hints")
     }
