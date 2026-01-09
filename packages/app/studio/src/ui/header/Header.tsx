@@ -79,7 +79,7 @@ export const Header = ({lifecycle, service}: Construct) => {
             </MenuButton>
             <hr/>
             <Group onInit={element => StudioPreferences.catchupAndSubscribe(enabled =>
-                element.classList.toggle("hidden", !enabled), "enable-history-buttons")}>
+                element.classList.toggle("hidden", !enabled), "visibility", "enable-history-buttons")}>
                 <UndoRedoButtons lifecycle={lifecycle} service={service}/>
                 <hr/>
             </Group>

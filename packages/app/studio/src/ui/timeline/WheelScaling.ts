@@ -5,7 +5,7 @@ export namespace WheelScaling {
     export const install = (element: Element, range: TimelineRange) => {
         return Events.subscribe(element, "wheel", (event: WheelEvent) => {
             event.preventDefault()
-            const scale = StudioPreferences.settings["normalize-mouse-wheel"]
+            const scale = StudioPreferences.settings.pointer["normalize-mouse-wheel"]
                 ? Math.sign(event.deltaY) * 0.025
                 : event.deltaY * 0.01
             const rect = element.getBoundingClientRect()

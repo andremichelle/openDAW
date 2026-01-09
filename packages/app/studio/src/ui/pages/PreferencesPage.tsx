@@ -16,14 +16,14 @@ import {Promises} from "@opendaw/lib-runtime"
 const className = Html.adoptStyleSheet(css, "PreferencesPage")
 
 const StudioSettingsLabels: NestedLabels<StudioSettings> = {
-    "visible-help-hints": "Visible Help & Hints",
-    "enable-history-buttons": "Show Undo/Redo buttons",
-    "note-audition-while-editing": "Note audition while editing",
-    "auto-open-clips": "Always open clip view",
-    "auto-create-output-compressor": "Automatically add compressor to main output",
-    "dragging-use-pointer-lock": "Use Pointer Lock at window edges [Chrome only]",
-    "modifying-controls-wheel": "Modify controls with mouse wheel",
-    "normalize-mouse-wheel": "Normalize mouse wheel speed",
+    "visibility": {
+        label: "Visibility",
+        fields: {
+            "visible-help-hints": "Visible Help & Hints",
+            "enable-history-buttons": "Show Undo/Redo buttons",
+            "auto-open-clips": "Always open clip view"
+        }
+    },
     "time-display": {
         label: "Time Display",
         fields: {
@@ -31,6 +31,21 @@ const StudioSettingsLabels: NestedLabels<StudioSettings> = {
             absolute: "Show absolute time",
             details: "Show details",
             fps: "Frame rate"
+        }
+    },
+    "engine": {
+        label: "Engine",
+        fields: {
+            "note-audition-while-editing": "Note audition while editing",
+            "auto-create-output-compressor": "Automatically add compressor to main output"
+        }
+    },
+    "pointer": {
+        label: "Pointer (Mouse/Touch)",
+        fields: {
+            "dragging-use-pointer-lock": "Use Pointer Lock at window edges [Chrome only]",
+            "modifying-controls-wheel": "Modify controls with mouse wheel",
+            "normalize-mouse-wheel": "Normalize mouse wheel speed"
         }
     },
     "debug": {
@@ -108,7 +123,7 @@ export const PreferencesPage: PageFactory<StudioService> = ({lifecycle, service}
             <div className="sections">
                 <section>
                     <div className="header">
-                        <h2>Studio</h2>
+                        <h2>Studio UI</h2>
                         <span>(Changes are applied immediately)</span>
                     </div>
                     <PreferencePanel lifecycle={lifecycle}
@@ -118,7 +133,7 @@ export const PreferencesPage: PageFactory<StudioService> = ({lifecycle, service}
                 </section>
                 <section>
                     <div className="header">
-                        <h2>Engine</h2>
+                        <h2>Audio Engine</h2>
                         <span>(Changes are applied immediately)</span>
                     </div>
                     <PreferencePanel lifecycle={lifecycle}

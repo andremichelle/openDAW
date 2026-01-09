@@ -344,7 +344,7 @@ export class StudioService implements ProjectEnv {
                     .reduce((max, unit) => Math.max(max, unit.tracks.values()
                         .reduce((max, track) => Math.max(max, track.clips.collection
                             .getMinFreeIndex()), 0)), 0)
-                if (maxClipIndex > 0 || StudioPreferences.settings["auto-open-clips"]) {
+                if (maxClipIndex > 0 || StudioPreferences.settings.visibility["auto-open-clips"]) {
                     this.timeline.clips.count.setValue(Math.max(maxClipIndex + 1, 3))
                     this.timeline.clips.visible.setValue(true)
                 } else {
@@ -428,10 +428,10 @@ export class StudioService implements ProjectEnv {
 
     #listenPreferences(): void {
         StudioPreferences.catchupAndSubscribe(value =>
-            Dragging.usePointerLock = value && Browser.isChrome(), "dragging-use-pointer-lock")
+            Dragging.usePointerLock = value && Browser.isChrome(), "pointer", "dragging-use-pointer-lock")
         StudioPreferences.catchupAndSubscribe(value =>
             document.body.classList.toggle("experimental-visible", value), "debug", "enable-beta-features")
         StudioPreferences.catchupAndSubscribe(value =>
-            document.body.classList.toggle("help-hidden", !value), "visible-help-hints")
+            document.body.classList.toggle("help-hidden", !value), "visibility", "visible-help-hints")
     }
 }

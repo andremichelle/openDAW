@@ -104,7 +104,7 @@ export const RelativeUnitValueDragging = ({
                     }))
                 }
             }
-        })(), "modifying-controls-wheel")
+        })(), "pointer", "modifying-controls-wheel")
     )
     return element
 }

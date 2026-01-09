@@ -64,7 +64,7 @@ export type ProjectCreateOptions = {
 export class Project implements BoxAdaptersContext, Terminable, TerminableOwner {
     static new(env: ProjectEnv, options?: ProjectCreateOptions): Project {
         const createDefaultUser = options?.noDefaultUser !== true
-        const createOutputCompressor = StudioPreferences.settings["auto-create-output-compressor"]
+        const createOutputCompressor = StudioPreferences.settings.engine["auto-create-output-compressor"]
         const {boxGraph, mandatoryBoxes} = ProjectSkeleton.empty({
             createOutputCompressor,
             createDefaultUser

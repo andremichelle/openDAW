@@ -238,7 +238,7 @@ export const VolumeSlider = ({lifecycle, editing, parameter, markers = DefaultVo
                     }))
                 }
             }
-        })(), "modifying-controls-wheel")
+        })(), "pointer", "modifying-controls-wheel")
     )
     observer(parameter)
     return wrapper

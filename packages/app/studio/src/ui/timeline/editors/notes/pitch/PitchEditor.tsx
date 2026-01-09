@@ -93,7 +93,7 @@ export const PitchEditor = ({
         pitchPainter(painter)
     }))
     const auditionNote = (pitch: byte, duration: ppqn) => {
-        if (!StudioPreferences.settings["note-audition-while-editing"]) {return}
+        if (!StudioPreferences.settings.engine["note-audition-while-editing"]) {return}
         project.engine.noteSignal({
             type: "note-audition",
             uuid: reader.trackBoxAdapter.unwrap().audioUnit.address.uuid, pitch, duration, velocity: 1.0
