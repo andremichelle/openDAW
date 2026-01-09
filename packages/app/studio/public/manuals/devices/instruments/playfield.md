@@ -40,10 +40,13 @@ Each pad displays:
 ### 1.2 Loading Samples
 
 - **Drag & drop**: Drop audio files directly onto empty or occupied pads
-- **Move samples**: Drag a sample from one pad to another to rearrange
+- **Move samples**: Drag a sample from one pad to another to swap positions
+- **Copy samples**: Hold ⌥ and drag a sample to copy it to another pad
 - **Move to another octave**: Drag a sample over the octave dots on the left, hold until the octave switches, then drop on any pad
 - **Context menu**: Right-click a pad to browse for samples
 - **Delete**: Select a pad and press Delete to remove the sample
+
+> **Note**: Copying uses ⌥ (Option/Alt) instead of ⌘ (Command) due to a long-standing browser limitation on macOS where the drop event doesn't fire when Command is held during drag operations.
 
 ### 1.3 Previewing
 

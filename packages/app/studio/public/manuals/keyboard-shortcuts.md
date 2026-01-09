@@ -44,3 +44,7 @@ Most shortcuts can be listed and customized in the [Shortcut Manager](action://o
 ### Warp Markers
 
 * Hold Shift to disable snapping
+
+### Playfield Sample Pads
+
+* Hold ⌥ and drag to copy a sample to another pad
