@@ -233,10 +233,47 @@ export class ValueMoveModifier implements ValueModifier {
                 event.box.delete()
             })
 
+            // Topological sort: if event A wants to move to (X,Y) where event B currently is,
+            // B must be processed first to vacate the slot
+            const stockKey = (pos: number, idx: number) => `${pos},${idx}`
+            const stockToPair = new Map<string, typeof pairs[0]>()
+            for (const pair of pairs) {
+                if (pair.stock !== null) {
+                    stockToPair.set(stockKey(pair.stock.position, pair.stock.index), pair)
+                }
+            }
+            const depths = new Map<typeof pairs[0], number>()
+            for (const pair of pairs) {
+                let depth = 0
+                let current: typeof pairs[0] | undefined = pair
+                const visited = new Set<typeof pairs[0]>()
+                while (current && !visited.has(current)) {
+                    visited.add(current)
+                    const key = stockKey(current.target.position, current.target.index)
+                    const blockingPair = stockToPair.get(key)
+                    if (blockingPair && blockingPair !== current &&
+                        (blockingPair.stock!.position !== blockingPair.target.position ||
+                         blockingPair.stock!.index !== blockingPair.target.index)) {
+                        depth++
+                        current = blockingPair
+                    } else {
+                        break
+                    }
+                }
+                depths.set(pair, depth)
+            }
+            pairs.sort((a, b) => (depths.get(a) ?? 0) - (depths.get(b) ?? 0))
+
             for (const {stock, target} of pairs) {
-                const adapter: ValueEventBoxAdapter = isNull(stock)
-                    ? this.#collection.createEvent(target)
-                    : stock.copyFrom(target)
+                let adapter: ValueEventBoxAdapter
+                if (isNull(stock)) {
+                    adapter = this.#collection.createEvent(target)
+                } else {
+                    // Remove from EventCollection before copyFrom to prevent duplicates during sort
+                    collection.remove(stock)
+                    adapter = stock.copyFrom(target)
+                    collection.add(adapter)
+                }
                 if (target.isSelected && !adapter.isSelected) {
                     this.#selection.select(adapter)
                 } else if (!target.isSelected && adapter.isSelected) {
