@@ -16,7 +16,7 @@ export const Colors = {
     black: new Color(197, 10, 16),
     background: new Color(197, 6, 7),
     panelBackground: new Color(197, 14, 10),
-    panelBackgroundBright: new Color(197, 10, 20),
+    panelBackgroundBright: new Color(197, 10, 17),
     panelBackgroundDark: new Color(197, 14, 9)
 }
 
