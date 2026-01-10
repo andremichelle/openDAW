@@ -4,6 +4,7 @@ import {
     assert,
     clampUnit,
     int,
+    isNull,
     Notifier,
     Nullable,
     NumberComparator,
@@ -213,21 +214,34 @@ export class ValueMoveModifier implements ValueModifier {
         obsolete.forEach(event => Arrays.remove(stream, event))
 
         editing.modify(() => {
-            stream.forEach(event => {
-                const stock = pull()
-                const adapter: ValueEventBoxAdapter = stock === null
-                    ? this.#collection.createEvent(event)
-                    : stock.copyFrom(event)
-                if (event.isSelected && !adapter.isSelected) {
+            // Collect all (stock, target) pairs
+            const pairs: Array<{ stock: Nullable<ValueEventBoxAdapter>, target: ValueEventDraft }> = []
+            stream.forEach(target => pairs.push({stock: pull(), target}))
+            // Collect obsolete events (those not paired with any target)
+            // These must be deleted FIRST to avoid collisions with events being moved
+            const obsoleteEvents: Array<ValueEventBoxAdapter> = []
+            while (true) {
+                const event = pull()
+                if (event === null) {break}
+                obsoleteEvents.push(event)
+            }
+            // Delete obsolete events BEFORE any copyFrom operations
+            // IMPORTANT: Remove from EventCollection synchronously because box.delete()
+            // triggers deferred pointerHub notifications that won't execute until after modify() completes
+            obsoleteEvents.forEach(event => {
+                collection.remove(event)
+                event.box.delete()
+            })
+
+            for (const {stock, target} of pairs) {
+                const adapter: ValueEventBoxAdapter = isNull(stock)
+                    ? this.#collection.createEvent(target)
+                    : stock.copyFrom(target)
+                if (target.isSelected && !adapter.isSelected) {
                     this.#selection.select(adapter)
-                } else if (!event.isSelected && adapter.isSelected) {
+                } else if (!target.isSelected && adapter.isSelected) {
                     this.#selection.deselect(adapter)
                 }
-            })
-            while (true) {
-                const obsolete = pull()
-                if (obsolete === null) {break}
-                obsolete.box.delete()
             }
         })
         this.#dispatchChange()

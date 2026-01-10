@@ -324,9 +324,7 @@ class EventArrayImpl<E extends Event> implements Omit<EventArray<E>, "iterateRan
     remove(event: E): boolean {
         ++this.modCount
         const index = this.#array.indexOf(event)
-        if (-1 === index) {
-            return false
-        }
+        if (-1 === index) {return false}
         this.#array.splice(index, 1)
         return true
     }

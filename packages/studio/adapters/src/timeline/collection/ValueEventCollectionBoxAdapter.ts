@@ -102,6 +102,7 @@ export class ValueEventCollectionBoxAdapter implements BoxAdapter {
             }))
         }
         if (low.position === position) {return Option.wrap(low)}
+        if (high.position === position) {return Option.wrap(high)}
         if (low.interpolation.type === "none") {
             return Option.wrap(this.createEvent({
                 position,
@@ -154,15 +155,14 @@ export class ValueEventCollectionBoxAdapter implements BoxAdapter {
     subscribeChange(observer: Observer<this>): Subscription {return this.#changeNotifier.subscribe(observer)}
 
     createEvent({position, index, value, interpolation}: CreateEventParams): ValueEventBoxAdapter {
-        const existing = this.#adapters.values().find(e => e.position === position && e.index === index)
+        // Position is stored as integer in box, so truncate for comparison to prevent duplicates
+        const intPosition = Math.trunc(position)
+        const existing = this.#adapters.values().find(event => event.position === intPosition && event.index === index)
         if (isDefined(existing)) {
-            console.warn(`createEvent: DUPLICATE POSITION/INDEX!`, {
-                existingUUID: UUID.toString(existing.uuid),
-                position,
-                index,
-                collectionUUID: UUID.toString(this.#box.address.uuid),
-                stack: new Error().stack
-            })
+            // Return an existing event instead of creating a duplicate-update its value
+            existing.box.value.setValue(value)
+            InterpolationFieldAdapter.write(existing.box.interpolation, interpolation)
+            return existing
         }
         const eventBox = ValueEventBox.create(this.#context.boxGraph, UUID.generate(), box => {
             box.position.setValue(position)

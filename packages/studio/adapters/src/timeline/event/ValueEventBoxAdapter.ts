@@ -127,8 +127,6 @@ export class ValueEventBoxAdapter implements ValueEvent, BoxAdapter, Selectable 
     copyTo(options?: CopyToParams): ValueEventBoxAdapter {
         const position = options?.position ?? this.position
         const index = options?.index ?? this.index
-        // DEBUG: Log copyTo calls
-        console.debug(`copyTo: position=${position}, index=${index}`, new Error().stack)
         const eventBox = ValueEventBox.create(this.#context.boxGraph, UUID.generate(), box => {
             box.position.setValue(position)
             box.index.setValue(index)
