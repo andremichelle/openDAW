@@ -6,6 +6,7 @@ import {ValueEventBoxAdapter} from "@opendaw/studio-adapters"
 import {ValueCaptureTarget} from "@/ui/timeline/editors/value/ValueEventCapturing.ts"
 import {Interpolation} from "@opendaw/lib-dsp"
 import {DebugMenus} from "@/ui/menu/debug.ts"
+import {ValueEventEditing} from "@/ui/timeline/editors/value/ValueEventEditing"
 
 type Construct = {
     element: Element
@@ -25,7 +26,7 @@ export const installValueContextMenu = ({element, capturing, editing, selection}
         addItems(
             MenuItem.default({label: "Delete"})
                 .setTriggerProcedure(() => editing.modify(() => selection.selected()
-                    .forEach(adapter => adapter.box.delete()))),
+                    .forEach(adapter => ValueEventEditing.deleteEvent(adapter.collection.unwrap(), adapter)))),
             MenuItem.default({label: "Interpolation"})
                 .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                     MenuItem.default({
