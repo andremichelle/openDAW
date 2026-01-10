@@ -225,61 +225,24 @@ export class ValueMoveModifier implements ValueModifier {
                 if (event === null) {break}
                 obsoleteEvents.push(event)
             }
-            // Delete obsolete events BEFORE any copyFrom operations
-            // IMPORTANT: Remove from EventCollection synchronously because box.delete()
-            // triggers deferred pointerHub notifications that won't execute until after modify() completes
-            obsoleteEvents.forEach(event => {
-                collection.remove(event)
-                event.box.delete()
-            })
-
-            // Topological sort: if event A wants to move to (X,Y) where event B currently is,
-            // B must be processed first to vacate the slot
-            const stockKey = (pos: number, idx: number) => `${pos},${idx}`
-            const stockToPair = new Map<string, typeof pairs[0]>()
-            for (const pair of pairs) {
-                if (pair.stock !== null) {
-                    stockToPair.set(stockKey(pair.stock.position, pair.stock.index), pair)
-                }
-            }
-            const depths = new Map<typeof pairs[0], number>()
-            for (const pair of pairs) {
-                let depth = 0
-                let current: typeof pairs[0] | undefined = pair
-                const visited = new Set<typeof pairs[0]>()
-                while (current && !visited.has(current)) {
-                    visited.add(current)
-                    const key = stockKey(current.target.position, current.target.index)
-                    const blockingPair = stockToPair.get(key)
-                    if (blockingPair && blockingPair !== current &&
-                        (blockingPair.stock!.position !== blockingPair.target.position ||
-                         blockingPair.stock!.index !== blockingPair.target.index)) {
-                        depth++
-                        current = blockingPair
-                    } else {
-                        break
-                    }
-                }
-                depths.set(pair, depth)
-            }
-            pairs.sort((a, b) => (depths.get(a) ?? 0) - (depths.get(b) ?? 0))
-
+            // Remove ALL events from the collection first to prevent duplicates during sorts
+            obsoleteEvents.forEach(event => collection.remove(event))
+            pairs.forEach(({stock}) => { if (stock !== null) collection.remove(stock) })
+            const adapters: Array<ValueEventBoxAdapter> = []
             for (const {stock, target} of pairs) {
-                let adapter: ValueEventBoxAdapter
-                if (isNull(stock)) {
-                    adapter = this.#collection.createEvent(target)
-                } else {
-                    // Remove from EventCollection before copyFrom to prevent duplicates during sort
-                    collection.remove(stock)
-                    adapter = stock.copyFrom(target)
-                    collection.add(adapter)
-                }
+                const adapter = isNull(stock)
+                    ? this.#collection.createEvent(target)
+                    : stock.copyFrom(target)
+                adapters.push(adapter)
                 if (target.isSelected && !adapter.isSelected) {
                     this.#selection.select(adapter)
                 } else if (!target.isSelected && adapter.isSelected) {
                     this.#selection.deselect(adapter)
                 }
             }
+            // Add all back, then delete obsolete boxes
+            adapters.forEach(adapter => collection.add(adapter))
+            obsoleteEvents.forEach(event => event.box.delete())
         })
         this.#dispatchChange()
     }
