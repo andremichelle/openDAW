@@ -35,7 +35,7 @@ export const EngineSettingsSchema = z.object({
     }).default({
         countInBars: 1,
         allowTakes: isDevOrLocalhost,
-        olderTakeAction: "disable-track",
+        olderTakeAction: "mute-region",
         olderTakeScope: "previous-only"
     })
 })

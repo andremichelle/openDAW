@@ -21,7 +21,8 @@ const StudioSettingsLabels: NestedLabels<StudioSettings> = {
         fields: {
             "visible-help-hints": "Visible Help & Hints",
             "enable-history-buttons": "Show Undo/Redo buttons",
-            "auto-open-clips": "Always open clip view"
+            "auto-open-clips": "Always open clip view",
+            "scrollbar-padding": "Add scrollbar padding in browsers"
         }
     },
     "time-display": {
