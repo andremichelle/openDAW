@@ -12,6 +12,7 @@ import {
 } from "@opendaw/studio-adapters"
 import {Project} from "./project"
 import {AudioWorklets} from "./AudioWorklets"
+import {MIDIReceiver} from "./midi"
 import type {SoundFont2} from "soundfont2"
 
 let workerUrl: Option<string> = Option.None
@@ -112,6 +113,9 @@ export class OfflineEngineRenderer {
 
         terminator.own(source.liveStreamReceiver.connect(engineMessenger.channel("engine-live-data")))
 
+        const {port, sab} = terminator.own(MIDIReceiver.create(() => 0,
+            (deviceId, data, relativeTimeInMs) => source.receivedMIDIFromEngine(deviceId, data, relativeTimeInMs)))
+
         await protocol.initialize(channel.port1, progressChannel.port1, {
             sampleRate,
             numberOfChannels,
@@ -121,6 +125,8 @@ export class OfflineEngineRenderer {
             project: source.toArrayBuffer(),
             exportConfiguration: optExportConfiguration.unwrapOrUndefined()
         })
+
+        engineCommands.setupMIDI(port, sab)
 
         return new OfflineEngineRenderer(
             worker,

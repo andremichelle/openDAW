@@ -135,8 +135,10 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 }))
 
         const {port, sab} =
-            this.#terminator.own(MIDIReceiver.create(context, (deviceId, data, relativeTimeInMs) =>
-                this.#project.receivedMIDIFromEngine(deviceId, data, relativeTimeInMs)))
+            this.#terminator.own(MIDIReceiver.create(
+                () => context instanceof AudioContext ? context.outputLatency * 1000 : 20,
+                (deviceId, data, relativeTimeInMs) =>
+                    this.#project.receivedMIDIFromEngine(deviceId, data, relativeTimeInMs)))
         this.#commands.setupMIDI(port, sab)
         Communicator.executor<EngineToClient>(messenger.channel("engine-to-client"), {
                 log: (message: string): void => console.log("WORKLET", message),

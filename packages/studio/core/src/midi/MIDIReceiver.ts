@@ -1,19 +1,14 @@
-import {int, Terminable} from "@opendaw/lib-std"
+import {int, Provider, Terminable} from "@opendaw/lib-std"
 
 type MIDIMessageCallback = (deviceId: string, data: Uint8Array, timeMs: int) => void
 
 export class MIDIReceiver implements Terminable {
-    static create(context: BaseAudioContext, callback: MIDIMessageCallback): MIDIReceiver {
+    static create(outputLatencyProvider: Provider<number>, callback: MIDIMessageCallback): MIDIReceiver {
         const MIDI_RING_SIZE = 2048
         const sab = new SharedArrayBuffer(MIDI_RING_SIZE * 2 * 4 + 8)
         const channel = new MessageChannel()
-        const hasOutputLatency = context instanceof AudioContext
         return new MIDIReceiver(sab, channel, (deviceId: string, data: Uint8Array, relativeTimeInMs: int) => {
-            let delay = 20.0 // default 20ms
-            if (hasOutputLatency) {
-                delay = context.outputLatency / 1000.0
-            }
-            callback(deviceId, data, relativeTimeInMs + delay)
+            callback(deviceId, data, relativeTimeInMs + outputLatencyProvider())
         })
     }
 
