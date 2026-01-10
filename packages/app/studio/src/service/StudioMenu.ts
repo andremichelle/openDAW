@@ -16,6 +16,7 @@ import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {SyncLogService} from "@/service/SyncLogService"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
+import {TestVideoRendering} from "@/service/TestVideoRendering"
 
 export const populateStudioMenu = (service: StudioService) => {
     const Global = GlobalShortcuts
@@ -79,7 +80,12 @@ export const populateStudioMenu = (service: StudioService) => {
                                     types: [FilePickerAcceptTypes.JsonFileType],
                                     suggestedName: "project.json"
                                 })
-                            })
+                            }),
+                            MenuItem.default({
+                                label: "Video...",
+                                selectable: service.hasProfile,
+                                hidden: !Browser.isLocalHost()
+                            }).setTriggerProcedure(async () => TestVideoRendering.test(service.project))
                         )),
                     MenuItem.default({label: "Cloud Backup"})
                         .setRuntimeChildrenProcedure(parent => {

@@ -14,28 +14,28 @@ import {Project} from "./project"
 import {AudioWorklets} from "./AudioWorklets"
 import type {SoundFont2} from "soundfont2"
 
-export namespace OfflineEngineRenderer {
-    let workerUrl: Option<string> = Option.None
+let workerUrl: Option<string> = Option.None
 
-    export const install = (url: string): void => {
+export class OfflineEngineRenderer {
+    static install(url: string): void {
         console.debug(`OfflineEngineWorkerUrl: '${url}'`)
         workerUrl = Option.wrap(url)
     }
 
-    export const getWorkerUrl = (): string => {
+    static getWorkerUrl(): string {
         return workerUrl.unwrap("OfflineEngineWorkerUrl is missing (call 'install' first)")
     }
 
-    export const start = async (source: Project,
-                                optExportConfiguration: Option<ExportStemsConfiguration>,
-                                progress: Progress.Handler,
-                                abortSignal?: AbortSignal,
-                                sampleRate: int = 48_000): Promise<AudioData> => {
+    static async create(
+        source: Project,
+        optExportConfiguration: Option<ExportStemsConfiguration>,
+        sampleRate: int = 48_000
+    ): Promise<OfflineEngineRenderer> {
         const numStems = ExportStemsConfiguration.countStems(optExportConfiguration)
         if (numStems === 0) {return panic("Nothing to export")}
         const numberOfChannels = numStems * 2
-        const {promise, reject, resolve} = Promise.withResolvers<AudioData>()
-        const worker = new Worker(getWorkerUrl(), {type: "module"})
+
+        const worker = new Worker(this.getWorkerUrl(), {type: "module"})
         const messenger = Messenger.for(worker)
         const protocol = Communicator.sender<OfflineEngineProtocol>(
             messenger.channel("offline-engine"),
@@ -120,23 +120,6 @@ export namespace OfflineEngineRenderer {
         channel.port2.start()
         progressChannel.port2.start()
 
-        let cancelled = false
-
-        if (isDefined(abortSignal)) {
-            abortSignal.onabort = () => {
-                engineCommands.stop(true)
-                protocol.stop()
-                terminator.terminate()
-                worker.terminate()
-                cancelled = true
-                reject(Errors.AbortError)
-            }
-        }
-
-        progressChannel.port2.onmessage = (event: MessageEvent<{
-            frames: number
-        }>) => progress(event.data.frames / sampleRate)
-
         await protocol.initialize(channel.port1, progressChannel.port1, {
             sampleRate,
             numberOfChannels,
@@ -146,21 +129,114 @@ export namespace OfflineEngineRenderer {
             project: projectCopy.toArrayBuffer(),
             exportConfiguration: optExportConfiguration.unwrapOrUndefined()
         })
-        engineCommands.play()
-        protocol.render({}).then(channels => {
+
+        return new OfflineEngineRenderer(
+            worker,
+            protocol,
+            engineCommands,
+            terminator,
+            progressChannel.port2,
+            sampleRate,
+            numberOfChannels
+        )
+    }
+
+    static async start(
+        source: Project,
+        optExportConfiguration: Option<ExportStemsConfiguration>,
+        progress: Progress.Handler,
+        abortSignal?: AbortSignal,
+        sampleRate: int = 48_000
+    ): Promise<AudioData> {
+        const renderer = await this.create(source, optExportConfiguration, sampleRate)
+        return renderer.render({}, progress, abortSignal)
+    }
+
+    readonly #worker: Worker
+    readonly #protocol: OfflineEngineProtocol
+    readonly #engineCommands: EngineCommands
+    readonly #terminator: Terminator
+    readonly #progressPort: MessagePort
+    readonly #sampleRate: int
+    readonly #numberOfChannels: int
+
+    #totalFrames: int = 0
+
+    private constructor(
+        worker: Worker,
+        protocol: OfflineEngineProtocol,
+        engineCommands: EngineCommands,
+        terminator: Terminator,
+        progressPort: MessagePort,
+        sampleRate: int,
+        numberOfChannels: int
+    ) {
+        this.#worker = worker
+        this.#protocol = protocol
+        this.#engineCommands = engineCommands
+        this.#terminator = terminator
+        this.#progressPort = progressPort
+        this.#sampleRate = sampleRate
+        this.#numberOfChannels = numberOfChannels
+    }
+
+    get sampleRate(): int {return this.#sampleRate}
+    get numberOfChannels(): int {return this.#numberOfChannels}
+    get totalFrames(): int {return this.#totalFrames}
+
+    play(): void {
+        this.#engineCommands.play()
+    }
+
+    stop(): void {
+        this.#engineCommands.stop(true)
+        this.#protocol.stop()
+    }
+
+    terminate(): void {
+        this.#terminator.terminate()
+        this.#worker.terminate()
+    }
+
+    async step(samples: int): Promise<Float32Array[]> {
+        const channels = await this.#protocol.step(samples)
+        this.#totalFrames += samples
+        return channels
+    }
+
+    async render(
+        config: OfflineEngineRenderConfig,
+        progress: Progress.Handler,
+        abortSignal?: AbortSignal
+    ): Promise<AudioData> {
+        const {promise, reject, resolve} = Promise.withResolvers<AudioData>()
+        let cancelled = false
+
+        if (isDefined(abortSignal)) {
+            abortSignal.onabort = () => {
+                this.stop()
+                this.terminate()
+                cancelled = true
+                reject(Errors.AbortError)
+            }
+        }
+
+        this.#progressPort.onmessage = (event: MessageEvent<{ frames: number }>) =>
+            progress(event.data.frames / this.#sampleRate)
+
+        this.play()
+        this.#protocol.render(config).then(channels => {
             if (cancelled) {return}
-            terminator.terminate()
-            worker.terminate()
+            this.terminate()
             const numberOfFrames = channels[0].length
-            const audioData = AudioData.create(sampleRate, numberOfFrames, numberOfChannels)
-            for (let channelIndex = 0; channelIndex < numberOfChannels; channelIndex++) {
+            const audioData = AudioData.create(this.#sampleRate, numberOfFrames, this.#numberOfChannels)
+            for (let channelIndex = 0; channelIndex < this.#numberOfChannels; channelIndex++) {
                 audioData.frames[channelIndex].set(channels[channelIndex])
             }
             resolve(audioData)
         }).catch(reason => {
             if (!cancelled) {
-                terminator.terminate()
-                worker.terminate()
+                this.terminate()
                 reject(reason)
             }
         })
