@@ -1,5 +1,5 @@
 import {asInstanceOf, DefaultObservableValue, Option, RuntimeNotifier} from "@opendaw/lib-std"
-import {AudioData, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioData, dbToGain, RenderQuantum} from "@opendaw/lib-dsp"
 import {Promises, Wait} from "@opendaw/lib-runtime"
 import {FFmpegWorker, OfflineEngineRenderer, Project, WavFile} from "@opendaw/studio-core"
 import {Files} from "@opendaw/lib-dom"
@@ -11,7 +11,9 @@ const WIDTH = 1280
 const HEIGHT = 720
 const FPS = 30
 const SAMPLE_RATE = 48_000
-const DURATION_SECONDS = 10
+const MAX_DURATION_SECONDS = 600
+const SILENCE_THRESHOLD_DB = -72.0
+const SILENCE_DURATION_SECONDS = 10
 
 export namespace TestVideoRendering {
     export const test = async (source: Project): Promise<void> => {
@@ -50,16 +52,23 @@ export namespace TestVideoRendering {
             const renderer = await OfflineEngineRenderer.create(project, Option.None, SAMPLE_RATE)
             renderer.play()
 
-            const totalFrames = DURATION_SECONDS * FPS
+            const maxFrames = MAX_DURATION_SECONDS * FPS
             const audioChunks: Float32Array[][] = []
             const tempoMap = project.tempoMap
+
+            // Silence detection
+            const silenceThreshold = dbToGain(SILENCE_THRESHOLD_DB)
+            const silenceSamplesNeeded = Math.ceil(SILENCE_DURATION_SECONDS * SAMPLE_RATE)
+            let consecutiveSilentSamples = 0
+            let hasHadAudio = false
 
             // Calculate samples per frame with error accumulation
             const idealSamplesPerFrame = SAMPLE_RATE / FPS
             let samplesRendered = 0
+            let frameIndex = 0
 
-            // Render frames
-            for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
+            // Render frames until silence detected or max duration reached
+            while (frameIndex < maxFrames) {
                 // Calculate target samples for end of this frame
                 const targetSamples = Math.round((frameIndex + 1) * idealSamplesPerFrame)
                 const samplesToRender = targetSamples - samplesRendered
@@ -70,6 +79,26 @@ export namespace TestVideoRendering {
                 const channels = await renderer.step(actualSamplesToRender)
                 audioChunks.push(channels)
                 samplesRendered += actualSamplesToRender
+
+                // Check for silence
+                let maxSample = 0
+                for (const channel of channels) {
+                    for (const sample of channel) {
+                        const absoluteValue = Math.abs(sample)
+                        if (absoluteValue > maxSample) {maxSample = absoluteValue}
+                    }
+                }
+
+                if (maxSample > silenceThreshold) {
+                    hasHadAudio = true
+                    consecutiveSilentSamples = 0
+                } else if (hasHadAudio) {
+                    consecutiveSilentSamples += actualSamplesToRender
+                    if (consecutiveSilentSamples >= silenceSamplesNeeded) {
+                        // Don't write this frame's PNG - we'll trim here
+                        break
+                    }
+                }
 
                 // Update shadertoy state with offline position
                 const seconds = renderer.totalFrames / SAMPLE_RATE
@@ -83,35 +112,58 @@ export namespace TestVideoRendering {
                 await ffmpeg.ffmpeg.writeFile(`frame_${String(frameIndex).padStart(6, "0")}.png`, frameData)
 
                 // Update progress
-                progressValue.setValue(frameIndex / totalFrames * 0.8)
-                dialog.message = `Rendering frame ${frameIndex + 1}/${totalFrames}`
+                progressValue.setValue(frameIndex / maxFrames * 0.8)
+                dialog.message = `Rendering frame ${frameIndex + 1}`
 
                 // Yield to UI
                 if (frameIndex % 10 === 0) {
                     await Wait.frame()
                 }
+
+                frameIndex++
             }
+
+            const totalFrames = frameIndex
 
             renderer.stop()
             renderer.terminate()
             shadertoyState.terminate()
             shadertoyRunner.terminate()
 
-            // Combine audio chunks into single buffer
+            // Trim trailing silence (keep a small tail of ~250ms)
+            const tailSamples = Math.min(Math.floor(SAMPLE_RATE / 4), consecutiveSilentSamples)
+            const framesToKeep = samplesRendered - consecutiveSilentSamples + tailSamples
+
+            // Combine audio chunks into single buffer (trimmed)
             dialog.message = "Encoding audio..."
             const numberOfChannels = audioChunks[0].length
-            const audioData = AudioData.create(SAMPLE_RATE, samplesRendered, numberOfChannels)
+            const audioData = AudioData.create(SAMPLE_RATE, framesToKeep, numberOfChannels)
             for (let channelIndex = 0; channelIndex < numberOfChannels; channelIndex++) {
                 let offset = 0
                 for (const chunk of audioChunks) {
-                    audioData.frames[channelIndex].set(chunk[channelIndex], offset)
-                    offset += chunk[channelIndex].length
+                    if (offset >= framesToKeep) {break}
+                    const toCopy = Math.min(chunk[channelIndex].length, framesToKeep - offset)
+                    audioData.frames[channelIndex].set(chunk[channelIndex].subarray(0, toCopy), offset)
+                    offset += toCopy
                 }
             }
 
             // Write audio as WAV
             const wavData = WavFile.encodeFloats(audioData)
             await ffmpeg.ffmpeg.writeFile("audio.wav", new Uint8Array(wavData))
+
+            // Calculate how many video frames match the trimmed audio
+            const audioDurationSeconds = framesToKeep / SAMPLE_RATE
+            const videoFramesToKeep = Math.ceil(audioDurationSeconds * FPS)
+
+            // Delete extra PNG frames that exceed the trimmed duration
+            const extraFrames: string[] = []
+            for (let index = videoFramesToKeep; index < totalFrames; index++) {
+                extraFrames.push(`frame_${String(index).padStart(6, "0")}.png`)
+            }
+            if (extraFrames.length > 0) {
+                await ffmpeg.cleanupFiles(extraFrames)
+            }
 
             // Combine video and audio with FFmpeg
             dialog.message = "Encoding video... (This takes a while)"
@@ -143,8 +195,8 @@ export namespace TestVideoRendering {
 
             // Cleanup ffmpeg files
             const filesToClean = ["audio.wav", "output.mp4"]
-            for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
-                filesToClean.push(`frame_${String(frameIndex).padStart(6, "0")}.png`)
+            for (let index = 0; index < videoFramesToKeep; index++) {
+                filesToClean.push(`frame_${String(index).padStart(6, "0")}.png`)
             }
             await ffmpeg.cleanupFiles(filesToClean)
 
