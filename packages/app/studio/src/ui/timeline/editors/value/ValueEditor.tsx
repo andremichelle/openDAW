@@ -111,7 +111,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 const now = Date.now()
                 const dblclck = now - lastDownTime < Events.DOUBLE_DOWN_THRESHOLD
                 lastDownTime = now
-                if (dblclck) {
+                if (dblclck && !event.shiftKey) {
                     if (target === null || target.type === "loop-duration") {
                         const rect = canvas.getBoundingClientRect()
                         const position = snapping.xToUnitRound(event.clientX - rect.left) - reader.offset
