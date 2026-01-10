@@ -4,6 +4,7 @@ import {
     Comparator,
     int,
     Option,
+    panic,
     Selectable,
     Terminable,
     Terminator,
@@ -33,7 +34,7 @@ export class ValueEventBoxAdapter implements ValueEvent, BoxAdapter, Selectable 
         if (positionDiff !== 0) {return positionDiff}
         const indexDiff = a.index - b.index
         if (indexDiff !== 0) {return indexDiff}
-        throw new Error(`${a} and ${b} are identical in terms of comparison`)
+        return panic(`${a} and ${b} are identical in terms of comparison`)
     }
 
     readonly type = "value-event"
