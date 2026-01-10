@@ -35,7 +35,7 @@ export const StudioSettingsSchema = z.object({
     }).default({
         "dragging-use-pointer-lock": false,
         "modifying-controls-wheel": false,
-        "normalize-mouse-wheel": false
+        "normalize-mouse-wheel": true
     }),
     "debug": z.object({
         "footer-show-fps-meter": z.boolean(),
