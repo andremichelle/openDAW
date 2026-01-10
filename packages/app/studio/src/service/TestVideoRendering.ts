@@ -1,17 +1,26 @@
-import {DefaultObservableValue, Option, RuntimeNotifier} from "@opendaw/lib-std"
-import {AudioData, PPQN, RenderQuantum, TempoMap} from "@opendaw/lib-dsp"
+import {asInstanceOf, DefaultObservableValue, Option, RuntimeNotifier} from "@opendaw/lib-std"
+import {AudioData, RenderQuantum} from "@opendaw/lib-dsp"
 import {Promises, Wait} from "@opendaw/lib-runtime"
 import {FFmpegWorker, OfflineEngineRenderer, Project, WavFile} from "@opendaw/studio-core"
 import {Files} from "@opendaw/lib-dom"
+import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
+import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
+import {ShadertoyBox} from "@opendaw/studio-boxes"
 
 const WIDTH = 1280
 const HEIGHT = 720
 const FPS = 30
 const SAMPLE_RATE = 48_000
-const DURATION_SECONDS = 20
+const DURATION_SECONDS = 10
 
 export namespace TestVideoRendering {
-    export const test = async (project: Project): Promise<void> => {
+    export const test = async (source: Project): Promise<void> => {
+        const project = source.copy()
+        const {boxGraph, timelineBox: {loopArea: {enabled}}} = project
+        boxGraph.beginTransaction()
+        enabled.setValue(false)
+        boxGraph.endTransaction()
+
         // Load FFmpeg first (has its own progress dialog)
         const ffmpeg = await loadFFmpeg()
 
@@ -25,9 +34,16 @@ export namespace TestVideoRendering {
 
             // Create canvas
             const canvas = new OffscreenCanvas(WIDTH, HEIGHT)
-            const ctx = canvas.getContext("2d")!
-            ctx.fillStyle = "#1a1a2e"
-            ctx.fillRect(0, 0, WIDTH, HEIGHT)
+            const ctx = canvas.getContext("webgl2")!
+
+            const shadertoyState = new ShadertoyState(project)
+            const shadertoyRunner = new ShadertoyRunner(shadertoyState, ctx)
+
+            const shadertoy = project.rootBoxAdapter.box.shadertoy
+            if (shadertoy.nonEmpty()) {
+                const code = asInstanceOf(shadertoy.targetVertex.unwrap().box, ShadertoyBox).shaderCode.getValue()
+                shadertoyRunner.compile(code)
+            }
 
             // Create renderer
             dialog.message = "Initializing renderer..."
@@ -48,7 +64,6 @@ export namespace TestVideoRendering {
                 const targetSamples = Math.round((frameIndex + 1) * idealSamplesPerFrame)
                 const samplesToRender = targetSamples - samplesRendered
 
-                // Round up to nearest multiple of RENDER_QUANTUM
                 const quantumsNeeded = Math.ceil(samplesToRender / RenderQuantum)
                 const actualSamplesToRender = quantumsNeeded * RenderQuantum
 
@@ -56,8 +71,11 @@ export namespace TestVideoRendering {
                 audioChunks.push(channels)
                 samplesRendered += actualSamplesToRender
 
-                // Draw frame
-                drawFrame(ctx, frameIndex, renderer.totalFrames, tempoMap)
+                // Update shadertoy state with offline position
+                const seconds = renderer.totalFrames / SAMPLE_RATE
+                const ppqn = tempoMap.secondsToPPQN(seconds)
+                shadertoyState.setPPQN(ppqn) // TODO: this should be done by the offline audio engine renderer
+                shadertoyRunner.render(seconds)
 
                 // Capture frame as PNG
                 const blob = await canvas.convertToBlob({type: "image/png"})
@@ -76,6 +94,8 @@ export namespace TestVideoRendering {
 
             renderer.stop()
             renderer.terminate()
+            shadertoyState.terminate()
+            shadertoyRunner.terminate()
 
             // Combine audio chunks into single buffer
             dialog.message = "Encoding audio..."
@@ -94,7 +114,7 @@ export namespace TestVideoRendering {
             await ffmpeg.ffmpeg.writeFile("audio.wav", new Uint8Array(wavData))
 
             // Combine video and audio with FFmpeg
-            dialog.message = "Encoding video..."
+            dialog.message = "Encoding video... (This takes a while)"
             progressValue.setValue(0.85)
 
             await ffmpeg.ffmpeg.exec([
@@ -147,85 +167,6 @@ export namespace TestVideoRendering {
             })
             throw error
         }
-    }
-
-    const drawFrame = (
-        ctx: OffscreenCanvasRenderingContext2D,
-        frameIndex: number,
-        totalSamples: number,
-        tempoMap: TempoMap
-    ): void => {
-        // Clear
-        ctx.fillStyle = "#1a1a2e"
-        ctx.fillRect(0, 0, WIDTH, HEIGHT)
-
-        // Calculate time values
-        const seconds = totalSamples / SAMPLE_RATE
-        const ppqn = tempoMap.secondsToPPQN(seconds)
-        const bpm = tempoMap.getTempoAt(ppqn)
-        const {bars, beats, semiquavers, ticks} = PPQN.toParts(ppqn)
-
-        // Draw background gradient
-        const gradient = ctx.createLinearGradient(0, 0, 0, HEIGHT)
-        gradient.addColorStop(0, "#1a1a2e")
-        gradient.addColorStop(1, "#16213e")
-        ctx.fillStyle = gradient
-        ctx.fillRect(0, 0, WIDTH, HEIGHT)
-
-        // Draw decorative lines
-        ctx.strokeStyle = "#0f3460"
-        ctx.lineWidth = 1
-        for (let y = 0; y < HEIGHT; y += 40) {
-            ctx.beginPath()
-            ctx.moveTo(0, y)
-            ctx.lineTo(WIDTH, y)
-            ctx.stroke()
-        }
-
-        // Main time display
-        ctx.textAlign = "center"
-        ctx.textBaseline = "middle"
-
-        // Musical time (large)
-        ctx.fillStyle = "#e94560"
-        ctx.font = "bold 120px monospace"
-        const musicalTime = `${bars + 1}.${beats + 1}.${semiquavers + 1}`
-        ctx.fillText(musicalTime, WIDTH / 2, HEIGHT / 2 - 80)
-
-        // Ticks
-        ctx.fillStyle = "#f1f1f1"
-        ctx.font = "bold 60px monospace"
-        ctx.fillText(`:${String(ticks).padStart(3, "0")}`, WIDTH / 2, HEIGHT / 2 + 20)
-
-        // Time in seconds
-        ctx.fillStyle = "#a1a1a1"
-        ctx.font = "36px monospace"
-        const minutes = Math.floor(seconds / 60)
-        const secs = seconds % 60
-        const timeString = `${String(minutes).padStart(2, "0")}:${secs.toFixed(3).padStart(6, "0")}`
-        ctx.fillText(timeString, WIDTH / 2, HEIGHT / 2 + 100)
-
-        // BPM display
-        ctx.fillStyle = "#00d9ff"
-        ctx.font = "bold 48px monospace"
-        ctx.fillText(`${bpm.toFixed(1)} BPM`, WIDTH / 2, HEIGHT / 2 + 180)
-
-        // Frame and sample info (smaller, bottom)
-        ctx.fillStyle = "#666"
-        ctx.font = "24px monospace"
-        ctx.fillText(`Frame: ${frameIndex + 1} | Samples: ${totalSamples}`, WIDTH / 2, HEIGHT - 40)
-
-        // Progress bar
-        const progress = frameIndex / (DURATION_SECONDS * FPS)
-        const barWidth = WIDTH - 100
-        const barHeight = 8
-        const barX = 50
-        const barY = HEIGHT - 80
-
-        ctx.fillStyle = "#333"
-        ctx.fillRect(barX, barY, barWidth, barHeight)
-        ctx.fillStyle = "#e94560"
-        ctx.fillRect(barX, barY, barWidth * progress, barHeight)
     }
 
     const loadFFmpeg = async (): Promise<FFmpegWorker> => {

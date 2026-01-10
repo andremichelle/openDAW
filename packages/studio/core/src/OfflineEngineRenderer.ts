@@ -26,15 +26,13 @@ export class OfflineEngineRenderer {
         return workerUrl.unwrap("OfflineEngineWorkerUrl is missing (call 'install' first)")
     }
 
-    static async create(
-        source: Project,
-        optExportConfiguration: Option<ExportStemsConfiguration>,
-        sampleRate: int = 48_000
+    static async create(source: Project,
+                        optExportConfiguration: Option<ExportStemsConfiguration>,
+                        sampleRate: int = 48_000
     ): Promise<OfflineEngineRenderer> {
         const numStems = ExportStemsConfiguration.countStems(optExportConfiguration)
         if (numStems === 0) {return panic("Nothing to export")}
         const numberOfChannels = numStems * 2
-
         const worker = new Worker(this.getWorkerUrl(), {type: "module"})
         const messenger = Messenger.for(worker)
         const protocol = Communicator.sender<OfflineEngineProtocol>(
@@ -52,19 +50,11 @@ export class OfflineEngineRenderer {
                 stop(): void { dispatcher.dispatchAndForget(this.stop) }
             }
         )
-
         const channel = new MessageChannel()
         const progressChannel = new MessageChannel()
         const syncStreamBuffer = new SharedArrayBuffer(1024)
         const controlFlagsBuffer = new SharedArrayBuffer(4)
-
         const terminator = new Terminator()
-        const projectCopy = source.copy()
-        const {timelineBox, boxGraph} = projectCopy
-        boxGraph.beginTransaction()
-        timelineBox.loopArea.enabled.setValue(false)
-        boxGraph.endTransaction()
-
         const engineMessenger = Messenger.for(channel.port2)
         Communicator.executor<EngineToClient>(engineMessenger.channel("engine-to-client"), {
             log: (message: string): void => console.log("OFFLINE-ENGINE", message),
@@ -120,13 +110,15 @@ export class OfflineEngineRenderer {
         channel.port2.start()
         progressChannel.port2.start()
 
+        terminator.own(source.liveStreamReceiver.connect(engineMessenger.channel("engine-live-data")))
+
         await protocol.initialize(channel.port1, progressChannel.port1, {
             sampleRate,
             numberOfChannels,
             processorsUrl: AudioWorklets.processorsUrl,
             syncStreamBuffer,
             controlFlagsBuffer,
-            project: projectCopy.toArrayBuffer(),
+            project: source.toArrayBuffer(),
             exportConfiguration: optExportConfiguration.unwrapOrUndefined()
         })
 
@@ -141,15 +133,23 @@ export class OfflineEngineRenderer {
         )
     }
 
-    static async start(
-        source: Project,
-        optExportConfiguration: Option<ExportStemsConfiguration>,
-        progress: Progress.Handler,
-        abortSignal?: AbortSignal,
-        sampleRate: int = 48_000
+    static async start(source: Project,
+                       optExportConfiguration: Option<ExportStemsConfiguration>,
+                       progress: Progress.Handler,
+                       abortSignal?: AbortSignal,
+                       sampleRate: int = 48_000
     ): Promise<AudioData> {
+        const {timelineBox: {loopArea: {enabled}}, boxGraph} = source
+        const wasEnabled = enabled.getValue()
+        boxGraph.beginTransaction()
+        enabled.setValue(false)
+        boxGraph.endTransaction()
         const renderer = await this.create(source, optExportConfiguration, sampleRate)
-        return renderer.render({}, progress, abortSignal)
+        const result = await renderer.render({}, progress, abortSignal)
+        boxGraph.beginTransaction()
+        enabled.setValue(wasEnabled)
+        boxGraph.endTransaction()
+        return result
     }
 
     readonly #worker: Worker

@@ -16,18 +16,31 @@ export class ShadertoyState implements Terminable {
 
     #beat = 0.0
 
-    constructor(project: Project) {this.#terminable = this.#listen(project)}
+    constructor(project: Project) {
+        this.#terminable = this.#listen(project)
+    }
 
     get audioData(): Uint8Array<ArrayBuffer> {return this.#audioData}
     get midiCCData(): Uint8Array<ArrayBuffer> {return this.#midiCCData}
     get midiNoteData(): Uint8Array<ArrayBuffer> {return this.#midiNoteData}
     get peaks(): Float32Array<ArrayBuffer> {return this.#peaks}
     get beat(): number {return this.#beat}
+
+    /**
+     * Sets the beat position.
+     * @param ppqn Position in PPQN ticks
+     */
+    setPPQN(ppqn: number): void {
+        this.#beat = ppqn / PPQN.Quarter
+    }
+
+    terminate(): void {this.#terminable.terminate()}
+
     /**
      * Sets the waveform data (row 1 of iChannel0).
      * @param data Up to 512 samples, -1.0 to 1.0 range
      */
-    setWaveform(data: Float32Array): void {
+    #setWaveform(data: Float32Array): void {
         const length = Math.min(data.length, 512)
         for (let i = 0; i < length; i++) {
             this.#audioData[512 + i] = Math.round((clamp(data[i], -1.0, 1.0) + 1.0) * 127.5)
@@ -39,7 +52,7 @@ export class ShadertoyState implements Terminable {
      * @param data 512 in Float32Array
      * @param sampleRate Sample rate in Hz
      */
-    setSpectrum(data: Float32Array, sampleRate: number): void {
+    #setSpectrum(data: Float32Array, sampleRate: number): void {
         const minFreq = 20.0
         const maxFreq = 20000.0
         const nyquist = sampleRate / 2.0
@@ -62,18 +75,10 @@ export class ShadertoyState implements Terminable {
     }
 
     /**
-     * Sets the beat position.
-     * @param ppqn Position in PPQN ticks
-     */
-    setPPQN(ppqn: number): void {
-        this.#beat = ppqn / PPQN.Quarter
-    }
-
-    /**
      * Sets stereo peak and RMS values.
      * @param peaks Float32Array with [leftPeak, leftRMS, rightPeak, rightRMS]
      */
-    setPeaks(peaks: Float32Array): void {
+    #setPeaks(peaks: Float32Array): void {
         this.#peaks.set(peaks)
     }
 
@@ -82,7 +87,7 @@ export class ShadertoyState implements Terminable {
      * @param cc Controller number (0-127)
      * @param value Normalized value (0.0-1.0)
      */
-    onMidiCC(cc: number, value: number): void {
+    #onMidiCC(cc: number, value: number): void {
         this.#midiCCData[cc] = Math.floor(value * 255.0)
     }
 
@@ -91,7 +96,7 @@ export class ShadertoyState implements Terminable {
      * @param pitch Note pitch (0-127)
      * @param velocity Normalized velocity (0.0-1.0)
      */
-    onMidiNoteOn(pitch: number, velocity: number): void {
+    #onMidiNoteOn(pitch: number, velocity: number): void {
         this.#noteVelocities[pitch].push(velocity)
         this.#updateNoteData(pitch)
     }
@@ -100,25 +105,23 @@ export class ShadertoyState implements Terminable {
      * Handles a MIDI note off event.
      * @param pitch Note pitch (0-127)
      */
-    onMidiNoteOff(pitch: number): void {
+    #onMidiNoteOff(pitch: number): void {
         this.#noteVelocities[pitch].shift()
         this.#updateNoteData(pitch)
     }
-
-    terminate(): void {this.#terminable.terminate()}
 
     #listen(project: Project): Terminable {
         const {engine: {position, sampleRate}, liveStreamReceiver} = project
         return Terminable.many(
             AnimationFrame.add(() => this.setPPQN(position.getValue())),
             ShadertoyMIDIOutput.subscribe(message => MidiData.accept(message, {
-                controller: (id: byte, value: unitValue) => this.onMidiCC(id, value),
-                noteOn: (note: byte, velocity: byte) => this.onMidiNoteOn(note, velocity),
-                noteOff: (note: byte) => this.onMidiNoteOff(note)
+                controller: (id: byte, value: unitValue) => this.#onMidiCC(id, value),
+                noteOn: (note: byte, velocity: byte) => this.#onMidiNoteOn(note, velocity),
+                noteOff: (note: byte) => this.#onMidiNoteOff(note)
             })),
-            liveStreamReceiver.subscribeFloats(EngineAddresses.PEAKS, (peaks) => this.setPeaks(peaks)),
-            liveStreamReceiver.subscribeFloats(EngineAddresses.SPECTRUM, spectrum => this.setSpectrum(spectrum, sampleRate)),
-            liveStreamReceiver.subscribeFloats(EngineAddresses.WAVEFORM, waveform => this.setWaveform(waveform))
+            liveStreamReceiver.subscribeFloats(EngineAddresses.PEAKS, (peaks) => this.#setPeaks(peaks)),
+            liveStreamReceiver.subscribeFloats(EngineAddresses.SPECTRUM, spectrum => this.#setSpectrum(spectrum, sampleRate)),
+            liveStreamReceiver.subscribeFloats(EngineAddresses.WAVEFORM, waveform => this.#setWaveform(waveform))
         )
     }
 
