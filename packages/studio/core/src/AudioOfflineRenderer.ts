@@ -5,8 +5,9 @@ import {ExportStemsConfiguration} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 import {AudioWorklets} from "./AudioWorklets"
 
+/** @deprecated */
 export namespace AudioOfflineRenderer {
-    /* Deprecated */
+    /** @deprecated */
     export const start = async (source: Project,
                                 optExportConfiguration: Option<ExportStemsConfiguration>,
                                 progress: Progress.Handler,
