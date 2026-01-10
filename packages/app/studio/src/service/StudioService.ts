@@ -199,7 +199,10 @@ export class StudioService implements ProjectEnv {
         return this.#projectProfileService.getValue()
             .ifSome(async (profile) => {
                 await this.audioContext.suspend()
-                await Mixdowns.exportMixdown(profile)
+                const {status, error} = await Promises.tryCatch(Mixdowns.exportMixdown(profile))
+                if (status === "rejected" && !Errors.isAbort(error)) {
+                    await RuntimeNotifier.info({headline: "Export Failed", message: String(error)})
+                }
                 this.audioContext.resume().then()
             })
     }
@@ -215,15 +218,19 @@ export class StudioService implements ProjectEnv {
                         message: "No stems to export"
                     })
                 }
-                const {status, error, value: config} =
+                const {status: dialogStatus, error: dialogError, value: config} =
                     await Promises.tryCatch(ProjectDialogs.showExportStemsDialog(project))
-                if (status === "rejected") {
-                    if (Errors.isAbort(error)) {return}
-                    throw error
+                if (dialogStatus === "rejected") {
+                    if (Errors.isAbort(dialogError)) {return}
+                    await RuntimeNotifier.info({headline: "Export Failed", message: String(dialogError)})
+                    return
                 }
                 ExportStemsConfiguration.sanitizeExportNamesInPlace(config)
                 await this.audioContext.suspend()
-                await Mixdowns.exportStems(profile, config)
+                const {status, error} = await Promises.tryCatch(Mixdowns.exportStems(profile, config))
+                if (status === "rejected" && !Errors.isAbort(error)) {
+                    await RuntimeNotifier.info({headline: "Export Failed", message: String(error)})
+                }
                 this.audioContext.resume().then(EmptyExec, EmptyExec)
             })
     }
