@@ -246,6 +246,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     restartRecording(): void {
         if (this.engine.isRecording.getValue()) {
+            const countingIn = Recording.wasCountingIn()
             this.engine.stopRecording()
             this.editing.modify(() => this.captureDevices.filterArmed()
                 .forEach(capture => {
@@ -253,7 +254,9 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                     capture.clearRecordedRegions()
                 }), false)
             this.engine.stop(true)
-            setTimeout(() => this.startRecording(true), 100)
+            setTimeout(() => this.startRecording(countingIn), 100)
+        } else {
+            this.startRecording()
         }
     }
 

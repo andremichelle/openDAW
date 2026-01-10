@@ -42,7 +42,7 @@ export class Recording {
             engine.isCountingIn.subscribe(stop),
             Terminable.create(() => Recording.#instance = Option.None)
         )
-        this.#instance = Option.wrap(new Recording())
+        this.#instance = Option.wrap(new Recording(countIn))
         return terminator
     }
 
@@ -70,5 +70,7 @@ export class Recording {
 
     static #instance: Option<Recording> = Option.None
 
-    private constructor() {}
+    static wasCountingIn(): boolean {return this.#instance.mapOr(recording => recording.countIn, () => false)}
+
+    private constructor(readonly countIn: boolean) {}
 }
