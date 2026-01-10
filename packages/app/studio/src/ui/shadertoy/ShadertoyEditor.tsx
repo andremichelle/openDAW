@@ -78,7 +78,7 @@ export const ShadertoyEditor = ({service, lifecycle}: Construct) => {
                             return Attempts.err("Could not create webgl2 context")
                         }
                         try {
-                            const testRunner = new ShadertoyRunner(gl)
+                            const testRunner = new ShadertoyRunner(service.optShadertoyState.unwrap("No state"), gl)
                             testRunner.compile(code)
                             testRunner.terminate()
                             return Attempts.Ok

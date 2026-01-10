@@ -1,4 +1,4 @@
-import {byte, clamp, clampUnit, Lazy, Terminable, unitValue} from "@opendaw/lib-std"
+import {byte, clamp, clampUnit, Terminable, unitValue} from "@opendaw/lib-std"
 import {gainToDb, PPQN} from "@opendaw/lib-dsp"
 import {ShadertoyMIDIOutput} from "@/ui/shadertoy/ShadertoyMIDIOutput"
 import {AnimationFrame} from "@opendaw/lib-dom"
@@ -6,26 +6,8 @@ import {MidiData} from "@opendaw/lib-midi"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {Project} from "@opendaw/studio-core"
 
-export class ShadertoyState {
-    @Lazy
-    static get(): ShadertoyState {return new ShadertoyState()}
-
-    static initialize(project: Project): Terminable {
-        const {engine: {position, sampleRate}, liveStreamReceiver} = project
-        const state = this.get()
-        return Terminable.many(
-            AnimationFrame.add(() => state.setPPQN(position.getValue())),
-            ShadertoyMIDIOutput.subscribe(message => MidiData.accept(message, {
-                controller: (id: byte, value: unitValue) => state.onMidiCC(id, value),
-                noteOn: (note: byte, velocity: byte) => state.onMidiNoteOn(note, velocity),
-                noteOff: (note: byte) => state.onMidiNoteOff(note)
-            })),
-            liveStreamReceiver.subscribeFloats(EngineAddresses.PEAKS, (peaks) => state.setPeaks(peaks)),
-            liveStreamReceiver.subscribeFloats(EngineAddresses.SPECTRUM, spectrum => state.setSpectrum(spectrum, sampleRate)),
-            liveStreamReceiver.subscribeFloats(EngineAddresses.WAVEFORM, waveform => state.setWaveform(waveform))
-        )
-    }
-
+export class ShadertoyState implements Terminable {
+    readonly #terminable: Terminable
     readonly #audioData = new Uint8Array(512 * 2)
     readonly #midiCCData = new Uint8Array(128)
     readonly #midiNoteData = new Uint8Array(128)
@@ -34,7 +16,7 @@ export class ShadertoyState {
 
     #beat = 0.0
 
-    private constructor() {}
+    constructor(project: Project) {this.#terminable = this.#listen(project)}
 
     get audioData(): Uint8Array<ArrayBuffer> {return this.#audioData}
     get midiCCData(): Uint8Array<ArrayBuffer> {return this.#midiCCData}
@@ -121,6 +103,23 @@ export class ShadertoyState {
     onMidiNoteOff(pitch: number): void {
         this.#noteVelocities[pitch].shift()
         this.#updateNoteData(pitch)
+    }
+
+    terminate(): void {this.#terminable.terminate()}
+
+    #listen(project: Project): Terminable {
+        const {engine: {position, sampleRate}, liveStreamReceiver} = project
+        return Terminable.many(
+            AnimationFrame.add(() => this.setPPQN(position.getValue())),
+            ShadertoyMIDIOutput.subscribe(message => MidiData.accept(message, {
+                controller: (id: byte, value: unitValue) => this.onMidiCC(id, value),
+                noteOn: (note: byte, velocity: byte) => this.onMidiNoteOn(note, velocity),
+                noteOff: (note: byte) => this.onMidiNoteOff(note)
+            })),
+            liveStreamReceiver.subscribeFloats(EngineAddresses.PEAKS, (peaks) => this.setPeaks(peaks)),
+            liveStreamReceiver.subscribeFloats(EngineAddresses.SPECTRUM, spectrum => this.setSpectrum(spectrum, sampleRate)),
+            liveStreamReceiver.subscribeFloats(EngineAddresses.WAVEFORM, waveform => this.setWaveform(waveform))
+        )
     }
 
     #updateNoteData(pitch: number): void {

@@ -109,6 +109,8 @@ export class StudioService implements ProjectEnv {
     readonly #sampleService: SampleService
     readonly #soundfontService: SoundfontService
 
+    #shadertoyState: Option<ShadertoyState> = Option.None
+
     #factoryFooterLabel: Option<Provider<FooterLabel>> = Option.None
 
     regionModifierInProgress: boolean = false
@@ -295,6 +297,8 @@ export class StudioService implements ProjectEnv {
 
     factoryFooterLabel(): Option<Provider<FooterLabel>> {return this.#factoryFooterLabel}
 
+    get optShadertoyState(): Option<ShadertoyState> {return this.#shadertoyState}
+
     resetPeaks(): void {this.#signals.notify({type: "reset-peaks"})}
 
     async verifyProject() {
@@ -333,7 +337,7 @@ export class StudioService implements ProjectEnv {
                 console.debug(`switch to %c${meta.name}%c`, "color: hsl(25, 69%, 63%)", "color: inherit")
                 const {timelineBox, timelineBoxAdapter, userEditingManager} = project
                 range.showUnitInterval(0, PPQN.fromSignature(9, 1))
-                lifeTime.own(ShadertoyState.initialize(project))
+                this.#shadertoyState = Option.wrap(lifeTime.own(new ShadertoyState(project)))
                 //
                 // -------------------------------
                 // Show views if content available

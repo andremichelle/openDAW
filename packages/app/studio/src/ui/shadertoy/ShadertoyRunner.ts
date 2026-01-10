@@ -2,6 +2,7 @@ import {Terminable} from "@opendaw/lib-std"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 
 export class ShadertoyRunner implements Terminable {
+    readonly #state: ShadertoyState
     readonly #gl: WebGL2RenderingContext
 
     #uniformLocations: {
@@ -69,8 +70,10 @@ export class ShadertoyRunner implements Terminable {
             fragColor.a = 1.0;
         }
     `
-    constructor(gl: WebGL2RenderingContext) {
+    constructor(state: ShadertoyState, gl: WebGL2RenderingContext) {
+        this.#state = state
         this.#gl = gl
+
         this.#initGeometry()
         this.#initAudioTexture()
         this.#initMidiCCTexture()
@@ -129,7 +132,7 @@ export class ShadertoyRunner implements Terminable {
         if (!this.#program) {
             return
         }
-        const {audioData, midiCCData, midiNoteData, beat, peaks} = ShadertoyState.get()
+        const {audioData, midiCCData, midiNoteData, beat, peaks} = this.#state
         const currentTime = time ?? (performance.now() / 1000.0 - this.#startTime)
         const timeDelta = currentTime - this.#lastFrameTime
         this.#lastFrameTime = currentTime
@@ -220,7 +223,7 @@ export class ShadertoyRunner implements Terminable {
         this.#audioTexture = gl.createTexture()
         gl.bindTexture(gl.TEXTURE_2D, this.#audioTexture)
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 512, 2, 0, gl.RED, gl.UNSIGNED_BYTE,
-            ShadertoyState.get().audioData)
+            this.#state.audioData)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
@@ -232,7 +235,7 @@ export class ShadertoyRunner implements Terminable {
         this.#midiCCTexture = gl.createTexture()
         gl.bindTexture(gl.TEXTURE_2D, this.#midiCCTexture)
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 128, 1, 0, gl.RED, gl.UNSIGNED_BYTE,
-            ShadertoyState.get().midiCCData)
+            this.#state.midiCCData)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
@@ -244,7 +247,7 @@ export class ShadertoyRunner implements Terminable {
         this.#midiNoteTexture = gl.createTexture()
         gl.bindTexture(gl.TEXTURE_2D, this.#midiNoteTexture)
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 128, 1, 0, gl.RED, gl.UNSIGNED_BYTE,
-            ShadertoyState.get().midiNoteData)
+            this.#state.midiNoteData)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)

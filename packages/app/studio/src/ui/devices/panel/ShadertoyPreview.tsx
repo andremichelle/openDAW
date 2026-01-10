@@ -39,7 +39,7 @@ export const ShadertoyPreview = ({lifecycle, service}: Construct) => {
                             element.setAttribute("data-status", "WebGL2 not supported")
                             return
                         }
-                        const runner = new ShadertoyRunner(gl)
+                        const runner = new ShadertoyRunner(service.optShadertoyState.unwrap("no state"), gl)
                         const shaderLifecycle = lifecycle.own(new Terminator())
                         lifecycle.ownAll(
                             visible.catchupAndSubscribe(owner => canvas.classList.toggle("hidden", !owner.getValue())),

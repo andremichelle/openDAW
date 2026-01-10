@@ -34,7 +34,7 @@ export const ShadertoyPreview = ({lifecycle, service}: Construct) => {
                         output.textContent = "WebGL2 not supported"
                         return
                     }
-                    const runner = new ShadertoyRunner(gl)
+                    const runner = new ShadertoyRunner(service.optShadertoyState.unwrap("no state"), gl)
                     const shaderLifecycle = lifecycle.own(new Terminator())
                     lifecycle.ownAll(
                         service.project.rootBox.shadertoy.catchupAndSubscribe(({targetVertex}) => {
