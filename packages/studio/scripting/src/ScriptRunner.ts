@@ -1,4 +1,14 @@
-import {Chord, ClassicWaveform, dbToGain, FFT, gainToDb, Interpolation, midiToHz, PPQN} from "@opendaw/lib-dsp"
+import {
+    AudioData,
+    Chord,
+    ClassicWaveform,
+    dbToGain,
+    FFT,
+    gainToDb,
+    Interpolation,
+    midiToHz,
+    PPQN
+} from "@opendaw/lib-dsp"
 import {VoicingMode} from "@opendaw/studio-enums"
 import {ScriptHostProtocol} from "./ScriptHostProtocol"
 import {ScriptExecutionContext} from "./ScriptExecutionProtocol"
@@ -14,7 +24,8 @@ export class ScriptRunner {
         Object.assign(globalThis, {
             ...context,
             openDAW: this.#api,
-            AudioPlayback, midiToHz, PPQN, FFT, Chord, Interpolation, dbToGain, gainToDb, ClassicWaveform, VoicingMode
+            AudioData, AudioPlayback, midiToHz, PPQN, FFT, Chord, Interpolation,
+            dbToGain, gainToDb, ClassicWaveform, VoicingMode
         })
         const blob = new Blob([jsCode], {type: "text/javascript"})
         const url = URL.createObjectURL(blob)
