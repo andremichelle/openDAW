@@ -52,6 +52,10 @@ export const NumberInput = ({
         }),
         Events.subscribe(element, "focusout", (event: Event) => {
             if (!isInstanceOf(event.target, HTMLElement)) {return}
+            const result = mapper.y(event.target.textContent ?? "")
+            if (result.type === "explicit") {
+                model.setValue(isDefined(guard) ? guard.guard(result.value) : result.value)
+            }
             updateDigits()
             Html.unselectContent(event.target)
         }),

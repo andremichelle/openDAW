@@ -42,29 +42,15 @@ export class VideoOverlay implements Terminable {
 
     render(position: ppqn): void {
         const {width, height} = this.#config
-        const context = this.#ctx
-        context.globalAlpha = 0.4
-        const fontSize = Math.round(height * 0.033)
-        context.clearRect(0, 0, width, height)
-        context.save()
-        context.translate(0, -height * 0.07)
-        this.#renderProjectName(fontSize)
-        this.#renderLogo()
-        context.restore()
-        this.#renderPosition(position, fontSize)
-    }
-
-    #renderProjectName(fontSize: number): void {
         const ctx = this.#ctx
-        const {width, height, projectName} = this.#config
-        ctx.font = `${fontSize}px Rubik`
-        ctx.textBaseline = "bottom"
-        ctx.textAlign = "left"
-        ctx.shadowColor = "rgba(255, 255, 255, 0.9)"
-        ctx.shadowBlur = 12
-        ctx.fillStyle = "rgba(255, 255, 255, 0.9)"
-        ctx.fillText(projectName, width * 0.02, height * 0.144)
-        ctx.shadowBlur = 0
+        ctx.globalAlpha = 0.4
+        const fontSize = Math.round(height * 0.033)
+        ctx.clearRect(0, 0, width, height)
+        ctx.save()
+        ctx.translate(0, -height * 0.07)
+        this.#renderLogo()
+        ctx.restore()
+        this.#renderPosition(position, fontSize)
     }
 
     #renderLogo(): void {
@@ -80,7 +66,7 @@ export class VideoOverlay implements Terminable {
 
     #renderPosition(position: ppqn, fontSize: number): void {
         const ctx = this.#ctx
-        const {width, height} = this.#config
+        const {width, height, projectName} = this.#config
         const {bars, beats, semiquavers, ticks} = PPQN.toParts(Math.abs(position) | 0)
         const positionFontSize = Math.round(fontSize * 0.7)
         const charWidth = positionFontSize * 0.65
@@ -99,12 +85,16 @@ export class VideoOverlay implements Terminable {
             sum + (char === "." || char === ":" ? separatorWidth : charWidth), 0)
         let x = (width - totalWidth) / 2
         const y = height - margin
-        ctx.font = `300 ${positionFontSize}px Rubik`
+
+        ctx.font = `300 ${fontSize}px Rubik`
         ctx.textBaseline = "bottom"
         ctx.textAlign = "center"
         ctx.shadowColor = "rgba(255, 255, 255, 1)"
         ctx.shadowBlur = 12
         ctx.fillStyle = "rgba(255, 255, 255, 0.95)"
+        ctx.fillText(projectName, width / 2, y - fontSize)
+
+        ctx.font = `300 ${positionFontSize}px Rubik`
         for (const char of chars) {
             const w = char === "." || char === ":" ? separatorWidth : charWidth
             ctx.fillText(char, x + w / 2, y)
