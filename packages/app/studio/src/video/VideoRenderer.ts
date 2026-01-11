@@ -5,21 +5,21 @@ import {Files} from "@opendaw/lib-dom"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
 import {ShadertoyBox} from "@opendaw/studio-boxes"
-import {VideoOverlay, WebCodecsVideoExporter} from "@/video/index"
+import {showVideoExportDialog, VideoOverlay, WebCodecsVideoExporter} from "@/video/index"
 
-const WIDTH = 1280
-const HEIGHT = 720
-const FPS = 30
-const SAMPLE_RATE = 48_000
-const MAX_DURATION_SECONDS = TimeSpan.hours(1).absSeconds() // safety net
+const MAX_DURATION_SECONDS = TimeSpan.hours(1).absSeconds()
 const SILENCE_THRESHOLD_DB = -72.0
 const SILENCE_DURATION_SECONDS = 10
 
 export namespace VideoRenderer {
-    export const test = async (source: Project, projectName: string): Promise<void> => {
+    export const render = async (source: Project, projectName: string, sampleRate: number): Promise<void> => {
         if (!WebCodecsVideoExporter.isSupported()) {
             return panic("WebCodecs is not supported in this browser")
         }
+
+        const config = await showVideoExportDialog(sampleRate)
+        const {width, height, frameRate, previewDuration} = config
+
         console.time("Render Video")
         const project = source.copy()
         const {boxGraph, timelineBox: {loopArea: {enabled}}} = project
@@ -37,10 +37,10 @@ export namespace VideoRenderer {
         })
 
         const exportConfig = {
-            width: WIDTH,
-            height: HEIGHT,
-            frameRate: FPS,
-            sampleRate: SAMPLE_RATE,
+            width,
+            height,
+            frameRate,
+            sampleRate,
             numberOfChannels: 2
         }
 
@@ -48,7 +48,7 @@ export namespace VideoRenderer {
         const exporter = await WebCodecsVideoExporter.create(exportConfig)
 
         try {
-            const shadertoyCanvas = new OffscreenCanvas(WIDTH, HEIGHT)
+            const shadertoyCanvas = new OffscreenCanvas(width, height)
             const shadertoyContext = shadertoyCanvas.getContext("webgl2")!
             const shadertoyState = new ShadertoyState(project)
             const shadertoyRunner = new ShadertoyRunner(shadertoyState, shadertoyContext)
@@ -57,29 +57,29 @@ export namespace VideoRenderer {
                 const code = asInstanceOf(shadertoy.targetVertex.unwrap().box, ShadertoyBox).shaderCode.getValue()
                 shadertoyRunner.compile(code)
             }
-            const compositionCanvas = new OffscreenCanvas(WIDTH, HEIGHT)
+            const compositionCanvas = new OffscreenCanvas(width, height)
             const compositionCtx = compositionCanvas.getContext("2d")!
-            const overlay = await VideoOverlay.create({
-                width: WIDTH,
-                height: HEIGHT,
-                projectName
-            })
+            const overlay = await VideoOverlay.create({width, height, projectName})
 
-            const renderer = await OfflineEngineRenderer.create(project, Option.None, SAMPLE_RATE)
+            const renderer = await OfflineEngineRenderer.create(project, Option.None, sampleRate)
             renderer.play()
 
-            const maxFrames = Math.ceil(MAX_DURATION_SECONDS * FPS)
             const tempoMap = project.tempoMap
-
-            const estimatedDurationInSeconds = tempoMap.ppqnToSeconds(project.lastRegionAction())
-            const estimatedNumberOfFrames = Math.ceil(estimatedDurationInSeconds * FPS)
+            const estimatedDurationInSeconds = previewDuration > 0
+                ? previewDuration
+                : tempoMap.ppqnToSeconds(project.lastRegionAction())
+            const maxDuration = previewDuration > 0
+                ? previewDuration
+                : MAX_DURATION_SECONDS
+            const maxFrames = Math.ceil(maxDuration * frameRate)
+            const estimatedNumberOfFrames = Math.ceil(estimatedDurationInSeconds * frameRate)
 
             const silenceThreshold = dbToGain(SILENCE_THRESHOLD_DB)
-            const silenceSamplesNeeded = Math.ceil(SILENCE_DURATION_SECONDS * SAMPLE_RATE)
+            const silenceSamplesNeeded = Math.ceil(SILENCE_DURATION_SECONDS * sampleRate)
             let consecutiveSilentSamples = 0
             let hasHadAudio = false
 
-            const idealSamplesPerFrame = SAMPLE_RATE / FPS
+            const idealSamplesPerFrame = sampleRate / frameRate
             let samplesRendered = 0
             let frameIndex = 0
 
@@ -93,24 +93,27 @@ export namespace VideoRenderer {
                 const actualSamplesToRender = quantumsNeeded * RenderQuantum
                 const channels = await renderer.step(actualSamplesToRender)
                 samplesRendered += actualSamplesToRender
-                let maxSample = 0
-                for (const channel of channels) {
-                    for (const sample of channel) {
-                        const absoluteValue = Math.abs(sample)
-                        if (absoluteValue > maxSample) {maxSample = absoluteValue}
+
+                if (previewDuration === 0) {
+                    let maxSample = 0
+                    for (const channel of channels) {
+                        for (const sample of channel) {
+                            const absoluteValue = Math.abs(sample)
+                            if (absoluteValue > maxSample) {maxSample = absoluteValue}
+                        }
                     }
-                }
-                if (maxSample > silenceThreshold) {
-                    hasHadAudio = true
-                    consecutiveSilentSamples = 0
-                } else if (hasHadAudio) {
-                    consecutiveSilentSamples += actualSamplesToRender
-                    if (consecutiveSilentSamples >= silenceSamplesNeeded) {
-                        break
+                    if (maxSample > silenceThreshold) {
+                        hasHadAudio = true
+                        consecutiveSilentSamples = 0
+                    } else if (hasHadAudio) {
+                        consecutiveSilentSamples += actualSamplesToRender
+                        if (consecutiveSilentSamples >= silenceSamplesNeeded) {
+                            break
+                        }
                     }
                 }
 
-                const seconds = renderer.totalFrames / SAMPLE_RATE
+                const seconds = renderer.totalFrames / sampleRate
                 const ppqn = tempoMap.secondsToPPQN(seconds)
                 shadertoyState.setPPQN(ppqn)
                 shadertoyRunner.render(seconds)
@@ -121,7 +124,7 @@ export namespace VideoRenderer {
                 compositionCtx.drawImage(overlay.canvas, 0, 0)
                 compositionCtx.globalCompositeOperation = "source-over"
 
-                const timestampSeconds = frameIndex / FPS
+                const timestampSeconds = frameIndex / frameRate
                 await exporter.addFrame(compositionCanvas, channels, timestampSeconds)
                 frameIndex++
             }

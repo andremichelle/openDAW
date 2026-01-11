@@ -44,6 +44,7 @@ export enum IconSymbol {
     Exit,
     ExpandWidth,
     FileList,
+    Film,
     Flask,
     Focus,
     Generator,
@@ -134,7 +135,7 @@ export enum IconSymbol {
     Volume,
     VUMeter,
     Waveform,
-    Zeitgeist
+    Zeitgeist,
 }
 
 export namespace IconSymbol {
