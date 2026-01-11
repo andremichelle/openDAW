@@ -109,7 +109,6 @@ export const showVideoExportDialog = async (sampleRate: number): Promise<VideoEx
             </div>
         </Dialog>
     )
-
     dialog.oncancel = () => reject(Errors.AbortError)
     Surface.get().flyout.appendChild(dialog)
     dialog.showModal()
