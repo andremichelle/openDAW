@@ -5,7 +5,7 @@ import {Files} from "@opendaw/lib-dom"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
 import {ShadertoyBox} from "@opendaw/studio-boxes"
-import {showVideoExportDialog, VideoOverlay, WebCodecsVideoExporter} from "@/video/index"
+import {showVideoExportDialog, VideoOverlay, WebCodecsVideoExporter} from "@/video"
 
 const MAX_DURATION_SECONDS = TimeSpan.hours(1).absSeconds()
 const SILENCE_THRESHOLD_DB = -72.0
