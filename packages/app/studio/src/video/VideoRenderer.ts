@@ -5,7 +5,7 @@ import {Files} from "@opendaw/lib-dom"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
 import {ShadertoyBox} from "@opendaw/studio-boxes"
-import {WebCodecsVideoExporter} from "@/video/index"
+import {VideoOverlay, WebCodecsVideoExporter} from "@/video/index"
 
 const WIDTH = 1280
 const HEIGHT = 720
@@ -16,7 +16,7 @@ const SILENCE_THRESHOLD_DB = -72.0
 const SILENCE_DURATION_SECONDS = 10
 
 export namespace VideoRenderer {
-    export const test = async (source: Project): Promise<void> => {
+    export const test = async (source: Project, projectName: string): Promise<void> => {
         if (!WebCodecsVideoExporter.isSupported()) {
             return panic("WebCodecs is not supported in this browser")
         }
@@ -48,15 +48,22 @@ export namespace VideoRenderer {
         const exporter = await WebCodecsVideoExporter.create(exportConfig)
 
         try {
-            const canvas = new OffscreenCanvas(WIDTH, HEIGHT)
-            const context = canvas.getContext("webgl2")!
+            const shadertoyCanvas = new OffscreenCanvas(WIDTH, HEIGHT)
+            const shadertoyContext = shadertoyCanvas.getContext("webgl2")!
             const shadertoyState = new ShadertoyState(project)
-            const shadertoyRunner = new ShadertoyRunner(shadertoyState, context)
+            const shadertoyRunner = new ShadertoyRunner(shadertoyState, shadertoyContext)
             const shadertoy = project.rootBoxAdapter.box.shadertoy
             if (shadertoy.nonEmpty()) {
                 const code = asInstanceOf(shadertoy.targetVertex.unwrap().box, ShadertoyBox).shaderCode.getValue()
                 shadertoyRunner.compile(code)
             }
+            const compositionCanvas = new OffscreenCanvas(WIDTH, HEIGHT)
+            const compositionCtx = compositionCanvas.getContext("2d")!
+            const overlay = await VideoOverlay.create({
+                width: WIDTH,
+                height: HEIGHT,
+                projectName
+            })
 
             const renderer = await OfflineEngineRenderer.create(project, Option.None, SAMPLE_RATE)
             renderer.play()
@@ -107,8 +114,15 @@ export namespace VideoRenderer {
                 const ppqn = tempoMap.secondsToPPQN(seconds)
                 shadertoyState.setPPQN(ppqn)
                 shadertoyRunner.render(seconds)
+
+                compositionCtx.drawImage(shadertoyCanvas, 0, 0)
+                overlay.render(ppqn)
+                compositionCtx.globalCompositeOperation = "screen"
+                compositionCtx.drawImage(overlay.canvas, 0, 0)
+                compositionCtx.globalCompositeOperation = "source-over"
+
                 const timestampSeconds = frameIndex / FPS
-                await exporter.addFrame(canvas, channels, timestampSeconds)
+                await exporter.addFrame(compositionCanvas, channels, timestampSeconds)
                 frameIndex++
             }
 
@@ -116,6 +130,7 @@ export namespace VideoRenderer {
             renderer.terminate()
             shadertoyState.terminate()
             shadertoyRunner.terminate()
+            overlay.terminate()
 
             if (!rendering) {
                 dialog.terminate()

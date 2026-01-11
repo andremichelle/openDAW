@@ -37,6 +37,10 @@ export default defineConfig(({command}) => {
             sourcemap: true,
             modulePreload: false, // Disable modulepreload polyfill injection
             rollupOptions: {
+                input: {
+                    main: resolve(__dirname, "index.html"),
+                    "overlay-preview": resolve(__dirname, "overlay-preview.html")
+                },
                 output: {
                     format: "es",
                     entryFileNames: `[name].${uuid}.js`,
@@ -101,8 +105,13 @@ export default defineConfig(({command}) => {
                     server.middlewares.use((req, res, next) => {
                         const url: string | undefined = req.url
                         if (url !== undefined && url.indexOf(".") === -1 && !url.startsWith("/@vite/")) {
-                            const indexPath = resolve(__dirname, "index.html")
-                            res.end(readFileSync(indexPath))
+                            if (url === "/overlay-preview") {
+                                const previewPath = resolve(__dirname, "overlay-preview.html")
+                                res.end(readFileSync(previewPath))
+                            } else {
+                                const indexPath = resolve(__dirname, "index.html")
+                                res.end(readFileSync(indexPath))
+                            }
                         } else {
                             next()
                         }

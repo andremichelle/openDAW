@@ -85,7 +85,7 @@ export const populateStudioMenu = (service: StudioService) => {
                                 label: "Video...",
                                 selectable: service.hasProfile,
                                 hidden: !Browser.isLocalHost()
-                            }).setTriggerProcedure(async () => VideoRenderer.test(service.project))
+                            }).setTriggerProcedure(async () => VideoRenderer.test(service.project, service.profile.meta.name))
                         )),
                     MenuItem.default({label: "Cloud Backup"})
                         .setRuntimeChildrenProcedure(parent => {
