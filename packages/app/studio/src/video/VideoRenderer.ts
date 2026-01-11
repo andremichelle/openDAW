@@ -1,4 +1,4 @@
-import {asInstanceOf, Option, panic, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
+import {asInstanceOf, DefaultObservableValue, Option, panic, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
 import {dbToGain, RenderQuantum} from "@opendaw/lib-dsp"
 import {OfflineEngineRenderer, Project} from "@opendaw/studio-core"
 import {Files} from "@opendaw/lib-dom"
@@ -29,7 +29,12 @@ export namespace VideoRenderer {
 
         let rendering = true
 
-        const dialog = RuntimeNotifier.progress({headline: "Rendering video...", cancel: () => rendering = false})
+        const progress = new DefaultObservableValue(0.0)
+        const dialog = RuntimeNotifier.progress({
+            headline: "Rendering video...",
+            progress: progress,
+            cancel: () => rendering = false
+        })
 
         const exportConfig = {
             width: WIDTH,
@@ -59,6 +64,9 @@ export namespace VideoRenderer {
             const maxFrames = Math.ceil(MAX_DURATION_SECONDS * FPS)
             const tempoMap = project.tempoMap
 
+            const estimatedDurationInSeconds = tempoMap.ppqnToSeconds(project.lastRegionAction())
+            const estimatedNumberOfFrames = Math.ceil(estimatedDurationInSeconds * FPS)
+
             const silenceThreshold = dbToGain(SILENCE_THRESHOLD_DB)
             const silenceSamplesNeeded = Math.ceil(SILENCE_DURATION_SECONDS * SAMPLE_RATE)
             let consecutiveSilentSamples = 0
@@ -69,7 +77,8 @@ export namespace VideoRenderer {
             let frameIndex = 0
 
             while (frameIndex < maxFrames && rendering) {
-                dialog.message = `Rendering frame ${frameIndex + 1}`
+                dialog.message = `Rendering ${frameIndex + 1} of estimated ${estimatedNumberOfFrames} frames`
+                progress.setValue(frameIndex / estimatedNumberOfFrames)
 
                 const targetSamples = Math.round((frameIndex + 1) * idealSamplesPerFrame)
                 const samplesToRender = targetSamples - samplesRendered

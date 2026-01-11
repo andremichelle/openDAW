@@ -1,6 +1,7 @@
 import {
     Arrays,
     Func,
+    isDefined,
     panic,
     Procedure,
     safeExecute,
@@ -50,7 +51,7 @@ import {EngineFacade} from "../EngineFacade"
 import {EngineWorklet} from "../EngineWorklet"
 import {MidiDevices, MIDILearning} from "../midi"
 import {ProjectValidation} from "./ProjectValidation"
-import {TempoMap, TimeBase} from "@opendaw/lib-dsp"
+import {ppqn, TempoMap, TimeBase} from "@opendaw/lib-dsp"
 import {MidiData} from "@opendaw/lib-midi"
 import {StudioPreferences} from "../StudioPreferences"
 
@@ -288,6 +289,13 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                 return false
             }
         }) ?? false)
+    }
+
+    lastRegionAction(): ppqn {
+        return this.rootBoxAdapter.audioUnits.adapters()
+            .flatMap(audioUnitAdapter => audioUnitAdapter.tracks.values()
+                .map(trackAdapter => trackAdapter.regions.collection.asArray().at(-1)))
+            .filter(isDefined).reduce((position, region) => Math.max(position, region.complete), 0)
     }
 
     terminate(): void {
