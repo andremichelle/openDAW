@@ -1,6 +1,22 @@
-import {int, Unhandled} from "./lang"
+import {Func, int, Unhandled, unitValue} from "./lang"
 
 export class TimeSpan {
+    static readonly createEstimator = (): Func<unitValue, TimeSpan> => {
+        const startTime: number = performance.now()
+        let output: TimeSpan = TimeSpan.millis(Number.POSITIVE_INFINITY)
+        let seconds: int = 0 | 0
+        return (progress: number): TimeSpan => {
+            if (progress === 0.0) {return TimeSpan.POSITIVE_INFINITY}
+            if (progress >= 1.0) {return TimeSpan.millis(0)}
+            const elapsedTime = performance.now() - startTime
+            if (elapsedTime > seconds * 1000.0) {
+                output = TimeSpan.millis(elapsedTime / progress - elapsedTime)
+                seconds++
+            }
+            return output
+        }
+    }
+
     static readonly POSITIVE_INFINITY = new TimeSpan(Number.POSITIVE_INFINITY)
     static readonly millis = (value: number) => new TimeSpan(value)
     static readonly seconds = (value: number) => new TimeSpan(value * TimeSpan.#MILLI_SECONDS_PER_SECOND)

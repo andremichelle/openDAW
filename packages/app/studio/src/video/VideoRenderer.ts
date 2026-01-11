@@ -6,6 +6,7 @@ import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
 import {ShadertoyBox} from "@opendaw/studio-boxes"
 import {showVideoExportDialog, VideoOverlay, WebCodecsVideoExporter} from "@/video"
+import {Promises} from "@opendaw/lib-runtime"
 
 const MAX_DURATION_SECONDS = TimeSpan.hours(1).absSeconds()
 const SILENCE_THRESHOLD_DB = -72.0
@@ -25,21 +26,23 @@ export namespace VideoRenderer {
         enabled.setValue(false)
         boxGraph.endTransaction()
         let active = true
-        const progress = new DefaultObservableValue(0.0)
+        const progressValue = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({
             headline: "Rendering video...",
-            progress: progress,
+            progress: progressValue,
             cancel: () => active = false
         })
 
         dialog.message = "Initializing..."
-        const exporter = await WebCodecsVideoExporter.create({
+        const exporter = await Promises.timeout(WebCodecsVideoExporter.create({
             width,
             height,
             frameRate,
             sampleRate,
             numberOfChannels: 2
-        })
+        }), TimeSpan.seconds(10))
+
+        const estimator = TimeSpan.createEstimator()
 
         try {
             const shadertoyCanvas = new OffscreenCanvas(width, height)
@@ -81,8 +84,13 @@ export namespace VideoRenderer {
             let frameIndex = 0
 
             while (frameIndex < maxFrames && active) {
-                dialog.message = `Rendering ${frameIndex + 1} of estimated ${estimatedNumberOfFrames} frames`
-                progress.setValue(frameIndex / estimatedNumberOfFrames)
+                if (frameIndex >= estimatedNumberOfFrames) {
+                    dialog.message = `Waiting for silence...`
+                } else {
+                    const progress = frameIndex / estimatedNumberOfFrames
+                    dialog.message = `Frame ${frameIndex + 1} / ${estimatedNumberOfFrames} (${estimator(progress)})`
+                    progressValue.setValue(progress)
+                }
 
                 const targetSamples = Math.round((frameIndex + 1) * idealSamplesPerFrame)
                 const samplesToRender = targetSamples - samplesRendered
