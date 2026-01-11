@@ -166,8 +166,11 @@ export namespace TestVideoRendering {
             }
 
             // Combine video and audio with FFmpeg
-            dialog.message = "Encoding video... (This takes a while)"
-            progressValue.setValue(0.85)
+            dialog.message = "Encoding video..."
+            const encodeProgressSubscription = ffmpeg.progressNotifier.subscribe(encodeProgress => {
+                progressValue.setValue(0.8 + encodeProgress * 0.15)
+                dialog.message = `Encoding video... ${Math.round(encodeProgress * 100)}%`
+            })
 
             await ffmpeg.ffmpeg.exec([
                 "-framerate", String(FPS),
@@ -183,6 +186,8 @@ export namespace TestVideoRendering {
                 "-y",
                 "output.mp4"
             ])
+
+            encodeProgressSubscription.terminate()
 
             progressValue.setValue(0.95)
             dialog.message = "Finalizing..."
