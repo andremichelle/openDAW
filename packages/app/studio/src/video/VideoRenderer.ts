@@ -16,36 +16,30 @@ export namespace VideoRenderer {
         if (!WebCodecsVideoExporter.isSupported()) {
             return panic("WebCodecs is not supported in this browser")
         }
-
         const config = await showVideoExportDialog(sampleRate)
-        const {width, height, frameRate, previewDuration} = config
-
+        const {width, height, frameRate, duration, overlay: overlayEnabled} = config
         console.time("Render Video")
         const project = source.copy()
         const {boxGraph, timelineBox: {loopArea: {enabled}}} = project
         boxGraph.beginTransaction()
         enabled.setValue(false)
         boxGraph.endTransaction()
-
-        let rendering = true
-
+        let active = true
         const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({
             headline: "Rendering video...",
             progress: progress,
-            cancel: () => rendering = false
+            cancel: () => active = false
         })
 
-        const exportConfig = {
+        dialog.message = "Initializing..."
+        const exporter = await WebCodecsVideoExporter.create({
             width,
             height,
             frameRate,
             sampleRate,
             numberOfChannels: 2
-        }
-
-        dialog.message = "Initializing..."
-        const exporter = await WebCodecsVideoExporter.create(exportConfig)
+        })
 
         try {
             const shadertoyCanvas = new OffscreenCanvas(width, height)
@@ -56,6 +50,9 @@ export namespace VideoRenderer {
             if (shadertoy.nonEmpty()) {
                 const code = asInstanceOf(shadertoy.targetVertex.unwrap().box, ShadertoyBox).shaderCode.getValue()
                 shadertoyRunner.compile(code)
+            } else {
+                shadertoyRunner.compile(
+                    `void mainImage(out vec4 fragColor, in vec2 fragCoord){vec2 uv = fragCoord/iResolution.xy;vec3 col = 0.5 + 0.5*cos(iTime+uv.xyx+vec3(0,1,2));fragColor = vec4(col,1.0);}`)
             }
             const compositionCanvas = new OffscreenCanvas(width, height)
             const compositionCtx = compositionCanvas.getContext("2d")!
@@ -65,11 +62,11 @@ export namespace VideoRenderer {
             renderer.play()
 
             const tempoMap = project.tempoMap
-            const estimatedDurationInSeconds = previewDuration > 0
-                ? previewDuration
+            const estimatedDurationInSeconds = duration > 0
+                ? duration
                 : tempoMap.ppqnToSeconds(project.lastRegionAction())
-            const maxDuration = previewDuration > 0
-                ? previewDuration
+            const maxDuration = duration > 0
+                ? duration
                 : MAX_DURATION_SECONDS
             const maxFrames = Math.ceil(maxDuration * frameRate)
             const estimatedNumberOfFrames = Math.ceil(estimatedDurationInSeconds * frameRate)
@@ -83,7 +80,7 @@ export namespace VideoRenderer {
             let samplesRendered = 0
             let frameIndex = 0
 
-            while (frameIndex < maxFrames && rendering) {
+            while (frameIndex < maxFrames && active) {
                 dialog.message = `Rendering ${frameIndex + 1} of estimated ${estimatedNumberOfFrames} frames`
                 progress.setValue(frameIndex / estimatedNumberOfFrames)
 
@@ -93,8 +90,7 @@ export namespace VideoRenderer {
                 const actualSamplesToRender = quantumsNeeded * RenderQuantum
                 const channels = await renderer.step(actualSamplesToRender)
                 samplesRendered += actualSamplesToRender
-
-                if (previewDuration === 0) {
+                if (duration === 0) {
                     let maxSample = 0
                     for (const channel of channels) {
                         for (const sample of channel) {
@@ -119,10 +115,13 @@ export namespace VideoRenderer {
                 shadertoyRunner.render(seconds)
 
                 compositionCtx.drawImage(shadertoyCanvas, 0, 0)
-                overlay.render(ppqn)
-                compositionCtx.globalCompositeOperation = "screen"
-                compositionCtx.drawImage(overlay.canvas, 0, 0)
-                compositionCtx.globalCompositeOperation = "source-over"
+
+                if (overlayEnabled) {
+                    overlay.render(ppqn)
+                    compositionCtx.globalCompositeOperation = "screen"
+                    compositionCtx.drawImage(overlay.canvas, 0, 0)
+                    compositionCtx.globalCompositeOperation = "source-over"
+                }
 
                 const timestampSeconds = frameIndex / frameRate
                 await exporter.addFrame(compositionCanvas, channels, timestampSeconds)
@@ -135,7 +134,7 @@ export namespace VideoRenderer {
             shadertoyRunner.terminate()
             overlay.terminate()
 
-            if (!rendering) {
+            if (!active) {
                 dialog.terminate()
                 exporter.terminate()
                 return

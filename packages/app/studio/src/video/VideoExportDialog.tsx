@@ -2,17 +2,20 @@ import {Dialog} from "@/ui/components/Dialog"
 import {Surface} from "@/ui/surface/Surface"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {createElement} from "@opendaw/lib-jsx"
-import {DefaultObservableValue, Errors, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, isInstanceOf, Terminator} from "@opendaw/lib-std"
 import {Button} from "@/ui/components/Button"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {NumberInput} from "@/ui/components/NumberInput"
+import {Checkbox} from "@/ui/components/Checkbox"
+import {Icon} from "@/ui/components/Icon"
 
 export interface VideoExportConfig {
     readonly width: number
     readonly height: number
     readonly frameRate: number
     readonly sampleRate: number
-    readonly previewDuration: number
+    readonly duration: number
+    readonly overlay: boolean
 }
 
 type DimensionPreset = {
@@ -30,14 +33,15 @@ const PRESETS: ReadonlyArray<DimensionPreset> = [
 
 const FPS_OPTIONS: ReadonlyArray<number> = [30, 60, 120]
 
+const widthModel = new DefaultObservableValue(1280)
+const heightModel = new DefaultObservableValue(720)
+const fpsModel = new DefaultObservableValue(60)
+const durationModel = new DefaultObservableValue(0)
+const overlayModel = new DefaultObservableValue(true)
+
 export const showVideoExportDialog = async (sampleRate: number): Promise<VideoExportConfig> => {
     const {resolve, reject, promise} = Promise.withResolvers<VideoExportConfig>()
     const lifecycle = new Terminator()
-
-    const widthModel = new DefaultObservableValue(1280)
-    const heightModel = new DefaultObservableValue(720)
-    const fpsModel = new DefaultObservableValue(60)
-    const previewModel = new DefaultObservableValue(0)
 
     const setDimensions = (width: number, height: number): void => {
         widthModel.setValue(width)
@@ -60,13 +64,17 @@ export const showVideoExportDialog = async (sampleRate: number): Promise<VideoEx
                         text: "Export",
                         primary: true,
                         onClick: handler => {
+                            if (isInstanceOf(document.activeElement, HTMLElement)) {
+                                document.activeElement.blur()
+                            }
                             handler.close()
                             resolve({
                                 width: widthModel.getValue(),
                                 height: heightModel.getValue(),
                                 frameRate: fpsModel.getValue(),
                                 sampleRate,
-                                previewDuration: previewModel.getValue()
+                                duration: durationModel.getValue(),
+                                overlay: overlayModel.getValue()
                             })
                         }
                     }
@@ -81,7 +89,13 @@ export const showVideoExportDialog = async (sampleRate: number): Promise<VideoEx
                         <NumberInput lifecycle={lifecycle} model={heightModel} maxChars={5}/>
                         <span style={{opacity: "0.5"}}>px</span>
                     </div>
-                    <div style={{display: "flex", gap: "0.25em", flexWrap: "wrap", marginTop: "0.5em"}}>
+                    <div style={{
+                        display: "flex",
+                        gap: "0.25em",
+                        flexWrap: "wrap",
+                        marginTop: "0.5em",
+                        fontSize: "0.75em"
+                    }}>
                         {PRESETS.map(preset => (
                             <Button lifecycle={lifecycle}
                                     onClick={() => setDimensions(preset.width, preset.height)}>
@@ -100,11 +114,17 @@ export const showVideoExportDialog = async (sampleRate: number): Promise<VideoEx
                     </div>
                 </div>
                 <div>
-                    <div style={{marginBottom: "0.5em", fontWeight: "bold"}}>Preview Duration</div>
+                    <div style={{marginBottom: "0.5em", fontWeight: "bold"}}>Duration</div>
                     <div style={{display: "flex", gap: "0.5em", alignItems: "center"}}>
-                        <NumberInput lifecycle={lifecycle} model={previewModel} maxChars={4}/>
-                        <span style={{opacity: "0.5"}}>seconds (0 = full)</span>
+                        <NumberInput lifecycle={lifecycle} model={durationModel} maxChars={4}/>
+                        <span style={{fontSize: "0.875em", opacity: "0.5"}}>seconds (0 = full)</span>
                     </div>
+                </div>
+                <div style={{fontSize: "0.875em", marginTop: "1em"}}>
+                    <Checkbox lifecycle={lifecycle} model={overlayModel}>
+                        <span>Render Overlay</span>
+                        <Icon symbol={IconSymbol.Checkbox}/>
+                    </Checkbox>
                 </div>
             </div>
         </Dialog>
