@@ -39,7 +39,9 @@ export class WebCodecsVideoExporter implements VideoExporter {
         })
         const videoSource = new CanvasSource(canvas, {
             codec: "avc",
-            bitrate: config.videoBitrate ?? 5_000_000
+            bitrate: config.videoBitrate ?? 5_000_000,
+            bitrateMode: "constant",
+            keyFrameInterval: 2
         })
         output.addVideoTrack(videoSource)
         const audioSource = new AudioSampleSource({
