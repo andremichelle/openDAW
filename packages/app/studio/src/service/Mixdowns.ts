@@ -15,7 +15,8 @@ import {ExportStemsConfiguration} from "@opendaw/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs"
 
 export namespace Mixdowns {
-    export const exportMixdown = async ({project, meta}: ProjectProfile): Promise<void> => {
+    export const exportMixdown = async ({project: source, meta}: ProjectProfile): Promise<void> => {
+        const project = source.copy()
         const abortController = new AbortController()
         const dialog = RuntimeNotifier.progress({
             headline: "Rendering mixdown...",
@@ -63,8 +64,9 @@ export namespace Mixdowns {
         return promise
     }
 
-    export const exportStems = async ({project, meta}: ProjectProfile,
+    export const exportStems = async ({project: source, meta}: ProjectProfile,
                                       config: ExportStemsConfiguration): Promise<void> => {
+        const project = source.copy()
         const abortController = new AbortController()
         const dialog = RuntimeNotifier.progress({
             headline: "Rendering mixdown...",

@@ -17,6 +17,7 @@ import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {SyncLogService} from "@/service/SyncLogService"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {VideoRenderer} from "@/video/VideoRenderer"
+import {CodecsUtils} from "@/CodecsUtils"
 
 export const populateStudioMenu = (service: StudioService) => {
     const Global = GlobalShortcuts
@@ -199,6 +200,8 @@ export const populateStudioMenu = (service: StudioService) => {
                             label: "Throw an error in audio-worklet 💣",
                             hidden: !Browser.isLocalHost()
                         }).setTriggerProcedure(() => service.panicEngine()),
+                        MenuItem.default({label: "List Supported Codecs...", separatorBefore: true})
+                            .setTriggerProcedure(() => CodecsUtils.listSupportedCodecs()),
                         MenuItem.default({label: "Clear Local Storage", separatorBefore: true})
                             .setTriggerProcedure(async () => {
                                 const approved = await RuntimeNotifier.approve({
