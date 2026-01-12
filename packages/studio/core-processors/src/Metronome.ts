@@ -32,7 +32,7 @@ export class Metronome {
         const enabled = this.#context.timeInfo.metronomeEnabled
         const signatureTrack = this.#context.timelineBoxAdapter.signatureTrack
         const metronome = this.#context.preferences.settings.metronome
-        const {beatSubDivision, gain} = metronome
+        const {beatSubDivision, gain, monophonic} = metronome
         blocks.forEach(({p0, p1, bpm, s0, s1, flags}) => {
             if (enabled && Bits.every(flags, BlockFlag.transporting)) {
                 for (const [curr, next] of Iterables.pairWise(signatureTrack.iterateAll())) {
@@ -51,6 +51,7 @@ export class Metronome {
                         const distanceToEvent = Math.floor(PPQN.pulsesToSamples(position - p0, bpm, sampleRate))
                         const beatIndex = Math.round((position - signatureStart) / stepSize)
                         const clickIndex = beatIndex % curr.nominator === 0 ? 0 : 1
+                        if (monophonic) {this.#clicks.forEach(click => click.fadeOut())}
                         this.#clicks.push(new Click(this.#clickSounds[clickIndex], s0 + distanceToEvent, gain))
                         position += stepSize
                     }
@@ -70,11 +71,14 @@ export class Metronome {
 }
 
 class Click {
+    static readonly FadeOutDuration: int = Math.floor(0.005 * sampleRate) | 0 // 5ms fade-out
+
     readonly #audioData: AudioData
     readonly #gainInDb: number
 
     #position: int = 0 | 0
     #startIndex: int = 0 | 0
+    #fadeOutPosition: int = -1 | 0
 
     constructor(audioData: AudioData, startIndex: int, gainInDb: number) {
         assert(startIndex >= 0 && startIndex < RenderQuantum, `${startIndex} out of bounds`)
@@ -83,6 +87,8 @@ class Click {
         this.#startIndex = startIndex
     }
 
+    fadeOut(): void {if (this.#fadeOutPosition < 0) {this.#fadeOutPosition = 0}}
+
     processAdd(buffer: AudioBuffer, start: int, end: int): boolean {
         const [out0, out1] = buffer.channels()
         const gain = dbToGain(this.#gainInDb)
@@ -90,12 +96,18 @@ class Click {
         const inp0 = frames[0]
         const inp1 = frames[numberOfChannels > 1 ? 1 : 0]
         const ratio = dataSampleRate / sampleRate
+        const isFadingOut = this.#fadeOutPosition >= 0
+        let fadeGain = 1.0
         for (let index = Math.max(this.#startIndex, start); index < end; index++) {
             const pFloat = this.#position
             const pInt = pFloat | 0
             const pAlpha = pFloat - pInt
-            out0[index] += (inp0[pInt] + pAlpha * (inp0[pInt + 1] - inp0[pInt])) * gain
-            out1[index] += (inp1[pInt] + pAlpha * (inp1[pInt + 1] - inp1[pInt])) * gain
+            if (isFadingOut) {
+                fadeGain = 1.0 - this.#fadeOutPosition / Click.FadeOutDuration
+                if (++this.#fadeOutPosition >= Click.FadeOutDuration) {return true}
+            }
+            out0[index] += (inp0[pInt] + pAlpha * (inp0[pInt + 1] - inp0[pInt])) * gain * fadeGain
+            out1[index] += (inp1[pInt] + pAlpha * (inp1[pInt + 1] - inp1[pInt])) * gain * fadeGain
             this.#position += ratio
             if (this.#position >= numberOfFrames - 1) {return true}
         }

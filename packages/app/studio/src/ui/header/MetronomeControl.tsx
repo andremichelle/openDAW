@@ -53,6 +53,10 @@ export const MetronomeControl = ({lifecycle, service, preferences}: Construct) =
                           checked: metronome.enabled,
                           shortcut: GlobalShortcuts["toggle-metronome"].shortcut.format()
                       }).setTriggerProcedure(() => metronome.enabled = !metronome.enabled),
+                      MenuItem.default({
+                          label: "Monophonic",
+                          checked: metronome.monophonic
+                      }).setTriggerProcedure(() => metronome.monophonic = !metronome.monophonic),
                       MenuItem.default({label: "Beat Divider"})
                           .setRuntimeChildrenProcedure(parent =>
                               parent.addMenuItem(...EngineSettings.BeatSubDivisionOptions

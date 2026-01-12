@@ -12,11 +12,13 @@ export const EngineSettingsSchema = z.object({
     metronome: z.object({
         enabled: z.boolean(),
         beatSubDivision: z.union(_BeatSubDivisionOptions.map(value => z.literal(value))),
-        gain: z.number().min(Number.NEGATIVE_INFINITY).max(0)
+        gain: z.number().min(Number.NEGATIVE_INFINITY).max(0),
+        monophonic: z.boolean()
     }).default({
         enabled: false,
         beatSubDivision: 1,
-        gain: -6.0
+        gain: -6.0,
+        monophonic: true
     }),
     playback: z.object({
         timestampEnabled: z.boolean(),

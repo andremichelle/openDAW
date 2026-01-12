@@ -61,7 +61,8 @@ export namespace PreferencesPageLabels {
             fields: {
                 enabled: "Enabled",
                 beatSubDivision: "Beat subdivision",
-                gain: "Volume (dB)"
+                gain: "Volume (dB)",
+                monophonic: "Monophonic"
             }
         },
         playback: {
