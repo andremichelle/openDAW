@@ -1,11 +1,27 @@
 import {BlockFlag, ProcessInfo} from "./processing"
-import {AudioBuffer, dbToGain, PPQN, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioBuffer, AudioData, dbToGain, PPQN, RenderQuantum} from "@opendaw/lib-dsp"
 import {assert, Bits, int, isNotNull, Iterables, TAU} from "@opendaw/lib-std"
 import {EngineContext} from "./EngineContext"
 
 export class Metronome {
+    static createDefaultClickSounds(): ReadonlyArray<AudioData> {
+        return [880.0, 440.0].map(frequency => {
+            const attack = Math.floor(0.002 * sampleRate)
+            const release = Math.floor(0.050 * sampleRate)
+            const numberOfFrames = attack + release
+            const data = AudioData.create(sampleRate, numberOfFrames, 1)
+            for (let index = 0; index < numberOfFrames; index++) {
+                const env = Math.min(index / attack, 1.0 - (index - attack) / release)
+                const amp = Math.sin(index / sampleRate * TAU * frequency) * env * env
+                data.frames[0][index] += amp
+            }
+            return data
+        })
+    }
+
     readonly #context: EngineContext
     readonly #output = new AudioBuffer()
+    readonly #clickSounds = Metronome.createDefaultClickSounds()
     readonly #clicks: Click[] = []
 
     constructor(context: EngineContext) {this.#context = context}
@@ -32,7 +48,8 @@ export class Metronome {
                     while (position < regionEnd) {
                         const distanceToEvent = Math.floor(PPQN.pulsesToSamples(position - p0, bpm, sampleRate))
                         const beatIndex = Math.round((position - signatureStart) / stepSize)
-                        this.#clicks.push(new Click(s0 + distanceToEvent, beatIndex % curr.nominator === 0, gain))
+                        const clickIndex = beatIndex % curr.nominator === 0 ? 0 : 1
+                        this.#clicks.push(new Click(this.#clickSounds[clickIndex], s0 + distanceToEvent, gain))
                         position += stepSize
                     }
                 }
@@ -51,30 +68,34 @@ export class Metronome {
 }
 
 class Click {
-    readonly #frequency: number
+    readonly #audioData: AudioData
     readonly #gainInDb: number
 
     #position: int = 0 | 0
     #startIndex: int = 0 | 0
 
-    constructor(startIndex: int, isAccent: boolean, gainInDb: number) {
+    constructor(audioData: AudioData, startIndex: int, gainInDb: number) {
         assert(startIndex >= 0 && startIndex < RenderQuantum, `${startIndex} out of bounds`)
-        this.#frequency = isAccent ? 880.0 : 440.0
+        this.#audioData = audioData
         this.#gainInDb = gainInDb
         this.#startIndex = startIndex
     }
 
     processAdd(buffer: AudioBuffer, start: int, end: int): boolean {
-        const [l, r] = buffer.channels()
-        const attack = Math.floor(0.002 * sampleRate)
-        const release = Math.floor(0.050 * sampleRate)
+        const [out0, out1] = buffer.channels()
         const gain = dbToGain(this.#gainInDb)
+        const {frames, numberOfChannels, numberOfFrames, sampleRate: dataSampleRate} = this.#audioData
+        const inp0 = frames[0]
+        const inp1 = frames[numberOfChannels > 1 ? 1 : 0]
+        const ratio = dataSampleRate / sampleRate
         for (let index = Math.max(this.#startIndex, start); index < end; index++) {
-            const env = Math.min(this.#position / attack, 1.0 - (this.#position - attack) / release)
-            const amp = Math.sin(this.#position / sampleRate * TAU * this.#frequency) * gain * env * env
-            l[index] += amp
-            r[index] += amp
-            if (++this.#position > attack + release) {return true}
+            const pFloat = this.#position
+            const pInt = pFloat | 0
+            const pAlpha = pFloat - pInt
+            out0[index] += (inp0[pInt] + pAlpha * (inp0[pInt + 1] - inp0[pInt])) * gain
+            out1[index] += (inp1[pInt] + pAlpha * (inp1[pInt + 1] - inp1[pInt])) * gain
+            this.#position += ratio
+            if (this.#position >= numberOfFrames - 1) {return true}
         }
         this.#startIndex = 0
         return false
