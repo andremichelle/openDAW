@@ -11,8 +11,7 @@ import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Html} from "@opendaw/lib-dom"
-import {MenuItem} from "@opendaw/studio-core"
-import {MidiDevices, StudioPreferences} from "@opendaw/studio-core"
+import {MenuItem, MidiDevices, StudioPreferences} from "@opendaw/studio-core"
 import {Manual, Manuals} from "@/ui/pages/Manuals"
 import {HorizontalPeakMeter} from "@/ui/components/HorizontalPeakMeter"
 import {gainToDb} from "@opendaw/lib-dsp"
@@ -103,7 +102,9 @@ export const Header = ({lifecycle, service}: Construct) => {
             <hr/>
             <TimeStateDisplay lifecycle={lifecycle} service={service}/>
             <hr/>
-            <MetronomeControl lifecycle={lifecycle} preferences={preferences}/>
+            <MetronomeControl lifecycle={lifecycle}
+                              service={service}
+                              preferences={preferences}/>
             <hr/>
             <div style={{flex: "1 0 0"}}/>
             {

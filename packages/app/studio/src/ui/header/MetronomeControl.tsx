@@ -1,21 +1,41 @@
-import {Lifecycle, StringMapping, ValueMapping} from "@opendaw/lib-std"
+import {isAbsent, Lifecycle, StringMapping, ValueMapping} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {ContextMenu, MenuItem} from "@opendaw/studio-core"
+import {AudioData} from "@opendaw/lib-dsp"
+import {ContextMenu, FilePickerAcceptTypes, MenuItem} from "@opendaw/studio-core"
 import {EnginePreferences, EngineSettings} from "@opendaw/studio-adapters"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {ShortcutTooltip} from "@/ui/shortcuts/ShortcutTooltip"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {Icon} from "@/ui/components/Icon"
 import {Checkbox} from "@/ui/components/Checkbox"
+import {Files} from "@opendaw/lib-dom"
+import {Promises} from "@opendaw/lib-runtime"
+import {StudioService} from "@/service/StudioService"
 
 type Construct = {
     lifecycle: Lifecycle
+    service: StudioService
     preferences: EnginePreferences
 }
 
-export const MetronomeControl = ({lifecycle, preferences}: Construct) => {
+export const MetronomeControl = ({lifecycle, service, preferences}: Construct) => {
     const {metronome, recording} = preferences.settings
     const gainModel = lifecycle.own(preferences.createMutableObservableValue("metronome", "gain"))
+    const loadClickSound = async (index: 0 | 1) => {
+        const fileResult = await Promises.tryCatch(Files.open(FilePickerAcceptTypes.WavFiles))
+        if (fileResult.status === "rejected") {return}
+        const file = fileResult.value.at(0)
+        if (isAbsent(file)) {return}
+        const arrayBuffer = await file.arrayBuffer()
+        const decodingResult = await Promises.tryCatch(service.audioContext.decodeAudioData(arrayBuffer))
+        if (decodingResult.status === "rejected") {return}
+        const audioBuffer = decodingResult.value
+        const data = AudioData.create(audioBuffer.sampleRate, audioBuffer.length, audioBuffer.numberOfChannels)
+        for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
+            data.frames[i].set(audioBuffer.getChannelData(i))
+        }
+        service.engine.loadClickSound(index, data)
+    }
     return (
         <Checkbox lifecycle={lifecycle}
                   onInit={element => lifecycle.own(ContextMenu.subscribe(element, collector => collector.addItems(
@@ -46,7 +66,14 @@ export const MetronomeControl = ({lifecycle, preferences}: Construct) => {
                                   .map(count => MenuItem.default({
                                       label: String(count),
                                       checked: count === recording.countInBars
-                                  }).setTriggerProcedure(() => recording.countInBars = count))))
+                                  }).setTriggerProcedure(() => recording.countInBars = count)))),
+                      MenuItem.default({label: "Browse click sound for"})
+                          .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                              MenuItem.default({label: "Numerator..."})
+                                  .setTriggerProcedure(() => loadClickSound(0)),
+                              MenuItem.default({label: "Denominator..."})
+                                  .setTriggerProcedure(() => loadClickSound(1))
+                          ))
                   )))}
                   model={preferences.createMutableObservableValue("metronome", "enabled")}
                   appearance={{

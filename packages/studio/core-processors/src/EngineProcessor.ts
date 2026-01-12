@@ -205,6 +205,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                             this.#sampleManager.getOrCreate(box.address.uuid).data.nonEmpty() && box.pointerHub.nonEmpty()
                     }) ?? true)),
                 panic: () => this.#panic = true,
+                loadClickSound: (index: 0 | 1, data: AudioData): void => this.#metronome.loadClickSound(index, data),
                 noteSignal: (signal: NoteSignal) => {
                     if (NoteSignal.isOn(signal)) {
                         const {uuid, pitch, velocity} = signal

@@ -35,7 +35,7 @@ import {
 import {BoxIO} from "@opendaw/studio-boxes"
 import {Engine} from "./Engine"
 import {Project} from "./project"
-import {MIDIReceiver} from "./midi/MIDIReceiver"
+import {MIDIReceiver} from "./midi"
 import type {SoundFont2} from "soundfont2"
 
 export class EngineWorklet extends AudioWorkletNode implements Engine {
@@ -118,6 +118,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     panic(): void {dispatcher.dispatchAndForget(this.panic)}
                     sleep(): void {dispatcher.dispatchAndForget(this.sleep)}
                     wake(): void {dispatcher.dispatchAndForget(this.wake)}
+                    loadClickSound(index: 0 | 1, data: AudioData): void {
+                        dispatcher.dispatchAndForget(this.loadClickSound, index, data)
+                    }
                     noteSignal(signal: NoteSignal): void {dispatcher.dispatchAndForget(this.noteSignal, signal)}
                     ignoreNoteRegion(uuid: UUID.Bytes): void {
                         dispatcher.dispatchAndForget(this.ignoreNoteRegion, uuid)
@@ -207,6 +210,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         this.#commands.stop(true)
     }
     wake(): void {Atomics.store(this.#controlFlags, 0, 0)}
+    loadClickSound(index: 0 | 1, data: AudioData): void {
+        this.#commands.loadClickSound(index, data)
+    }
 
     get isPlaying(): ObservableValue<boolean> {return this.#isPlaying}
     get isRecording(): ObservableValue<boolean> {return this.#isRecording}

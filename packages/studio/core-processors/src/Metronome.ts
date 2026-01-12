@@ -4,7 +4,7 @@ import {assert, Bits, int, isNotNull, Iterables, TAU} from "@opendaw/lib-std"
 import {EngineContext} from "./EngineContext"
 
 export class Metronome {
-    static createDefaultClickSounds(): ReadonlyArray<AudioData> {
+    static createDefaultClickSounds(): Array<AudioData> {
         return [880.0, 440.0].map(frequency => {
             const attack = Math.floor(0.002 * sampleRate)
             const release = Math.floor(0.050 * sampleRate)
@@ -21,10 +21,12 @@ export class Metronome {
 
     readonly #context: EngineContext
     readonly #output = new AudioBuffer()
-    readonly #clickSounds = Metronome.createDefaultClickSounds()
+    readonly #clickSounds: Array<AudioData> = Metronome.createDefaultClickSounds()
     readonly #clicks: Click[] = []
 
     constructor(context: EngineContext) {this.#context = context}
+
+    loadClickSound(index: 0 | 1, data: AudioData): void {this.#clickSounds[index] = data}
 
     process({blocks}: ProcessInfo): void {
         const enabled = this.#context.timeInfo.metronomeEnabled

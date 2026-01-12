@@ -1,5 +1,5 @@
 import {int, Nullable, ObservableValue, Observer, Subscription, Terminable, UUID} from "@opendaw/lib-std"
-import {bpm, ppqn} from "@opendaw/lib-dsp"
+import {AudioData, bpm, ppqn} from "@opendaw/lib-dsp"
 import {ClipNotification, EnginePreferences, NoteSignal} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 
@@ -15,6 +15,7 @@ export interface Engine extends Terminable {
     panic(): void
     sleep(): void
     wake(): void
+    loadClickSound(index: 0 | 1, data: AudioData): void
     noteSignal(signal: NoteSignal): void
     subscribeNotes(observer: Observer<NoteSignal>): Subscription
     ignoreNoteRegion(uuid: UUID.Bytes): void

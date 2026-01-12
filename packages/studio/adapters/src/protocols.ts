@@ -20,6 +20,8 @@ export interface EngineCommands extends Terminable {
     scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void
     scheduleClipStop(trackIds: ReadonlyArray<UUID.Bytes>): void
     setupMIDI(port: MessagePort, buffer: SharedArrayBuffer): void
+    // metronome
+    loadClickSound(index: 0 | 1, data: AudioData): void
 }
 
 export interface EngineToClient {

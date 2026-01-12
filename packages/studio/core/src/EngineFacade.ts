@@ -9,7 +9,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {bpm, ppqn} from "@opendaw/lib-dsp"
+import {AudioData, bpm, ppqn} from "@opendaw/lib-dsp"
 import {
     ClipNotification,
     EnginePreferences,
@@ -92,6 +92,9 @@ export class EngineFacade implements Engine {
     panic(): void {this.#worklet.ifSome(worklet => worklet.panic())}
     sleep(): void {this.#worklet.ifSome(worklet => worklet.sleep())}
     wake(): void {this.#worklet.ifSome(worklet => worklet.wake())}
+    loadClickSound(index: 0 | 1, data: AudioData): void {
+        this.#worklet.ifSome(worklet => worklet.loadClickSound(index, data))
+    }
     subscribeClipNotification(observer: Observer<ClipNotification>): Subscription {
         return this.#worklet.unwrap("No worklet to subscribeClipNotification").subscribeClipNotification(observer)
     }
