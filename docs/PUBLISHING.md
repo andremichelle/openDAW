@@ -72,7 +72,7 @@ Successfully published:
  ...
 ```
 
-Note the highest version number (e.g., `0.0.93`) - you'll use this for the release tag.
+Note the version number for `@moises-ai/studio-sdk` (e.g., `0.0.93`) - you'll use this for the release tag.
 
 ### Step 2: Create a GitHub Release
 
@@ -87,7 +87,7 @@ Once the dry run succeeds, create a release to publish for real:
 
 The GitHub Action will automatically build, test, and publish all 16 packages to GitHub Package Registry.
 
-**Release Naming Convention:** Since this project uses independent versioning (each package has its own version), the release tag serves as a snapshot marker. Use the highest package version as the tag name.
+**Release Naming Convention:** Since this project uses independent versioning (each package has its own version), the release tag serves as a snapshot marker. Use the `@moises-ai/studio-sdk` version as the tag name.
 
 **Note:** Manual workflow triggers are always dry runs. Actual publishing requires creating a GitHub Release.
 
