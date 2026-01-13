@@ -50,31 +50,46 @@ These packages have `"private": true` and are not published:
 
 ## Publishing Workflow
 
-### Automatic Publishing (via GitHub Releases)
+### Step 1: Run a Dry Run First (Recommended)
 
-Packages are automatically published when you create a new release in GitHub:
+Before publishing, always run a dry run to verify everything works:
 
-1. Go to **Releases** in the GitHub repository
-2. Click **"Draft a new release"**
-3. Create a new tag (e.g., `v0.0.94`)
-4. Fill in the release title and notes
-5. Click **"Publish release"**
+1. Go to **Actions** → **Publish Packages to GitHub Registry**
+2. Click **"Run workflow"** (dropdown on the right)
+3. Check ✓ **Perform a dry run**
+4. Click the green **"Run workflow"** button
 
-The GitHub Action will:
-1. Checkout the code
-2. Install dependencies
-3. Build all packages
-4. Run tests
-5. Publish all non-private packages to GitHub Package Registry
+The dry run will build, test, and simulate publishing without actually pushing to the registry. Check the output for:
+- Any build or test failures
+- The list of packages and versions that will be published
 
-### Manual Publishing (via workflow dispatch)
+Example successful output:
+```
+Successfully published:
+ - @moises-ai/studio-sdk@0.0.93
+ - @moises-ai/studio-core@0.0.93
+ - @moises-ai/lib-std@0.0.65
+ ...
+```
 
-You can also trigger publishing manually:
+Note the highest version number (e.g., `0.0.93`) - you'll use this for the release tag.
 
-1. Go to **Actions** > **Publish Packages to GitHub Registry**
-2. Click **"Run workflow"**
-3. Optionally enable "dry run" to test without publishing
-4. Click **"Run workflow"**
+### Step 2: Create a GitHub Release
+
+Once the dry run succeeds, create a release to publish for real:
+
+1. Go to **Releases** → **Draft a new release**
+2. Click **"Choose a tag"** and create a new tag using the highest version from the dry run (e.g., `v0.0.93`)
+3. Target: `main` branch
+4. Release title: Same as the tag (e.g., `v0.0.93`)
+5. Add release notes describing what changed
+6. Click **"Publish release"**
+
+The GitHub Action will automatically build, test, and publish all 16 packages to GitHub Package Registry.
+
+**Release Naming Convention:** Since this project uses independent versioning (each package has its own version), the release tag serves as a snapshot marker. Use the highest package version as the tag name.
+
+**Note:** Manual workflow triggers are always dry runs. Actual publishing requires creating a GitHub Release.
 
 ### Local Manual Publishing
 
