@@ -66,5 +66,5 @@ export const RootBox: BoxSchema<Pointers> = {
             // TODO Move to UserInterfaceBox
             111: {type: "pointer", name: "editing-channel", pointerType: Pointers.Editing, mandatory: false}
         }
-    }
+    }, pointerRules: {accepts: [Pointers.MetaData], mandatory: false}
 }

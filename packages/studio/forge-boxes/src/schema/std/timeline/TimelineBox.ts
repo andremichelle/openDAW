@@ -101,5 +101,5 @@ export const TimelineBox: BoxSchema<Pointers> = {
                 value: 120.0, constraints: {min: 30.0, max: 999.0, scaling: "exponential"}, unit: "bpm"
             }
         }
-    }
+    }, pointerRules: {accepts: [Pointers.MetaData], mandatory: false}
 }
