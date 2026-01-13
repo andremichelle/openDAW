@@ -177,15 +177,15 @@ Create or update `.npmrc` in your project:
 
 ```ini
 @moises-ai:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
 ```
 
-### 2. Set the GITHUB_TOKEN environment variable
+### 2. Set the NODE_AUTH_TOKEN environment variable
 
 You need a GitHub Personal Access Token with `read:packages` scope:
 
 ```bash
-export GITHUB_TOKEN=ghp_your_token_here
+export NODE_AUTH_TOKEN=ghp_your_token_here
 ```
 
 Or add it to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.).
