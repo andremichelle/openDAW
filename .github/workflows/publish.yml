@@ -4,12 +4,7 @@ on:
   release:
     types: [created]
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Perform a dry run (no actual publish)'
-        required: false
-        default: false
-        type: boolean
+    # Manual trigger is always a dry run - actual publishing requires a release
 
 jobs:
   publish:
@@ -43,15 +38,18 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Publish packages (dry run)
-        if: ${{ github.event.inputs.dry_run == 'true' }}
-        run: npx lerna publish from-package --yes --no-private --loglevel verbose
+      - name: Dry run (manual trigger)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          echo "::notice::This is a DRY RUN - no packages will be published"
+          echo "To publish packages, create a GitHub Release"
+          npx lerna publish from-package --yes --no-private --loglevel verbose
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish packages
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+      - name: Publish packages (release trigger)
+        if: ${{ github.event_name == 'release' }}
         run: npx lerna publish from-package --yes --no-private --loglevel verbose
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -60,9 +58,17 @@ jobs:
       - name: Summary
         if: success()
         run: |
-          echo "## Published Packages" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "The following packages were published to GitHub Package Registry:" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "## Dry Run Complete" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "This was a **dry run** - no packages were actually published." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "To publish, create a GitHub Release." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Published Packages" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The following packages were published to GitHub Package Registry:" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- @moises-ai/studio-sdk" >> $GITHUB_STEP_SUMMARY
           echo "- @moises-ai/studio-core" >> $GITHUB_STEP_SUMMARY
