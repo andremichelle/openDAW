@@ -16,7 +16,19 @@ export interface VideoExportConfig {
     readonly sampleRate: number
     readonly duration: number
     readonly overlay: boolean
+    readonly videoBitrate: number
 }
+
+type QualityPreset = {
+    readonly label: string
+    readonly bitrate: number
+}
+
+const QUALITY_PRESETS: ReadonlyArray<QualityPreset> = [
+    {label: "Medium", bitrate: 8_000_000},
+    {label: "High", bitrate: 16_000_000},
+    {label: "Very High", bitrate: 32_000_000}
+]
 
 type DimensionPreset = {
     readonly label: string
@@ -38,6 +50,7 @@ const heightModel = new DefaultObservableValue(720)
 const fpsModel = new DefaultObservableValue(60)
 const durationModel = new DefaultObservableValue(0)
 const overlayModel = new DefaultObservableValue(true)
+const qualityModel = new DefaultObservableValue(QUALITY_PRESETS[1].bitrate)
 
 export const showVideoExportDialog = async (sampleRate: number): Promise<VideoExportConfig> => {
     const {resolve, reject, promise} = Promise.withResolvers<VideoExportConfig>()
@@ -74,7 +87,8 @@ export const showVideoExportDialog = async (sampleRate: number): Promise<VideoEx
                                 frameRate: fpsModel.getValue(),
                                 sampleRate,
                                 duration: durationModel.getValue(),
-                                overlay: overlayModel.getValue()
+                                overlay: overlayModel.getValue(),
+                                videoBitrate: qualityModel.getValue()
                             })
                         }
                     }
@@ -111,6 +125,17 @@ export const showVideoExportDialog = async (sampleRate: number): Promise<VideoEx
                                     model={fpsModel}
                                     elements={FPS_OPTIONS.map(fps => ({value: fps, element: <span>{fps}</span>}))}/>
                         <span style={{opacity: "0.5"}}>fps</span>
+                    </div>
+                </div>
+                <div>
+                    <div style={{marginBottom: "0.5em", fontWeight: "bold"}}>Quality</div>
+                    <div style={{display: "flex", gap: "0.5em", alignItems: "center", fontSize: "10px"}}>
+                        <RadioGroup lifecycle={lifecycle}
+                                    model={qualityModel}
+                                    elements={QUALITY_PRESETS.map(preset => ({
+                                        value: preset.bitrate,
+                                        element: <span>{preset.label}</span>
+                                    }))}/>
                     </div>
                 </div>
                 <div>

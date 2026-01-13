@@ -18,7 +18,7 @@ export namespace VideoRenderer {
             return panic("WebCodecs is not supported in this browser")
         }
         const config = await showVideoExportDialog(sampleRate)
-        const {width, height, frameRate, duration, overlay: overlayEnabled} = config
+        const {width, height, frameRate, duration, overlay: overlayEnabled, videoBitrate} = config
         console.time("Render Video")
         const project = source.copy()
         const {boxGraph, timelineBox: {loopArea: {enabled}}} = project
@@ -39,7 +39,8 @@ export namespace VideoRenderer {
             height,
             frameRate,
             sampleRate,
-            numberOfChannels: 2
+            numberOfChannels: 2,
+            videoBitrate
         }), TimeSpan.seconds(10))
 
         const estimator = TimeSpan.createEstimator()
