@@ -43,7 +43,7 @@ jobs:
         run: |
           echo "::notice::This is a DRY RUN - no packages will be published"
           echo "To publish packages, create a GitHub Release"
-          npx lerna publish from-package --yes --no-private --loglevel verbose
+          npx lerna publish from-package --yes --no-private --loglevel verbose --dry-run
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
