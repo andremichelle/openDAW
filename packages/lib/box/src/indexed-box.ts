@@ -1,5 +1,5 @@
 import {Field} from "./field"
-import {clamp, Class, int, panic} from "@opendaw/lib-std"
+import {clamp, Class, int, panic} from "@moises-ai/lib-std"
 import {Int32Field} from "./primitive"
 import {Box} from "./box"
 

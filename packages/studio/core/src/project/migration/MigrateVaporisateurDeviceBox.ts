@@ -1,5 +1,5 @@
-import {BoxGraph, Field} from "@opendaw/lib-box"
-import {BoxIO, VaporisateurDeviceBox} from "@opendaw/studio-boxes"
+import {BoxGraph, Field} from "@moises-ai/lib-box"
+import {BoxIO, VaporisateurDeviceBox} from "@moises-ai/studio-boxes"
 
 export const migrateVaporisateurDeviceBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box: VaporisateurDeviceBox): void => {
     if (box.version.getValue() === 0) {

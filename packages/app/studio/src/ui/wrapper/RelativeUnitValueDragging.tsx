@@ -12,15 +12,15 @@ import {
     Terminator,
     unitValue,
     ValueGuide
-} from "@opendaw/lib-std"
-import {createElement, Group, JsxValue} from "@opendaw/lib-jsx"
+} from "@moises-ai/lib-std"
+import {createElement, Group, JsxValue} from "@moises-ai/lib-jsx"
 import {ValueDragging} from "@/ui/hooks/dragging"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 import {ValueTooltip} from "@/ui/surface/ValueTooltip.tsx"
 import {Surface} from "../surface/Surface"
-import {Events} from "@opendaw/lib-dom"
-import {Runtime} from "@opendaw/lib-runtime"
-import {StudioPreferences} from "@opendaw/studio-core"
+import {Events} from "@moises-ai/lib-dom"
+import {Runtime} from "@moises-ai/lib-runtime"
+import {StudioPreferences} from "@moises-ai/studio-core"
 
 type Construct = {
     lifecycle: Lifecycle

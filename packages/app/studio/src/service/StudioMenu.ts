@@ -1,8 +1,8 @@
-import {EmptyExec, isAbsent, isDefined, panic, RuntimeNotifier, RuntimeSignal} from "@opendaw/lib-std"
-import {Browser, Files} from "@opendaw/lib-dom"
-import {RouteLocation} from "@opendaw/lib-jsx"
-import {Promises} from "@opendaw/lib-runtime"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {EmptyExec, isAbsent, isDefined, panic, RuntimeNotifier, RuntimeSignal} from "@moises-ai/lib-std"
+import {Browser, Files} from "@moises-ai/lib-dom"
+import {RouteLocation} from "@moises-ai/lib-jsx"
+import {Promises} from "@moises-ai/lib-runtime"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {
     CloudBackup,
     FilePickerAcceptTypes,
@@ -11,7 +11,7 @@ import {
     StudioPreferences,
     Workers,
     YService
-} from "@opendaw/studio-core"
+} from "@moises-ai/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {SyncLogService} from "@/service/SyncLogService"

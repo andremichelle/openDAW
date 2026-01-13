@@ -1,5 +1,5 @@
-import {Observer, PathTuple, Subscription, Terminable, Terminator, ValueAtPath, VirtualObject} from "@opendaw/lib-std"
-import {Communicator, Messenger} from "@opendaw/lib-runtime"
+import {Observer, PathTuple, Subscription, Terminable, Terminator, ValueAtPath, VirtualObject} from "@moises-ai/lib-std"
+import {Communicator, Messenger} from "@moises-ai/lib-runtime"
 import {PreferencesProtocol} from "./PreferencesProtocol"
 
 export class PreferencesClient<SETTINGS extends object> implements Terminable {

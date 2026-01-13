@@ -3,15 +3,15 @@ import {
     DeviceHost,
     UnknownAudioEffectDeviceBoxAdapter,
     UnknownMidiEffectDeviceBoxAdapter
-} from "@opendaw/studio-adapters"
-import {Lifecycle} from "@opendaw/lib-std"
+} from "@moises-ai/studio-adapters"
+import {Lifecycle} from "@moises-ai/lib-std"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
-import {createElement} from "@opendaw/lib-jsx"
+import {createElement} from "@moises-ai/lib-jsx"
 import {DeviceMidiMeter} from "@/ui/devices/panel/DeviceMidiMeter.tsx"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 import {StudioService} from "@/service/StudioService"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "UnknownAudioEffectDeviceEditor")
 

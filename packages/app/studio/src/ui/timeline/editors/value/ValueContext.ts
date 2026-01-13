@@ -1,5 +1,5 @@
-import {ObservableValue, StringMapping, unitValue, ValueMapping} from "@opendaw/lib-std"
-import {PrimitiveValues} from "@opendaw/lib-box"
+import {ObservableValue, StringMapping, unitValue, ValueMapping} from "@moises-ai/lib-std"
+import {PrimitiveValues} from "@moises-ai/lib-box"
 
 export interface ValueContext {
     readonly anchorModel: ObservableValue<unitValue>

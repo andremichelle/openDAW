@@ -1,6 +1,6 @@
 import {createVoltageConnector, ModularBox, ModuleConnectionBox} from "./modules"
 import {createModule} from "./builder"
-import {Pointers} from "@opendaw/studio-enums"
+import {Pointers} from "@moises-ai/studio-enums"
 import {UnipolarConstraints} from "../Defaults"
 
 export const ModuleDefinitions = [

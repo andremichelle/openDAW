@@ -8,18 +8,18 @@ import {
     TrackBoxAdapter,
     ValueEventCollectionBoxAdapter,
     ValueRegionBoxAdapter
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {
     AudioEventOwnerReader,
     EventOwnerReader,
     NoteEventOwnerReader,
     ValueEventOwnerReader
 } from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {PPQN, ppqn} from "@opendaw/lib-dsp"
-import {mod, Observer, Option, Subscription} from "@opendaw/lib-std"
-import {Propagation} from "@opendaw/lib-box"
-import {TimelineRange} from "@opendaw/studio-core"
-import {deferNextFrame} from "@opendaw/lib-dom"
+import {PPQN, ppqn} from "@moises-ai/lib-dsp"
+import {mod, Observer, Option, Subscription} from "@moises-ai/lib-std"
+import {Propagation} from "@moises-ai/lib-box"
+import {TimelineRange} from "@moises-ai/studio-core"
+import {deferNextFrame} from "@moises-ai/lib-dom"
 
 export class RegionReader<REGION extends LoopableRegionBoxAdapter<CONTENT>, CONTENT> implements EventOwnerReader<CONTENT> {
     static forAudioRegionBoxAdapter(region: AudioRegionBoxAdapter,

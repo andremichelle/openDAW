@@ -9,10 +9,10 @@ import {
     midiToHz,
     PPQN,
     ppqn
-} from "@opendaw/lib-dsp"
-import {bipolar, float, int, Nullable, Procedure, unitValue} from "@opendaw/lib-std"
-import {Sample} from "@opendaw/studio-adapters"
-import {VoicingMode} from "@opendaw/studio-enums"
+} from "@moises-ai/lib-dsp"
+import {bipolar, float, int, Nullable, Procedure, unitValue} from "@moises-ai/lib-std"
+import {Sample} from "@moises-ai/studio-adapters"
+import {VoicingMode} from "@moises-ai/studio-enums"
 
 export {PPQN, FFT, Chord, Sample, dbToGain, gainToDb, midiToHz, ClassicWaveform, VoicingMode}
 export type {Procedure}

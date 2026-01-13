@@ -1,4 +1,4 @@
-import {Address, Box, Int32Field} from "@opendaw/lib-box"
+import {Address, Box, Int32Field} from "@moises-ai/lib-box"
 import {
     float,
     Notifier,
@@ -10,8 +10,8 @@ import {
     Terminator,
     UUID,
     ValueMapping
-} from "@opendaw/lib-std"
-import {AudioBusBox, AuxSendBox, BoxVisitor} from "@opendaw/studio-boxes"
+} from "@moises-ai/lib-std"
+import {AudioBusBox, AuxSendBox, BoxVisitor} from "@moises-ai/studio-boxes"
 import {BoxAdapter} from "../BoxAdapter"
 import {AudioBusBoxAdapter} from "./AudioBusBoxAdapter"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"

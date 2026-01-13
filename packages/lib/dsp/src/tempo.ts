@@ -1,5 +1,5 @@
 import {bpm, ppqn, seconds} from "./ppqn"
-import {Observable} from "@opendaw/lib-std"
+import {Observable} from "@moises-ai/lib-std"
 
 /**
  * Interface for tempo map conversions between musical time (PPQN) and absolute time (seconds/samples).

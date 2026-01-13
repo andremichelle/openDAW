@@ -1,9 +1,9 @@
 import css from "./ValueEditorHeader.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Lifecycle} from "@moises-ai/lib-std"
 import {StudioService} from "@/service/StudioService.ts"
-import {createElement} from "@opendaw/lib-jsx"
+import {createElement} from "@moises-ai/lib-jsx"
 import {ParameterValueEditing} from "@/ui/timeline/editors/value/ParameterValueEditing.ts"
-import {Html, ModfierKeys} from "@opendaw/lib-dom"
+import {Html, ModfierKeys} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "ValueEditorHeader")
 

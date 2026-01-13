@@ -1,11 +1,11 @@
 import css from "./CompressionCurve.sass?inline"
-import {AnimationFrame, Html} from "@opendaw/lib-dom"
-import {Lifecycle, TAU} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {CompressorDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {AnimationFrame, Html} from "@moises-ai/lib-dom"
+import {Lifecycle, TAU} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {CompressorDeviceBoxAdapter} from "@moises-ai/studio-adapters"
 import {CanvasPainter} from "@/ui/canvas/painter"
 import {Vertical} from "@/ui/devices/audio-effects/Compressor/Vertical"
-import {GainComputer} from "@opendaw/lib-dsp/ctagdrc"
+import {GainComputer} from "@moises-ai/lib-dsp/ctagdrc"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 
 const className = Html.adoptStyleSheet(css, "CompressionCurve")

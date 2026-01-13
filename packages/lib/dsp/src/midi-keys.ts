@@ -1,4 +1,4 @@
-import {byte, clampUnit, int} from "@opendaw/lib-std"
+import {byte, clampUnit, int} from "@moises-ai/lib-std"
 
 export namespace MidiKeys {
     export const BlackKeyIndices = [1, 3, 6, 8, 10]

@@ -1,12 +1,12 @@
-import {int, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioEffectDeviceAdapter} from "@opendaw/studio-adapters"
+import {int, Option, Terminable, UUID} from "@moises-ai/lib-std"
+import {AudioEffectDeviceAdapter} from "@moises-ai/studio-adapters"
 import {EngineContext} from "../../EngineContext"
 import {ProcessInfo, Processor} from "../../processing"
 import {AbstractProcessor} from "../../AbstractProcessor"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
 import {AutomatableParameter} from "../../AutomatableParameter"
 import {AudioEffectDeviceProcessor} from "../../AudioEffectDeviceProcessor"
-import {AudioBuffer, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioBuffer, RenderQuantum} from "@moises-ai/lib-dsp"
 
 export class NopDeviceProcessor extends AbstractProcessor implements AudioEffectDeviceProcessor {
     static ID: int = 0 | 0

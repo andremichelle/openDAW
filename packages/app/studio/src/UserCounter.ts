@@ -1,5 +1,5 @@
-import {int, Notifier, Procedure} from "@opendaw/lib-std"
-import {Browser} from "@opendaw/lib-dom"
+import {int, Notifier, Procedure} from "@moises-ai/lib-std"
+import {Browser} from "@moises-ai/lib-dom"
 
 export class UserCounter {
     readonly #sessionId: string

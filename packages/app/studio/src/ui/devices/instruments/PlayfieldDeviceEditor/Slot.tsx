@@ -1,9 +1,9 @@
-import {DefaultObservableValue, int, Lifecycle, ObservableValue, Option, Terminator, UUID} from "@opendaw/lib-std"
-import {createElement, replaceChildren} from "@opendaw/lib-jsx"
-import {NoteStreamReceiver, PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
+import {DefaultObservableValue, int, Lifecycle, ObservableValue, Option, Terminator, UUID} from "@moises-ai/lib-std"
+import {createElement, replaceChildren} from "@moises-ai/lib-jsx"
+import {NoteStreamReceiver, PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter} from "@moises-ai/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 import {SampleSelector, SampleSelectStrategy} from "@/ui/devices/SampleSelector"
-import {AudioFileBox, PlayfieldSampleBox} from "@opendaw/studio-boxes"
+import {AudioFileBox, PlayfieldSampleBox} from "@moises-ai/studio-boxes"
 import {EmptySlot} from "@/ui/devices/instruments/PlayfieldDeviceEditor/EmptySlot"
 import {BusySlot} from "./BusySlot"
 

@@ -1,4 +1,4 @@
-import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@moises-ai/studio-adapters"
 
 export type ValueAssignment = {
     device?: DeviceBoxAdapter

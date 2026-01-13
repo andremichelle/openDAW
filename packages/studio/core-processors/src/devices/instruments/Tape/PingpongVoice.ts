@@ -1,5 +1,5 @@
-import {int} from "@opendaw/lib-std"
-import {AudioBuffer, AudioData} from "@opendaw/lib-dsp"
+import {int} from "@moises-ai/lib-std"
+import {AudioBuffer, AudioData} from "@moises-ai/lib-dsp"
 import {Voice} from "./Voice"
 import {VoiceState} from "./VoiceState"
 import {VOICE_FADE_DURATION, LOOP_FADE_DURATION, LOOP_MARGIN_START, LOOP_MARGIN_END} from "./constants"

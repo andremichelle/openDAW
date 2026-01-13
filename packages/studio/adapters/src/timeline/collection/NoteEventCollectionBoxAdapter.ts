@@ -1,4 +1,4 @@
-import {NoteEventBox, NoteEventCollectionBox} from "@opendaw/studio-boxes"
+import {NoteEventBox, NoteEventCollectionBox} from "@moises-ai/studio-boxes"
 import {
     Coordinates,
     float,
@@ -11,10 +11,10 @@ import {
     Subscription,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {Address} from "@opendaw/lib-box"
-import {EventCollection, NoteEvent, ppqn} from "@opendaw/lib-dsp"
-import {Pointers} from "@opendaw/studio-enums"
+} from "@moises-ai/lib-std"
+import {Address} from "@moises-ai/lib-box"
+import {EventCollection, NoteEvent, ppqn} from "@moises-ai/lib-dsp"
+import {Pointers} from "@moises-ai/studio-enums"
 import {BoxAdapter} from "../../BoxAdapter"
 import {NoteEventBoxAdapter} from "../event/NoteEventBoxAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"

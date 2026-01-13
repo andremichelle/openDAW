@@ -10,9 +10,9 @@ import {
     Option,
     RuntimeNotifier,
     UUID
-} from "@opendaw/lib-std"
-import {Address, Box, BoxGraph, PointerField} from "@opendaw/lib-box"
-import {AudioUnitType} from "@opendaw/studio-enums"
+} from "@moises-ai/lib-std"
+import {Address, Box, BoxGraph, PointerField} from "@moises-ai/lib-box"
+import {AudioUnitType} from "@moises-ai/studio-enums"
 import {
     AudioFileBox,
     AudioUnitBox,
@@ -22,7 +22,7 @@ import {
     CaptureMidiBox,
     SoundfontFileBox,
     TrackBox
-} from "@opendaw/studio-boxes"
+} from "@moises-ai/studio-boxes"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {ProjectUtils} from "../project/ProjectUtils"
 import {TrackType} from "../timeline/TrackType"

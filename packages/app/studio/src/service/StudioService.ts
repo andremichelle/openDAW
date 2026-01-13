@@ -16,7 +16,7 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {populateStudioMenu} from "@/service/StudioMenu"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
@@ -31,12 +31,12 @@ import {ProjectProfileService} from "./ProjectProfileService"
 import {StudioSignal} from "./StudioSignal"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {FooterLabel} from "@/service/FooterLabel"
-import {RouteLocation} from "@opendaw/lib-jsx"
-import {PPQN} from "@opendaw/lib-dsp"
-import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@opendaw/lib-dom"
-import {Promises} from "@opendaw/lib-runtime"
-import {ExportStemsConfiguration, PresetDecoder} from "@opendaw/studio-adapters"
-import {Address} from "@opendaw/lib-box"
+import {RouteLocation} from "@moises-ai/lib-jsx"
+import {PPQN} from "@moises-ai/lib-dsp"
+import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@moises-ai/lib-dom"
+import {Promises} from "@moises-ai/lib-runtime"
+import {ExportStemsConfiguration, PresetDecoder} from "@moises-ai/studio-adapters"
+import {Address} from "@moises-ai/lib-box"
 import {
     AudioWorklets,
     CloudAuthManager,
@@ -57,10 +57,10 @@ import {
     SoundfontService,
     StudioPreferences,
     TimelineRange
-} from "@opendaw/studio-core"
+} from "@moises-ai/studio-core"
 import {ProjectDialogs} from "@/project/ProjectDialogs"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
-import {AudioUnitType} from "@opendaw/studio-enums"
+import {AudioUnitBox} from "@moises-ai/studio-boxes"
+import {AudioUnitType} from "@moises-ai/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
 import {Mixdowns} from "@/service/Mixdowns"

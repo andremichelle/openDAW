@@ -7,11 +7,11 @@ import {
     RuntimeNotifier,
     Terminable,
     UUID
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {ProjectDialogs} from "@/project/ProjectDialogs"
 import {Dialogs} from "@/ui/components/dialogs"
-import {Promises} from "@opendaw/lib-runtime"
-import {Files} from "@opendaw/lib-dom"
+import {Promises} from "@moises-ai/lib-runtime"
+import {Files} from "@moises-ai/lib-dom"
 import {
     FilePickerAcceptTypes,
     Project,
@@ -22,8 +22,8 @@ import {
     ProjectStorage,
     SampleService,
     SoundfontService
-} from "@opendaw/studio-core"
-import {SampleLoaderManager, SoundfontLoaderManager} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-core"
+import {SampleLoaderManager, SoundfontLoaderManager} from "@moises-ai/studio-adapters"
 
 export class ProjectProfileService {
     readonly #profile: MutableObservableOption<ProjectProfile>

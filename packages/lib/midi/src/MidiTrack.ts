@@ -1,4 +1,4 @@
-import {ArrayMultimap, ByteArrayOutput, int, isDefined} from "@opendaw/lib-std"
+import {ArrayMultimap, ByteArrayOutput, int, isDefined} from "@moises-ai/lib-std"
 import {Channel} from "./Channel"
 import {ControlEvent} from "./ControlEvent"
 import {MetaEvent, MetaType} from "./MetaType"

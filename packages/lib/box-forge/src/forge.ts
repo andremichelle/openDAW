@@ -12,8 +12,8 @@ import {
     SetMultimap,
     Strings,
     Unhandled
-} from "@opendaw/lib-std"
-import {ByteArrayField, Constraints, FieldKey, NoPointers, PointerRules, PointerTypes} from "@opendaw/lib-box"
+} from "@moises-ai/lib-std"
+import {ByteArrayField, Constraints, FieldKey, NoPointers, PointerRules, PointerTypes} from "@moises-ai/lib-box"
 import {ModuleDeclarationKind, Project, Scope, SourceFile, VariableDeclarationKind} from "ts-morph"
 import {AnyField, BoxSchema, ClassSchema, FieldName, Referencable, Schema} from "./schema"
 import {header} from "./header"
@@ -67,7 +67,7 @@ export class BoxForge<E extends PointerTypes> {
     #writeBoxVisitor(): void {
         const file: SourceFile = this.#project.createSourceFile(`${this.#path}/visitor.ts`, header)
         file.addImportDeclarations([
-            {moduleSpecifier: "@opendaw/lib-box", namedImports: ["VertexVisitor"]},
+            {moduleSpecifier: "@moises-ai/lib-box", namedImports: ["VertexVisitor"]},
             {moduleSpecifier: ".", namedImports: this.#schema.boxes.map(({class: {name}}) => name)}
         ])
         file.addInterface({
@@ -147,8 +147,8 @@ export class BoxForge<E extends PointerTypes> {
     }
 }
 
-const STD_LIBRARY = "@opendaw/lib-std" as const
-const BOX_LIBRARY = "@opendaw/lib-box" as const
+const STD_LIBRARY = "@moises-ai/lib-std" as const
+const BOX_LIBRARY = "@moises-ai/lib-box" as const
 
 type ClassOptions = Readonly<{
     import_std_lib: string[]
@@ -283,7 +283,7 @@ class ClassWriter<E extends PointerTypes> {
                 : `${this.#option.extends}<${fieldsType}>`
         })
         if (noEdgeConstrains) {
-            this.#imports.add("@opendaw/lib-box", "UnreferenceableType")
+            this.#imports.add("@moises-ai/lib-box", "UnreferenceableType")
         }
         if (this.#option.isBox) {
             let pointerRules

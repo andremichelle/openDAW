@@ -1,6 +1,6 @@
-import {BoxGraph} from "@opendaw/lib-box"
-import {clamp, isDefined} from "@opendaw/lib-std"
-import {BoxIO, BoxVisitor, DelayDeviceBox, ValueEventBox} from "@opendaw/studio-boxes"
+import {BoxGraph} from "@moises-ai/lib-box"
+import {clamp, isDefined} from "@moises-ai/lib-std"
+import {BoxIO, BoxVisitor, DelayDeviceBox, ValueEventBox} from "@moises-ai/studio-boxes"
 
 export const migrateDelayDeviceBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box: DelayDeviceBox): void => {
     if (box.version.getValue() !== 0) {return}

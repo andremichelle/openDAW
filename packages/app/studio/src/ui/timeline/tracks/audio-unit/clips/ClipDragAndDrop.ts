@@ -3,7 +3,7 @@ import {CreateParameters, TimelineDragAndDrop} from "@/ui/timeline/tracks/audio-
 import {ClipCaptureTarget} from "./ClipCapturing"
 import {ClipWidth} from "@/ui/timeline/tracks/audio-unit/clips/constants"
 import {StudioService} from "@/service/StudioService"
-import {AudioContentFactory} from "@opendaw/studio-core"
+import {AudioContentFactory} from "@moises-ai/studio-core"
 
 export class ClipDragAndDrop extends TimelineDragAndDrop<ClipCaptureTarget> {
     constructor(service: StudioService, capturing: ElementCapturing<ClipCaptureTarget>) {

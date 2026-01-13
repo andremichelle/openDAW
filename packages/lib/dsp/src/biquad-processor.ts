@@ -1,5 +1,5 @@
 import {BiquadCoeff} from "./biquad-coeff"
-import {Arrays, clampUnit, int} from "@opendaw/lib-std"
+import {Arrays, clampUnit, int} from "@moises-ai/lib-std"
 
 export interface BiquadProcessor {
     reset(): void

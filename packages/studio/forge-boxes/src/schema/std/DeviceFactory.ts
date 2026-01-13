@@ -1,6 +1,6 @@
-import {BoxSchema, FieldRecord, mergeFields, reserveMany} from "@opendaw/lib-box-forge"
-import {Pointers} from "@opendaw/studio-enums"
-import {Objects} from "@opendaw/lib-std"
+import {BoxSchema, FieldRecord, mergeFields, reserveMany} from "@moises-ai/lib-box-forge"
+import {Pointers} from "@moises-ai/studio-enums"
+import {Objects} from "@moises-ai/lib-std"
 
 const DefaultPointers = [Pointers.Device, Pointers.Selection, Pointers.MetaData]
 const DefaultAudioPointers = [...DefaultPointers, Pointers.SideChain]

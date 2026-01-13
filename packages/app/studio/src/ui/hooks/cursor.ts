@@ -1,7 +1,7 @@
-import {int, isDefined, Maybe, Nullable, Subscription, Terminable, Terminator} from "@opendaw/lib-std"
+import {int, isDefined, Maybe, Nullable, Subscription, Terminable, Terminator} from "@moises-ai/lib-std"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {Surface} from "@/ui/surface/Surface.tsx"
-import {CssUtils, Events} from "@opendaw/lib-dom"
+import {CssUtils, Events} from "@moises-ai/lib-dom"
 
 export type CursorEvent = {
     clientX: number

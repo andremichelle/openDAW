@@ -1,5 +1,5 @@
-import {RenderQuantum} from "@opendaw/lib-dsp"
-import {Communicator, Messenger} from "@opendaw/lib-runtime"
+import {RenderQuantum} from "@moises-ai/lib-dsp"
+import {Communicator, Messenger} from "@moises-ai/lib-runtime"
 import {Protocol} from "./protocol"
 import {Waveform} from "./waveform"
 import {Oscillator} from "./oscillator"

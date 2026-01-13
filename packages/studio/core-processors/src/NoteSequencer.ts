@@ -6,8 +6,8 @@ import {
     NoteRegionBoxAdapter,
     TrackBoxAdapter,
     TrackType
-} from "@opendaw/studio-adapters"
-import {EventSpanRetainer, LoopableRegion, NoteEvent, ppqn} from "@opendaw/lib-dsp"
+} from "@moises-ai/studio-adapters"
+import {EventSpanRetainer, LoopableRegion, NoteEvent, ppqn} from "@moises-ai/lib-dsp"
 import {
     Bits,
     byte,
@@ -22,7 +22,7 @@ import {
     Terminator,
     unitValue,
     UUID
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {NoteCompleteEvent, NoteEventSource, NoteLifecycleEvent} from "./NoteEventSource"
 import {BlockFlag, ProcessPhase} from "./processing"
 

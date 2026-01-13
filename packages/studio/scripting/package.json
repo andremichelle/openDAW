@@ -1,9 +1,10 @@
 {
-    "name": "@opendaw/studio-scripting",
+    "name": "@moises-ai/studio-scripting",
     "version": "0.0.29",
     "license": "LGPL-3.0-or-later",
     "type": "module",
     "publishConfig": {
+        "registry": "https://npm.pkg.github.com",
         "access": "public"
     },
     "main": "./dist/index.js",
@@ -30,17 +31,17 @@
         "test": "echo \"No tests to run\""
     },
     "dependencies": {
-        "@opendaw/lib-box": "^0.0.67",
-        "@opendaw/lib-dsp": "^0.0.65",
-        "@opendaw/lib-runtime": "^0.0.65",
-        "@opendaw/lib-std": "^0.0.65",
-        "@opendaw/studio-adapters": "^0.0.76",
-        "@opendaw/studio-boxes": "^0.0.68",
-        "@opendaw/studio-enums": "^0.0.57"
+        "@moises-ai/lib-box": "^0.0.67",
+        "@moises-ai/lib-dsp": "^0.0.65",
+        "@moises-ai/lib-runtime": "^0.0.65",
+        "@moises-ai/lib-std": "^0.0.65",
+        "@moises-ai/studio-adapters": "^0.0.76",
+        "@moises-ai/studio-boxes": "^0.0.68",
+        "@moises-ai/studio-enums": "^0.0.57"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/typescript-config": "^0.0.28"
+        "@moises-ai/eslint-config": "^0.0.27",
+        "@moises-ai/typescript-config": "^0.0.28"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

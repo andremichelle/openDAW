@@ -1,7 +1,7 @@
 // Level Detector (Ballistics)
 import {CrestFactor} from "./CrestFactor"
 import {SmoothingFilter} from "./SmoothingFilter"
-import {int} from "@opendaw/lib-std"
+import {int} from "@moises-ai/lib-std"
 
 export class LevelDetector {
     readonly #sampleRate: number

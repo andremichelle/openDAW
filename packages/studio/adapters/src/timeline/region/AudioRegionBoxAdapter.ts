@@ -14,11 +14,11 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {EventCollection, ppqn, TimeBase, TimeBaseConverter} from "@opendaw/lib-dsp"
-import {Address, Field, PointerField, Propagation, Update} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
-import {AudioRegionBox} from "@opendaw/studio-boxes"
+} from "@moises-ai/lib-std"
+import {EventCollection, ppqn, TimeBase, TimeBaseConverter} from "@moises-ai/lib-dsp"
+import {Address, Field, PointerField, Propagation, Update} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
+import {AudioRegionBox} from "@moises-ai/studio-boxes"
 import {LoopableRegionBoxAdapter, RegionBoxAdapter, RegionBoxAdapterVisitor} from "../RegionBoxAdapter"
 import {TrackBoxAdapter} from "../TrackBoxAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"

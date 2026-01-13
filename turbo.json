@@ -17,7 +17,7 @@
         "dist/**"
       ]
     },
-    "@opendaw/studio-forge-boxes#build": {
+    "@moises-ai/studio-forge-boxes#build": {
       "dependsOn": [
         "^build"
       ],
@@ -30,9 +30,9 @@
         "../boxes/src/**"
       ]
     },
-    "@opendaw/studio-boxes#build": {
+    "@moises-ai/studio-boxes#build": {
       "dependsOn": [
-        "@opendaw/studio-forge-boxes#build"
+        "@moises-ai/studio-forge-boxes#build"
       ],
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -42,7 +42,7 @@
         "dist/**"
       ]
     },
-    "@opendaw/studio-core-workers#build": {
+    "@moises-ai/studio-core-workers#build": {
       "dependsOn": [
         "^build"
       ],
@@ -55,7 +55,7 @@
         "../core/dist/workers-main.js.map"
       ]
     },
-    "@opendaw/studio-core-processors#build": {
+    "@moises-ai/studio-core-processors#build": {
       "dependsOn": [
         "^build"
       ],
@@ -68,11 +68,11 @@
         "../core/dist/processors.js.map"
       ]
     },
-    "@opendaw/studio-core#build": {
+    "@moises-ai/studio-core#build": {
       "dependsOn": [
         "^build",
-        "@opendaw/studio-core-workers#build",
-        "@opendaw/studio-core-processors#build"
+        "@moises-ai/studio-core-workers#build",
+        "@moises-ai/studio-core-processors#build"
       ],
       "inputs": [
         "$TURBO_DEFAULT$",

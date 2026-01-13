@@ -1,11 +1,11 @@
 import css from "./DeviceMidiMeter.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
-import {createElement, DomElement} from "@opendaw/lib-jsx"
-import {Address} from "@opendaw/lib-box"
-import {LiveStreamReceiver} from "@opendaw/lib-fusion"
-import {Html} from "@opendaw/lib-dom"
-import {NoteStreamReceiver} from "@opendaw/studio-adapters"
-import {Colors} from "@opendaw/studio-enums"
+import {Lifecycle} from "@moises-ai/lib-std"
+import {createElement, DomElement} from "@moises-ai/lib-jsx"
+import {Address} from "@moises-ai/lib-box"
+import {LiveStreamReceiver} from "@moises-ai/lib-fusion"
+import {Html} from "@moises-ai/lib-dom"
+import {NoteStreamReceiver} from "@moises-ai/studio-adapters"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "DeviceMidiMeter")
 

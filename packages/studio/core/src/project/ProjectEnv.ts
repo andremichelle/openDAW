@@ -1,4 +1,4 @@
-import {SampleLoaderManager, SoundfontLoaderManager} from "@opendaw/studio-adapters"
+import {SampleLoaderManager, SoundfontLoaderManager} from "@moises-ai/studio-adapters"
 import {AudioWorklets} from "../AudioWorklets"
 
 export interface ProjectEnv {

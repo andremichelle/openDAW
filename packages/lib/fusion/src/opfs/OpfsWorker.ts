@@ -1,5 +1,5 @@
-import {Arrays, asDefined, isNotUndefined, panic} from "@opendaw/lib-std"
-import {Communicator, Messenger, Promises} from "@opendaw/lib-runtime"
+import {Arrays, asDefined, isNotUndefined, panic} from "@moises-ai/lib-std"
+import {Communicator, Messenger, Promises} from "@moises-ai/lib-runtime"
 import {OpfsProtocol} from "./OpfsProtocol"
 
 export namespace OpfsWorker {

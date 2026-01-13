@@ -1,9 +1,9 @@
 import css from "./PianoRoll.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {createElement, Frag} from "@opendaw/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {createElement, Frag} from "@moises-ai/lib-jsx"
 import {PianoRollLayout} from "@/ui/PianoRollLayout"
 import {NoteShortcuts} from "@/ui/shortcuts/SoftwareMIDIShortcuts"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Lifecycle} from "@moises-ai/lib-std"
 
 const className = Html.adoptStyleSheet(css, "PianoRoll")
 

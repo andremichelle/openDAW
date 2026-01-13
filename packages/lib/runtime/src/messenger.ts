@@ -7,7 +7,7 @@ import {
     Procedure,
     Subscription,
     Terminable
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 
 export type Port = {
     postMessage(message: any, transfer?: Array<Transferable>): void

@@ -1,4 +1,4 @@
-import {Padding} from "@opendaw/lib-std"
+import {Padding} from "@moises-ai/lib-std"
 
 export const Config = {
     AutoScrollHorizontalSpeed: 0.25,

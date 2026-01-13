@@ -1,15 +1,15 @@
 import css from "./EmptySlot.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {int, Lifecycle, ObservableValue} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {int, Lifecycle, ObservableValue} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {SampleSelector} from "@/ui/devices/SampleSelector"
 import {SlotDragAndDrop} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotDragAndDrop"
 import {NoteLabel} from "@/ui/devices/instruments/PlayfieldDeviceEditor/NoteLabel"
 import {Icon} from "@/ui/components/Icon"
-import {NoteStreamReceiver} from "@opendaw/studio-adapters"
-import {IconSymbol} from "@opendaw/studio-enums"
-import {ContextMenu} from "@opendaw/studio-core"
+import {NoteStreamReceiver} from "@moises-ai/studio-adapters"
+import {IconSymbol} from "@moises-ai/studio-enums"
+import {ContextMenu} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "EmptySlot")
 

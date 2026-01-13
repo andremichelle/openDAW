@@ -10,7 +10,7 @@ import {
     Option,
     Subscription,
     SyncProvider
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {Update} from "./updates"
 
 class Modification {

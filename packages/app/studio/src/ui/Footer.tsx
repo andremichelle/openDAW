@@ -1,15 +1,15 @@
 import css from "./Footer.sass?inline"
-import {createElement, Frag, LocalLink, replaceChildren} from "@opendaw/lib-jsx"
-import {isDefined, Lifecycle, Terminator, TimeSpan} from "@opendaw/lib-std"
+import {createElement, Frag, LocalLink, replaceChildren} from "@moises-ai/lib-jsx"
+import {isDefined, Lifecycle, Terminator, TimeSpan} from "@moises-ai/lib-std"
 import {StudioService} from "@/service/StudioService"
 import {Surface} from "@/ui/surface/Surface"
-import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
-import {Runtime} from "@opendaw/lib-runtime"
+import {AnimationFrame, Events, Html} from "@moises-ai/lib-dom"
+import {Runtime} from "@moises-ai/lib-runtime"
 import {FooterLabel} from "@/service/FooterLabel"
-import {ProjectMeta, StudioPreferences} from "@opendaw/studio-core"
-import {Colors} from "@opendaw/studio-enums"
+import {ProjectMeta, StudioPreferences} from "@moises-ai/studio-core"
+import {Colors} from "@moises-ai/studio-enums"
 import {UserCounter} from "@/UserCounter"
-import {AudioData} from "@opendaw/lib-dsp"
+import {AudioData} from "@moises-ai/lib-dsp"
 
 const className = Html.adoptStyleSheet(css, "footer")
 

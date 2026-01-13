@@ -1,5 +1,5 @@
 import {Voice} from "./Voice"
-import {NoteEvent, ppqn} from "@opendaw/lib-dsp"
+import {NoteEvent, ppqn} from "@moises-ai/lib-dsp"
 
 export interface VoicingHost {
     create(): Voice

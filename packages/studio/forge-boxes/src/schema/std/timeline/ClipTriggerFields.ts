@@ -1,5 +1,5 @@
-import {Pointers} from "@opendaw/studio-enums"
-import {ClassSchema, deprecated} from "@opendaw/lib-box-forge"
+import {Pointers} from "@moises-ai/studio-enums"
+import {ClassSchema, deprecated} from "@moises-ai/lib-box-forge"
 
 export const ClipTriggerFields = {
     name: "ClipPlaybackFields", // cannot change

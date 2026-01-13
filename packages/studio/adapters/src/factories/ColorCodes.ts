@@ -1,6 +1,6 @@
-import {AudioUnitType, Colors} from "@opendaw/studio-enums"
+import {AudioUnitType, Colors} from "@moises-ai/studio-enums"
 import {TrackType} from "../timeline/TrackType"
-import {Color} from "@opendaw/lib-std"
+import {Color} from "@moises-ai/lib-std"
 
 export namespace ColorCodes {
     export const forAudioType = (type?: AudioUnitType): Color => {

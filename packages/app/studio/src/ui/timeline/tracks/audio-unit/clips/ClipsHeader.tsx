@@ -1,10 +1,10 @@
 import css from "./ClipsHeader.sass?inline"
-import {DefaultObservableValue, Lifecycle, ObservableValue, Option, Terminator, UUID} from "@opendaw/lib-std"
-import {createElement, DomElement} from "@opendaw/lib-jsx"
+import {DefaultObservableValue, Lifecycle, ObservableValue, Option, Terminator, UUID} from "@moises-ai/lib-std"
+import {createElement, DomElement} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
-import {IconSymbol} from "@opendaw/studio-enums"
-import {deferNextFrame, Dragging, Events, Html} from "@opendaw/lib-dom"
+import {IconSymbol} from "@moises-ai/studio-enums"
+import {deferNextFrame, Dragging, Events, Html} from "@moises-ai/lib-dom"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 
 const className = Html.adoptStyleSheet(css, "ClipsHeader")

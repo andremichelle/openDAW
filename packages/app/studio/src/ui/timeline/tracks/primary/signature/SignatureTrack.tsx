@@ -1,10 +1,10 @@
 import css from "./SignatureTrack.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Lifecycle} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {SignatureTrackBody} from "@/ui/timeline/tracks/primary/signature/SignatureTrackBody.tsx"
 import {SignatureTrackHeader} from "@/ui/timeline/tracks/primary/signature/SignatureTrackHeader.tsx"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "SignatureTrack")
 

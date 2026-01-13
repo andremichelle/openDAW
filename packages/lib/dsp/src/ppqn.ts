@@ -1,7 +1,7 @@
 // Pulses per quarter note (PPQN)
 // 960 = 3*5*2^6
 
-import {int} from "@opendaw/lib-std"
+import {int} from "@moises-ai/lib-std"
 
 export type ppqn = number
 export type seconds = number

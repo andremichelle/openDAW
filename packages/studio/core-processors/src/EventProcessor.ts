@@ -1,6 +1,6 @@
 import {Block, ProcessInfo} from "./processing"
-import {Event, PPQN, ppqn} from "@opendaw/lib-dsp"
-import {Maybe} from "@opendaw/lib-std"
+import {Event, PPQN, ppqn} from "@moises-ai/lib-dsp"
+import {Maybe} from "@moises-ai/lib-std"
 import {AbstractProcessor} from "./AbstractProcessor"
 import {UpdateEvent} from "./UpdateClock"
 

@@ -16,7 +16,7 @@ import {
     UnknownMidiEffectDeviceBox,
     VelocityDeviceBox,
     ZeitgeistDeviceBox
-} from "@opendaw/studio-boxes"
+} from "@moises-ai/studio-boxes"
 
 export type EffectBox =
     | ArpeggioDeviceBox | PitchDeviceBox | VelocityDeviceBox | ZeitgeistDeviceBox | UnknownMidiEffectDeviceBox

@@ -1,15 +1,15 @@
 import css from "./ValueEventsEditor.sass?inline"
-import {Lifecycle, ValueMapping} from "@opendaw/lib-std"
+import {Lifecycle, ValueMapping} from "@moises-ai/lib-std"
 import {StudioService} from "@/service/StudioService.ts"
-import {createElement} from "@opendaw/lib-jsx"
+import {createElement} from "@moises-ai/lib-jsx"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {ValueEditor} from "@/ui/timeline/editors/value/ValueEditor.tsx"
 import {ValueEditorHeader} from "@/ui/timeline/editors/value/ValueEditorHeader.tsx"
 import {EditorMenuCollector} from "@/ui/timeline/editors/EditorMenuCollector.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {ParameterValueEditing} from "@/ui/timeline/editors/value/ParameterValueEditing.ts"
-import {Html} from "@opendaw/lib-dom"
-import {TimelineRange} from "@opendaw/studio-core"
+import {Html} from "@moises-ai/lib-dom"
+import {TimelineRange} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "ValueEventsEditor")
 

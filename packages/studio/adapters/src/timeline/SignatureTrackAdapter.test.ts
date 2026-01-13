@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest"
-import {ppqn, PPQN, SMPTE} from "@opendaw/lib-dsp"
-import {int} from "@opendaw/lib-std"
+import {ppqn, PPQN, SMPTE} from "@moises-ai/lib-dsp"
+import {int} from "@moises-ai/lib-std"
 
 describe("SignatureTrackAdapter", () => {
     const BPM = 60

@@ -1,4 +1,4 @@
-import {AnyFunc, DefaultObservableValue, EmptyProcedure, ObservableValue, Procedure, Provider} from "@opendaw/lib-std"
+import {AnyFunc, DefaultObservableValue, EmptyProcedure, ObservableValue, Procedure, Provider} from "@moises-ai/lib-std"
 
 export type DotPath = string
 

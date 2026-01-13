@@ -1,15 +1,15 @@
 import css from "./AutoGainButton.sass?inline"
-import {Events, Html} from "@opendaw/lib-dom"
-import {Lifecycle, Terminator} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Events, Html} from "@moises-ai/lib-dom"
+import {Lifecycle, Terminator} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {LKR} from "@/ui/devices/constants"
 import {Column} from "@/ui/devices/Column"
 import {Icon} from "@/ui/components/Icon"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {StereoToolDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {gainToDb} from "@opendaw/lib-dsp"
-import {Runtime} from "@opendaw/lib-runtime"
-import {Project} from "@opendaw/studio-core"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
+import {StereoToolDeviceBoxAdapter} from "@moises-ai/studio-adapters"
+import {gainToDb} from "@moises-ai/lib-dsp"
+import {Runtime} from "@moises-ai/lib-runtime"
+import {Project} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "AutoGainButton")
 

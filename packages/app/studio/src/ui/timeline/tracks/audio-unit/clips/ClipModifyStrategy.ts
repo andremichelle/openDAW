@@ -1,5 +1,5 @@
-import {AnyClipBoxAdapter} from "@opendaw/studio-adapters"
-import {int} from "@opendaw/lib-std"
+import {AnyClipBoxAdapter} from "@moises-ai/studio-adapters"
+import {int} from "@moises-ai/lib-std"
 
 export interface ClipModifyStrategies {
     showOrigin(): boolean

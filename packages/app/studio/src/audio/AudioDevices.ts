@@ -1,5 +1,5 @@
-import {Func, int, Option, panic} from "@opendaw/lib-std"
-import {Promises} from "@opendaw/lib-runtime"
+import {Func, int, Option, panic} from "@moises-ai/lib-std"
+import {Promises} from "@moises-ai/lib-runtime"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Button} from "@/ui/components/Dialog"
 

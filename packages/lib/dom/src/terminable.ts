@@ -1,4 +1,4 @@
-import {Func, Terminable} from "@opendaw/lib-std"
+import {Func, Terminable} from "@moises-ai/lib-std"
 
 export namespace TerminatorUtils {
     const weakRefs = new Array<[WeakRef<WeakKey>, Terminable]>()

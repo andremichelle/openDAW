@@ -1,8 +1,8 @@
 import css from "./DevicePanel.sass?inline"
-import {asDefined, Lifecycle, ObservableValue, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
-import {appendChildren, createElement} from "@opendaw/lib-jsx"
+import {asDefined, Lifecycle, ObservableValue, Option, Terminable, Terminator, UUID} from "@moises-ai/lib-std"
+import {appendChildren, createElement} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService"
-import {AudioUnitBox, BoxVisitor, PlayfieldSampleBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, BoxVisitor, PlayfieldSampleBox} from "@moises-ai/studio-boxes"
 import {
     AudioEffectDeviceAdapter,
     AudioUnitInputAdapter,
@@ -11,20 +11,20 @@ import {
     IndexedBoxAdapterCollection,
     MidiEffectDeviceAdapter,
     PlayfieldSampleBoxAdapter
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {Orientation, Scroller} from "@/ui/components/Scroller"
 import {DeviceMidiMeter} from "@/ui/devices/panel/DeviceMidiMeter.tsx"
 import {ChannelStrip} from "@/ui/mixer/ChannelStrip"
 import {installAutoScroll} from "@/ui/AutoScroll"
-import {deferNextFrame, Events, Html} from "@opendaw/lib-dom"
+import {deferNextFrame, Events, Html} from "@moises-ai/lib-dom"
 import {DevicePanelDragAndDrop} from "@/ui/devices/DevicePanelDragAndDrop"
 import {NoAudioUnitSelectedPlaceholder} from "@/ui/devices/panel/NoAudioUnitSelectedPlaceholder"
 import {NoEffectPlaceholder} from "@/ui/devices/panel/NoEffectPlaceholder"
 import {DeviceMount} from "@/ui/devices/panel/DeviceMount"
-import {Box} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
-import {Project, ProjectProfile} from "@opendaw/studio-core"
+import {Box} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
+import {Project, ProjectProfile} from "@moises-ai/studio-core"
 import {ShadertoyPreview} from "@/ui/devices/panel/ShadertoyPreview"
 
 const className = Html.adoptStyleSheet(css, "DevicePanel")

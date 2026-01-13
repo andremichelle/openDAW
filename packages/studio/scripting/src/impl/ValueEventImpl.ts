@@ -1,6 +1,6 @@
 import {ValueEvent} from "../Api"
-import {Interpolation, ppqn} from "@opendaw/lib-dsp"
-import {unitValue} from "@opendaw/lib-std"
+import {Interpolation, ppqn} from "@moises-ai/lib-dsp"
+import {unitValue} from "@moises-ai/lib-std"
 
 export class ValueEventImpl implements ValueEvent {
     position: ppqn

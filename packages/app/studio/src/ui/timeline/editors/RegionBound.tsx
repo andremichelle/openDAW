@@ -1,14 +1,14 @@
 import css from "./RegionBound.sass?inline"
-import {Lifecycle, Option, Terminable, Terminator} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Lifecycle, Option, Terminable, Terminator} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
-import {TimelineRange} from "@opendaw/studio-core"
-import {LoopableRegion} from "@opendaw/lib-dsp"
-import {AnyRegionBoxAdapter, RegionAdapters, UnionBoxTypes} from "@opendaw/studio-adapters"
+import {TimelineRange} from "@moises-ai/studio-core"
+import {LoopableRegion} from "@moises-ai/lib-dsp"
+import {AnyRegionBoxAdapter, RegionAdapters, UnionBoxTypes} from "@moises-ai/studio-adapters"
 import {createRegionCapturing} from "@/ui/timeline/editors/RegionCapturingTarget.ts"
 import {installCursor} from "@/ui/hooks/cursor.ts"
-import {Context2d, Html} from "@opendaw/lib-dom"
+import {Context2d, Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "RegionBound")
 

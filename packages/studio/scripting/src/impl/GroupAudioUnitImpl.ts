@@ -1,7 +1,7 @@
 import {AuxAudioUnit, GroupAudioUnit, Send} from "../Api"
 import {AudioUnitImpl} from "./AudioUnitImpl"
 import {SendImpl} from "./SendImpl"
-import {Arrays} from "@opendaw/lib-std"
+import {Arrays} from "@moises-ai/lib-std"
 
 export class GroupAudioUnitImpl extends AudioUnitImpl implements GroupAudioUnit {
     readonly kind = "group" as const

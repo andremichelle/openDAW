@@ -1,11 +1,12 @@
 {
-    "name": "@opendaw/lib-dom",
+    "name": "@moises-ai/lib-dom",
     "version": "0.0.67",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "license": "LGPL-3.0-or-later",
     "publishConfig": {
+        "registry": "https://npm.pkg.github.com",
         "access": "public"
     },
     "exports": {
@@ -23,13 +24,13 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@opendaw/lib-runtime": "^0.0.65",
-        "@opendaw/lib-std": "^0.0.65",
+        "@moises-ai/lib-runtime": "^0.0.65",
+        "@moises-ai/lib-std": "^0.0.65",
         "@types/wicg-file-system-access": "^2023.10.6"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/typescript-config": "^0.0.28"
+        "@moises-ai/eslint-config": "^0.0.27",
+        "@moises-ai/typescript-config": "^0.0.28"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

@@ -18,7 +18,7 @@ import {
     SortedSet,
     Subscription,
     UUID
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {Address} from "./address"
 import {Vertex} from "./vertex"
 import {PointerField} from "./pointer"

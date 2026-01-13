@@ -1,10 +1,10 @@
-import {Communicator, Messenger} from "@opendaw/lib-runtime"
+import {Communicator, Messenger} from "@moises-ai/lib-runtime"
 
 import {ScriptExecutionContext, ScriptExecutionProtocol} from "./ScriptExecutionProtocol"
 import {ScriptRunner} from "./ScriptRunner"
 import {ScriptHostProtocol} from "./ScriptHostProtocol"
-import {Sample} from "@opendaw/studio-adapters"
-import {AudioData} from "@opendaw/lib-dsp"
+import {Sample} from "@moises-ai/studio-adapters"
+import {AudioData} from "@moises-ai/lib-dsp"
 
 const messenger: Messenger = Messenger.for(self)
 

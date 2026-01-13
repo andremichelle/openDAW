@@ -1,11 +1,11 @@
 import {ClipModifier} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifier.ts"
-import {BoxEditing} from "@opendaw/lib-box"
-import {Arrays, asDefined, clamp, int, isDefined, Option, panic, Selection, ValueAxis} from "@opendaw/lib-std"
-import {AnyClipBox, AnyClipBoxAdapter} from "@opendaw/studio-adapters"
+import {BoxEditing} from "@moises-ai/lib-box"
+import {Arrays, asDefined, clamp, int, isDefined, Option, panic, Selection, ValueAxis} from "@moises-ai/lib-std"
+import {AnyClipBox, AnyClipBoxAdapter} from "@moises-ai/studio-adapters"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {ClipModifyStrategy} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifyStrategy.ts"
 import {Dialogs} from "@/ui/components/dialogs"
-import {Dragging} from "@opendaw/lib-dom"
+import {Dragging} from "@moises-ai/lib-dom"
 
 class UnselectedModifyStrategy implements ClipModifyStrategy {
     readonly #tool: ClipMoveModifier

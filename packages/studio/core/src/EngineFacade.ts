@@ -8,8 +8,8 @@ import {
     Subscription,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {AudioData, bpm, ppqn} from "@opendaw/lib-dsp"
+} from "@moises-ai/lib-std"
+import {AudioData, bpm, ppqn} from "@moises-ai/lib-dsp"
 import {
     ClipNotification,
     EnginePreferences,
@@ -17,11 +17,11 @@ import {
     EngineSettingsSchema,
     NoteSignal,
     PreferencesFacade
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {Engine} from "./Engine"
 import {EngineWorklet} from "./EngineWorklet"
 import {Project} from "./project"
-import {Preferences} from "@opendaw/lib-fusion"
+import {Preferences} from "@moises-ai/lib-fusion"
 
 export class EngineFacade implements Engine {
     readonly #terminator: Terminator = new Terminator()

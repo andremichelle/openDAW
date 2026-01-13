@@ -1,12 +1,12 @@
-import {MutableObservableValue, ObservableOption, Option} from "@opendaw/lib-std"
-import {EventCollection, ppqn, TimeBase} from "@opendaw/lib-dsp"
+import {MutableObservableValue, ObservableOption, Option} from "@moises-ai/lib-std"
+import {EventCollection, ppqn, TimeBase} from "@moises-ai/lib-dsp"
 import {BoxAdapter} from "../BoxAdapter"
 import {AudioPlayMode} from "../audio/AudioPlayMode"
 import {AudioFileBoxAdapter} from "../audio/AudioFileBoxAdapter"
 import {AudioTimeStretchBoxAdapter} from "../audio/AudioTimeStretchBoxAdapter"
 import {AudioPitchStretchBoxAdapter} from "../audio/AudioPitchStretchBoxAdapter"
 import {WarpMarkerBoxAdapter} from "../audio/WarpMarkerBoxAdapter"
-import {AudioClipBox, AudioRegionBox} from "@opendaw/studio-boxes"
+import {AudioClipBox, AudioRegionBox} from "@moises-ai/studio-boxes"
 
 export interface AudioContentBoxAdapter extends BoxAdapter {
     get file(): AudioFileBoxAdapter

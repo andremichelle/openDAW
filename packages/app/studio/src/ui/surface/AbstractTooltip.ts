@@ -1,6 +1,6 @@
-import {AnimationFrame} from "@opendaw/lib-dom"
+import {AnimationFrame} from "@moises-ai/lib-dom"
 import {Surface} from "./Surface"
-import {int, Option, Provider, Terminable} from "@opendaw/lib-std"
+import {int, Option, Provider, Terminable} from "@moises-ai/lib-std"
 
 export type ClientPosition = { clientX: number, clientY: number }
 

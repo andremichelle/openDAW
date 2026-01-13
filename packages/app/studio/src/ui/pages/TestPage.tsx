@@ -1,7 +1,7 @@
 import css from "./TestPage.sass?inline"
-import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
+import {createElement, PageContext, PageFactory} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "TestPage")
 

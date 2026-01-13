@@ -1,7 +1,7 @@
-import {Peaks} from "@opendaw/lib-fusion"
-import {EngineToClient, SampleLoader, SampleLoaderManager, SampleLoaderState} from "@opendaw/studio-adapters"
-import {Observer, Option, SortedSet, Subscription, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioData} from "@opendaw/lib-dsp"
+import {Peaks} from "@moises-ai/lib-fusion"
+import {EngineToClient, SampleLoader, SampleLoaderManager, SampleLoaderState} from "@moises-ai/studio-adapters"
+import {Observer, Option, SortedSet, Subscription, Terminable, UUID} from "@moises-ai/lib-std"
+import {AudioData} from "@moises-ai/lib-dsp"
 
 class SampleLoaderWorklet implements SampleLoader, Terminable {
     readonly peaks: Option<Peaks> = Option.None

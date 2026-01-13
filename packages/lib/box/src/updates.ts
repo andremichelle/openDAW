@@ -1,7 +1,7 @@
 import {PrimitiveField, PrimitiveType, PrimitiveValues, ValueSerialization} from "./primitive"
 import {Address} from "./address"
 import {PointerField} from "./pointer"
-import {Arrays, ByteArrayInput, DataInput, DataOutput, Option, UUID} from "@opendaw/lib-std"
+import {Arrays, ByteArrayInput, DataInput, DataOutput, Option, UUID} from "@moises-ai/lib-std"
 import {BoxGraph} from "./graph"
 
 export type Update = NewUpdate | PrimitiveUpdate | PointerUpdate | DeleteUpdate

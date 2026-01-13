@@ -1,6 +1,6 @@
-import {int, Nullable, ObservableValue, Observer, Subscription, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioData, bpm, ppqn} from "@opendaw/lib-dsp"
-import {ClipNotification, EnginePreferences, NoteSignal} from "@opendaw/studio-adapters"
+import {int, Nullable, ObservableValue, Observer, Subscription, Terminable, UUID} from "@moises-ai/lib-std"
+import {AudioData, bpm, ppqn} from "@moises-ai/lib-dsp"
+import {ClipNotification, EnginePreferences, NoteSignal} from "@moises-ai/studio-adapters"
 import {Project} from "./project"
 
 export interface Engine extends Terminable {

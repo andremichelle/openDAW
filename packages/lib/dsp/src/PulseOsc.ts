@@ -3,7 +3,7 @@
  *
  * https://github.com/rcliftonharvey/rchoscillators/blob/master/library/oscillators/templates/bandlimited/pulse.h
  */
-import {TAU} from "@opendaw/lib-std"
+import {TAU} from "@moises-ai/lib-std"
 
 const M_2_PI = 2.0 / Math.PI
 

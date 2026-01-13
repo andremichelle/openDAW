@@ -1,9 +1,9 @@
 import css from "./HorizontalMeter.sass?inline"
-import {AnimationFrame, Html} from "@opendaw/lib-dom"
-import {Arrays, Lifecycle, ValueMapping} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {AnimationFrame, Html} from "@moises-ai/lib-dom"
+import {Arrays, Lifecycle, ValueMapping} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {CanvasPainter} from "@/ui/canvas/painter"
-import {Colors} from "@opendaw/studio-enums"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "PeakVolumeSlider")
 

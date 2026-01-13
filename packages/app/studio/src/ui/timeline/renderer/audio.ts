@@ -1,9 +1,9 @@
-import {Peaks, PeaksPainter} from "@opendaw/lib-fusion"
-import {TimelineRange} from "@opendaw/studio-core"
-import {AudioFileBoxAdapter, AudioPlayMode} from "@opendaw/studio-adapters"
-import {Option} from "@opendaw/lib-std"
+import {Peaks, PeaksPainter} from "@moises-ai/lib-fusion"
+import {TimelineRange} from "@moises-ai/studio-core"
+import {AudioFileBoxAdapter, AudioPlayMode} from "@moises-ai/studio-adapters"
+import {Option} from "@moises-ai/lib-std"
 import {RegionBound} from "@/ui/timeline/renderer/env"
-import {dbToGain, LoopableRegion, PPQN, TempoChangeGrid, TempoMap} from "@opendaw/lib-dsp"
+import {dbToGain, LoopableRegion, PPQN, TempoChangeGrid, TempoMap} from "@moises-ai/lib-dsp"
 
 type Segment = { x0: number, x1: number, u0: number, u1: number, outside: boolean }
 export const renderAudio = (context: CanvasRenderingContext2D,

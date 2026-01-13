@@ -4,10 +4,10 @@ import {
     ClipSequencingUpdates,
     Section,
     TrackBoxAdapter
-} from "@opendaw/studio-adapters"
-import {Arrays, identity, Option, quantizeFloor, SortedSet, UUID} from "@opendaw/lib-std"
-import {ppqn, PPQN} from "@opendaw/lib-dsp"
-import {BoxGraph, Update} from "@opendaw/lib-box"
+} from "@moises-ai/studio-adapters"
+import {Arrays, identity, Option, quantizeFloor, SortedSet, UUID} from "@moises-ai/lib-std"
+import {ppqn, PPQN} from "@moises-ai/lib-dsp"
+import {BoxGraph, Update} from "@moises-ai/lib-box"
 
 // Just convenient to identify which UUID is for which type
 type ClipKey = UUID.Bytes

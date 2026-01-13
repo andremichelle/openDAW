@@ -1,10 +1,10 @@
 import css from "./TracksFooter.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Lifecycle} from "@moises-ai/lib-std"
 import {StudioService} from "@/service/StudioService.ts"
 import {TimelineRangeSlider} from "@/ui/timeline/TimelineRangeSlider.tsx"
-import {createElement} from "@opendaw/lib-jsx"
+import {createElement} from "@moises-ai/lib-jsx"
 import {TracksFooterHeader} from "@/ui/timeline/tracks/footer/TracksFooterHeader.tsx"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "TracksFooter")
 

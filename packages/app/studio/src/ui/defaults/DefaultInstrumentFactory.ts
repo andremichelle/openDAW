@@ -1,6 +1,6 @@
-import {InstrumentFactories, InstrumentFactory} from "@opendaw/studio-adapters"
+import {InstrumentFactories, InstrumentFactory} from "@moises-ai/studio-adapters"
 import {DefaultPlayfieldAttachment} from "@/ui/defaults/DefaultPlayfieldAttachment"
-import {ProjectApi} from "@opendaw/studio-core"
+import {ProjectApi} from "@moises-ai/studio-core"
 
 export namespace DefaultInstrumentFactory {
     export const create = (api: ProjectApi, factory: InstrumentFactory) => {

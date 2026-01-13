@@ -1,5 +1,5 @@
-import {BoxSchema, FieldRecord, mergeFields, reserveMany} from "@opendaw/lib-box-forge"
-import {Pointers} from "@opendaw/studio-enums"
+import {BoxSchema, FieldRecord, mergeFields, reserveMany} from "@moises-ai/lib-box-forge"
+import {Pointers} from "@moises-ai/studio-enums"
 
 const CaptureAttributes = {
     1: {type: "string", name: "device-id"},

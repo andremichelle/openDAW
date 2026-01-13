@@ -1,5 +1,5 @@
-import {Sample} from "@opendaw/studio-adapters"
-import {AudioData} from "@opendaw/lib-dsp"
+import {Sample} from "@moises-ai/studio-adapters"
+import {AudioData} from "@moises-ai/lib-dsp"
 
 export interface ScriptHostProtocol {
     openProject(buffer: ArrayBufferLike, name?: string): void

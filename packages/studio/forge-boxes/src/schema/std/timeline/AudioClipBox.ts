@@ -1,8 +1,8 @@
-import {BoxSchema, deprecated} from "@opendaw/lib-box-forge"
-import {Pointers} from "@opendaw/studio-enums"
+import {BoxSchema, deprecated} from "@moises-ai/lib-box-forge"
+import {Pointers} from "@moises-ai/studio-enums"
 import {ClipTriggerFields} from "./ClipTriggerFields"
 import {HueConstraints} from "../Defaults"
-import {TimeBase} from "@opendaw/lib-dsp"
+import {TimeBase} from "@moises-ai/lib-dsp"
 
 export const AudioClipBox: BoxSchema<Pointers> = {
     type: "box",

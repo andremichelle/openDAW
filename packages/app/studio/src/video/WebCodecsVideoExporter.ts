@@ -1,4 +1,4 @@
-import {asDefined, DefaultObservableValue, ObservableValue} from "@opendaw/lib-std"
+import {asDefined, DefaultObservableValue, ObservableValue} from "@moises-ai/lib-std"
 import type {
     AudioSample as AudioSampleClass,
     AudioSampleSource,

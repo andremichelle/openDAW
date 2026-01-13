@@ -1,11 +1,11 @@
 import css from "./VUMeterPanel.sass?inline"
-import {DefaultObservableValue, Lifecycle, Option, Terminator} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {DefaultObservableValue, Lifecycle, Option, Terminator} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {VUMeterDesign} from "@/ui/meter/VUMeterDesign.tsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {Html} from "@opendaw/lib-dom"
-import {EngineAddresses} from "@opendaw/studio-adapters"
-import {ProjectProfile} from "@opendaw/studio-core"
+import {Html} from "@moises-ai/lib-dom"
+import {EngineAddresses} from "@moises-ai/studio-adapters"
+import {ProjectProfile} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "VUMeterPanel")
 

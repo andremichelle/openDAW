@@ -6,9 +6,9 @@ import {
     NoteRegionBox,
     ValueClipBox,
     ValueRegionBox
-} from "@opendaw/studio-boxes"
-import {Box} from "@opendaw/lib-box"
-import {panic} from "@opendaw/lib-std"
+} from "@moises-ai/studio-boxes"
+import {Box} from "@moises-ai/lib-box"
+import {panic} from "@moises-ai/lib-std"
 
 export type AnyClipBox = NoteClipBox | ValueClipBox | AudioClipBox
 export type AnyRegionBox = AudioRegionBox | NoteRegionBox | ValueRegionBox

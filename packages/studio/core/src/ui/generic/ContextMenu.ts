@@ -1,5 +1,5 @@
-import {Client, Option, Subscription} from "@opendaw/lib-std"
-import {Events} from "@opendaw/lib-dom"
+import {Client, Option, Subscription} from "@moises-ai/lib-std"
+import {Events} from "@moises-ai/lib-dom"
 import {MenuItem, MenuRootData} from "./MenuItems"
 
 export namespace ContextMenu {

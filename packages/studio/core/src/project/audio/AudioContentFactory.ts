@@ -1,6 +1,6 @@
-import {ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
-import {ColorCodes, Sample, TrackType} from "@opendaw/studio-adapters"
-import {int, isDefined, panic, quantizeCeil, UUID} from "@opendaw/lib-std"
+import {ppqn, PPQN, TimeBase} from "@moises-ai/lib-dsp"
+import {ColorCodes, Sample, TrackType} from "@moises-ai/studio-adapters"
+import {int, isDefined, panic, quantizeCeil, UUID} from "@moises-ai/lib-std"
 import {
     AudioClipBox,
     AudioFileBox,
@@ -9,9 +9,9 @@ import {
     AudioTimeStretchBox,
     TrackBox,
     ValueEventCollectionBox
-} from "@opendaw/studio-boxes"
-import {TransientPlayMode} from "@opendaw/studio-enums"
-import {BoxGraph} from "@opendaw/lib-box"
+} from "@moises-ai/studio-boxes"
+import {TransientPlayMode} from "@moises-ai/studio-enums"
+import {BoxGraph} from "@moises-ai/lib-box"
 import {AudioContentHelpers} from "./AudioContentHelpers"
 import {WarpMarkerTemplate} from "./WarpMarkerTemplate"
 

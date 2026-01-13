@@ -1,4 +1,4 @@
-import {BoxGraph} from "@opendaw/lib-box"
+import {BoxGraph} from "@moises-ai/lib-box"
 import {
     AudioBusBox,
     AudioUnitBox,
@@ -10,7 +10,7 @@ import {
     TimelineBox,
     UserInterfaceBox,
     ValueEventCollectionBox
-} from "@opendaw/studio-boxes"
+} from "@moises-ai/studio-boxes"
 import {
     asInstanceOf,
     assert,
@@ -21,8 +21,8 @@ import {
     Option,
     panic,
     UUID
-} from "@opendaw/lib-std"
-import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
+} from "@moises-ai/lib-std"
+import {AudioUnitType, Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {ProjectMandatoryBoxes} from "./ProjectMandatoryBoxes"
 
 export type ProjectSkeleton = {

@@ -1,6 +1,6 @@
-import {BoxGraph} from "@opendaw/lib-box"
-import {AudioData} from "@opendaw/lib-dsp"
-import {AudioFileBox, BoxIO} from "@opendaw/studio-boxes"
+import {BoxGraph} from "@moises-ai/lib-box"
+import {AudioData} from "@moises-ai/lib-dsp"
+import {AudioFileBox, BoxIO} from "@moises-ai/studio-boxes"
 
 const isIntEncodedAsFloat = (v: number) =>
     v > 0 && v < 1e-6 && Number.isFinite(v) && (v / 1.401298464324817e-45) % 1 === 0

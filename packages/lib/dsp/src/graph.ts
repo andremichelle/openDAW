@@ -1,4 +1,4 @@
-import {Arrays, asDefined, assert} from "@opendaw/lib-std"
+import {Arrays, asDefined, assert} from "@moises-ai/lib-std"
 
 export type Edge<V> = [V, V]
 

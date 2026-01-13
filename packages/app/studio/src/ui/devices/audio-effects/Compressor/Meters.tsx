@@ -1,8 +1,8 @@
 import css from "./Meters.sass?inline"
-import {AnimationFrame, Html} from "@opendaw/lib-dom"
-import {clampUnit, Lifecycle} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {Colors} from "@opendaw/studio-enums"
+import {AnimationFrame, Html} from "@moises-ai/lib-dom"
+import {clampUnit, Lifecycle} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Colors} from "@moises-ai/studio-enums"
 import {Vertical} from "@/ui/devices/audio-effects/Compressor/Vertical"
 
 const className = Html.adoptStyleSheet(css, "Meters")

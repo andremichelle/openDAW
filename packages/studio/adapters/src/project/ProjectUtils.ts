@@ -1,4 +1,4 @@
-import {ppqn} from "@opendaw/lib-dsp"
+import {ppqn} from "@moises-ai/lib-dsp"
 import {
     Arrays,
     asInstanceOf,
@@ -11,7 +11,7 @@ import {
     SetMultimap,
     SortedSet,
     UUID
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {
     AudioFileBox,
     AudioUnitBox,
@@ -23,8 +23,8 @@ import {
     SoundfontFileBox,
     TrackBox,
     TransientMarkerBox
-} from "@opendaw/studio-boxes"
-import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
+} from "@moises-ai/studio-boxes"
+import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@moises-ai/lib-box"
 import {ProjectSkeleton} from "./ProjectSkeleton"
 import {AnyRegionBox, UnionBoxTypes} from "../unions"
 import {AudioUnitOrdering} from "../factories/AudioUnitOrdering"

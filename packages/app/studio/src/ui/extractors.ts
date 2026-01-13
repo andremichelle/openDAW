@@ -7,8 +7,8 @@ import {
     ReverbDeviceBox,
     TapeDeviceBox,
     TrackBox
-} from "@opendaw/studio-boxes"
-import {Box, PointerField, PointerHub, PrimitiveField, PrimitiveValues, StringField} from "@opendaw/lib-box"
+} from "@moises-ai/studio-boxes"
+import {Box, PointerField, PointerHub, PrimitiveField, PrimitiveValues, StringField} from "@moises-ai/lib-box"
 import {
     Arrays,
     DefaultObservableValue,
@@ -19,8 +19,8 @@ import {
     ObservableValue,
     Option,
     Terminator
-} from "@opendaw/lib-std"
-import {Pointers} from "@opendaw/studio-enums"
+} from "@moises-ai/lib-std"
+import {Pointers} from "@moises-ai/studio-enums"
 
 // TODO Is this completely obsolete?
 export namespace Extractors {

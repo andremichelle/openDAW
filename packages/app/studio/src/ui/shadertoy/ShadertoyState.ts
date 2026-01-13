@@ -1,10 +1,10 @@
-import {byte, clamp, clampUnit, Terminable, unitValue} from "@opendaw/lib-std"
-import {gainToDb, PPQN} from "@opendaw/lib-dsp"
+import {byte, clamp, clampUnit, Terminable, unitValue} from "@moises-ai/lib-std"
+import {gainToDb, PPQN} from "@moises-ai/lib-dsp"
 import {ShadertoyMIDIOutput} from "@/ui/shadertoy/ShadertoyMIDIOutput"
-import {AnimationFrame} from "@opendaw/lib-dom"
-import {MidiData} from "@opendaw/lib-midi"
-import {EngineAddresses} from "@opendaw/studio-adapters"
-import {Project} from "@opendaw/studio-core"
+import {AnimationFrame} from "@moises-ai/lib-dom"
+import {MidiData} from "@moises-ai/lib-midi"
+import {EngineAddresses} from "@moises-ai/studio-adapters"
+import {Project} from "@moises-ai/studio-core"
 
 export class ShadertoyState implements Terminable {
     readonly #terminable: Terminable

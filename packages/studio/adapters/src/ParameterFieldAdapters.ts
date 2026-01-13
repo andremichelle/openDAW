@@ -1,5 +1,5 @@
-import {Option, SortedSet, Terminable} from "@opendaw/lib-std"
-import {Address} from "@opendaw/lib-box"
+import {Option, SortedSet, Terminable} from "@moises-ai/lib-std"
+import {Address} from "@moises-ai/lib-box"
 import {AutomatableParameterFieldAdapter} from "./AutomatableParameterFieldAdapter"
 
 export class ParameterFieldAdapters {

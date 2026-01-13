@@ -1,9 +1,9 @@
 import css from "./PrimaryTracks.sass?inline"
-import {Lifecycle, Terminator} from "@opendaw/lib-std"
-import {createElement, Frag, replaceChildren} from "@opendaw/lib-jsx"
+import {Lifecycle, Terminator} from "@moises-ai/lib-std"
+import {createElement, Frag, replaceChildren} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {MarkerTrack} from "./marker/MarkerTrack"
-import {deferNextFrame, Html} from "@opendaw/lib-dom"
+import {deferNextFrame, Html} from "@moises-ai/lib-dom"
 import {TempoTrack} from "@/ui/timeline/tracks/primary/tempo/TempoTrack"
 import {SignatureTrack} from "@/ui/timeline/tracks/primary/signature/SignatureTrack"
 

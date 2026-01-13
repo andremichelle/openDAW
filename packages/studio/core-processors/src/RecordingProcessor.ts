@@ -1,4 +1,4 @@
-import {RecordingProcessorOptions, RingBuffer} from "@opendaw/studio-adapters"
+import {RecordingProcessorOptions, RingBuffer} from "@moises-ai/studio-adapters"
 
 export class RecordingProcessor extends AudioWorkletProcessor {
     readonly #writer: RingBuffer.Writer

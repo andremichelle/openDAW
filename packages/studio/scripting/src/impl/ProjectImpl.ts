@@ -1,4 +1,4 @@
-import {int, Procedure} from "@opendaw/lib-std"
+import {int, Procedure} from "@moises-ai/lib-std"
 import {AuxAudioUnit, GroupAudioUnit, InstrumentAudioUnit, Instruments, OutputAudioUnit, Project} from "../Api"
 import {ApiImpl} from "./ApiImpl"
 import {OutputAudioUnitImpl} from "./OutputAudioUnitImpl"

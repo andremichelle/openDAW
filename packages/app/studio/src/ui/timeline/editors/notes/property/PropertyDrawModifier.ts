@@ -1,8 +1,8 @@
-import {clamp, Notifier, Observer, Option, Selection, Terminable, unitValue, ValueAxis} from "@opendaw/lib-std"
-import {BoxEditing} from "@opendaw/lib-box"
+import {clamp, Notifier, Observer, Option, Selection, Terminable, unitValue, ValueAxis} from "@moises-ai/lib-std"
+import {BoxEditing} from "@moises-ai/lib-box"
 import {Line, NoteModifyStrategy} from "../NoteModifyStrategies.ts"
-import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
-import {EventCollection, NoteEvent, ppqn} from "@opendaw/lib-dsp"
+import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
+import {EventCollection, NoteEvent, ppqn} from "@moises-ai/lib-dsp"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {
     NotePropertyCent,
@@ -14,7 +14,7 @@ import {Snapping} from "@/ui/timeline/Snapping.ts"
 
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {UINoteEvent} from "@/ui/timeline/editors/notes/UINoteEvent.ts"
-import {Dragging} from "@opendaw/lib-dom"
+import {Dragging} from "@moises-ai/lib-dom"
 
 type Construct = Readonly<{
     element: Element

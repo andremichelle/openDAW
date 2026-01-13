@@ -1,7 +1,7 @@
-import {PPQN} from "@opendaw/lib-dsp"
-import {Events} from "@opendaw/lib-dom"
-import {Lifecycle} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {PPQN} from "@moises-ai/lib-dsp"
+import {Events} from "@moises-ai/lib-dom"
+import {Lifecycle} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {VideoOverlay} from "./VideoOverlay"
 
 const WIDTH = 1280

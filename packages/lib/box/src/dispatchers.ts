@@ -1,4 +1,4 @@
-import {int, Procedure, Subscription, Terminator, Unhandled} from "@opendaw/lib-std"
+import {int, Procedure, Subscription, Terminator, Unhandled} from "@moises-ai/lib-std"
 import {Address, Addressable} from "./address"
 
 export enum Propagation {This, Parent, Children}

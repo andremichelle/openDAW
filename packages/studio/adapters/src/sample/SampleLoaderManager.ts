@@ -1,4 +1,4 @@
-import {Terminable, UUID} from "@opendaw/lib-std"
+import {Terminable, UUID} from "@moises-ai/lib-std"
 import {SampleLoader} from "./SampleLoader"
 
 export interface SampleLoaderManager {

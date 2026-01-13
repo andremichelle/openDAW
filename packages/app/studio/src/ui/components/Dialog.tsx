@@ -1,11 +1,11 @@
 import css from "./Dialog.sass?inline"
-import {Exec, Procedure, safeExecute, Terminator} from "@opendaw/lib-std"
-import {createElement, JsxValue} from "@opendaw/lib-jsx"
+import {Exec, Procedure, safeExecute, Terminator} from "@moises-ai/lib-std"
+import {createElement, JsxValue} from "@moises-ai/lib-jsx"
 import {Button} from "@/ui/components/Button.tsx"
 import {Icon} from "@/ui/components/Icon.tsx"
-import {IconSymbol} from "@opendaw/studio-enums"
-import {Events, Html} from "@opendaw/lib-dom"
-import {Colors} from "@opendaw/studio-enums"
+import {IconSymbol} from "@moises-ai/studio-enums"
+import {Events, Html} from "@moises-ai/lib-dom"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "Dialog")
 

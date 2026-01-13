@@ -8,8 +8,8 @@ import {
     SortedSet,
     Subscription,
     Terminable
-} from "@opendaw/lib-std"
-import {Address, Addressable} from "@opendaw/lib-box"
+} from "@moises-ai/lib-std"
+import {Address, Addressable} from "@moises-ai/lib-box"
 import {VertexSelection} from "./VertexSelection"
 import {SelectableVertex} from "./SelectableVertex"
 

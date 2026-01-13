@@ -1,14 +1,14 @@
 import css from "./TransientMarkerEditor.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {BinarySearch, Lifecycle, Nullable, NumberComparator, ObservableValue, Terminator} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {BinarySearch, Lifecycle, Nullable, NumberComparator, ObservableValue, Terminator} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader"
-import {Project, TimelineRange} from "@opendaw/studio-core"
+import {Project, TimelineRange} from "@moises-ai/studio-core"
 import {Snapping} from "@/ui/timeline/Snapping"
 import {CanvasPainter} from "@/ui/canvas/painter"
-import {Colors} from "@opendaw/studio-enums"
+import {Colors} from "@moises-ai/studio-enums"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
-import {TransientMarkerBoxAdapter} from "@opendaw/studio-adapters"
+import {TransientMarkerBoxAdapter} from "@moises-ai/studio-adapters"
 
 const className = Html.adoptStyleSheet(css, "TransientMarkerEditor")
 

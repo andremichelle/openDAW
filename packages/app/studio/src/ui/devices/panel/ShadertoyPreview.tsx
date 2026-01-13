@@ -1,5 +1,5 @@
 import css from "./ShadertoyPreview.sass?inline"
-import {Events, Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@moises-ai/lib-dom"
 import {
     asInstanceOf,
     DefaultObservableValue,
@@ -8,11 +8,11 @@ import {
     Terminable,
     Terminator,
     tryCatch
-} from "@opendaw/lib-std"
-import {createElement, Frag, replaceChildren} from "@opendaw/lib-jsx"
+} from "@moises-ai/lib-std"
+import {createElement, Frag, replaceChildren} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
-import {ShadertoyBox} from "@opendaw/studio-boxes"
+import {ShadertoyBox} from "@moises-ai/studio-boxes"
 import {ShadertoyLogo} from "@/ui/devices/panel/ShadertoyLogo"
 import {setupShadertoyRunner} from "@/ui/shadertoy/runner-setup"
 

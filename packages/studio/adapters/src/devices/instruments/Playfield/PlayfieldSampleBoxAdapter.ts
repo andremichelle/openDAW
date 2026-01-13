@@ -1,7 +1,7 @@
-import {Pointers} from "@opendaw/studio-enums"
-import {PlayfieldSampleBox} from "@opendaw/studio-boxes"
-import {int, Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
-import {Address, BooleanField, Field, Int32Field, StringField} from "@opendaw/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
+import {PlayfieldSampleBox} from "@moises-ai/studio-boxes"
+import {int, Option, StringMapping, Terminator, UUID, ValueMapping} from "@moises-ai/lib-std"
+import {Address, BooleanField, Field, Int32Field, StringField} from "@moises-ai/lib-box"
 import {
     AudioEffectDeviceAdapter,
     DeviceAccepts,

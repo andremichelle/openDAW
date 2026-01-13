@@ -1,5 +1,5 @@
 import {PPQN, ppqn} from "./ppqn"
-import {int} from "@opendaw/lib-std"
+import {int} from "@moises-ai/lib-std"
 
 export class Glide {
     #beginFrequency: number = 0.0

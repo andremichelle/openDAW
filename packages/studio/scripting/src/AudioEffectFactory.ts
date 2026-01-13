@@ -1,6 +1,6 @@
-import {Box, BoxGraph} from "@opendaw/lib-box"
-import {AudioUnitBox, DelayDeviceBox} from "@opendaw/studio-boxes"
-import {Unhandled, UUID} from "@opendaw/lib-std"
+import {Box, BoxGraph} from "@moises-ai/lib-box"
+import {AudioUnitBox, DelayDeviceBox} from "@moises-ai/studio-boxes"
+import {Unhandled, UUID} from "@moises-ai/lib-std"
 import {AudioEffects} from "./Api"
 
 export class AudioEffectFactory {

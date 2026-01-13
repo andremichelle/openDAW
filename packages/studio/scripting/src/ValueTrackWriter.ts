@@ -1,8 +1,8 @@
 import {ValueEventImpl, ValueRegionImpl, ValueTrackImpl} from "./impl"
-import {asDefined, isDefined, UUID} from "@opendaw/lib-std"
-import {AudioUnitBox, TrackBox, ValueEventBox, ValueEventCollectionBox, ValueRegionBox} from "@opendaw/studio-boxes"
-import {InterpolationFieldAdapter, TrackType} from "@opendaw/studio-adapters"
-import {Box, BoxGraph} from "@opendaw/lib-box"
+import {asDefined, isDefined, UUID} from "@moises-ai/lib-std"
+import {AudioUnitBox, TrackBox, ValueEventBox, ValueEventCollectionBox, ValueRegionBox} from "@moises-ai/studio-boxes"
+import {InterpolationFieldAdapter, TrackType} from "@moises-ai/studio-adapters"
+import {Box, BoxGraph} from "@moises-ai/lib-box"
 import {AnyDevice, ValueRegion} from "./Api"
 import {IndexRef} from "./IndexRef"
 

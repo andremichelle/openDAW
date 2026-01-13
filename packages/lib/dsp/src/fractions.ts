@@ -1,4 +1,4 @@
-import {int} from "@opendaw/lib-std"
+import {int} from "@moises-ai/lib-std"
 import {PPQN, ppqn} from "./ppqn"
 
 export type Fraction = Readonly<[int, int]>

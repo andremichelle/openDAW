@@ -1,8 +1,8 @@
 import {EngineContext} from "./EngineContext"
 import {AudioInput, Block, Processor} from "./processing"
-import {Option, Terminable} from "@opendaw/lib-std"
-import {AuxSendBoxAdapter} from "@opendaw/studio-adapters"
-import {AudioBuffer, dbToGain, Ramp} from "@opendaw/lib-dsp"
+import {Option, Terminable} from "@moises-ai/lib-std"
+import {AuxSendBoxAdapter} from "@moises-ai/studio-adapters"
+import {AudioBuffer, dbToGain, Ramp} from "@moises-ai/lib-dsp"
 import {AutomatableParameter} from "./AutomatableParameter"
 import {AudioProcessor} from "./AudioProcessor"
 

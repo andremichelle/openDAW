@@ -1,4 +1,4 @@
-import {int, Option} from "@opendaw/lib-std"
+import {int, Option} from "@moises-ai/lib-std"
 
 export type ProcessorOptions = {}
 

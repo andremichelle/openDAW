@@ -1,6 +1,6 @@
-import {assert, Func, int, Listeners, SortedSet, Subscription, Terminable, UUID} from "@opendaw/lib-std"
-import {Box, PointerField, PointerHub} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
+import {assert, Func, int, Listeners, SortedSet, Subscription, Terminable, UUID} from "@moises-ai/lib-std"
+import {Box, PointerField, PointerHub} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
 import {BoxAdapter} from "./BoxAdapter"
 
 export interface AdapterCollectionListener<ADAPTER extends BoxAdapter> {

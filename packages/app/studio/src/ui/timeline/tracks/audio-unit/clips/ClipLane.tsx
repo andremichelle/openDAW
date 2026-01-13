@@ -10,14 +10,14 @@ import {
     Nullable,
     Option,
     Terminator
-} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {AnyClipBoxAdapter, NoteClipBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
+} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {AnyClipBoxAdapter, NoteClipBoxAdapter, TrackBoxAdapter} from "@moises-ai/studio-adapters"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {ClipPlaceholder} from "@/ui/timeline/tracks/audio-unit/clips/ClipPlaceholder.tsx"
 import {ClipModifyStrategies, ClipModifyStrategy} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifyStrategy.ts"
 import {StudioService} from "@/service/StudioService.ts"
-import {deferNextFrame, Html} from "@opendaw/lib-dom"
+import {deferNextFrame, Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "ClipLane")
 

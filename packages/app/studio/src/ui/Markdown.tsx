@@ -1,10 +1,10 @@
-import {Browser, Html, ModfierKeys} from "@opendaw/lib-dom"
+import {Browser, Html, ModfierKeys} from "@moises-ai/lib-dom"
 import css from "./Markdown.sass?inline"
-import {Exec, isDefined} from "@opendaw/lib-std"
-import {createElement, RouteLocation} from "@opendaw/lib-jsx"
+import {Exec, isDefined} from "@moises-ai/lib-std"
+import {createElement, RouteLocation} from "@moises-ai/lib-jsx"
 import markdownit from "markdown-it"
 import {markdownItTable} from "markdown-it-table"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol} from "@moises-ai/studio-enums"
 import {Icon} from "@/ui/components/Icon"
 
 const className = Html.adoptStyleSheet(css, "Markdown")

@@ -39,8 +39,8 @@ function generateIndex() {
 
     // Manual re-exports from other packages
     const manualExports = [
-        'export type {Preferences, PreferencesProtocol} from "@opendaw/lib-fusion"',
-        'export {PreferencesClient, PreferencesFacade, PreferencesHost} from "@opendaw/lib-fusion"'
+        'export type {Preferences, PreferencesProtocol} from "@moises-ai/lib-fusion"',
+        'export {PreferencesClient, PreferencesFacade, PreferencesHost} from "@moises-ai/lib-fusion"'
     ].join('\n');
 
     const content = `// Auto-generated exports - do not edit manually

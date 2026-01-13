@@ -1,15 +1,15 @@
 import css from "./PianoRoll.sass?inline"
-import {int, Lifecycle, Option} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {int, Lifecycle, Option} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {PitchPositioner} from "@/ui/timeline/editors/notes/pitch/PitchPositioner.ts"
-import {MidiKeys} from "@opendaw/lib-dsp"
+import {MidiKeys} from "@moises-ai/lib-dsp"
 import {ScaleConfig} from "@/ui/timeline/editors/notes/pitch/ScaleConfig.ts"
-import {NoteSignal, NoteStreamReceiver} from "@opendaw/studio-adapters"
-import {Dragging, Events, Html} from "@opendaw/lib-dom"
+import {NoteSignal, NoteStreamReceiver} from "@moises-ai/studio-adapters"
+import {Dragging, Events, Html} from "@moises-ai/lib-dom"
 import {Fonts} from "@/ui/Fonts"
-import {CaptureMidi} from "@opendaw/studio-core"
-import {Colors} from "@opendaw/studio-enums"
+import {CaptureMidi} from "@moises-ai/studio-core"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "PianoRoll")
 

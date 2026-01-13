@@ -1,11 +1,11 @@
 import css from "./DevicePeakMeter.sass?inline"
-import {Arrays, int, Lifecycle, Terminator, ValueMapping} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {Address} from "@opendaw/lib-box"
-import {gainToDb} from "@opendaw/lib-dsp"
-import {LiveStreamReceiver} from "@opendaw/lib-fusion"
-import {Html} from "@opendaw/lib-dom"
-import {Colors} from "@opendaw/studio-enums"
+import {Arrays, int, Lifecycle, Terminator, ValueMapping} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Address} from "@moises-ai/lib-box"
+import {gainToDb} from "@moises-ai/lib-dsp"
+import {LiveStreamReceiver} from "@moises-ai/lib-fusion"
+import {Html} from "@moises-ai/lib-dom"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "DevicePeakMeter")
 

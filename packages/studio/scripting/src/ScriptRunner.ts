@@ -8,8 +8,8 @@ import {
     Interpolation,
     midiToHz,
     PPQN
-} from "@opendaw/lib-dsp"
-import {VoicingMode} from "@opendaw/studio-enums"
+} from "@moises-ai/lib-dsp"
+import {VoicingMode} from "@moises-ai/studio-enums"
 import {ScriptHostProtocol} from "./ScriptHostProtocol"
 import {ScriptExecutionContext} from "./ScriptExecutionProtocol"
 import {Api, AudioPlayback} from "./Api"

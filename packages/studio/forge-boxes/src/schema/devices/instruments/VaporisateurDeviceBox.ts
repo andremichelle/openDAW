@@ -1,8 +1,8 @@
-import {BoxSchema, deprecated} from "@opendaw/lib-box-forge"
-import {Pointers, VoicingMode} from "@opendaw/studio-enums"
+import {BoxSchema, deprecated} from "@moises-ai/lib-box-forge"
+import {Pointers, VoicingMode} from "@moises-ai/studio-enums"
 import {BipolarConstraints, ParameterPointerRules, UnipolarConstraints} from "../../std/Defaults"
 import {DeviceFactory} from "../../std/DeviceFactory"
-import {ClassicWaveform} from "@opendaw/lib-dsp"
+import {ClassicWaveform} from "@moises-ai/lib-dsp"
 
 const NoiseEnv = {value: 0.001, constraints: {min: 0.001, max: 5.0, scaling: "exponential"}, unit: "s"} as const
 

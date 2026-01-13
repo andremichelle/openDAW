@@ -1,7 +1,7 @@
 import {ChannelStripProcessor} from "./ChannelStripProcessor"
-import {asDefined, SortedSet, Terminable, UUID} from "@opendaw/lib-std"
-import {Pointers} from "@opendaw/studio-enums"
-import {AudioUnitBox, AuxSendBox, BoxVisitor} from "@opendaw/studio-boxes"
+import {asDefined, SortedSet, Terminable, UUID} from "@moises-ai/lib-std"
+import {Pointers} from "@moises-ai/studio-enums"
+import {AudioUnitBox, AuxSendBox, BoxVisitor} from "@moises-ai/studio-boxes"
 
 export class Mixer {
     readonly #channelStrips: SortedSet<UUID.Bytes, ChannelStripProcessor>

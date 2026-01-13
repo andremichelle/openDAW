@@ -7,9 +7,9 @@ import {
     RuntimeSignal,
     TimeSpan,
     unitValue
-} from "@opendaw/lib-std"
-import {Browser} from "@opendaw/lib-dom"
-import {Promises} from "@opendaw/lib-runtime"
+} from "@moises-ai/lib-std"
+import {Browser} from "@moises-ai/lib-dom"
+import {Promises} from "@moises-ai/lib-runtime"
 import {CloudService} from "./CloudService"
 import {CloudHandler} from "./CloudHandler"
 import {CloudAuthManager} from "./CloudAuthManager"

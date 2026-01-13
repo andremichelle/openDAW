@@ -8,20 +8,20 @@ import {
     Subscription,
     Terminable,
     tryCatch
-} from "@opendaw/lib-std"
-import {ShortcutDefinitions, ShortcutManager} from "@opendaw/lib-dom"
+} from "@moises-ai/lib-std"
+import {ShortcutDefinitions, ShortcutManager} from "@moises-ai/lib-dom"
 import {GlobalShortcuts, GlobalShortcutsFactory} from "@/ui/shortcuts/GlobalShortcuts"
 import {StudioService} from "@/service/StudioService"
 import {DefaultWorkspace} from "@/ui/workspace/Default"
 import {PanelType} from "@/ui/workspace/PanelType"
 import {Workspace} from "@/ui/workspace/Workspace"
-import {DeviceHost, Devices, ProjectUtils} from "@opendaw/studio-adapters"
+import {DeviceHost, Devices, ProjectUtils} from "@moises-ai/studio-adapters"
 import {ContentEditorShortcuts, ContentEditorShortcutsFactory} from "@/ui/shortcuts/ContentEditorShortcuts"
 import {PianoPanelShortcuts, PianoPanelShortcutsFactory} from "@/ui/shortcuts/PianoPanelShortcuts"
 import {RegionsShortcuts, RegionsShortcutsFactory} from "@/ui/shortcuts/RegionsShortcuts"
 import {NoteEditorShortcuts, NoteEditorShortcutsFactory} from "@/ui/shortcuts/NoteEditorShortcuts"
 import {SoftwareMIDIShortcuts, SoftwareMIDIShortcutsFactory} from "@/ui/shortcuts/SoftwareMIDIShortcuts"
-import {RouteLocation} from "@opendaw/lib-jsx"
+import {RouteLocation} from "@moises-ai/lib-jsx"
 
 export namespace StudioShortcutManager {
     const localStorageKey = "shortcuts"

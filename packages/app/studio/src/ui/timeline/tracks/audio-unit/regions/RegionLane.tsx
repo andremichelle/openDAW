@@ -1,12 +1,12 @@
 import css from "./RegionLane.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {Lifecycle} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {Lifecycle} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {renderRegions} from "@/ui/timeline/tracks/audio-unit/regions/RegionRenderer.ts"
-import {TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
+import {TrackBoxAdapter, TrackType} from "@moises-ai/studio-adapters"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-import {TimelineRange} from "@opendaw/studio-core"
+import {TimelineRange} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "RegionLane")
 

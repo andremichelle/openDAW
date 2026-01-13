@@ -1,6 +1,6 @@
-import {AudioSendRouting, AudioUnitType, Pointers} from "@opendaw/studio-enums"
+import {AudioSendRouting, AudioUnitType, Pointers} from "@moises-ai/studio-enums"
 import {BipolarConstraints, ParameterPointerRules} from "./Defaults"
-import {BoxSchema} from "@opendaw/lib-box-forge"
+import {BoxSchema} from "@moises-ai/lib-box-forge"
 
 export const AudioUnitBox: BoxSchema<Pointers> = {
     type: "box",

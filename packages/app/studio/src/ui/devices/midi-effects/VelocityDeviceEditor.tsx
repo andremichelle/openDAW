@@ -1,17 +1,17 @@
 import css from "./VelocityDeviceEditor.sass?inline"
-import {DeviceHost, VelocityDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {Arrays, int, Lifecycle, linear, TAU, unitValue} from "@opendaw/lib-std"
+import {DeviceHost, VelocityDeviceBoxAdapter} from "@moises-ai/studio-adapters"
+import {Arrays, int, Lifecycle, linear, TAU, unitValue} from "@moises-ai/lib-std"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
-import {createElement} from "@opendaw/lib-jsx"
+import {createElement} from "@moises-ai/lib-jsx"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder.tsx"
 import {DeviceMidiMeter} from "@/ui/devices/panel/DeviceMidiMeter.tsx"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 import {StudioService} from "@/service/StudioService"
-import {EffectFactories} from "@opendaw/studio-core"
+import {EffectFactories} from "@moises-ai/studio-core"
 import {Icon} from "@/ui/components/Icon"
 import {CanvasPainter} from "@/ui/canvas/painter"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "VelocityDeviceEditor")
 

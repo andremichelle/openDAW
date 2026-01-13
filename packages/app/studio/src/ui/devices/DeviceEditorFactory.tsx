@@ -1,4 +1,4 @@
-import {createElement, JsxValue} from "@opendaw/lib-jsx"
+import {createElement, JsxValue} from "@moises-ai/lib-jsx"
 import {
     ArpeggioDeviceBox,
     AudioBusBox,
@@ -26,7 +26,7 @@ import {
     VaporisateurDeviceBox,
     VelocityDeviceBox,
     ZeitgeistDeviceBox
-} from "@opendaw/studio-boxes"
+} from "@moises-ai/studio-boxes"
 import {ArpeggioDeviceEditor} from "@/ui/devices/midi-effects/ArpeggioDeviceEditor.tsx"
 import {
     ArpeggioDeviceBoxAdapter,
@@ -55,13 +55,13 @@ import {
     VaporisateurDeviceBoxAdapter,
     VelocityDeviceBoxAdapter,
     ZeitgeistDeviceBoxAdapter
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {DelayDeviceEditor} from "@/ui/devices/audio-effects/DelayDeviceEditor.tsx"
 import {ReverbDeviceEditor} from "@/ui/devices/audio-effects/ReverbDeviceEditor.tsx"
 import {RevampDeviceEditor} from "@/ui/devices/audio-effects/RevampDeviceEditor.tsx"
 import {ModularDeviceEditor} from "@/ui/devices/audio-effects/ModularDeviceEditor.tsx"
-import {asDefined, Lifecycle} from "@opendaw/lib-std"
-import {Box} from "@opendaw/lib-box"
+import {asDefined, Lifecycle} from "@moises-ai/lib-std"
+import {Box} from "@moises-ai/lib-box"
 import {PitchDeviceEditor} from "./midi-effects/PitchDeviceEditor"
 import {TapeDeviceEditor} from "@/ui/devices/instruments/TapeDeviceEditor.tsx"
 import {VaporisateurDeviceEditor} from "@/ui/devices/instruments/VaporisateurDeviceEditor.tsx"

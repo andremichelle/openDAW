@@ -9,9 +9,9 @@ import {
     Procedure,
     Provider,
     Terminable
-} from "@opendaw/lib-std"
-import {Address} from "@opendaw/lib-box"
-import {Communicator, Messenger} from "@opendaw/lib-runtime"
+} from "@moises-ai/lib-std"
+import {Address} from "@moises-ai/lib-box"
+import {Communicator, Messenger} from "@moises-ai/lib-runtime"
 import {Lock} from "./Lock"
 import {PackageType} from "./PackageType"
 import {Protocol} from "./Protocol"

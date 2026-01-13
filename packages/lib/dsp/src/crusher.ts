@@ -1,4 +1,4 @@
-import {clamp, clampUnit, exponential, int} from "@opendaw/lib-std"
+import {clamp, clampUnit, exponential, int} from "@moises-ai/lib-std"
 import {dbToGain} from "./utils"
 import {StereoMatrix} from "./stereo"
 import {BiquadCoeff} from "./biquad-coeff"

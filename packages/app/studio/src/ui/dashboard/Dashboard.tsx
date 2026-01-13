@@ -1,8 +1,8 @@
 import css from "./Dashboard.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
-import {createElement, LocalLink} from "@opendaw/lib-jsx"
+import {Lifecycle} from "@moises-ai/lib-std"
+import {createElement, LocalLink} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 import {Resources} from "@/ui/dashboard/Resources"
 import {DemoProjects} from "@/ui/dashboard/DemoProjects"
 

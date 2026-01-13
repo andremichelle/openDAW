@@ -1,7 +1,7 @@
-import {Lifecycle, Procedure} from "@opendaw/lib-std"
-import {createElement, JsxValue} from "@opendaw/lib-jsx"
+import {Lifecycle, Procedure} from "@moises-ai/lib-std"
+import {createElement, JsxValue} from "@moises-ai/lib-jsx"
 import {Appearance, ButtonCheckboxRadio} from "@/ui/components/ButtonCheckboxRadio"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 
 export type ButtonParameters = {
     lifecycle: Lifecycle

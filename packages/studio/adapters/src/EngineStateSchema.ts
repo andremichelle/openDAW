@@ -1,4 +1,4 @@
-import {Schema} from "@opendaw/lib-std"
+import {Schema} from "@moises-ai/lib-std"
 
 export const EngineStateSchema = Schema.createBuilder({
     position: Schema.float,

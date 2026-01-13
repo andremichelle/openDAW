@@ -1,5 +1,5 @@
-import {FFT, Window} from "@opendaw/lib-dsp"
-import {int} from "@opendaw/lib-std"
+import {FFT, Window} from "@moises-ai/lib-dsp"
+import {int} from "@moises-ai/lib-std"
 
 export class AudioAnalyser {
     static readonly DEFAULT_SIZE = 512

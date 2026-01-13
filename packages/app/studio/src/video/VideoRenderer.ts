@@ -1,12 +1,12 @@
-import {asInstanceOf, DefaultObservableValue, Option, panic, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
-import {dbToGain, RenderQuantum} from "@opendaw/lib-dsp"
-import {OfflineEngineRenderer, Project} from "@opendaw/studio-core"
-import {Files} from "@opendaw/lib-dom"
+import {asInstanceOf, DefaultObservableValue, Option, panic, RuntimeNotifier, TimeSpan} from "@moises-ai/lib-std"
+import {dbToGain, RenderQuantum} from "@moises-ai/lib-dsp"
+import {OfflineEngineRenderer, Project} from "@moises-ai/studio-core"
+import {Files} from "@moises-ai/lib-dom"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
-import {ShadertoyBox} from "@opendaw/studio-boxes"
+import {ShadertoyBox} from "@moises-ai/studio-boxes"
 import {showVideoExportDialog, VideoOverlay, WebCodecsVideoExporter} from "@/video"
-import {Promises} from "@opendaw/lib-runtime"
+import {Promises} from "@moises-ai/lib-runtime"
 
 const MAX_DURATION_SECONDS = TimeSpan.hours(1).absSeconds()
 const SILENCE_THRESHOLD_DB = -72.0

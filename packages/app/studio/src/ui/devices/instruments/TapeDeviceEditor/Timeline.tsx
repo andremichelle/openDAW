@@ -1,9 +1,9 @@
-import {asDefined, Lifecycle, ObservableValue, quantizeFloor} from "@opendaw/lib-std"
-import {deferNextFrame, Html} from "@opendaw/lib-dom"
-import {ppqn, PPQN} from "@opendaw/lib-dsp"
-import {createElement} from "@opendaw/lib-jsx"
-import {AudioUnitTracks} from "@opendaw/studio-adapters"
-import {Colors} from "@opendaw/studio-enums"
+import {asDefined, Lifecycle, ObservableValue, quantizeFloor} from "@moises-ai/lib-std"
+import {deferNextFrame, Html} from "@moises-ai/lib-dom"
+import {ppqn, PPQN} from "@moises-ai/lib-dsp"
+import {createElement} from "@moises-ai/lib-jsx"
+import {AudioUnitTracks} from "@moises-ai/studio-adapters"
+import {Colors} from "@moises-ai/studio-enums"
 
 type Construct = {
     lifecycle: Lifecycle

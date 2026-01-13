@@ -1,5 +1,5 @@
-import {canWrite, isDefined, panic, Procedure, safeWrite} from "@opendaw/lib-std"
-import {Html} from "@opendaw/lib-dom"
+import {canWrite, isDefined, panic, Procedure, safeWrite} from "@moises-ai/lib-std"
+import {Html} from "@moises-ai/lib-dom"
 import {SupportedSvgTags} from "./supported-svg-tags"
 import {Inject} from "./inject"
 import {DomElement, JsxValue} from "./types"

@@ -1,11 +1,11 @@
 import css from "./MusicalUnitDisplay.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {PPQN} from "@opendaw/lib-dsp"
+import {Html} from "@moises-ai/lib-dom"
+import {DefaultObservableValue, Lifecycle} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {PPQN} from "@moises-ai/lib-dsp"
 import {UnitDisplay} from "@/ui/header/UnitDisplay"
 import {StudioService} from "@/service/StudioService"
-import {StudioPreferences} from "@opendaw/studio-core"
+import {StudioPreferences} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "MusicalUnitDisplay")
 

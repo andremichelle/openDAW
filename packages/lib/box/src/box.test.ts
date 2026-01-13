@@ -1,4 +1,4 @@
-import {ByteArrayInput, ByteArrayOutput, Maybe, Option, safeExecute, Unhandled, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, ByteArrayOutput, Maybe, Option, safeExecute, Unhandled, UUID} from "@moises-ai/lib-std"
 import {NoPointers, VertexVisitor} from "./vertex"
 import {Field, FieldConstruct} from "./field"
 import {Box, BoxConstruct} from "./box"

@@ -1,8 +1,8 @@
 import css from "./NoteLabel.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {int, Lifecycle, ObservableValue} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {MidiKeys} from "@opendaw/lib-dsp"
+import {Html} from "@moises-ai/lib-dom"
+import {int, Lifecycle, ObservableValue} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {MidiKeys} from "@moises-ai/lib-dsp"
 
 const className = Html.adoptStyleSheet(css, "NoteLabel")
 

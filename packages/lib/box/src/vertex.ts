@@ -1,4 +1,4 @@
-import {DataInput, DataOutput, JSONValue, Maybe, Option, Optional} from "@opendaw/lib-std"
+import {DataInput, DataOutput, JSONValue, Maybe, Option, Optional} from "@moises-ai/lib-std"
 import {Addressable} from "./address"
 import {Box} from "./box"
 import {Field, Fields} from "./field"

@@ -1,6 +1,6 @@
-import {byte, panic, unitValue, UUID} from "@opendaw/lib-std"
-import {MidiData} from "@opendaw/lib-midi"
-import {ppqn} from "@opendaw/lib-dsp"
+import {byte, panic, unitValue, UUID} from "@moises-ai/lib-std"
+import {MidiData} from "@moises-ai/lib-midi"
+import {ppqn} from "@moises-ai/lib-dsp"
 
 export type NoteSignalOn = { type: "note-on", uuid: UUID.Bytes, pitch: byte, velocity: unitValue }
 

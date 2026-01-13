@@ -3,9 +3,9 @@ import {PanelPlaceholder} from "@/ui/workspace/PanelPlaceholder.tsx"
 import {PanelResizer} from "@/ui/workspace/PanelResizer.tsx"
 import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
 import {ContentGlue} from "@/ui/workspace/ContentGlue.ts"
-import {isDefined, Iterables, Lifecycle, Nullable, Unhandled} from "@opendaw/lib-std"
-import {Html} from "@opendaw/lib-dom"
-import {appendChildren, createElement} from "@opendaw/lib-jsx"
+import {isDefined, Iterables, Lifecycle, Nullable, Unhandled} from "@moises-ai/lib-std"
+import {Html} from "@moises-ai/lib-dom"
+import {appendChildren, createElement} from "@moises-ai/lib-jsx"
 
 export namespace WorkspaceBuilder {
     export const buildScreen = (lifecycle: Lifecycle,

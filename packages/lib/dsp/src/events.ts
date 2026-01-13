@@ -14,7 +14,7 @@ import {
     Predicate,
     Predicates,
     unitValue
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {ppqn} from "./ppqn"
 
 export interface Event {

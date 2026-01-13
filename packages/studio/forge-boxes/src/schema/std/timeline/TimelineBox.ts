@@ -1,6 +1,6 @@
-import {PPQN} from "@opendaw/lib-dsp"
-import {BoxSchema, deprecated} from "@opendaw/lib-box-forge"
-import {Pointers} from "@opendaw/studio-enums"
+import {PPQN} from "@moises-ai/lib-dsp"
+import {BoxSchema, deprecated} from "@moises-ai/lib-box-forge"
+import {Pointers} from "@moises-ai/studio-enums"
 import {IndexConstraints, PPQNDurationConstraints, PPQNPositionConstraints} from "../Defaults"
 
 export const TimelineBox: BoxSchema<Pointers> = {

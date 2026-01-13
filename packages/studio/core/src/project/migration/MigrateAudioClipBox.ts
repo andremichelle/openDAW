@@ -1,8 +1,8 @@
-import {BoxGraph} from "@opendaw/lib-box"
-import {asInstanceOf, Float, UUID} from "@opendaw/lib-std"
-import {AudioClipBox, AudioFileBox, AudioPitchStretchBox, BoxIO, ValueEventCollectionBox} from "@opendaw/studio-boxes"
-import {AudioPlayback} from "@opendaw/studio-enums"
-import {TimeBase} from "@opendaw/lib-dsp"
+import {BoxGraph} from "@moises-ai/lib-box"
+import {asInstanceOf, Float, UUID} from "@moises-ai/lib-std"
+import {AudioClipBox, AudioFileBox, AudioPitchStretchBox, BoxIO, ValueEventCollectionBox} from "@moises-ai/studio-boxes"
+import {AudioPlayback} from "@moises-ai/studio-enums"
+import {TimeBase} from "@moises-ai/lib-dsp"
 import {AudioContentHelpers} from "../audio/AudioContentHelpers"
 
 const isIntEncodedAsFloat = (v: number) =>

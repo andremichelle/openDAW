@@ -1,4 +1,4 @@
-import {Option} from "@opendaw/lib-std"
+import {Option} from "@moises-ai/lib-std"
 import {NoteEventTarget} from "./NoteEventSource"
 import {DeviceProcessor} from "./DeviceProcessor"
 

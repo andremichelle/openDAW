@@ -1,7 +1,7 @@
-import {Events, Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@moises-ai/lib-dom"
 import css from "./TextInput.sass?inline"
-import {int, isDefined, isInstanceOf, Lifecycle, MutableObservableValue} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {int, isDefined, isInstanceOf, Lifecycle, MutableObservableValue} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 
 const defaultClassName = Html.adoptStyleSheet(css, "TextInput")
 

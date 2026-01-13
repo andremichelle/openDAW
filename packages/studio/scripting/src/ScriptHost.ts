@@ -1,5 +1,5 @@
-import {RuntimeNotifier} from "@opendaw/lib-std"
-import {Communicator, Messenger, Promises} from "@opendaw/lib-runtime"
+import {RuntimeNotifier} from "@moises-ai/lib-std"
+import {Communicator, Messenger, Promises} from "@moises-ai/lib-runtime"
 import {ScriptExecutionContext, ScriptExecutionProtocol} from "./ScriptExecutionProtocol"
 import {ScriptHostProtocol} from "./ScriptHostProtocol"
 

@@ -1,8 +1,8 @@
-import {Pointers} from "@opendaw/studio-enums"
+import {Pointers} from "@moises-ai/studio-enums"
 import {ParameterPointerRules, UnipolarConstraints} from "./Defaults"
-import {BoxSchema, FieldRecord, mergeFields, reserveMany} from "@opendaw/lib-box-forge"
-import {PPQN} from "@opendaw/lib-dsp"
-import {Objects} from "@opendaw/lib-std"
+import {BoxSchema, FieldRecord, mergeFields, reserveMany} from "@moises-ai/lib-box-forge"
+import {PPQN} from "@moises-ai/lib-dsp"
+import {Objects} from "@moises-ai/lib-std"
 
 const GrooveBoxAttributes = {
     1: {type: "string", name: "label"},

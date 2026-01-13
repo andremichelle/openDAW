@@ -1,5 +1,5 @@
-import {ppqn} from "@opendaw/lib-dsp"
-import {mod, panic} from "@opendaw/lib-std"
+import {ppqn} from "@moises-ai/lib-dsp"
+import {mod, panic} from "@moises-ai/lib-std"
 import {AnyRegionBoxAdapter, UnionAdapterTypes} from "../UnionAdapterTypes"
 
 export namespace RegionEditing {

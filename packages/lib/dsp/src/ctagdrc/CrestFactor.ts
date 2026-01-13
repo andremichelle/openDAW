@@ -1,5 +1,5 @@
 // Crest Factor calculator
-import {int} from "@opendaw/lib-std"
+import {int} from "@moises-ai/lib-std"
 
 export class CrestFactor {
     readonly #maxAttackTime: number = 0.08  // 8ms

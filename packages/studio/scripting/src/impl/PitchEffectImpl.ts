@@ -1,5 +1,5 @@
 import {PitchEffect} from "../Api"
-import {float, int} from "@opendaw/lib-std"
+import {float, int} from "@moises-ai/lib-std"
 
 export class PitchEffectImpl implements PitchEffect {
     readonly key = "pitch" as const

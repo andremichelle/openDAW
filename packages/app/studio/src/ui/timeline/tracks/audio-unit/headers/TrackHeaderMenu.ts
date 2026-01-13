@@ -1,12 +1,12 @@
-import {MenuItem} from "@opendaw/studio-core"
-import {isInstanceOf, Procedure, RuntimeNotifier, UUID} from "@opendaw/lib-std"
-import {AudioUnitBoxAdapter, DeviceAccepts, ProjectUtils, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
+import {MenuItem} from "@moises-ai/studio-core"
+import {isInstanceOf, Procedure, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
+import {AudioUnitBoxAdapter, DeviceAccepts, ProjectUtils, TrackBoxAdapter, TrackType} from "@moises-ai/studio-adapters"
 import {DebugMenus} from "@/ui/menu/debug"
 import {MidiImport} from "@/ui/timeline/MidiImport.ts"
-import {CaptureMidiBox, TrackBox} from "@opendaw/studio-boxes"
+import {CaptureMidiBox, TrackBox} from "@moises-ai/studio-boxes"
 import {StudioService} from "@/service/StudioService"
 import {MenuCapture} from "@/ui/timeline/tracks/audio-unit/menu/capture"
-import {Project} from "@opendaw/studio-core"
+import {Project} from "@moises-ai/studio-core"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
 export const installTrackHeaderMenu = (service: StudioService,

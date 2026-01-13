@@ -1,4 +1,4 @@
-import {Attempt, int} from "@opendaw/lib-std"
+import {Attempt, int} from "@moises-ai/lib-std"
 import {Validator} from "./Validator"
 
 export namespace Parsing {

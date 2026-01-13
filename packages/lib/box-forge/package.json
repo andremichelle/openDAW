@@ -1,5 +1,5 @@
 {
-    "name": "@opendaw/lib-box-forge",
+    "name": "@moises-ai/lib-box-forge",
     "version": "0.0.68",
     "private": true,
     "sideEffects": false,
@@ -16,15 +16,15 @@
         "test": "npm run gen && vitest run"
     },
     "dependencies": {
-        "@opendaw/lib-box": "^0.0.67",
-        "@opendaw/lib-dom": "^0.0.67",
-        "@opendaw/lib-runtime": "^0.0.65",
-        "@opendaw/lib-std": "^0.0.65",
+        "@moises-ai/lib-box": "^0.0.67",
+        "@moises-ai/lib-dom": "^0.0.67",
+        "@moises-ai/lib-runtime": "^0.0.65",
+        "@moises-ai/lib-std": "^0.0.65",
         "ts-morph": "^25.0.1",
         "tsx": "^4.20.3"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/typescript-config": "^0.0.28"
+        "@moises-ai/eslint-config": "^0.0.27",
+        "@moises-ai/typescript-config": "^0.0.28"
     }
 }

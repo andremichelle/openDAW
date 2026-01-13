@@ -1,5 +1,5 @@
-import {NoteEvent, ppqn} from "@opendaw/lib-dsp"
-import {int} from "@opendaw/lib-std"
+import {NoteEvent, ppqn} from "@moises-ai/lib-dsp"
+import {int} from "@moises-ai/lib-std"
 
 export type UINoteEvent = NoteEvent & {
     isSelected: boolean

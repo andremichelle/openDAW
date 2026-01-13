@@ -1,15 +1,15 @@
-import {int, linear, Option, Procedure} from "@opendaw/lib-std"
+import {int, linear, Option, Procedure} from "@moises-ai/lib-std"
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {PitchPositioner} from "@/ui/timeline/editors/notes/pitch/PitchPositioner.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {MidiKeys, NoteEvent, ppqn} from "@opendaw/lib-dsp"
+import {MidiKeys, NoteEvent, ppqn} from "@moises-ai/lib-dsp"
 import {ScaleConfig} from "@/ui/timeline/editors/notes/pitch/ScaleConfig.ts"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {NoteModifyStrategies, NoteModifyStrategy} from "@/ui/timeline/editors/notes/NoteModifyStrategies.ts"
 import {renderTimeGrid} from "@/ui/timeline/editors/TimeGridRenderer.ts"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {TimelineRange} from "@opendaw/studio-core"
+import {TimelineRange} from "@moises-ai/studio-core"
 
 type Construct = {
     canvas: HTMLCanvasElement,

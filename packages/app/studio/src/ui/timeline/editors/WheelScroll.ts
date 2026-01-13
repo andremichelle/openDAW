@@ -1,5 +1,5 @@
-import {Events} from "@opendaw/lib-dom"
-import {TimelineRange} from "@opendaw/studio-core"
+import {Events} from "@moises-ai/lib-dom"
+import {TimelineRange} from "@moises-ai/studio-core"
 
 export const attachWheelScroll = (element: Element, range: TimelineRange) =>
     Events.subscribe(element, "wheel", (event: WheelEvent) => {

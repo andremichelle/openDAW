@@ -1,5 +1,5 @@
 import css from "./NoteEditor.sass?inline"
-import {Html, ShortcutManager} from "@opendaw/lib-dom"
+import {Html, ShortcutManager} from "@moises-ai/lib-dom"
 import {
     DefaultObservableValue,
     int,
@@ -10,18 +10,18 @@ import {
     Option,
     Terminable,
     UUID
-} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {PitchEditor} from "@/ui/timeline/editors/notes/pitch/PitchEditor.tsx"
 import {PitchPositioner} from "@/ui/timeline/editors/notes/pitch/PitchPositioner.ts"
-import {CaptureMidi, ClipboardEntry, ClipboardHandler, ClipboardManager, TimelineRange} from "@opendaw/studio-core"
+import {CaptureMidi, ClipboardEntry, ClipboardHandler, ClipboardManager, TimelineRange} from "@moises-ai/studio-core"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {NoteEventBox} from "@opendaw/studio-boxes"
+import {NoteEventBox} from "@moises-ai/studio-boxes"
 import {PianoRoll} from "@/ui/timeline/editors/notes/pitch/PianoRoll.tsx"
 import {ScaleConfig} from "@/ui/timeline/editors/notes/pitch/ScaleConfig.ts"
 import {PitchEditorHeader} from "@/ui/timeline/editors/notes/pitch/PitchEditorHeader.tsx"
-import {FilteredSelection, NoteEventBoxAdapter, NoteSignal, NoteStreamReceiver} from "@opendaw/studio-adapters"
+import {FilteredSelection, NoteEventBoxAdapter, NoteSignal, NoteStreamReceiver} from "@moises-ai/studio-adapters"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {PropertyEditor} from "./property/PropertyEditor.tsx"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
@@ -33,8 +33,8 @@ import {NotePropertyVelocity, PropertyAccessor} from "@/ui/timeline/editors/note
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {createPitchMenu} from "@/ui/timeline/editors/notes/pitch/PitchMenu.ts"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
-import {ppqn} from "@opendaw/lib-dsp"
-import {Address, PointerField} from "@opendaw/lib-box"
+import {ppqn} from "@moises-ai/lib-dsp"
+import {Address, PointerField} from "@moises-ai/lib-box"
 
 const className = Html.adoptStyleSheet(css, "NoteEditor")
 

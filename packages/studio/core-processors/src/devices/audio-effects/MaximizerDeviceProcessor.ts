@@ -1,11 +1,11 @@
-import {clamp, int, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioEffectDeviceAdapter, MaximizerDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {clamp, int, Option, Terminable, UUID} from "@moises-ai/lib-std"
+import {AudioEffectDeviceAdapter, MaximizerDeviceBoxAdapter} from "@moises-ai/studio-adapters"
 import {EngineContext} from "../../EngineContext"
 import {Block, Processor} from "../../processing"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
 import {AutomatableParameter} from "../../AutomatableParameter"
 import {AudioEffectDeviceProcessor} from "../../AudioEffectDeviceProcessor"
-import {AudioBuffer, dbToGain, gainToDb, Ramp} from "@opendaw/lib-dsp"
+import {AudioBuffer, dbToGain, gainToDb, Ramp} from "@moises-ai/lib-dsp"
 import {AudioProcessor} from "../../AudioProcessor"
 
 const RELEASE_IN_SECONDS = 0.2

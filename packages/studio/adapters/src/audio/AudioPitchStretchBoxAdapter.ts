@@ -1,10 +1,10 @@
-import {Notifier, Observer, SortedSet, Subscription, Terminator, UUID} from "@opendaw/lib-std"
-import {Address, PointerField} from "@opendaw/lib-box"
+import {Notifier, Observer, SortedSet, Subscription, Terminator, UUID} from "@moises-ai/lib-std"
+import {Address, PointerField} from "@moises-ai/lib-box"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {BoxAdapter} from "../BoxAdapter"
-import {EventCollection} from "@opendaw/lib-dsp"
+import {EventCollection} from "@moises-ai/lib-dsp"
 import {WarpMarkerBoxAdapter} from "./WarpMarkerBoxAdapter"
-import {AudioPitchStretchBox, WarpMarkerBox} from "@opendaw/studio-boxes"
+import {AudioPitchStretchBox, WarpMarkerBox} from "@moises-ai/studio-boxes"
 import {MarkerComparator} from "./MarkerComparator"
 
 export class AudioPitchStretchBoxAdapter implements BoxAdapter {

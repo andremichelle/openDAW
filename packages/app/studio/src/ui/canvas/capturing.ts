@@ -1,4 +1,4 @@
-import {Nullable} from "@opendaw/lib-std"
+import {Nullable} from "@moises-ai/lib-std"
 
 export interface Capturing<T> {capture(localX: number, localY: number): Nullable<T>}
 

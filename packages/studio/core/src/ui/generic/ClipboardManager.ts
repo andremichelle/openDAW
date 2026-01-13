@@ -1,5 +1,5 @@
-import {Client, JSONValue, Option, Subscription, Terminable} from "@opendaw/lib-std"
-import {Events, ReservedShortcuts} from "@opendaw/lib-dom"
+import {Client, JSONValue, Option, Subscription, Terminable} from "@moises-ai/lib-std"
+import {Events, ReservedShortcuts} from "@moises-ai/lib-dom"
 import {ContextMenu} from "./ContextMenu"
 import {MenuItem} from "./MenuItems"
 

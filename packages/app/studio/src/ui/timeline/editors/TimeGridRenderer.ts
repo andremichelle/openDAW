@@ -1,6 +1,6 @@
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {TimeGrid, TimelineRange} from "@opendaw/studio-core"
-import {SignatureTrackAdapter} from "@opendaw/studio-adapters"
+import {TimeGrid, TimelineRange} from "@moises-ai/studio-core"
+import {SignatureTrackAdapter} from "@moises-ai/studio-adapters"
 
 const SnapColor = "rgba(0, 0, 0, 0.20)"
 const SubSnapColor = "rgba(0, 0, 0, 0.06)"

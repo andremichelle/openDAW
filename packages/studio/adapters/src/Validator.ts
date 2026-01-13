@@ -1,8 +1,8 @@
-import {BoxGraph} from "@opendaw/lib-box"
-import {AudioRegionBox, BoxVisitor, TrackBox} from "@opendaw/studio-boxes"
-import {Arrays, Attempt, Attempts, clamp, int} from "@opendaw/lib-std"
+import {BoxGraph} from "@moises-ai/lib-box"
+import {AudioRegionBox, BoxVisitor, TrackBox} from "@moises-ai/studio-boxes"
+import {Arrays, Attempt, Attempts, clamp, int} from "@moises-ai/lib-std"
 import {UnionBoxTypes} from "./unions"
-import {TimeBase} from "@opendaw/lib-dsp"
+import {TimeBase} from "@moises-ai/lib-dsp"
 import {TempoRange} from "./TempoRange"
 
 export namespace Validator {

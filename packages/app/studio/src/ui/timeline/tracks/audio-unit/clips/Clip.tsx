@@ -1,21 +1,21 @@
 import css from "./Clip.sass?inline"
-import {asDefined, DefaultObservableValue, Lifecycle, Procedure, Terminator, UUID} from "@opendaw/lib-std"
+import {asDefined, DefaultObservableValue, Lifecycle, Procedure, Terminator, UUID} from "@moises-ai/lib-std"
 import {
     AnyClipBoxAdapter,
     AudioClipBoxAdapter,
     ClipNotification,
     NoteClipBoxAdapter,
     ValueClipBoxAdapter
-} from "@opendaw/studio-adapters"
-import {createElement} from "@opendaw/lib-jsx"
+} from "@moises-ai/studio-adapters"
+import {createElement} from "@moises-ai/lib-jsx"
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {createNoteClipPainter} from "@/ui/timeline/tracks/audio-unit/clips/painter/NoteClipPainter.ts"
 import {createAudioClipPainter} from "@/ui/timeline/tracks/audio-unit/clips/painter/AudioClipPainter.ts"
 import {createValueClipPainter} from "@/ui/timeline/tracks/audio-unit/clips/painter/ValueClipPainter.ts"
 import {ClipPlaybackButton} from "./ClipPlaybackButton"
-import {ppqn} from "@opendaw/lib-dsp"
-import {Events, Html} from "@opendaw/lib-dom"
-import {Project} from "@opendaw/studio-core"
+import {ppqn} from "@moises-ai/lib-dsp"
+import {Events, Html} from "@moises-ai/lib-dom"
+import {Project} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "Clip")
 

@@ -1,5 +1,5 @@
-import {bipolar, Id, int, unitValue} from "@opendaw/lib-std"
-import {AudioBuffer, NoteEvent, ppqn} from "@opendaw/lib-dsp"
+import {bipolar, Id, int, unitValue} from "@moises-ai/lib-std"
+import {AudioBuffer, NoteEvent, ppqn} from "@moises-ai/lib-dsp"
 import {Block} from "../processing"
 
 export interface Voice {

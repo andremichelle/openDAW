@@ -1,10 +1,10 @@
-import {SignatureEvent, SignatureTrackAdapter} from "@opendaw/studio-adapters"
-import {isDefined, Nullable} from "@opendaw/lib-std"
+import {SignatureEvent, SignatureTrackAdapter} from "@moises-ai/studio-adapters"
+import {isDefined, Nullable} from "@moises-ai/lib-std"
 import {CanvasPainter} from "@/ui/canvas/painter"
-import {Context2d} from "@opendaw/lib-dom"
-import {TimelineRange} from "@opendaw/studio-core"
-import {Colors} from "@opendaw/studio-enums"
-import {ppqn} from "@opendaw/lib-dsp"
+import {Context2d} from "@moises-ai/lib-dom"
+import {TimelineRange} from "@moises-ai/studio-core"
+import {Colors} from "@moises-ai/studio-enums"
+import {ppqn} from "@moises-ai/lib-dsp"
 
 export type SignatureDragPreview = Readonly<{ event: SignatureEvent, targetPpqn: ppqn }>
 

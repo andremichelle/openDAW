@@ -1,4 +1,4 @@
-import {Arrays, WeakRefSet} from "@opendaw/lib-std"
+import {Arrays, WeakRefSet} from "@moises-ai/lib-std"
 
 export type AudioData = {
     sampleRate: number

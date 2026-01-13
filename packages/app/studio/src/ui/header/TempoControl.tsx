@@ -6,13 +6,13 @@ import {
     ObservableValue,
     Option,
     Terminator
-} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {UnitDisplay} from "@/ui/header/UnitDisplay"
-import {Dragging} from "@opendaw/lib-dom"
-import {Validator} from "@opendaw/studio-adapters"
+import {Dragging} from "@moises-ai/lib-dom"
+import {Validator} from "@moises-ai/studio-adapters"
 import {DblClckTextInput} from "@/ui/wrapper/DblClckTextInput"
-import {ContextMenu, MenuItem} from "@opendaw/studio-core"
+import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 

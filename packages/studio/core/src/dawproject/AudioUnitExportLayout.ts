@@ -1,7 +1,7 @@
-import {ArrayMultimap, asInstanceOf, isDefined, isInstanceOf, Nullable, Option} from "@opendaw/lib-std"
-import {AudioUnitType} from "@opendaw/studio-enums"
-import {AudioBusBox, AudioUnitBox} from "@opendaw/studio-boxes"
-import {DeviceBoxUtils} from "@opendaw/studio-adapters"
+import {ArrayMultimap, asInstanceOf, isDefined, isInstanceOf, Nullable, Option} from "@moises-ai/lib-std"
+import {AudioUnitType} from "@moises-ai/studio-enums"
+import {AudioBusBox, AudioUnitBox} from "@moises-ai/studio-boxes"
+import {DeviceBoxUtils} from "@moises-ai/studio-adapters"
 
 export namespace AudioUnitExportLayout {
     export interface Track {

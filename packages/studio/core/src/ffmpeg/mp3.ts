@@ -1,4 +1,4 @@
-import {Progress} from "@opendaw/lib-std"
+import {Progress} from "@moises-ai/lib-std"
 import type {AcceptedSource, FFmpegWorker} from "./FFmpegWorker"
 import type {FFmpegConverter} from "./FFmpegConverter"
 

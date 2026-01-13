@@ -1,10 +1,10 @@
-import {BoxEditing} from "@opendaw/lib-box"
+import {BoxEditing} from "@moises-ai/lib-box"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {MutableObservableValue, Procedure, Selection} from "@opendaw/lib-std"
-import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
-import {EventCollection} from "@opendaw/lib-dsp"
+import {MutableObservableValue, Procedure, Selection} from "@moises-ai/lib-std"
+import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
+import {EventCollection} from "@moises-ai/lib-dsp"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
-import {MenuCollector, MenuItem} from "@opendaw/studio-core"
+import {MenuCollector, MenuItem} from "@moises-ai/studio-core"
 
 export const createPitchMenu = ({editing, snapping, selection, events, stepRecording}: {
     editing: BoxEditing

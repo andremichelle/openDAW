@@ -1,8 +1,8 @@
 import {NoteRegionImpl, NoteTrackImpl} from "./impl"
-import {asDefined, isDefined, UUID} from "@opendaw/lib-std"
-import {AudioUnitBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
-import {TrackType} from "@opendaw/studio-adapters"
-import {BoxGraph} from "@opendaw/lib-box"
+import {asDefined, isDefined, UUID} from "@moises-ai/lib-std"
+import {AudioUnitBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@moises-ai/studio-boxes"
+import {TrackType} from "@moises-ai/studio-adapters"
+import {BoxGraph} from "@moises-ai/lib-box"
 import {NoteRegion} from "./Api"
 import {IndexRef} from "./IndexRef"
 

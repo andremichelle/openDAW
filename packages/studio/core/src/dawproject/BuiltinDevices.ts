@@ -1,8 +1,8 @@
-import {ifDefined, int, UUID} from "@opendaw/lib-std"
-import {BoxGraph, Field} from "@opendaw/lib-box"
-import {BandSchema, EqBandType, EqualizerSchema, ParameterDecoder} from "@opendaw/lib-dawproject"
-import {Pointers} from "@opendaw/studio-enums"
-import {RevampDeviceBox, RevampPass, RevampShelf} from "@opendaw/studio-boxes"
+import {ifDefined, int, UUID} from "@moises-ai/lib-std"
+import {BoxGraph, Field} from "@moises-ai/lib-box"
+import {BandSchema, EqBandType, EqualizerSchema, ParameterDecoder} from "@moises-ai/lib-dawproject"
+import {Pointers} from "@moises-ai/studio-enums"
+import {RevampDeviceBox, RevampPass, RevampShelf} from "@moises-ai/studio-boxes"
 import {EffectParameterDefaults} from "../EffectParameterDefaults"
 
 export namespace BuiltinDevices {

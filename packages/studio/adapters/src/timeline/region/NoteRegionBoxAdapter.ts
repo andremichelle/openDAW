@@ -1,4 +1,4 @@
-import {LoopableRegion, NoteEvent, ppqn, PPQN, RegionCollection} from "@opendaw/lib-dsp"
+import {LoopableRegion, NoteEvent, ppqn, PPQN, RegionCollection} from "@moises-ai/lib-dsp"
 import {
     Arrays,
     int,
@@ -11,10 +11,10 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {Address, Field, Propagation, Update} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
-import {NoteEventCollectionBox, NoteRegionBox} from "@opendaw/studio-boxes"
+} from "@moises-ai/lib-std"
+import {Address, Field, Propagation, Update} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
+import {NoteEventCollectionBox, NoteRegionBox} from "@moises-ai/studio-boxes"
 import {TrackBoxAdapter} from "../TrackBoxAdapter"
 import {LoopableRegionBoxAdapter, RegionBoxAdapter, RegionBoxAdapterVisitor} from "../RegionBoxAdapter"
 import {NoteEventCollectionBoxAdapter} from "../collection/NoteEventCollectionBoxAdapter"

@@ -1,4 +1,4 @@
-import {Color} from "@opendaw/lib-std"
+import {Color} from "@moises-ai/lib-std"
 
 export const Colors = {
     white: new Color(0, 0, 100),

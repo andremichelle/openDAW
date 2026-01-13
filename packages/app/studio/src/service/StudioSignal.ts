@@ -1,5 +1,5 @@
-import {Sample, Soundfont} from "@opendaw/studio-adapters"
-import {ProjectMeta} from "@opendaw/studio-core"
+import {Sample, Soundfont} from "@moises-ai/studio-adapters"
+import {ProjectMeta} from "@moises-ai/studio-core"
 
 export type StudioSignal =
     | { type: "reset-peaks" }

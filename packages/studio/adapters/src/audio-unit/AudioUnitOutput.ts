@@ -1,7 +1,7 @@
-import {Notifier, Observer, Option, Subscription, Terminable, Terminator} from "@opendaw/lib-std"
-import {PointerField} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
-import {AudioBusBox, BoxVisitor} from "@opendaw/studio-boxes"
+import {Notifier, Observer, Option, Subscription, Terminable, Terminator} from "@moises-ai/lib-std"
+import {PointerField} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
+import {AudioBusBox, BoxVisitor} from "@moises-ai/studio-boxes"
 import {BoxAdapters} from "../BoxAdapters"
 import {AudioBusBoxAdapter} from "./AudioBusBoxAdapter"
 

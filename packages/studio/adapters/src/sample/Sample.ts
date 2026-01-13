@@ -1,4 +1,4 @@
-import {UUID} from "@opendaw/lib-std"
+import {UUID} from "@moises-ai/lib-std"
 import {SampleMetaData} from "./SampleMetaData"
 import {z} from "zod"
 

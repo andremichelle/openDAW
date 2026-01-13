@@ -1,6 +1,6 @@
-import {BoxSchema} from "@opendaw/lib-box-forge"
-import {Pointers} from "@opendaw/studio-enums"
-import {PPQN} from "@opendaw/lib-dsp"
+import {BoxSchema} from "@moises-ai/lib-box-forge"
+import {Pointers} from "@moises-ai/studio-enums"
+import {PPQN} from "@moises-ai/lib-dsp"
 import {
     BipolarConstraints,
     MidiNoteConstraints,

@@ -1,9 +1,9 @@
 import {Api, Project} from "../Api"
 import {ProjectImpl} from "./ProjectImpl"
 import {ScriptHostProtocol} from "../ScriptHostProtocol"
-import {Sample} from "@opendaw/studio-adapters"
+import {Sample} from "@moises-ai/studio-adapters"
 import {ProjectUnpacker} from "../ProjectUnpacker"
-import {AudioData} from "@opendaw/lib-dsp"
+import {AudioData} from "@moises-ai/lib-dsp"
 
 export class ApiImpl implements Api {
     readonly #protocol: ScriptHostProtocol

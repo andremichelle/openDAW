@@ -1,5 +1,5 @@
-import {BoxSchema} from "@opendaw/lib-box-forge"
-import {Pointers} from "@opendaw/studio-enums"
+import {BoxSchema} from "@moises-ai/lib-box-forge"
+import {Pointers} from "@moises-ai/studio-enums"
 import {HueConstraints, PPQNPositionConstraints} from "../Defaults"
 
 export const MarkerBox: BoxSchema<Pointers> = {

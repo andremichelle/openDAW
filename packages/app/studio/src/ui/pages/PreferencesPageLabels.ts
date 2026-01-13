@@ -1,6 +1,6 @@
 import {NestedLabels} from "@/ui/PreferencePanel"
-import {FpsOptions, StudioSettings} from "@opendaw/studio-core"
-import {EngineSettings} from "@opendaw/studio-adapters"
+import {FpsOptions, StudioSettings} from "@moises-ai/studio-core"
+import {EngineSettings} from "@moises-ai/studio-adapters"
 
 export namespace PreferencesPageLabels {
     export const StudioSettingsLabels: NestedLabels<StudioSettings> = {

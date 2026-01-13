@@ -1,7 +1,7 @@
-import {PianoMode} from "@opendaw/studio-boxes"
-import {float, int, Observer, StringMapping, Subscription, ValueMapping} from "@opendaw/lib-std"
+import {PianoMode} from "@moises-ai/studio-boxes"
+import {float, int, Observer, StringMapping, Subscription, ValueMapping} from "@moises-ai/lib-std"
 import {FieldAdapter} from "./FieldAdapter"
-import {Propagation} from "@opendaw/lib-box"
+import {Propagation} from "@moises-ai/lib-box"
 
 export class PianoModeAdapter {
     readonly #object: PianoMode

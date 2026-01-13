@@ -1,5 +1,5 @@
-import {bipolar, int, nextPowOf2, panic, unitValue, ValueMapping} from "@opendaw/lib-std"
-import {BiquadCoeff, BiquadMono, BiquadProcessor, Delay, Smooth, StereoMatrix} from "@opendaw/lib-dsp"
+import {bipolar, int, nextPowOf2, panic, unitValue, ValueMapping} from "@moises-ai/lib-std"
+import {BiquadCoeff, BiquadMono, BiquadProcessor, Delay, Smooth, StereoMatrix} from "@moises-ai/lib-dsp"
 
 const LIMITER_ATTACK_MS = 50.0
 const LIMITER_RELEASE_MS = 250.0

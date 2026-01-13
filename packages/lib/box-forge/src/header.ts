@@ -6,6 +6,6 @@ export const header = `
 //  |___/\\___/_\\_\\_|\\___/_| \\__, \\___|
 //                         |___/
 //
-//  auto-generated | do not edit | blame andre.michelle@opendaw.org
+//  auto-generated | do not edit | blame andre.michelle@moises-ai.org
 //
 ` as const

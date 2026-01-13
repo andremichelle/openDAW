@@ -9,8 +9,8 @@ import {
     ObservableValue,
     safeExecute,
     unitValue
-} from "@opendaw/lib-std"
-import {MidiData} from "@opendaw/lib-midi"
+} from "@moises-ai/lib-std"
+import {MidiData} from "@moises-ai/lib-midi"
 
 type OnMidiMessage = Nullable<(this: MIDIInput, ev: MIDIMessageEvent) => any>
 

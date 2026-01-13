@@ -1,4 +1,4 @@
-import {clamp, Notifier, Observer, Subscription, Terminable} from "@opendaw/lib-std"
+import {clamp, Notifier, Observer, Subscription, Terminable} from "@moises-ai/lib-std"
 
 export class ScrollModel implements Terminable {
     static readonly #MinThumbSize = 16.0

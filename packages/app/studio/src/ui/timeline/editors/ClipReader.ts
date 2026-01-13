@@ -8,11 +8,11 @@ import {
     TrackBoxAdapter,
     ValueClipBoxAdapter,
     ValueEventCollectionBoxAdapter
-} from "@opendaw/studio-adapters"
-import {ppqn} from "@opendaw/lib-dsp"
-import {mod, Observer, Option, Subscription} from "@opendaw/lib-std"
-import {TimelineRange} from "@opendaw/studio-core"
-import {Propagation} from "@opendaw/lib-box"
+} from "@moises-ai/studio-adapters"
+import {ppqn} from "@moises-ai/lib-dsp"
+import {mod, Observer, Option, Subscription} from "@moises-ai/lib-std"
+import {TimelineRange} from "@moises-ai/studio-core"
+import {Propagation} from "@moises-ai/lib-box"
 import {
     AudioEventOwnerReader,
     EventOwnerReader,

@@ -1,7 +1,7 @@
-import {StringMapping, unitValue, ValueMapping} from "@opendaw/lib-std"
+import {StringMapping, unitValue, ValueMapping} from "@moises-ai/lib-std"
 import {PropertyParameters} from "@/ui/timeline/editors/notes/property/PropertyParameters.ts"
 import {NoteModifyStrategy} from "@/ui/timeline/editors/notes/NoteModifyStrategies.ts"
-import {NoteEventBox} from "@opendaw/studio-boxes"
+import {NoteEventBox} from "@moises-ai/studio-boxes"
 import {UINoteEvent} from "../UINoteEvent"
 
 export interface PropertyAccessor {

@@ -1,9 +1,9 @@
 import css from "./EmptyModular.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Lifecycle} from "@moises-ai/lib-std"
 import {Icon} from "@/ui/components/Icon.tsx"
-import {IconSymbol} from "@opendaw/studio-enums"
-import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {IconSymbol} from "@moises-ai/studio-enums"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "EmptyModular")
 

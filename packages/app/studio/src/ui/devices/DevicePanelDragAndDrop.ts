@@ -1,4 +1,4 @@
-import {asDefined, panic, Terminable} from "@opendaw/lib-std"
+import {asDefined, panic, Terminable} from "@moises-ai/lib-std"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {
@@ -8,10 +8,10 @@ import {
     InstrumentBox,
     InstrumentFactories,
     InstrumentFactory
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {InsertMarker} from "@/ui/components/InsertMarker"
-import {EffectFactories, Project} from "@opendaw/studio-core"
-import {IndexedBox} from "@opendaw/lib-box"
+import {EffectFactories, Project} from "@moises-ai/studio-core"
+import {IndexedBox} from "@moises-ai/lib-box"
 
 export namespace DevicePanelDragAndDrop {
     export const install = (project: Project,

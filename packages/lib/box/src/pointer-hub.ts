@@ -1,6 +1,6 @@
 import {PointerField, PointerTypes} from "./pointer"
 import {Vertex} from "./vertex"
-import {int, Iterables, Listeners, Option, panic, SortedSet, Subscription} from "@opendaw/lib-std"
+import {int, Iterables, Listeners, Option, panic, SortedSet, Subscription} from "@moises-ai/lib-std"
 import {Address} from "./address"
 
 export interface PointerListener {

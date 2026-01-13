@@ -1,6 +1,6 @@
 import {BlockFlag, ProcessInfo} from "./processing"
-import {AudioBuffer, AudioData, dbToGain, PPQN, RenderQuantum} from "@opendaw/lib-dsp"
-import {assert, Bits, int, isNotNull, Iterables, TAU} from "@opendaw/lib-std"
+import {AudioBuffer, AudioData, dbToGain, PPQN, RenderQuantum} from "@moises-ai/lib-dsp"
+import {assert, Bits, int, isNotNull, Iterables, TAU} from "@moises-ai/lib-std"
 import {EngineContext} from "./EngineContext"
 
 export class Metronome {

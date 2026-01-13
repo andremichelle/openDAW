@@ -1,5 +1,5 @@
-import {asInstanceOf, int, Option, quantizeFloor, Terminable, Terminator, UUID} from "@opendaw/lib-std"
-import {dbToGain, ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
+import {asInstanceOf, int, Option, quantizeFloor, Terminable, Terminator, UUID} from "@moises-ai/lib-std"
+import {dbToGain, ppqn, PPQN, TimeBase} from "@moises-ai/lib-dsp"
 import {
     AudioFileBox,
     AudioPitchStretchBox,
@@ -7,8 +7,8 @@ import {
     TrackBox,
     ValueEventCollectionBox,
     WarpMarkerBox
-} from "@opendaw/studio-boxes"
-import {ColorCodes, SampleLoaderManager, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-boxes"
+import {ColorCodes, SampleLoaderManager, TrackType, UnionBoxTypes} from "@moises-ai/studio-adapters"
 import {Project} from "../project"
 import {RecordingWorklet} from "../RecordingWorklet"
 import {Capture} from "./Capture"

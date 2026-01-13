@@ -1,4 +1,4 @@
-import {asDefined, assert, Class, int, isDefined, Maybe, panic, WeakMaps} from "@opendaw/lib-std"
+import {asDefined, assert, Class, int, isDefined, Maybe, panic, WeakMaps} from "@moises-ai/lib-std"
 
 export namespace Xml {
     type Meta =

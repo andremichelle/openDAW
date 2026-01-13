@@ -1,5 +1,5 @@
-import {ModuleConnectionBox} from "@opendaw/studio-boxes"
-import {Address, Vertex} from "@opendaw/lib-box"
+import {ModuleConnectionBox} from "@moises-ai/studio-boxes"
+import {Address, Vertex} from "@moises-ai/lib-box"
 import {BoxAdapter} from "../BoxAdapter"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 

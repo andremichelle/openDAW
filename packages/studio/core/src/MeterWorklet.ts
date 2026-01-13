@@ -1,6 +1,6 @@
-import {int, Notifier, Observer, Schema, Subscription, SyncStream, Terminable, Terminator} from "@opendaw/lib-std"
-import {AnimationFrame} from "@opendaw/lib-dom"
-import {PeakMeterProcessorOptions} from "@opendaw/studio-adapters"
+import {int, Notifier, Observer, Schema, Subscription, SyncStream, Terminable, Terminator} from "@moises-ai/lib-std"
+import {AnimationFrame} from "@moises-ai/lib-dom"
+import {PeakMeterProcessorOptions} from "@moises-ai/studio-adapters"
 
 export type PeakSchema = { peak: Float32Array, rms: Float32Array }
 

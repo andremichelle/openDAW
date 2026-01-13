@@ -1,7 +1,7 @@
-import {BoxGraph} from "@opendaw/lib-box"
-import {AudioPitchStretchBox, AudioTimeStretchBox, WarpMarkerBox} from "@opendaw/studio-boxes"
-import {ppqn} from "@opendaw/lib-dsp"
-import {UUID} from "@opendaw/lib-std"
+import {BoxGraph} from "@moises-ai/lib-box"
+import {AudioPitchStretchBox, AudioTimeStretchBox, WarpMarkerBox} from "@moises-ai/studio-boxes"
+import {ppqn} from "@moises-ai/lib-dsp"
+import {UUID} from "@moises-ai/lib-std"
 import {WarpMarkerTemplate} from "./WarpMarkerTemplate"
 
 export namespace AudioContentHelpers {

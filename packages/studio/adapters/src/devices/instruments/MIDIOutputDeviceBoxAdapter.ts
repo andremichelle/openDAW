@@ -7,9 +7,9 @@ import {
     Terminator,
     UUID,
     ValueMapping
-} from "@opendaw/lib-std"
-import {MIDIOutputBox, MIDIOutputDeviceBox, MIDIOutputParameterBox} from "@opendaw/studio-boxes"
-import {Address, BooleanField, StringField} from "@opendaw/lib-box"
+} from "@moises-ai/lib-std"
+import {MIDIOutputBox, MIDIOutputDeviceBox, MIDIOutputParameterBox} from "@moises-ai/studio-boxes"
+import {Address, BooleanField, StringField} from "@moises-ai/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"

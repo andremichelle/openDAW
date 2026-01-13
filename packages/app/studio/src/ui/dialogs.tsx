@@ -1,9 +1,9 @@
-import {DefaultObservableValue, Procedure, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, Procedure, Terminator} from "@moises-ai/lib-std"
 import {Dialog} from "@/ui/components/Dialog.tsx"
-import {createElement} from "@opendaw/lib-jsx"
+import {createElement} from "@moises-ai/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol} from "@moises-ai/studio-enums"
 
 const Icons = [
     IconSymbol.AudioBus, IconSymbol.Waveform, IconSymbol.Flask, IconSymbol.BassGuitar, IconSymbol.Guitar,

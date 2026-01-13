@@ -8,7 +8,7 @@ import {
     PointerField,
     PrimitiveField,
     Vertex
-} from "@opendaw/lib-box"
+} from "@moises-ai/lib-box"
 import * as Y from "yjs"
 import {
     asDefined,
@@ -19,7 +19,7 @@ import {
     isUndefined,
     JSONValue,
     UUID
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 
 export namespace YMapper {
     export const createBoxMap = (box: Box): Y.Map<unknown> => {

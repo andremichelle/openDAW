@@ -1,7 +1,7 @@
-import {Notifier, Observer, Subscription, Terminator, UUID} from "@opendaw/lib-std"
-import {Address} from "@opendaw/lib-box"
-import {Event} from "@opendaw/lib-dsp"
-import {TransientMarkerBox} from "@opendaw/studio-boxes"
+import {Notifier, Observer, Subscription, Terminator, UUID} from "@moises-ai/lib-std"
+import {Address} from "@moises-ai/lib-box"
+import {Event} from "@moises-ai/lib-dsp"
+import {TransientMarkerBox} from "@moises-ai/studio-boxes"
 import {BoxAdapter} from "../BoxAdapter"
 
 export class TransientMarkerBoxAdapter implements BoxAdapter, Event {

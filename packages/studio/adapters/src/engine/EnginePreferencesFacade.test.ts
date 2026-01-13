@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest"
-import {PreferencesFacade, PreferencesHost} from "@opendaw/lib-fusion"
+import {PreferencesFacade, PreferencesHost} from "@moises-ai/lib-fusion"
 import {EngineSettings, EngineSettingsSchema} from "./EnginePreferencesSchema"
 
 const EngineSettingsDefaults = EngineSettingsSchema.parse({})

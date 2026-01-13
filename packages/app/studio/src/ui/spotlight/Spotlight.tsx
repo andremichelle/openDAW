@@ -1,11 +1,11 @@
 import css from "./Spotlight.sass?inline"
-import {Nullable, Option, Point, Terminable, Terminator} from "@opendaw/lib-std"
+import {Nullable, Option, Point, Terminable, Terminator} from "@moises-ai/lib-std"
 import {StudioService} from "@/service/StudioService.ts"
-import {appendChildren, createElement, replaceChildren} from "@opendaw/lib-jsx"
+import {appendChildren, createElement, replaceChildren} from "@moises-ai/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {Surface} from "@/ui/surface/Surface.tsx"
-import {IconSymbol} from "@opendaw/studio-enums"
-import {Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
+import {IconSymbol} from "@moises-ai/studio-enums"
+import {Dragging, Events, Html, Keyboard} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "Spotlight")
 

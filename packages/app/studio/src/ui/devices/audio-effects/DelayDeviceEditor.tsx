@@ -1,16 +1,16 @@
 import css from "./DelayDeviceEditor.sass?inline"
-import {AutomatableParameterFieldAdapter, DelayDeviceBoxAdapter, DeviceHost} from "@opendaw/studio-adapters"
-import {int, isDefined, Lifecycle} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {AutomatableParameterFieldAdapter, DelayDeviceBoxAdapter, DeviceHost} from "@moises-ai/studio-adapters"
+import {int, isDefined, Lifecycle} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 import {StudioService} from "@/service/StudioService"
-import {EffectFactories} from "@opendaw/studio-core"
+import {EffectFactories} from "@moises-ai/studio-core"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import {ParameterLabel} from "@/ui/components/ParameterLabel"
-import {Colors} from "@opendaw/studio-enums"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "DelayDeviceEditor")
 

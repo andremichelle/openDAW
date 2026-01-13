@@ -1,6 +1,6 @@
 import type {Dropbox, DropboxResponse, files} from "dropbox"
-import {Errors, isDefined, Option, panic} from "@opendaw/lib-std"
-import {Promises} from "@opendaw/lib-runtime"
+import {Errors, isDefined, Option, panic} from "@moises-ai/lib-std"
+import {Promises} from "@moises-ai/lib-runtime"
 import {CloudHandler} from "./CloudHandler"
 
 export class DropboxHandler implements CloudHandler {

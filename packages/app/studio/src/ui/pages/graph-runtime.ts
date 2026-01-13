@@ -2,7 +2,7 @@
 import ForceGraph from "force-graph"
 import * as d3 from "d3-force"
 import {SimulationNodeDatum} from "d3-force"
-import {isUndefined, unitValue} from "@opendaw/lib-std"
+import {isUndefined, unitValue} from "@moises-ai/lib-std"
 
 type Node = {
     id: string; label?: string, root?: boolean, fx?: number, fy?: number

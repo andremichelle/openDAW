@@ -1,5 +1,5 @@
-import {MidiDevices} from "@opendaw/studio-core"
-import {Notifier, Observer, Subscription} from "@opendaw/lib-std"
+import {MidiDevices} from "@moises-ai/studio-core"
+import {Notifier, Observer, Subscription} from "@moises-ai/lib-std"
 
 export class ShadertoyMIDIOutput {
     static readonly #notifier: Notifier<Uint8Array> = new Notifier()

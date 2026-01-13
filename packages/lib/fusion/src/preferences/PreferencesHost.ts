@@ -7,9 +7,9 @@ import {
     Terminator,
     ValueAtPath,
     VirtualObject
-} from "@opendaw/lib-std"
-import {queueTask} from "@opendaw/lib-dom"
-import {Communicator, Messenger} from "@opendaw/lib-runtime"
+} from "@moises-ai/lib-std"
+import {queueTask} from "@moises-ai/lib-dom"
+import {Communicator, Messenger} from "@moises-ai/lib-runtime"
 import {Preferences} from "./Preferences"
 import {PreferencesProtocol} from "./PreferencesProtocol"
 

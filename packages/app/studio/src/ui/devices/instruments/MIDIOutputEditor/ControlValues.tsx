@@ -1,10 +1,10 @@
 import css from "./ControlValues.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {asInstanceOf, byte, Lifecycle, Terminable, Terminator, UUID} from "@opendaw/lib-std"
-import {createElement, Group} from "@opendaw/lib-jsx"
-import {AutomatableParameterFieldAdapter, MIDIOutputDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {MIDIOutputParameterBox} from "@opendaw/studio-boxes"
-import {Project} from "@opendaw/studio-core"
+import {Html} from "@moises-ai/lib-dom"
+import {asInstanceOf, byte, Lifecycle, Terminable, Terminator, UUID} from "@moises-ai/lib-std"
+import {createElement, Group} from "@moises-ai/lib-jsx"
+import {AutomatableParameterFieldAdapter, MIDIOutputDeviceBoxAdapter} from "@moises-ai/studio-adapters"
+import {MIDIOutputParameterBox} from "@moises-ai/studio-boxes"
+import {Project} from "@moises-ai/studio-core"
 import {ControlValue} from "@/ui/devices/instruments/MIDIOutputEditor/ControlValue"
 
 const className = Html.adoptStyleSheet(css, "ControlValues")

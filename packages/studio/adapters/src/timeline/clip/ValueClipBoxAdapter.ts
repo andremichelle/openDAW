@@ -1,4 +1,4 @@
-import {EventCollection, ppqn, PPQN} from "@opendaw/lib-dsp"
+import {EventCollection, ppqn, PPQN} from "@moises-ai/lib-dsp"
 import {
     DefaultObservableValue,
     int,
@@ -13,13 +13,13 @@ import {
     Terminator,
     unitValue,
     UUID
-} from "@opendaw/lib-std"
-import {Address, Int32Field, Propagation, Update} from "@opendaw/lib-box"
+} from "@moises-ai/lib-std"
+import {Address, Int32Field, Propagation, Update} from "@moises-ai/lib-box"
 import {ClipBoxAdapter, ClipBoxAdapterVisitor} from "../ClipBoxAdapter"
 import {TrackBoxAdapter} from "../TrackBoxAdapter"
 import {ValueEventCollectionBoxAdapter} from "../collection/ValueEventCollectionBoxAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
-import {ValueClipBox} from "@opendaw/studio-boxes"
+import {ValueClipBox} from "@moises-ai/studio-boxes"
 import {ValueEventBoxAdapter} from "../event/ValueEventBoxAdapter"
 
 export class ValueClipBoxAdapter implements ClipBoxAdapter<ValueEventCollectionBoxAdapter> {

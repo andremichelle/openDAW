@@ -1,7 +1,7 @@
 import css from "./AudioOutputDevices.sass?inline"
-import {Procedure} from "@opendaw/lib-std"
-import {Await, createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {Procedure} from "@moises-ai/lib-std"
+import {Await, createElement} from "@moises-ai/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {AudioDevices} from "@/audio/AudioDevices"
 

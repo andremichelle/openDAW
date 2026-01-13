@@ -1,6 +1,6 @@
-import {Notifier, Observer, Option, Subscription, Terminable} from "@opendaw/lib-std"
-import {BoxEditing, PointerField, Vertex} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
+import {Notifier, Observer, Option, Subscription, Terminable} from "@moises-ai/lib-std"
+import {BoxEditing, PointerField, Vertex} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
 
 export class UserEditing implements Terminable {
     readonly #editing: BoxEditing

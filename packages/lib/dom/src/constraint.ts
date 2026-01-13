@@ -1,4 +1,4 @@
-import {isAbsent, Maybe} from "@opendaw/lib-std"
+import {isAbsent, Maybe} from "@moises-ai/lib-std"
 
 export namespace ConstrainDOM {
     export const resolveString = (constrain: Maybe<ConstrainDOMString>): Maybe<string> => {

@@ -1,5 +1,5 @@
-import {Terminator} from "@opendaw/lib-std"
-import {createElement, Frag, Router} from "@opendaw/lib-jsx"
+import {Terminator} from "@moises-ai/lib-std"
+import {createElement, Frag, Router} from "@moises-ai/lib-jsx"
 import {WorkspacePage} from "@/ui/workspace/WorkspacePage.tsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {ComponentsPage} from "@/ui/pages/ComponentsPage.tsx"

@@ -8,9 +8,9 @@ import {
     Option,
     Provider,
     Terminable
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {AnyDragData, DragFile} from "@/ui/AnyDragData"
-import {Events} from "@opendaw/lib-dom"
+import {Events} from "@moises-ai/lib-dom"
 
 export namespace DragAndDrop {
     let dragging: Option<AnyDragData> = Option.None

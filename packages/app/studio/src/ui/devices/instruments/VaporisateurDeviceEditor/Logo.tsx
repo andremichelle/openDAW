@@ -1,4 +1,4 @@
-import {createElement} from "@opendaw/lib-jsx"
+import {createElement} from "@moises-ai/lib-jsx"
 
 export const Logo = () => {
     const S = 60

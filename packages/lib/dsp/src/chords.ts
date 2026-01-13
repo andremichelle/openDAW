@@ -1,4 +1,4 @@
-import {Arrays, int} from "@opendaw/lib-std"
+import {Arrays, int} from "@moises-ai/lib-std"
 
 export namespace Chord {
     export const Major: ReadonlyArray<int> = [0, 2, 4, 5, 7, 9, 11]

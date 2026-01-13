@@ -1,4 +1,4 @@
-import {EmptyExec, Lazy, Notifier, Nullable, Progress, unitValue} from "@opendaw/lib-std"
+import {EmptyExec, Lazy, Notifier, Nullable, Progress, unitValue} from "@moises-ai/lib-std"
 import type {FFmpeg, LogEvent} from "@ffmpeg/ffmpeg"
 import {Mp3Converter} from "./mp3"
 import {FlacConverter} from "./flac"

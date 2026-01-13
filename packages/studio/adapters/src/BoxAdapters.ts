@@ -9,8 +9,8 @@ import {
     Subscription,
     Terminable,
     UUID
-} from "@opendaw/lib-std"
-import {Box, Update} from "@opendaw/lib-box"
+} from "@moises-ai/lib-std"
+import {Box, Update} from "@moises-ai/lib-box"
 import {
     ArpeggioDeviceBox,
     AudioBusBox,
@@ -70,7 +70,7 @@ import {
     VelocityDeviceBox,
     WarpMarkerBox,
     ZeitgeistDeviceBox
-} from "@opendaw/studio-boxes"
+} from "@moises-ai/studio-boxes"
 import {AudioUnitBoxAdapter} from "./audio-unit/AudioUnitBoxAdapter"
 import {DelayDeviceBoxAdapter} from "./devices/audio-effects/DelayDeviceBoxAdapter"
 import {ReverbDeviceBoxAdapter} from "./devices/audio-effects/ReverbDeviceBoxAdapter"

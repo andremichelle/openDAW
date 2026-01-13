@@ -1,15 +1,15 @@
 import css from "./OutputSelector.sass?inline"
-import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {Surface} from "@/ui/surface/Surface"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol} from "@moises-ai/studio-enums"
 import {Dialog} from "@/ui/components/Dialog"
 import {AudioOutputDevices} from "@/ui/mixer/AudioOutputDevices"
-import {Promises} from "@opendaw/lib-runtime"
+import {Promises} from "@moises-ai/lib-runtime"
 import {Dialogs} from "@/ui/components/dialogs"
 import {TextScroller} from "@/ui/TextScroller"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Lifecycle} from "@moises-ai/lib-std"
 
 const className = Html.adoptStyleSheet(css, "OutputSelector")
 

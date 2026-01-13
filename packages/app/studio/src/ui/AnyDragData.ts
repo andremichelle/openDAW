@@ -1,6 +1,6 @@
-import {byte, int} from "@opendaw/lib-std"
-import {InstrumentFactories, Sample, Soundfont} from "@opendaw/studio-adapters"
-import {EffectFactories} from "@opendaw/studio-core"
+import {byte, int} from "@moises-ai/lib-std"
+import {InstrumentFactories, Sample, Soundfont} from "@moises-ai/studio-adapters"
+import {EffectFactories} from "@moises-ai/studio-core"
 
 export type DragCopyHint = { copy?: boolean }
 export type DragSample = { type: "sample", sample: Sample } & DragCopyHint

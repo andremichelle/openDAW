@@ -1,5 +1,5 @@
-import {bpm, ppqn, PPQN, seconds, TempoChangeGrid, TempoMap} from "@opendaw/lib-dsp"
-import {Observer, quantizeCeil, Subscription, Terminator} from "@opendaw/lib-std"
+import {bpm, ppqn, PPQN, seconds, TempoChangeGrid, TempoMap} from "@moises-ai/lib-dsp"
+import {Observer, quantizeCeil, Subscription, Terminator} from "@moises-ai/lib-std"
 import {TimelineBoxAdapter} from "./timeline/TimelineBoxAdapter"
 
 /**

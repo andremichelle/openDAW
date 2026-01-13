@@ -1,4 +1,4 @@
-import {Exec, Procedure} from "@opendaw/lib-std"
+import {Exec, Procedure} from "@moises-ai/lib-std"
 
 export interface Result<T> {
     success: Procedure<T>

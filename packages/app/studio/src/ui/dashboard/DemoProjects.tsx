@@ -1,14 +1,14 @@
 import css from "./DemoProjects.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {Lifecycle, Option, RuntimeNotifier} from "@opendaw/lib-std"
-import {Await, createElement} from "@opendaw/lib-jsx"
-import {Colors} from "@opendaw/studio-enums"
+import {Html} from "@moises-ai/lib-dom"
+import {Lifecycle, Option, RuntimeNotifier} from "@moises-ai/lib-std"
+import {Await, createElement} from "@moises-ai/lib-jsx"
+import {Colors} from "@moises-ai/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {DemoProjectJson} from "@/ui/dashboard/DemoProjectJson"
 import {DemoProject} from "@/ui/dashboard/DemoProject"
-import {network, Promises} from "@opendaw/lib-runtime"
-import {ProjectBundle} from "@opendaw/studio-core"
+import {network, Promises} from "@moises-ai/lib-runtime"
+import {ProjectBundle} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "DemoProjects")
 

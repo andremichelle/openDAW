@@ -6,9 +6,9 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
-import {AnyRegionBox, CaptureBox} from "@opendaw/studio-adapters"
+} from "@moises-ai/lib-std"
+import {AudioUnitBox} from "@moises-ai/studio-boxes"
+import {AnyRegionBox, CaptureBox} from "@moises-ai/studio-adapters"
 import {CaptureDevices} from "./CaptureDevices"
 
 export abstract class Capture<BOX extends CaptureBox = CaptureBox> implements Terminable {

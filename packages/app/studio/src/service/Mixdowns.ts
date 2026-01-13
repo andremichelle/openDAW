@@ -1,5 +1,5 @@
-import {DefaultObservableValue, Errors, Option, panic, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
-import {AudioData} from "@opendaw/lib-dsp"
+import {DefaultObservableValue, Errors, Option, panic, RuntimeNotifier, TimeSpan} from "@moises-ai/lib-std"
+import {AudioData} from "@moises-ai/lib-dsp"
 import {
     ExternalLib,
     FFmpegConverter,
@@ -8,10 +8,10 @@ import {
     ProjectMeta,
     ProjectProfile,
     WavFile
-} from "@opendaw/studio-core"
-import {Files} from "@opendaw/lib-dom"
-import {Promises} from "@opendaw/lib-runtime"
-import {ExportStemsConfiguration} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-core"
+import {Files} from "@moises-ai/lib-dom"
+import {Promises} from "@moises-ai/lib-runtime"
+import {ExportStemsConfiguration} from "@moises-ai/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs"
 
 export namespace Mixdowns {
@@ -182,7 +182,7 @@ export namespace Mixdowns {
 
     const loadFFmepg = async (): Promise<FFmpegWorker> => {
         const {FFmpegWorker} = await Promises.guardedRetry(() =>
-            import("@opendaw/studio-core/FFmpegWorker"), (_, count) => count < 60)
+            import("@moises-ai/studio-core/FFmpegWorker"), (_, count) => count < 60)
         const progress = new DefaultObservableValue(0.0)
         const progressDialog = RuntimeNotifier.progress({headline: "Loading FFmpeg...", progress})
         const {status, value, error} = await Promises.tryCatch(FFmpegWorker.load(value => progress.setValue(value)))

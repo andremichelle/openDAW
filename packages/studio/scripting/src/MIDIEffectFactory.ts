@@ -1,7 +1,7 @@
 import {MIDIEffects} from "./Api"
-import {Box, BoxGraph} from "@opendaw/lib-box"
-import {AudioUnitBox, PitchDeviceBox} from "@opendaw/studio-boxes"
-import {Unhandled, UUID} from "@opendaw/lib-std"
+import {Box, BoxGraph} from "@moises-ai/lib-box"
+import {AudioUnitBox, PitchDeviceBox} from "@moises-ai/studio-boxes"
+import {Unhandled, UUID} from "@moises-ai/lib-std"
 
 export class MIDIEffectFactory {
     static write(boxGraph: BoxGraph,

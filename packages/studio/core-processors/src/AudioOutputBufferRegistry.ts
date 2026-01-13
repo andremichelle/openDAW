@@ -1,6 +1,6 @@
-import {Option, SortedSet, Terminable} from "@opendaw/lib-std"
-import {Address} from "@opendaw/lib-box"
-import {AudioBuffer} from "@opendaw/lib-dsp"
+import {Option, SortedSet, Terminable} from "@moises-ai/lib-std"
+import {Address} from "@moises-ai/lib-box"
+import {AudioBuffer} from "@moises-ai/lib-dsp"
 import {Processor} from "./processing"
 
 export type AudioOutputBuffer = {

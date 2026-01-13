@@ -1,16 +1,16 @@
 import css from "./AuxSend.sass?inline"
-import {DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
-import {createElement, DomElement, Inject} from "@opendaw/lib-jsx"
-import {AuxSendBoxAdapter} from "@opendaw/studio-adapters"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {DefaultObservableValue, Lifecycle} from "@moises-ai/lib-std"
+import {createElement, DomElement, Inject} from "@moises-ai/lib-jsx"
+import {AuxSendBoxAdapter} from "@moises-ai/studio-adapters"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {Knob, TinyDesign} from "@/ui/components/Knob.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
-import {MenuItem} from "@opendaw/studio-core"
+import {MenuItem} from "@moises-ai/studio-core"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {IconCartridge} from "@/ui/components/Icon.tsx"
 import {SnapCenter} from "@/ui/configs.ts"
-import {BoxEditing} from "@opendaw/lib-box"
-import {Html} from "@opendaw/lib-dom"
+import {BoxEditing} from "@moises-ai/lib-box"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "AuxSend")
 

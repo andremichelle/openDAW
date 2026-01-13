@@ -1,11 +1,11 @@
 import css from "./WiringFlyout.sass?inline"
-import {Point, Terminator} from "@opendaw/lib-std"
+import {Point, Terminator} from "@moises-ai/lib-std"
 import {Icon} from "@/ui/components/Icon.tsx"
-import {createElement} from "@opendaw/lib-jsx"
-import {ModuleConnectionAdapter, ModuleConnectorAdapter} from "@opendaw/studio-adapters"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {createElement} from "@moises-ai/lib-jsx"
+import {ModuleConnectionAdapter, ModuleConnectorAdapter} from "@moises-ai/studio-adapters"
+import {IconSymbol} from "@moises-ai/studio-enums"
 import {ModularEnvironment} from "@/ui/modular/ModularEnvironment.ts"
-import {Events, Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "WiringFlyout")
 

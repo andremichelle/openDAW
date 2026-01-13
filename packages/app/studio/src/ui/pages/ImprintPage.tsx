@@ -1,8 +1,8 @@
 import css from "./ImprintPage.sass?inline"
-import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
+import {createElement, PageContext, PageFactory} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {Html} from "@opendaw/lib-dom"
-import {Colors} from "@opendaw/studio-enums"
+import {Html} from "@moises-ai/lib-dom"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "ImprintPage")
 
@@ -14,7 +14,7 @@ export const ImprintPage: PageFactory<StudioService> = ({}: PageContext<StudioSe
         <p>
             <span style={{color: Colors.cream.toString()}}>André Michelle</span><br/>
             <span style={{color: Colors.dark.toString()}}>Cologne, Germany</span><br/>
-            Email: <a style={{color: Colors.blue}} href="mailto:hello@opendaw.org">hello@opendaw.org</a>
+            Email: <a style={{color: Colors.blue}} href="mailto:hello@moises-ai.org">hello@moises-ai.org</a>
         </p>
         <p>
             This website is a personal, non-commercial project.<br/>

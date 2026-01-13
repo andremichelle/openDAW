@@ -15,7 +15,7 @@ import {
     Terminable,
     TerminableOwner,
     TimeSpan
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {Wait} from "./wait"
 
 export type Resolve<T> = (value: T) => void
