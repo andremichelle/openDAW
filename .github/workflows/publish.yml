@@ -31,11 +31,6 @@ jobs:
           registry-url: 'https://npm.pkg.github.com'
           scope: '@moises-ai'
 
-      - name: Configure npm for GitHub Packages
-        run: |
-          echo "@moises-ai:registry=https://npm.pkg.github.com" >> .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
-
       - name: Verify scope transformation
         run: node scripts/verify-scope.js
 
