@@ -1,4 +1,4 @@
-import {EmptyExec, Notifier, Observer, Option, Subscription, UUID} from "@opendaw/lib-std"
+import {EmptyExec, Notifier, Observer, Option, Subscription, UUID} from "@moises-ai/lib-std"
 import {ProjectMeta} from "./ProjectMeta"
 import {Project} from "./Project"
 import {Workers} from "../Workers"

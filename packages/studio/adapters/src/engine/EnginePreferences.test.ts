@@ -1,7 +1,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest"
-import {Subscription} from "@opendaw/lib-std"
-import {Messenger} from "@opendaw/lib-runtime"
-import {PreferencesClient, PreferencesHost} from "@opendaw/lib-fusion"
+import {Subscription} from "@moises-ai/lib-std"
+import {Messenger} from "@moises-ai/lib-runtime"
+import {PreferencesClient, PreferencesHost} from "@moises-ai/lib-fusion"
 import {EngineSettings, EngineSettingsSchema} from "./EnginePreferencesSchema"
 
 const EngineSettingsDefaults = EngineSettingsSchema.parse({})

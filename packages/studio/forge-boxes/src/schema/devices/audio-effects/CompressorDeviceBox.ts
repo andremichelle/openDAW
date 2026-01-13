@@ -1,5 +1,5 @@
-import {BoxSchema} from "@opendaw/lib-box-forge"
-import {Pointers} from "@opendaw/studio-enums"
+import {BoxSchema} from "@moises-ai/lib-box-forge"
+import {Pointers} from "@moises-ai/studio-enums"
 import {DeviceFactory} from "../../std/DeviceFactory"
 import {ParameterPointerRules} from "../../std/Defaults"
 

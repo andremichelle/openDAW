@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest"
-import {ByteArrayInput, ByteArrayOutput, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, ByteArrayOutput, UUID} from "@moises-ai/lib-std"
 import {Address, Addressable} from "./address"
 
 describe("Address", () => {

@@ -12,8 +12,8 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {ArrayField, BoxGraph, Field, ObjectField, PointerField, PrimitiveField, Update} from "@opendaw/lib-box"
+} from "@moises-ai/lib-std"
+import {ArrayField, BoxGraph, Field, ObjectField, PointerField, PrimitiveField, Update} from "@moises-ai/lib-box"
 import {YMapper} from "./YMapper"
 import * as Y from "yjs"
 

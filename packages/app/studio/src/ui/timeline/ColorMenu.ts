@@ -1,6 +1,6 @@
-import {MenuItem} from "@opendaw/studio-core"
-import {ColorCodes, TrackType} from "@opendaw/studio-adapters"
-import {Procedure} from "@opendaw/lib-std"
+import {MenuItem} from "@moises-ai/studio-core"
+import {ColorCodes, TrackType} from "@moises-ai/studio-adapters"
+import {Procedure} from "@moises-ai/lib-std"
 
 export namespace ColorMenu {
     const Colors: ReadonlyArray<{ label: string, hue: number }> = [

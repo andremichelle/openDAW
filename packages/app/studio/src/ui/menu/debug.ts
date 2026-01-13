@@ -1,5 +1,5 @@
-import {Box} from "@opendaw/lib-box"
-import {MenuItem} from "@opendaw/studio-core"
+import {Box} from "@moises-ai/lib-box"
+import {MenuItem} from "@moises-ai/studio-core"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 
 export namespace DebugMenus {

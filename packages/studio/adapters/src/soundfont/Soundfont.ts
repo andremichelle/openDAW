@@ -1,4 +1,4 @@
-import {UUID} from "@opendaw/lib-std"
+import {UUID} from "@moises-ai/lib-std"
 import {SoundfontMetaData} from "./SoundfontMetaData"
 import {z} from "zod"
 

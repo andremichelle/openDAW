@@ -1,14 +1,14 @@
 import css from "./OutputSelector.sass?inline"
-import {assert, DefaultObservableValue, Lifecycle, StringComparator, UUID} from "@opendaw/lib-std"
-import {AudioBusFactory, AudioUnitBoxAdapter} from "@opendaw/studio-adapters"
-import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
-import {createElement, DomElement, Frag} from "@opendaw/lib-jsx"
+import {assert, DefaultObservableValue, Lifecycle, StringComparator, UUID} from "@moises-ai/lib-std"
+import {AudioBusFactory, AudioUnitBoxAdapter} from "@moises-ai/studio-adapters"
+import {AudioUnitType, Colors, IconSymbol} from "@moises-ai/studio-enums"
+import {createElement, DomElement, Frag} from "@moises-ai/lib-jsx"
 import {IconCartridge} from "@/ui/components/Icon.tsx"
-import {Html} from "@opendaw/lib-dom"
-import {MenuItem} from "@opendaw/studio-core"
+import {Html} from "@moises-ai/lib-dom"
+import {MenuItem} from "@moises-ai/studio-core"
 import {showNewAudioBusOrAuxDialog} from "@/ui/dialogs"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {Project} from "@opendaw/studio-core"
+import {Project} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "OutputSelector")
 

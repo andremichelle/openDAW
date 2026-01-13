@@ -1,4 +1,4 @@
-import {MenuItem, MenuRootData} from "@opendaw/studio-core"
+import {MenuItem, MenuRootData} from "@moises-ai/studio-core"
 
 export interface EditorMenuCollector {
     viewMenu: MenuItem<MenuRootData>

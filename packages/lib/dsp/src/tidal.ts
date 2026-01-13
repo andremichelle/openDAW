@@ -1,4 +1,4 @@
-import {linear, unitValue} from "@opendaw/lib-std"
+import {linear, unitValue} from "@moises-ai/lib-std"
 
 export class TidalComputer {
     static readonly #SLOPE_MULT: number = 10.0

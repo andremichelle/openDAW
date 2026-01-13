@@ -1,4 +1,4 @@
-import {TerminatorUtils} from "@opendaw/lib-dom"
+import {TerminatorUtils} from "@moises-ai/lib-dom"
 import {createElement} from "../create-element"
 import {RouteLocation, RouteMatcher} from "../routes"
 

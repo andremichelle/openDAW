@@ -1,16 +1,16 @@
 import css from "./PlayfieldSampleEditor.sass?inline"
-import {Lifecycle, Terminable} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {Events, Html} from "@opendaw/lib-dom"
+import {Lifecycle, Terminable} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Events, Html} from "@moises-ai/lib-dom"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
-import {DeviceHost, InstrumentFactories, NoteLifeCycle, PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
+import {DeviceHost, InstrumentFactories, NoteLifeCycle, PlayfieldSampleBoxAdapter} from "@moises-ai/studio-adapters"
 import {SlotEditor} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotEditor"
 import {Icon} from "@/ui/components/Icon"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {StudioService} from "@/service/StudioService"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "PlayfieldSampleEditor")
 

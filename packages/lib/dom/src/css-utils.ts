@@ -1,4 +1,4 @@
-import {panic} from "@opendaw/lib-std"
+import {panic} from "@moises-ai/lib-std"
 
 export namespace CssUtils {
     export const calc = (term: string, size: number, em: number): number => {

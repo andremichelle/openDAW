@@ -1,9 +1,9 @@
-import {byte, int, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioFileBox, PlayfieldDeviceBox, PlayfieldSampleBox} from "@opendaw/studio-boxes"
-import {Project} from "@opendaw/studio-core"
+import {byte, int, Option, Terminable, UUID} from "@moises-ai/lib-std"
+import {AudioFileBox, PlayfieldDeviceBox, PlayfieldSampleBox} from "@moises-ai/studio-boxes"
+import {Project} from "@moises-ai/studio-core"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData, DragDevice} from "@/ui/AnyDragData"
-import {PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
+import {PlayfieldSampleBoxAdapter} from "@moises-ai/studio-adapters"
 
 export namespace SlotDragAndDrop {
     const findSampleByIndex = (project: Project, index: int): Option<PlayfieldSampleBox> => {

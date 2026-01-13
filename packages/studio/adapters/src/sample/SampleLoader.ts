@@ -1,7 +1,7 @@
-import {Observer, Option, Subscription, UUID} from "@opendaw/lib-std"
-import {Peaks} from "@opendaw/lib-fusion"
+import {Observer, Option, Subscription, UUID} from "@moises-ai/lib-std"
+import {Peaks} from "@moises-ai/lib-fusion"
 import {SampleLoaderState} from "./SampleLoaderState"
-import {AudioData} from "@opendaw/lib-dsp"
+import {AudioData} from "@moises-ai/lib-dsp"
 
 export interface SampleLoader {
     get data(): Option<AudioData>

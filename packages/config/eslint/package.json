@@ -1,5 +1,5 @@
 {
-    "name": "@opendaw/eslint-config",
+    "name": "@moises-ai/eslint-config",
     "version": "0.0.27",
     "private": true,
     "main": "index.js",

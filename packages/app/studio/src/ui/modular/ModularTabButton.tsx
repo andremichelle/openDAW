@@ -1,9 +1,9 @@
 import css from "./ModularTabButton.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
-import {ModularAdapter, UserEditing} from "@opendaw/studio-adapters"
-import {Vertex} from "@opendaw/lib-box"
-import {createElement, Inject} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {Lifecycle} from "@moises-ai/lib-std"
+import {ModularAdapter, UserEditing} from "@moises-ai/studio-adapters"
+import {Vertex} from "@moises-ai/lib-box"
+import {createElement, Inject} from "@moises-ai/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "ModularTabButton")
 

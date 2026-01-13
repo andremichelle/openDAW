@@ -1,5 +1,5 @@
-import {Arrays, ByteArrayOutput} from "@opendaw/lib-std"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {Arrays, ByteArrayOutput} from "@moises-ai/lib-std"
+import {AudioUnitBox} from "@moises-ai/studio-boxes"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {ProjectUtils} from "../project/ProjectUtils"
 import {PresetHeader} from "./PresetHeader"

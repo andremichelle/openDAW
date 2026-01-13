@@ -1,11 +1,11 @@
 import css from "./AddParameterButton.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {asInstanceOf, UUID} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {MIDIOutputParameterBox, TrackBox} from "@opendaw/studio-boxes"
-import {IconSymbol, Pointers} from "@opendaw/studio-enums"
-import {MIDIOutputDeviceBoxAdapter, TrackType} from "@opendaw/studio-adapters"
-import {Project} from "@opendaw/studio-core"
+import {Html} from "@moises-ai/lib-dom"
+import {asInstanceOf, UUID} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {MIDIOutputParameterBox, TrackBox} from "@moises-ai/studio-boxes"
+import {IconSymbol, Pointers} from "@moises-ai/studio-enums"
+import {MIDIOutputDeviceBoxAdapter, TrackType} from "@moises-ai/studio-adapters"
+import {Project} from "@moises-ai/studio-core"
 import {Icon} from "@/ui/components/Icon"
 
 const className = Html.adoptStyleSheet(css, "AddParameterButton")

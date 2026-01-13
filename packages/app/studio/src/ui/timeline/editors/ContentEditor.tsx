@@ -1,6 +1,6 @@
 import css from "./ContentEditor.sass?inline"
-import {Lifecycle, Option, Terminator, ValueMapping} from "@opendaw/lib-std"
-import {createElement, Frag, replaceChildren} from "@opendaw/lib-jsx"
+import {Lifecycle, Option, Terminator, ValueMapping} from "@moises-ai/lib-std"
+import {createElement, Frag, replaceChildren} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {
     AudioClipBox,
@@ -10,7 +10,7 @@ import {
     NoteRegionBox,
     ValueClipBox,
     ValueRegionBox
-} from "@opendaw/studio-boxes"
+} from "@moises-ai/studio-boxes"
 import {NoteEditor} from "@/ui/timeline/editors/notes/NoteEditor.tsx"
 import {
     AudioClipBoxAdapter,
@@ -19,19 +19,19 @@ import {
     NoteRegionBoxAdapter,
     ValueClipBoxAdapter,
     ValueRegionBoxAdapter
-} from "@opendaw/studio-adapters"
-import {Box, PointerField, Vertex} from "@opendaw/lib-box"
+} from "@moises-ai/studio-adapters"
+import {Box, PointerField, Vertex} from "@moises-ai/lib-box"
 import {SnapSelector} from "@/ui/timeline/SnapSelector.tsx"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {TimelineRange} from "@opendaw/studio-core"
+import {TimelineRange} from "@moises-ai/studio-core"
 import {TimeAxis} from "@/ui/timeline/TimeAxis.tsx"
 import {TimelineRangeSlider} from "@/ui/timeline/TimelineRangeSlider.tsx"
 import {ValueEventsEditor} from "./value/ValueEventsEditor.tsx"
 import {FlexSpacer} from "@/ui/components/FlexSpacer.tsx"
-import {PPQN} from "@opendaw/lib-dsp"
+import {PPQN} from "@moises-ai/lib-dsp"
 import {AudioEditor} from "@/ui/timeline/editors/audio/AudioEditor.tsx"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {MenuItem} from "@opendaw/studio-core"
+import {MenuItem} from "@moises-ai/studio-core"
 import {EditorMenuCollector} from "@/ui/timeline/editors/EditorMenuCollector.ts"
 
 import {ClipReader} from "@/ui/timeline/editors/ClipReader.ts"
@@ -43,9 +43,9 @@ import {
     ValueEventOwnerReader
 } from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {RegionReader} from "@/ui/timeline/editors/RegionReader.ts"
-import {Colors, Pointers} from "@opendaw/studio-enums"
+import {Colors, Pointers} from "@moises-ai/studio-enums"
 import {ParameterValueEditing} from "@/ui/timeline/editors/value/ParameterValueEditing.ts"
-import {AnimationFrame, deferNextFrame, Html, ShortcutManager} from "@opendaw/lib-dom"
+import {AnimationFrame, deferNextFrame, Html, ShortcutManager} from "@moises-ai/lib-dom"
 import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 
 const className = Html.adoptStyleSheet(css, "ContentEditor")

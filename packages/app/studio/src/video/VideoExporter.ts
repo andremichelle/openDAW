@@ -1,4 +1,4 @@
-import {ObservableValue, Terminable} from "@opendaw/lib-std"
+import {ObservableValue, Terminable} from "@moises-ai/lib-std"
 
 export interface VideoExportConfig {
     readonly width: number

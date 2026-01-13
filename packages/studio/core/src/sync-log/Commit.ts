@@ -1,5 +1,5 @@
-import {assert, ByteArrayInput, ByteArrayOutput, Hash} from "@opendaw/lib-std"
-import {Update} from "@opendaw/lib-box"
+import {assert, ByteArrayInput, ByteArrayOutput, Hash} from "@moises-ai/lib-std"
+import {Update} from "@moises-ai/lib-box"
 import {Project} from "../project/Project"
 
 export const enum CommitType { Init, Open, Updates, NewVersion }

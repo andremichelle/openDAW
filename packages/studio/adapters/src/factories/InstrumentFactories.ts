@@ -9,11 +9,11 @@ import {
     SoundfontFileBox,
     TapeDeviceBox,
     VaporisateurDeviceBox
-} from "@opendaw/studio-boxes"
-import {byte, isDefined, UUID} from "@opendaw/lib-std"
-import {ClassicWaveform} from "@opendaw/lib-dsp"
-import {BoxGraph, Field} from "@opendaw/lib-box"
-import {IconSymbol, Pointers, VoicingMode} from "@opendaw/studio-enums"
+} from "@moises-ai/studio-boxes"
+import {byte, isDefined, UUID} from "@moises-ai/lib-std"
+import {ClassicWaveform} from "@moises-ai/lib-dsp"
+import {BoxGraph, Field} from "@moises-ai/lib-box"
+import {IconSymbol, Pointers, VoicingMode} from "@moises-ai/studio-enums"
 import {DeviceManualUrls} from "../DeviceManualUrls"
 import {InstrumentFactory} from "./InstrumentFactory"
 import {TrackType} from "../timeline/TrackType"

@@ -1,6 +1,6 @@
 import {Voice} from "./Voice"
-import {bipolar, Id, int, Provider, unitValue} from "@opendaw/lib-std"
-import {AudioBuffer, Glide, NoteEvent, ppqn} from "@opendaw/lib-dsp"
+import {bipolar, Id, int, Provider, unitValue} from "@moises-ai/lib-std"
+import {AudioBuffer, Glide, NoteEvent, ppqn} from "@moises-ai/lib-dsp"
 import {Block} from "../processing"
 
 export class VoiceUnison implements Voice {

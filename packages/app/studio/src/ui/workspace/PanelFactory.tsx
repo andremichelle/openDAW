@@ -1,6 +1,6 @@
-import {Lifecycle, panic} from "@opendaw/lib-std"
+import {Lifecycle, panic} from "@moises-ai/lib-std"
 import {PanelContentFactory} from "@/ui/workspace/PanelContents.tsx"
-import {createElement, JsxValue} from "@opendaw/lib-jsx"
+import {createElement, JsxValue} from "@moises-ai/lib-jsx"
 import {ContentEditor} from "@/ui/timeline/editors/ContentEditor.tsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Timeline} from "@/ui/timeline/Timeline.tsx"

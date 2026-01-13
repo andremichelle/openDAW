@@ -11,9 +11,9 @@ import {
     Subscription,
     Terminable,
     UUID
-} from "@opendaw/lib-std"
-import {Box, Field, Int32Field, PointerField} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
+} from "@moises-ai/lib-std"
+import {Box, Field, Int32Field, PointerField} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
 import {AdapterCollectionListener} from "./BoxAdapterCollection"
 import {IndexComparator} from "./IndexComparator"
 import {BoxAdapter} from "./BoxAdapter"

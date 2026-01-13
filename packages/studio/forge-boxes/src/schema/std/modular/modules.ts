@@ -1,5 +1,5 @@
-import {BoxSchema, FieldName, FieldSchema} from "@opendaw/lib-box-forge"
-import {Pointers} from "@opendaw/studio-enums"
+import {BoxSchema, FieldName, FieldSchema} from "@moises-ai/lib-box-forge"
+import {Pointers} from "@moises-ai/studio-enums"
 import {UnipolarConstraints} from "../Defaults"
 
 export const createVoltageConnector = (name: string): FieldSchema<Pointers.VoltageConnection> & FieldName => ({

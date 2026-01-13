@@ -1,5 +1,5 @@
-import {Id, int, isDefined, Nullable} from "@opendaw/lib-std"
-import {AudioBuffer, NoteEvent} from "@opendaw/lib-dsp"
+import {Id, int, isDefined, Nullable} from "@moises-ai/lib-std"
+import {AudioBuffer, NoteEvent} from "@moises-ai/lib-dsp"
 import {Voice} from "./Voice"
 import {VoicingHost} from "./VoicingHost"
 import {VoicingStrategy} from "./VoicingStrategy"

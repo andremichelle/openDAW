@@ -1,5 +1,5 @@
-import {assert, Bits, int, isInstanceOf, Option, SortedSet, UUID} from "@opendaw/lib-std"
-import {AudioBuffer, AudioData, EventCollection, LoopableRegion, RenderQuantum} from "@opendaw/lib-dsp"
+import {assert, Bits, int, isInstanceOf, Option, SortedSet, UUID} from "@moises-ai/lib-std"
+import {AudioBuffer, AudioData, EventCollection, LoopableRegion, RenderQuantum} from "@moises-ai/lib-dsp"
 import {
     AudioClipBoxAdapter,
     AudioContentBoxAdapter,
@@ -10,7 +10,7 @@ import {
     TrackType,
     TransientMarkerBoxAdapter,
     WarpMarkerBoxAdapter
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {EngineContext} from "../../EngineContext"
 import {AudioGenerator, Block, BlockFlag, ProcessInfo, Processor} from "../../processing"
 import {AbstractProcessor} from "../../AbstractProcessor"

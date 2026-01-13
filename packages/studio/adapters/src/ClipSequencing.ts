@@ -1,5 +1,5 @@
-import {Option, Terminable, UUID} from "@opendaw/lib-std"
-import {ppqn} from "@opendaw/lib-dsp"
+import {Option, Terminable, UUID} from "@moises-ai/lib-std"
+import {ppqn} from "@moises-ai/lib-dsp"
 import {AnyClipBoxAdapter} from "./UnionAdapterTypes"
 
 export type Section = {

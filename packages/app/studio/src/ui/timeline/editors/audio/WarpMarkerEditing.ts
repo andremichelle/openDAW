@@ -3,10 +3,10 @@ import {
     FilteredSelection,
     TransientMarkerBoxAdapter,
     WarpMarkerBoxAdapter
-} from "@opendaw/studio-adapters"
-import {ContextMenu, Project, TimelineRange} from "@opendaw/studio-core"
+} from "@moises-ai/studio-adapters"
+import {ContextMenu, Project, TimelineRange} from "@moises-ai/studio-core"
 import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader"
-import {WarpMarkerBox} from "@opendaw/studio-boxes"
+import {WarpMarkerBox} from "@moises-ai/studio-boxes"
 import {
     clamp,
     isNotNull,
@@ -18,12 +18,12 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {MenuItem} from "@opendaw/studio-core"
+} from "@moises-ai/lib-std"
+import {MenuItem} from "@moises-ai/studio-core"
 import {DebugMenus} from "@/ui/menu/debug"
 import {WarpMarkerUtils} from "@/ui/timeline/editors/audio/WarpMarkerUtils"
-import {Dragging, Events, Keyboard} from "@opendaw/lib-dom"
-import {PPQN} from "@opendaw/lib-dsp"
+import {Dragging, Events, Keyboard} from "@moises-ai/lib-dom"
+import {PPQN} from "@moises-ai/lib-dsp"
 import {Snapping} from "@/ui/timeline/Snapping"
 
 export namespace WarpMarkerEditing {

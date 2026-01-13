@@ -1,4 +1,4 @@
-import {Key, Shortcut} from "@opendaw/lib-dom"
+import {Key, Shortcut} from "@moises-ai/lib-dom"
 
 export namespace CommonShortcuts {
     const shift = true

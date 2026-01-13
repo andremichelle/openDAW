@@ -1,8 +1,8 @@
 import css from "./PrivacyPage.sass?inline"
-import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
+import {createElement, PageContext, PageFactory} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {Html} from "@opendaw/lib-dom"
-import {Colors} from "@opendaw/studio-enums"
+import {Html} from "@moises-ai/lib-dom"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "PrivacyPage")
 
@@ -22,7 +22,7 @@ export const PrivacyPage: PageFactory<StudioService> = ({}: PageContext<StudioSe
             storage location.</p>
         <h3>Contact</h3>
         <p>For questions about this policy, contact: <a style={{color: Colors.blue}}
-                                                        href="mailto:hello@opendaw.org">hello@opendaw.org</a>
+                                                        href="mailto:hello@moises-ai.org">hello@moises-ai.org</a>
         </p>
     </div>
 )

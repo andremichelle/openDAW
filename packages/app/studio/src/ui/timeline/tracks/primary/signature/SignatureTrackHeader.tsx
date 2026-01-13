@@ -1,13 +1,13 @@
 import css from "./SignatureTrackHeader.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {createElement} from "@moises-ai/lib-jsx"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol} from "@moises-ai/studio-enums"
 import {Icon} from "@/ui/components/Icon"
-import {Lifecycle} from "@opendaw/lib-std"
-import {TimelineBox} from "@opendaw/studio-boxes"
-import {BoxEditing} from "@opendaw/lib-box"
+import {Lifecycle} from "@moises-ai/lib-std"
+import {TimelineBox} from "@moises-ai/studio-boxes"
+import {BoxEditing} from "@moises-ai/lib-box"
 
 const className = Html.adoptStyleSheet(css, "SignatureTrackHeader")
 

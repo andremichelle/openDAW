@@ -1,6 +1,6 @@
-import {Gate, PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
-import {AudioData, NoteEvent, velocityToGain} from "@opendaw/lib-dsp"
-import {Id, int} from "@opendaw/lib-std"
+import {Gate, PlayfieldSampleBoxAdapter} from "@moises-ai/studio-adapters"
+import {AudioData, NoteEvent, velocityToGain} from "@moises-ai/lib-dsp"
+import {Id, int} from "@moises-ai/lib-std"
 import {AutomatableParameters} from "./AutomatableParameters"
 
 const FAST_RELEASE = Math.floor(0.005 * sampleRate)

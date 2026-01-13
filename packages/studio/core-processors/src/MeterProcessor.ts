@@ -1,6 +1,6 @@
-import {PeakMeterProcessorOptions} from "@opendaw/studio-adapters"
-import {RenderQuantum, RMS} from "@opendaw/lib-dsp"
-import {Arrays, int, Schema, SyncStream} from "@opendaw/lib-std"
+import {PeakMeterProcessorOptions} from "@moises-ai/studio-adapters"
+import {RenderQuantum, RMS} from "@moises-ai/lib-dsp"
+import {Arrays, int, Schema, SyncStream} from "@moises-ai/lib-std"
 
 export class MeterProcessor extends AudioWorkletProcessor {
     readonly #numberOfChannels: int

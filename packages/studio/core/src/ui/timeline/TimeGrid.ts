@@ -1,7 +1,7 @@
-import {ppqn, PPQN} from "@opendaw/lib-dsp"
-import {int, isDefined, Iterables} from "@opendaw/lib-std"
+import {ppqn, PPQN} from "@moises-ai/lib-dsp"
+import {int, isDefined, Iterables} from "@moises-ai/lib-std"
 import {TimelineRange} from "./TimelineRange"
-import {SignatureTrackAdapter} from "@opendaw/studio-adapters"
+import {SignatureTrackAdapter} from "@moises-ai/studio-adapters"
 
 export namespace TimeGrid {
     export type Signature = [int, int]

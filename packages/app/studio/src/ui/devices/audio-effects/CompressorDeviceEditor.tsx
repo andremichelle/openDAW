@@ -4,23 +4,23 @@ import {
     CompressorDeviceBoxAdapter,
     DeviceHost,
     LabeledAudioOutput
-} from "@opendaw/studio-adapters"
-import {Address} from "@opendaw/lib-box"
-import {Lifecycle, Option} from "@opendaw/lib-std"
-import {createElement, Frag} from "@opendaw/lib-jsx"
+} from "@moises-ai/studio-adapters"
+import {Address} from "@moises-ai/lib-box"
+import {Lifecycle, Option} from "@moises-ai/lib-std"
+import {createElement, Frag} from "@moises-ai/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 import {StudioService} from "@/service/StudioService"
-import {EffectFactories, MenuItem} from "@opendaw/studio-core"
+import {EffectFactories, MenuItem} from "@moises-ai/studio-core"
 import {ParameterToggleButton} from "@/ui/devices/ParameterToggleButton"
 import {ParameterLabel} from "@/ui/components/ParameterLabel"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import {Meters} from "@/ui/devices/audio-effects/Compressor/Meters"
 import {CompressionCurve} from "@/ui/devices/audio-effects/Compressor/CompressionCurve"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "CompressorDeviceEditor")
 

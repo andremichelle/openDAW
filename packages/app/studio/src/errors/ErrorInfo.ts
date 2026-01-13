@@ -1,4 +1,4 @@
-import {isDefined} from "@opendaw/lib-std"
+import {isDefined} from "@moises-ai/lib-std"
 
 export type ErrorInfo = {
     name: string

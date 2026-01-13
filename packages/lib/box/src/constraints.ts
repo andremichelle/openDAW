@@ -1,4 +1,4 @@
-import {float, int} from "@opendaw/lib-std"
+import {float, int} from "@moises-ai/lib-std"
 
 export namespace Constraints {
     export type Int32 =

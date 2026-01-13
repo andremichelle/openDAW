@@ -1,5 +1,5 @@
-import {int} from "@opendaw/lib-std"
-import {AudioUnitType} from "@opendaw/studio-enums"
+import {int} from "@moises-ai/lib-std"
+import {AudioUnitType} from "@moises-ai/studio-enums"
 
 export const AudioUnitOrdering: Record<string, int> = {
     [AudioUnitType.Instrument]: 0,

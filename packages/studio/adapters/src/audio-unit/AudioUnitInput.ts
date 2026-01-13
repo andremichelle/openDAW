@@ -8,11 +8,11 @@ import {
     Subscription,
     Terminable,
     Terminator
-} from "@opendaw/lib-std"
-import {PointerHub} from "@opendaw/lib-box"
-import {AudioBusBox} from "@opendaw/studio-boxes"
-import {Pointers} from "@opendaw/studio-enums"
-import {IconSymbol} from "@opendaw/studio-enums"
+} from "@moises-ai/lib-std"
+import {PointerHub} from "@moises-ai/lib-box"
+import {AudioBusBox} from "@moises-ai/studio-boxes"
+import {Pointers} from "@moises-ai/studio-enums"
+import {IconSymbol} from "@moises-ai/studio-enums"
 import {AudioUnitInputAdapter} from "./AudioUnitInputAdapter"
 import {BoxAdapters} from "../BoxAdapters"
 import {AudioBusBoxAdapter} from "./AudioBusBoxAdapter"

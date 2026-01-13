@@ -1,13 +1,13 @@
 import {Dialog} from "@/ui/components/Dialog"
-import {ExportStemsConfiguration} from "@opendaw/studio-adapters"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {ExportStemsConfiguration} from "@moises-ai/studio-adapters"
+import {IconSymbol} from "@moises-ai/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
-import {createElement} from "@opendaw/lib-jsx"
-import {Errors, isDefined, Objects, Terminator, UUID} from "@opendaw/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Errors, isDefined, Objects, Terminator, UUID} from "@moises-ai/lib-std"
 import {StudioService} from "@/service/StudioService"
 import {ProjectBrowser} from "@/project/ProjectBrowser"
 import {EditableExportStemsConfiguration, ExportStemsConfigurator} from "@/service/ExportStemsConfigurator"
-import {Project, ProjectMeta} from "@opendaw/studio-core"
+import {Project, ProjectMeta} from "@moises-ai/studio-core"
 
 export namespace ProjectDialogs {
     export const showSaveDialog = async ({headline, meta}: {

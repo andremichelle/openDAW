@@ -12,11 +12,11 @@ import {
     SyncStream,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {AudioData, bpm, ppqn} from "@opendaw/lib-dsp"
-import {SyncSource} from "@opendaw/lib-box"
-import {AnimationFrame} from "@opendaw/lib-dom"
-import {Communicator, Messenger} from "@opendaw/lib-runtime"
+} from "@moises-ai/lib-std"
+import {AudioData, bpm, ppqn} from "@moises-ai/lib-dsp"
+import {SyncSource} from "@moises-ai/lib-box"
+import {AnimationFrame} from "@moises-ai/lib-dom"
+import {Communicator, Messenger} from "@moises-ai/lib-runtime"
 import {
     ClipNotification,
     ClipSequencingUpdates,
@@ -31,8 +31,8 @@ import {
     NoteSignal,
     PreferencesHost,
     ProcessorOptions
-} from "@opendaw/studio-adapters"
-import {BoxIO} from "@opendaw/studio-boxes"
+} from "@moises-ai/studio-adapters"
+import {BoxIO} from "@moises-ai/studio-boxes"
 import {Engine} from "./Engine"
 import {Project} from "./project"
 import {MIDIReceiver} from "./midi"

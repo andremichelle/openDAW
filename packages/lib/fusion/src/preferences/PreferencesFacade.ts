@@ -7,8 +7,8 @@ import {
     Terminator,
     ValueAtPath,
     VirtualObject
-} from "@opendaw/lib-std"
-import {queueTask} from "@opendaw/lib-dom"
+} from "@moises-ai/lib-std"
+import {queueTask} from "@moises-ai/lib-dom"
 import {Preferences} from "./Preferences"
 import {PreferencesHost} from "./PreferencesHost"
 

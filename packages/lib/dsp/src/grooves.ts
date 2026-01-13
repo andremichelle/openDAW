@@ -1,5 +1,5 @@
 import {ppqn} from "./ppqn"
-import {assert, Bijective, BinarySearch, FloatArray, NumberComparator, quantizeFloor, unitValue} from "@opendaw/lib-std"
+import {assert, Bijective, BinarySearch, FloatArray, NumberComparator, quantizeFloor, unitValue} from "@moises-ai/lib-std"
 
 export interface GrooveFunction extends Bijective<unitValue, unitValue> {}
 

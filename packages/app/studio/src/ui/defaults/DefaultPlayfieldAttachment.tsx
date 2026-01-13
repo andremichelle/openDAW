@@ -1,5 +1,5 @@
-import {InstrumentFactories} from "@opendaw/studio-adapters"
-import {UUID} from "@opendaw/lib-std"
+import {InstrumentFactories} from "@moises-ai/studio-adapters"
+import {UUID} from "@moises-ai/lib-std"
 
 export const DefaultPlayfieldAttachment: InstrumentFactories.PlayfieldAttachment = [
     {

@@ -1,6 +1,6 @@
-import {Arrays, asInstanceOf, byte, int, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioBuffer, Event, PPQN} from "@opendaw/lib-dsp"
-import {MIDIOutputDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {Arrays, asInstanceOf, byte, int, Option, Terminable, UUID} from "@moises-ai/lib-std"
+import {AudioBuffer, Event, PPQN} from "@moises-ai/lib-dsp"
+import {MIDIOutputDeviceBoxAdapter} from "@moises-ai/studio-adapters"
 import {EngineContext} from "../../EngineContext"
 import {AudioProcessor} from "../../AudioProcessor"
 import {Block, Processor} from "../../processing"
@@ -8,8 +8,8 @@ import {AutomatableParameter} from "../../AutomatableParameter"
 import {NoteEventSource, NoteEventTarget, NoteLifecycleEvent} from "../../NoteEventSource"
 import {DeviceProcessor} from "../../DeviceProcessor"
 import {InstrumentDeviceProcessor} from "../../InstrumentDeviceProcessor"
-import {MidiData} from "@opendaw/lib-midi"
-import {MIDIOutputBox, MIDIOutputParameterBox} from "@opendaw/studio-boxes"
+import {MidiData} from "@moises-ai/lib-midi"
+import {MIDIOutputBox, MIDIOutputParameterBox} from "@moises-ai/studio-boxes"
 
 export class MIDIOutputDeviceProcessor extends AudioProcessor implements InstrumentDeviceProcessor, NoteEventTarget {
     readonly #adapter: MIDIOutputDeviceBoxAdapter

@@ -1,9 +1,9 @@
 import css from "./SearchInput.sass?inline"
-import {Lifecycle, MutableObservableValue} from "@opendaw/lib-std"
-import {Html} from "@opendaw/lib-dom"
-import {createElement} from "@opendaw/lib-jsx"
+import {Lifecycle, MutableObservableValue} from "@moises-ai/lib-std"
+import {Html} from "@moises-ai/lib-dom"
+import {createElement} from "@moises-ai/lib-jsx"
 import {Icon} from "@/ui/components/Icon"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "SearchInput")
 

@@ -1,7 +1,7 @@
 import css from "./NoAudioUnitSelectedPlaceholder.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {Lifecycle} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {Lifecycle} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {TextButton} from "@/ui/components/TextButton"
 

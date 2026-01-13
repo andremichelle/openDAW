@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest"
-import {int} from "@opendaw/lib-std"
+import {int} from "@moises-ai/lib-std"
 import {Graph, TopologicalSort} from "./graph"
 
 describe("graph", () => {

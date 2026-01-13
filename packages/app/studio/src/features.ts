@@ -1,4 +1,4 @@
-import {requireProperty} from "@opendaw/lib-std"
+import {requireProperty} from "@moises-ai/lib-std"
 
 export const testFeatures = async (): Promise<void> => {
     requireProperty(Promise, "withResolvers")

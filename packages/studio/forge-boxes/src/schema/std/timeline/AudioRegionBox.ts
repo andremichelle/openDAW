@@ -1,6 +1,6 @@
-import {BoxSchema, deprecated} from "@opendaw/lib-box-forge"
-import {Pointers} from "@opendaw/studio-enums"
-import {TimeBase} from "@opendaw/lib-dsp"
+import {BoxSchema, deprecated} from "@moises-ai/lib-box-forge"
+import {Pointers} from "@moises-ai/studio-enums"
+import {TimeBase} from "@moises-ai/lib-dsp"
 import {HueConstraints, PPQNPositionConstraints} from "../Defaults"
 
 export const AudioRegionBox: BoxSchema<Pointers> = {

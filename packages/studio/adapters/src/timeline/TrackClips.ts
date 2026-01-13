@@ -1,5 +1,5 @@
-import {Pointers} from "@opendaw/studio-enums"
-import {Notifier, Observer, Subscription, Terminable, Terminator} from "@opendaw/lib-std"
+import {Pointers} from "@moises-ai/studio-enums"
+import {Notifier, Observer, Subscription, Terminable, Terminator} from "@moises-ai/lib-std"
 import {TrackBoxAdapter} from "./TrackBoxAdapter"
 import {IndexedBoxAdapterCollection} from "../IndexedBoxAdapterCollection"
 import {AnyClipBoxAdapter} from "../UnionAdapterTypes"

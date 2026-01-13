@@ -1,5 +1,5 @@
 import {Shortcut} from "./shortcut-manager"
-import {isAbsent, JSONValue} from "@opendaw/lib-std"
+import {isAbsent, JSONValue} from "@moises-ai/lib-std"
 
 export type ShortcutDefinition = { shortcut: Shortcut, description: string }
 

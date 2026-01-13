@@ -1,5 +1,5 @@
-import {Arrays, int, panic} from "@opendaw/lib-std"
-import {AudioData} from "@opendaw/lib-dsp"
+import {Arrays, int, panic} from "@moises-ai/lib-std"
+import {AudioData} from "@moises-ai/lib-dsp"
 
 export namespace WavFile {
     const MAGIC_RIFF = 0x46464952

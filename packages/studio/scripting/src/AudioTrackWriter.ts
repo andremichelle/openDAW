@@ -1,4 +1,4 @@
-import {UUID} from "@opendaw/lib-std"
+import {UUID} from "@moises-ai/lib-std"
 import {
     AudioPitchStretchBox,
     AudioRegionBox,
@@ -6,14 +6,14 @@ import {
     TrackBox,
     ValueEventCollectionBox,
     WarpMarkerBox
-} from "@opendaw/studio-boxes"
-import {TrackType} from "@opendaw/studio-adapters"
-import {BoxGraph} from "@opendaw/lib-box"
+} from "@moises-ai/studio-boxes"
+import {TrackType} from "@moises-ai/studio-adapters"
+import {BoxGraph} from "@moises-ai/lib-box"
 import {IndexRef} from "./IndexRef"
 import {AudioPlayback} from "./Api"
 import {AudioTrackImpl} from "./impl/AudioTrackImpl"
 import {AudioRegionImpl} from "./impl/AudioRegionImpl"
-import {TimeBase} from "@opendaw/lib-dsp"
+import {TimeBase} from "@moises-ai/lib-dsp"
 import {AudioFileBoxfactory} from "./AudioFileBoxfactory"
 
 export namespace AudioTrackWriter {

@@ -17,9 +17,9 @@ import {
     panic,
     UUID,
     ValueMapping
-} from "@opendaw/lib-std"
-import {BoxGraph, Field, PointerField} from "@opendaw/lib-box"
-import {gainToDb, PPQN} from "@opendaw/lib-dsp"
+} from "@moises-ai/lib-std"
+import {BoxGraph, Field, PointerField} from "@moises-ai/lib-box"
+import {gainToDb, PPQN} from "@moises-ai/lib-dsp"
 import {
     ArrangementSchema,
     AudioSchema,
@@ -41,8 +41,8 @@ import {
     TrackSchema,
     TransportSchema,
     WarpsSchema
-} from "@opendaw/lib-dawproject"
-import {AudioSendRouting, AudioUnitType, IconSymbol, Pointers} from "@opendaw/studio-enums"
+} from "@moises-ai/lib-dawproject"
+import {AudioSendRouting, AudioUnitType, IconSymbol, Pointers} from "@moises-ai/studio-enums"
 import {
     AudioBusBox,
     AudioFileBox,
@@ -65,7 +65,7 @@ import {
     UnknownMidiEffectDeviceBox,
     UserInterfaceBox,
     ValueEventCollectionBox
-} from "@opendaw/studio-boxes"
+} from "@moises-ai/studio-boxes"
 import {
     AudioUnitOrdering,
     CaptureBox,
@@ -74,7 +74,7 @@ import {
     InstrumentFactories,
     ProjectSkeleton,
     TrackType
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {DawProject} from "./DawProject"
 import {BuiltinDevices} from "./BuiltinDevices"
 import {AudioContentHelpers} from "../project/audio/AudioContentHelpers"

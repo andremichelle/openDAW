@@ -19,7 +19,7 @@ import {
     panic,
     safeExecute,
     Subscription
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {Propagation} from "./dispatchers"
 import {VertexVisitor} from "./vertex"
 import {Constraints} from "./constraints"

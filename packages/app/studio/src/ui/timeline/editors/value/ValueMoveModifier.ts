@@ -15,15 +15,15 @@ import {
     unitValue,
     ValueAxis,
     ValueMapping
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {BoxEditing} from "@opendaw/lib-box"
-import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
-import {EventCollection, Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
+import {BoxEditing} from "@moises-ai/lib-box"
+import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@moises-ai/studio-adapters"
+import {EventCollection, Interpolation, ppqn, ValueEvent} from "@moises-ai/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
 import {ValueEventDraft} from "./ValueEventDraft.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {Dragging} from "@opendaw/lib-dom"
+import {Dragging} from "@moises-ai/lib-dom"
 import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
 
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"

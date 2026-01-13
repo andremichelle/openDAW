@@ -1,5 +1,5 @@
-import {Address} from "@opendaw/lib-box"
-import {Option, Provider} from "@opendaw/lib-std"
+import {Address} from "@moises-ai/lib-box"
+import {Option, Provider} from "@moises-ai/lib-std"
 
 export type LabeledAudioOutput = {
     readonly address: Address

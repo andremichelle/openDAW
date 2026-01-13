@@ -1,6 +1,6 @@
-import {BoxGraph} from "@opendaw/lib-box"
-import {UUID} from "@opendaw/lib-std"
-import {BoxIO, ValueEventBox, ValueEventCurveBox} from "@opendaw/studio-boxes"
+import {BoxGraph} from "@moises-ai/lib-box"
+import {UUID} from "@moises-ai/lib-std"
+import {BoxIO, ValueEventBox, ValueEventCurveBox} from "@moises-ai/studio-boxes"
 
 export const migrateValueEventBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, eventBox: ValueEventBox): void => {
     const slope = eventBox.slope.getValue()

@@ -8,9 +8,9 @@ import {
     Subscription,
     unitValue,
     UUID
-} from "@opendaw/lib-std"
-import {OpenSampleAPI, SampleStorage, WavFile} from "@opendaw/studio-core"
-import {dbToGain} from "@opendaw/lib-dsp"
+} from "@moises-ai/lib-std"
+import {OpenSampleAPI, SampleStorage, WavFile} from "@moises-ai/studio-core"
+import {dbToGain} from "@moises-ai/lib-dsp"
 
 export type PlaybackEvent = {
     type: "idle"

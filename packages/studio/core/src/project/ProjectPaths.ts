@@ -1,4 +1,4 @@
-import {UUID} from "@opendaw/lib-std"
+import {UUID} from "@moises-ai/lib-std"
 
 export namespace ProjectPaths {
     export const Folder = "projects/v1"

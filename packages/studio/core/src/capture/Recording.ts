@@ -1,8 +1,8 @@
-import {asInstanceOf, assert, Errors, Option, Terminable, Terminator} from "@opendaw/lib-std"
-import {Promises} from "@opendaw/lib-runtime"
-import {AudioUnitType} from "@opendaw/studio-enums"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
-import {InstrumentFactories} from "@opendaw/studio-adapters"
+import {asInstanceOf, assert, Errors, Option, Terminable, Terminator} from "@moises-ai/lib-std"
+import {Promises} from "@moises-ai/lib-runtime"
+import {AudioUnitType} from "@moises-ai/studio-enums"
+import {AudioUnitBox} from "@moises-ai/studio-boxes"
+import {InstrumentFactories} from "@moises-ai/studio-adapters"
 import {Project} from "../project"
 
 export class Recording {

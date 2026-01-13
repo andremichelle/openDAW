@@ -1,12 +1,12 @@
-import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@moises-ai/studio-adapters"
 import {Column} from "@/ui/devices/Column.tsx"
-import {createElement} from "@opendaw/lib-jsx"
+import {createElement} from "@moises-ai/lib-jsx"
 import {LKR} from "@/ui/devices/constants.ts"
 import {ParameterLabelKnob} from "@/ui/devices/ParameterLabelKnob.tsx"
-import {Color, TerminableOwner, ValueGuide} from "@opendaw/lib-std"
-import {BoxEditing, PrimitiveValues} from "@opendaw/lib-box"
-import {MIDILearning} from "@opendaw/studio-core"
-import {Colors} from "@opendaw/studio-enums"
+import {Color, TerminableOwner, ValueGuide} from "@moises-ai/lib-std"
+import {BoxEditing, PrimitiveValues} from "@moises-ai/lib-box"
+import {MIDILearning} from "@moises-ai/studio-core"
+import {Colors} from "@moises-ai/studio-enums"
 
 type Creation<T extends PrimitiveValues> = {
     lifecycle: TerminableOwner

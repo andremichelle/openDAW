@@ -1,6 +1,6 @@
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
-import {PI_HALF, Procedure, TAU} from "@opendaw/lib-std"
-import {NoteClipBoxAdapter} from "@opendaw/studio-adapters"
+import {PI_HALF, Procedure, TAU} from "@moises-ai/lib-std"
+import {NoteClipBoxAdapter} from "@moises-ai/studio-adapters"
 
 export const createNoteClipPainter = (adapter: NoteClipBoxAdapter): Procedure<CanvasPainter> => painter => {
     const {context, actualHeight: size} = painter

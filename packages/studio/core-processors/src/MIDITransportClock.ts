@@ -1,10 +1,10 @@
 import {BlockFlag, ProcessInfo} from "./processing"
-import {Fragmentor, PPQN} from "@opendaw/lib-dsp"
+import {Fragmentor, PPQN} from "@moises-ai/lib-dsp"
 import {EngineContext} from "./EngineContext"
-import {Bits} from "@opendaw/lib-std"
+import {Bits} from "@moises-ai/lib-std"
 import {AbstractProcessor} from "./AbstractProcessor"
-import {RootBoxAdapter} from "@opendaw/studio-adapters"
-import {MidiData} from "@opendaw/lib-midi"
+import {RootBoxAdapter} from "@moises-ai/studio-adapters"
+import {MidiData} from "@moises-ai/lib-midi"
 
 export class MIDITransportClock extends AbstractProcessor {
     static readonly ClockRate = PPQN.fromSignature(1, 24 * 4) // 24 pulses per quarter note

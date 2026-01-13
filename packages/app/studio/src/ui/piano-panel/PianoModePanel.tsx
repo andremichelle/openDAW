@@ -1,7 +1,7 @@
 import css from "./PianoModePanel.sass?inline"
-import {createElement, Group} from "@opendaw/lib-jsx"
+import {createElement, Group} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {deferNextFrame, Html, ShortcutManager} from "@opendaw/lib-dom"
+import {deferNextFrame, Html, ShortcutManager} from "@moises-ai/lib-dom"
 import {PianoRoll} from "@/ui/piano-panel/PianoRoll.tsx"
 import {NoteFall} from "@/ui/piano-panel/NoteFall.tsx"
 import {
@@ -13,15 +13,15 @@ import {
     Subscription,
     Terminable,
     Terminator
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {NumberInput} from "@/ui/components/NumberInput.tsx"
 import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {Icon} from "@/ui/components/Icon.tsx"
-import {AudioUnitBoxAdapter, RootBoxAdapter, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, RootBoxAdapter, TrackBoxAdapter, TrackType} from "@moises-ai/studio-adapters"
 import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {PPQN} from "@opendaw/lib-dsp"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
+import {PPQN} from "@moises-ai/lib-dsp"
 import {PianoPanelShortcuts} from "@/ui/shortcuts/PianoPanelShortcuts"
 
 const className = Html.adoptStyleSheet(css, "PianoModePanel")

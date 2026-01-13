@@ -1,10 +1,10 @@
-import {ByteArrayInput, EmptyExec, Lazy, UUID} from "@opendaw/lib-std"
-import {Peaks, SamplePeaks} from "@opendaw/lib-fusion"
-import {Sample, SampleMetaData} from "@opendaw/studio-adapters"
+import {ByteArrayInput, EmptyExec, Lazy, UUID} from "@moises-ai/lib-std"
+import {Peaks, SamplePeaks} from "@moises-ai/lib-fusion"
+import {Sample, SampleMetaData} from "@moises-ai/studio-adapters"
 import {Workers} from "../Workers"
 import {WavFile} from "../WavFile"
 import {Storage} from "../Storage"
-import {AudioData} from "@opendaw/lib-dsp"
+import {AudioData} from "@moises-ai/lib-dsp"
 
 export namespace SampleStorage {
     export type NewSample = {

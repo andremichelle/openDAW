@@ -9,13 +9,13 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
-import {ppqn, PPQN} from "@opendaw/lib-dsp"
+import {ppqn, PPQN} from "@moises-ai/lib-dsp"
 import {SignatureEventBoxAdapter} from "./SignatureEventBoxAdapter"
-import {Signature, SignatureEventBox, SignatureTrack, TimelineBox} from "@opendaw/studio-boxes"
+import {Signature, SignatureEventBox, SignatureTrack, TimelineBox} from "@moises-ai/studio-boxes"
 import {IndexedBoxAdapterCollection} from "../IndexedBoxAdapterCollection"
-import {Pointers} from "@opendaw/studio-enums"
+import {Pointers} from "@moises-ai/studio-enums"
 
 export type SignatureEvent = Readonly<{
     index: int,

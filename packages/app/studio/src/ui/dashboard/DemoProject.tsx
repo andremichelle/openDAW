@@ -1,8 +1,8 @@
 import css from "./DemoProject.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {createElement} from "@moises-ai/lib-jsx"
 import {DemoProjectJson} from "@/ui/dashboard/DemoProjectJson"
-import {Exec} from "@opendaw/lib-std"
+import {Exec} from "@moises-ai/lib-std"
 
 const className = Html.adoptStyleSheet(css, "DemoProject")
 

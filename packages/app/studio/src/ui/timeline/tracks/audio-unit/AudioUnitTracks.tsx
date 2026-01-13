@@ -1,11 +1,11 @@
 import css from "./AudioUnitTracks.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {Vertex} from "@opendaw/lib-box"
-import {Html} from "@opendaw/lib-dom"
-import {AudioUnitType} from "@opendaw/studio-enums"
-import {AudioUnitBoxAdapter, Devices} from "@opendaw/studio-adapters"
-import {Project} from "@opendaw/studio-core"
+import {Lifecycle} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Vertex} from "@moises-ai/lib-box"
+import {Html} from "@moises-ai/lib-dom"
+import {AudioUnitType} from "@moises-ai/studio-enums"
+import {AudioUnitBoxAdapter, Devices} from "@moises-ai/studio-adapters"
+import {Project} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "AudioUnitTracks")
 

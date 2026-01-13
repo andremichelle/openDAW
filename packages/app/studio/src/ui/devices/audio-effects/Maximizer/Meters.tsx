@@ -1,9 +1,9 @@
 import css from "./Meters.sass?inline"
-import {AnimationFrame, Html} from "@opendaw/lib-dom"
-import {Lifecycle, ValueMapping} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {Colors} from "@opendaw/studio-enums"
-import {gainToDb} from "@opendaw/lib-dsp"
+import {AnimationFrame, Html} from "@moises-ai/lib-dom"
+import {Lifecycle, ValueMapping} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Colors} from "@moises-ai/studio-enums"
+import {gainToDb} from "@moises-ai/lib-dsp"
 
 const className = Html.adoptStyleSheet(css, "PushMeters")
 

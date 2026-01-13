@@ -1,12 +1,12 @@
-import {asEnumValue, clamp, Notifier, Observer, SortedSet, Subscription, Terminator, UUID} from "@opendaw/lib-std"
-import {Address, PointerField} from "@opendaw/lib-box"
+import {asEnumValue, clamp, Notifier, Observer, SortedSet, Subscription, Terminator, UUID} from "@moises-ai/lib-std"
+import {Address, PointerField} from "@moises-ai/lib-box"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {BoxAdapter} from "../BoxAdapter"
-import {EventCollection} from "@opendaw/lib-dsp"
+import {EventCollection} from "@moises-ai/lib-dsp"
 import {WarpMarkerBoxAdapter} from "./WarpMarkerBoxAdapter"
-import {AudioTimeStretchBox, WarpMarkerBox} from "@opendaw/studio-boxes"
+import {AudioTimeStretchBox, WarpMarkerBox} from "@moises-ai/studio-boxes"
 import {MarkerComparator} from "./MarkerComparator"
-import {TransientPlayMode} from "@opendaw/studio-enums"
+import {TransientPlayMode} from "@moises-ai/studio-enums"
 
 export class AudioTimeStretchBoxAdapter implements BoxAdapter {
     readonly #terminator = new Terminator()

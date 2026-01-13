@@ -1,4 +1,4 @@
-import {Comparator, int, unitValue} from "@opendaw/lib-std"
+import {Comparator, int, unitValue} from "@moises-ai/lib-std"
 import {Event, EventSpan} from "./events"
 
 export interface NoteEvent extends EventSpan {

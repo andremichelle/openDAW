@@ -11,7 +11,7 @@ import {
     panic,
     safeExecute,
     short
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {Address} from "./address"
 import {Box} from "./box"
 import {PointerRules, Vertex, VertexVisitor} from "./vertex"

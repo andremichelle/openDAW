@@ -1,7 +1,7 @@
 import {describe, expect, it, beforeEach} from "vitest"
 import {TimeStretchSequencer} from "./TimeStretchSequencer"
-import {AudioBuffer, AudioData, EventCollection, LoopableRegion, Event} from "@opendaw/lib-dsp"
-import {TransientPlayMode} from "@opendaw/studio-enums"
+import {AudioBuffer, AudioData, EventCollection, LoopableRegion, Event} from "@moises-ai/lib-dsp"
+import {TransientPlayMode} from "@moises-ai/studio-enums"
 import {Block, BlockFlag} from "../../../processing"
 
 // Test helper: minimal Event implementation for transient markers

@@ -1,6 +1,6 @@
-import {ppqn, Region, RegionCollection} from "@opendaw/lib-dsp"
-import {int} from "@opendaw/lib-std"
-import {AnyLoopableRegionBoxAdapter, AnyRegionBoxAdapter} from "@opendaw/studio-adapters"
+import {ppqn, Region, RegionCollection} from "@moises-ai/lib-dsp"
+import {int} from "@moises-ai/lib-std"
+import {AnyLoopableRegionBoxAdapter, AnyRegionBoxAdapter} from "@moises-ai/studio-adapters"
 
 export interface RegionModifyStrategies {
     showOrigin(): boolean

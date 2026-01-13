@@ -1,7 +1,7 @@
 import css from "./UnitDisplay.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {int, Lifecycle, ObservableValue, Procedure} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {int, Lifecycle, ObservableValue, Procedure} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 
 const className = Html.adoptStyleSheet(css, "UnitDisplay")
 

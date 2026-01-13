@@ -1,4 +1,4 @@
-import {PointerRules} from "@opendaw/lib-box"
+import {PointerRules} from "@moises-ai/lib-box"
 import {BoxForge, ClassSchema, FieldName, FieldRecord, FieldSchema, mergeFields} from "../src"
 import {PointerType} from "./Pointers"
 

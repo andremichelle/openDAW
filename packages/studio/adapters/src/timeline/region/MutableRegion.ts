@@ -1,4 +1,4 @@
-import {ppqn} from "@opendaw/lib-dsp"
+import {ppqn} from "@moises-ai/lib-dsp"
 
 export interface MutableRegion {
     set position(value: ppqn)

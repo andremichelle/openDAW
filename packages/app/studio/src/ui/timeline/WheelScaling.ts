@@ -1,5 +1,5 @@
-import {Events} from "@opendaw/lib-dom"
-import {StudioPreferences, TimelineRange} from "@opendaw/studio-core"
+import {Events} from "@moises-ai/lib-dom"
+import {StudioPreferences, TimelineRange} from "@moises-ai/studio-core"
 
 export namespace WheelScaling {
     export const install = (element: Element, range: TimelineRange) =>

@@ -1,4 +1,4 @@
-import {Maybe, UUID} from "@opendaw/lib-std"
+import {Maybe, UUID} from "@moises-ai/lib-std"
 import {AddressLayout} from "./address"
 
 export type UpdateTask<M> =

@@ -1,11 +1,11 @@
 import css from "./ParameterLabel.sass?inline"
-import {ControlSource, Lifecycle, Terminable} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {ControlSource, Lifecycle, Terminable} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {attachParameterContextMenu} from "@/ui/menu/automation.ts"
-import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {BoxEditing} from "@opendaw/lib-box"
-import {Html} from "@opendaw/lib-dom"
-import {MIDILearning} from "@opendaw/studio-core"
+import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@moises-ai/studio-adapters"
+import {BoxEditing} from "@moises-ai/lib-box"
+import {Html} from "@moises-ai/lib-dom"
+import {MIDILearning} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "ParameterLabel")
 

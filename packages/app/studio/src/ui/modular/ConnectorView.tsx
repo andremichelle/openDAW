@@ -1,12 +1,12 @@
 import css from "./ConnectorView.sass?inline"
-import {createElement} from "@opendaw/lib-jsx"
-import {ModuleAdapter, ModuleConnectorAdapter} from "@opendaw/studio-adapters"
-import {Lifecycle, Point, Rect, Terminator} from "@opendaw/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {ModuleAdapter, ModuleConnectorAdapter} from "@moises-ai/studio-adapters"
+import {Lifecycle, Point, Rect, Terminator} from "@moises-ai/lib-std"
 import {ConnectorViewAdapter, ModularEnvironment} from "@/ui/modular/ModularEnvironment.ts"
 import {WiringFlyout} from "@/ui/modular/WiringFlyout.tsx"
-import {ContextMenu, MenuItem} from "@opendaw/studio-core"
+import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
 import {Surface} from "../surface/Surface.tsx"
-import {Events, Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "Connector")
 

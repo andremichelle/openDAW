@@ -1,4 +1,4 @@
-import {BoxVisitor, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
+import {BoxVisitor, ValueEventBox, ValueEventCollectionBox} from "@moises-ai/studio-boxes"
 import {
     asDefined,
     Curve,
@@ -15,10 +15,10 @@ import {
     unitValue,
     UUID,
     ValueMapping
-} from "@opendaw/lib-std"
-import {Address, Box} from "@opendaw/lib-box"
-import {EventCollection, Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
-import {Pointers} from "@opendaw/studio-enums"
+} from "@moises-ai/lib-std"
+import {Address, Box} from "@moises-ai/lib-box"
+import {EventCollection, Interpolation, ppqn, ValueEvent} from "@moises-ai/lib-dsp"
+import {Pointers} from "@moises-ai/studio-enums"
 import {BoxAdapter} from "../../BoxAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {ValueEventBoxAdapter} from "../event/ValueEventBoxAdapter"

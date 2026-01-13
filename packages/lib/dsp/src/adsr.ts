@@ -1,4 +1,4 @@
-import {int, unitValue} from "@opendaw/lib-std"
+import {int, unitValue} from "@moises-ai/lib-std"
 
 const enum State { Idle, Attack, Decay, Sustain, Release }
 

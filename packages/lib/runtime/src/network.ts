@@ -9,7 +9,7 @@ import {
     Progress,
     RuntimeNotifier,
     TimeSpan
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {Wait} from "./wait"
 
 export namespace network {

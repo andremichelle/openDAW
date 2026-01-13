@@ -10,12 +10,12 @@ import {
     RuntimeNotifier,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {Await, createElement} from "@opendaw/lib-jsx"
-import {Events, Html, Keyboard} from "@opendaw/lib-dom"
-import {Promises} from "@opendaw/lib-runtime"
-import {IconSymbol} from "@opendaw/studio-enums"
-import {ShadertoyBox} from "@opendaw/studio-boxes"
+} from "@moises-ai/lib-std"
+import {Await, createElement} from "@moises-ai/lib-jsx"
+import {Events, Html, Keyboard} from "@moises-ai/lib-dom"
+import {Promises} from "@moises-ai/lib-runtime"
+import {IconSymbol} from "@moises-ai/studio-enums"
+import {ShadertoyBox} from "@moises-ai/studio-boxes"
 import {StudioService} from "@/service/StudioService"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {Button} from "@/ui/components/Button"

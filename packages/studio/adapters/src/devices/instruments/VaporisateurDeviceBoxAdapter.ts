@@ -1,6 +1,6 @@
-import {Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
-import {VaporisateurDeviceBox} from "@opendaw/studio-boxes"
-import {Address, BooleanField, StringField} from "@opendaw/lib-box"
+import {Option, StringMapping, UUID, ValueMapping} from "@moises-ai/lib-std"
+import {VaporisateurDeviceBox} from "@moises-ai/studio-boxes"
+import {Address, BooleanField, StringField} from "@moises-ai/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
@@ -8,7 +8,7 @@ import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
-import {VoicingMode} from "@opendaw/studio-enums"
+import {VoicingMode} from "@moises-ai/studio-enums"
 import {VaporisateurSettings} from "./VaporisateurSettings"
 
 export class VaporisateurDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {

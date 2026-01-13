@@ -1,7 +1,7 @@
 import {AudioPlayback, AudioRegion, AudioTrack} from "../Api"
-import {PPQN, ppqn} from "@opendaw/lib-dsp"
-import {int} from "@opendaw/lib-std"
-import {ColorCodes, Sample, TrackType} from "@opendaw/studio-adapters"
+import {PPQN, ppqn} from "@moises-ai/lib-dsp"
+import {int} from "@moises-ai/lib-std"
+import {ColorCodes, Sample, TrackType} from "@moises-ai/studio-adapters"
 
 export class AudioRegionImpl implements AudioRegion {
     readonly track: AudioTrack

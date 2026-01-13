@@ -1,14 +1,14 @@
 import css from "./CrusherDeviceEditor.sass?inline"
-import {CrusherDeviceBoxAdapter, DeviceHost} from "@opendaw/studio-adapters"
-import {Lifecycle} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {CrusherDeviceBoxAdapter, DeviceHost} from "@moises-ai/studio-adapters"
+import {Lifecycle} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder.tsx"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 import {StudioService} from "@/service/StudioService"
-import {EffectFactories} from "@opendaw/studio-core"
+import {EffectFactories} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "CrusherDeviceEditor")
 

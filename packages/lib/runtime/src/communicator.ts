@@ -1,4 +1,4 @@
-import {asDefined, assert, int, isDefined, Iterables, Maybe, panic, Subscription, Terminable} from "@opendaw/lib-std"
+import {asDefined, assert, int, isDefined, Iterables, Maybe, panic, Subscription, Terminable} from "@moises-ai/lib-std"
 import {Messenger} from "./messenger"
 import {ExecutorTuple} from "./promises"
 

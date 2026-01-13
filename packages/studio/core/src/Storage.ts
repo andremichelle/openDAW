@@ -1,6 +1,6 @@
-import {UUID} from "@opendaw/lib-std"
+import {UUID} from "@moises-ai/lib-std"
 import {Workers} from "./Workers"
-import {Promises} from "@opendaw/lib-runtime"
+import {Promises} from "@moises-ai/lib-runtime"
 
 export abstract class Storage<ITEM extends { uuid: UUID.String } & META, META, NEW, PARTS> {
     protected constructor(readonly folder: string) {}

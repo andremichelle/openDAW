@@ -1,6 +1,6 @@
-import {InaccessibleProperty} from "@opendaw/lib-std"
-import {Api, AudioPlayback} from "@opendaw/studio-scripting"
-import {AudioData, dbToGain} from "@opendaw/lib-dsp"
+import {InaccessibleProperty} from "@moises-ai/lib-std"
+import {Api, AudioPlayback} from "@moises-ai/studio-scripting"
+import {AudioData, dbToGain} from "@moises-ai/lib-dsp"
 
 const openDAW: Api = InaccessibleProperty("Not to be executed.")
 

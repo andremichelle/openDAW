@@ -10,11 +10,11 @@ import {
     Terminator,
     unitValue,
     UUID
-} from "@opendaw/lib-std"
-import {Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
-import {Address, Field, Propagation, Update} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
-import {ValueEventBox} from "@opendaw/studio-boxes"
+} from "@moises-ai/lib-std"
+import {Interpolation, ppqn, ValueEvent} from "@moises-ai/lib-dsp"
+import {Address, Field, Propagation, Update} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
+import {ValueEventBox} from "@moises-ai/studio-boxes"
 import {ValueEventCollectionBoxAdapter} from "../collection/ValueEventCollectionBoxAdapter"
 import {BoxAdapter} from "../../BoxAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"

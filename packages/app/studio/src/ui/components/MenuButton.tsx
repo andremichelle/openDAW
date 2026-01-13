@@ -1,10 +1,10 @@
 import css from "./MenuButton.sass?inline"
-import {createElement, JsxValue} from "@opendaw/lib-jsx"
-import {MenuItem} from "@opendaw/studio-core"
+import {createElement, JsxValue} from "@moises-ai/lib-jsx"
+import {MenuItem} from "@moises-ai/studio-core"
 import {Menu} from "@/ui/components/Menu.tsx"
-import {Color, getOrProvide, isDefined, Option, Procedure, ValueOrProvider} from "@opendaw/lib-std"
+import {Color, getOrProvide, isDefined, Option, Procedure, ValueOrProvider} from "@moises-ai/lib-std"
 import {Surface} from "@/ui/surface/Surface.tsx"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "MenuButton")
 

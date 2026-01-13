@@ -14,7 +14,7 @@ import {
     panic,
     safeExecute,
     Subscription
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {Serializer} from "./serializer"
 import {VertexVisitor} from "./vertex"
 import {Propagation} from "./dispatchers"

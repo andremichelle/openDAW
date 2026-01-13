@@ -1,11 +1,11 @@
 import css from "./TempoTrack.sass?inline"
-import {Lifecycle, MutableObservableValue} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Lifecycle, MutableObservableValue} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {TempoTrackBody} from "@/ui/timeline/tracks/primary/tempo/TempoTrackBody.tsx"
 import {TempoTrackHeader} from "@/ui/timeline/tracks/primary/tempo/TempoTrackHeader.tsx"
-import {Html} from "@opendaw/lib-dom"
-import {bpm} from "@opendaw/lib-dsp"
+import {Html} from "@moises-ai/lib-dom"
+import {bpm} from "@moises-ai/lib-dsp"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 
 const className = Html.adoptStyleSheet(css, "TempoTrack")

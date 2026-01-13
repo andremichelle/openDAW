@@ -1,6 +1,6 @@
-import {asDefined} from "@opendaw/lib-std"
-import {IconSymbol} from "@opendaw/studio-enums"
-import {CssUtils} from "@opendaw/lib-dom"
+import {asDefined} from "@moises-ai/lib-std"
+import {IconSymbol} from "@moises-ai/studio-enums"
+import {CssUtils} from "@moises-ai/lib-dom"
 
 const iconSymbolToCursor = (symbol: IconSymbol, hotspotX: number, hotspotY: number, fallback: CssUtils.Cursor = "auto") => {
     const cursor: Element = asDefined(document.getElementById(

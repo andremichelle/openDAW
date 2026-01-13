@@ -1,7 +1,7 @@
-import {assert, FloatArray, int, Lazy, Option, Procedure} from "@opendaw/lib-std"
-import {Communicator, Messenger} from "@opendaw/lib-runtime"
-import type {OpfsProtocol, SamplePeakProtocol} from "@opendaw/lib-fusion"
-import type {AudioData, TransientProtocol} from "@opendaw/lib-dsp"
+import {assert, FloatArray, int, Lazy, Option, Procedure} from "@moises-ai/lib-std"
+import {Communicator, Messenger} from "@moises-ai/lib-runtime"
+import type {OpfsProtocol, SamplePeakProtocol} from "@moises-ai/lib-fusion"
+import type {AudioData, TransientProtocol} from "@moises-ai/lib-dsp"
 
 export class Workers {
     static async install(url: string): Promise<void> {

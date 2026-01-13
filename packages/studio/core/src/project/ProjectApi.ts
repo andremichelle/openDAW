@@ -16,10 +16,10 @@ import {
     Strings,
     Subscription,
     UUID
-} from "@opendaw/lib-std"
-import {ppqn, PPQN} from "@opendaw/lib-dsp"
-import {BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
-import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
+} from "@moises-ai/lib-std"
+import {ppqn, PPQN} from "@moises-ai/lib-dsp"
+import {BoxGraph, Field, IndexedBox, PointerField} from "@moises-ai/lib-box"
+import {AudioUnitType, Pointers} from "@moises-ai/studio-enums"
 import {
     AudioClipBox,
     AudioRegionBox,
@@ -34,7 +34,7 @@ import {
     ValueClipBox,
     ValueEventCollectionBox,
     ValueRegionBox
-} from "@opendaw/studio-boxes"
+} from "@moises-ai/studio-boxes"
 import {
     AudioUnitBoxAdapter,
     AudioUnitFactory,
@@ -48,7 +48,7 @@ import {
     InstrumentProduct,
     ProjectQueries,
     TrackType
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {Project} from "./Project"
 import {EffectFactory} from "../EffectFactory"
 import {EffectBox} from "../EffectBox"

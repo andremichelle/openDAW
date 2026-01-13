@@ -1,7 +1,7 @@
 import css from "./ShadertoyLogo.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {createElement} from "@opendaw/lib-jsx"
-import {Procedure} from "@opendaw/lib-std"
+import {Html} from "@moises-ai/lib-dom"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Procedure} from "@moises-ai/lib-std"
 
 const className = Html.adoptStyleSheet(css, "ShadertoyLogo")
 

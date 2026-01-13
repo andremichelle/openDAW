@@ -1,5 +1,5 @@
-import {ppqn} from "@opendaw/lib-dsp"
-import {int, Observer, Option, Subscription} from "@opendaw/lib-std"
+import {ppqn} from "@moises-ai/lib-dsp"
+import {int, Observer, Option, Subscription} from "@moises-ai/lib-std"
 import {TimeAxisCursorMapper} from "@/ui/timeline/TimeAxis.tsx"
 import {
     AudioContentBoxAdapter,
@@ -7,8 +7,8 @@ import {
     TimelineBoxAdapter,
     TrackBoxAdapter,
     ValueEventCollectionBoxAdapter
-} from "@opendaw/studio-adapters"
-import {TimelineRange} from "@opendaw/studio-core"
+} from "@moises-ai/studio-adapters"
+import {TimelineRange} from "@moises-ai/studio-core"
 
 export interface AudioEventOwnerReader extends EventOwnerReader<ValueEventCollectionBoxAdapter> {
     get audioContent(): AudioContentBoxAdapter

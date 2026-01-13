@@ -1,11 +1,11 @@
 import css from "./Display.sass?inline"
-import {AnimationFrame, Context2d, Html} from "@opendaw/lib-dom"
-import {int, Lifecycle, TAU} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {AnimationFrame, Context2d, Html} from "@moises-ai/lib-dom"
+import {int, Lifecycle, TAU} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {CanvasPainter} from "@/ui/canvas/painter"
-import {DattorroReverbDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {DattorroReverbDeviceBoxAdapter} from "@moises-ai/studio-adapters"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
-import {LiveStreamReceiver} from "@opendaw/lib-fusion"
+import {LiveStreamReceiver} from "@moises-ai/lib-fusion"
 
 const className = Html.adoptStyleSheet(css, "Display")
 

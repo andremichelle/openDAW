@@ -1,4 +1,4 @@
-import {Exec, Provider} from "@opendaw/lib-std"
+import {Exec, Provider} from "@moises-ai/lib-std"
 import {createElement, replaceChildren} from "../create-element"
 import {DomElement, JsxValue} from "../types"
 import {Inject} from "../inject"

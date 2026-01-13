@@ -3,7 +3,7 @@ import {BooleanField, BoxGraph} from "./"
 import {PointerField, UnreferenceableType} from "./pointer"
 import {Box, BoxConstruct} from "./box"
 import {NoPointers, VertexVisitor} from "./vertex"
-import {Maybe, Option, panic, Procedure, safeExecute, UUID} from "@opendaw/lib-std"
+import {Maybe, Option, panic, Procedure, safeExecute, UUID} from "@moises-ai/lib-std"
 import {BoxEditing} from "./editing"
 
 enum PointerType {A, B}

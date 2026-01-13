@@ -1,6 +1,6 @@
-import {Arrays, Errors, panic, Procedure, Progress, RuntimeNotifier, UUID} from "@opendaw/lib-std"
-import {network, Promises} from "@opendaw/lib-runtime"
-import {Soundfont} from "@opendaw/studio-adapters"
+import {Arrays, Errors, panic, Procedure, Progress, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
+import {network, Promises} from "@moises-ai/lib-runtime"
+import {Soundfont} from "@moises-ai/studio-adapters"
 import {CloudHandler} from "./CloudHandler"
 import {OpenSoundfontAPI, SoundfontStorage} from "../soundfont"
 

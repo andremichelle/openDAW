@@ -1,5 +1,5 @@
-import {StringMapping, ValueMapping} from "@opendaw/lib-std"
-import {ClassicWaveform} from "@opendaw/lib-dsp"
+import {StringMapping, ValueMapping} from "@moises-ai/lib-std"
+import {ClassicWaveform} from "@moises-ai/lib-dsp"
 
 export const VaporisateurSettings = (() => {
     const MIN_CUTOFF = 20.0

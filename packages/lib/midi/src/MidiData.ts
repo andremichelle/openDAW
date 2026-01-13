@@ -1,6 +1,6 @@
-import {byte, isNull, Nullable, safeExecute} from "@opendaw/lib-std"
+import {byte, isNull, Nullable, safeExecute} from "@moises-ai/lib-std"
 import {MidiEventVisitor} from "./MidiEventVisitor"
-import {ppqn} from "@opendaw/lib-dsp"
+import {ppqn} from "@moises-ai/lib-dsp"
 
 export namespace MidiData {
     export enum Command {

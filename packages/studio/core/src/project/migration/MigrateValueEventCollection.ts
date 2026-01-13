@@ -1,6 +1,6 @@
-import {BoxGraph} from "@opendaw/lib-box"
-import {isDefined} from "@opendaw/lib-std"
-import {BoxIO, BoxVisitor, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
+import {BoxGraph} from "@moises-ai/lib-box"
+import {isDefined} from "@moises-ai/lib-std"
+import {BoxIO, BoxVisitor, ValueEventBox, ValueEventCollectionBox} from "@moises-ai/studio-boxes"
 
 export const migrateValueEventCollection = (boxGraph: BoxGraph<BoxIO.TypeMap>, collectionBox: ValueEventCollectionBox): void => {
     const events = collectionBox.events.pointerHub.incoming()

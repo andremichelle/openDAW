@@ -1,14 +1,14 @@
 import css from "./MarkerTrackBody.sass?inline"
-import {int, isDefined, Lifecycle, Nullable, Option, UUID} from "@opendaw/lib-std"
+import {int, isDefined, Lifecycle, Nullable, Option, UUID} from "@moises-ai/lib-std"
 import {StudioService} from "@/service/StudioService.ts"
-import {MarkerBoxAdapter, MarkerTrackAdapter, TimelineBoxAdapter} from "@opendaw/studio-adapters"
-import {createElement} from "@opendaw/lib-jsx"
+import {MarkerBoxAdapter, MarkerTrackAdapter, TimelineBoxAdapter} from "@moises-ai/studio-adapters"
+import {createElement} from "@moises-ai/lib-jsx"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
-import {MarkerBox} from "@opendaw/studio-boxes"
+import {MarkerBox} from "@moises-ai/studio-boxes"
 import {MarkerRenderer} from "@/ui/timeline/tracks/primary/marker/MarkerRenderer"
 import {MarkerContextMenu} from "@/ui/timeline/tracks/primary/marker/MarkerContextMenu"
 import {Markers} from "@/ui/timeline/tracks/primary/marker/Markers"
-import {Dragging, Events, Html} from "@opendaw/lib-dom"
+import {Dragging, Events, Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "marker-track-body")
 

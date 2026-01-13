@@ -1,10 +1,10 @@
 import css from "./SelectionRectangle.sass?inline"
-import {createElement} from "@opendaw/lib-jsx"
-import {EmptyExec, Lifecycle, Option, Selection, SortedSet, UUID, ValueAxis} from "@opendaw/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {EmptyExec, Lifecycle, Option, Selection, SortedSet, UUID, ValueAxis} from "@moises-ai/lib-std"
 import {TimelineSelectableLocator} from "@/ui/timeline/TimelineSelectableLocator.ts"
-import {Dragging, Html, PointerCaptureTarget} from "@opendaw/lib-dom"
-import {BoxAdapter} from "@opendaw/studio-adapters"
-import {Colors} from "@opendaw/studio-enums"
+import {Dragging, Html, PointerCaptureTarget} from "@moises-ai/lib-dom"
+import {BoxAdapter} from "@moises-ai/studio-adapters"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "SelectionRectangle")
 

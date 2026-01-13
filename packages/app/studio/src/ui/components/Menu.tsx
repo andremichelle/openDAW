@@ -1,11 +1,11 @@
 import css from "./Menu.sass?inline"
-import {DefaultMenuData, HeaderMenuData, InputValueMenuData, MenuItem} from "@opendaw/studio-core"
-import {createElement, Frag} from "@opendaw/lib-jsx"
-import {int, isDefined, Lifecycle, Nullable, Option, panic, Terminable, Terminator} from "@opendaw/lib-std"
+import {DefaultMenuData, HeaderMenuData, InputValueMenuData, MenuItem} from "@moises-ai/studio-core"
+import {createElement, Frag} from "@moises-ai/lib-jsx"
+import {int, isDefined, Lifecycle, Nullable, Option, panic, Terminable, Terminator} from "@moises-ai/lib-std"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {Surface} from "@/ui/surface/Surface.tsx"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
+import {AnimationFrame, Events, Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "menu")
 

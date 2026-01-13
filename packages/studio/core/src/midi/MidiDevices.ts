@@ -14,9 +14,9 @@ import {
     Subscription,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {MidiData} from "@opendaw/lib-midi"
-import {Promises} from "@opendaw/lib-runtime"
+} from "@moises-ai/lib-std"
+import {MidiData} from "@moises-ai/lib-midi"
+import {Promises} from "@moises-ai/lib-runtime"
 import {MIDIMessageSubscriber} from "./MIDIMessageSubscriber"
 import {SoftwareMIDIInput} from "./SoftwareMIDIInput"
 

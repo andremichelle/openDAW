@@ -11,12 +11,12 @@ import {
     Terminator,
     unitValue,
     ValueMapping
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {ValueAssignment} from "@/ui/timeline/editors/value/ValueAssignment.tsx"
-import {PointerField, PrimitiveValues} from "@opendaw/lib-box"
-import {TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
-import {Pointers} from "@opendaw/studio-enums"
-import {Project} from "@opendaw/studio-core"
+import {PointerField, PrimitiveValues} from "@moises-ai/lib-box"
+import {TrackBoxAdapter, TrackType} from "@moises-ai/studio-adapters"
+import {Pointers} from "@moises-ai/studio-enums"
+import {Project} from "@moises-ai/studio-core"
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 
 export class ParameterValueEditing implements ValueContext, Terminable {

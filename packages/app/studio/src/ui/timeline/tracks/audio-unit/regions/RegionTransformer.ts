@@ -4,9 +4,9 @@ import {
     AudioRegionBoxAdapter,
     NoteRegionBoxAdapter,
     ValueRegionBoxAdapter
-} from "@opendaw/studio-adapters"
-import {AudioClipBox, NoteClipBox, ValueClipBox} from "@opendaw/studio-boxes"
-import {asDefined, UUID} from "@opendaw/lib-std"
+} from "@moises-ai/studio-adapters"
+import {AudioClipBox, NoteClipBox, ValueClipBox} from "@moises-ai/studio-boxes"
+import {asDefined, UUID} from "@moises-ai/lib-std"
 
 export namespace RegionTransformer {
     export const toClip = (region: AnyRegionBoxAdapter, copyEvents: boolean = true): AnyClipBox => {

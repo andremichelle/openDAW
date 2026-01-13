@@ -1,6 +1,6 @@
 import {describe, expect, it, vi} from "vitest"
-import {ByteArrayInput, ByteArrayOutput, UUID} from "@opendaw/lib-std"
-import {Address} from "@opendaw/lib-box"
+import {ByteArrayInput, ByteArrayOutput, UUID} from "@moises-ai/lib-std"
+import {Address} from "@moises-ai/lib-box"
 import {Flags} from "./Flags"
 import {PackageType} from "./PackageType"
 

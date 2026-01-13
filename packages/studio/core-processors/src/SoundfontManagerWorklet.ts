@@ -1,6 +1,6 @@
-import {Peaks} from "@opendaw/lib-fusion"
-import {EngineToClient, SoundfontLoader, SoundfontLoaderManager, SoundfontLoaderState} from "@opendaw/studio-adapters"
-import {Observer, Option, SortedSet, Subscription, Terminable, UUID} from "@opendaw/lib-std"
+import {Peaks} from "@moises-ai/lib-fusion"
+import {EngineToClient, SoundfontLoader, SoundfontLoaderManager, SoundfontLoaderState} from "@moises-ai/studio-adapters"
+import {Observer, Option, SortedSet, Subscription, Terminable, UUID} from "@moises-ai/lib-std"
 import type {SoundFont2} from "soundfont2"
 
 class SoundfontLoaderWorklet implements SoundfontLoader {

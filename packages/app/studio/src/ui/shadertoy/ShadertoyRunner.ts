@@ -1,4 +1,4 @@
-import {Terminable} from "@opendaw/lib-std"
+import {Terminable} from "@moises-ai/lib-std"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 
 export class ShadertoyRunner implements Terminable {

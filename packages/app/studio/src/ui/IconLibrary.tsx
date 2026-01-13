@@ -1,5 +1,5 @@
-import {createElement} from "@opendaw/lib-jsx"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {createElement} from "@moises-ai/lib-jsx"
+import {IconSymbol} from "@moises-ai/studio-enums"
 
 export const IconLibrary = () => (
     <symbol width="0" height="0" display="none">

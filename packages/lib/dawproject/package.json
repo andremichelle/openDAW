@@ -1,11 +1,12 @@
 {
-    "name": "@opendaw/lib-dawproject",
+    "name": "@moises-ai/lib-dawproject",
     "version": "0.0.51",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "license": "LGPL-3.0-or-later",
     "publishConfig": {
+        "registry": "https://npm.pkg.github.com",
         "access": "public"
     },
     "exports": {
@@ -23,14 +24,14 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@opendaw/lib-dsp": "^0.0.65",
-        "@opendaw/lib-runtime": "^0.0.65",
-        "@opendaw/lib-xml": "^0.0.51",
+        "@moises-ai/lib-dsp": "^0.0.65",
+        "@moises-ai/lib-runtime": "^0.0.65",
+        "@moises-ai/lib-xml": "^0.0.51",
         "jszip": "^3.10.1"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/typescript-config": "^0.0.28",
+        "@moises-ai/eslint-config": "^0.0.27",
+        "@moises-ai/typescript-config": "^0.0.28",
         "jsdom": "^26.1.0"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"

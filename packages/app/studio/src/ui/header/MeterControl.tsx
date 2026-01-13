@@ -1,12 +1,12 @@
-import {Attempt, DefaultObservableValue, EmptyExec, int, Lifecycle, Terminator} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Attempt, DefaultObservableValue, EmptyExec, int, Lifecycle, Terminator} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {DblClckTextInput} from "@/ui/wrapper/DblClckTextInput"
-import {Parsing} from "@opendaw/studio-adapters"
+import {Parsing} from "@moises-ai/studio-adapters"
 import {UnitDisplay} from "@/ui/header/UnitDisplay"
-import {ContextMenu, MenuItem} from "@opendaw/studio-core"
+import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
-import {Propagation} from "@opendaw/lib-box"
+import {Propagation} from "@moises-ai/lib-box"
 
 type Construct = {
     lifecycle: Lifecycle

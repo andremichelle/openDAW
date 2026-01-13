@@ -1,10 +1,10 @@
 import css from "./ErrorsPage.sass?inline"
-import {Await, createElement, Group, PageContext, PageFactory} from "@opendaw/lib-jsx"
+import {Await, createElement, Group, PageContext, PageFactory} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {Events, Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@moises-ai/lib-dom"
 import {Entry, ErrorEntry} from "@/ui/pages/errors/ErrorEntry"
-import {Promises, Wait} from "@opendaw/lib-runtime"
-import {Colors} from "@opendaw/studio-enums"
+import {Promises, Wait} from "@moises-ai/lib-runtime"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "ErrorsPage")
 const loadLimit = 100

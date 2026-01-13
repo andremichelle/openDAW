@@ -1,13 +1,13 @@
-import {Pointers} from "@opendaw/studio-enums"
-import {clampUnit, Random, StringMapping, unitValue, UUID, ValueMapping} from "@opendaw/lib-std"
-import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
-import {VelocityDeviceBox} from "@opendaw/studio-boxes"
+import {Pointers} from "@moises-ai/studio-enums"
+import {clampUnit, Random, StringMapping, unitValue, UUID, ValueMapping} from "@moises-ai/lib-std"
+import {Address, BooleanField, Int32Field, PointerField, StringField} from "@moises-ai/lib-box"
+import {VelocityDeviceBox} from "@moises-ai/studio-boxes"
 import {DeviceHost, Devices, MidiEffectDeviceAdapter} from "../../DeviceAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
-import {ppqn} from "@opendaw/lib-dsp"
+import {ppqn} from "@moises-ai/lib-dsp"
 
 export class VelocityDeviceBoxAdapter implements MidiEffectDeviceAdapter {
     readonly type = "midi-effect"

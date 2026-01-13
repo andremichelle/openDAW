@@ -1,7 +1,7 @@
-import {asDefined, isDefined, panic, RuntimeNotifier, UUID} from "@opendaw/lib-std"
-import {Xml} from "@opendaw/lib-xml"
-import {FileReferenceSchema, MetaDataSchema, ProjectSchema} from "@opendaw/lib-dawproject"
-import {ProjectSkeleton, SampleLoaderManager} from "@opendaw/studio-adapters"
+import {asDefined, isDefined, panic, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
+import {Xml} from "@moises-ai/lib-xml"
+import {FileReferenceSchema, MetaDataSchema, ProjectSchema} from "@moises-ai/lib-dawproject"
+import {ProjectSkeleton, SampleLoaderManager} from "@moises-ai/studio-adapters"
 import {DawProjectExporter} from "./DawProjectExporter"
 import {ExternalLib} from "../ExternalLib"
 

@@ -1,7 +1,7 @@
 import css from "./OscillatorSelector.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {int, Lifecycle, MutableObservableValue} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {int, Lifecycle, MutableObservableValue} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 
 const className = Html.adoptStyleSheet(css, "OscillatorSelector")
 

@@ -1,4 +1,4 @@
-import {int, nextPowOf2} from "@opendaw/lib-std"
+import {int, nextPowOf2} from "@moises-ai/lib-std"
 
 export class Delay {
     readonly #delaySize: int

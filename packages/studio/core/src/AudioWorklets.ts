@@ -1,5 +1,5 @@
-import {asDefined, int, Option} from "@opendaw/lib-std"
-import {ExportStemsConfiguration, ProcessorOptions, RingBuffer} from "@opendaw/studio-adapters"
+import {asDefined, int, Option} from "@moises-ai/lib-std"
+import {ExportStemsConfiguration, ProcessorOptions, RingBuffer} from "@moises-ai/studio-adapters"
 import {Project} from "./project"
 import {EngineWorklet} from "./EngineWorklet"
 import {MeterWorklet} from "./MeterWorklet"

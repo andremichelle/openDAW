@@ -1,4 +1,4 @@
-import {Notifier, ObservableValue, Observer, Subscription, Terminable, Terminator} from "@opendaw/lib-std"
+import {Notifier, ObservableValue, Observer, Subscription, Terminable, Terminator} from "@moises-ai/lib-std"
 import {bpm, PPQN, ppqn, seconds} from "./ppqn"
 import {TempoMap} from "./tempo"
 

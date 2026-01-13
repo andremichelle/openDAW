@@ -1,5 +1,5 @@
 import {TransientMarkerBoxAdapter} from "./TransientMarkerBoxAdapter"
-import {int, panic} from "@opendaw/lib-std"
+import {int, panic} from "@moises-ai/lib-std"
 import {WarpMarkerBoxAdapter} from "./WarpMarkerBoxAdapter"
 
 export type Marker = WarpMarkerBoxAdapter | TransientMarkerBoxAdapter

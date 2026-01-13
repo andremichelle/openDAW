@@ -1,7 +1,7 @@
 import {AudioData} from "./audio-data"
 import {BiquadCoeff} from "./biquad-coeff"
 import {BiquadMono} from "./biquad-processor"
-import {panic} from "@opendaw/lib-std"
+import {panic} from "@moises-ai/lib-std"
 
 const LR_ORDER = 48
 const LOW_CROSSOVER_HZ = 200.0

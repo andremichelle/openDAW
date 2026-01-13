@@ -1,5 +1,5 @@
-import {Terminable} from "@opendaw/lib-std"
-import {Html} from "@opendaw/lib-dom"
+import {Terminable} from "@moises-ai/lib-std"
+import {Html} from "@moises-ai/lib-dom"
 import {createElement} from "../create-element"
 
 const className = Html.adoptStyleSheet(`

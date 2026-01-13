@@ -1,7 +1,7 @@
-import {Errors, int, isDefined, Option, panic, Progress, Terminator, TimeSpan} from "@opendaw/lib-std"
-import {AnimationFrame} from "@opendaw/lib-dom"
-import {Wait} from "@opendaw/lib-runtime"
-import {ExportStemsConfiguration} from "@opendaw/studio-adapters"
+import {Errors, int, isDefined, Option, panic, Progress, Terminator, TimeSpan} from "@moises-ai/lib-std"
+import {AnimationFrame} from "@moises-ai/lib-dom"
+import {Wait} from "@moises-ai/lib-runtime"
+import {ExportStemsConfiguration} from "@moises-ai/studio-adapters"
 import {Project} from "./project"
 import {AudioWorklets} from "./AudioWorklets"
 

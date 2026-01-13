@@ -1,5 +1,5 @@
-import {int, Nullable, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioData, ppqn} from "@opendaw/lib-dsp"
+import {int, Nullable, Terminable, UUID} from "@moises-ai/lib-std"
+import {AudioData, ppqn} from "@moises-ai/lib-dsp"
 import {ClipSequencingUpdates} from "./ClipNotifications"
 import {NoteSignal} from "./NoteSignal"
 import type {SoundFont2} from "soundfont2"

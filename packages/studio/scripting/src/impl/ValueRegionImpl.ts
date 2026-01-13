@@ -1,9 +1,9 @@
 import {ValueEvent, ValueRegion, ValueRegionProps, ValueTrack} from "../Api"
-import {ppqn} from "@opendaw/lib-dsp"
-import {int} from "@opendaw/lib-std"
+import {ppqn} from "@moises-ai/lib-dsp"
+import {int} from "@moises-ai/lib-std"
 import {ValueEventImpl} from "./ValueEventImpl"
-import {ColorCodes, TrackType} from "@opendaw/studio-adapters"
-import {Wait} from "@opendaw/lib-runtime"
+import {ColorCodes, TrackType} from "@moises-ai/studio-adapters"
+import {Wait} from "@moises-ai/lib-runtime"
 
 export class ValueRegionImpl implements ValueRegion {
     readonly track: ValueTrack

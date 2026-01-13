@@ -1,6 +1,6 @@
-import {BoxGraph, Field} from "@opendaw/lib-box"
-import {UUID} from "@opendaw/lib-std"
-import {BoxIO, MIDIOutputBox, MIDIOutputDeviceBox} from "@opendaw/studio-boxes"
+import {BoxGraph, Field} from "@moises-ai/lib-box"
+import {UUID} from "@moises-ai/lib-std"
+import {BoxIO, MIDIOutputBox, MIDIOutputDeviceBox} from "@moises-ai/studio-boxes"
 
 export const migrateMIDIOutputDeviceBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, deviceBox: MIDIOutputDeviceBox, outputMidiDevices: Field): void => {
     const id = deviceBox.deprecatedDevice.id.getValue()

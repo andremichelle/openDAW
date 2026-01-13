@@ -1,6 +1,6 @@
-import {LoopableRegion, ValueEvent} from "@opendaw/lib-dsp"
-import {asDefined, assert, Curve, Func, unitValue} from "@opendaw/lib-std"
-import {TimelineRange} from "@opendaw/studio-core"
+import {LoopableRegion, ValueEvent} from "@moises-ai/lib-dsp"
+import {asDefined, assert, Curve, Func, unitValue} from "@moises-ai/lib-std"
+import {TimelineRange} from "@moises-ai/studio-core"
 
 export const renderValueStream = (context: CanvasRenderingContext2D,
                                   range: TimelineRange,

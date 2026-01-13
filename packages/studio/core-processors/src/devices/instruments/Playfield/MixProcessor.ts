@@ -1,4 +1,4 @@
-import {Arrays, Terminable, UUID} from "@opendaw/lib-std"
+import {Arrays, Terminable, UUID} from "@moises-ai/lib-std"
 import {AudioProcessor} from "../../../AudioProcessor"
 import {AudioGenerator, Processor} from "../../../processing"
 import {PeakBroadcaster} from "../../../PeakBroadcaster"
@@ -6,7 +6,7 @@ import {EventBuffer} from "../../../EventBuffer"
 import {EngineContext} from "../../../EngineContext"
 import {PlayfieldDeviceProcessor} from "../PlayfieldDeviceProcessor"
 import {AudioDeviceProcessor} from "../../../AudioDeviceProcessor"
-import {AudioBuffer, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioBuffer, RenderQuantum} from "@moises-ai/lib-dsp"
 
 export class MixProcessor extends AudioProcessor implements AudioDeviceProcessor, Processor, AudioGenerator {
     readonly #device: PlayfieldDeviceProcessor

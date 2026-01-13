@@ -1,4 +1,4 @@
-import {Exec} from "@opendaw/lib-std"
+import {Exec} from "@moises-ai/lib-std"
 
 export const queueTask = (exec: Exec) => {
     let pendingBroadcast = false

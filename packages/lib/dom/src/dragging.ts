@@ -1,4 +1,4 @@
-import {EmptyExec, Func, int, isDefined, Option, safeRead, Terminable, Terminator} from "@opendaw/lib-std"
+import {EmptyExec, Func, int, isDefined, Option, safeRead, Terminable, Terminator} from "@moises-ai/lib-std"
 import {Browser} from "./browser"
 import {AnimationFrame} from "./frames"
 import {Events, PointerCaptureTarget} from "./events"

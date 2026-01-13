@@ -22,7 +22,7 @@ module.exports = {
             {
                 "patterns": [
                     {
-                        "group": ["**/src/**", "@opendaw/*/src/**"],
+                        "group": ["**/src/**", "@moises-ai/*/src/**"],
                         "message": "Direct imports from src folders are not allowed. Use package exports instead."
                     }
                 ]

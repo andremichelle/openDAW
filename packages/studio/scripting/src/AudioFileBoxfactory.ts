@@ -1,6 +1,6 @@
-import {AudioFileBox} from "@opendaw/studio-boxes"
-import {UUID} from "@opendaw/lib-std"
-import {BoxGraph} from "@opendaw/lib-box"
+import {AudioFileBox} from "@moises-ai/studio-boxes"
+import {UUID} from "@moises-ai/lib-std"
+import {BoxGraph} from "@moises-ai/lib-box"
 
 export namespace AudioFileBoxfactory {
     export const create = (boxGraph: BoxGraph, sample: Sample): AudioFileBox =>

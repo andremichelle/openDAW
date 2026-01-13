@@ -1,6 +1,6 @@
-import {DeviceFactory, EffectPointerType} from "@opendaw/studio-adapters"
-import {Field} from "@opendaw/lib-box"
-import {int} from "@opendaw/lib-std"
+import {DeviceFactory, EffectPointerType} from "@moises-ai/studio-adapters"
+import {Field} from "@moises-ai/lib-box"
+import {int} from "@moises-ai/lib-std"
 import {Project} from "./project"
 import {EffectBox} from "./EffectBox"
 

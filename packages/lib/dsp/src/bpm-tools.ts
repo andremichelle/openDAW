@@ -1,4 +1,4 @@
-import {int} from "@opendaw/lib-std"
+import {int} from "@moises-ai/lib-std"
 
 /**
  * BPM detector (90-180 BPM) for a mono Float32Array.

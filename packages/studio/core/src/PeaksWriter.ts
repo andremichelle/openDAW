@@ -1,5 +1,5 @@
-import {Peaks, SamplePeakWorker} from "@opendaw/lib-fusion"
-import {Arrays, assert, int, Nullable} from "@opendaw/lib-std"
+import {Peaks, SamplePeakWorker} from "@moises-ai/lib-fusion"
+import {Arrays, assert, int, Nullable} from "@moises-ai/lib-std"
 import {RenderQuantum} from "./RenderQuantum"
 
 export class PeaksWriter implements Peaks, Peaks.Stage {

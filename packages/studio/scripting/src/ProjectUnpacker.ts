@@ -1,5 +1,5 @@
 import {Project} from "./Api"
-import {ProjectSkeleton} from "@opendaw/studio-adapters"
+import {ProjectSkeleton} from "@moises-ai/studio-adapters"
 import {ApiImpl, ProjectImpl} from "./impl"
 
 export namespace ProjectUnpacker {

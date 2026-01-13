@@ -1,11 +1,11 @@
 import {TimelineCoordinates, TimelineSelectableLocator} from "@/ui/timeline/TimelineSelectableLocator.ts"
-import {ValueEventBoxAdapter} from "@opendaw/studio-adapters"
-import {Iterables, ValueAxis} from "@opendaw/lib-std"
-import {ValueEvent} from "@opendaw/lib-dsp"
+import {ValueEventBoxAdapter} from "@moises-ai/studio-adapters"
+import {Iterables, ValueAxis} from "@moises-ai/lib-std"
+import {ValueEvent} from "@moises-ai/lib-dsp"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {ValueCaptureTarget} from "@/ui/timeline/editors/value/ValueEventCapturing.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {TimelineRange} from "@opendaw/studio-core"
+import {TimelineRange} from "@moises-ai/studio-core"
 
 export const createValueSelectionLocator = (reader: ValueEventOwnerReader,
                                             range: TimelineRange,

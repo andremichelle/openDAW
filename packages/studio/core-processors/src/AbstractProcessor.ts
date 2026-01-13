@@ -1,12 +1,12 @@
-import {Arrays, Option, panic, Terminable, TerminableOwner, Terminator} from "@opendaw/lib-std"
-import {PointerField, PrimitiveValues} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
-import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
+import {Arrays, Option, panic, Terminable, TerminableOwner, Terminator} from "@moises-ai/lib-std"
+import {PointerField, PrimitiveValues} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
+import {AutomatableParameterFieldAdapter} from "@moises-ai/studio-adapters"
 import {AutomatableParameter} from "./AutomatableParameter"
 import {ProcessInfo, Processor} from "./processing"
 import {EngineContext} from "./EngineContext"
 import {EventBuffer} from "./EventBuffer"
-import {ppqn} from "@opendaw/lib-dsp"
+import {ppqn} from "@moises-ai/lib-dsp"
 
 export abstract class AbstractProcessor implements Processor, TerminableOwner, Terminable {
     readonly #terminator = new Terminator()

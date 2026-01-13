@@ -1,5 +1,5 @@
 import css from "./BusySlot.sass?inline"
-import {Events, Html, Keyboard} from "@opendaw/lib-dom"
+import {Events, Html, Keyboard} from "@moises-ai/lib-dom"
 import {
     asDefined,
     DefaultObservableValue,
@@ -9,18 +9,18 @@ import {
     ObservableValue,
     Option,
     Terminable
-} from "@opendaw/lib-std"
-import {createElement, DomElement} from "@opendaw/lib-jsx"
+} from "@moises-ai/lib-std"
+import {createElement, DomElement} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {NoteLifeCycle, PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {NoteLifeCycle, PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter} from "@moises-ai/studio-adapters"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {SampleSelector} from "@/ui/devices/SampleSelector"
 import {CanvasPainter} from "@/ui/canvas/painter"
 import {SlotUtils} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotUtils"
 import {Icon} from "@/ui/components/Icon"
 import {Checkbox} from "@/ui/components/Checkbox"
-import {BoxEditing} from "@opendaw/lib-box"
-import {ContextMenu, MenuItem} from "@opendaw/studio-core"
+import {BoxEditing} from "@moises-ai/lib-box"
+import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {SlotDragAndDrop} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotDragAndDrop"
 import {NoteLabel} from "@/ui/devices/instruments/PlayfieldDeviceEditor/NoteLabel"

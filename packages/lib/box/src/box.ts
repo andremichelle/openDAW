@@ -21,7 +21,7 @@ import {
     Procedure,
     Subscription,
     UUID
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {PointerRules, Vertex, VertexVisitor} from "./vertex"
 import {Field, FieldKey, FieldKeys, Fields} from "./field"
 import {PointerField, PointerTypes} from "./pointer"

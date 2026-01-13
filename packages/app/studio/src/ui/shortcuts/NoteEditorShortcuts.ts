@@ -1,4 +1,4 @@
-import {Key, Shortcut, ShortcutDefinitions, ShortcutValidator} from "@opendaw/lib-dom"
+import {Key, Shortcut, ShortcutDefinitions, ShortcutValidator} from "@moises-ai/lib-dom"
 
 const shift = true
 

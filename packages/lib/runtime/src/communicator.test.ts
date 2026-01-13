@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest"
-import {DefaultObservableValue, Exec, Procedure} from "@opendaw/lib-std"
+import {DefaultObservableValue, Exec, Procedure} from "@moises-ai/lib-std"
 import {Messenger} from "./messenger"
 import {Communicator} from "./communicator"
 import {Wait} from "./wait"

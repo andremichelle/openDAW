@@ -1,7 +1,7 @@
-import {NoteRegionBoxAdapter} from "@opendaw/studio-adapters"
-import {LoopableRegion} from "@opendaw/lib-dsp"
+import {NoteRegionBoxAdapter} from "@moises-ai/studio-adapters"
+import {LoopableRegion} from "@moises-ai/lib-dsp"
 import {RegionBound} from "@/ui/timeline/renderer/env.ts"
-import {TimelineRange} from "@opendaw/studio-core"
+import {TimelineRange} from "@moises-ai/studio-core"
 
 export const renderNotes = (context: CanvasRenderingContext2D,
                             range: TimelineRange,

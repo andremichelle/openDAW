@@ -1,4 +1,4 @@
-import {Exec, Subscription} from "@opendaw/lib-std"
+import {Exec, Subscription} from "@moises-ai/lib-std"
 
 export namespace Runtime {
     // Debounce execution by delaying the call until after the timeout has passed without new invocations.

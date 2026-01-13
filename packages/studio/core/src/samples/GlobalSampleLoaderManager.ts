@@ -1,12 +1,12 @@
-import {ByteArrayInput, int, Progress, SortedSet, Subscription, Terminable, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, int, Progress, SortedSet, Subscription, Terminable, UUID} from "@moises-ai/lib-std"
 import {DefaultSampleLoader} from "./DefaultSampleLoader"
 import {SampleProvider} from "./SampleProvider"
-import {SampleLoader, SampleLoaderManager, SampleMetaData} from "@opendaw/studio-adapters"
-import {AudioData} from "@opendaw/lib-dsp"
+import {SampleLoader, SampleLoaderManager, SampleMetaData} from "@moises-ai/studio-adapters"
+import {AudioData} from "@moises-ai/lib-dsp"
 import {SampleStorage} from "./SampleStorage"
-import {Peaks, SamplePeaks} from "@opendaw/lib-fusion"
+import {Peaks, SamplePeaks} from "@moises-ai/lib-fusion"
 import {Workers} from "../Workers"
-import {Promises} from "@opendaw/lib-runtime"
+import {Promises} from "@moises-ai/lib-runtime"
 
 type CachedSample = {
     uuid: UUID.Bytes

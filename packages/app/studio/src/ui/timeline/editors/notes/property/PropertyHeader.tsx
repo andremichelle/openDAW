@@ -1,10 +1,10 @@
 import css from "./PropertyHeader.sass?inline"
-import {Lifecycle, MutableObservableValue} from "@opendaw/lib-std"
-import {createElement, Inject} from "@opendaw/lib-jsx"
+import {Lifecycle, MutableObservableValue} from "@moises-ai/lib-std"
+import {createElement, Inject} from "@moises-ai/lib-jsx"
 import {DropDown} from "@/ui/composite/DropDown.tsx"
 import {NotePropertyAccessors, PropertyAccessor} from "@/ui/timeline/editors/notes/property/PropertyAccessor.ts"
 import {FlexSpacer} from "@/ui/components/FlexSpacer.tsx"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "PropertyHeader")
 

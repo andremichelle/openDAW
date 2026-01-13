@@ -1,9 +1,9 @@
 import css from "./BoxesDebugView.sass?inline"
-import {NumberComparator, UUID} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {BoxGraph} from "@opendaw/lib-box"
+import {NumberComparator, UUID} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {BoxGraph} from "@moises-ai/lib-box"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "BoxesDebugView")
 

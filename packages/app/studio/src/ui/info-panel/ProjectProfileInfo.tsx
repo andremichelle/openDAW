@@ -6,15 +6,15 @@ import {
     Lifecycle,
     MutableObservableOption,
     RuntimeNotifier
-} from "@opendaw/lib-std"
-import {createElement, Inject} from "@opendaw/lib-jsx"
+} from "@moises-ai/lib-std"
+import {createElement, Inject} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Cover} from "./Cover"
-import {Events, Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@moises-ai/lib-dom"
 import {Button} from "@/ui/components/Button"
-import {Colors} from "@opendaw/studio-enums"
+import {Colors} from "@moises-ai/studio-enums"
 import {PublishMusic} from "@/ui/info-panel/PublishMusic"
-import {Promises} from "@opendaw/lib-runtime"
+import {Promises} from "@moises-ai/lib-runtime"
 
 const className = Html.adoptStyleSheet(css, "ProjectInfo")
 

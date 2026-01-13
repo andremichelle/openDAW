@@ -1,5 +1,5 @@
 {
-    "name": "@opendaw/typescript-config",
+    "name": "@moises-ai/typescript-config",
     "version": "0.0.28",
     "private": true,
     "publishConfig": {

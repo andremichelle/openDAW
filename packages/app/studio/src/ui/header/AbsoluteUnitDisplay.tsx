@@ -1,11 +1,11 @@
 import css from "./AbsoluteUnitDisplay.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {DefaultObservableValue, Lifecycle, Terminator} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {UnitDisplay} from "@/ui/header/UnitDisplay"
 import {StudioService} from "@/service/StudioService"
-import {SMPTE} from "@opendaw/lib-dsp"
-import {StudioPreferences} from "@opendaw/studio-core"
+import {SMPTE} from "@moises-ai/lib-dsp"
+import {StudioPreferences} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "AbsoluteUnitDisplay")
 

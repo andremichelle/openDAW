@@ -13,10 +13,10 @@ import {
     ValueEventCollectionBox,
     VaporisateurDeviceBox,
     ZeitgeistDeviceBox
-} from "@opendaw/studio-boxes"
-import {asInstanceOf, Subscription, UUID} from "@opendaw/lib-std"
-import {ProjectSkeleton} from "@opendaw/studio-adapters"
-import {AudioData} from "@opendaw/lib-dsp"
+} from "@moises-ai/studio-boxes"
+import {asInstanceOf, Subscription, UUID} from "@moises-ai/lib-std"
+import {ProjectSkeleton} from "@moises-ai/studio-adapters"
+import {AudioData} from "@moises-ai/lib-dsp"
 import {ProjectEnv} from "./ProjectEnv"
 import {
     migrateAudioClipBox,

@@ -1,14 +1,14 @@
 import css from "./Resources.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
-import {createElement, replaceChildren} from "@opendaw/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {DefaultObservableValue, Lifecycle, Terminator} from "@moises-ai/lib-std"
+import {createElement, replaceChildren} from "@moises-ai/lib-jsx"
 import {ProjectBrowser} from "@/project/ProjectBrowser"
 import {Dialogs} from "@/ui/components/dialogs"
 import {SampleBrowser} from "@/ui/browse/SampleBrowser"
 import {SoundfontBrowser} from "@/ui/browse/SoundfontBrowser"
 import {StudioService} from "@/service/StudioService"
 import {RadioGroup} from "@/ui/components/RadioGroup"
-import {Colors} from "@opendaw/studio-enums"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "Resources")
 

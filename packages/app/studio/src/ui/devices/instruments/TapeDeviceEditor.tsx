@@ -1,13 +1,13 @@
 import css from "./TapeDeviceEditor.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Lifecycle} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {Tape} from "@/ui/devices/instruments/TapeDeviceEditor/Tape.tsx"
 import {Timeline} from "@/ui/devices/instruments/TapeDeviceEditor/Timeline.tsx"
-import {AudioUnitTracks, DeviceHost, InstrumentFactories, TapeDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {AudioUnitTracks, DeviceHost, InstrumentFactories, TapeDeviceBoxAdapter} from "@moises-ai/studio-adapters"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 import {StudioService} from "@/service/StudioService"
 
 const className = Html.adoptStyleSheet(css, "TapeDeviceEditor")

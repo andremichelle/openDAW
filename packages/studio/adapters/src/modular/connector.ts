@@ -1,6 +1,6 @@
-import {Pointers} from "@opendaw/studio-enums"
-import {Address, Field} from "@opendaw/lib-box"
-import {Arrays} from "@opendaw/lib-std"
+import {Pointers} from "@moises-ai/studio-enums"
+import {Address, Field} from "@moises-ai/lib-box"
+import {Arrays} from "@moises-ai/lib-std"
 import {BoxAdapters} from "../BoxAdapters"
 import {ModuleConnectionAdapter} from "./connection"
 

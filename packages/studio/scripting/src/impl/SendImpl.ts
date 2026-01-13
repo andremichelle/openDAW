@@ -1,4 +1,4 @@
-import {bipolar} from "@opendaw/lib-std"
+import {bipolar} from "@moises-ai/lib-std"
 import {AuxAudioUnit, GroupAudioUnit, Send} from "../Api"
 
 export class SendImpl implements Send {

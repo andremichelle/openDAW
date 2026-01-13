@@ -1,5 +1,5 @@
-import {Id, int, unitValue} from "@opendaw/lib-std"
-import {NoteEvent, ppqn} from "@opendaw/lib-dsp"
+import {Id, int, unitValue} from "@moises-ai/lib-std"
+import {NoteEvent, ppqn} from "@moises-ai/lib-dsp"
 import {NoteLifecycleEvent} from "../../../NoteEventSource"
 
 export type Stack = ReadonlyArray<Omit<NoteEvent, "position">>

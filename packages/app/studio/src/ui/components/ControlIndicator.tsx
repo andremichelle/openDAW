@@ -1,6 +1,6 @@
-import {Lifecycle} from "@opendaw/lib-std"
-import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
-import {createElement, Group, JsxValue} from "@opendaw/lib-jsx"
+import {Lifecycle} from "@moises-ai/lib-std"
+import {AutomatableParameterFieldAdapter} from "@moises-ai/studio-adapters"
+import {createElement, Group, JsxValue} from "@moises-ai/lib-jsx"
 
 type Construct = {
     lifecycle: Lifecycle

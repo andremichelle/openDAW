@@ -1,8 +1,8 @@
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader"
-import {ppqn} from "@opendaw/lib-dsp"
-import {TimelineBoxAdapter, TrackBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
-import {int, Observer, Option, Subscription, Terminable} from "@opendaw/lib-std"
-import {TimelineRange} from "@opendaw/studio-core"
+import {ppqn} from "@moises-ai/lib-dsp"
+import {TimelineBoxAdapter, TrackBoxAdapter, ValueEventCollectionBoxAdapter} from "@moises-ai/studio-adapters"
+import {int, Observer, Option, Subscription, Terminable} from "@moises-ai/lib-std"
+import {TimelineRange} from "@moises-ai/studio-core"
 
 export class TempoValueEventOwnerReader implements ValueEventOwnerReader {
     readonly #adapter: TimelineBoxAdapter

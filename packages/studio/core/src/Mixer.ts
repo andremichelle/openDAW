@@ -1,9 +1,9 @@
-import {Arrays, asDefined, EmptyExec, SortedSet, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
-import {Pointers} from "@opendaw/studio-enums"
-import {AudioUnitBox, AuxSendBox, BoxVisitor} from "@opendaw/studio-boxes"
-import {AudioUnitBoxAdapter, IndexedBoxAdapterCollection} from "@opendaw/studio-adapters"
-import {DeferExec, deferNextFrame} from "@opendaw/lib-dom"
-import {Box} from "@opendaw/lib-box"
+import {Arrays, asDefined, EmptyExec, SortedSet, Subscription, Terminable, Terminator, UUID} from "@moises-ai/lib-std"
+import {Pointers} from "@moises-ai/studio-enums"
+import {AudioUnitBox, AuxSendBox, BoxVisitor} from "@moises-ai/studio-boxes"
+import {AudioUnitBoxAdapter, IndexedBoxAdapterCollection} from "@moises-ai/studio-adapters"
+import {DeferExec, deferNextFrame} from "@moises-ai/lib-dom"
+import {Box} from "@moises-ai/lib-box"
 
 export interface ChannelStripView {
     silent(value: boolean): void

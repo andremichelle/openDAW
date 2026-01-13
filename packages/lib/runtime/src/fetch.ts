@@ -1,4 +1,4 @@
-import {asDefined, byte, ByteArrayOutput, Func, Procedure, unitValue} from "@opendaw/lib-std"
+import {asDefined, byte, ByteArrayOutput, Func, Procedure, unitValue} from "@moises-ai/lib-std"
 
 export namespace Fetch {
     export const ProgressArrayBuffer = (progress: Procedure<unitValue>): Func<Response, Promise<ArrayBufferLike>> =>

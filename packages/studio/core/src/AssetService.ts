@@ -9,12 +9,12 @@ import {
     Progress,
     RuntimeNotifier,
     UUID
-} from "@opendaw/lib-std"
-import {Files} from "@opendaw/lib-dom"
-import {Promises} from "@opendaw/lib-runtime"
-import {BoxGraph} from "@opendaw/lib-box"
-import {Sample, Soundfont} from "@opendaw/studio-adapters"
-import {AudioFileBox, SoundfontFileBox} from "@opendaw/studio-boxes"
+} from "@moises-ai/lib-std"
+import {Files} from "@moises-ai/lib-dom"
+import {Promises} from "@moises-ai/lib-runtime"
+import {BoxGraph} from "@moises-ai/lib-box"
+import {Sample, Soundfont} from "@moises-ai/studio-adapters"
+import {AudioFileBox, SoundfontFileBox} from "@moises-ai/studio-boxes"
 
 export namespace AssetService {
     export type ImportArgs = {

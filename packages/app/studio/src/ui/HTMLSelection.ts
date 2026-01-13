@@ -1,5 +1,5 @@
-import {Events, Keyboard} from "@opendaw/lib-dom"
-import {isDefined, Nullable, Terminable, Terminator} from "@opendaw/lib-std"
+import {Events, Keyboard} from "@moises-ai/lib-dom"
+import {isDefined, Nullable, Terminable, Terminator} from "@moises-ai/lib-std"
 
 export class HTMLSelection implements Terminable {
     readonly #terminator = new Terminator()

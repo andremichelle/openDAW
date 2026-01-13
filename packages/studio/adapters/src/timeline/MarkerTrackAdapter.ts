@@ -1,8 +1,8 @@
-import {assert, Notifier, Observer, SortedSet, Subscription, Terminable, UUID} from "@opendaw/lib-std"
+import {assert, Notifier, Observer, SortedSet, Subscription, Terminable, UUID} from "@moises-ai/lib-std"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
-import {EventCollection} from "@opendaw/lib-dsp"
+import {EventCollection} from "@moises-ai/lib-dsp"
 import {MarkerBoxAdapter} from "./MarkerBoxAdapter"
-import {MarkerBox, MarkerTrack} from "@opendaw/studio-boxes"
+import {MarkerBox, MarkerTrack} from "@moises-ai/studio-boxes"
 
 export class MarkerTrackAdapter implements Terminable {
     readonly #context: BoxAdaptersContext

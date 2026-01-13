@@ -1,5 +1,5 @@
 import {Waveform} from "./waveform"
-import {TAU} from "@opendaw/lib-std"
+import {TAU} from "@moises-ai/lib-std"
 
 export class Oscillator {
     waveform: Waveform = Waveform.SINE

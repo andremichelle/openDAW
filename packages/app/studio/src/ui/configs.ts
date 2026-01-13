@@ -1,4 +1,4 @@
-import {ValueMapping} from "@opendaw/lib-std"
+import {ValueMapping} from "@moises-ai/lib-std"
 
 export const SnapCenter = {snap: {threshold: 0.5, snapLength: 12}}
 export const SnapCommonDecibel = {

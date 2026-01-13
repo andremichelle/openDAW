@@ -1,5 +1,5 @@
-import {Interpolation, ppqn} from "@opendaw/lib-dsp"
-import {IterableIterators, Option, unitValue} from "@opendaw/lib-std"
+import {Interpolation, ppqn} from "@moises-ai/lib-dsp"
+import {IterableIterators, Option, unitValue} from "@moises-ai/lib-std"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
 

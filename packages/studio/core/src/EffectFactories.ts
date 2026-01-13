@@ -1,4 +1,4 @@
-import {UUID} from "@opendaw/lib-std"
+import {UUID} from "@moises-ai/lib-std"
 import {
     ArpeggioDeviceBox,
     CompressorDeviceBox,
@@ -20,9 +20,9 @@ import {
     TidalDeviceBox,
     VelocityDeviceBox,
     ZeitgeistDeviceBox
-} from "@opendaw/studio-boxes"
-import {IconSymbol} from "@opendaw/studio-enums"
-import {DeviceManualUrls} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-boxes"
+import {IconSymbol} from "@moises-ai/studio-enums"
+import {DeviceManualUrls} from "@moises-ai/studio-adapters"
 import {EffectFactory} from "./EffectFactory"
 import {EffectParameterDefaults} from "./EffectParameterDefaults"
 

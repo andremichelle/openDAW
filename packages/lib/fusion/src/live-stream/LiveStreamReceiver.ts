@@ -11,10 +11,10 @@ import {
     SortedSet,
     Subscription,
     Terminable
-} from "@opendaw/lib-std"
-import {Address} from "@opendaw/lib-box"
-import {AnimationFrame} from "@opendaw/lib-dom"
-import {Communicator, Messenger} from "@opendaw/lib-runtime"
+} from "@moises-ai/lib-std"
+import {Address} from "@moises-ai/lib-box"
+import {AnimationFrame} from "@moises-ai/lib-dom"
+import {Communicator, Messenger} from "@moises-ai/lib-runtime"
 import {PackageType} from "./PackageType"
 import {Subscribers} from "./Subscribers"
 import {Protocol} from "./Protocol"

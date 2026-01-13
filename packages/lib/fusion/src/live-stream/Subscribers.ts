@@ -1,5 +1,5 @@
-import {Arrays, isDefined, Maybe, SortedSet, Subscription, Terminable} from "@opendaw/lib-std"
-import {Address} from "@opendaw/lib-box"
+import {Arrays, isDefined, Maybe, SortedSet, Subscription, Terminable} from "@moises-ai/lib-std"
+import {Address} from "@moises-ai/lib-box"
 
 type ListenersEntry<T> = { address: Address, listeners: Array<T> }
 

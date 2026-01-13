@@ -1,5 +1,5 @@
 import {FieldKey, Fields} from "./field"
-import {assert, ByteArrayInput, ByteArrayOutput, DataInput, DataOutput, isUndefined, tryCatch} from "@opendaw/lib-std"
+import {assert, ByteArrayInput, ByteArrayOutput, DataInput, DataOutput, isUndefined, tryCatch} from "@moises-ai/lib-std"
 
 export namespace Serializer {
     const MAGIC_HEADER = 0x464c4453

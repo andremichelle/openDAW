@@ -1,12 +1,12 @@
 import css from "./DropDown.sass?inline"
-import {Func, Lifecycle, MutableObservableValue, Provider} from "@opendaw/lib-std"
+import {Func, Lifecycle, MutableObservableValue, Provider} from "@moises-ai/lib-std"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
-import {createElement, Inject} from "@opendaw/lib-jsx"
-import {MenuItem} from "@opendaw/studio-core"
+import {createElement, Inject} from "@moises-ai/lib-jsx"
+import {MenuItem} from "@moises-ai/studio-core"
 import {Appearance} from "../components/ButtonCheckboxRadio"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {Icon} from "@/ui/components/Icon"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "DropDown")
 

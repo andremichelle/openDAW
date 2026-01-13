@@ -1,7 +1,7 @@
-import {Notifier, Observer, Option, Subscription, Terminable, UUID} from "@opendaw/lib-std"
-import {Peaks} from "@opendaw/lib-fusion"
-import {SampleLoader, SampleLoaderState, SampleMetaData} from "@opendaw/studio-adapters"
-import {AudioData} from "@opendaw/lib-dsp"
+import {Notifier, Observer, Option, Subscription, Terminable, UUID} from "@moises-ai/lib-std"
+import {Peaks} from "@moises-ai/lib-fusion"
+import {SampleLoader, SampleLoaderState, SampleMetaData} from "@moises-ai/studio-adapters"
+import {AudioData} from "@moises-ai/lib-dsp"
 
 export class DefaultSampleLoader implements SampleLoader {
     readonly #uuid: UUID.Bytes

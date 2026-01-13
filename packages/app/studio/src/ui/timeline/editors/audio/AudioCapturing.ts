@@ -1,7 +1,7 @@
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
-import {Nullable} from "@opendaw/lib-std"
+import {Nullable} from "@moises-ai/lib-std"
 import {PointerRadiusDistance} from "@/ui/timeline/constants.ts"
-import {TimelineRange} from "@opendaw/studio-core"
+import {TimelineRange} from "@moises-ai/studio-core"
 
 import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 

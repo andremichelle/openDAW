@@ -11,15 +11,15 @@ import {
     tryCatch,
     unitValue,
     UUID
-} from "@opendaw/lib-std"
-import {NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
-import {AudioUnitBoxAdapter, ColorCodes, TrackType} from "@opendaw/studio-adapters"
-import {PPQN, ppqn} from "@opendaw/lib-dsp"
+} from "@moises-ai/lib-std"
+import {NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@moises-ai/studio-boxes"
+import {AudioUnitBoxAdapter, ColorCodes, TrackType} from "@moises-ai/studio-adapters"
+import {PPQN, ppqn} from "@moises-ai/lib-dsp"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
-import {Promises, Wait} from "@opendaw/lib-runtime"
-import {Files} from "@opendaw/lib-dom"
-import {Project} from "@opendaw/studio-core"
-import {ControlType, MidiFile} from "@opendaw/lib-midi"
+import {Promises, Wait} from "@moises-ai/lib-runtime"
+import {Files} from "@moises-ai/lib-dom"
+import {Project} from "@moises-ai/studio-core"
+import {ControlType, MidiFile} from "@moises-ai/lib-midi"
 
 export namespace MidiImport {
     export const toTracks = async (project: Project, audioUnitBoxAdapter: AudioUnitBoxAdapter) => {

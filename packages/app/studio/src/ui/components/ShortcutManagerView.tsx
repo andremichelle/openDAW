@@ -1,5 +1,5 @@
 import css from "./ShortcutManagerView.sass?inline"
-import {Events, Html, Shortcut, ShortcutDefinition, ShortcutDefinitions} from "@opendaw/lib-dom"
+import {Events, Html, Shortcut, ShortcutDefinition, ShortcutDefinitions} from "@moises-ai/lib-dom"
 import {
     DefaultObservableValue,
     isAbsent,
@@ -9,11 +9,11 @@ import {
     Objects,
     Strings,
     Terminator
-} from "@opendaw/lib-std"
-import {createElement, replaceChildren} from "@opendaw/lib-jsx"
+} from "@moises-ai/lib-std"
+import {createElement, replaceChildren} from "@moises-ai/lib-jsx"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Surface} from "@/ui/surface/Surface"
-import {Colors} from "@opendaw/studio-enums"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "ShortcutManagerView")
 

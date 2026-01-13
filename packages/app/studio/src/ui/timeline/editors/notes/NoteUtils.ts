@@ -1,9 +1,9 @@
-import {NoteEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
-import {Promises} from "@opendaw/lib-runtime"
-import {Files} from "@opendaw/lib-dom"
-import {Channel, ControlEvent, ControlType, MidiFile, MidiTrack} from "@opendaw/lib-midi"
-import {ArrayMultimap, int} from "@opendaw/lib-std"
-import {EventCollection, EventSpan, NoteEvent, PPQN, ppqn} from "@opendaw/lib-dsp"
+import {NoteEventCollectionBoxAdapter} from "@moises-ai/studio-adapters"
+import {Promises} from "@moises-ai/lib-runtime"
+import {Files} from "@moises-ai/lib-dom"
+import {Channel, ControlEvent, ControlType, MidiFile, MidiTrack} from "@moises-ai/lib-midi"
+import {ArrayMultimap, int} from "@moises-ai/lib-std"
+import {EventCollection, EventSpan, NoteEvent, PPQN, ppqn} from "@moises-ai/lib-dsp"
 
 const fromCollection = <E extends NoteEvent>(collection: EventCollection<E>): MidiTrack => {
     const events: Array<ControlEvent> = []

@@ -1,7 +1,7 @@
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 import css from "./ProgressBar.sass?inline"
-import {Lifecycle, ObservableValue, unitValue} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Lifecycle, ObservableValue, unitValue} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 
 const className = Html.adoptStyleSheet(css, "ProgressBar")
 

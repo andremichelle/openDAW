@@ -10,10 +10,10 @@ import {
     Selection,
     Unhandled,
     ValueAxis
-} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-import {AnyClipBoxAdapter, ClipAdapters, isVertexOfBox, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
+import {AnyClipBoxAdapter, ClipAdapters, isVertexOfBox, TrackType, UnionBoxTypes} from "@moises-ai/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {ClipCaptureTarget, ClipCapturing} from "@/ui/timeline/tracks/audio-unit/clips/ClipCapturing.ts"
@@ -27,7 +27,7 @@ import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {installClipContextMenu} from "@/ui/timeline/tracks/audio-unit/clips/ClipContextMenu.ts"
 import {PanelType} from "@/ui/workspace/PanelType"
 import {ClipDragAndDrop} from "./ClipDragAndDrop.ts"
-import {Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
+import {Dragging, Events, Html, Keyboard} from "@moises-ai/lib-dom"
 import {DragAndDrop} from "@/ui/DragAndDrop.ts"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"

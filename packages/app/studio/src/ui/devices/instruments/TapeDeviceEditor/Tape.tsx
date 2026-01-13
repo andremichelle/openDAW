@@ -1,9 +1,9 @@
-import {Arrays, Circle, clamp, Geom, isDefined, Lifecycle, ObservableValue, ValueMapping} from "@opendaw/lib-std"
-import {createElement, Frag} from "@opendaw/lib-jsx"
-import {ppqn, PPQN} from "@opendaw/lib-dsp"
-import {AudioUnitTracks} from "@opendaw/studio-adapters"
-import {deferNextFrame} from "@opendaw/lib-dom"
-import {Colors} from "@opendaw/studio-enums"
+import {Arrays, Circle, clamp, Geom, isDefined, Lifecycle, ObservableValue, ValueMapping} from "@moises-ai/lib-std"
+import {createElement, Frag} from "@moises-ai/lib-jsx"
+import {ppqn, PPQN} from "@moises-ai/lib-dsp"
+import {AudioUnitTracks} from "@moises-ai/studio-adapters"
+import {deferNextFrame} from "@moises-ai/lib-dom"
+import {Colors} from "@moises-ai/studio-enums"
 
 const tapeVelocity = 13.0 / PPQN.Bar // TapeDeviceEditor speed 4.76 cm/s converted into svg coordinates
 const rEmpty = 15

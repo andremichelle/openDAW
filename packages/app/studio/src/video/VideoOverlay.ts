@@ -1,5 +1,5 @@
-import {Terminable} from "@opendaw/lib-std"
-import {PPQN, ppqn} from "@opendaw/lib-dsp"
+import {Terminable} from "@moises-ai/lib-std"
+import {PPQN, ppqn} from "@moises-ai/lib-dsp"
 
 export interface VideoOverlayConfig {
     readonly width: number

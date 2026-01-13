@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest"
-import {Comparator, int} from "@opendaw/lib-std"
+import {Comparator, int} from "@moises-ai/lib-std"
 import {Event, EventCollection} from "./events"
 
 class ScheduleEvent implements Event {

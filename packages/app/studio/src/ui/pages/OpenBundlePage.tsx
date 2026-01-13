@@ -1,10 +1,10 @@
 import css from "./OpenBundlePage.sass?inline"
-import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
+import {createElement, PageContext, PageFactory} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {Html} from "@opendaw/lib-dom"
-import {network, Promises} from "@opendaw/lib-runtime"
-import {Option, RuntimeNotifier} from "@opendaw/lib-std"
-import {ProjectBundle} from "@opendaw/studio-core"
+import {Html} from "@moises-ai/lib-dom"
+import {network, Promises} from "@moises-ai/lib-runtime"
+import {Option, RuntimeNotifier} from "@moises-ai/lib-std"
+import {ProjectBundle} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "OpenBundlePage")
 

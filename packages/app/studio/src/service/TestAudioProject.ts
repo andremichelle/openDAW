@@ -1,6 +1,6 @@
 import {StudioService} from "@/service/StudioService"
-import {AudioUnitFactory, InstrumentFactories, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
-import {AudioUnitType, IconSymbol} from "@opendaw/studio-enums"
+import {AudioUnitFactory, InstrumentFactories, ProjectSkeleton, TrackType} from "@moises-ai/studio-adapters"
+import {AudioUnitType, IconSymbol} from "@moises-ai/studio-enums"
 import {
     AudioFileBox,
     AudioRegionBox,
@@ -10,10 +10,10 @@ import {
     TransientMarkerBox,
     ValueEventCollectionBox,
     WarpMarkerBox
-} from "@opendaw/studio-boxes"
-import {Option, Progress, UUID} from "@opendaw/lib-std"
-import {Project, SampleStorage, Workers} from "@opendaw/studio-core"
-import {PPQN, TimeBase} from "@opendaw/lib-dsp"
+} from "@moises-ai/studio-boxes"
+import {Option, Progress, UUID} from "@moises-ai/lib-std"
+import {Project, SampleStorage, Workers} from "@moises-ai/studio-core"
+import {PPQN, TimeBase} from "@moises-ai/lib-dsp"
 
 export const testAudioProject = async (service: StudioService) => {
     const skeleton =

@@ -1,8 +1,8 @@
-import {MenuItem} from "@opendaw/studio-core"
-import {ModuleDelayBox, ModuleGainBox, ModuleMultiplierBox} from "@opendaw/studio-boxes"
-import {quantizeRound, UUID} from "@opendaw/lib-std"
+import {MenuItem} from "@moises-ai/studio-core"
+import {ModuleDelayBox, ModuleGainBox, ModuleMultiplierBox} from "@moises-ai/studio-boxes"
+import {quantizeRound, UUID} from "@moises-ai/lib-std"
 import {Camera} from "@/ui/modular/Camera.ts"
-import {ModularAdapter} from "@opendaw/studio-adapters"
+import {ModularAdapter} from "@moises-ai/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 
 export class ModuleShelf {

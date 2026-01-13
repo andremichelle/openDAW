@@ -1,5 +1,5 @@
 import {z} from "zod"
-import {Browser} from "@opendaw/lib-dom"
+import {Browser} from "@moises-ai/lib-dom"
 
 export const FpsOptions = [24, 25, 29.97, 30] as const
 

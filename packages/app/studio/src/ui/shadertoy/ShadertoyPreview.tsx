@@ -1,11 +1,11 @@
 import css from "./ShadertoyPreview.sass?inline"
-import {Events, Html} from "@opendaw/lib-dom"
-import {asInstanceOf, isAbsent, Lifecycle, Nullable, Terminable, Terminator, tryCatch} from "@opendaw/lib-std"
-import {createElement, LocalLink} from "@opendaw/lib-jsx"
+import {Events, Html} from "@moises-ai/lib-dom"
+import {asInstanceOf, isAbsent, Lifecycle, Nullable, Terminable, Terminator, tryCatch} from "@moises-ai/lib-std"
+import {createElement, LocalLink} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
-import {ShadertoyBox} from "@opendaw/studio-boxes"
-import {Colors} from "@opendaw/studio-enums"
+import {ShadertoyBox} from "@moises-ai/studio-boxes"
+import {Colors} from "@moises-ai/studio-enums"
 import {setupShadertoyRunner} from "@/ui/shadertoy/runner-setup"
 
 const className = Html.adoptStyleSheet(css, "ShadertoyPreview")

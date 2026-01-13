@@ -1,5 +1,5 @@
-import {ModuleMultiplierBox} from "@opendaw/studio-boxes"
-import {Pointers} from "@opendaw/studio-enums"
+import {ModuleMultiplierBox} from "@moises-ai/studio-boxes"
+import {Pointers} from "@moises-ai/studio-enums"
 import {AbstractModuleAdapter} from "../abstract"
 import {ModuleAdapter} from "../module"
 import {Direction, ModuleConnectorAdapter} from "../connector"

@@ -1,7 +1,7 @@
 import css from "./Column.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {createElement, JsxValue} from "@opendaw/lib-jsx"
-import {Color} from "@opendaw/lib-std"
+import {Html} from "@moises-ai/lib-dom"
+import {createElement, JsxValue} from "@moises-ai/lib-jsx"
+import {Color} from "@moises-ai/lib-std"
 
 const className = Html.adoptStyleSheet(css, "Column")
 

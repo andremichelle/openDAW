@@ -9,13 +9,13 @@ import {
     StringComparator,
     TimeSpan,
     UUID
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {Icon} from "@/ui/components/Icon"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol} from "@moises-ai/studio-enums"
 import {Dialogs} from "@/ui/components/dialogs"
-import {Await, createElement, DomElement, Frag, Group} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
-import {ContextMenu, MenuItem, ProjectMeta, ProjectSignals, ProjectStorage} from "@opendaw/studio-core"
+import {Await, createElement, DomElement, Frag, Group} from "@moises-ai/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {ContextMenu, MenuItem, ProjectMeta, ProjectSignals, ProjectStorage} from "@moises-ai/studio-core"
 import {SearchInput} from "@/ui/components/SearchInput"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 

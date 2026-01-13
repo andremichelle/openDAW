@@ -1,4 +1,4 @@
-import {Exec, int, Nullable, Terminable} from "@opendaw/lib-std"
+import {Exec, int, Nullable, Terminable} from "@moises-ai/lib-std"
 
 export namespace AnimationFrame {
     const nonrecurring = new Set<Exec>()

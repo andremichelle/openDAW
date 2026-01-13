@@ -1,5 +1,5 @@
-import {asInstanceOf, isDefined, Maybe, Option, SortedSet, Subscription, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioUnitBox, BoxVisitor, CaptureAudioBox, CaptureMidiBox} from "@opendaw/studio-boxes"
+import {asInstanceOf, isDefined, Maybe, Option, SortedSet, Subscription, Terminable, UUID} from "@moises-ai/lib-std"
+import {AudioUnitBox, BoxVisitor, CaptureAudioBox, CaptureMidiBox} from "@moises-ai/studio-boxes"
 import {Project} from "../project"
 import {Capture} from "./Capture"
 import {CaptureMidi} from "./CaptureMidi"

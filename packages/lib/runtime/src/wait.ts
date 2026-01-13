@@ -1,4 +1,4 @@
-import {Exec, int, Observable, TimeSpan, tryCatch} from "@opendaw/lib-std"
+import {Exec, int, Observable, TimeSpan, tryCatch} from "@moises-ai/lib-std"
 
 export namespace Wait {
     export const frame = (): Promise<void> => new Promise(resolve => requestAnimationFrame(() => resolve()))

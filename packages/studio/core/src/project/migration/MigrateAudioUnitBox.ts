@@ -1,8 +1,8 @@
-import {BoxGraph} from "@opendaw/lib-box"
-import {asDefined} from "@opendaw/lib-std"
-import {AudioUnitBox, BoxIO, BoxVisitor, CaptureAudioBox, CaptureMidiBox} from "@opendaw/studio-boxes"
-import {AudioUnitType} from "@opendaw/studio-enums"
-import {UUID} from "@opendaw/lib-std"
+import {BoxGraph} from "@moises-ai/lib-box"
+import {asDefined} from "@moises-ai/lib-std"
+import {AudioUnitBox, BoxIO, BoxVisitor, CaptureAudioBox, CaptureMidiBox} from "@moises-ai/studio-boxes"
+import {AudioUnitType} from "@moises-ai/studio-enums"
+import {UUID} from "@moises-ai/lib-std"
 
 export const migrateAudioUnitBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box: AudioUnitBox): void => {
     if (box.type.getValue() !== AudioUnitType.Instrument || box.capture.nonEmpty()) {return}

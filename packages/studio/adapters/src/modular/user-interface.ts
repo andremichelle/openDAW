@@ -1,5 +1,5 @@
-import {DeviceInterfaceKnobBox} from "@opendaw/studio-boxes"
-import {Address, Box, PointerTypes, PrimitiveField} from "@opendaw/lib-box"
+import {DeviceInterfaceKnobBox} from "@moises-ai/studio-boxes"
+import {Address, Box, PointerTypes, PrimitiveField} from "@moises-ai/lib-box"
 import {ModuleAdapter, Modules} from "./module"
 import {BoxAdapter} from "../BoxAdapter"
 import {AutomatableParameterFieldAdapter} from "../AutomatableParameterFieldAdapter"

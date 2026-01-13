@@ -1,0 +1,87 @@
+name: Publish Packages to GitHub Registry
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Perform a dry run (no actual publish)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@moises-ai'
+
+      - name: Configure npm for GitHub Packages
+        run: |
+          echo "@moises-ai:registry=https://npm.pkg.github.com" >> .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
+
+      - name: Verify scope transformation
+        run: node scripts/verify-scope.js
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build all packages
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Publish packages (dry run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: npx lerna publish from-package --yes --no-private --loglevel verbose
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish packages
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: npx lerna publish from-package --yes --no-private --loglevel verbose
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "## Published Packages" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The following packages were published to GitHub Package Registry:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/studio-sdk" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/studio-core" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/studio-adapters" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/studio-boxes" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/studio-enums" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/studio-scripting" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/lib-std" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/lib-runtime" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/lib-box" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/lib-dom" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/lib-dsp" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/lib-fusion" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/lib-jsx" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/lib-midi" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/lib-xml" >> $GITHUB_STEP_SUMMARY
+          echo "- @moises-ai/lib-dawproject" >> $GITHUB_STEP_SUMMARY

@@ -1,5 +1,5 @@
-import {BoxForge} from "@opendaw/lib-box-forge"
-import {Pointers} from "@opendaw/studio-enums"
+import {BoxForge} from "@moises-ai/lib-box-forge"
+import {Pointers} from "@moises-ai/studio-enums"
 import {DeviceDefinitions} from "./schema/devices"
 import {ModuleDefinitions} from "./schema/std/modular"
 import {Definitions} from "./schema/std"
@@ -7,7 +7,7 @@ import {Definitions} from "./schema/std"
 BoxForge.gen<Pointers>({
     path: "../boxes/src/",
     pointers: {
-        from: "@opendaw/studio-enums",
+        from: "@moises-ai/studio-enums",
         enum: "Pointers",
         print: pointer => `Pointers.${Pointers[pointer]}`
     },

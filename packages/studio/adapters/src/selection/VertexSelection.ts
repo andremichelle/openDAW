@@ -12,10 +12,10 @@ import {
     Subscription,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {Address, Addressable, BoxEditing, BoxGraph, Field, PointerField} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
-import {SelectionBox} from "@opendaw/studio-boxes"
+} from "@moises-ai/lib-std"
+import {Address, Addressable, BoxEditing, BoxGraph, Field, PointerField} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
+import {SelectionBox} from "@moises-ai/studio-boxes"
 import {SelectableVertex} from "./SelectableVertex"
 import {SelectionEntry} from "./SelectionEntry"
 import {FilteredSelection} from "./FilteredSelection"

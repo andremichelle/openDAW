@@ -1,9 +1,9 @@
 import css from "./RequestMidiButton.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {createElement} from "@opendaw/lib-jsx"
-import {MidiDevices} from "@opendaw/studio-core"
+import {Html} from "@moises-ai/lib-dom"
+import {createElement} from "@moises-ai/lib-jsx"
+import {MidiDevices} from "@moises-ai/studio-core"
 import {Icon} from "@/ui/components/Icon"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "RequestMidiButton")
 

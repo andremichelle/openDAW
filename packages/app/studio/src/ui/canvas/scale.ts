@@ -1,4 +1,4 @@
-import {unitValue} from "@opendaw/lib-std"
+import {unitValue} from "@moises-ai/lib-std"
 
 export interface Scale {
     unitToNorm(unit: number): unitValue

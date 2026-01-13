@@ -1,9 +1,9 @@
 import css from "./ValueTooltip.sass?inline"
 import {Surface} from "./Surface"
-import {createElement} from "@opendaw/lib-jsx"
-import {PrintValue, Provider, Terminable} from "@opendaw/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {PrintValue, Provider, Terminable} from "@moises-ai/lib-std"
 import {AbstractTooltip} from "@/ui/surface/AbstractTooltip.ts"
-import {Events, Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@moises-ai/lib-dom"
 
 export interface ValueData extends PrintValue {
     clientX: number

@@ -1,13 +1,13 @@
-import {AudioFileBox} from "@opendaw/studio-boxes"
-import {int, Option, panic, Provider, SortedSet, Terminator, UUID} from "@opendaw/lib-std"
-import {Peaks} from "@opendaw/lib-fusion"
-import {Address, PointerField} from "@opendaw/lib-box"
+import {AudioFileBox} from "@moises-ai/studio-boxes"
+import {int, Option, panic, Provider, SortedSet, Terminator, UUID} from "@moises-ai/lib-std"
+import {Peaks} from "@moises-ai/lib-fusion"
+import {Address, PointerField} from "@moises-ai/lib-box"
 import {SampleLoader} from "../sample/SampleLoader"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {BoxAdapter} from "../BoxAdapter"
-import {AudioData, EventCollection} from "@opendaw/lib-dsp"
+import {AudioData, EventCollection} from "@moises-ai/lib-dsp"
 import {TransientMarkerBoxAdapter} from "./TransientMarkerBoxAdapter"
-import {Promises} from "@opendaw/lib-runtime"
+import {Promises} from "@moises-ai/lib-runtime"
 
 export class AudioFileBoxAdapter implements BoxAdapter {
     static Comparator = (a: TransientMarkerBoxAdapter, b: TransientMarkerBoxAdapter): int => {

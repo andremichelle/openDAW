@@ -1,13 +1,13 @@
-import {Bits, int, isDefined, isNotNull, Nullable} from "@opendaw/lib-std"
-import {AudioBuffer, AudioData, EventCollection, LoopableRegion, PPQN} from "@opendaw/lib-dsp"
-import {AudioTimeStretchBoxAdapter, TransientMarkerBoxAdapter, WarpMarkerBoxAdapter} from "@opendaw/studio-adapters"
+import {Bits, int, isDefined, isNotNull, Nullable} from "@moises-ai/lib-std"
+import {AudioBuffer, AudioData, EventCollection, LoopableRegion, PPQN} from "@moises-ai/lib-dsp"
+import {AudioTimeStretchBoxAdapter, TransientMarkerBoxAdapter, WarpMarkerBoxAdapter} from "@moises-ai/studio-adapters"
 import {Block, BlockFlag} from "../../../processing"
 import {Voice} from "./Voice"
 import {OnceVoice} from "./OnceVoice"
 import {RepeatVoice} from "./RepeatVoice"
 import {PingpongVoice} from "./PingpongVoice"
 import {VOICE_FADE_DURATION} from "./constants"
-import {TransientPlayMode} from "@opendaw/studio-enums"
+import {TransientPlayMode} from "@moises-ai/studio-enums"
 
 export class TimeStretchSequencer {
     readonly #voices: Array<Voice> = []

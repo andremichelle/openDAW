@@ -10,10 +10,10 @@ import {
     quantizeRound,
     Subscription,
     Terminable
-} from "@opendaw/lib-std"
-import {ppqn, PPQN} from "@opendaw/lib-dsp"
-import {MenuItem, MenuRootData, TimelineRange} from "@opendaw/studio-core"
-import {SignatureTrackAdapter} from "@opendaw/studio-adapters"
+} from "@moises-ai/lib-std"
+import {ppqn, PPQN} from "@moises-ai/lib-dsp"
+import {MenuItem, MenuRootData, TimelineRange} from "@moises-ai/studio-core"
+import {SignatureTrackAdapter} from "@moises-ai/studio-adapters"
 
 export interface SnapUnit {
     get name(): string

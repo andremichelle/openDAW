@@ -1,4 +1,4 @@
-import {asEnumValue, MutableValueOwner, ValueOwner} from "@opendaw/lib-std"
+import {asEnumValue, MutableValueOwner, ValueOwner} from "@moises-ai/lib-std"
 import {ppqn, samples, seconds} from "./ppqn"
 import {TempoMap} from "./tempo"
 

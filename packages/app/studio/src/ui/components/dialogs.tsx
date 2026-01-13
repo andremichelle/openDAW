@@ -1,4 +1,4 @@
-import {createElement, JsxValue} from "@opendaw/lib-jsx"
+import {createElement, JsxValue} from "@moises-ai/lib-jsx"
 import {Button, Dialog, DialogHandler} from "@/ui/components/Dialog.tsx"
 import {
     Arrays,
@@ -11,14 +11,14 @@ import {
     RuntimeNotification,
     Terminable,
     Terminator
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {Surface} from "@/ui/surface/Surface.tsx"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {Box, BoxGraph} from "@opendaw/lib-box"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
+import {Box, BoxGraph} from "@moises-ai/lib-box"
 import {BoxDebugView} from "./BoxDebugView"
 import {BoxesDebugView} from "@/ui/components/BoxesDebugView.tsx"
 import {ProgressBar} from "@/ui/components/ProgressBar.tsx"
-import {Browser} from "@opendaw/lib-dom"
+import {Browser} from "@moises-ai/lib-dom"
 
 export namespace Dialogs {
     type Default = {

@@ -1,4 +1,4 @@
-import {int} from "@opendaw/lib-std"
+import {int} from "@moises-ai/lib-std"
 
 export namespace Stream {
     export const read = async (reader: ReadableStreamDefaultReader<Uint8Array>): Promise<ArrayBuffer> => {

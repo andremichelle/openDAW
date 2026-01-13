@@ -8,10 +8,10 @@ import {
     Option,
     Selection,
     Unhandled
-} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {CutCursor} from "@/ui/timeline/CutCursor.tsx"
-import {ppqn} from "@opendaw/lib-dsp"
+import {ppqn} from "@moises-ai/lib-dsp"
 import {installAutoScroll} from "@/ui/AutoScroll.ts"
 import {Config} from "@/ui/timeline/Config.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
@@ -21,7 +21,7 @@ import {
     RegionAdapters,
     RegionEditing,
     UnionBoxTypes
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {createRegionLocator} from "@/ui/timeline/tracks/audio-unit/regions/RegionSelectionLocator.ts"
 import {installRegionContextMenu} from "@/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
@@ -37,11 +37,11 @@ import {RegionLoopDurationModifier} from "@/ui/timeline/tracks/audio-unit/region
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {RegionDragAndDrop} from "@/ui/timeline/tracks/audio-unit/regions/RegionDragAndDrop.ts"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
-import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
+import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@moises-ai/lib-dom"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
-import {TimelineRange} from "@opendaw/studio-core"
+import {TimelineRange} from "@moises-ai/studio-core"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 
 const className = Html.adoptStyleSheet(css, "RegionsArea")

@@ -14,7 +14,7 @@ import {NoteTrackImpl} from "./NoteTrackImpl"
 import {ValueTrackImpl} from "./ValueTrackImpl"
 import {DelayEffectImpl} from "./DelayEffectImpl"
 import {PitchEffectImpl} from "./PitchEffectImpl"
-import {bipolar, Nullable} from "@opendaw/lib-std"
+import {bipolar, Nullable} from "@moises-ai/lib-std"
 import {AudioTrackImpl} from "./AudioTrackImpl"
 
 export abstract class AudioUnitImpl implements AudioUnit {

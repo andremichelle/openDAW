@@ -1,4 +1,4 @@
-import {Box, Vertex} from "@opendaw/lib-box"
+import {Box, Vertex} from "@moises-ai/lib-box"
 import {
     BoxVisitor,
     ModularAudioInputBox,
@@ -7,9 +7,9 @@ import {
     ModuleDelayBox,
     ModuleGainBox,
     ModuleMultiplierBox
-} from "@opendaw/studio-boxes"
-import {asDefined, Selectable} from "@opendaw/lib-std"
-import {Pointers} from "@opendaw/studio-enums"
+} from "@moises-ai/studio-boxes"
+import {asDefined, Selectable} from "@moises-ai/lib-std"
+import {Pointers} from "@moises-ai/studio-enums"
 import {ModuleDelayAdapter} from "./modules/delay"
 import {ModularAudioOutputAdapter} from "./modules/audio-output"
 import {ModuleGainAdapter} from "./modules/gain"

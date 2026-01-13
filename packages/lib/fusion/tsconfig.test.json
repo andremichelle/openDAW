@@ -1,5 +1,5 @@
 {
-  "extends": "@opendaw/typescript-config/test.json",
+  "extends": "@moises-ai/typescript-config/test.json",
   "include": ["src/**/*.ts"],
   "exclude": ["dist", "node_modules"]
 }

@@ -1,6 +1,6 @@
 import {PanelType} from "@/ui/workspace/PanelType.ts"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol} from "@moises-ai/studio-enums"
 
 export class PanelState {
     static create(schema: Workspace.PanelConfig): PanelState {return new PanelState(schema)}

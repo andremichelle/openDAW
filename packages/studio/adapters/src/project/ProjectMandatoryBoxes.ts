@@ -1,4 +1,4 @@
-import {AudioBusBox, AudioUnitBox, RootBox, TimelineBox, UserInterfaceBox} from "@opendaw/studio-boxes"
+import {AudioBusBox, AudioUnitBox, RootBox, TimelineBox, UserInterfaceBox} from "@moises-ai/studio-boxes"
 
 export type ProjectMandatoryBoxes = {
     rootBox: RootBox

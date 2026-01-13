@@ -1,11 +1,11 @@
-import {Observer, Subscription, Terminable, UUID} from "@opendaw/lib-std"
+import {Observer, Subscription, Terminable, UUID} from "@moises-ai/lib-std"
 import {Processor, ProcessPhase} from "./processing"
-import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
+import {LiveStreamBroadcaster} from "@moises-ai/lib-fusion"
 import {UpdateClock} from "./UpdateClock"
 import {TimeInfo} from "./TimeInfo"
 import {AudioUnit} from "./AudioUnit"
 import {Mixer} from "./Mixer"
-import {BoxAdaptersContext, EngineSettings, EngineToClient, PreferencesClient} from "@opendaw/studio-adapters"
+import {BoxAdaptersContext, EngineSettings, EngineToClient, PreferencesClient} from "@moises-ai/studio-adapters"
 import {AudioOutputBufferRegistry} from "./AudioOutputBufferRegistry"
 
 export interface EngineContext extends BoxAdaptersContext, Terminable {

@@ -1,16 +1,16 @@
-import {ContextMenu, MenuItem} from "@opendaw/studio-core"
+import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
-import {AnyClipBoxAdapter, AudioClipBoxAdapter} from "@opendaw/studio-adapters"
-import {EmptyExec, Procedure, Selection, UUID} from "@opendaw/lib-std"
+import {AnyClipBoxAdapter, AudioClipBoxAdapter} from "@moises-ai/studio-adapters"
+import {EmptyExec, Procedure, Selection, UUID} from "@moises-ai/lib-std"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {NameValidator} from "@/ui/validator/name.ts"
 import {ClipCaptureTarget} from "@/ui/timeline/tracks/audio-unit/clips/ClipCapturing.ts"
 import {DebugMenus} from "@/ui/menu/debug"
 import {exportNotesToMidiFile} from "@/ui/timeline/editors/notes/NoteUtils"
-import {AudioRegionBox, NoteRegionBox, ValueRegionBox} from "@opendaw/studio-boxes"
+import {AudioRegionBox, NoteRegionBox, ValueRegionBox} from "@moises-ai/studio-boxes"
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
-import {AudioContentModifier, Project} from "@opendaw/studio-core"
-import {Promises} from "@opendaw/lib-runtime"
+import {AudioContentModifier, Project} from "@moises-ai/studio-core"
+import {Promises} from "@moises-ai/lib-runtime"
 
 type Creation = {
     element: HTMLElement

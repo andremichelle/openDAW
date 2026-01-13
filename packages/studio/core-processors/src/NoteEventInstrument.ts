@@ -1,10 +1,10 @@
 import {Block, Processor} from "./processing"
-import {Event} from "@opendaw/lib-dsp"
+import {Event} from "@moises-ai/lib-dsp"
 import {NoteEventSource, NoteLifecycleEvent} from "./NoteEventSource"
-import {assert, Option, Terminable, Terminator} from "@opendaw/lib-std"
-import {NoteBroadcaster} from "@opendaw/studio-adapters"
-import {Address} from "@opendaw/lib-box"
-import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
+import {assert, Option, Terminable, Terminator} from "@moises-ai/lib-std"
+import {NoteBroadcaster} from "@moises-ai/studio-adapters"
+import {Address} from "@moises-ai/lib-box"
+import {LiveStreamBroadcaster} from "@moises-ai/lib-fusion"
 
 export class NoteEventInstrument implements Terminable {
     readonly #terminator = new Terminator()

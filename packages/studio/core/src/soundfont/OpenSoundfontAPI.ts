@@ -1,7 +1,7 @@
-import {asDefined, Lazy, Procedure, RuntimeNotifier, unitValue, UUID} from "@opendaw/lib-std"
-import {Soundfont, SoundfontMetaData} from "@opendaw/studio-adapters"
+import {asDefined, Lazy, Procedure, RuntimeNotifier, unitValue, UUID} from "@moises-ai/lib-std"
+import {Soundfont, SoundfontMetaData} from "@moises-ai/studio-adapters"
 import {OpenDAWHeaders} from "../OpenDAWHeaders"
-import {network, Promises} from "@opendaw/lib-runtime"
+import {network, Promises} from "@moises-ai/lib-runtime"
 import {z} from "zod"
 
 export class OpenSoundfontAPI {

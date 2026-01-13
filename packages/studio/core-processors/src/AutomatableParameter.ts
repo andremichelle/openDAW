@@ -1,5 +1,5 @@
-import {Address, PrimitiveValues} from "@opendaw/lib-box"
-import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
+import {Address, PrimitiveValues} from "@moises-ai/lib-box"
+import {AutomatableParameterFieldAdapter} from "@moises-ai/studio-adapters"
 import {
     assert,
     Notifier,
@@ -10,8 +10,8 @@ import {
     TerminableOwner,
     Terminator,
     unitValue
-} from "@opendaw/lib-std"
-import {ppqn} from "@opendaw/lib-dsp"
+} from "@moises-ai/lib-std"
+import {ppqn} from "@moises-ai/lib-dsp"
 import {EngineContext} from "./EngineContext"
 
 export class AutomatableParameter<T extends PrimitiveValues = any> implements TerminableOwner, Terminable {

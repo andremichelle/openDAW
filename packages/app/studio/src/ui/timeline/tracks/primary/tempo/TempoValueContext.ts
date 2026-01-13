@@ -8,9 +8,9 @@ import {
     Terminator,
     unitValue,
     ValueMapping
-} from "@opendaw/lib-std"
-import {TempoRange, TimelineBoxAdapter} from "@opendaw/studio-adapters"
-import {bpm} from "@opendaw/lib-dsp"
+} from "@moises-ai/lib-std"
+import {TempoRange, TimelineBoxAdapter} from "@moises-ai/studio-adapters"
+import {bpm} from "@moises-ai/lib-dsp"
 
 export class TempoValueContext implements ValueContext, Terminable {
     readonly #terminator = new Terminator()

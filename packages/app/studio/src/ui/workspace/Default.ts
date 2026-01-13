@@ -1,7 +1,7 @@
 import {PanelState} from "@/ui/workspace/PanelState.ts"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
 import {Workspace} from "./Workspace.ts"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol} from "@moises-ai/studio-enums"
 
 const BrowserPanel = PanelState.create({
     type: "panel",

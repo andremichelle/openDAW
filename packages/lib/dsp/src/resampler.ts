@@ -1,4 +1,4 @@
-import {Arrays, int} from "@opendaw/lib-std"
+import {Arrays, int} from "@moises-ai/lib-std"
 import {RenderQuantum} from "./constants"
 import {StereoMatrix} from "./stereo"
 

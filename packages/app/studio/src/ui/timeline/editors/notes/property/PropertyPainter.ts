@@ -1,4 +1,4 @@
-import {Arrays, ObservableValue, Option, Procedure, ValueAxis} from "@opendaw/lib-std"
+import {Arrays, ObservableValue, Option, Procedure, ValueAxis} from "@moises-ai/lib-std"
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {PropertyNodeSize} from "@/ui/timeline/editors/notes/Constants.ts"
 import {renderTimeGrid} from "@/ui/timeline/editors/TimeGridRenderer.ts"
@@ -8,7 +8,7 @@ import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {NoteModifyStrategies, NoteModifyStrategy} from "@/ui/timeline/editors/notes/NoteModifyStrategies.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {TimelineRange} from "@opendaw/studio-core"
+import {TimelineRange} from "@moises-ai/studio-core"
 
 type Construct = {
     canvas: HTMLCanvasElement,

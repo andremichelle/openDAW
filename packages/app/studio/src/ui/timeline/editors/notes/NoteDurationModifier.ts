@@ -1,13 +1,13 @@
-import {int, Notifier, Observer, Option, Selection, Terminable, unitValue} from "@opendaw/lib-std"
+import {int, Notifier, Observer, Option, Selection, Terminable, unitValue} from "@moises-ai/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {BoxEditing} from "@opendaw/lib-box"
+import {BoxEditing} from "@moises-ai/lib-box"
 import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
-import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
-import {EventCollection, NoteEvent, ppqn} from "@opendaw/lib-dsp"
+import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
+import {EventCollection, NoteEvent, ppqn} from "@moises-ai/lib-dsp"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {UINoteEvent} from "./UINoteEvent"
-import {Dragging} from "@opendaw/lib-dom"
+import {Dragging} from "@moises-ai/lib-dom"
 
 class SelectedModifyStrategy implements NoteModifyStrategy {
     readonly #tool: NoteDurationModifier

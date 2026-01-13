@@ -1,6 +1,6 @@
 import css from "./FlexSpace.sass?inline"
-import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "FlexSpace")
 

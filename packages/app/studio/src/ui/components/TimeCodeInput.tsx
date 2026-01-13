@@ -8,10 +8,10 @@ import {
     MutableObservableValue,
     safeRead,
     tryCatch
-} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {ppqn, PPQN} from "@opendaw/lib-dsp"
-import {Events, Html} from "@opendaw/lib-dom"
+} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {ppqn, PPQN} from "@moises-ai/lib-dsp"
+import {Events, Html} from "@moises-ai/lib-dom"
 
 const defaultClassName = Html.adoptStyleSheet(css, "TimeCodeInput")
 

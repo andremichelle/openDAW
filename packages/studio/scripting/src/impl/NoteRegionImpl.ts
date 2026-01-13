@@ -1,8 +1,8 @@
 import {NoteEvent, NoteRegion, NoteRegionProps, NoteTrack} from "../Api"
-import {PPQN, ppqn} from "@opendaw/lib-dsp"
-import {int} from "@opendaw/lib-std"
+import {PPQN, ppqn} from "@moises-ai/lib-dsp"
+import {int} from "@moises-ai/lib-std"
 import {NoteEventImpl} from "./NoteEventImpl"
-import {ColorCodes, TrackType} from "@opendaw/studio-adapters"
+import {ColorCodes, TrackType} from "@moises-ai/studio-adapters"
 
 export class NoteRegionImpl implements NoteRegion {
     readonly track: NoteTrack

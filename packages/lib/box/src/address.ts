@@ -11,7 +11,7 @@ import {
     Nullable,
     SortedSet,
     UUID
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {FieldKey, FieldKeys} from "./field"
 
 export type AddressJSON = { uuid: Array<int>, fields: Array<int> }

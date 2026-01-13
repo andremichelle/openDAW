@@ -11,10 +11,10 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {EventCollection, ppqn, PPQN} from "@opendaw/lib-dsp"
-import {Address, Int32Field, Propagation, Update} from "@opendaw/lib-box"
-import {NoteClipBox} from "@opendaw/studio-boxes"
+} from "@moises-ai/lib-std"
+import {EventCollection, ppqn, PPQN} from "@moises-ai/lib-dsp"
+import {Address, Int32Field, Propagation, Update} from "@moises-ai/lib-box"
+import {NoteClipBox} from "@moises-ai/studio-boxes"
 import {NoteEventCollectionBoxAdapter} from "../collection/NoteEventCollectionBoxAdapter"
 import {ClipBoxAdapter, ClipBoxAdapterVisitor} from "../ClipBoxAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"

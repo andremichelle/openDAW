@@ -1,4 +1,4 @@
-import {EventCollection, ppqn, PPQN, TimeBase, TimeBaseConverter} from "@opendaw/lib-dsp"
+import {EventCollection, ppqn, PPQN, TimeBase, TimeBaseConverter} from "@moises-ai/lib-dsp"
 import {
     asEnumValue,
     DefaultObservableValue,
@@ -17,11 +17,11 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {AudioClipBox} from "@opendaw/studio-boxes"
-import {Address, Int32Field, PointerField, Propagation, Update} from "@opendaw/lib-box"
+} from "@moises-ai/lib-std"
+import {AudioClipBox} from "@moises-ai/studio-boxes"
+import {Address, Int32Field, PointerField, Propagation, Update} from "@moises-ai/lib-box"
 import {ClipBoxAdapter, ClipBoxAdapterVisitor} from "../ClipBoxAdapter"
-import {Pointers} from "@opendaw/studio-enums"
+import {Pointers} from "@moises-ai/studio-enums"
 import {TrackBoxAdapter} from "../TrackBoxAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {AudioFileBoxAdapter} from "../../audio/AudioFileBoxAdapter"

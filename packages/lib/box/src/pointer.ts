@@ -14,7 +14,7 @@ import {
     safeExecute,
     Subscription,
     tryCatch
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {Vertex, VertexVisitor} from "./vertex"
 import {Address} from "./address"
 import {PointerHub} from "./pointer-hub"

@@ -13,14 +13,14 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {Address, Field, PrimitiveField, PrimitiveValues} from "@opendaw/lib-box"
-import {MidiData} from "@opendaw/lib-midi"
-import {Pointers} from "@opendaw/studio-enums"
+} from "@moises-ai/lib-std"
+import {Address, Field, PrimitiveField, PrimitiveValues} from "@moises-ai/lib-box"
+import {MidiData} from "@moises-ai/lib-midi"
+import {Pointers} from "@moises-ai/studio-enums"
 import {Project} from "../project"
 import {MidiDevices} from "./MidiDevices"
-import {AnimationFrame} from "@opendaw/lib-dom"
-import {MIDIControllerBox} from "@opendaw/studio-boxes"
+import {AnimationFrame} from "@moises-ai/lib-dom"
+import {MIDIControllerBox} from "@moises-ai/studio-boxes"
 
 interface MIDIConnection {
     box: MIDIControllerBox

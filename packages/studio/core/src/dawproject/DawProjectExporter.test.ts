@@ -7,13 +7,13 @@ import {
     SampleLoader,
     SampleLoaderManager,
     SampleLoaderState
-} from "@opendaw/studio-adapters"
-import {Observer, Option, panic, Subscription, Terminable, UUID} from "@opendaw/lib-std"
-import {Xml} from "@opendaw/lib-xml"
-import {FileReferenceSchema} from "@opendaw/lib-dawproject"
+} from "@moises-ai/studio-adapters"
+import {Observer, Option, panic, Subscription, Terminable, UUID} from "@moises-ai/lib-std"
+import {Xml} from "@moises-ai/lib-xml"
+import {FileReferenceSchema} from "@moises-ai/lib-dawproject"
 import {DawProjectExporter} from "./DawProjectExporter"
-import {Peaks} from "@opendaw/lib-fusion"
-import {AudioData} from "@opendaw/lib-dsp"
+import {Peaks} from "@moises-ai/lib-fusion"
+import {AudioData} from "@moises-ai/lib-dsp"
 
 describe("DawProjectExport", () => {
     it("export", async () => {

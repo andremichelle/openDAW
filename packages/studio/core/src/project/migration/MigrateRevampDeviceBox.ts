@@ -1,6 +1,6 @@
-import {BoxGraph} from "@opendaw/lib-box"
-import {clamp} from "@opendaw/lib-std"
-import {BoxIO, RevampDeviceBox} from "@opendaw/studio-boxes"
+import {BoxGraph} from "@moises-ai/lib-box"
+import {clamp} from "@moises-ai/lib-std"
+import {BoxIO, RevampDeviceBox} from "@moises-ai/studio-boxes"
 
 export const migrateRevampDeviceBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box: RevampDeviceBox): void => {
     boxGraph.beginTransaction()

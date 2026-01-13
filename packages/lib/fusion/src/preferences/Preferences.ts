@@ -7,7 +7,7 @@ import {
     Terminable,
     tryCatch,
     ValueAtPath
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {PreferencesFacade} from "./PreferencesFacade"
 import {PreferencesHost} from "./PreferencesHost"
 import {z} from "zod"

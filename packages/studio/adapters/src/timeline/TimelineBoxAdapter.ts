@@ -1,4 +1,4 @@
-import {TimelineBox} from "@opendaw/studio-boxes"
+import {TimelineBox} from "@moises-ai/studio-boxes"
 import {
     int,
     MutableObservableOption,
@@ -9,13 +9,13 @@ import {
     Subscription,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {Address} from "@opendaw/lib-box"
+} from "@moises-ai/lib-std"
+import {Address} from "@moises-ai/lib-box"
 import {BoxAdapter} from "../BoxAdapter"
 import {MarkerTrackAdapter} from "./MarkerTrackAdapter"
 import {SignatureTrackAdapter} from "./SignatureTrackAdapter"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
-import {PPQN, ppqn} from "@opendaw/lib-dsp"
+import {PPQN, ppqn} from "@moises-ai/lib-dsp"
 import {ValueEventCollectionBoxAdapter} from "./collection/ValueEventCollectionBoxAdapter"
 
 export class TimelineBoxAdapter implements BoxAdapter {

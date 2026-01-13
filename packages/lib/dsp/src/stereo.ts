@@ -1,4 +1,4 @@
-import {clamp, int, PI_QUART} from "@opendaw/lib-std"
+import {clamp, int, PI_QUART} from "@moises-ai/lib-std"
 import {Mixing} from "./mixing"
 
 export namespace StereoMatrix {

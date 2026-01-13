@@ -1,4 +1,4 @@
-import {Procedure} from "@opendaw/lib-std"
+import {Procedure} from "@moises-ai/lib-std"
 import {Inject} from "./inject"
 
 export type DomElement = HTMLElement | SVGElement

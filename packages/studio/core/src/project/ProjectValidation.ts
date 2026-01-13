@@ -1,7 +1,7 @@
-import {AudioRegionBox, BoxVisitor, NoteRegionBox, TrackBox, ValueRegionBox} from "@opendaw/studio-boxes"
-import {Arrays, asDefined, EmptyExec, RuntimeNotifier} from "@opendaw/lib-std"
-import {ProjectSkeleton} from "@opendaw/studio-adapters"
-import {Box} from "@opendaw/lib-box"
+import {AudioRegionBox, BoxVisitor, NoteRegionBox, TrackBox, ValueRegionBox} from "@moises-ai/studio-boxes"
+import {Arrays, asDefined, EmptyExec, RuntimeNotifier} from "@moises-ai/lib-std"
+import {ProjectSkeleton} from "@moises-ai/studio-adapters"
+import {Box} from "@moises-ai/lib-box"
 
 export namespace ProjectValidation {
     export const validate = (skeleton: ProjectSkeleton): void => {

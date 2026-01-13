@@ -1,4 +1,4 @@
-import {int, Provider, Terminable} from "@opendaw/lib-std"
+import {int, Provider, Terminable} from "@moises-ai/lib-std"
 
 type MIDIMessageCallback = (deviceId: string, data: Uint8Array, timeMs: int) => void
 

@@ -1,14 +1,14 @@
 import css from "./ManualPage.sass?inline"
-import {Await, createElement, Frag, LocalLink, PageContext, PageFactory, RouteLocation} from "@opendaw/lib-jsx"
+import {Await, createElement, Frag, LocalLink, PageContext, PageFactory, RouteLocation} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {BackButton} from "@/ui/pages/BackButton"
 import {Markdown} from "@/ui/Markdown"
 import {Manual, Manuals} from "@/ui/pages/Manuals"
-import {Html} from "@opendaw/lib-dom"
-import {CloudBackup, MenuItem} from "@opendaw/studio-core"
-import {EmptyExec, panic} from "@opendaw/lib-std"
-import {network} from "@opendaw/lib-runtime"
+import {Html} from "@moises-ai/lib-dom"
+import {CloudBackup, MenuItem} from "@moises-ai/studio-core"
+import {EmptyExec, panic} from "@moises-ai/lib-std"
+import {network} from "@moises-ai/lib-runtime"
 
 const className = Html.adoptStyleSheet(css, "ManualPage")
 

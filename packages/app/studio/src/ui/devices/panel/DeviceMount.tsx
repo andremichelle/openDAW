@@ -1,8 +1,8 @@
-import {AudioEffectDeviceAdapter, DeviceBoxAdapter, DeviceHost, MidiEffectDeviceAdapter} from "@opendaw/studio-adapters"
+import {AudioEffectDeviceAdapter, DeviceBoxAdapter, DeviceHost, MidiEffectDeviceAdapter} from "@moises-ai/studio-adapters"
 import {DeviceEditorFactory} from "@/ui/devices/DeviceEditorFactory"
-import {Exec, Lifecycle, Option, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
-import {JsxValue} from "@opendaw/lib-jsx"
-import {Box} from "@opendaw/lib-box"
+import {Exec, Lifecycle, Option, Subscription, Terminable, Terminator, UUID} from "@moises-ai/lib-std"
+import {JsxValue} from "@moises-ai/lib-jsx"
+import {Box} from "@moises-ai/lib-box"
 import {StudioService} from "@/service/StudioService"
 
 type DeviceFactory = (service: StudioService, lifecycle: Lifecycle, box: Box, deviceHost: DeviceHost) => JsxValue

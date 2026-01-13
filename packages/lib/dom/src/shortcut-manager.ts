@@ -16,7 +16,7 @@ import {
     Subscription,
     Terminable,
     Terminator
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {Browser} from "./browser"
 import {Events} from "./events"
 import {Key} from "./key"

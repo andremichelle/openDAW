@@ -11,9 +11,9 @@ import {
     Terminator,
     unitValue,
     UUID
-} from "@opendaw/lib-std"
-import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
-import {ppqn, UpdateClockRate} from "@opendaw/lib-dsp"
+} from "@moises-ai/lib-std"
+import {Address, BooleanField, Int32Field, PointerField, StringField} from "@moises-ai/lib-box"
+import {ppqn, UpdateClockRate} from "@moises-ai/lib-dsp"
 import {BoxAdapter} from "../BoxAdapter"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {TrackClips} from "./TrackClips"
@@ -23,8 +23,8 @@ import {TrackType} from "./TrackType"
 import {AnyClipBoxAdapter, AnyRegionBoxAdapter} from "../UnionAdapterTypes"
 import {ValueClipBoxAdapter} from "./clip/ValueClipBoxAdapter"
 import {ValueRegionBoxAdapter} from "./region/ValueRegionBoxAdapter"
-import {AudioUnitBox, TrackBox} from "@opendaw/studio-boxes"
-import {Pointers} from "@opendaw/studio-enums"
+import {AudioUnitBox, TrackBox} from "@moises-ai/studio-boxes"
+import {Pointers} from "@moises-ai/studio-enums"
 
 export class TrackBoxAdapter implements BoxAdapter {
     readonly #context: BoxAdaptersContext

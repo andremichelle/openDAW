@@ -1,7 +1,7 @@
-import {AudioFileBox, TransientMarkerBox} from "@opendaw/studio-boxes"
-import {Option, Provider, UUID} from "@opendaw/lib-std"
-import {AudioData, TransientProtocol} from "@opendaw/lib-dsp"
-import {BoxGraph} from "@opendaw/lib-box"
+import {AudioFileBox, TransientMarkerBox} from "@moises-ai/studio-boxes"
+import {Option, Provider, UUID} from "@moises-ai/lib-std"
+import {AudioData, TransientProtocol} from "@moises-ai/lib-dsp"
+import {BoxGraph} from "@moises-ai/lib-box"
 
 export namespace AudioFileBoxFactory {
     const applyTransients = (audioFileBox: AudioFileBox, transients: ReadonlyArray<number>) =>

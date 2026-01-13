@@ -1,4 +1,4 @@
-import {IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol} from "@moises-ai/studio-enums"
 
 export interface DeviceFactory {
     readonly defaultName: string

@@ -1,8 +1,8 @@
-import {asDefined, asInstanceOf, Color, ifDefined, isInstanceOf, Maybe, Option, UUID} from "@opendaw/lib-std"
-import {Xml} from "@opendaw/lib-xml"
-import {dbToGain, PPQN} from "@opendaw/lib-dsp"
-import {AddressIdEncoder, BooleanField, Field} from "@opendaw/lib-box"
-import {Html} from "@opendaw/lib-dom"
+import {asDefined, asInstanceOf, Color, ifDefined, isInstanceOf, Maybe, Option, UUID} from "@moises-ai/lib-std"
+import {Xml} from "@moises-ai/lib-xml"
+import {dbToGain, PPQN} from "@moises-ai/lib-dsp"
+import {AddressIdEncoder, BooleanField, Field} from "@moises-ai/lib-box"
+import {Html} from "@moises-ai/lib-dom"
 import {
     ApplicationSchema,
     ArrangementSchema,
@@ -31,8 +31,8 @@ import {
     Unit,
     WarpSchema,
     WarpsSchema
-} from "@opendaw/lib-dawproject"
-import {AudioUnitType} from "@opendaw/studio-enums"
+} from "@moises-ai/lib-dawproject"
+import {AudioUnitType} from "@moises-ai/studio-enums"
 import {
     AudioFileBox,
     AudioRegionBox,
@@ -43,8 +43,8 @@ import {
     NoteRegionBox,
     TrackBox,
     ValueRegionBox
-} from "@opendaw/studio-boxes"
-import {ColorCodes, DeviceBoxUtils, ProjectSkeleton, SampleLoaderManager} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-boxes"
+import {ColorCodes, DeviceBoxUtils, ProjectSkeleton, SampleLoaderManager} from "@moises-ai/studio-adapters"
 import {AudioUnitExportLayout} from "./AudioUnitExportLayout"
 import {DeviceIO} from "./DeviceIO"
 import {WavFile} from "../WavFile"

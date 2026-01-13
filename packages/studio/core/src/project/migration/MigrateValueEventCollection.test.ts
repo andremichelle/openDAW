@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest"
-import {BoxGraph} from "@opendaw/lib-box"
-import {isDefined, Option, UUID} from "@opendaw/lib-std"
-import {BoxIO, BoxVisitor, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
+import {BoxGraph} from "@moises-ai/lib-box"
+import {isDefined, Option, UUID} from "@moises-ai/lib-std"
+import {BoxIO, BoxVisitor, ValueEventBox, ValueEventCollectionBox} from "@moises-ai/studio-boxes"
 import {migrateValueEventCollection} from "./MigrateValueEventCollection"
 
 const createTestSetup = () => {

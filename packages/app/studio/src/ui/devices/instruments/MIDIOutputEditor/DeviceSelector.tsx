@@ -10,14 +10,14 @@ import {
     Strings,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {createElement, Inject} from "@opendaw/lib-jsx"
+} from "@moises-ai/lib-std"
+import {createElement, Inject} from "@moises-ai/lib-jsx"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {MenuItem, MidiDevices, Project} from "@opendaw/studio-core"
-import {MIDIOutputDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {MIDIOutputBox, RootBox} from "@opendaw/studio-boxes"
-import {Html} from "@opendaw/lib-dom"
+import {MenuItem, MidiDevices, Project} from "@moises-ai/studio-core"
+import {MIDIOutputDeviceBoxAdapter} from "@moises-ai/studio-adapters"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
+import {MIDIOutputBox, RootBox} from "@moises-ai/studio-boxes"
+import {Html} from "@moises-ai/lib-dom"
 import {NumberInput} from "@/ui/components/NumberInput"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Icon} from "@/ui/components/Icon"

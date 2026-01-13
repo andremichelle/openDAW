@@ -1,7 +1,7 @@
-import {PrimitiveField} from "@opendaw/lib-box"
-import {DefaultParameter, int, StringMapping, ValueMapping} from "@opendaw/lib-std"
-import {NoteEventBox} from "@opendaw/studio-boxes"
-import {PPQN} from "@opendaw/lib-dsp"
+import {PrimitiveField} from "@moises-ai/lib-box"
+import {DefaultParameter, int, StringMapping, ValueMapping} from "@moises-ai/lib-std"
+import {NoteEventBox} from "@moises-ai/studio-boxes"
+import {PPQN} from "@moises-ai/lib-dsp"
 
 export type OnlyPrimitives<T> = { [K in keyof T as T[K] extends PrimitiveField<number> ? K : never]: T[K] }
 

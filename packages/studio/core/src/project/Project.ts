@@ -10,8 +10,8 @@ import {
     TerminableOwner,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {BoxEditing, BoxGraph, DeleteUpdate, NewUpdate} from "@opendaw/lib-box"
+} from "@moises-ai/lib-std"
+import {BoxEditing, BoxGraph, DeleteUpdate, NewUpdate} from "@moises-ai/lib-box"
 import {
     AudioBusBox,
     AudioFileBox,
@@ -23,7 +23,7 @@ import {
     TimelineBox,
     TrackBox,
     UserInterfaceBox
-} from "@opendaw/studio-boxes"
+} from "@moises-ai/studio-boxes"
 import {
     BoxAdapters,
     BoxAdaptersContext,
@@ -40,8 +40,8 @@ import {
     UserEditingManager,
     VaryingTempoMap,
     VertexSelection
-} from "@opendaw/studio-adapters"
-import {LiveStreamBroadcaster, LiveStreamReceiver} from "@opendaw/lib-fusion"
+} from "@moises-ai/studio-adapters"
+import {LiveStreamBroadcaster, LiveStreamReceiver} from "@moises-ai/lib-fusion"
 import {ProjectEnv} from "./ProjectEnv"
 import {Mixer} from "../Mixer"
 import {ProjectApi} from "./ProjectApi"
@@ -51,8 +51,8 @@ import {EngineFacade} from "../EngineFacade"
 import {EngineWorklet} from "../EngineWorklet"
 import {MidiDevices, MIDILearning} from "../midi"
 import {ProjectValidation} from "./ProjectValidation"
-import {ppqn, TempoMap, TimeBase} from "@opendaw/lib-dsp"
-import {MidiData} from "@opendaw/lib-midi"
+import {ppqn, TempoMap, TimeBase} from "@moises-ai/lib-dsp"
+import {MidiData} from "@moises-ai/lib-midi"
 import {StudioPreferences} from "../StudioPreferences"
 
 export type RestartWorklet = { unload: Func<unknown, Promise<unknown>>, load: Procedure<EngineWorklet> }

@@ -1,6 +1,6 @@
-import {AudioEffectDeviceAdapter, CompressorDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {int, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
-import {AudioBuffer, dbToGain, Event, gainToDb, Ramp, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioEffectDeviceAdapter, CompressorDeviceBoxAdapter} from "@moises-ai/studio-adapters"
+import {int, Option, Terminable, Terminator, UUID} from "@moises-ai/lib-std"
+import {AudioBuffer, dbToGain, Event, gainToDb, Ramp, RenderQuantum} from "@moises-ai/lib-dsp"
 import {EngineContext} from "../../EngineContext"
 import {Block, Processor, ProcessPhase} from "../../processing"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
@@ -14,7 +14,7 @@ import {
     LevelDetector,
     LookAhead,
     SmoothingFilter
-} from "@opendaw/lib-dsp/ctagdrc"
+} from "@moises-ai/lib-dsp/ctagdrc"
 
 /**
  * Ported from https://github.com/p-hlp/CTAGDRC

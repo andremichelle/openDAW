@@ -1,11 +1,11 @@
-import {Bits, int, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {TidalDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {Bits, int, Option, Terminable, UUID} from "@moises-ai/lib-std"
+import {TidalDeviceBoxAdapter} from "@moises-ai/studio-adapters"
 import {EngineContext} from "../../EngineContext"
 import {Block, BlockFlag, Processor} from "../../processing"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
 import {AutomatableParameter} from "../../AutomatableParameter"
 import {AudioEffectDeviceProcessor} from "../../AudioEffectDeviceProcessor"
-import {AudioBuffer, Fraction, PPQN, Smooth, TidalComputer} from "@opendaw/lib-dsp"
+import {AudioBuffer, Fraction, PPQN, Smooth, TidalComputer} from "@moises-ai/lib-dsp"
 import {AudioProcessor} from "../../AudioProcessor"
 
 export class TidalDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {

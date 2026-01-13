@@ -1,5 +1,5 @@
 import {CloudHandler} from "./CloudHandler"
-import {assert, Errors, isDefined, Option, panic} from "@opendaw/lib-std"
+import {assert, Errors, isDefined, Option, panic} from "@moises-ai/lib-std"
 
 type DriveFile = {
     id: string

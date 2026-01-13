@@ -1,8 +1,8 @@
-import {DefaultObservableValue, isDefined, Lifecycle, Nullable, Terminator} from "@opendaw/lib-std"
-import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
-import {AnyClipBoxAdapter} from "@opendaw/studio-adapters"
+import {DefaultObservableValue, isDefined, Lifecycle, Nullable, Terminator} from "@moises-ai/lib-std"
+import {createElement, Group, replaceChildren} from "@moises-ai/lib-jsx"
+import {AnyClipBoxAdapter} from "@moises-ai/studio-adapters"
 import {Clip} from "@/ui/timeline/tracks/audio-unit/clips/Clip.tsx"
-import {Project} from "@opendaw/studio-core"
+import {Project} from "@moises-ai/studio-core"
 
 type Construct = {
     lifecycle: Lifecycle

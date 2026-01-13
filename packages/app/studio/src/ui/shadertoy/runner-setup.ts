@@ -1,5 +1,5 @@
-import {AnimationFrame} from "@opendaw/lib-dom"
-import {Terminable, ValueOwner} from "@opendaw/lib-std"
+import {AnimationFrame} from "@moises-ai/lib-dom"
+import {Terminable, ValueOwner} from "@moises-ai/lib-std"
 import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
 
 export const setupShadertoyRunner = (runner: ShadertoyRunner,

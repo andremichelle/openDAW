@@ -2,8 +2,8 @@ import "@/monaco/imports"
 import * as monaco from "monaco-editor"
 import "monaco-editor/esm/vs/language/typescript/monaco.contribution"
 import "monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution"
-import declarations from "@opendaw/studio-scripting/api.declaration?raw"
-import library from "@opendaw/studio-scripting/library?raw"
+import declarations from "@moises-ai/studio-scripting/api.declaration?raw"
+import library from "@moises-ai/studio-scripting/library?raw"
 
 // Configure TypeScript defaults
 const tsDefaults = monaco.languages.typescript.typescriptDefaults

@@ -1,4 +1,4 @@
-import {assert, clamp, TAU, unitValue} from "@opendaw/lib-std"
+import {assert, clamp, TAU, unitValue} from "@moises-ai/lib-std"
 
 // turns out the following code is producing similar but different frequency responses
 // https://chromium.googlesource.com/chromium/blink/+/refs/heads/main/Source/platform/audio/Biquad.cpp

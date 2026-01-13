@@ -1,6 +1,6 @@
-import {Promises} from "@opendaw/lib-runtime"
-import {Arrays, Errors, Optional} from "@opendaw/lib-std"
-import {ConstrainDOM} from "@opendaw/lib-dom"
+import {Promises} from "@moises-ai/lib-runtime"
+import {Arrays, Errors, Optional} from "@moises-ai/lib-std"
+import {ConstrainDOM} from "@moises-ai/lib-dom"
 
 export class AudioDevices {
     static async requestPermission() {

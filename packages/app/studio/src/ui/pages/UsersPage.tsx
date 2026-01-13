@@ -1,9 +1,9 @@
 import css from "./UsersPage.sass?inline"
-import {Await, createElement, Frag, PageContext, PageFactory, replaceChildren} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {Await, createElement, Frag, PageContext, PageFactory, replaceChildren} from "@moises-ai/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
 import type {StudioService} from "@/service/StudioService.ts"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
-import {Colors} from "@opendaw/studio-enums"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "UsersPage")
 

@@ -1,16 +1,16 @@
 import css from "./TimeStateDisplay.sass?inline"
-import {float, Lifecycle, ObservableValue, Option, Terminator} from "@opendaw/lib-std"
-import {createElement, Inject} from "@opendaw/lib-jsx"
+import {float, Lifecycle, ObservableValue, Option, Terminator} from "@moises-ai/lib-std"
+import {createElement, Inject} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {Html} from "@opendaw/lib-dom"
-import {FpsOptions, ProjectProfile, StudioPreferences} from "@opendaw/studio-core"
+import {Html} from "@moises-ai/lib-dom"
+import {FpsOptions, ProjectProfile, StudioPreferences} from "@moises-ai/studio-core"
 import {TapButton} from "@/ui/header/TapButton"
 import {MusicalUnitDisplay} from "@/ui/header/MusicalUnitDisplay"
 import {AbsoluteUnitDisplay} from "@/ui/header/AbsoluteUnitDisplay"
 import {TempoControl} from "@/ui/header/TempoControl"
 import {MeterControl} from "@/ui/header/MeterControl"
-import {ContextMenu, MenuItem} from "@opendaw/studio-core"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "TimeStateDisplay")
 

@@ -1,5 +1,5 @@
 import {NoteEvent} from "../Api"
-import {ppqn} from "@opendaw/lib-dsp"
+import {ppqn} from "@moises-ai/lib-dsp"
 
 export class NoteEventImpl implements NoteEvent {
     position: ppqn

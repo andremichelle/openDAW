@@ -1,13 +1,13 @@
 import css from "./PreferencePanel.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {Lifecycle, Optional} from "@opendaw/lib-std"
-import {createElement, Frag} from "@opendaw/lib-jsx"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Html} from "@moises-ai/lib-dom"
+import {Lifecycle, Optional} from "@moises-ai/lib-std"
+import {createElement, Frag} from "@moises-ai/lib-jsx"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Icon} from "@/ui/components/Icon"
 import {NumberInput} from "@/ui/components/NumberInput"
 import {RadioGroup} from "@/ui/components/RadioGroup"
-import {Preferences} from "@opendaw/lib-fusion"
+import {Preferences} from "@moises-ai/lib-fusion"
 
 const className = Html.adoptStyleSheet(css, "PreferencePanel")
 

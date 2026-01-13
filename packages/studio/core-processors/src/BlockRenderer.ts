@@ -1,4 +1,4 @@
-import {bpm, ppqn, PPQN, RenderQuantum, TempoChangeGrid} from "@opendaw/lib-dsp"
+import {bpm, ppqn, PPQN, RenderQuantum, TempoChangeGrid} from "@moises-ai/lib-dsp"
 import {Block, BlockFlags, ProcessInfo} from "./processing"
 import {EngineContext} from "./EngineContext"
 import {
@@ -13,8 +13,8 @@ import {
     SetMultimap,
     Terminable,
     Terminator
-} from "@opendaw/lib-std"
-import {MarkerBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
+} from "@moises-ai/lib-std"
+import {MarkerBoxAdapter, ValueEventCollectionBoxAdapter} from "@moises-ai/studio-adapters"
 
 type Action = null
     | { type: "loop", target: ppqn }

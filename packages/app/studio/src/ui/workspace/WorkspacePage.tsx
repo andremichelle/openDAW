@@ -1,8 +1,8 @@
 import css from "./WorkspacePage.sass?inline"
-import {Terminator} from "@opendaw/lib-std"
-import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
+import {Terminator} from "@moises-ai/lib-std"
+import {createElement, PageContext, PageFactory} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 import {WorkspaceBuilder} from "@/ui/workspace/WorkspaceBuilder"
 
 const className = Html.adoptStyleSheet(css, "WorkspacePage")

@@ -1,9 +1,9 @@
 import css from "./CutCursor.sass?inline"
-import {isDefined, Lifecycle, Nullable, ObservableValue} from "@opendaw/lib-std"
-import {ppqn} from "@opendaw/lib-dsp"
-import {TimelineRange} from "@opendaw/studio-core"
-import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {isDefined, Lifecycle, Nullable, ObservableValue} from "@moises-ai/lib-std"
+import {ppqn} from "@moises-ai/lib-dsp"
+import {TimelineRange} from "@moises-ai/studio-core"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "CutCursor")
 

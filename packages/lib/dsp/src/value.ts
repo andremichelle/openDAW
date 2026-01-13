@@ -1,4 +1,4 @@
-import {BinarySearch, Comparator, Curve, int, Iterables, Nullable, panic, unitValue} from "@opendaw/lib-std"
+import {BinarySearch, Comparator, Curve, int, Iterables, Nullable, panic, unitValue} from "@moises-ai/lib-std"
 import {Event, EventCollection} from "./events"
 import {ppqn} from "./ppqn"
 

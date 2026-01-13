@@ -1,7 +1,7 @@
-import {Arrays, int, Terminable} from "@opendaw/lib-std"
-import {Address} from "@opendaw/lib-box"
-import {RenderQuantum, RMS, StereoMatrix} from "@opendaw/lib-dsp"
-import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
+import {Arrays, int, Terminable} from "@moises-ai/lib-std"
+import {Address} from "@moises-ai/lib-box"
+import {RenderQuantum, RMS, StereoMatrix} from "@moises-ai/lib-dsp"
+import {LiveStreamBroadcaster} from "@moises-ai/lib-fusion"
 
 export class PeakBroadcaster implements Terminable {
     static readonly PEAK_DECAY = Math.exp(-1.0 / (sampleRate * 0.250))

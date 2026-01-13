@@ -17,11 +17,11 @@ import {
     Terminator,
     unitValue,
     ValueMapping
-} from "@opendaw/lib-std"
-import {ppqn} from "@opendaw/lib-dsp"
-import {Address, PointerField, PointerTypes, PrimitiveField, PrimitiveType, PrimitiveValues} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
-import {BoxVisitor, TrackBox} from "@opendaw/studio-boxes"
+} from "@moises-ai/lib-std"
+import {ppqn} from "@moises-ai/lib-dsp"
+import {Address, PointerField, PointerTypes, PrimitiveField, PrimitiveType, PrimitiveValues} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
+import {BoxVisitor, TrackBox} from "@moises-ai/studio-boxes"
 import {TrackBoxAdapter} from "./timeline/TrackBoxAdapter"
 import {BoxAdaptersContext} from "./BoxAdaptersContext"
 

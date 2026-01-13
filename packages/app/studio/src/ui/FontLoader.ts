@@ -1,6 +1,6 @@
 import {Fonts} from "@/ui/Fonts"
-import {loadFont} from "@opendaw/lib-dom"
-import {Lazy} from "@opendaw/lib-std"
+import {loadFont} from "@moises-ai/lib-dom"
+import {Lazy} from "@moises-ai/lib-std"
 
 export class FontLoader {
     @Lazy
