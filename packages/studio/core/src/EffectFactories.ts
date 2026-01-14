@@ -120,6 +120,7 @@ export namespace EffectFactories {
                 box.label.setValue("Delay")
                 box.index.setValue(index)
                 box.host.refer(hostField)
+                box.version.setValue(1)
             })
     }
 
