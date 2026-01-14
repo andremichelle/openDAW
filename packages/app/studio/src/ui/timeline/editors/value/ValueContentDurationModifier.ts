@@ -2,7 +2,7 @@ import {int, Notifier, Observer, Option, Terminable, unitValue} from "@opendaw/l
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {BoxEditing} from "@opendaw/lib-box"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
+import {Interpolation, ppqn, PPQN, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
 import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
 import {Dragging} from "@opendaw/lib-dom"
@@ -51,7 +51,7 @@ export class ValueContentDurationModifier implements ValueModifier {
     }
     readContentDuration(region: ValueEventOwnerReader): number {
         return Math.max(region.loopDuration + this.#deltaLoopDuration,
-            Math.min(region.loopDuration, this.#snapping.value(region.position)))
+            Math.min(region.loopDuration, PPQN.SemiQuaver))
     }
 
     update({clientX}: Dragging.Event): void {

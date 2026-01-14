@@ -1,7 +1,7 @@
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
 import {BoxEditing} from "@opendaw/lib-box"
 import {Arrays, int, Option} from "@opendaw/lib-std"
-import {ppqn, RegionCollection} from "@opendaw/lib-dsp"
+import {ppqn, PPQN, RegionCollection} from "@opendaw/lib-dsp"
 import {
     AnyLoopableRegionBoxAdapter,
     AnyRegionBoxAdapter,
@@ -24,7 +24,7 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
     readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.resolveLoopOffset(this.readPosition(region))}
     readLoopDuration(region: AnyLoopableRegionBoxAdapter): ppqn {
         if (!region.canResize) {return region.loopDuration}
-        return Math.max(Math.min(this.#tool.snapping.value(region.position), region.loopDuration),
+        return Math.max(Math.min(PPQN.SemiQuaver, region.loopDuration),
             region.loopDuration + this.#tool.deltaLoopDuration)
     }
     readMirror(region: AnyRegionBoxAdapter): boolean {return region.isMirrowed}

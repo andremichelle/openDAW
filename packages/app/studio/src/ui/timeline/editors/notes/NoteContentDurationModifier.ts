@@ -4,7 +4,7 @@ import {BoxEditing} from "@opendaw/lib-box"
 import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {ppqn} from "@opendaw/lib-dsp"
+import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {UINoteEvent} from "./UINoteEvent"
 import {Dragging} from "@opendaw/lib-dom"
 
@@ -46,7 +46,7 @@ export class NoteContentDurationModifier implements NoteModifier {
     showPropertyLine(): Option<Line> {return Option.None}
     readContentDuration(region: NoteEventOwnerReader): number {
         return Math.max(region.loopDuration + this.#deltaLoopDuration,
-            Math.min(region.loopDuration, this.#snapping.value(region.position)))
+            Math.min(region.loopDuration, PPQN.SemiQuaver))
     }
     selectedModifyStrategy(): NoteModifyStrategy {return NoteModifyStrategy.Identity}
     unselectedModifyStrategy(): NoteModifyStrategy {return NoteModifyStrategy.Identity}

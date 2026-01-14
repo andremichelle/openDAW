@@ -49,7 +49,7 @@ export class RegionReader<REGION extends LoopableRegionBoxAdapter<CONTENT>, CONT
     get loopOffset(): number {return this.region.loopOffset}
     get loopDuration(): number {return this.region.loopDuration}
     get contentDuration(): ppqn {return this.region.loopDuration}
-    set contentDuration(value: ppqn) {this.region.box.loopDuration.setValue(Math.max(PPQN.Quarter, value))}
+    set contentDuration(value: ppqn) {this.region.box.loopDuration.setValue(Math.max(PPQN.SemiQuaver, value))}
     get hue(): number {return this.region.hue}
     get mute(): boolean {return this.region.mute}
     get offset(): number {return this.region.offset}
