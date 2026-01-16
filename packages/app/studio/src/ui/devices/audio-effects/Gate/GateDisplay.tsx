@@ -1,6 +1,6 @@
 import css from "./GateDisplay.sass?inline"
 import {AnimationFrame, Html} from "@opendaw/lib-dom"
-import {clamp, Lifecycle} from "@opendaw/lib-std"
+import {clamp, Lifecycle, unitValue} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {CanvasPainter} from "@/ui/canvas/painter"
@@ -17,12 +17,6 @@ const DB_MIN = -60.0
 const DB_MAX = 0.0
 const HISTORY_SIZE = 256
 
-const dbToY = (db: number, height: number): number => {
-    const clampedDb = clamp(db, DB_MIN, DB_MAX)
-    const normalized = (clampedDb - DB_MIN) / (DB_MAX - DB_MIN)
-    return height * (1.0 - normalized)
-}
-
 export const GateDisplay = ({lifecycle, values}: Construct) => {
     const inputHistory = new Float32Array(HISTORY_SIZE).fill(DB_MIN)
     const outputHistory = new Float32Array(HISTORY_SIZE).fill(DB_MIN)
@@ -35,14 +29,19 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
                 const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
                     const {context, actualWidth, actualHeight} = painter
 
+                    const lineWidth = 1.0 / devicePixelRatio
+                    const bottom = actualHeight - lineWidth
+                    const normToY = (normalized: unitValue) =>
+                        bottom - (bottom - lineWidth) * normalized
+                    const dbToY = (db: number): number =>
+                        normToY((clamp(db, DB_MIN, DB_MAX) - DB_MIN) / (DB_MAX - DB_MIN))
+
                     inputHistory[writeIndex] = values[0]
                     outputHistory[writeIndex] = values[1]
                     envelopeHistory[writeIndex] = values[2]
                     writeIndex = (writeIndex + 1) % HISTORY_SIZE
 
                     context.clearRect(0, 0, actualWidth, actualHeight)
-
-                    const lineWidth = 1.0 / devicePixelRatio
 
                     const inputPath = new Path2D()
                     const outputPath = new Path2D()
@@ -51,11 +50,9 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
                     for (let i = 0; i < HISTORY_SIZE; i++) {
                         const bufferIndex = (writeIndex + i) % HISTORY_SIZE
                         const x = (i / HISTORY_SIZE) * actualWidth
-
-                        const inputY = dbToY(inputHistory[bufferIndex], actualHeight)
-                        const outputY = dbToY(outputHistory[bufferIndex], actualHeight)
-                        const envelopeY = (1.0 - envelopeHistory[bufferIndex]) * actualHeight
-
+                        const inputY = dbToY(inputHistory[bufferIndex])
+                        const outputY = dbToY(outputHistory[bufferIndex])
+                        const envelopeY = normToY(envelopeHistory[bufferIndex])
                         if (i === 0) {
                             inputPath.moveTo(x, inputY)
                             outputPath.moveTo(x, outputY)
@@ -76,7 +73,7 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
 
                     const inputGradient = context.createLinearGradient(0, 0, 0, actualHeight)
                     inputGradient.addColorStop(0, DisplayPaint.strokeStyle(0.3))
-                    inputGradient.addColorStop(1, DisplayPaint.strokeStyle(0.0))
+                    inputGradient.addColorStop(1, "transparent")
                     context.fillStyle = inputGradient
                     context.fill(inputPath)
 
@@ -89,11 +86,10 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
 
                     const outputGradient = context.createLinearGradient(0, 0, 0, actualHeight)
                     outputGradient.addColorStop(0, DisplayPaint.strokeStyle(0.3))
-                    outputGradient.addColorStop(1, DisplayPaint.strokeStyle(0.0))
+                    outputGradient.addColorStop(1, "transparent")
                     context.fillStyle = outputGradient
                     context.fill(outputPath)
-
-                    context.strokeStyle = Colors.orange.toString()
+                    context.strokeStyle = Colors.white.toString()
                     context.lineWidth = lineWidth
                     context.stroke(envelopePath)
                 }))
