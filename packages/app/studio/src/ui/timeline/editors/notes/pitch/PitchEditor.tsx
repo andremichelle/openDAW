@@ -182,17 +182,17 @@ export const PitchEditor = ({
         shortcuts.register(NoteEditorShortcuts["increment-note-octave"].shortcut, () =>
             modifySelection(({box, pitch}: NoteEventBoxAdapter) => {
                 if (pitch + 12 <= 127) {box.pitch.setValue(pitch + 12)}
-            })),
+            }), {allowRepeat: true}),
         shortcuts.register(NoteEditorShortcuts["decrement-note-octave"].shortcut, () =>
             modifySelection(({box, pitch}: NoteEventBoxAdapter) => {
                 if (pitch - 12 >= 0) {box.pitch.setValue(pitch - 12)}
-            })),
+            }), {allowRepeat: true}),
         shortcuts.register(NoteEditorShortcuts["increment-note-position"].shortcut, () =>
             modifySelection(({box, position}: NoteEventBoxAdapter) =>
-                box.position.setValue(position + snapping.value(reader.position + position)))),
+                box.position.setValue(position + snapping.value(reader.position + position))), {allowRepeat: true}),
         shortcuts.register(NoteEditorShortcuts["decrement-note-position"].shortcut, () =>
             modifySelection(({box, position}: NoteEventBoxAdapter) =>
-                box.position.setValue(position - snapping.value(reader.position + position)))),
+                box.position.setValue(position - snapping.value(reader.position + position))), {allowRepeat: true}),
         shortcuts.register(ContentEditorShortcuts["select-all"].shortcut, () => selection.select(...locator.selectable())),
         shortcuts.register(ContentEditorShortcuts["deselect-all"].shortcut, () => selection.deselectAll()),
         shortcuts.register(ContentEditorShortcuts["delete-selection"].shortcut, () => {
