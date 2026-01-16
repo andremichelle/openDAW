@@ -9,7 +9,7 @@ import {AutomatableParameter} from "../../AutomatableParameter"
 import {AudioEffectDeviceProcessor} from "../../AudioEffectDeviceProcessor"
 
 export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {
-    static readonly PEAK_DECAY_PER_SAMPLE = Math.exp(-1.0 / (sampleRate * 0.500))
+    static readonly PEAK_DECAY_PER_SAMPLE = Math.exp(-1.0 / (sampleRate * 0.030))
 
     static ID: int = 0 | 0
 

@@ -2,6 +2,9 @@ import css from "./GateDisplay.sass?inline"
 import {AnimationFrame, Html} from "@opendaw/lib-dom"
 import {clamp, Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
+import {DisplayPaint} from "@/ui/devices/DisplayPaint"
+import {CanvasPainter} from "@/ui/canvas/painter"
+import {Colors} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "GateDisplay")
 
@@ -10,64 +13,75 @@ type Construct = {
     values: Float32Array  // [inputPeakDb, outputPeakDb, gateEnvelope, thresholdDb]
 }
 
-const DB_MIN = -80.0
+const DB_MIN = -60.0
 const DB_MAX = 0.0
+const HISTORY_SIZE = 216
 
 const dbToY = (db: number, height: number): number => {
-    const normalized = clamp((db - DB_MIN) / (DB_MAX - DB_MIN), 0.0, 1.0)
+    const clampedDb = clamp(db, DB_MIN, DB_MAX)
+    const normalized = (clampedDb - DB_MIN) / (DB_MAX - DB_MIN)
     return height * (1.0 - normalized)
 }
 
 export const GateDisplay = ({lifecycle, values}: Construct) => {
-    const width = 216
-    const height = 64
-    const canvas = <canvas width={width} height={height}/> as HTMLCanvasElement
-    const ctx = canvas.getContext("2d")!
-
-    // Colors
-    const inputColor = "rgba(255, 255, 255, 0.4)"
-    const outputColor = "#ff9500" // Orange
-    const thresholdColor = "rgba(255, 255, 255, 0.3)"
-    const gateOpenColor = "rgba(0, 255, 0, 0.5)"
-    const gateClosedColor = "rgba(255, 0, 0, 0.3)"
-
-    // Initialize canvas with black background
-    ctx.fillStyle = "rgba(0, 0, 0, 0.6)"
-    ctx.fillRect(0, 0, width, height)
-
-    lifecycle.own(AnimationFrame.add(() => {
-        const [inputPeakDb, outputPeakDb, gateEnvelope, thresholdDb] = values
-
-        // Shift canvas content left by 1 pixel
-        ctx.drawImage(canvas, -1, 0)
-
-        // Clear the rightmost column
-        ctx.fillStyle = "rgba(0, 0, 0, 0.6)"
-        ctx.fillRect(width - 1, 0, 1, height)
-
-        // Draw gate state indicator at bottom (1px wide bar)
-        ctx.fillStyle = gateEnvelope > 0.5 ? gateOpenColor : gateClosedColor
-        ctx.fillRect(width - 1, height - 3, 1, 3)
-
-        // Draw threshold line
-        const thresholdY = dbToY(thresholdDb, height - 4)
-        ctx.fillStyle = thresholdColor
-        ctx.fillRect(width - 1, thresholdY, 1, 1)
-
-        // Draw input peak (light)
-        const inputY = dbToY(inputPeakDb, height - 4)
-        ctx.fillStyle = inputColor
-        ctx.fillRect(width - 1, inputY, 1, height - 4 - inputY)
-
-        // Draw output peak (orange) on top
-        const outputY = dbToY(outputPeakDb, height - 4)
-        ctx.fillStyle = outputColor
-        ctx.fillRect(width - 1, outputY, 1, height - 4 - outputY)
-    }))
+    // Ring buffers
+    const inputHistory = new Float32Array(HISTORY_SIZE).fill(DB_MIN)
+    const outputHistory = new Float32Array(HISTORY_SIZE).fill(DB_MIN)
+    const envelopeHistory = new Float32Array(HISTORY_SIZE).fill(0)
+    let writeIndex = 0
 
     return (
         <div classList={className}>
-            {canvas}
+            <canvas onInit={canvas => {
+                const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
+                    const {context, actualWidth, actualHeight} = painter
+
+                    // Write to ring buffer
+                    inputHistory[writeIndex] = values[0]
+                    outputHistory[writeIndex] = values[1]
+                    envelopeHistory[writeIndex] = values[2]
+                    writeIndex = (writeIndex + 1) % HISTORY_SIZE
+
+                    // Clear canvas
+                    context.clearRect(0, 0, actualWidth, actualHeight)
+
+                    // Draw input (raw) as bars with low opacity
+                    context.fillStyle = DisplayPaint.strokeStyle(0.2)
+                    for (let i = 0; i < HISTORY_SIZE; i++) {
+                        const bufferIndex = (writeIndex + i) % HISTORY_SIZE
+                        const x = (i / HISTORY_SIZE) * actualWidth
+                        const y = dbToY(inputHistory[bufferIndex], actualHeight)
+                        context.fillRect(x, y, actualWidth / HISTORY_SIZE + 1, actualHeight - y)
+                    }
+
+                    // Draw output (processed) as bars with more opacity
+                    context.fillStyle = DisplayPaint.strokeStyle(0.6)
+                    for (let i = 0; i < HISTORY_SIZE; i++) {
+                        const bufferIndex = (writeIndex + i) % HISTORY_SIZE
+                        const x = (i / HISTORY_SIZE) * actualWidth
+                        const y = dbToY(outputHistory[bufferIndex], actualHeight)
+                        context.fillRect(x, y, actualWidth / HISTORY_SIZE + 1, actualHeight - y)
+                    }
+
+                    // Draw envelope as 1px line
+                    context.strokeStyle = Colors.orange.toString()
+                    context.lineWidth = devicePixelRatio
+                    context.beginPath()
+                    for (let i = 0; i < HISTORY_SIZE; i++) {
+                        const bufferIndex = (writeIndex + i) % HISTORY_SIZE
+                        const x = (i / HISTORY_SIZE) * actualWidth
+                        const y = (1.0 - envelopeHistory[bufferIndex]) * actualHeight
+                        if (i === 0) {
+                            context.moveTo(x, y)
+                        } else {
+                            context.lineTo(x, y)
+                        }
+                    }
+                    context.stroke()
+                }))
+                painter.requestUpdate()
+                lifecycle.own(AnimationFrame.add(painter.requestUpdate))
+            }}/>
         </div>
     )
 }
