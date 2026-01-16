@@ -11,7 +11,7 @@ import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 export const installTrackHeaderMenu = (service: StudioService,
                                        audioUnitBoxAdapter: AudioUnitBoxAdapter,
                                        trackBoxAdapter: TrackBoxAdapter): Procedure<MenuItem> => parent => {
-    const inputAdapter = audioUnitBoxAdapter.input.getValue()
+    const inputAdapter = audioUnitBoxAdapter.input.adapter()
     if (inputAdapter.isEmpty()) {return parent}
     const accepts: DeviceAccepts = inputAdapter.unwrap("Cannot unwrap input adapter").accepts
     const acceptMidi = audioUnitBoxAdapter.captureBox.mapOr(box => isInstanceOf(box, CaptureMidiBox), false)

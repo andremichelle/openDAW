@@ -77,7 +77,7 @@ export class TrackBoxAdapter implements BoxAdapter {
             const vertex = targetVertex.box
             if (vertex instanceof AudioUnitBox) {
                 const adapter = this.#context.boxAdapters.adapterFor(vertex, AudioUnitBoxAdapter)
-                return adapter.input.getValue().ifSome(({labelField}) => labelField.setValue(value))
+                return adapter.input.adapter().ifSome(({labelField}) => labelField.setValue(value))
             } else if ("label" in vertex && vertex.label instanceof StringField) {
                 return vertex.label.setValue(value)
             }

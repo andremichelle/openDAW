@@ -61,7 +61,7 @@ export class Mixer {
         const visitInputs = (channelStrip: ChannelStripProcessor) => {
             if (touchedInputs.has(channelStrip)) {return}
             touchedInputs.add(channelStrip)
-            channelStrip.adapter.input.getValue().ifSome(input => {
+            channelStrip.adapter.input.adapter().ifSome(input => {
                 if (input.type === "bus") {
                     input.box.input.pointerHub
                         .filter(Pointers.AudioOutput)

@@ -1,5 +1,14 @@
 import css from "./DevicePanel.sass?inline"
-import {asDefined, Lifecycle, ObservableValue, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {
+    asDefined,
+    Lifecycle,
+    MutableObservableOption,
+    ObservableOption,
+    Option,
+    Terminable,
+    Terminator,
+    UUID
+} from "@opendaw/lib-std"
 import {appendChildren, createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {AudioUnitBox, BoxVisitor, PlayfieldSampleBox} from "@opendaw/studio-boxes"
@@ -34,7 +43,7 @@ type Construct = {
     service: StudioService
 }
 
-type Context = { deviceHost: DeviceHost, instrument: ObservableValue<Option<AudioUnitInputAdapter>> }
+type Context = { deviceHost: DeviceHost, instrument: ObservableOption<AudioUnitInputAdapter> }
 
 export const DevicePanel = ({lifecycle, service}: Construct) => {
     const midiEffectsContainer: HTMLElement = <div className="midi-container"/>
@@ -72,11 +81,11 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         return asDefined(box.accept<BoxVisitor<Context>>({
             visitAudioUnitBox: (_box: AudioUnitBox): Context => ({
                 deviceHost,
-                instrument: deviceHost.audioUnitBoxAdapter().input
+                instrument: deviceHost.audioUnitBoxAdapter().input.adapter()
             }),
             visitPlayfieldSampleBox: (box: PlayfieldSampleBox): Context => ({
                 deviceHost,
-                instrument: ObservableValue.seal(Option.wrap(project.boxAdapters.adapterFor(box, PlayfieldSampleBoxAdapter)))
+                instrument: new MutableObservableOption(project.boxAdapters.adapterFor(box, PlayfieldSampleBoxAdapter))
             })
         }))
     }
@@ -97,8 +106,8 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         noEffectPlaceholder.classList.toggle("hidden", optEditing.isEmpty())
         if (optEditing.isEmpty()) {return}
         const {deviceHost, instrument} = getContext(project, optEditing.unwrap().box)
-        if (instrument.getValue().nonEmpty()) {
-            const input = instrument.getValue().unwrap()
+        if (instrument.nonEmpty()) {
+            const input = instrument.unwrap()
             if (input.accepts === "midi") {
                 appendChildren(midiEffectsContainer, (
                     <div style={{margin: "1.125rem 0 0 0"}}>
@@ -111,7 +120,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         }
         const midiEffects = deviceHost.midiEffects
         appendChildren(midiEffectsContainer, midiEffects.adapters().map((adapter) => mounts.get(adapter.uuid).editor()))
-        appendChildren(instrumentContainer, instrument.getValue().match({
+        appendChildren(instrumentContainer, instrument.match({
             none: () => <div/>,
             some: (type: AudioUnitInputAdapter) => mounts.get(type.uuid).editor()
         }))
@@ -130,7 +139,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
 
     const subscribeChain = ({midiEffects, instrument, audioEffects, host}: {
         midiEffects: IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>,
-        instrument: ObservableValue<Option<AudioUnitInputAdapter>>,
+        instrument: ObservableOption<AudioUnitInputAdapter>,
         audioEffects: IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost>,
         host: DeviceHost
     }): Terminable => {
@@ -150,7 +159,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
             }),
             instrument.catchupAndSubscribe(owner => {
                 instrumentLifecycle.terminate()
-                owner.getValue().ifSome(adapter => {
+                owner.ifSome(adapter => {
                     mounts.add(DeviceMount.forInstrument(service, adapter, host, updateDom.request))
                     instrumentLifecycle.own({
                         terminate: () => {
