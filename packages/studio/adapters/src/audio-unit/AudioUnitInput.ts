@@ -7,6 +7,7 @@ import {
     ObservableValue,
     Observer,
     Option,
+    panic,
     Subscription,
     Terminable,
     Terminator
@@ -46,13 +47,12 @@ export class AudioUnitInput implements Terminable {
             })
         }))
         this.#terminator.own(pointerHub.catchupAndSubscribe({
-            onAdded: ({box}) => {
+            onAdded: ({box, pointerType}) => {
                 if (this.#adapter.nonEmpty()) {
-                    console.warn("AudioUnitInput.onAdded: Already set!", {
-                        existing: this.#adapter.unwrap().box.address.toString(),
-                        incoming: box.address.toString()
-                    })
-                    return
+                    const existing = this.#adapter.unwrap()
+                    panic(`AudioUnitInput already has an input. ` +
+                        `Existing: ${existing.box.name}@${existing.box.address.toString()} (type: ${existing.type}), ` +
+                        `Incoming: ${box.name}@${box.address.toString()} (pointerType: ${String(pointerType)})`)
                 }
                 const input: AudioUnitInputAdapter = box instanceof AudioBusBox
                     ? boxAdapters.adapterFor(box, AudioBusBoxAdapter)
