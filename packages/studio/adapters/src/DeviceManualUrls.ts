@@ -14,6 +14,7 @@ export namespace DeviceManualUrls {
     export const DattorroReverb = "manuals/devices/audio/dattorro-reverb"
     export const Maximizer = "manuals/devices/audio/maximizer"
     export const Compressor = "manuals/devices/audio/compressor"
+    export const Gate = "manuals/devices/audio/gate"
     export const Reverb = "manuals/devices/audio/cheap-reverb"
     export const Crusher = "manuals/devices/audio/crusher"
     export const Fold = "manuals/devices/audio/fold"

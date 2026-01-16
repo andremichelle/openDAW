@@ -23,6 +23,7 @@ import {MIDIOutputBox} from "./instruments/MIDIOutputBox"
 import {MIDIOutputParameterBox} from "./instruments/MIDIOutputParameterBox"
 import {TidalDeviceBox} from "./audio-effects/TidalDeviceBox"
 import {DattorroReverbDeviceBox} from "./audio-effects/DattorroReverbDeviceBox"
+import {GateDeviceBox} from "./audio-effects/GateDeviceBox"
 
 export const DeviceDefinitions = [
     UnknownAudioEffectDevice,
@@ -32,6 +33,7 @@ export const DeviceDefinitions = [
     StereoToolDeviceBox,
     MaximizerDeviceBox,
     CompressorDeviceBox,
+    GateDeviceBox,
     DelayDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,

@@ -9,6 +9,7 @@ import {
     DattorroReverbDeviceBox,
     DelayDeviceBox,
     FoldDeviceBox,
+    GateDeviceBox,
     MIDIOutputDeviceBox,
     ModularDeviceBox,
     NanoDeviceBox,
@@ -38,6 +39,7 @@ import {
     DelayDeviceBoxAdapter,
     DeviceHost,
     FoldDeviceBoxAdapter,
+    GateDeviceBoxAdapter,
     MIDIOutputDeviceBoxAdapter,
     ModularDeviceBoxAdapter,
     NanoDeviceBoxAdapter,
@@ -76,6 +78,7 @@ import {StudioService} from "@/service/StudioService"
 import {SoundfontDeviceEditor} from "@/ui/devices/instruments/SoundfontDeviceEditor"
 import {MaximizerDeviceEditor} from "@/ui/devices/audio-effects/MaximizerDeviceEditor"
 import {CompressorDeviceEditor} from "@/ui/devices/audio-effects/CompressorDeviceEditor"
+import {GateDeviceEditor} from "@/ui/devices/audio-effects/GateDeviceEditor"
 import {CrusherDeviceEditor} from "@/ui/devices/audio-effects/CrusherDeviceEditor"
 import {FoldDeviceEditor} from "@/ui/devices/audio-effects/FoldDeviceEditor"
 import {MIDIOutputDeviceEditor} from "@/ui/devices/instruments/MIDIOutputDeviceEditor"
@@ -229,6 +232,12 @@ export namespace DeviceEditorFactory {
                                         service={service}
                                         adapter={service.project.boxAdapters.adapterFor(box, CompressorDeviceBoxAdapter)}
                                         deviceHost={deviceHost}/>
+            ),
+            visitGateDeviceBox: (box: GateDeviceBox) => (
+                <GateDeviceEditor lifecycle={lifecycle}
+                                  service={service}
+                                  adapter={service.project.boxAdapters.adapterFor(box, GateDeviceBoxAdapter)}
+                                  deviceHost={deviceHost}/>
             ),
             visitReverbDeviceBox: (box: ReverbDeviceBox) => (
                 <ReverbDeviceEditor lifecycle={lifecycle}

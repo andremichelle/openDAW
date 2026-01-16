@@ -6,6 +6,7 @@ import {
     DattorroReverbDeviceBox,
     DelayDeviceBox,
     FoldDeviceBox,
+    GateDeviceBox,
     GrooveShuffleBox,
     MaximizerDeviceBox,
     ModularAudioInputBox,
@@ -169,6 +170,21 @@ export namespace EffectFactories {
             })
     }
 
+    export const Gate: EffectFactory = {
+        defaultName: "Gate",
+        defaultIcon: IconSymbol.Gate,
+        description: "Attenuates signals below a threshold to reduce noise",
+        manualPage: DeviceManualUrls.Gate,
+        separatorBefore: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index): GateDeviceBox =>
+            GateDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("Gate")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
     export const Reverb: EffectFactory = {
         defaultName: "Cheap Reverb",
         defaultIcon: IconSymbol.Cube,
@@ -287,7 +303,7 @@ export namespace EffectFactories {
 
     export const MidiNamed = {Arpeggio, Pitch, Velocity, Zeitgeist}
     export const AudioNamed = {
-        StereoTool, Compressor, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal, Maximizer
+        StereoTool, Compressor, Gate, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal, Maximizer
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(MidiNamed)
     export const AudioList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(AudioNamed)
