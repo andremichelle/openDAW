@@ -11,7 +11,7 @@ import {
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {CutCursor} from "@/ui/timeline/CutCursor.tsx"
-import {ppqn} from "@opendaw/lib-dsp"
+import {PPQN, ppqn} from "@opendaw/lib-dsp"
 import {installAutoScroll} from "@/ui/AutoScroll.ts"
 import {Config} from "@/ui/timeline/Config.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
@@ -208,6 +208,10 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 const scale = event.deltaY * 0.01
                 const rect = element.getBoundingClientRect()
                 range.scaleBy(scale, range.xToValue(event.clientX - rect.left))
+            } else if (event.altKey) {
+                event.preventDefault()
+                event.stopPropagation()
+                range.moveUnitBy(Math.sign(event.deltaY) * PPQN.SemiQuaver * 2)
             } else {
                 const deltaX = event.deltaX
                 const threshold = 5.0
