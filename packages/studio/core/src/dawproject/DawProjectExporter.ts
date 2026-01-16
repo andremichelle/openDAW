@@ -29,6 +29,7 @@ import {
     TempoAutomationConverter,
     TimelineSchema,
     TimeSignatureParameterSchema,
+    TimeSignaturePointSchema,
     TimeUnit,
     TrackSchema,
     TransportSchema,
@@ -45,6 +46,7 @@ import {
     NoteEventBox,
     NoteEventCollectionBox,
     NoteRegionBox,
+    SignatureEventBox,
     TrackBox,
     ValueEventBox,
     ValueEventCollectionBox,
@@ -298,6 +300,40 @@ export namespace DawProjectExporter {
             }, PointsSchema)
         }
 
+        const writeSignatureAutomation = (): Optional<PointsSchema> => {
+            const {signatureTrack, signature} = timelineBox
+            if (!signatureTrack.enabled.getValue()) {return undefined}
+            const events = signatureTrack.events.pointerHub.incoming()
+                .map(({box}) => asInstanceOf(box, SignatureEventBox))
+                .sort((eventA, eventB) => eventA.index.getValue() - eventB.index.getValue())
+            if (events.length === 0) {return undefined}
+            // Calculate absolute positions for each event
+            const points: Array<TimeSignaturePointSchema> = []
+            let accumulatedPpqn = 0
+            let currentNominator = signature.nominator.getValue()
+            let currentDenominator = signature.denominator.getValue()
+            // Add the initial signature at time 0
+            points.push(Xml.element({
+                time: 0,
+                numerator: currentNominator,
+                denominator: currentDenominator
+            }, TimeSignaturePointSchema))
+            for (const event of events) {
+                const barDuration = PPQN.fromSignature(currentNominator, currentDenominator)
+                accumulatedPpqn += barDuration * event.relativePosition.getValue()
+                currentNominator = event.nominator.getValue()
+                currentDenominator = event.denominator.getValue()
+                points.push(Xml.element({
+                    time: accumulatedPpqn / PPQN.Quarter,
+                    numerator: currentNominator,
+                    denominator: currentDenominator
+                }, TimeSignaturePointSchema))
+            }
+            return Xml.element({
+                points
+            }, PointsSchema)
+        }
+
         const writeLanes = (): ReadonlyArray<TimelineSchema> => {
             return audioUnits
                 .flatMap(audioUnitBox => audioUnitBox.tracks.pointerHub.incoming()
@@ -325,6 +361,7 @@ export namespace DawProjectExporter {
             structure: writeStructure(),
             arrangement: Xml.element({
                 tempoAutomation: writeTempoAutomation(),
+                timeSignatureAutomation: writeSignatureAutomation(),
                 lanes: Xml.element({
                     lanes: writeLanes(),
                     timeUnit: TimeUnit.BEATS

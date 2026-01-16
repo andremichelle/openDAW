@@ -1,7 +1,7 @@
 import {BooleanParameterSchema, Interpolation, RealParameterSchema, Unit} from "./defaults"
 import {Xml} from "@opendaw/lib-xml"
 import {asDefined} from "@opendaw/lib-std"
-import {Interpolation as DspInterpolation, semitoneToHz} from "@opendaw/lib-dsp"
+import {Interpolation as OpenDAWInterpolation, semitoneToHz} from "@opendaw/lib-dsp"
 
 export namespace ParameterEncoder {
     export const bool = (id: string, value: boolean, name?: string) => Xml.element({
@@ -50,7 +50,7 @@ export namespace TempoAutomationConverter {
      * - "none" (hold/step) → Interpolation.HOLD
      * - "linear" or "curve" → Interpolation.LINEAR
      */
-    export const toDawProjectInterpolation = (interpolation: DspInterpolation): Interpolation =>
+    export const toDawProjectInterpolation = (interpolation: OpenDAWInterpolation): Interpolation =>
         interpolation.type === "none" ? Interpolation.HOLD : Interpolation.LINEAR
 
     /**
@@ -58,6 +58,6 @@ export namespace TempoAutomationConverter {
      * - Interpolation.HOLD → Interpolation.None
      * - Interpolation.LINEAR → Interpolation.Linear
      */
-    export const fromDawProjectInterpolation = (interpolation: Interpolation | undefined): DspInterpolation =>
-        interpolation === Interpolation.HOLD ? DspInterpolation.None : DspInterpolation.Linear
+    export const fromDawProjectInterpolation = (interpolation: Interpolation | undefined): OpenDAWInterpolation =>
+        interpolation === Interpolation.HOLD ? OpenDAWInterpolation.None : OpenDAWInterpolation.Linear
 }
