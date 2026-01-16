@@ -35,6 +35,7 @@ export const SampleBrowser = ({lifecycle, service, background, fontSize}: Constr
     const reload = Inject.ref<HotspotUpdater>()
     const filter = new DefaultObservableValue("")
     const linearVolume = service.samplePlayback.linearVolume
+    const searchInput: HTMLElement = <SearchInput lifecycle={lifecycle} model={filter} style={{gridColumn: "1 / -1"}}/>
     const element: Element = (
         <div className={Html.buildClassList(className, background && "background")} tabIndex={-1} style={{fontSize}}>
             <div className="filter">
@@ -50,7 +51,7 @@ export const SampleBrowser = ({lifecycle, service, background, fontSize}: Constr
                         tooltip: "Locally stored samples"
                     }
                 ]} appearance={{framed: true, landscape: true}}/>
-                <SearchInput lifecycle={lifecycle} model={filter} style={{gridColumn: "1 / -1"}}/>
+                {searchInput}
             </div>
             <header>
                 <span>Name</span>
@@ -102,6 +103,7 @@ export const SampleBrowser = ({lifecycle, service, background, fontSize}: Constr
                                         reload.get().update()
                                     }, 500)
                                 }, "import-sample"))
+                                searchInput.focus()
                                 return entries
                             }}/>
                     )
@@ -120,6 +122,7 @@ export const SampleBrowser = ({lifecycle, service, background, fontSize}: Constr
         RuntimeSignal.subscribe(signal => signal === ProjectSignals.StorageUpdated && reload.get().update()),
         {terminate: () => service.samplePlayback.eject()},
         Events.subscribe(element, "keydown", async event => {
+            if (Events.isTextInput(event.target)) {return}
             if (Keyboard.isDelete(event) && location.getValue() === AssetLocation.Local) {
                 await sampleSelection.deleteSelected()
                 reload.get().update()

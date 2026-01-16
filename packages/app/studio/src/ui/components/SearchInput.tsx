@@ -15,18 +15,29 @@ type Construct = {
 }
 
 export const SearchInput = ({lifecycle, model, placeholder, style}: Construct) => {
-    return (
+    const input: HTMLInputElement = (
+        <input type="search"
+               value={model.getValue()}
+               placeholder={placeholder}
+               oninput={(event) => {
+                   if (event.target instanceof HTMLInputElement) {
+                       model.setValue(event.target.value)
+                   }
+               }}
+               onConnect={element => {
+                   element.focus()
+                   lifecycle.own(model.subscribe(owner => element.value = owner.getValue()))
+               }}/>
+    )
+    const element: HTMLElement = (
         <div className={className} style={style}>
             <Icon symbol={IconSymbol.Search}/>
-            <input type="search"
-                   value={model.getValue()}
-                   placeholder={placeholder}
-                   oninput={(event) => {
-                       if (event.target instanceof HTMLInputElement) {
-                           model.setValue(event.target.value)
-                       }
-                   }}
-                   onInit={input => lifecycle.own(model.subscribe(owner => input.value = owner.getValue()))}/>
+            {input}
         </div>
     )
+    element.focus = () => {
+        input.blur()
+        input.focus()
+    }
+    return element
 }

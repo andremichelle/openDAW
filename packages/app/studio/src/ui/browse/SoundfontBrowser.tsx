@@ -33,6 +33,7 @@ export const SoundfontBrowser = ({lifecycle, service, background, fontSize}: Con
     const entriesLifeSpan = lifecycle.own(new Terminator())
     const reload = Inject.ref<HotspotUpdater>()
     const filter = new DefaultObservableValue("")
+    const searchInput: HTMLInputElement = <SearchInput lifecycle={lifecycle} model={filter}/>
     const element: Element = (
         <div className={Html.buildClassList(className, background && "background")} tabIndex={-1} style={{fontSize}}>
             <div className="filter">
@@ -48,7 +49,7 @@ export const SoundfontBrowser = ({lifecycle, service, background, fontSize}: Con
                         tooltip: "Locally stored soundfonts"
                     }
                 ]} appearance={{framed: true, landscape: true}}/>
-                <SearchInput lifecycle={lifecycle} model={filter}/>
+                {searchInput}
             </div>
             <header>
                 <span>Name</span>
@@ -103,6 +104,7 @@ export const SoundfontBrowser = ({lifecycle, service, background, fontSize}: Con
                                         reload.get().update()
                                     }, 500)
                                 }, "import-soundfont"))
+                                searchInput.focus()
                                 return entries
                             }}/>
                     )
@@ -115,6 +117,7 @@ export const SoundfontBrowser = ({lifecycle, service, background, fontSize}: Con
         location.subscribe(() => reload.get().update()),
         RuntimeSignal.subscribe(signal => signal === ProjectSignals.StorageUpdated && reload.get().update()),
         Events.subscribe(element, "keydown", async event => {
+            if (Events.isTextInput(event.target)) {return}
             if (Keyboard.isDelete(event) && location.getValue() === AssetLocation.Local) {
                 await soundfontSelection.deleteSelected()
                 reload.get().update()

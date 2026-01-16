@@ -49,9 +49,11 @@ export class Events {
 
     static readonly PreventDefault: Procedure<Event> = event => event.preventDefault()
 
-    static readonly isTextInput = (target: Nullable<EventTarget>): boolean => target instanceof HTMLInputElement
-        || target instanceof HTMLTextAreaElement
-        || (target instanceof HTMLElement && isDefined(target.getAttribute("contenteditable")))
+    static readonly isTextInput = (target: Nullable<EventTarget>): boolean => {
+        return target instanceof HTMLInputElement
+            || target instanceof HTMLTextAreaElement
+            || (target instanceof HTMLElement && isDefined(target.getAttribute("contenteditable")))
+    }
 
     /**
      * Detects keyboard events triggered by browser autofill (e.g., Safari).

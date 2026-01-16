@@ -33,6 +33,7 @@ export const RadioGroup = <T, >({lifecycle, model, elements, style, className, a
                        oninput={() => {
                            model.setValue(value)
                            input.checked = value === model.getValue()
+                           input.blur()
                        }}/>
             )
             const label = <label className={className} htmlFor={glue}>{element}</label>
