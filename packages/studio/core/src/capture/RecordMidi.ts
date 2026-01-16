@@ -107,12 +107,14 @@ export namespace RecordMidi {
             const loopEnabled = loopArea.enabled.getValue()
             const loopFrom = loopArea.from.getValue()
             const loopTo = loopArea.to.getValue()
-            const loopDurationPPQN = loopTo - loopFrom
             const allowTakes = project.engine.preferences.settings.recording.allowTakes
             if (loopEnabled && allowTakes && currentTake.nonEmpty() && currentPosition < lastPosition) {
-                positionOffset += loopDurationPPQN
                 editing.modify(() => {
-                    currentTake.ifSome(take => finalizeTake(take, loopDurationPPQN))
+                    currentTake.ifSome(take => {
+                        const actualDurationPPQN = take.regionBox.duration.getValue()
+                        finalizeTake(take, actualDurationPPQN)
+                        positionOffset += actualDurationPPQN
+                    })
                     startNewTake(loopFrom)
                 }, false)
             }
