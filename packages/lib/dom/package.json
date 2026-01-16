@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/lib-dom",
-    "version": "0.0.67",
+    "version": "0.0.68",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",

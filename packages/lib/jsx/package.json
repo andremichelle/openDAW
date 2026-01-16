@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/lib-jsx",
-    "version": "0.0.67",
+    "version": "0.0.68",
     "license": "LGPL-3.0-or-later",
     "sideEffects": false,
     "main": "./dist/index.js",
@@ -23,7 +23,7 @@
         "test": "echo \"No tests to run\""
     },
     "dependencies": {
-        "@opendaw/lib-dom": "^0.0.67",
+        "@opendaw/lib-dom": "^0.0.68",
         "@opendaw/lib-std": "^0.0.65"
     },
     "devDependencies": {
