@@ -4,7 +4,6 @@ import {clamp, Lifecycle, unitValue} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {CanvasPainter} from "@/ui/canvas/painter"
-import {Colors} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "GateDisplay")
 
@@ -28,6 +27,7 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
             <canvas onInit={canvas => {
                 const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
                     const {context, actualWidth, actualHeight} = painter
+                    context.clearRect(0, 0, actualWidth, actualHeight)
 
                     const lineWidth = 1.0 / devicePixelRatio
                     const bottom = actualHeight - lineWidth
@@ -40,8 +40,6 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
                     outputHistory[writeIndex] = values[1]
                     envelopeHistory[writeIndex] = values[2]
                     writeIndex = (writeIndex + 1) % HISTORY_SIZE
-
-                    context.clearRect(0, 0, actualWidth, actualHeight)
 
                     const inputPath = new Path2D()
                     const outputPath = new Path2D()
@@ -67,29 +65,22 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
                     context.strokeStyle = DisplayPaint.strokeStyle(0.4)
                     context.lineWidth = lineWidth
                     context.stroke(inputPath)
-
                     inputPath.lineTo(actualWidth, actualHeight)
                     inputPath.lineTo(0, actualHeight)
-
-                    const inputGradient = context.createLinearGradient(0, 0, 0, actualHeight)
-                    inputGradient.addColorStop(0, DisplayPaint.strokeStyle(0.3))
-                    inputGradient.addColorStop(1, "transparent")
-                    context.fillStyle = inputGradient
+                    const gradient = context.createLinearGradient(0, 0, 0, actualHeight)
+                    gradient.addColorStop(0, DisplayPaint.strokeStyle(0.3))
+                    gradient.addColorStop(1, "transparent")
+                    context.fillStyle = gradient
                     context.fill(inputPath)
-
                     context.strokeStyle = DisplayPaint.strokeStyle(1.0)
                     context.lineWidth = lineWidth
                     context.stroke(outputPath)
-
                     outputPath.lineTo(actualWidth, actualHeight)
                     outputPath.lineTo(0, actualHeight)
-
-                    const outputGradient = context.createLinearGradient(0, 0, 0, actualHeight)
-                    outputGradient.addColorStop(0, DisplayPaint.strokeStyle(0.3))
-                    outputGradient.addColorStop(1, "transparent")
-                    context.fillStyle = outputGradient
+                    context.fillStyle = gradient
                     context.fill(outputPath)
-                    context.strokeStyle = Colors.white.toString()
+
+                    context.strokeStyle = "rgba(255, 255, 255, 0.66)"
                     context.lineWidth = lineWidth
                     context.stroke(envelopePath)
                 }))
