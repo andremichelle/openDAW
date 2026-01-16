@@ -61,7 +61,6 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
                             envelopePath.lineTo(x, envelopeY)
                         }
                     }
-
                     context.strokeStyle = DisplayPaint.strokeStyle(0.4)
                     context.lineWidth = lineWidth
                     context.stroke(inputPath)
@@ -80,7 +79,10 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
                     context.fillStyle = gradient
                     context.fill(outputPath)
 
-                    context.strokeStyle = "rgba(255, 255, 255, 0.66)"
+                    const envelopeGradient = context.createLinearGradient(0, 0, 0, actualHeight * 2)
+                    envelopeGradient.addColorStop(0, "white")
+                    envelopeGradient.addColorStop(1, "transparent")
+                    context.strokeStyle = envelopeGradient
                     context.lineWidth = lineWidth
                     context.stroke(envelopePath)
                 }))
