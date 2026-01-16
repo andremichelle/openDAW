@@ -15,7 +15,7 @@ type Construct = {
 
 const DB_MIN = -60.0
 const DB_MAX = 0.0
-const HISTORY_SIZE = 216
+const HISTORY_SIZE = 256
 
 const dbToY = (db: number, height: number): number => {
     const clampedDb = clamp(db, DB_MIN, DB_MAX)
@@ -34,39 +34,68 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
             <canvas onInit={canvas => {
                 const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
                     const {context, actualWidth, actualHeight} = painter
+
                     inputHistory[writeIndex] = values[0]
                     outputHistory[writeIndex] = values[1]
                     envelopeHistory[writeIndex] = values[2]
                     writeIndex = (writeIndex + 1) % HISTORY_SIZE
+
                     context.clearRect(0, 0, actualWidth, actualHeight)
-                    context.fillStyle = DisplayPaint.strokeStyle(0.2)
+
+                    const lineWidth = 1.0 / devicePixelRatio
+
+                    const inputPath = new Path2D()
+                    const outputPath = new Path2D()
+                    const envelopePath = new Path2D()
+
                     for (let i = 0; i < HISTORY_SIZE; i++) {
                         const bufferIndex = (writeIndex + i) % HISTORY_SIZE
                         const x = (i / HISTORY_SIZE) * actualWidth
-                        const y = dbToY(inputHistory[bufferIndex], actualHeight)
-                        context.fillRect(x, y, actualWidth / HISTORY_SIZE + 1, actualHeight - y)
-                    }
-                    context.fillStyle = DisplayPaint.strokeStyle(0.6)
-                    for (let i = 0; i < HISTORY_SIZE; i++) {
-                        const bufferIndex = (writeIndex + i) % HISTORY_SIZE
-                        const x = (i / HISTORY_SIZE) * actualWidth
-                        const y = dbToY(outputHistory[bufferIndex], actualHeight)
-                        context.fillRect(x, y, actualWidth / HISTORY_SIZE + 1, actualHeight - y)
-                    }
-                    context.strokeStyle = Colors.orange.toString()
-                    context.lineWidth = 1.0 / devicePixelRatio
-                    context.beginPath()
-                    for (let i = 0; i < HISTORY_SIZE; i++) {
-                        const bufferIndex = (writeIndex + i) % HISTORY_SIZE
-                        const x = (i / HISTORY_SIZE) * actualWidth
-                        const y = (1.0 - envelopeHistory[bufferIndex]) * actualHeight
+
+                        const inputY = dbToY(inputHistory[bufferIndex], actualHeight)
+                        const outputY = dbToY(outputHistory[bufferIndex], actualHeight)
+                        const envelopeY = (1.0 - envelopeHistory[bufferIndex]) * actualHeight
+
                         if (i === 0) {
-                            context.moveTo(x, y)
+                            inputPath.moveTo(x, inputY)
+                            outputPath.moveTo(x, outputY)
+                            envelopePath.moveTo(x, envelopeY)
                         } else {
-                            context.lineTo(x, y)
+                            inputPath.lineTo(x, inputY)
+                            outputPath.lineTo(x, outputY)
+                            envelopePath.lineTo(x, envelopeY)
                         }
                     }
-                    context.stroke()
+
+                    context.strokeStyle = DisplayPaint.strokeStyle(0.4)
+                    context.lineWidth = lineWidth
+                    context.stroke(inputPath)
+
+                    inputPath.lineTo(actualWidth, actualHeight)
+                    inputPath.lineTo(0, actualHeight)
+
+                    const inputGradient = context.createLinearGradient(0, 0, 0, actualHeight)
+                    inputGradient.addColorStop(0, DisplayPaint.strokeStyle(0.3))
+                    inputGradient.addColorStop(1, DisplayPaint.strokeStyle(0.0))
+                    context.fillStyle = inputGradient
+                    context.fill(inputPath)
+
+                    context.strokeStyle = DisplayPaint.strokeStyle(1.0)
+                    context.lineWidth = lineWidth
+                    context.stroke(outputPath)
+
+                    outputPath.lineTo(actualWidth, actualHeight)
+                    outputPath.lineTo(0, actualHeight)
+
+                    const outputGradient = context.createLinearGradient(0, 0, 0, actualHeight)
+                    outputGradient.addColorStop(0, DisplayPaint.strokeStyle(0.3))
+                    outputGradient.addColorStop(1, DisplayPaint.strokeStyle(0.0))
+                    context.fillStyle = outputGradient
+                    context.fill(outputPath)
+
+                    context.strokeStyle = Colors.orange.toString()
+                    context.lineWidth = lineWidth
+                    context.stroke(envelopePath)
                 }))
                 painter.requestUpdate()
                 lifecycle.own(AnimationFrame.add(painter.requestUpdate))
