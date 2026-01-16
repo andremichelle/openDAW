@@ -127,6 +127,7 @@ export class Shortcut {
     }
 
     static fromEvent(event: KeyboardEvent): Option<Shortcut> {
+        if (Events.isAutofillEvent(event)) {return Option.None}
         const code = event.code
         if (code.startsWith("Shift")
             || code.startsWith("Control")
@@ -211,6 +212,7 @@ export class Shortcut {
     }
 
     matches(event: KeyboardEvent): boolean {
+        if (Events.isAutofillEvent(event)) {return false}
         let codeMatches: boolean
         if (this.#code.startsWith("Key")) {
             // For letters, use event.key to respect keyboard layout (e.g. QWERTZ)
