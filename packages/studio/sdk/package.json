@@ -2,6 +2,7 @@
     "name": "@opendaw/studio-sdk",
     "version": "0.0.94",
     "license": "LGPL-3.0-or-later",
+    "type": "module",
     "publishConfig": {
         "access": "public"
     },
@@ -20,9 +21,26 @@
         "synth",
         "fx"
     ],
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        }
+    },
     "files": [
+        "dist/**/*",
         "README.md"
     ],
+    "scripts": {
+        "sync-version": "node scripts/sync-version.js",
+        "build": "npm run sync-version && tsc",
+        "prepublishOnly": "npm run sync-version"
+    },
+    "devDependencies": {
+        "@opendaw/typescript-config": "^0.0.28"
+    },
     "dependencies": {
         "@opendaw/lib-box": "^0.0.67",
         "@opendaw/lib-dawproject": "^0.0.51",
