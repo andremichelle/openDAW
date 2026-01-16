@@ -1,4 +1,4 @@
-import {asDefined, asInstanceOf, Color, ifDefined, isInstanceOf, Maybe, Option, UUID} from "@opendaw/lib-std"
+import {asDefined, asInstanceOf, Color, ifDefined, isInstanceOf, Maybe, Option, Optional, UUID} from "@opendaw/lib-std"
 import {Xml} from "@opendaw/lib-xml"
 import {dbToGain, PPQN} from "@opendaw/lib-dsp"
 import {AddressIdEncoder, BooleanField, Field} from "@opendaw/lib-box"
@@ -8,6 +8,7 @@ import {
     ArrangementSchema,
     AudioAlgorithm,
     AudioSchema,
+    AutomationTargetSchema,
     BooleanParameterSchema,
     BuiltinDeviceSchema,
     ChannelRole,
@@ -21,8 +22,11 @@ import {
     NoteSchema,
     NotesSchema,
     ParameterEncoder,
+    PointsSchema,
     ProjectSchema,
     RealParameterSchema,
+    RealPointSchema,
+    TempoAutomationConverter,
     TimelineSchema,
     TimeSignatureParameterSchema,
     TimeUnit,
@@ -42,9 +46,11 @@ import {
     NoteEventCollectionBox,
     NoteRegionBox,
     TrackBox,
+    ValueEventBox,
+    ValueEventCollectionBox,
     ValueRegionBox
 } from "@opendaw/studio-boxes"
-import {ColorCodes, DeviceBoxUtils, ProjectSkeleton, SampleLoaderManager} from "@opendaw/studio-adapters"
+import {ColorCodes, DeviceBoxUtils, InterpolationFieldAdapter, ProjectSkeleton, SampleLoaderManager} from "@opendaw/studio-adapters"
 import {AudioUnitExportLayout} from "./AudioUnitExportLayout"
 import {DeviceIO} from "./DeviceIO"
 import {WavFile} from "../WavFile"
@@ -263,6 +269,35 @@ export namespace DawProjectExporter {
                 }, ClipSchema)]
             }, ClipsSchema)
 
+        const writeTempoAutomation = (): Optional<PointsSchema> => {
+            const {tempoTrack} = timelineBox
+            if (!tempoTrack.enabled.getValue()) {return undefined}
+            const targetVertex = tempoTrack.events.targetVertex
+            if (targetVertex.isEmpty()) {return undefined}
+            const collectionBox = asInstanceOf(targetVertex.unwrap().box, ValueEventCollectionBox)
+            const events = collectionBox.events.pointerHub.incoming()
+                .map(({box}) => asInstanceOf(box, ValueEventBox))
+                .sort((eventA, eventB) => eventA.position.getValue() - eventB.position.getValue())
+            if (events.length === 0) {return undefined}
+            const minBpm = tempoTrack.minBpm.getValue()
+            const maxBpm = tempoTrack.maxBpm.getValue()
+            const tempoParameterId = ids.getOrCreate(timelineBox.bpm.address)
+            return Xml.element({
+                unit: Unit.BPM,
+                target: Xml.element({
+                    parameter: tempoParameterId
+                }, AutomationTargetSchema),
+                points: events.map(event => {
+                    const interpolation = InterpolationFieldAdapter.read(event.interpolation)
+                    return Xml.element({
+                        time: event.position.getValue() / PPQN.Quarter,
+                        value: TempoAutomationConverter.normalizedToBpm(event.value.getValue(), minBpm, maxBpm),
+                        interpolation: TempoAutomationConverter.toDawProjectInterpolation(interpolation)
+                    }, RealPointSchema)
+                })
+            }, PointsSchema)
+        }
+
         const writeLanes = (): ReadonlyArray<TimelineSchema> => {
             return audioUnits
                 .flatMap(audioUnitBox => audioUnitBox.tracks.pointerHub.incoming()
@@ -289,6 +324,7 @@ export namespace DawProjectExporter {
             transport: writeTransport(),
             structure: writeStructure(),
             arrangement: Xml.element({
+                tempoAutomation: writeTempoAutomation(),
                 lanes: Xml.element({
                     lanes: writeLanes(),
                     timeUnit: TimeUnit.BEATS

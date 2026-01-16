@@ -35,8 +35,10 @@ import {
     NotesSchema,
     PointsSchema,
     ProjectSchema,
+    RealPointSchema,
     SendSchema,
     SendType,
+    TempoAutomationConverter,
     TimelineSchema,
     TrackSchema,
     TransportSchema,
@@ -64,6 +66,7 @@ import {
     UnknownAudioEffectDeviceBox,
     UnknownMidiEffectDeviceBox,
     UserInterfaceBox,
+    ValueEventBox,
     ValueEventCollectionBox
 } from "@opendaw/studio-boxes"
 import {
@@ -72,6 +75,7 @@ import {
     ColorCodes,
     InstrumentBox,
     InstrumentFactories,
+    InterpolationFieldAdapter,
     ProjectSkeleton,
     TrackType
 } from "@opendaw/studio-adapters"
@@ -439,6 +443,30 @@ export namespace DawProjectImport {
                     box.playMode.refer(pitchStretch)
                 })
             }
+            const readTempoAutomation = (tempoAutomation: PointsSchema): void => {
+                const points = tempoAutomation.points
+                if (!isDefined(points) || points.length === 0) {return}
+                const minBpm = timelineBox.tempoTrack.minBpm.getValue()
+                const maxBpm = timelineBox.tempoTrack.maxBpm.getValue()
+                const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+                timelineBox.tempoTrack.events.refer(collectionBox.owners)
+                timelineBox.tempoTrack.enabled.setValue(true)
+                points
+                    .filter((point): point is RealPointSchema => isInstanceOf(point, RealPointSchema))
+                    .forEach(point => {
+                        const eventBox = ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                            box.position.setValue(point.time * PPQN.Quarter)
+                            box.index.setValue(0)
+                            box.value.setValue(TempoAutomationConverter.bpmToNormalized(point.value, minBpm, maxBpm))
+                            box.events.refer(collectionBox.events)
+                        })
+                        const interpolation = TempoAutomationConverter.fromDawProjectInterpolation(point.interpolation)
+                        InterpolationFieldAdapter.write(eventBox.interpolation, interpolation)
+                    })
+            }
+
+            ifDefined(arrangement.tempoAutomation, readTempoAutomation)
+
             return Promise.all(arrangement?.lanes?.lanes?.filter(timeline => isInstanceOf(timeline, LanesSchema))
                 .map(readLane) ?? [])
         }
