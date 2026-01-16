@@ -16,7 +16,6 @@ import {Capture} from "./Capture"
 import {CaptureDevices} from "./CaptureDevices"
 import {RecordAudio} from "./RecordAudio"
 import {AudioDevices} from "../AudioDevices"
-import {OPENDAW_SDK_VERSION} from "@opendaw/studio-sdk"
 
 export class CaptureAudio extends Capture<CaptureAudioBox> {
     readonly #stream: MutableObservableOption<MediaStream>
@@ -156,7 +155,6 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
                 if (this.#isMonitoring) {
                     this.#connectMonitoring(stream)
                 }
-                OPENDAW_SDK_VERSION
             } else {
                 stream.getAudioTracks().forEach(track => track.stop())
                 return Errors.warn(`Could not find audio device with id: '${deviceId}' (got: '${gotDeviceId}')`)
