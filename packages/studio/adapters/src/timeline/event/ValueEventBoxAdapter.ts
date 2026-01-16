@@ -30,6 +30,7 @@ type CopyToParams = {
 
 export class ValueEventBoxAdapter implements ValueEvent, BoxAdapter, Selectable {
     static readonly Comparator: Comparator<ValueEventBoxAdapter> = (a, b) => {
+        if (a === b) {return panic(`${a} is equal to itself`)}
         const positionDiff = a.position - b.position
         if (positionDiff !== 0) {return positionDiff}
         const indexDiff = a.index - b.index
