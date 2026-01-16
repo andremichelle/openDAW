@@ -24,10 +24,9 @@ const dbToY = (db: number, height: number): number => {
 }
 
 export const GateDisplay = ({lifecycle, values}: Construct) => {
-    // Ring buffers
     const inputHistory = new Float32Array(HISTORY_SIZE).fill(DB_MIN)
     const outputHistory = new Float32Array(HISTORY_SIZE).fill(DB_MIN)
-    const envelopeHistory = new Float32Array(HISTORY_SIZE).fill(0)
+    const envelopeHistory = new Float32Array(HISTORY_SIZE).fill(0.0)
     let writeIndex = 0
 
     return (
@@ -35,17 +34,11 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
             <canvas onInit={canvas => {
                 const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
                     const {context, actualWidth, actualHeight} = painter
-
-                    // Write to ring buffer
                     inputHistory[writeIndex] = values[0]
                     outputHistory[writeIndex] = values[1]
                     envelopeHistory[writeIndex] = values[2]
                     writeIndex = (writeIndex + 1) % HISTORY_SIZE
-
-                    // Clear canvas
                     context.clearRect(0, 0, actualWidth, actualHeight)
-
-                    // Draw input (raw) as bars with low opacity
                     context.fillStyle = DisplayPaint.strokeStyle(0.2)
                     for (let i = 0; i < HISTORY_SIZE; i++) {
                         const bufferIndex = (writeIndex + i) % HISTORY_SIZE
@@ -53,8 +46,6 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
                         const y = dbToY(inputHistory[bufferIndex], actualHeight)
                         context.fillRect(x, y, actualWidth / HISTORY_SIZE + 1, actualHeight - y)
                     }
-
-                    // Draw output (processed) as bars with more opacity
                     context.fillStyle = DisplayPaint.strokeStyle(0.6)
                     for (let i = 0; i < HISTORY_SIZE; i++) {
                         const bufferIndex = (writeIndex + i) % HISTORY_SIZE
@@ -62,10 +53,8 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
                         const y = dbToY(outputHistory[bufferIndex], actualHeight)
                         context.fillRect(x, y, actualWidth / HISTORY_SIZE + 1, actualHeight - y)
                     }
-
-                    // Draw envelope as 1px line
                     context.strokeStyle = Colors.orange.toString()
-                    context.lineWidth = devicePixelRatio
+                    context.lineWidth = 1.0 / devicePixelRatio
                     context.beginPath()
                     for (let i = 0; i < HISTORY_SIZE; i++) {
                         const bufferIndex = (writeIndex + i) % HISTORY_SIZE
