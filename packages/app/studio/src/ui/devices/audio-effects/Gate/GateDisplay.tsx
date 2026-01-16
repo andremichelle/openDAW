@@ -14,7 +14,7 @@ type Construct = {
 
 const DB_MIN = -60.0
 const DB_MAX = 0.0
-const HISTORY_SIZE = 256
+const HISTORY_SIZE = 192
 
 export const GateDisplay = ({lifecycle, values}: Construct) => {
     const inputHistory = new Float32Array(HISTORY_SIZE).fill(DB_MIN)
@@ -47,7 +47,7 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
 
                     for (let i = 0; i < HISTORY_SIZE; i++) {
                         const bufferIndex = (writeIndex + i) % HISTORY_SIZE
-                        const x = (i / HISTORY_SIZE) * actualWidth
+                        const x = Math.round((i / (HISTORY_SIZE - 1)) * actualWidth)
                         const inputY = dbToY(inputHistory[bufferIndex])
                         const outputY = dbToY(outputHistory[bufferIndex])
                         const envelopeY = normToY(envelopeHistory[bufferIndex])
