@@ -8,7 +8,7 @@ export namespace TrackType {
             case TrackType.Audio:
                 return "Audio"
             case TrackType.Notes:
-                return "Notes"
+                return "Note"
             case TrackType.Value:
                 return "Automation"
             case TrackType.Undefined:
