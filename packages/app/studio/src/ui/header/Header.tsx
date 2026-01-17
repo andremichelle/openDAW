@@ -57,12 +57,14 @@ export const Header = ({lifecycle, service}: Construct) => {
         if (manual.type === "page") {
             return MenuItem.default({
                 label: manual.label,
+                icon: manual.icon,
                 checked: RouteLocation.get().path === manual.path,
                 separatorBefore: manual.separatorBefore ?? false
             }).setTriggerProcedure(() => RouteLocation.get().navigateTo(manual.path))
         } else if (manual.type === "folder") {
             return MenuItem.default({
                 label: manual.label,
+                icon: manual.icon,
                 separatorBefore: manual.separatorBefore ?? false
             }).setRuntimeChildrenProcedure(parent => parent.addMenuItem(...addManualMenuItems(manual.files)))
         } else {
