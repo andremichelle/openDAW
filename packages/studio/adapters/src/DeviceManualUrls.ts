@@ -20,6 +20,7 @@ export namespace DeviceManualUrls {
     export const Fold = "manuals/devices/audio/fold"
     export const Tidal = "manuals/devices/audio/tidal"
     export const Revamp = "manuals/devices/audio/revamp"
+    export const GuitarAmp = "manuals/devices/audio/guitar-amp"
     export const Modular = "manuals/devices/audio/modular"
 
     // Instruments
