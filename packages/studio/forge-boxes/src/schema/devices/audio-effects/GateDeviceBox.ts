@@ -10,7 +10,7 @@ export const GateDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffec
     },
     11: {
         type: "float32", name: "return", pointerRules: ParameterPointerRules,
-        value: 6.0, constraints: {min: 0.0, max: 24.0, scaling: "linear"}, unit: "dB"
+        value: 0.0, constraints: {min: 0.0, max: 24.0, scaling: "linear"}, unit: "dB"
     },
     12: {
         type: "float32", name: "attack", pointerRules: ParameterPointerRules,
