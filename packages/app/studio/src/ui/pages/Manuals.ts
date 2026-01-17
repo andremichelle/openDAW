@@ -34,6 +34,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                     {type: "page", label: "Dattorro Reverb", path: "/manuals/devices/audio/dattorro-reverb"},
                     {type: "page", label: "Delay", path: "/manuals/devices/audio/delay"},
                     {type: "page", label: "Fold", path: "/manuals/devices/audio/fold"},
+                    {type: "page", label: "Gate", path: "/manuals/devices/audio/gate"},
                     {type: "page", label: "Maximizer", path: "/manuals/devices/audio/maximizer"},
                     {type: "page", label: "Revamp", path: "/manuals/devices/audio/revamp"},
                     {type: "page", label: "Stereo Tool", path: "/manuals/devices/audio/stereotool"},
