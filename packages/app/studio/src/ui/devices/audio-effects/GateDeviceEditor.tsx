@@ -32,7 +32,7 @@ export const GateDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
     const {editing, midiLearning} = project
     const {threshold, return: returnParam, attack, hold, release, floor} = adapter.namedParameter
     // [0] inputPeakDb, [1] outputPeakDb, [2] gateEnvelope, [3] thresholdDb
-    const values = new Float32Array([Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, 0.0, -40.0])
+    const values = new Float32Array([Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY])
     lifecycle.own(project.liveStreamReceiver.subscribeFloats(
         adapter.address.append(0), processorValues => values.set(processorValues)))
     const createLabelControlFrag = (parameter: AutomatableParameterFieldAdapter<number>) => (

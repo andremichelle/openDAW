@@ -30,7 +30,7 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
 
                     const lineWidth = 1.5 / devicePixelRatio
                     const top = lineWidth + devicePixelRatio * 4
-                    const bottom = actualHeight - lineWidth
+                    const bottom = actualHeight - lineWidth + devicePixelRatio
                     const normToY = (normalized: unitValue) => bottom - (bottom - top) * normalized
                     const dbToY = (db: number): number => normToY(clampUnit((db - DB_MIN) / (DB_MAX - DB_MIN)))
 
