@@ -1,13 +1,16 @@
 component
   grid-column: 1 / -1
   align-self: stretch
-  width: 256px
-  height: 100%
   overflow: hidden
+  display: flex
 
   > canvas
-    display: block
-    width: 100%
+    flex: 0 0 256px
     height: 100%
     border-radius: 0.5em
     border: 0.5px rgba(white, 0.1) solid
+
+  > svg
+    flex: 0 0 1em
+    height: 100%
+    background-color: rgba(red, 0.1)

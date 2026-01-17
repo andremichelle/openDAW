@@ -76,7 +76,6 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
                     outputPath.lineTo(0, actualHeight)
                     context.fillStyle = gradient
                     context.fill(outputPath)
-
                     const envelopeGradient = context.createLinearGradient(0, 0, 0, actualHeight * 2)
                     envelopeGradient.addColorStop(0, "white")
                     envelopeGradient.addColorStop(1, "transparent")
@@ -87,6 +86,7 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
                 painter.requestUpdate()
                 lifecycle.own(AnimationFrame.add(painter.requestUpdate))
             }}/>
+            <svg/>
         </div>
     )
 }
