@@ -9,7 +9,7 @@ import {AutomatableParameter} from "../../AutomatableParameter"
 import {AudioEffectDeviceProcessor} from "../../AudioEffectDeviceProcessor"
 
 export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {
-    static readonly PEAK_DECAY_PER_SAMPLE = Math.exp(-1.0 / (sampleRate * 0.030))
+    static readonly PEAK_DECAY_PER_SAMPLE = Math.exp(-1.0 / (sampleRate * 0.010))
 
     static ID: int = 0 | 0
 
@@ -146,12 +146,12 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
             } else {
                 this.#inpMax *= GateDeviceProcessor.PEAK_DECAY_PER_SAMPLE
             }
-            if (level >= this.#thresholdGain) {
+            if (this.#inpMax >= this.#thresholdGain) {
                 this.#gateOpen = true
                 this.#holdCounter = this.#holdSamples
             } else if (this.#gateOpen && this.#holdCounter > 0) {
                 this.#holdCounter--
-            } else if (level < this.#returnThresholdGain) {
+            } else if (this.#inpMax < this.#returnThresholdGain) {
                 this.#gateOpen = false
             }
             const target = this.#gateOpen ? 1.0 : 0.0
