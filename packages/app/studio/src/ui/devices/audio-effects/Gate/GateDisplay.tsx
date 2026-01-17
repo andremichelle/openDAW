@@ -14,7 +14,7 @@ type Construct = {
 
 const DB_MIN = -60.0
 const DB_MAX = 0.0
-const HISTORY_SIZE = 64+1
+const HISTORY_SIZE = 128 + 1
 
 export const GateDisplay = ({lifecycle, values}: Construct) => {
     const inputHistory = new Float32Array(HISTORY_SIZE).fill(DB_MIN)
@@ -29,9 +29,10 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
                     context.clearRect(0, 0, actualWidth, actualHeight)
 
                     const lineWidth = 1.5 / devicePixelRatio
+                    const top = lineWidth + devicePixelRatio * 4
                     const bottom = actualHeight - lineWidth
                     const normToY = (normalized: unitValue) =>
-                        bottom - (bottom - lineWidth) * normalized
+                        bottom - (bottom - top) * normalized
                     const dbToY = (db: number): number =>
                         normToY((clamp(db, DB_MIN, DB_MAX) - DB_MIN) / (DB_MAX - DB_MIN))
 

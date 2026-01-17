@@ -22,6 +22,11 @@ type Construct = {
     deviceHost: DeviceHost
 }
 
+// TODO
+//  Use thresholdDb from adapter.
+//  Draw threshold lines.
+//  Show db labels.
+
 export const GateDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
     const {editing, midiLearning} = project
@@ -53,6 +58,7 @@ export const GateDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                       populateMenu={parent => MenuItems.forEffectDevice(parent, service, deviceHost, adapter)}
                       populateControls={() => (
                           <div className={className}>
+                              <section className="envelope" style={{gridArea: "1 / 1 / 2 / 4"}}/>
                               {[attack, hold, release].map(parameter => createLabelControlFrag(parameter))}
                               <SidechainButton sideChain={adapter.sideChain}
                                                rootBoxAdapter={project.rootBoxAdapter}
