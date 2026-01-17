@@ -2,31 +2,21 @@
 
 component
   display: grid
-  grid-template: auto auto 1fr / repeat(6, 36px)
+  grid-template-columns: repeat(8, auto)
+  grid-template-rows: auto auto 1fr
   row-gap: 0.25em
   column-gap: 0.25em
+  align-items: center
   @include mixins.Control
 
-  > div.sidechain-row
+  > span
+    font-size: 9px
+    white-space: nowrap
+    color: var(--color-shadow)
+    text-align: right
+
+  > button[class*="SidechainButton"]
+    grid-column: span 2
+
+  > div[class*="GateDisplay"]
     grid-column: 1 / -1
-    display: flex
-
-  > div.control-section
-    padding: 4px 0 0 0
-    grid-column: span 3
-    display: flex
-    flex-direction: column
-    justify-content: space-between
-
-    > div.controls
-      display: grid
-      column-gap: 0.25em
-      align-items: center
-      align-content: start
-      grid-template-columns: 1fr auto
-
-      > span
-        font-size: 9px
-        white-space: nowrap
-        color: var(--color-shadow)
-        text-align: right

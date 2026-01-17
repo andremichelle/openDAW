@@ -53,21 +53,11 @@ export const GateDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                       populateMenu={parent => MenuItems.forEffectDevice(parent, service, deviceHost, adapter)}
                       populateControls={() => (
                           <div className={className}>
-                              <div className="sidechain-row">
-                                  <SidechainButton sideChain={adapter.sideChain}
-                                                   rootBoxAdapter={project.rootBoxAdapter}
-                                                   editing={editing}/>
-                              </div>
-                              <div className="control-section">
-                                  <div className="controls">
-                                      {[threshold, returnParam, floor]
-                                          .map(parameter => createLabelControlFrag(parameter))}
-                                  </div>
-                                  <div className="controls">
-                                      {[attack, hold, release]
-                                          .map(parameter => createLabelControlFrag(parameter))}
-                                  </div>
-                              </div>
+                              {[attack, hold, release].map(parameter => createLabelControlFrag(parameter))}
+                              <SidechainButton sideChain={adapter.sideChain}
+                                               rootBoxAdapter={project.rootBoxAdapter}
+                                               editing={editing}/>
+                              {[threshold, returnParam, floor].map(parameter => createLabelControlFrag(parameter))}
                               <GateDisplay lifecycle={lifecycle} values={values}/>
                           </div>)}
                       populateMeter={() => (
