@@ -13,7 +13,7 @@ type Construct = {
 }
 
 const DB_MIN = -60.0
-const DB_MAX = 0.0
+const DB_MAX = 6.0
 const HISTORY_SIZE = 128 + 1
 
 export const GateDisplay = ({lifecycle, values}: Construct) => {
@@ -25,13 +25,11 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
         <div classList={className}>
             <canvas onInit={canvas => {
                 const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
-                    const {context, actualWidth, actualHeight} = painter
+                    const {context, actualWidth, actualHeight, devicePixelRatio} = painter
                     context.clearRect(0, 0, actualWidth, actualHeight)
 
-                    const lineWidth = 1.5 / devicePixelRatio
-                    const top = lineWidth + devicePixelRatio * 4
-                    const bottom = actualHeight - lineWidth + devicePixelRatio
-                    const normToY = (normalized: unitValue) => bottom - (bottom - top) * normalized
+                    const lineWidth = 2.0 / devicePixelRatio
+                    const normToY = (normalized: unitValue) => actualHeight - actualHeight * normalized
                     const dbToY = (db: number): number => normToY(clampUnit((db - DB_MIN) / (DB_MAX - DB_MIN)))
 
                     inputHistory[writeIndex] = dbToY(values[0])
