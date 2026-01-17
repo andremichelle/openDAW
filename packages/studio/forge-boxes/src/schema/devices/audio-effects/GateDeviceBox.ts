@@ -6,7 +6,7 @@ import {ParameterPointerRules} from "../../std/Defaults"
 export const GateDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffect("GateDeviceBox", {
     10: {
         type: "float32", name: "threshold", pointerRules: ParameterPointerRules,
-        value: -40.0, constraints: {min: -80.0, max: 0.0, scaling: "linear"}, unit: "dB"
+        value: -6.0, constraints: {min: -60.0, max: 0.0, scaling: "linear"}, unit: "dB"
     },
     11: {
         type: "float32", name: "return", pointerRules: ParameterPointerRules,
@@ -14,7 +14,7 @@ export const GateDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffec
     },
     12: {
         type: "float32", name: "attack", pointerRules: ParameterPointerRules,
-        value: 0.5, constraints: {min: 0.0, max: 50.0, scaling: "linear"}, unit: "ms"
+        value: 1.0, constraints: {min: 0.0, max: 50.0, scaling: "linear"}, unit: "ms"
     },
     13: {
         type: "float32", name: "hold", pointerRules: ParameterPointerRules,
@@ -26,7 +26,7 @@ export const GateDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffec
     },
     15: {
         type: "float32", name: "floor", pointerRules: ParameterPointerRules,
-        value: -80.0, constraints: {min: -80.0, max: 0.0, scaling: "linear"}, unit: "dB"
+        value: -72.0, constraints: {min: -72.0, max: 0.0, scaling: "linear"}, unit: "dB"
     },
     30: {
         type: "pointer", name: "side-chain", pointerType: Pointers.SideChain, mandatory: false
