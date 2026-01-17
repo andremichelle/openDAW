@@ -14,14 +14,13 @@ type Construct = {
 
 const DB_MIN = -60.0
 const DB_MAX = 0.0
-const HISTORY_SIZE = 192
+const HISTORY_SIZE = 64+1
 
 export const GateDisplay = ({lifecycle, values}: Construct) => {
     const inputHistory = new Float32Array(HISTORY_SIZE).fill(DB_MIN)
     const outputHistory = new Float32Array(HISTORY_SIZE).fill(DB_MIN)
     const envelopeHistory = new Float32Array(HISTORY_SIZE).fill(0.0)
     let writeIndex = 0
-
     return (
         <div classList={className}>
             <canvas onInit={canvas => {
@@ -29,7 +28,7 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
                     const {context, actualWidth, actualHeight} = painter
                     context.clearRect(0, 0, actualWidth, actualHeight)
 
-                    const lineWidth = 1.0 / devicePixelRatio
+                    const lineWidth = 1.5 / devicePixelRatio
                     const bottom = actualHeight - lineWidth
                     const normToY = (normalized: unitValue) =>
                         bottom - (bottom - lineWidth) * normalized
@@ -47,7 +46,7 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
 
                     for (let i = 0; i < HISTORY_SIZE; i++) {
                         const bufferIndex = (writeIndex + i) % HISTORY_SIZE
-                        const x = Math.round((i / (HISTORY_SIZE - 1)) * actualWidth)
+                        const x = (i / (HISTORY_SIZE - 1) * actualWidth)
                         const inputY = dbToY(inputHistory[bufferIndex])
                         const outputY = dbToY(outputHistory[bufferIndex])
                         const envelopeY = normToY(envelopeHistory[bufferIndex])

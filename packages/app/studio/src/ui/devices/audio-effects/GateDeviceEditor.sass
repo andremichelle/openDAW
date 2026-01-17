@@ -2,21 +2,22 @@
 
 component
   display: grid
-  grid-template-columns: repeat(8, auto)
+  grid-template-columns: repeat(4, auto)
   grid-template-rows: auto auto 1fr
   row-gap: 0.25em
-  column-gap: 0.25em
-  align-items: center
+  column-gap: 0.5em
+  align-items: start
   @include mixins.Control
 
-  > span
-    font-size: 9px
-    white-space: nowrap
-    color: var(--color-shadow)
-    text-align: right
+  > div.control
+    padding: 0 0.5em
+    display: grid
+    grid-template-rows: auto auto
+    row-gap: 1px
+    justify-content: center
 
-  > button[class*="SidechainButton"]
-    grid-column: span 2
-
-  > div[class*="GateDisplay"]
-    grid-column: 1 / -1
+    > h3
+      font-size: 9px
+      height: 12px
+      text-align: center
+      color: var(--color-shadow)

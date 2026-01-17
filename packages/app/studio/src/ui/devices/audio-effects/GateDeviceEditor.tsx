@@ -1,7 +1,7 @@
 import css from "./GateDeviceEditor.sass?inline"
 import {AutomatableParameterFieldAdapter, DeviceHost, GateDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {Lifecycle} from "@opendaw/lib-std"
-import {createElement, Frag} from "@opendaw/lib-jsx"
+import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
@@ -31,8 +31,8 @@ export const GateDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
     lifecycle.own(project.liveStreamReceiver.subscribeFloats(
         adapter.address.append(0), processorValues => values.set(processorValues)))
     const createLabelControlFrag = (parameter: AutomatableParameterFieldAdapter<number>) => (
-        <Frag>
-            <span>{parameter.name}</span>
+        <div className="control">
+            <h3>{parameter.name}</h3>
             <RelativeUnitValueDragging lifecycle={lifecycle}
                                        editing={editing}
                                        parameter={parameter}
@@ -44,7 +44,7 @@ export const GateDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                                 parameter={parameter}
                                 framed standalone/>
             </RelativeUnitValueDragging>
-        </Frag>
+        </div>
     )
     return (
         <DeviceEditor lifecycle={lifecycle}

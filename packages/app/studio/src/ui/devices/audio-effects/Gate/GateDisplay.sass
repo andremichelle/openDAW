@@ -1,8 +1,13 @@
 component
-  display: flex
+  grid-column: 1 / -1
+  align-self: stretch
+  width: 256px
+  height: 100%
+  overflow: hidden
 
-  canvas
-    border-radius: 2px
+  > canvas
+    display: block
     width: 100%
     height: 100%
+    border-radius: 2px
     background-color: rgba(black, 0.1)
