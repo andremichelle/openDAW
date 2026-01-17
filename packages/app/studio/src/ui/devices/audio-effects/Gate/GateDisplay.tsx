@@ -4,19 +4,21 @@ import {clampUnit, Lifecycle, unitValue} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {CanvasPainter} from "@/ui/canvas/painter"
+import {GateDeviceBoxAdapter} from "@opendaw/studio-adapters"
 
 const className = Html.adoptStyleSheet(css, "GateDisplay")
 
 type Construct = {
     lifecycle: Lifecycle
+    adapter: GateDeviceBoxAdapter
     values: Float32Array  // [inputPeakDb, outputPeakDb, gateEnvelope, thresholdDb]
 }
 
-const DB_MIN = -60.0
+const DB_MIN = -66.0
 const DB_MAX = 6.0
 const HISTORY_SIZE = 128 + 1
 
-export const GateDisplay = ({lifecycle, values}: Construct) => {
+export const GateDisplay = ({lifecycle, adapter, values}: Construct) => {
     const inputHistory = new Float32Array(HISTORY_SIZE).fill(Number.MAX_VALUE)
     const outputHistory = new Float32Array(HISTORY_SIZE).fill(Number.MAX_VALUE)
     const envelopeHistory = new Float32Array(HISTORY_SIZE).fill(Number.MAX_VALUE)
@@ -80,11 +82,35 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
                     context.strokeStyle = envelopeGradient
                     context.lineWidth = lineWidth
                     context.stroke(envelopePath)
+
+                    const threshold = adapter.namedParameter.threshold.getControlledValue()
+                    const returnValue = adapter.namedParameter.return.getControlledValue()
+                    const thresholdY = dbToY(threshold)
+                    const returnY = dbToY(threshold - returnValue)
+
+                    context.strokeStyle = DisplayPaint.strokeStyle(0.5)
+                    context.lineWidth = lineWidth
+                    context.beginPath()
+                    context.moveTo(0, thresholdY)
+                    context.lineTo(actualWidth, thresholdY)
+                    context.moveTo(0, returnY)
+                    context.lineTo(actualWidth, returnY)
+                    context.stroke()
+                    context.fillStyle = DisplayPaint.strokeStyle(0.03)
+                    context.fillRect(0, thresholdY, actualWidth, returnY - thresholdY)
                 }))
                 painter.requestUpdate()
                 lifecycle.own(AnimationFrame.add(painter.requestUpdate))
             }}/>
-            <svg/>
+            <svg>
+                {[0, 12, 24, 36, 48, 60].map(db => {
+                    const normalized = (-db - DB_MIN) / (DB_MAX - DB_MIN)
+                    return <text x="2"
+                                 y={`${((1.0 - normalized) * 100)}%`}
+                                 font-size="8" fill="rgba(255, 255, 255, 0.2)"
+                                 dominant-baseline="middle">{db}</text>
+                })}
+            </svg>
         </div>
     )
 }

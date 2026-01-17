@@ -67,7 +67,7 @@ export const GateDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                                                    editing={editing}/>
                               </div>
                               {[threshold, returnParam, floor].map(parameter => createLabelControlFrag(parameter))}
-                              <GateDisplay lifecycle={lifecycle} values={values}/>
+                              <GateDisplay lifecycle={lifecycle} adapter={adapter} values={values}/>
                           </div>)}
                       populateMeter={() => (
                           <DevicePeakMeter lifecycle={lifecycle}
