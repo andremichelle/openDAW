@@ -610,12 +610,10 @@ export const IconLibrary = () => (
                 <path
                     d="M11 5.07089C7.93431 5.5094 5.5094 7.93431 5.07089 11H7V13H5.07089C5.5094 16.0657 7.93431 18.4906 11 18.9291V17H13V18.9291C16.0657 18.4906 18.4906 16.0657 18.9291 13H17V11H18.9291C18.4906 7.93431 16.0657 5.5094 13 5.07089V7H11V5.07089ZM3.05493 11C3.51608 6.82838 6.82838 3.51608 11 3.05493V1H13V3.05493C17.1716 3.51608 20.4839 6.82838 20.9451 11H23V13H20.9451C20.4839 17.1716 17.1716 20.4839 13 20.9451V23H11V20.9451C6.82838 20.4839 3.51608 17.1716 3.05493 13H1V11H3.05493ZM15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9C13.6569 9 15 10.3431 15 12Z"/>
             </symbol>
-            <symbol id={IconSymbol.toName(IconSymbol.Gate)} viewBox="0 0 24 24" fill="currentColor">
-                <path d="M4 4h2v16H4V4zm14 0h2v16h-2V4zm-6-2v2h-2v4h2v8h-2v4h2v2h2v-2h2v-4h-2V8h2V4h-2V2h-2z"/>
+            <symbol id={IconSymbol.toName(IconSymbol.Gate)} viewBox="-2 -2 28 28" fill="currentColor">
+                <path d="M19.92 12.08L12 20l-7.92-7.92l1.42-1.41l5.5 5.5V2h2v14.17l5.5-5.51zM12 20H2v2h20v-2z"/>
             </symbol>
-            <symbol id={IconSymbol.toName(IconSymbol.Swap)}
-                    viewBox="0 0 24 24"
-                    fill="currentColor">
+            <symbol id={IconSymbol.toName(IconSymbol.Swap)} viewBox="0 0 24 24" fill="currentColor">
                 <path
                     d="M16.0503 12.0498L21 16.9996L16.0503 21.9493L14.636 20.5351L17.172 17.9988L4 17.9996V15.9996L17.172 15.9988L14.636 13.464L16.0503 12.0498ZM7.94975 2.0498L9.36396 3.46402L6.828 5.9988L20 5.99955V7.99955L6.828 7.9988L9.36396 10.5351L7.94975 11.9493L3 6.99955L7.94975 2.0498Z"/>
             </symbol>
