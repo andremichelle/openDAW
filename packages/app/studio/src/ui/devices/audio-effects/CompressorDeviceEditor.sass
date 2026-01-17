@@ -13,7 +13,7 @@ component
     grid-column: 1 / -1
     column-gap: 0.25em
 
-    button
+    button:not(.SidechainButton)
       padding: 0 2px 0 4px
       height: 15px
       font-size: 9px
@@ -22,7 +22,7 @@ component
       border-radius: 1px
       background-color: rgba(black, 0.33)
 
-      &.active, &.has-source
+      &.active
         color: var(--color-background)
         background-color: var(--color-orange)
 

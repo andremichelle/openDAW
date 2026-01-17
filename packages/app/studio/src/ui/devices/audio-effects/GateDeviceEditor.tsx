@@ -1,24 +1,17 @@
 import css from "./GateDeviceEditor.sass?inline"
-import {
-    AutomatableParameterFieldAdapter,
-    GateDeviceBoxAdapter,
-    DeviceHost,
-    LabeledAudioOutput
-} from "@opendaw/studio-adapters"
-import {Address} from "@opendaw/lib-box"
-import {Lifecycle, Option} from "@opendaw/lib-std"
+import {AutomatableParameterFieldAdapter, DeviceHost, GateDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {Lifecycle} from "@opendaw/lib-std"
 import {createElement, Frag} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
-import {EffectFactories, MenuItem} from "@opendaw/studio-core"
+import {EffectFactories} from "@opendaw/studio-core"
 import {ParameterLabel} from "@/ui/components/ParameterLabel"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import {GateDisplay} from "@/ui/devices/audio-effects/Gate/GateDisplay"
-import {MenuButton} from "@/ui/components/MenuButton"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {SidechainButton} from "@/ui/devices/SidechainButton"
 
 const className = Html.adoptStyleSheet(css, "GateDeviceEditor")
 
@@ -53,35 +46,6 @@ export const GateDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
             </RelativeUnitValueDragging>
         </Frag>
     )
-    const sideChain = adapter.sideChain
-    const createSideChainMenu = (parent: MenuItem) => {
-        const isSelected = (address: Address) =>
-            sideChain.targetAddress.mapOr(other => other.equals(address), false)
-        const createSelectableItem = (output: LabeledAudioOutput): MenuItem => {
-            if (output.children().nonEmpty()) {
-                return MenuItem.default({label: output.label})
-                    .setRuntimeChildrenProcedure(subParent =>
-                        output.children().ifSome(children => {
-                            for (const child of children) {
-                                subParent.addMenuItem(createSelectableItem(child))
-                            }
-                        }))
-            }
-            return MenuItem.default({
-                label: output.label,
-                checked: isSelected(output.address)
-            }).setTriggerProcedure(() => editing.modify(() =>
-                sideChain.targetAddress = Option.wrap(output.address)))
-        }
-        sideChain.targetAddress.ifSome(() =>
-            parent.addMenuItem(MenuItem.default({label: "Remove Sidechain"})
-                .setTriggerProcedure(() => editing.modify(() =>
-                    sideChain.targetAddress = Option.None))))
-        parent.addMenuItem(MenuItem.header({label: "Tracks", icon: IconSymbol.OpenDAW, color: Colors.orange}))
-        for (const output of project.rootBoxAdapter.labeledAudioOutputs()) {
-            parent.addMenuItem(createSelectableItem(output))
-        }
-    }
     return (
         <DeviceEditor lifecycle={lifecycle}
                       project={project}
@@ -90,10 +54,9 @@ export const GateDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                       populateControls={() => (
                           <div className={className}>
                               <div className="sidechain-row">
-                                  <MenuButton onInit={button => sideChain.catchupAndSubscribe(pointer =>
-                                      button.classList.toggle("has-source", pointer.nonEmpty()))}
-                                              root={MenuItem.root().setRuntimeChildrenProcedure(createSideChainMenu)}
-                                              appearance={{tinyTriangle: true}}>Sidechain</MenuButton>
+                                  <SidechainButton sideChain={adapter.sideChain}
+                                                   rootBoxAdapter={project.rootBoxAdapter}
+                                                   editing={editing}/>
                               </div>
                               <div className="control-section">
                                   <div className="controls">
