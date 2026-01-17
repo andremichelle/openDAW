@@ -1,6 +1,6 @@
 import css from "./GateDisplay.sass?inline"
 import {AnimationFrame, Html} from "@opendaw/lib-dom"
-import {clampUnit, Lifecycle, unitValue} from "@opendaw/lib-std"
+import {Lifecycle, unitValue} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {CanvasPainter} from "@/ui/canvas/painter"
@@ -31,8 +31,12 @@ export const GateDisplay = ({lifecycle, adapter, values}: Construct) => {
                     context.clearRect(0, 0, actualWidth, actualHeight)
 
                     const lineWidth = 2.0 / devicePixelRatio
-                    const normToY = (normalized: unitValue) => actualHeight - actualHeight * normalized
-                    const dbToY = (db: number): number => normToY(clampUnit((db - DB_MIN) / (DB_MAX - DB_MIN)))
+                    const normToY = (normalized: unitValue) => {
+                        return normalized === Number.NEGATIVE_INFINITY
+                            ? actualHeight + devicePixelRatio
+                            : actualHeight - actualHeight * normalized
+                    }
+                    const dbToY = (db: number): number => normToY(((db - DB_MIN) / (DB_MAX - DB_MIN)))
 
                     inputHistory[writeIndex] = dbToY(values[0])
                     outputHistory[writeIndex] = dbToY(values[1])
