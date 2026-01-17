@@ -1,6 +1,6 @@
 import {AudioEffectDeviceAdapter, GateDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {int, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
-import {AudioBuffer, dbToGain, Event, gainToDb, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioBuffer, dbToGain, Event, gainToDb} from "@opendaw/lib-dsp"
 import {EngineContext} from "../../EngineContext"
 import {Block, Processor, ProcessPhase} from "../../processing"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
@@ -33,7 +33,6 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
     #sideChain: Option<AudioBuffer> = Option.None
     #needsSideChainResolution: boolean = false
 
-    // Parameters (cached)
     #threshold: number = -40.0
     #return: number = 6.0
     #attack: number = 0.5
@@ -41,7 +40,6 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
     #release: number = 100.0
     #floor: number = -80.0
 
-    // Derived values
     #thresholdGain: number = dbToGain(-40.0)
     #returnThresholdGain: number = dbToGain(-46.0)
     #floorGain: number = dbToGain(-80.0)
@@ -49,7 +47,6 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
     #attackCoeff: number = 0.0
     #releaseCoeff: number = 0.0
 
-    // State
     #envelope: number = 0.0
     #holdCounter: int = 0 | 0
     #gateOpen: boolean = false
@@ -62,8 +59,8 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
         this.#adapter = adapter
         this.#output = new AudioBuffer()
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
-        // [0] inputPeakDb, [1] outputPeakDb, [2] gateEnvelope, [3] thresholdDb
-        this.#editorValues = new Float32Array([Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, 0.0, -40.0])
+        // [0] inputPeakDb, [1] outputPeakDb, [2] gateEnvelopeDb
+        this.#editorValues = new Float32Array([Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY])
 
         const {threshold, return: returnParam, attack, hold, release, floor} = adapter.namedParameter
 
@@ -81,8 +78,7 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
                 this.#editorValues, (_hasSubscribers) => {
                     this.#editorValues[0] = gainToDb(this.#inpMax)
                     this.#editorValues[1] = gainToDb(this.#outMax)
-                    this.#editorValues[2] = this.#envelope
-                    this.#editorValues[3] = this.#threshold
+                    this.#editorValues[2] = gainToDb(this.#envelope)
                 }),
             adapter.sideChain.catchupAndSubscribe(() => {
                 this.#sideChainConnection.terminate()
@@ -136,60 +132,39 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
     processAudio(_block: Block, from: int, to: int): void {
         if (this.#source.isEmpty()) return
         const source = this.#source.unwrap()
-
         const srcL = source.getChannel(0)
         const srcR = source.getChannel(1)
         const outL = this.#output.getChannel(0)
         const outR = this.#output.getChannel(1)
-
-        // Determine sidechain source
         const useSidechain = this.#sideChain.nonEmpty()
         const scL = useSidechain ? this.#sideChain.unwrap().getChannel(0) : srcL
         const scR = useSidechain ? this.#sideChain.unwrap().getChannel(1) : srcR
-
         for (let i = from; i < to; i++) {
-            // 1. Detect level (peak of L/R from sidechain or input)
             const level = Math.max(Math.abs(scL[i]), Math.abs(scR[i]))
-
-            // Track input peak for display
             if (this.#inpMax <= level) {
                 this.#inpMax = level
             } else {
                 this.#inpMax *= GateDeviceProcessor.PEAK_DECAY_PER_SAMPLE
             }
-
-            // 2. Update gate state
             if (level >= this.#thresholdGain) {
-                // Signal above threshold - open gate
                 this.#gateOpen = true
                 this.#holdCounter = this.#holdSamples
             } else if (this.#gateOpen && this.#holdCounter > 0) {
-                // In hold period - decrement counter
                 this.#holdCounter--
             } else if (level < this.#returnThresholdGain) {
-                // Signal below return threshold and hold expired - close gate
                 this.#gateOpen = false
             }
-
-            // 3. Smooth envelope toward target
             const target = this.#gateOpen ? 1.0 : 0.0
             if (target > this.#envelope) {
-                // Opening - use attack coefficient
                 this.#envelope = this.#attackCoeff * this.#envelope + (1.0 - this.#attackCoeff) * target
             } else {
-                // Closing - use release coefficient
                 this.#envelope = this.#releaseCoeff * this.#envelope + (1.0 - this.#releaseCoeff) * target
             }
-
-            // 4. Apply gain
             const gain = this.#floorGain + (1.0 - this.#floorGain) * this.#envelope
             const l = srcL[i] * gain
             const r = srcR[i] * gain
-
             outL[i] = l
             outR[i] = r
-
-            // Track output peak for display
             const outPeak = Math.max(Math.abs(l), Math.abs(r))
             if (this.#outMax <= outPeak) {
                 this.#outMax = outPeak
@@ -225,19 +200,10 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
     }
 
     #updateCoefficients(): void {
-        // Attack: time to open gate (0 = instant)
         const attackSeconds = this.#attack * 0.001
-        if (attackSeconds <= 0.0) {
-            this.#attackCoeff = 0.0 // Instant attack
-        } else {
-            this.#attackCoeff = Math.exp(-1.0 / (sampleRate * attackSeconds))
-        }
-
-        // Release: time to close gate (minimum 1ms)
         const releaseSeconds = this.#release * 0.001
+        this.#attackCoeff = Math.exp(-1.0 / (sampleRate * attackSeconds))
         this.#releaseCoeff = Math.exp(-1.0 / (sampleRate * releaseSeconds))
-
-        // Hold: time to keep gate open after signal drops
         this.#holdSamples = Math.round(this.#hold * 0.001 * sampleRate) | 0
     }
 

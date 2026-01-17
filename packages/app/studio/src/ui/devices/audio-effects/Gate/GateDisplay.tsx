@@ -1,6 +1,6 @@
 import css from "./GateDisplay.sass?inline"
 import {AnimationFrame, Html} from "@opendaw/lib-dom"
-import {clamp, Lifecycle, unitValue} from "@opendaw/lib-std"
+import {clampUnit, Lifecycle, unitValue} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {CanvasPainter} from "@/ui/canvas/painter"
@@ -17,9 +17,9 @@ const DB_MAX = 0.0
 const HISTORY_SIZE = 128 + 1
 
 export const GateDisplay = ({lifecycle, values}: Construct) => {
-    const inputHistory = new Float32Array(HISTORY_SIZE).fill(DB_MIN)
-    const outputHistory = new Float32Array(HISTORY_SIZE).fill(DB_MIN)
-    const envelopeHistory = new Float32Array(HISTORY_SIZE).fill(0.0)
+    const inputHistory = new Float32Array(HISTORY_SIZE).fill(Number.MAX_VALUE)
+    const outputHistory = new Float32Array(HISTORY_SIZE).fill(Number.MAX_VALUE)
+    const envelopeHistory = new Float32Array(HISTORY_SIZE).fill(Number.MAX_VALUE)
     let writeIndex = 0
     return (
         <div classList={className}>
@@ -30,15 +30,13 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
 
                     const lineWidth = 1.5 / devicePixelRatio
                     const top = lineWidth + devicePixelRatio * 4
-                    const bottom = actualHeight - lineWidth + devicePixelRatio
-                    const normToY = (normalized: unitValue) =>
-                        bottom - (bottom - top) * normalized
-                    const dbToY = (db: number): number =>
-                        normToY((clamp(db, DB_MIN, DB_MAX) - DB_MIN) / (DB_MAX - DB_MIN))
+                    const bottom = actualHeight - lineWidth
+                    const normToY = (normalized: unitValue) => bottom - (bottom - top) * normalized
+                    const dbToY = (db: number): number => normToY(clampUnit((db - DB_MIN) / (DB_MAX - DB_MIN)))
 
-                    inputHistory[writeIndex] = values[0]
-                    outputHistory[writeIndex] = values[1]
-                    envelopeHistory[writeIndex] = values[2]
+                    inputHistory[writeIndex] = dbToY(values[0])
+                    outputHistory[writeIndex] = dbToY(values[1])
+                    envelopeHistory[writeIndex] = dbToY(values[2])
                     writeIndex = (writeIndex + 1) % HISTORY_SIZE
 
                     const inputPath = new Path2D()
@@ -48,9 +46,9 @@ export const GateDisplay = ({lifecycle, values}: Construct) => {
                     for (let i = 0; i < HISTORY_SIZE; i++) {
                         const bufferIndex = (writeIndex + i) % HISTORY_SIZE
                         const x = (i / (HISTORY_SIZE - 1) * actualWidth)
-                        const inputY = dbToY(inputHistory[bufferIndex])
-                        const outputY = dbToY(outputHistory[bufferIndex])
-                        const envelopeY = normToY(envelopeHistory[bufferIndex])
+                        const inputY = inputHistory[bufferIndex]
+                        const outputY = outputHistory[bufferIndex]
+                        const envelopeY = envelopeHistory[bufferIndex]
                         if (i === 0) {
                             inputPath.moveTo(x, inputY)
                             outputPath.moveTo(x, outputY)
