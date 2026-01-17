@@ -68,7 +68,7 @@ export class GateDeviceBoxAdapter implements AudioEffectDeviceAdapter {
                 box.release, ValueMapping.linear(1.0, 2000.0),
                 StringMapping.numeric({unit: "ms", fractionDigits: 1}), "Release"),
             floor: this.#parametric.createParameter(
-                box.floor, ValueMapping.linear(-80.0, 0.0), StringMapping.decible, "Floor")
+                box.floor, ValueMapping.decibel(-72.0, -12.0, 0.0), StringMapping.decible, "Floor")
         } as const
     }
 }
