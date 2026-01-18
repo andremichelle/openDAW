@@ -8,11 +8,17 @@ import {
     drawHeatmap,
     drawHistogram,
     drawLayerDiagram,
+    drawSpectrumComparison,
     drawWeightDistributionByLayer,
     WeightStats
 } from "./visualizer"
 import namWasmUrl from "@andremichelle/nam-wasm/nam.wasm?url"
 import {NamModel} from "@andremichelle/nam-wasm"
+
+// TODO: NamFileBox
+// TODO: Version checking
+// TODO: Assets hosting
+// TODO: Parameters
 
 const LOCAL_MODEL_URL = "/[PRE] JCM800-2203-MODIFIED-HI The Sound.nam"
 const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
@@ -28,6 +34,12 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
     let sender: Nullable<NamProcessorProtocol> = null
     let audioSource: Nullable<MediaElementAudioSourceNode> = null
     let audioElement: Nullable<HTMLAudioElement> = null
+    let inputAnalyser: Nullable<AnalyserNode> = null
+    let outputAnalyser: Nullable<AnalyserNode> = null
+    let inputFreqData: Nullable<Float32Array> = null
+    let outputFreqData: Nullable<Float32Array> = null
+    let animationId: number = 0
+    const FFT_SIZE = 2048
 
     // UI references
     let statusEl: HTMLDivElement
@@ -41,6 +53,7 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
     let heatmapCanvas: HTMLCanvasElement
     let layerCanvas: HTMLCanvasElement
     let segmentCanvas: HTMLCanvasElement
+    let spectrumCanvas: HTMLCanvasElement
     let vizSection: HTMLDivElement
 
     const setStatus = (message: string, type: "info" | "error" | "success" = "info") => {
@@ -74,7 +87,7 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
             drawHistogram(histogramCanvas, model.weights, 150)
         }
         if (isDefined(heatmapCanvas)) {
-            drawHeatmap(heatmapCanvas, model.weights, 512)
+            drawHeatmap(heatmapCanvas, model.weights)
         }
         if (isDefined(layerCanvas)) {
             drawLayerDiagram(layerCanvas, model)
@@ -123,7 +136,20 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
             numberOfOutputs: 1,
             outputChannelCount: [2]
         })
-        namNode.connect(audioContext.destination)
+
+        // Create analysers for spectrum visualization
+        inputAnalyser = audioContext.createAnalyser()
+        inputAnalyser.fftSize = FFT_SIZE
+        inputFreqData = new Float32Array(inputAnalyser.frequencyBinCount)
+
+        outputAnalyser = audioContext.createAnalyser()
+        outputAnalyser.fftSize = FFT_SIZE
+        outputFreqData = new Float32Array(outputAnalyser.frequencyBinCount)
+
+        // Connect: Source -> InputAnalyser -> NAM -> OutputAnalyser -> Destination
+        // (audioSource will connect to inputAnalyser later)
+        namNode.connect(outputAnalyser)
+        outputAnalyser.connect(audioContext.destination)
 
         sender = Communicator.sender<NamProcessorProtocol>(
             Messenger.for(namNode.port),
@@ -189,6 +215,35 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
         }
     }
 
+    // Animation loop for spectrum visualization
+    const startAnimation = () => {
+        const animate = () => {
+            if (!isDefined(inputAnalyser) || !isDefined(outputAnalyser) ||
+                !isDefined(inputFreqData) || !isDefined(outputFreqData) ||
+                !isDefined(spectrumCanvas)) {
+                animationId = requestAnimationFrame(animate)
+                return
+            }
+
+            // Get frequency data from both analysers
+            inputAnalyser.getFloatFrequencyData(inputFreqData as Float32Array<ArrayBuffer>)
+            outputAnalyser.getFloatFrequencyData(outputFreqData as Float32Array<ArrayBuffer>)
+
+            // Draw spectrum comparison
+            drawSpectrumComparison(spectrumCanvas, inputFreqData, outputFreqData, FFT_SIZE)
+
+            animationId = requestAnimationFrame(animate)
+        }
+        animationId = requestAnimationFrame(animate)
+    }
+
+    const stopAnimation = () => {
+        if (animationId !== 0) {
+            cancelAnimationFrame(animationId)
+            animationId = 0
+        }
+    }
+
     const toggleAudio = () => {
         if (!isDefined(audioContext) || !isDefined(namNode)) return
 
@@ -196,10 +251,12 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
             if (audioElement.paused) {
                 audioElement.play()
                 startAudioBtn.textContent = "Stop Audio"
+                startAnimation()
             } else {
                 audioElement.pause()
                 audioElement.currentTime = 0
                 startAudioBtn.textContent = "Play Audio"
+                stopAnimation()
             }
             return
         }
@@ -208,10 +265,18 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
         audioElement.crossOrigin = "anonymous"
         audioElement.loop = true
         audioSource = audioContext.createMediaElementSource(audioElement)
-        audioSource.connect(namNode)
+
+        // Connect: Source -> InputAnalyser -> NAM
+        if (isDefined(inputAnalyser)) {
+            audioSource.connect(inputAnalyser)
+            inputAnalyser.connect(namNode)
+        } else {
+            audioSource.connect(namNode)
+        }
 
         audioElement.play()
         startAudioBtn.textContent = "Stop Audio"
+        startAnimation()
 
         if (audioContext.state === "suspended") {
             audioContext.resume()
@@ -412,37 +477,28 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                         />
                     </div>
 
-                    <div class="viz-panel wide">
-                        <h3>Weight Heatmap (Red=positive, Blue=negative)</h3>
+                    <div class="viz-panel">
+                        <h3>Weight Heatmap</h3>
                         <canvas
-                            style="width: 100%; image-rendering: pixelated;"
+                            class="heatmap"
+                            width="300"
+                            height="300"
+                            style="width: 150px; height: 150px;"
                             onInit={(element: HTMLCanvasElement) => heatmapCanvas = element}
+                        />
+                    </div>
+
+                    <div class="viz-panel wide">
+                        <h3>Frequency Spectrum (Input vs Output)</h3>
+                        <canvas
+                            width="800"
+                            height="200"
+                            onInit={(element: HTMLCanvasElement) => spectrumCanvas = element}
                         />
                     </div>
                 </div>
             </div>
 
-            <div class="section">
-                <h2>Visualize Only (no audio)</h2>
-                <div class="controls">
-                    <div class="row">
-                        <label>Load .nam file to visualize</label>
-                        <input
-                            type="file"
-                            accept=".nam"
-                            onInit={(element: HTMLInputElement) => {
-                                element.onchange = async () => {
-                                    const file = element.files?.[0]
-                                    if (isDefined(file)) {
-                                        await loadModelForVisualization(file)
-                                        setStatus(`Visualizing: ${file.name}`, "success")
-                                    }
-                                }
-                            }}
-                        />
-                    </div>
-                </div>
-            </div>
         </div>
     ))
 })()

@@ -89,12 +89,6 @@ h1
         background: #204a20
         color: #66ff66
 
-canvas
-    width: 100%
-    height: 150px
-    background: #111
-    border-radius: 4px
-
 .viz-grid
     display: grid
     grid-template-columns: 1fr 1fr
@@ -114,9 +108,15 @@ canvas
         margin-bottom: 8px
 
     canvas
+        display: block
         width: 100%
         height: auto
-        background: transparent
+        background: #111
+        border-radius: 4px
+
+        &.heatmap
+            width: 150px
+            height: 150px
 
 .stats
     font-family: monospace

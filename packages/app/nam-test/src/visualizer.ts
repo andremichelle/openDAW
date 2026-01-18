@@ -1,6 +1,10 @@
 import {isDefined} from "@opendaw/lib-std"
 import {NamModel} from "@andremichelle/nam-wasm"
 
+// Colors matching DisplayPaint style
+const positiveColor = (opacity: number) => `hsla(200, 83%, 60%, ${opacity})` // cyan-blue
+const negativeColor = (opacity: number) => `hsla(340, 83%, 60%, ${opacity})` // magenta-pink
+
 export interface WeightStats {
     count: number
     min: number
@@ -102,52 +106,179 @@ export const drawHistogram = (
     ctx.fillText(`max: ${maxCount}`, padding + 5, padding + 15)
 }
 
-export const drawHeatmap = (
+// Precomputed heatmap data for efficient animation
+export interface HeatmapData {
+    positions: Float32Array  // x, y pairs
+    intensities: Float32Array
+    signs: Int8Array  // 1 for positive, -1 for negative
+    size: number
+}
+
+// Precompute positions and intensities once when model loads
+export const createHeatmapData = (weights: number[]): HeatmapData => {
+    const size = 300
+    const centerX = size / 2
+    const centerY = size / 2
+    const maxRadius = size / 2 - 10
+
+    // Percentile-based scaling
+    const sorted = [...weights].map(Math.abs).sort((a, b) => a - b)
+    const p95 = sorted[Math.floor(sorted.length * 0.95)]
+
+    const positions = new Float32Array(weights.length * 2)
+    const intensities = new Float32Array(weights.length)
+    const signs = new Int8Array(weights.length)
+
+    for (let i = 0; i < weights.length; i++) {
+        // Fermat spiral for even visual distribution
+        const angle = i * 2.4 // Golden angle approximation
+        const radius = Math.sqrt(i / weights.length) * maxRadius
+
+        positions[i * 2] = centerX + Math.cos(angle) * radius
+        positions[i * 2 + 1] = centerY + Math.sin(angle) * radius
+        intensities[i] = Math.min(Math.abs(weights[i]) / p95, 1)
+        signs[i] = weights[i] >= 0 ? 1 : -1
+    }
+
+    return {positions, intensities, signs, size}
+}
+
+// Fast draw using precomputed data
+export const drawHeatmapAnimated = (
     canvas: HTMLCanvasElement,
-    weights: number[],
-    cols: number = 256
+    data: HeatmapData,
+    audioLevel: number = 0
 ): void => {
     const ctx = canvas.getContext("2d")
     if (!isDefined(ctx)) return
 
-    const rows = Math.ceil(weights.length / cols)
-    canvas.width = cols
-    canvas.height = rows
+    const {positions, intensities, signs, size} = data
 
-    const imageData = ctx.createImageData(cols, rows)
-    const data = imageData.data
+    // Set canvas size only if needed
+    if (canvas.width !== size) {
+        canvas.width = size
+        canvas.height = size
+    }
 
-    const stats = computeStats(weights)
-    const absMax = Math.max(Math.abs(stats.min), Math.abs(stats.max))
+    // Clear
+    ctx.fillStyle = "#0a0a10"
+    ctx.fillRect(0, 0, size, size)
 
-    for (let i = 0; i < weights.length; i++) {
-        const normalized = weights[i] / absMax // -1 to 1
-        const pixelIndex = i * 4
+    // Audio-reactive glow
+    const glowBoost = 1 + audioLevel * 0.8
 
-        if (normalized >= 0) {
-            // Positive: black to red
-            data[pixelIndex] = Math.floor(normalized * 255)     // R
-            data[pixelIndex + 1] = 0                             // G
-            data[pixelIndex + 2] = 0                             // B
-        } else {
-            // Negative: black to blue
-            data[pixelIndex] = 0                                 // R
-            data[pixelIndex + 1] = 0                             // G
-            data[pixelIndex + 2] = Math.floor(-normalized * 255) // B
+    // Draw in batches by color to reduce state changes
+    const count = intensities.length
+
+    // Draw positive weights (cyan)
+    ctx.fillStyle = positiveColor(0.5 * glowBoost)
+    for (let i = 0; i < count; i++) {
+        if (signs[i] > 0) {
+            const alpha = Math.min(intensities[i] * 0.8 + 0.1, 1) * glowBoost
+            if (alpha > 0.15) {
+                ctx.globalAlpha = alpha
+                ctx.fillRect(positions[i * 2] - 0.5, positions[i * 2 + 1] - 0.5, 1.5, 1.5)
+            }
         }
-        data[pixelIndex + 3] = 255 // A
     }
 
-    // Fill remaining pixels
-    for (let i = weights.length; i < cols * rows; i++) {
-        const pixelIndex = i * 4
-        data[pixelIndex] = 30
-        data[pixelIndex + 1] = 30
-        data[pixelIndex + 2] = 46
-        data[pixelIndex + 3] = 255
+    // Draw negative weights (magenta)
+    ctx.fillStyle = negativeColor(0.5 * glowBoost)
+    for (let i = 0; i < count; i++) {
+        if (signs[i] < 0) {
+            const alpha = Math.min(intensities[i] * 0.8 + 0.1, 1) * glowBoost
+            if (alpha > 0.15) {
+                ctx.globalAlpha = alpha
+                ctx.fillRect(positions[i * 2] - 0.5, positions[i * 2 + 1] - 0.5, 1.5, 1.5)
+            }
+        }
     }
 
-    ctx.putImageData(imageData, 0, 0)
+    ctx.globalAlpha = 1
+}
+
+// Static version for display
+export const drawHeatmap = (
+    canvas: HTMLCanvasElement,
+    weights: number[]
+): void => {
+    const data = createHeatmapData(weights)
+    drawHeatmapAnimated(canvas, data, 0)
+}
+
+// Frequency spectrum comparison (input vs output)
+export const drawSpectrumComparison = (
+    canvas: HTMLCanvasElement,
+    inputData: Float32Array,
+    outputData: Float32Array,
+    fftSize: number
+): void => {
+    const ctx = canvas.getContext("2d")
+    if (!isDefined(ctx)) return
+
+    const width = canvas.width
+    const height = canvas.height
+    const binCount = fftSize / 2
+
+    // Clear
+    ctx.fillStyle = "#0a0a10"
+    ctx.fillRect(0, 0, width, height)
+
+    // Draw center line
+    const centerY = height / 2
+    ctx.strokeStyle = "#333"
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(0, centerY)
+    ctx.lineTo(width, centerY)
+    ctx.stroke()
+
+    // getFloatFrequencyData returns dB values (typically -100 to 0)
+    const maxDb = 0
+    const minDb = -100
+    const dbRange = maxDb - minDb
+
+    const getY = (dbValue: number, isInput: boolean): number => {
+        // dbValue is already in dB from analyser
+        const normalized = (dbValue - minDb) / dbRange
+        const barHeight = Math.max(0, Math.min(1, normalized)) * (height / 2 - 10)
+        return isInput ? centerY - barHeight : centerY + barHeight
+    }
+
+    // Draw input spectrum (top, cyan) - use logarithmic frequency scale
+    ctx.beginPath()
+    ctx.strokeStyle = positiveColor(0.9)
+    ctx.lineWidth = 2
+    for (let i = 1; i < binCount; i++) {
+        // Logarithmic x scale for frequency
+        const logX = Math.log(i) / Math.log(binCount)
+        const x = logX * width
+        const y = getY(inputData[i], true)
+        if (i === 1) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+    }
+    ctx.stroke()
+
+    // Draw output spectrum (bottom, magenta)
+    ctx.beginPath()
+    ctx.strokeStyle = negativeColor(0.9)
+    ctx.lineWidth = 2
+    for (let i = 1; i < binCount; i++) {
+        const logX = Math.log(i) / Math.log(binCount)
+        const x = logX * width
+        const y = getY(outputData[i], false)
+        if (i === 1) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+    }
+    ctx.stroke()
+
+    // Labels
+    ctx.fillStyle = positiveColor(1)
+    ctx.font = "11px monospace"
+    ctx.textAlign = "left"
+    ctx.fillText("Input", 5, 15)
+    ctx.fillStyle = negativeColor(1)
+    ctx.fillText("Output", 5, height - 5)
 }
 
 export const drawLayerDiagram = (canvas: HTMLCanvasElement, model: NamModel): void => {
