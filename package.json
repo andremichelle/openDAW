@@ -12,6 +12,7 @@
     "build": "turbo build --output-logs=full",
     "dev:studio": "turbo run dev --filter=@opendaw/app-studio",
     "dev:lab": "turbo run dev --filter=@opendaw/lab",
+    "dev:nam-test": "turbo run dev --filter=@opendaw/nam-test",
     "dev:yjs-server": "turbo run dev --filter=yjs-server",
     "test": "turbo run test --concurrency=1",
     "lint": "turbo run lint",
