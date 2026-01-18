@@ -1,6 +1,5 @@
 import {RenderQuantum} from "@opendaw/lib-dsp"
-import {NamWasmModule} from "@andremichelle/nam-wasm"
-import createNamModule from "@andremichelle/nam-wasm/nam.js"
+import {createNamModule, NamWasmModule} from "@andremichelle/nam-wasm"
 import {isDefined} from "@opendaw/lib-std"
 
 registerProcessor("nam-test-processor", class NamTestProcessor extends AudioWorkletProcessor {
