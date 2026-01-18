@@ -1,6 +1,8 @@
 import "./style.sass"
 import {assert, isDefined, Nullable} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
+import {Communicator, Messenger} from "@opendaw/lib-runtime"
+import {NamProcessorProtocol} from "./protocol"
 import namWasmUrl from "@andremichelle/nam-wasm/nam.wasm?url"
 
 const LOCAL_MODEL_URL = "/[PRE] JCM800-2203-MODIFIED-HI The Sound.nam"
@@ -14,10 +16,9 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
     // State
     let audioContext: Nullable<AudioContext> = null
     let namNode: Nullable<AudioWorkletNode> = null
+    let sender: Nullable<NamProcessorProtocol> = null
     let audioSource: Nullable<MediaElementAudioSourceNode> = null
     let audioElement: Nullable<HTMLAudioElement> = null
-    let wasmReady = false
-    let modelLoaded = false
 
     // UI references
     let statusEl: HTMLDivElement
@@ -50,35 +51,46 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
         })
         namNode.connect(audioContext.destination)
 
-        // Listen for messages from processor
-        namNode.port.onmessage = (event) => {
-            const {type} = event.data
-            if (type === "wasm-ready") {
-                wasmReady = true
-                setStatus("WASM ready! Load a model to continue.", "success")
-                loadModelBtn.disabled = false
-            } else if (type === "model-loaded") {
-                modelLoaded = event.data.success
-                if (modelLoaded) {
-                    setStatus("Model loaded! Click 'Play Audio' to hear it.", "success")
-                    startAudioBtn.disabled = false
-                } else {
-                    setStatus(`Failed to load model: ${event.data.error || "unknown error"}`, "error")
+        // Create Communicator sender
+        sender = Communicator.sender<NamProcessorProtocol>(
+            Messenger.for(namNode.port),
+            (dispatcher): NamProcessorProtocol => ({
+                initWasm(wasmBinary: Communicator.Transfer<ArrayBuffer>) {
+                    return dispatcher.dispatchAndReturn(this.initWasm, wasmBinary)
+                },
+                loadModel(modelJson: string) {
+                    return dispatcher.dispatchAndReturn(this.loadModel, modelJson)
+                },
+                setInputGain(value: number) {
+                    dispatcher.dispatchAndForget(this.setInputGain, value)
+                },
+                setOutputGain(value: number) {
+                    dispatcher.dispatchAndForget(this.setOutputGain, value)
+                },
+                setMix(value: number) {
+                    dispatcher.dispatchAndForget(this.setMix, value)
+                },
+                setBypass(value: boolean) {
+                    dispatcher.dispatchAndForget(this.setBypass, value)
                 }
-            } else if (type === "wasm-error") {
-                setStatus(`WASM error: ${event.data.error}`, "error")
-            }
-        }
+            })
+        )
 
         setStatus("Fetching WASM binary...")
         const wasmBinary = await fetch(namWasmUrl).then(response => response.arrayBuffer())
 
         setStatus("Initializing WASM in AudioWorklet...")
-        namNode.port.postMessage({type: "init-wasm", wasmBinary}, [wasmBinary])
+        try {
+            await sender.initWasm(Communicator.makeTransferable(wasmBinary))
+            setStatus("WASM ready! Load a model to continue.", "success")
+            loadModelBtn.disabled = false
+        } catch (error) {
+            setStatus(`WASM error: ${error}`, "error")
+        }
     }
 
     const loadModel = async () => {
-        if (!isDefined(namNode) || !wasmReady) return
+        if (!isDefined(sender)) return
 
         const url = modelUrlInput.value.trim()
         if (!url) {
@@ -94,9 +106,15 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
             }
             const modelJson = await response.text()
             setStatus("Sending model to processor...")
-            namNode.port.postMessage({type: "load-model", modelJson})
+            const success = await sender.loadModel(modelJson)
+            if (success) {
+                setStatus("Model loaded! Click 'Play Audio' to hear it.", "success")
+                startAudioBtn.disabled = false
+            } else {
+                setStatus("Failed to load model", "error")
+            }
         } catch (error) {
-            setStatus(`Failed to fetch model: ${error}`, "error")
+            setStatus(`Failed to load model: ${error}`, "error")
         }
     }
 
@@ -201,11 +219,8 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                             value="1"
                             onInit={(element: HTMLInputElement) => {
                                 element.oninput = () => {
-                                    if (isDefined(namNode)) {
-                                        namNode.port.postMessage({
-                                            type: "set-input-gain",
-                                            value: parseFloat(element.value)
-                                        })
+                                    if (isDefined(sender)) {
+                                        sender.setInputGain(parseFloat(element.value))
                                     }
                                 }
                             }}
@@ -221,11 +236,8 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                             value="1"
                             onInit={(element: HTMLInputElement) => {
                                 element.oninput = () => {
-                                    if (isDefined(namNode)) {
-                                        namNode.port.postMessage({
-                                            type: "set-output-gain",
-                                            value: parseFloat(element.value)
-                                        })
+                                    if (isDefined(sender)) {
+                                        sender.setOutputGain(parseFloat(element.value))
                                     }
                                 }
                             }}
@@ -241,8 +253,8 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                             value="1"
                             onInit={(element: HTMLInputElement) => {
                                 element.oninput = () => {
-                                    if (isDefined(namNode)) {
-                                        namNode.port.postMessage({type: "set-mix", value: parseFloat(element.value)})
+                                    if (isDefined(sender)) {
+                                        sender.setMix(parseFloat(element.value))
                                     }
                                 }
                             }}
@@ -254,25 +266,14 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                             type="checkbox"
                             onInit={(element: HTMLInputElement) => {
                                 element.onchange = () => {
-                                    if (isDefined(namNode)) {
-                                        namNode.port.postMessage({type: "set-bypass", value: element.checked})
+                                    if (isDefined(sender)) {
+                                        sender.setBypass(element.checked)
                                     }
                                 }
                             }}
                         />
                     </div>
                 </div>
-            </div>
-
-            <div class="section">
-                <h2>Notes</h2>
-                <ul style="padding-left: 20px; color: #888; font-size: 14px;">
-                    <li>Local JCM800 model + clean guitar audio are pre-loaded</li>
-                    <li>Get more NAM models from <a href="https://www.tone3000.com/" target="_blank"
-                                                    style="color: #4a9eff;">TONE3000</a></li>
-                    <li>Models are .nam files (JSON format)</li>
-                    <li>NAM processes mono audio - stereo input is mixed to mono</li>
-                </ul>
             </div>
         </div>
     ))

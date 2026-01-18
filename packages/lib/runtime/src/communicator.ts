@@ -10,6 +10,12 @@ import {ExecutorTuple} from "./promises"
  * Also read: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Inheritance_and_the_prototype_chain
  */
 export namespace Communicator {
+    export class Transfer<T extends Transferable> {
+        constructor(readonly value: T) {}
+    }
+
+    export const makeTransferable = <T extends Transferable>(value: T): Transfer<T> => new Transfer(value)
+
     export const sender = <PROTOCOL>(messenger: Messenger, bind: (dispatcher: Dispatcher) => PROTOCOL): PROTOCOL =>
         bind(new Sender(messenger))
 
@@ -24,18 +30,20 @@ export namespace Communicator {
     const extractTransferables = (args: any[]): Transferable[] => {
         const transferables: Transferable[] = []
         for (const arg of args) {
-            if (arg instanceof MessagePort) {
+            if (arg instanceof Transfer) {
+                transferables.push(arg.value)
+            } else if (arg instanceof MessagePort) {
                 transferables.push(arg)
-            }
-            if (typeof ImageBitmap !== "undefined" && arg instanceof ImageBitmap) {
+            } else if (typeof ImageBitmap !== "undefined" && arg instanceof ImageBitmap) {
                 transferables.push(arg)
-            }
-            if (typeof OffscreenCanvas !== "undefined" && arg instanceof OffscreenCanvas) {
+            } else if (typeof OffscreenCanvas !== "undefined" && arg instanceof OffscreenCanvas) {
                 transferables.push(arg)
             }
         }
         return transferables
     }
+
+    const unwrapArg = (arg: any): any => arg instanceof Transfer ? arg.value : arg
 
     class Sender<PROTOCOL> implements Dispatcher, Terminable {
         readonly #messenger: Messenger
@@ -58,7 +66,7 @@ export namespace Communicator {
                 type: "send",
                 returnId: false,
                 func: func.name as keyof PROTOCOL,
-                args: Array.from(Iterables.map(args, arg => ({value: arg})))
+                args: Array.from(Iterables.map(args, arg => ({value: unwrapArg(arg)})))
             } satisfies Send<any>, transferables)
         }
 
@@ -78,7 +86,7 @@ export namespace Communicator {
                 returnId: this.#returnId,
                 func: func.name as keyof PROTOCOL,
                 args: Array.from(Iterables.map(args, (arg, index) =>
-                    typeof arg === "function" ? ({callback: index}) : ({value: arg})))
+                    typeof arg === "function" ? ({callback: index}) : ({value: unwrapArg(arg)})))
             } satisfies Send<any>, transferables)
             this.#returnId++
         })
