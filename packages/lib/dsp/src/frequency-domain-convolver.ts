@@ -17,7 +17,7 @@ export class FrequencyDomainConvolver {
     readonly #overlapBuffer: Float32Array
 
     #irLength: int = 0
-    #inputPosition: int = 0
+    #position: int = 0
 
     constructor(maxIrLength: int, blockSize: int) {
         this.#blockSize = blockSize
@@ -25,16 +25,16 @@ export class FrequencyDomainConvolver {
         this.#fft = new FFT(this.#fftSize)
         this.#irReal = new Float32Array(this.#fftSize)
         this.#irImag = new Float32Array(this.#fftSize)
-        this.#inputBuffer = new Float32Array(this.#fftSize)
+        this.#inputBuffer = new Float32Array(this.#blockSize)
         this.#inputReal = new Float32Array(this.#fftSize)
         this.#inputImag = new Float32Array(this.#fftSize)
         this.#outputReal = new Float32Array(this.#fftSize)
         this.#outputImag = new Float32Array(this.#fftSize)
-        this.#overlapBuffer = new Float32Array(this.#fftSize)
+        this.#overlapBuffer = new Float32Array(this.#fftSize + this.#blockSize)
     }
 
     get irLength(): int {return this.#irLength}
-    get latency(): int {return this.#fftSize - this.#blockSize}
+    get latency(): int {return this.#blockSize}
 
     setImpulseResponse(ir: Float32Array): void {
         this.#irLength = ir.length
@@ -49,7 +49,7 @@ export class FrequencyDomainConvolver {
     clear(): void {
         this.#inputBuffer.fill(0.0)
         this.#overlapBuffer.fill(0.0)
-        this.#inputPosition = 0
+        this.#position = 0
     }
 
     process(source: Float32Array, target: Float32Array, fromIndex: int, toIndex: int): void {
@@ -60,24 +60,29 @@ export class FrequencyDomainConvolver {
             return
         }
         for (let i = fromIndex; i < toIndex; i++) {
-            this.#inputBuffer[this.#inputPosition] = source[i]
-            this.#inputPosition++
-            if (this.#inputPosition === this.#blockSize) {
+            // Store input sample
+            this.#inputBuffer[this.#position] = source[i]
+            this.#position++
+            // When we've collected a full block, process it BEFORE reading output
+            if (this.#position === this.#blockSize) {
                 this.#processBlock()
-                this.#inputPosition = 0
+                this.#position = 0
             }
-            target[i] = this.#overlapBuffer[0]
-            this.#shiftOverlapBuffer()
+            // Output from overlap buffer (shifted by processBlock)
+            target[i] = this.#overlapBuffer[this.#position]
         }
     }
 
     #processBlock(): void {
+        // Zero-pad input to FFT size
         this.#inputReal.fill(0.0)
         this.#inputImag.fill(0.0)
         for (let i = 0; i < this.#blockSize; i++) {
             this.#inputReal[i] = this.#inputBuffer[i]
         }
+        // Forward FFT
         this.#fft.process(this.#inputReal, this.#inputImag)
+        // Complex multiplication in frequency domain
         for (let i = 0; i < this.#fftSize; i++) {
             const a = this.#inputReal[i]
             const b = this.#inputImag[i]
@@ -86,16 +91,19 @@ export class FrequencyDomainConvolver {
             this.#outputReal[i] = a * c - b * d
             this.#outputImag[i] = a * d + b * c
         }
+        // Inverse FFT
         this.#fft.inverse(this.#outputReal, this.#outputImag)
+        // Shift overlap buffer by blockSize
+        for (let i = 0; i < this.#fftSize; i++) {
+            this.#overlapBuffer[i] = this.#overlapBuffer[i + this.#blockSize]
+        }
+        // Zero the shifted-in portion
+        for (let i = this.#fftSize; i < this.#fftSize + this.#blockSize; i++) {
+            this.#overlapBuffer[i] = 0.0
+        }
+        // Add new convolution result (overlap-add)
         for (let i = 0; i < this.#fftSize; i++) {
             this.#overlapBuffer[i] += this.#outputReal[i]
         }
-    }
-
-    #shiftOverlapBuffer(): void {
-        for (let i = 0; i < this.#fftSize - 1; i++) {
-            this.#overlapBuffer[i] = this.#overlapBuffer[i + 1]
-        }
-        this.#overlapBuffer[this.#fftSize - 1] = 0.0
     }
 }
