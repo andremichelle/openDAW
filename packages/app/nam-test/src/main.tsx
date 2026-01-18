@@ -3,7 +3,7 @@ import {assert, isDefined, Nullable} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import namWasmUrl from "@andremichelle/nam-wasm/nam.wasm?url"
 
-const LOCAL_MODEL_URL = "/[PRE] JCM800-2203-MODIFIED-HI The Goods.nam"
+const LOCAL_MODEL_URL = "/[PRE] JCM800-2203-MODIFIED-HI The Sound.nam"
 const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
 
 ;(async () => {
@@ -148,7 +148,8 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                     <div class="row">
                         <button onInit={(element: HTMLButtonElement) => {
                             element.onclick = () => initAudio()
-                        }}>Initialize Audio</button>
+                        }}>Initialize Audio
+                        </button>
                     </div>
                 </div>
             </div>
@@ -171,7 +172,8 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                                 loadModelBtn = element
                                 element.onclick = () => loadModel()
                             }}
-                        >Load Model</button>
+                        >Load Model
+                        </button>
                     </div>
                 </div>
             </div>
@@ -186,7 +188,8 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                                 startAudioBtn = element
                                 element.onclick = () => toggleAudio()
                             }}
-                        >Play Audio</button>
+                        >Play Audio
+                        </button>
                     </div>
                     <div class="row">
                         <label>Input Gain</label>
@@ -199,7 +202,10 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                             onInit={(element: HTMLInputElement) => {
                                 element.oninput = () => {
                                     if (isDefined(namNode)) {
-                                        namNode.port.postMessage({type: "set-input-gain", value: parseFloat(element.value)})
+                                        namNode.port.postMessage({
+                                            type: "set-input-gain",
+                                            value: parseFloat(element.value)
+                                        })
                                     }
                                 }
                             }}
@@ -216,7 +222,10 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                             onInit={(element: HTMLInputElement) => {
                                 element.oninput = () => {
                                     if (isDefined(namNode)) {
-                                        namNode.port.postMessage({type: "set-output-gain", value: parseFloat(element.value)})
+                                        namNode.port.postMessage({
+                                            type: "set-output-gain",
+                                            value: parseFloat(element.value)
+                                        })
                                     }
                                 }
                             }}
@@ -259,7 +268,8 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                 <h2>Notes</h2>
                 <ul style="padding-left: 20px; color: #888; font-size: 14px;">
                     <li>Local JCM800 model + clean guitar audio are pre-loaded</li>
-                    <li>Get more NAM models from <a href="https://www.tone3000.com/" target="_blank" style="color: #4a9eff;">TONE3000</a></li>
+                    <li>Get more NAM models from <a href="https://www.tone3000.com/" target="_blank"
+                                                    style="color: #4a9eff;">TONE3000</a></li>
                     <li>Models are .nam files (JSON format)</li>
                     <li>NAM processes mono audio - stereo input is mixed to mono</li>
                 </ul>

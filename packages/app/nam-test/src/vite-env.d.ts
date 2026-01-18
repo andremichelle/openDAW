@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 
+// TODO Remove
 declare module "@andremichelle/nam-wasm/nam.js" {
     import {EmscriptenModule} from "@andremichelle/nam-wasm"
 

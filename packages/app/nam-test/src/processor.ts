@@ -11,6 +11,8 @@ registerProcessor("nam-test-processor", class NamTestProcessor extends AudioWork
     #outputGain: number = 1.0
     #mix: number = 1.0
     #bypass: boolean = false
+    #loudnessCompensation: number = 1.0 // Linear multiplier to normalize model output
+    #modelInputGain: number = 1.0 // Input gain from model metadata
 
     // Reusable buffers
     readonly #monoInput: Float32Array = new Float32Array(RenderQuantum)
@@ -62,6 +64,26 @@ registerProcessor("nam-test-processor", class NamTestProcessor extends AudioWork
                             console.log("[Processor] Config:", JSON.stringify(parsed.config)?.substring(0, 300))
                             this.#modelLoaded = this.#namModule.loadModel(this.#instanceId, data.modelJson)
                             console.log(`[Processor] Model loaded: ${this.#modelLoaded}`)
+
+                            // Apply model gain from metadata (input normalization)
+                            if (parsed.metadata?.gain !== undefined) {
+                                this.#modelInputGain = parsed.metadata.gain
+                                console.log(`[Processor] Model input gain: ${this.#modelInputGain.toFixed(4)}`)
+                            } else {
+                                this.#modelInputGain = 1.0
+                            }
+
+                            // Apply loudness compensation targeting -18 dBFS reference level
+                            if (this.#modelLoaded && this.#namModule.hasModelLoudness(this.#instanceId)) {
+                                const loudnessDb = this.#namModule.getModelLoudness(this.#instanceId)
+                                const targetDb = -18 // Common mixing reference level
+                                const compensationDb = targetDb - loudnessDb
+                                this.#loudnessCompensation = Math.pow(10, compensationDb / 20)
+                                console.log(`[Processor] Model loudness: ${loudnessDb.toFixed(2)} dB, target: ${targetDb} dB, compensation: ${this.#loudnessCompensation.toFixed(2)}x`)
+                            } else {
+                                this.#loudnessCompensation = 1.0
+                            }
+
                             this.port.postMessage({type: "model-loaded", success: this.#modelLoaded})
                         } catch (error) {
                             console.error("[Processor] Failed to load model:", error)
@@ -115,18 +137,18 @@ registerProcessor("nam-test-processor", class NamTestProcessor extends AudioWork
             return true
         }
 
-        // Mix stereo to mono with input gain
+        // Mix stereo to mono with model input gain and user input gain
         for (let i = 0; i < RenderQuantum; i++) {
-            this.#monoInput[i] = (inputL[i] + inputR[i]) * 0.5 * this.#inputGain
+            this.#monoInput[i] = (inputL[i] + inputR[i]) * 0.5 * this.#modelInputGain * this.#inputGain
         }
 
         // Process through NAM
         this.#namModule.process(this.#instanceId, this.#monoInput, this.#monoOutput)
 
-        // Apply output gain and mix, expand to stereo
+        // Apply loudness compensation, output gain, and mix, expand to stereo
         for (let i = 0; i < RenderQuantum; i++) {
             const dry = (inputL[i] + inputR[i]) * 0.5
-            const wet = this.#monoOutput[i] * this.#outputGain
+            const wet = this.#monoOutput[i] * this.#loudnessCompensation * this.#outputGain
             const mixed = dry * (1 - this.#mix) + wet * this.#mix
             outputL[i] = mixed
             outputR[i] = mixed
