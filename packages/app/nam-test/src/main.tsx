@@ -3,9 +3,16 @@ import {assert, isDefined, Nullable} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {NamProcessorProtocol} from "./protocol"
+import {
+    computeStats,
+    drawHeatmap,
+    drawHistogram,
+    drawLayerDiagram,
+    drawWeightDistributionByLayer,
+    WeightStats
+} from "./visualizer"
 import namWasmUrl from "@andremichelle/nam-wasm/nam.wasm?url"
-
-// https://www.thenam.online/
+import {NamModel} from "@andremichelle/nam-wasm"
 
 const LOCAL_MODEL_URL = "/[PRE] JCM800-2203-MODIFIED-HI The Sound.nam"
 const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
@@ -28,12 +35,77 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
     let startAudioBtn: HTMLButtonElement
     let modelUrlInput: HTMLInputElement
 
+    // Visualizer references
+    let statsEl: HTMLDivElement
+    let histogramCanvas: HTMLCanvasElement
+    let heatmapCanvas: HTMLCanvasElement
+    let layerCanvas: HTMLCanvasElement
+    let segmentCanvas: HTMLCanvasElement
+    let vizSection: HTMLDivElement
+
     const setStatus = (message: string, type: "info" | "error" | "success" = "info") => {
         if (isDefined(statusEl)) {
             statusEl.textContent = message
             statusEl.className = `status ${type}`
         }
         console.log(`[Status] ${message}`)
+    }
+
+    const updateVisualizations = (model: NamModel) => {
+        // Stats
+        const stats: WeightStats = computeStats(model.weights)
+        if (isDefined(statsEl)) {
+            statsEl.innerHTML = `
+                <div><strong>Model:</strong> ${model.metadata?.name || "Unknown"}</div>
+                <div><strong>Architecture:</strong> ${model.architecture}</div>
+                <div><strong>Version:</strong> ${model.version}</div>
+                <div><strong>Weights:</strong> ${stats.count.toLocaleString()}</div>
+                <div><strong>Range:</strong> [${stats.min.toFixed(4)}, ${stats.max.toFixed(4)}]</div>
+                <div><strong>Mean:</strong> ${stats.mean.toFixed(6)}</div>
+                <div><strong>Std Dev:</strong> ${stats.stdDev.toFixed(6)}</div>
+                <div><strong>Distribution:</strong> ${stats.positive} pos, ${stats.negative} neg, ${stats.zeros} zero</div>
+                ${model.metadata?.loudness ? `<div><strong>Loudness:</strong> ${model.metadata.loudness.toFixed(2)} dB</div>` : ""}
+                ${model.metadata?.gain ? `<div><strong>Gain:</strong> ${model.metadata.gain.toFixed(4)}</div>` : ""}
+            `
+        }
+
+        // Canvases
+        if (isDefined(histogramCanvas)) {
+            drawHistogram(histogramCanvas, model.weights, 150)
+        }
+        if (isDefined(heatmapCanvas)) {
+            drawHeatmap(heatmapCanvas, model.weights, 512)
+        }
+        if (isDefined(layerCanvas)) {
+            drawLayerDiagram(layerCanvas, model)
+        }
+        if (isDefined(segmentCanvas)) {
+            drawWeightDistributionByLayer(segmentCanvas, model)
+        }
+
+        // Show section
+        if (isDefined(vizSection)) {
+            vizSection.style.display = "block"
+        }
+    }
+
+    const loadModelForVisualization = async (source: string | File) => {
+        try {
+            let json: string
+            if (typeof source === "string") {
+                const response = await fetch(source)
+                if (!response.ok) throw new Error(`HTTP ${response.status}`)
+                json = await response.text()
+            } else {
+                json = await source.text()
+            }
+            const model: NamModel = NamModel.parse(json)
+            updateVisualizations(model)
+            return json
+        } catch (error) {
+            setStatus(`Failed to load model for visualization: ${error}`, "error")
+            return null
+        }
     }
 
     const initAudio = async () => {
@@ -53,7 +125,6 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
         })
         namNode.connect(audioContext.destination)
 
-        // Create Communicator sender
         sender = Communicator.sender<NamProcessorProtocol>(
             Messenger.for(namNode.port),
             (dispatcher): NamProcessorProtocol => ({
@@ -102,11 +173,9 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
 
         setStatus(`Fetching model from ${url}...`)
         try {
-            const response = await fetch(url)
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`)
-            }
-            const modelJson = await response.text()
+            const modelJson = await loadModelForVisualization(url)
+            if (!isDefined(modelJson)) return
+
             setStatus("Sending model to processor...")
             const success = await sender.loadModel(modelJson)
             if (success) {
@@ -135,7 +204,6 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
             return
         }
 
-        // Create audio element and connect
         audioElement = new Audio(LOCAL_AUDIO_URL)
         audioElement.crossOrigin = "anonymous"
         audioElement.loop = true
@@ -194,6 +262,29 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                             }}
                         >Load Model
                         </button>
+                    </div>
+                    <div class="row">
+                        <label>Or load from file</label>
+                        <input
+                            type="file"
+                            accept=".nam"
+                            onInit={(element: HTMLInputElement) => {
+                                element.onchange = async () => {
+                                    const file = element.files?.[0]
+                                    if (isDefined(file)) {
+                                        const modelJson = await loadModelForVisualization(file)
+                                        if (isDefined(modelJson) && isDefined(sender)) {
+                                            setStatus("Loading model into processor...")
+                                            const success = await sender.loadModel(modelJson)
+                                            if (success) {
+                                                setStatus("Model loaded!", "success")
+                                                startAudioBtn.disabled = false
+                                            }
+                                        }
+                                    }
+                                }
+                            }}
+                        />
                     </div>
                 </div>
             </div>
@@ -270,6 +361,81 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                                 element.onchange = () => {
                                     if (isDefined(sender)) {
                                         sender.setBypass(element.checked)
+                                    }
+                                }
+                            }}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <div
+                class="section"
+                style="display: none;"
+                onInit={(element: HTMLDivElement) => vizSection = element}
+            >
+                <h2>Model Visualization</h2>
+
+                <div class="viz-grid">
+                    <div class="viz-panel">
+                        <h3>Statistics</h3>
+                        <div
+                            class="stats"
+                            onInit={(element: HTMLDivElement) => statsEl = element}
+                        />
+                    </div>
+
+                    <div class="viz-panel">
+                        <h3>Architecture</h3>
+                        <canvas
+                            width="600"
+                            height="150"
+                            onInit={(element: HTMLCanvasElement) => layerCanvas = element}
+                        />
+                    </div>
+
+                    <div class="viz-panel">
+                        <h3>Weight Distribution (Histogram)</h3>
+                        <canvas
+                            width="600"
+                            height="200"
+                            onInit={(element: HTMLCanvasElement) => histogramCanvas = element}
+                        />
+                    </div>
+
+                    <div class="viz-panel">
+                        <h3>Weight Magnitude by Segment</h3>
+                        <canvas
+                            width="600"
+                            height="150"
+                            onInit={(element: HTMLCanvasElement) => segmentCanvas = element}
+                        />
+                    </div>
+
+                    <div class="viz-panel wide">
+                        <h3>Weight Heatmap (Red=positive, Blue=negative)</h3>
+                        <canvas
+                            style="width: 100%; image-rendering: pixelated;"
+                            onInit={(element: HTMLCanvasElement) => heatmapCanvas = element}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Visualize Only (no audio)</h2>
+                <div class="controls">
+                    <div class="row">
+                        <label>Load .nam file to visualize</label>
+                        <input
+                            type="file"
+                            accept=".nam"
+                            onInit={(element: HTMLInputElement) => {
+                                element.onchange = async () => {
+                                    const file = element.files?.[0]
+                                    if (isDefined(file)) {
+                                        await loadModelForVisualization(file)
+                                        setStatus(`Visualizing: ${file.name}`, "success")
                                     }
                                 }
                             }}

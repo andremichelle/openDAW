@@ -94,3 +94,38 @@ canvas
     height: 150px
     background: #111
     border-radius: 4px
+
+.viz-grid
+    display: grid
+    grid-template-columns: 1fr 1fr
+    gap: 16px
+
+.viz-panel
+    background: #1a1a2e
+    padding: 12px
+    border-radius: 8px
+
+    &.wide
+        grid-column: 1 / -1
+
+    h3
+        font-size: 13px
+        color: #888
+        margin-bottom: 8px
+
+    canvas
+        width: 100%
+        height: auto
+        background: transparent
+
+.stats
+    font-family: monospace
+    font-size: 12px
+    line-height: 1.6
+    color: #ccc
+
+    div
+        padding: 2px 0
+
+    strong
+        color: #4a9eff
