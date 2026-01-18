@@ -14,7 +14,7 @@ export namespace Communicator {
         constructor(readonly value: T) {}
     }
 
-    export const makeTransferable = <T extends Transferable>(value: T): Transfer<T> => new Transfer(value)
+    export const makeTransferable = <T extends Transferable>(value: T): T => new Transfer(value) as unknown as T
 
     export const sender = <PROTOCOL>(messenger: Messenger, bind: (dispatcher: Dispatcher) => PROTOCOL): PROTOCOL =>
         bind(new Sender(messenger))

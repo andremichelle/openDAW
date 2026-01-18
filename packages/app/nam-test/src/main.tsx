@@ -5,6 +5,8 @@ import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {NamProcessorProtocol} from "./protocol"
 import namWasmUrl from "@andremichelle/nam-wasm/nam.wasm?url"
 
+// https://www.thenam.online/
+
 const LOCAL_MODEL_URL = "/[PRE] JCM800-2203-MODIFIED-HI The Sound.nam"
 const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
 
@@ -55,8 +57,8 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
         sender = Communicator.sender<NamProcessorProtocol>(
             Messenger.for(namNode.port),
             (dispatcher): NamProcessorProtocol => ({
-                initWasm(wasmBinary: Communicator.Transfer<ArrayBuffer>) {
-                    return dispatcher.dispatchAndReturn(this.initWasm, wasmBinary)
+                initWasm(wasmBinary: ArrayBuffer) {
+                    return dispatcher.dispatchAndReturn(this.initWasm, Communicator.makeTransferable(wasmBinary))
                 },
                 loadModel(modelJson: string) {
                     return dispatcher.dispatchAndReturn(this.loadModel, modelJson)
@@ -81,7 +83,7 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
 
         setStatus("Initializing WASM in AudioWorklet...")
         try {
-            await sender.initWasm(Communicator.makeTransferable(wasmBinary))
+            await sender.initWasm(wasmBinary)
             setStatus("WASM ready! Load a model to continue.", "success")
             loadModelBtn.disabled = false
         } catch (error) {
