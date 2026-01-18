@@ -7,7 +7,6 @@ import {
     DelayDeviceBox,
     FoldDeviceBox,
     GateDeviceBox,
-    GuitarAmpDeviceBox,
     GrooveShuffleBox,
     MaximizerDeviceBox,
     ModularAudioInputBox,
@@ -186,21 +185,6 @@ export namespace EffectFactories {
             })
     }
 
-    export const GuitarAmp: EffectFactory = {
-        defaultName: "Guitar Amp",
-        defaultIcon: IconSymbol.Guitar,
-        description: "Convolution-based cabinet simulation",
-        manualPage: DeviceManualUrls.GuitarAmp,
-        separatorBefore: false,
-        type: "audio",
-        create: ({boxGraph}, hostField, index): GuitarAmpDeviceBox =>
-            GuitarAmpDeviceBox.create(boxGraph, UUID.generate(), box => {
-                box.label.setValue("Guitar Amp")
-                box.index.setValue(index)
-                box.host.refer(hostField)
-            })
-    }
-
     export const Reverb: EffectFactory = {
         defaultName: "Cheap Reverb",
         defaultIcon: IconSymbol.Cube,
@@ -319,7 +303,7 @@ export namespace EffectFactories {
 
     export const MidiNamed = {Arpeggio, Pitch, Velocity, Zeitgeist}
     export const AudioNamed = {
-        StereoTool, Compressor, Gate, GuitarAmp, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal, Maximizer
+        StereoTool, Compressor, Gate, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal, Maximizer
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(MidiNamed)
     export const AudioList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(AudioNamed)

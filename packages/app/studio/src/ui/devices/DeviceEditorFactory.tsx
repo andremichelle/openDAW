@@ -10,7 +10,6 @@ import {
     DelayDeviceBox,
     FoldDeviceBox,
     GateDeviceBox,
-    GuitarAmpDeviceBox,
     MIDIOutputDeviceBox,
     ModularDeviceBox,
     NanoDeviceBox,
@@ -41,7 +40,6 @@ import {
     DeviceHost,
     FoldDeviceBoxAdapter,
     GateDeviceBoxAdapter,
-    GuitarAmpDeviceBoxAdapter,
     MIDIOutputDeviceBoxAdapter,
     ModularDeviceBoxAdapter,
     NanoDeviceBoxAdapter,
@@ -87,7 +85,6 @@ import {MIDIOutputDeviceEditor} from "@/ui/devices/instruments/MIDIOutputDeviceE
 import {VelocityDeviceEditor} from "@/ui/devices/midi-effects/VelocityDeviceEditor"
 import {TidalDeviceEditor} from "@/ui/devices/audio-effects/TidalDeviceEditor"
 import {DattorroReverbDeviceEditor} from "@/ui/devices/audio-effects/DattorroReverbDeviceEditor"
-import {GuitarAmpDeviceEditor} from "@/ui/devices/audio-effects/GuitarAmpDeviceEditor"
 
 export namespace DeviceEditorFactory {
     export const toMidiEffectDeviceEditor = (service: StudioService, lifecycle: Lifecycle, box: Box, deviceHost: DeviceHost) =>
@@ -241,12 +238,6 @@ export namespace DeviceEditorFactory {
                                   service={service}
                                   adapter={service.project.boxAdapters.adapterFor(box, GateDeviceBoxAdapter)}
                                   deviceHost={deviceHost}/>
-            ),
-            visitGuitarAmpDeviceBox: (box: GuitarAmpDeviceBox) => (
-                <GuitarAmpDeviceEditor lifecycle={lifecycle}
-                                       service={service}
-                                       adapter={service.project.boxAdapters.adapterFor(box, GuitarAmpDeviceBoxAdapter)}
-                                       deviceHost={deviceHost}/>
             ),
             visitReverbDeviceBox: (box: ReverbDeviceBox) => (
                 <ReverbDeviceEditor lifecycle={lifecycle}

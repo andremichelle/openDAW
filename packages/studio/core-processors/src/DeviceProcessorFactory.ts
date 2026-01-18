@@ -9,7 +9,6 @@ import {
     DelayDeviceBox,
     FoldDeviceBox,
     GateDeviceBox,
-    GuitarAmpDeviceBox,
     MIDIOutputDeviceBox,
     ModularDeviceBox,
     NanoDeviceBox,
@@ -38,7 +37,6 @@ import {
     DelayDeviceBoxAdapter,
     FoldDeviceBoxAdapter,
     GateDeviceBoxAdapter,
-    GuitarAmpDeviceBoxAdapter,
     MIDIOutputDeviceBoxAdapter,
     ModularDeviceBoxAdapter,
     NanoDeviceBoxAdapter,
@@ -79,7 +77,6 @@ import {SoundfontDeviceProcessor} from "./devices/instruments/SoundfontDevicePro
 import {MaximizerDeviceProcessor} from "./devices/audio-effects/MaximizerDeviceProcessor"
 import {CompressorDeviceProcessor} from "./devices/audio-effects/CompressorDeviceProcessor"
 import {GateDeviceProcessor} from "./devices/audio-effects/GateDeviceProcessor"
-import {GuitarAmpDeviceProcessor} from "./devices/audio-effects/GuitarAmpDeviceProcessor"
 import {CrusherDeviceProcessor} from "./devices/audio-effects/CrusherDeviceProcessor"
 import {FoldDeviceProcessor} from "./devices/audio-effects/FoldDeviceProcessor"
 import {MIDIOutputDeviceProcessor} from "./devices/instruments/MIDIOutputDeviceProcessor"
@@ -139,8 +136,6 @@ export namespace AudioEffectDeviceProcessorFactory {
                 new CompressorDeviceProcessor(context, context.boxAdapters.adapterFor(box, CompressorDeviceBoxAdapter)),
             visitGateDeviceBox: (box: GateDeviceBox): AudioEffectDeviceProcessor =>
                 new GateDeviceProcessor(context, context.boxAdapters.adapterFor(box, GateDeviceBoxAdapter)),
-            visitGuitarAmpDeviceBox: (box: GuitarAmpDeviceBox): AudioEffectDeviceProcessor =>
-                new GuitarAmpDeviceProcessor(context, context.boxAdapters.adapterFor(box, GuitarAmpDeviceBoxAdapter)),
             visitDelayDeviceBox: (box: DelayDeviceBox): AudioEffectDeviceProcessor =>
                 new DelayDeviceProcessor(context, context.boxAdapters.adapterFor(box, DelayDeviceBoxAdapter)),
             visitDattorroReverbDeviceBox: (box: DattorroReverbDeviceBox): AudioEffectDeviceProcessor =>
