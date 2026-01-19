@@ -34,7 +34,9 @@ const StatRow = ({label, value}: { label: string, value: string | number | undef
 
 export const showNamModelDialog = (model: NamModel): void => {
     const lifecycle = new Terminator()
-    const stats = computeStats(model.weights)
+    const weights = model.weights
+    const hasWeights = isDefined(weights) && weights.length > 0
+    const stats = hasWeights ? computeStats(weights) : null
     const meta = model.metadata
     const training = model.training
     const dialog = (
@@ -61,7 +63,7 @@ export const showNamModelDialog = (model: NamModel): void => {
                         <StatRow label="Type" value={model.architecture}/>
                         <StatRow label="Version" value={model.version}/>
                         <StatRow label="Layers" value={model.config.layers.length}/>
-                        <StatRow label="Weights" value={stats.count.toLocaleString()}/>
+                        <StatRow label="Weights" value={stats?.count.toLocaleString()}/>
                     </div>
                 </div>
                 <div className="section">
@@ -89,24 +91,30 @@ export const showNamModelDialog = (model: NamModel): void => {
                         </div>
                     </div>
                 )}
-                <div className="section">
-                    <h2>Weight Statistics</h2>
-                    <div className="stats">
-                        <StatRow label="Range" value={`[${stats.min.toFixed(4)}, ${stats.max.toFixed(4)}]`}/>
-                        <StatRow label="Mean" value={stats.mean.toFixed(6)}/>
-                        <StatRow label="Std Dev" value={stats.stdDev.toFixed(6)}/>
-                        <StatRow label="Distribution"
-                                 value={`${stats.positive} pos, ${stats.negative} neg, ${stats.zeros} zero`}/>
+                {hasWeights && stats !== null && (
+                    <div className="section">
+                        <h2>Weight Statistics</h2>
+                        <div className="stats">
+                            <StatRow label="Range" value={`[${stats.min.toFixed(4)}, ${stats.max.toFixed(4)}]`}/>
+                            <StatRow label="Mean" value={stats.mean.toFixed(6)}/>
+                            <StatRow label="Std Dev" value={stats.stdDev.toFixed(6)}/>
+                            <StatRow label="Distribution"
+                                     value={`${stats.positive} pos, ${stats.negative} neg, ${stats.zeros} zero`}/>
+                        </div>
                     </div>
-                </div>
-                <div className="section">
-                    <h2>Weight Distribution</h2>
-                    <HistogramCanvas lifecycle={lifecycle} weights={model.weights}/>
-                </div>
-                <div className="section">
-                    <h2>Weight Magnitude</h2>
-                    <MagnitudeCanvas lifecycle={lifecycle} weights={model.weights}/>
-                </div>
+                )}
+                {hasWeights && (
+                    <div className="section">
+                        <h2>Weight Distribution</h2>
+                        <HistogramCanvas lifecycle={lifecycle} weights={weights}/>
+                    </div>
+                )}
+                {hasWeights && (
+                    <div className="section">
+                        <h2>Weight Magnitude</h2>
+                        <MagnitudeCanvas lifecycle={lifecycle} weights={weights}/>
+                    </div>
+                )}
             </div>
         </Dialog>
     )
