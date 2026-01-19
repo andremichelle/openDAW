@@ -5,7 +5,9 @@ import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
-import {Events, Files, Html} from "@opendaw/lib-dom"
+import {Files, Html} from "@opendaw/lib-dom"
+import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
+import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {StudioService} from "@/service/StudioService"
 import {EffectFactories} from "@opendaw/studio-core"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder"
@@ -124,17 +126,12 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                       lifecycle, editing, midiLearning, adapter, parameter: mix,
                                       anchor: 1.0
                                   })}
-                                  <div className="mono-checkbox" onInit={element => {
-                                      lifecycle.ownAll(
-                                          adapter.monoField.catchupAndSubscribe(field =>
-                                              element.classList.toggle("active", field.getValue())),
-                                          Events.subscribe(element, "click", () =>
-                                              editing.modify(() => adapter.monoField.setValue(!adapter.monoField.getValue())))
-                                      )
-                                  }}>
-                                      <div className="checkbox"/>
-                                      <span>Mono</span>
-                                  </div>
+                                  <Checkbox lifecycle={lifecycle}
+                                            model={EditWrapper.forValue(editing, adapter.monoField)}
+                                            className="mono-checkbox"
+                                            appearance={{cursor: "pointer"}}>
+                                      <Icon symbol={IconSymbol.Checkbox}/><span>Mono</span>
+                                  </Checkbox>
                               </div>
                           </div>
                       )}
