@@ -37,6 +37,7 @@ export class NeuralAmpDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     get host(): PointerField<Pointers.AudioEffectHost> {return this.#box.host}
     get modelJsonField(): StringField {return this.#box.modelJson}
     get monoField(): BooleanField {return this.#box.mono}
+    get spectrum(): Address {return this.#box.address.append(0xFFF)}
 
     deviceHost(): DeviceHost {
         return this.#context.boxAdapters

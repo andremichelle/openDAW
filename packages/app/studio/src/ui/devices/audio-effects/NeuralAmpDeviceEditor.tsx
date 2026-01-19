@@ -11,6 +11,7 @@ import {EffectFactories} from "@opendaw/studio-core"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder"
 import {NamModel} from "@opendaw/nam-wasm"
 import {showNamModelDialog} from "./NeuralAmp/NamModelDialog"
+import {createSpectrumRenderer} from "./NeuralAmp/SpectrumRenderer"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
 import {Button} from "@/ui/components/Button"
@@ -75,7 +76,11 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                       populateMenu={parent => MenuItems.forEffectDevice(parent, service, deviceHost, adapter)}
                       populateControls={() => (
                           <div className={className}>
-                              <canvas className="spectrum"/>
+                              <canvas className="spectrum"
+                                      onInit={(canvas: HTMLCanvasElement) => {
+                                          lifecycle.own(createSpectrumRenderer(
+                                              canvas, adapter, project.liveStreamReceiver, project.engine.sampleRate))
+                                      }}/>
                               <div className="model-row">
                                   <Button lifecycle={lifecycle}
                                           onClick={browseModel}
@@ -97,9 +102,9 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                   <Button lifecycle={lifecycle}
                                           onClick={showModelInfo}
                                           appearance={{
-                                              framed: false,
+                                              framed: true,
                                               cursor: "pointer",
-                                              color: Colors.green,
+                                              color: Colors.shadow,
                                               activeColor: Colors.white
                                           }}
                                           className="icon-button">

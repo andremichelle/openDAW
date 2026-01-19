@@ -1,6 +1,6 @@
 import {EngineToClient, NeuralAmpDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {int, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioBuffer, dbToGain, Event, RenderQuantum, StereoMatrix} from "@opendaw/lib-dsp"
+import {AudioAnalyser, AudioBuffer, dbToGain, Event, RenderQuantum, StereoMatrix} from "@opendaw/lib-dsp"
 import {EngineContext} from "../../EngineContext"
 import {Block, Processor} from "../../processing"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
@@ -65,9 +65,12 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
 
     readonly #output: AudioBuffer
     readonly #peaks: PeakBroadcaster
+    readonly #audioAnalyser: AudioAnalyser
+    readonly #spectrum: Float32Array
     readonly #inputs: [Float32Array, Float32Array]
     readonly #outputs: [Float32Array, Float32Array]
 
+    #needsSpectrum: boolean = false
     #pendingModelJson: string = ""
     #source: Option<AudioBuffer> = Option.None
     #instances: [int, int] = [-1, -1]
@@ -84,6 +87,8 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
         this.#adapter = adapter
         this.#output = new AudioBuffer()
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
+        this.#audioAnalyser = new AudioAnalyser({decay: 0.96})
+        this.#spectrum = new Float32Array(this.#audioAnalyser.numBins())
         this.#inputs = [new Float32Array(RenderQuantum), new Float32Array(RenderQuantum)]
         this.#outputs = [new Float32Array(RenderQuantum), new Float32Array(RenderQuantum)]
 
@@ -96,7 +101,13 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
             context.registerProcessor(this),
             context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing),
             adapter.modelJsonField.catchupAndSubscribe(field => this.#onModelJsonChanged(field.getValue())),
-            adapter.monoField.catchupAndSubscribe(field => this.#onMonoChanged(field.getValue()))
+            adapter.monoField.catchupAndSubscribe(field => this.#onMonoChanged(field.getValue())),
+            context.broadcaster.broadcastFloats(adapter.spectrum, this.#spectrum, (hasSubscribers) => {
+                this.#needsSpectrum = hasSubscribers
+                if (!hasSubscribers) {return}
+                this.#spectrum.set(this.#audioAnalyser.bins())
+                this.#audioAnalyser.decay = true
+            })
         )
 
         this.#initInstance()
@@ -177,6 +188,9 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
             }
         }
         this.#peaks.process(outL, outR, from, to)
+        if (this.#needsSpectrum) {
+            this.#audioAnalyser.process(outL, outR, from, to)
+        }
     }
 
     parameterChanged(parameter: AutomatableParameter): void {
