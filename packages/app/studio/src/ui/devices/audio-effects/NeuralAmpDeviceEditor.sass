@@ -51,5 +51,19 @@ component
   > div.controls
     width: 100%
     display: grid
-    grid-template-columns: 1fr 1em 1fr
+    grid-template-columns: 1fr 1fr 1fr
     justify-content: space-around
+
+  > div.mono-toggle
+    margin-top: 0.5em
+    padding: 0.25em 0.5em
+    font-size: 0.625rem
+    background: var(--color-shadow)
+    color: var(--color-light)
+    border-radius: 3px
+    cursor: pointer
+    text-align: center
+
+    &.active
+      background: var(--color-blue)
+      color: white

@@ -5,7 +5,7 @@ import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
-import {Files, Html} from "@opendaw/lib-dom"
+import {Events, Files, Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {EffectFactories} from "@opendaw/studio-core"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder"
@@ -23,7 +23,7 @@ type Construct = {
 export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
     const {editing, midiLearning} = project
-    const {inputGain, outputGain} = adapter.namedParameter
+    const {inputGain, outputGain, mix} = adapter.namedParameter
 
     let modelNameEl: HTMLSpanElement
 
@@ -89,15 +89,25 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                               <div className="controls">
                                   {ControlBuilder.createKnob({
                                       lifecycle, editing, midiLearning, adapter, parameter: inputGain,
-                                      anchor: 0.5,
-                                      style: {gridColumn: "1"}
+                                      anchor: 0.5
                                   })}
                                   {ControlBuilder.createKnob({
                                       lifecycle, editing, midiLearning, adapter, parameter: outputGain,
-                                      anchor: 0.5,
-                                      style: {gridColumn: "3"}
+                                      anchor: 0.5
+                                  })}
+                                  {ControlBuilder.createKnob({
+                                      lifecycle, editing, midiLearning, adapter, parameter: mix,
+                                      anchor: 1.0
                                   })}
                               </div>
+                              <div className="mono-toggle" onInit={element => {
+                                  lifecycle.ownAll(
+                                      adapter.monoField.catchupAndSubscribe(field =>
+                                          element.classList.toggle("active", field.getValue())),
+                                      Events.subscribe(element, "click", () =>
+                                          editing.modify(() => adapter.monoField.setValue(!adapter.monoField.getValue())))
+                                  )
+                              }}>Mono</div>
                           </div>
                       )}
                       populateMeter={() => (

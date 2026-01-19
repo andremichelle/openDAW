@@ -36,6 +36,7 @@ export class NeuralAmpDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     get minimizedField(): BooleanField {return this.#box.minimized}
     get host(): PointerField<Pointers.AudioEffectHost> {return this.#box.host}
     get modelJsonField(): StringField {return this.#box.modelJson}
+    get monoField(): BooleanField {return this.#box.mono}
 
     deviceHost(): DeviceHost {
         return this.#context.boxAdapters
@@ -61,7 +62,10 @@ export class NeuralAmpDeviceBoxAdapter implements AudioEffectDeviceAdapter {
             outputGain: this.#parametric.createParameter(
                 box.outputGain,
                 ValueMapping.DefaultDecibel,
-                StringMapping.numeric({unit: "dB", fractionDigits: 1}), "output")
+                StringMapping.numeric({unit: "dB", fractionDigits: 1}), "output"),
+            mix: this.#parametric.createParameter(
+                box.mix, ValueMapping.linear(0.0, 1.0),
+                StringMapping.percent(), "Mix")
         } as const
     }
 }

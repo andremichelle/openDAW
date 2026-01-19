@@ -66,6 +66,7 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
 
     readonly parameterInputGain: AutomatableParameter<number>
     readonly parameterOutputGain: AutomatableParameter<number>
+    readonly parameterMix: AutomatableParameter<number>
 
     readonly #output: AudioBuffer
     readonly #peaks: PeakBroadcaster
@@ -77,6 +78,8 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
     #modelLoaded: boolean = false
     #inputGain: number = 1.0
     #outputGain: number = 1.0
+    #mono: boolean = true
+    #mix: number = 1.0
 
     constructor(context: EngineContext, adapter: NeuralAmpDeviceBoxAdapter) {
         super(context)
@@ -91,11 +94,13 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
         const {namedParameter} = adapter
         this.parameterInputGain = this.own(this.bindParameter(namedParameter.inputGain))
         this.parameterOutputGain = this.own(this.bindParameter(namedParameter.outputGain))
+        this.parameterMix = this.own(this.bindParameter(namedParameter.mix))
 
         this.ownAll(
             context.registerProcessor(this),
             context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing),
-            adapter.modelJsonField.catchupAndSubscribe(field => this.#onModelJsonChanged(field.getValue()))
+            adapter.modelJsonField.catchupAndSubscribe(field => this.#onModelJsonChanged(field.getValue())),
+            adapter.monoField.catchupAndSubscribe(field => this.#mono = field.getValue())
         )
 
         this.#initInstance()
@@ -148,20 +153,30 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
         }
 
         const wasm = module.unwrap()
+        const wet = this.#mix
+        const dry = 1.0 - wet
 
-        // Mix to mono with input gain
-        for (let i = 0; i < numFrames; i++) {
-            this.#monoInput[i] = (input[0][from + i] + input[1][from + i]) * 0.5 * this.#inputGain
+        // Convert to mono with input gain
+        if (this.#mono) {
+            // Sum L+R to mono (0.5 prevents clipping when both channels are correlated)
+            for (let i = 0; i < numFrames; i++) {
+                this.#monoInput[i] = (input[0][from + i] + input[1][from + i]) * 0.5 * this.#inputGain
+            }
+        } else {
+            // Use left channel only (for mono sources)
+            for (let i = 0; i < numFrames; i++) {
+                this.#monoInput[i] = input[0][from + i] * this.#inputGain
+            }
         }
 
         // Process through NAM
         wasm.process(this.#instanceId, this.#monoInput.subarray(0, numFrames), this.#monoOutput.subarray(0, numFrames))
 
-        // Apply output gain and copy to stereo output
+        // Apply output gain and wet/dry mix, copy to stereo output
         for (let i = 0; i < numFrames; i++) {
-            const sample = this.#monoOutput[i] * this.#outputGain
-            output[0][from + i] = sample
-            output[1][from + i] = sample
+            const wetSample = this.#monoOutput[i] * this.#outputGain
+            output[0][from + i] = input[0][from + i] * dry + wetSample * wet
+            output[1][from + i] = input[1][from + i] * dry + wetSample * wet
         }
 
         this.#peaks.process(output[0], output[1], from, to)
@@ -172,6 +187,8 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
             this.#inputGain = dbToGain(this.parameterInputGain.getValue())
         } else if (parameter === this.parameterOutputGain) {
             this.#outputGain = dbToGain(this.parameterOutputGain.getValue())
+        } else if (parameter === this.parameterMix) {
+            this.#mix = this.parameterMix.getValue()
         }
     }
 
