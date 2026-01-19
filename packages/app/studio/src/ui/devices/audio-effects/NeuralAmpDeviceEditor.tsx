@@ -10,6 +10,7 @@ import {StudioService} from "@/service/StudioService"
 import {EffectFactories} from "@opendaw/studio-core"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder"
 import {NamModel} from "@opendaw/nam-wasm"
+import {showNamModelDialog} from "./NeuralAmp/NamModelDialog"
 
 const className = Html.adoptStyleSheet(css, "NeuralAmpDeviceEditor")
 
@@ -74,7 +75,17 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                       populateControls={() => (
                           <div className={className}>
                               <div className="model-section">
-                                  <h1>Model</h1>
+                                  <h1 onclick={() => {
+                                      const modelJson = adapter.modelJsonField.getValue()
+                                      if (modelJson.length > 0) {
+                                          try {
+                                              const model = NamModel.parse(modelJson)
+                                              showNamModelDialog(model)
+                                          } catch {
+                                              // Invalid model, do nothing
+                                          }
+                                      }
+                                  }}>Model</h1>
                                   <span className="model-name empty"
                                         onInit={(element: HTMLSpanElement) => {
                                             modelNameEl = element
