@@ -12,8 +12,8 @@ import {
     drawWeightDistributionByLayer,
     WeightStats
 } from "./visualizer"
-import namWasmUrl from "@andremichelle/nam-wasm/nam.wasm?url"
-import {NamModel} from "@andremichelle/nam-wasm"
+import namWasmUrl from "@opendaw/nam-wasm/nam.wasm?url"
+import {NamModel} from "@opendaw/nam-wasm"
 
 // TODO: NamFileBox
 // TODO: Version checking

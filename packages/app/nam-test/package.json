@@ -11,7 +11,7 @@
         "lint": "eslint \"src/**/*.ts\""
     },
     "dependencies": {
-        "@andremichelle/nam-wasm": "^1.0.2",
+        "@opendaw/nam-wasm": "^1.0.0",
         "@opendaw/lib-dom": "^0.0.68",
         "@opendaw/lib-dsp": "^0.0.66",
         "@opendaw/lib-jsx": "^0.0.68",

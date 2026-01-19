@@ -1,5 +1,5 @@
 import {RenderQuantum} from "@opendaw/lib-dsp"
-import {createNamModule, NamWasmModule} from "@andremichelle/nam-wasm"
+import {createNamModule, NamWasmModule} from "@opendaw/nam-wasm"
 import {isDefined} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {NamProcessorProtocol} from "./protocol"

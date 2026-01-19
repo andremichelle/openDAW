@@ -1,5 +1,5 @@
 import {isDefined} from "@opendaw/lib-std"
-import {NamModel} from "@andremichelle/nam-wasm"
+import {NamModel} from "@opendaw/nam-wasm"
 
 // Colors matching DisplayPaint style
 const positiveColor = (opacity: number) => `hsla(200, 83%, 60%, ${opacity})` // cyan-blue
