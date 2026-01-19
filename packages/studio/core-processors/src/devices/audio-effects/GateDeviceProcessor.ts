@@ -16,6 +16,7 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
     readonly #id: int = GateDeviceProcessor.ID++
     readonly #adapter: GateDeviceBoxAdapter
 
+    readonly parameterInverse: AutomatableParameter<boolean>
     readonly parameterThreshold: AutomatableParameter<number>
     readonly parameterReturn: AutomatableParameter<number>
     readonly parameterAttack: AutomatableParameter<number>
@@ -33,6 +34,7 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
     #sideChain: Option<AudioBuffer> = Option.None
     #needsSideChainResolution: boolean = false
 
+    #inverse: boolean = false
     #threshold: number = -40.0
     #return: number = 6.0
     #attack: number = 0.5
@@ -62,8 +64,9 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
         // [0] inputPeakDb, [1] outputPeakDb, [2] gateEnvelopeDb
         this.#editorValues = new Float32Array([Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY])
 
-        const {threshold, return: returnParam, attack, hold, release, floor} = adapter.namedParameter
+        const {inverse, threshold, return: returnParam, attack, hold, release, floor} = adapter.namedParameter
 
+        this.parameterInverse = this.own(this.bindParameter(inverse))
         this.parameterThreshold = this.own(this.bindParameter(threshold))
         this.parameterReturn = this.own(this.bindParameter(returnParam))
         this.parameterAttack = this.own(this.bindParameter(attack))
@@ -154,7 +157,7 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
             } else if (this.#inpMax < this.#returnThresholdGain) {
                 this.#gateOpen = false
             }
-            const target = this.#gateOpen ? 1.0 : 0.0
+            const target = this.#inverse !== this.#gateOpen ? 1.0 : 0.0
             if (target > this.#envelope) {
                 this.#envelope = this.#attackCoeff * this.#envelope + (1.0 - this.#attackCoeff) * target
             } else {
@@ -177,7 +180,9 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
     }
 
     parameterChanged(parameter: AutomatableParameter): void {
-        if (parameter === this.parameterThreshold) {
+        if (parameter === this.parameterInverse) {
+            this.#inverse = this.parameterInverse.getValue()
+        } else if (parameter === this.parameterThreshold) {
             this.#threshold = this.parameterThreshold.getValue()
             this.#thresholdGain = dbToGain(this.#threshold)
             this.#returnThresholdGain = dbToGain(this.#threshold - this.#return)

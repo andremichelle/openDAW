@@ -12,6 +12,7 @@ import {ParameterLabel} from "@/ui/components/ParameterLabel"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import {GateDisplay} from "@/ui/devices/audio-effects/Gate/GateDisplay"
 import {SidechainButton} from "@/ui/devices/SidechainButton"
+import {ParameterToggleButton} from "@/ui/devices/ParameterToggleButton"
 
 const className = Html.adoptStyleSheet(css, "GateDeviceEditor")
 
@@ -30,7 +31,7 @@ type Construct = {
 export const GateDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
     const {editing, midiLearning} = project
-    const {threshold, return: returnParam, attack, hold, release, floor} = adapter.namedParameter
+    const {inverse, threshold, return: returnParam, attack, hold, release, floor} = adapter.namedParameter
     // [0] inputPeakDb, [1] outputPeakDb, [2] gateEnvelope, [3] thresholdDb
     const values = new Float32Array([Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY])
     lifecycle.own(project.liveStreamReceiver.subscribeFloats(
@@ -61,12 +62,17 @@ export const GateDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                               <section className="envelope" style={{gridArea: "1 / 1 / 2 / 4"}}/>
                               <section className="bounds" style={{gridArea: "2 / 1 / 2 / 4"}}/>
                               {[attack, hold, release].map(parameter => createLabelControlFrag(parameter))}
-                              <div className="sidechain">
+                              <div className="group">
                                   <SidechainButton sideChain={adapter.sideChain}
                                                    rootBoxAdapter={project.rootBoxAdapter}
                                                    editing={editing}/>
                               </div>
                               {[threshold, returnParam, floor].map(parameter => createLabelControlFrag(parameter))}
+                              <div className="group">
+                                  <ParameterToggleButton lifecycle={lifecycle}
+                                                         editing={editing}
+                                                         parameter={inverse}/>
+                              </div>
                               <GateDisplay lifecycle={lifecycle} adapter={adapter} values={values}/>
                           </div>)}
                       populateMeter={() => (

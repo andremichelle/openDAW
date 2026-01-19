@@ -28,6 +28,7 @@ export const GateDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffec
         type: "float32", name: "floor", pointerRules: ParameterPointerRules,
         value: -72.0, constraints: {min: -72.0, max: 0.0, scaling: "linear"}, unit: "dB"
     },
+    16: {type: "boolean", name: "inverse", pointerRules: ParameterPointerRules, value: false},
     30: {
         type: "pointer", name: "side-chain", pointerType: Pointers.SideChain, mandatory: false
     }

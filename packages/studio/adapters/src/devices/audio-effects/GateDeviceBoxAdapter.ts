@@ -54,6 +54,8 @@ export class GateDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 
     #wrapParameters(box: GateDeviceBox) {
         return {
+            inverse: this.#parametric.createParameter(
+                box.inverse, ValueMapping.bool, StringMapping.bool, "Inverse"),
             threshold: this.#parametric.createParameter(
                 box.threshold, ValueMapping.linear(-80.0, 0.0), StringMapping.decible, "Threshold"),
             return: this.#parametric.createParameter(
