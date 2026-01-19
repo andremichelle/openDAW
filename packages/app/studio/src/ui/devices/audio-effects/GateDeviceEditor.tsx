@@ -62,13 +62,13 @@ export const GateDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                               <section className="envelope" style={{gridArea: "1 / 1 / 2 / 4"}}/>
                               <section className="bounds" style={{gridArea: "2 / 1 / 2 / 4"}}/>
                               {[attack, hold, release].map(parameter => createLabelControlFrag(parameter))}
-                              <div className="group">
+                              <div className="sidechain">
                                   <SidechainButton sideChain={adapter.sideChain}
                                                    rootBoxAdapter={project.rootBoxAdapter}
                                                    editing={editing}/>
                               </div>
                               {[threshold, returnParam, floor].map(parameter => createLabelControlFrag(parameter))}
-                              <div className="group">
+                              <div className="inverse">
                                   <ParameterToggleButton lifecycle={lifecycle}
                                                          editing={editing}
                                                          parameter={inverse}/>

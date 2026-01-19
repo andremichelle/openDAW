@@ -105,7 +105,25 @@ Using a floor above -∞ creates a more natural sound by allowing some bleed thr
 
 ---
 
-## 4. Sidechain
+## 4. Inverse Mode
+
+When **Inverse** is enabled, the gate behavior is flipped:
+
+- **Normal**: Gate opens when signal is **above** threshold (passes loud signals)
+- **Inverse**: Gate opens when signal is **below** threshold (passes quiet signals)
+
+In inverse mode, the gate acts like a "ducker"—it attenuates loud signals and passes through quiet ones.
+
+### Use Cases
+
+- **Ducking**: Use a voice-over as sidechain input to automatically duck background music when someone speaks
+- **Hearing what's cut**: Enable inverse to monitor exactly what the gate is removing
+- **Reverse effects**: Create unusual rhythmic effects by letting through only the quiet portions of a signal
+- **Isolating ambience**: Extract room tone or reverb tails while cutting the main transients
+
+---
+
+## 5. Sidechain
 
 Routes an external signal to control the gate. Click to select any track's output as the detection source.
 
@@ -119,13 +137,13 @@ Classic uses:
 
 ---
 
-## 5. Visual Display
+## 6. Visual Display
 
 Shows the input signal level (filled area) and the gate envelope (line). The envelope visualization helps you see when the gate is open or closed and how the attack/release shapes the gain.
 
 ---
 
-## 6. Tips
+## 7. Tips
 
 - **Start with the threshold**: Play the material and adjust threshold until the gate opens only for the sounds you want
 - **Use hold for drums**: A short hold time (50-100 ms) prevents the gate from cutting off the body of drum hits
