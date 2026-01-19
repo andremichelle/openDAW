@@ -12,6 +12,7 @@ import {
     MIDIOutputDeviceBox,
     ModularDeviceBox,
     NanoDeviceBox,
+    NeuralAmpDeviceBox,
     PitchDeviceBox,
     PlayfieldDeviceBox,
     RevampDeviceBox,
@@ -40,6 +41,7 @@ import {
     MIDIOutputDeviceBoxAdapter,
     ModularDeviceBoxAdapter,
     NanoDeviceBoxAdapter,
+    NeuralAmpDeviceBoxAdapter,
     PitchDeviceBoxAdapter,
     PlayfieldDeviceBoxAdapter,
     RevampDeviceBoxAdapter,
@@ -83,6 +85,7 @@ import {MIDIOutputDeviceProcessor} from "./devices/instruments/MIDIOutputDeviceP
 import {VelocityDeviceProcessor} from "./devices/midi-effects/VelocityDeviceProcessor"
 import {TidalDeviceProcessor} from "./devices/audio-effects/TidalDeviceProcessor"
 import {DattorroReverbDeviceProcessor} from "./devices/audio-effects/DattorroReverbDeviceProcessor"
+import {NeuralAmpDeviceProcessor} from "./devices/audio-effects/NeuralAmpDeviceProcessor"
 
 export namespace InstrumentDeviceProcessorFactory {
     export const create = (context: EngineContext,
@@ -151,6 +154,8 @@ export namespace AudioEffectDeviceProcessorFactory {
             visitRevampDeviceBox: (box: RevampDeviceBox): AudioEffectDeviceProcessor =>
                 new RevampDeviceProcessor(context, context.boxAdapters.adapterFor(box, RevampDeviceBoxAdapter)),
             visitModularDeviceBox: (box: ModularDeviceBox): AudioEffectDeviceProcessor =>
-                new NopDeviceProcessor(context, context.boxAdapters.adapterFor(box, ModularDeviceBoxAdapter))
+                new NopDeviceProcessor(context, context.boxAdapters.adapterFor(box, ModularDeviceBoxAdapter)),
+            visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox): AudioEffectDeviceProcessor =>
+                new NeuralAmpDeviceProcessor(context, context.boxAdapters.adapterFor(box, NeuralAmpDeviceBoxAdapter))
         }), `Could not create audio-effect for'${box.name}'`)
 }

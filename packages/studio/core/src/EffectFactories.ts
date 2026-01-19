@@ -14,6 +14,7 @@ import {
     ModularBox,
     ModularDeviceBox,
     ModuleConnectionBox,
+    NeuralAmpDeviceBox,
     PitchDeviceBox,
     RevampDeviceBox,
     ReverbDeviceBox,
@@ -262,6 +263,21 @@ export namespace EffectFactories {
             })
     }
 
+    export const NeuralAmp: EffectFactory = {
+        defaultName: "Neural Amp",
+        defaultIcon: IconSymbol.NeuralAmp,
+        description: "Neural network-based amp modeling using NAM models",
+        manualPage: DeviceManualUrls.NeuralAmp,
+        separatorBefore: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index): NeuralAmpDeviceBox =>
+            NeuralAmpDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("Neural Amp")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
     export const Modular: EffectFactory = {
         defaultName: "🔇 Create New Modular Audio Effect (inaudible yet)",
         defaultIcon: IconSymbol.Box,
@@ -303,7 +319,7 @@ export namespace EffectFactories {
 
     export const MidiNamed = {Arpeggio, Pitch, Velocity, Zeitgeist}
     export const AudioNamed = {
-        StereoTool, Compressor, Gate, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal, Maximizer
+        StereoTool, Compressor, Gate, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal, Maximizer, NeuralAmp
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(MidiNamed)
     export const AudioList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(AudioNamed)
