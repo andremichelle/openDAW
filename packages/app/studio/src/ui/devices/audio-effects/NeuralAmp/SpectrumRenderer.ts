@@ -34,8 +34,11 @@ export const createSpectrumRenderer = (canvas: HTMLCanvasElement,
         let x0: int = 0 | 0
         let lastEnergy = spectrum[0]
         let currentEnergy = lastEnergy
+        let minY = height
         const path2D = new Path2D()
-        path2D.moveTo(0, dbToY(gainToDb(lastEnergy)))
+        const startY = dbToY(gainToDb(lastEnergy))
+        minY = Math.min(minY, startY)
+        path2D.moveTo(0, startY)
         for (let i = 1; i < numBins; ++i) {
             const energy = spectrum[i]
             if (currentEnergy < energy) {
@@ -51,6 +54,7 @@ export const createSpectrumRenderer = (canvas: HTMLCanvasElement,
                 const scale = 1.0 / xn
                 const y1 = dbToY(gainToDb(lastEnergy))
                 const y2 = dbToY(gainToDb(currentEnergy))
+                minY = Math.min(minY, y2)
                 for (let x = 1; x <= xn; ++x) {
                     path2D.lineTo(x0 + x, linear(y1, y2, x * scale))
                 }
@@ -60,12 +64,15 @@ export const createSpectrumRenderer = (canvas: HTMLCanvasElement,
             x0 = x1
         }
         context.lineWidth = 1
-        context.fillStyle = DisplayPaint.strokeStyle(0.08)
         context.strokeStyle = DisplayPaint.strokeStyle(0.80)
         context.stroke(path2D)
         path2D.lineTo(width, height)
         path2D.lineTo(0, height)
         path2D.closePath()
+        const gradient = context.createLinearGradient(0, minY, 0, height)
+        gradient.addColorStop(0, DisplayPaint.strokeStyle(0.25))
+        gradient.addColorStop(1, "transparent")
+        context.fillStyle = gradient
         context.fill(path2D)
     }))
     terminator.own(receiver.subscribeFloats(adapter.spectrum, values => {
