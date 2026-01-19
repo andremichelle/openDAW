@@ -119,12 +119,12 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                       anchor: 0.5
                                   })}
                                   {ControlBuilder.createKnob({
-                                      lifecycle, editing, midiLearning, adapter, parameter: outputGain,
-                                      anchor: 0.5
-                                  })}
-                                  {ControlBuilder.createKnob({
                                       lifecycle, editing, midiLearning, adapter, parameter: mix,
                                       anchor: 1.0
+                                  })}
+                                  {ControlBuilder.createKnob({
+                                      lifecycle, editing, midiLearning, adapter, parameter: outputGain,
+                                      anchor: 0.5
                                   })}
                                   <Checkbox lifecycle={lifecycle}
                                             model={EditWrapper.forValue(editing, adapter.monoField)}

@@ -58,11 +58,11 @@ export class NeuralAmpDeviceBoxAdapter implements AudioEffectDeviceAdapter {
         return {
             inputGain: this.#parametric.createParameter(
                 box.inputGain,
-                ValueMapping.DefaultDecibel,
+                ValueMapping.decibel(-72.0, 0.0, 12.0),
                 StringMapping.numeric({unit: "dB", fractionDigits: 1}), "input"),
             outputGain: this.#parametric.createParameter(
                 box.outputGain,
-                ValueMapping.DefaultDecibel,
+                ValueMapping.decibel(-72.0, 0.0, 12.0),
                 StringMapping.numeric({unit: "dB", fractionDigits: 1}), "output"),
             mix: this.#parametric.createParameter(
                 box.mix, ValueMapping.linear(0.0, 1.0),
