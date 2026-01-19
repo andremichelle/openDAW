@@ -110,7 +110,7 @@ export const installTrackHeaderMenu = (service: StudioService,
         }).setTriggerProcedure(() => editing.modify(() =>
             project.api.deleteAudioUnit(audioUnitBoxAdapter.box))),
         MenuItem.default({
-            label: `Delete ${TrackType.toLabelString(trackType)} Track`,
+            label: `Delete ${TrackType.toLabelString(trackBoxAdapter.type)} Track`,
             selectable: !audioUnitBoxAdapter.isOutput,
             hidden: audioUnitBoxAdapter.tracks.collection.size() === 1
         }).setTriggerProcedure(() => editing.modify(() => {
