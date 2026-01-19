@@ -17,10 +17,6 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
     static #wasmLoading: Promise<NamWasmModule> | null = null
     static #pendingCallbacks: Array<() => void> = []
 
-    /**
-     * Fetches and initializes the NAM WASM module.
-     * The module is shared across all instances.
-     */
     static async fetchWasm(engineToClient: EngineToClient): Promise<NamWasmModule> {
         if (this.#wasmModule.nonEmpty()) {
             return this.#wasmModule.unwrap()
@@ -38,7 +34,6 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
             module.setSampleRate(sampleRate)
             this.#wasmModule = Option.wrap(module)
             this.#wasmLoading = null
-            // Notify all pending processors
             for (const callback of this.#pendingCallbacks) {
                 callback()
             }
@@ -70,11 +65,11 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
 
     readonly #output: AudioBuffer
     readonly #peaks: PeakBroadcaster
-    readonly #monoInput: Float32Array
-    readonly #monoOutput: Float32Array
+    readonly #inputs: [Float32Array, Float32Array]
+    readonly #outputs: [Float32Array, Float32Array]
 
     #source: Option<AudioBuffer> = Option.None
-    #instanceId: int = -1
+    #instances: [int, int] = [-1, -1]
     #modelLoaded: boolean = false
     #inputGain: number = 1.0
     #outputGain: number = 1.0
@@ -88,8 +83,8 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
         this.#adapter = adapter
         this.#output = new AudioBuffer()
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
-        this.#monoInput = new Float32Array(128)
-        this.#monoOutput = new Float32Array(128)
+        this.#inputs = [new Float32Array(128), new Float32Array(128)]
+        this.#outputs = [new Float32Array(128), new Float32Array(128)]
 
         const {namedParameter} = adapter
         this.parameterInputGain = this.own(this.bindParameter(namedParameter.inputGain))
@@ -100,7 +95,7 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
             context.registerProcessor(this),
             context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing),
             adapter.modelJsonField.catchupAndSubscribe(field => this.#onModelJsonChanged(field.getValue())),
-            adapter.monoField.catchupAndSubscribe(field => this.#mono = field.getValue())
+            adapter.monoField.catchupAndSubscribe(field => this.#onMonoChanged(field.getValue()))
         )
 
         this.#initInstance()
@@ -115,8 +110,11 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
         this.#peaks.clear()
         this.eventInput.clear()
         const module = NeuralAmpDeviceProcessor.#wasmModule
-        if (module.nonEmpty() && this.#instanceId >= 0) {
-            module.unwrap().reset(this.#instanceId)
+        if (module.nonEmpty()) {
+            const wasm = module.unwrap()
+            for (const instance of this.#instances) {
+                if (instance >= 0) {wasm.reset(instance)}
+            }
         }
     }
 
@@ -135,15 +133,12 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
 
     processAudio(_block: Block, from: number, to: number): void {
         if (this.#source.isEmpty()) {return}
-
         const source = this.#source.unwrap()
         const input = source.channels() as StereoMatrix.Channels
         const output = this.#output.channels() as StereoMatrix.Channels
         const numFrames = to - from
-
-        // If no WASM or no model, pass through
         const module = NeuralAmpDeviceProcessor.#wasmModule
-        if (module.isEmpty() || !this.#modelLoaded || this.#instanceId < 0) {
+        if (module.isEmpty() || !this.#modelLoaded || this.#instances[0] < 0) {
             for (let i = from; i < to; i++) {
                 output[0][i] = input[0][i]
                 output[1][i] = input[1][i]
@@ -151,34 +146,31 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
             this.#peaks.process(output[0], output[1], from, to)
             return
         }
-
         const wasm = module.unwrap()
         const wet = this.#mix
         const dry = 1.0 - wet
-
-        // Convert to mono with input gain
         if (this.#mono) {
-            // Sum L+R to mono (0.5 prevents clipping when both channels are correlated)
             for (let i = 0; i < numFrames; i++) {
-                this.#monoInput[i] = (input[0][from + i] + input[1][from + i]) * 0.5 * this.#inputGain
+                this.#inputs[0][i] = (input[0][from + i] + input[1][from + i]) * 0.5 * this.#inputGain
+            }
+            wasm.process(this.#instances[0], this.#inputs[0].subarray(0, numFrames), this.#outputs[0].subarray(0, numFrames))
+            for (let i = 0; i < numFrames; i++) {
+                const wetSample = this.#outputs[0][i] * this.#outputGain
+                output[0][from + i] = input[0][from + i] * dry + wetSample * wet
+                output[1][from + i] = input[1][from + i] * dry + wetSample * wet
             }
         } else {
-            // Use left channel only (for mono sources)
             for (let i = 0; i < numFrames; i++) {
-                this.#monoInput[i] = input[0][from + i] * this.#inputGain
+                this.#inputs[0][i] = input[0][from + i] * this.#inputGain
+                this.#inputs[1][i] = input[1][from + i] * this.#inputGain
+            }
+            wasm.process(this.#instances[0], this.#inputs[0].subarray(0, numFrames), this.#outputs[0].subarray(0, numFrames))
+            wasm.process(this.#instances[1], this.#inputs[1].subarray(0, numFrames), this.#outputs[1].subarray(0, numFrames))
+            for (let i = 0; i < numFrames; i++) {
+                output[0][from + i] = input[0][from + i] * dry + this.#outputs[0][i] * this.#outputGain * wet
+                output[1][from + i] = input[1][from + i] * dry + this.#outputs[1][i] * this.#outputGain * wet
             }
         }
-
-        // Process through NAM
-        wasm.process(this.#instanceId, this.#monoInput.subarray(0, numFrames), this.#monoOutput.subarray(0, numFrames))
-
-        // Apply output gain and wet/dry mix, copy to stereo output
-        for (let i = 0; i < numFrames; i++) {
-            const wetSample = this.#monoOutput[i] * this.#outputGain
-            output[0][from + i] = input[0][from + i] * dry + wetSample * wet
-            output[1][from + i] = input[1][from + i] * dry + wetSample * wet
-        }
-
         this.#peaks.process(output[0], output[1], from, to)
     }
 
@@ -194,7 +186,7 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
 
     terminate(): void {
         super.terminate()
-        this.#destroyInstance()
+        this.#destroyInstances()
     }
 
     toString(): string {return `{${this.constructor.name} (${this.#id})}`}
@@ -202,15 +194,44 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
     #initInstance(): void {
         const module = NeuralAmpDeviceProcessor.#wasmModule
         if (module.nonEmpty()) {
-            this.#instanceId = module.unwrap().createInstance()
+            const wasm = module.unwrap()
+            this.#instances[0] = wasm.createInstance()
+            if (!this.#mono) {
+                this.#instances[1] = wasm.createInstance()
+            }
         }
     }
 
-    #destroyInstance(): void {
+    #destroyInstances(): void {
         const module = NeuralAmpDeviceProcessor.#wasmModule
-        if (module.nonEmpty() && this.#instanceId >= 0) {
-            module.unwrap().destroyInstance(this.#instanceId)
-            this.#instanceId = -1
+        if (module.nonEmpty()) {
+            const wasm = module.unwrap()
+            for (let i = 0; i < 2; i++) {
+                if (this.#instances[i] >= 0) {
+                    wasm.destroyInstance(this.#instances[i])
+                    this.#instances[i] = -1
+                }
+            }
+        }
+    }
+
+    #onMonoChanged(mono: boolean): void {
+        this.#mono = mono
+        const module = NeuralAmpDeviceProcessor.#wasmModule
+        if (module.isEmpty()) {return}
+        const wasm = module.unwrap()
+        if (mono) {
+            if (this.#instances[1] >= 0) {
+                wasm.destroyInstance(this.#instances[1])
+                this.#instances[1] = -1
+            }
+        } else {
+            if (this.#instances[1] < 0) {
+                this.#instances[1] = wasm.createInstance()
+                if (this.#pendingModelJson.length > 0) {
+                    wasm.loadModel(this.#instances[1], this.#pendingModelJson)
+                }
+            }
         }
     }
 
@@ -238,17 +259,20 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
             this.#modelLoaded = false
             return
         }
-
-        if (this.#instanceId < 0) {
+        if (this.#instances[0] < 0) {
             this.#initInstance()
         }
-
+        const wasm = module.unwrap()
         if (this.#pendingModelJson.length === 0) {
-            module.unwrap().unloadModel(this.#instanceId)
+            for (const instance of this.#instances) {
+                if (instance >= 0) {wasm.unloadModel(instance)}
+            }
             this.#modelLoaded = false
             return
         }
-
-        this.#modelLoaded = module.unwrap().loadModel(this.#instanceId, this.#pendingModelJson)
+        this.#modelLoaded = wasm.loadModel(this.#instances[0], this.#pendingModelJson)
+        if (this.#instances[1] >= 0) {
+            this.#modelLoaded = this.#modelLoaded && wasm.loadModel(this.#instances[1], this.#pendingModelJson)
+        }
     }
 }

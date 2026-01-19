@@ -8,6 +8,7 @@ import {
     drawHeatmap,
     drawHistogram,
     drawLayerDiagram,
+    drawNetworkGraph,
     drawSpectrumComparison,
     drawWeightDistributionByLayer,
     WeightStats
@@ -52,6 +53,7 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
     let histogramCanvas: HTMLCanvasElement
     let heatmapCanvas: HTMLCanvasElement
     let layerCanvas: HTMLCanvasElement
+    let networkCanvas: HTMLCanvasElement
     let segmentCanvas: HTMLCanvasElement
     let spectrumCanvas: HTMLCanvasElement
     let vizSection: HTMLDivElement
@@ -91,6 +93,9 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
         }
         if (isDefined(layerCanvas)) {
             drawLayerDiagram(layerCanvas, model)
+        }
+        if (isDefined(networkCanvas)) {
+            drawNetworkGraph(networkCanvas, model)
         }
         if (isDefined(segmentCanvas)) {
             drawWeightDistributionByLayer(segmentCanvas, model)
@@ -171,6 +176,9 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                 },
                 setBypass(value: boolean) {
                     dispatcher.dispatchAndForget(this.setBypass, value)
+                },
+                setMono(value: boolean) {
+                    dispatcher.dispatchAndForget(this.setMono, value)
                 }
             })
         )
@@ -431,6 +439,20 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                             }}
                         />
                     </div>
+                    <div class="row">
+                        <label>Mono</label>
+                        <input
+                            type="checkbox"
+                            checked
+                            onInit={(element: HTMLInputElement) => {
+                                element.onchange = () => {
+                                    if (isDefined(sender)) {
+                                        sender.setMono(element.checked)
+                                    }
+                                }
+                            }}
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -456,6 +478,15 @@ const LOCAL_AUDIO_URL = "/Drop_D_Riff.mp3"
                             width="600"
                             height="150"
                             onInit={(element: HTMLCanvasElement) => layerCanvas = element}
+                        />
+                    </div>
+
+                    <div class="viz-panel">
+                        <h3>Network Graph</h3>
+                        <canvas
+                            width="600"
+                            height="200"
+                            onInit={(element: HTMLCanvasElement) => networkCanvas = element}
                         />
                     </div>
 

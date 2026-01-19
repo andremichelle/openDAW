@@ -292,8 +292,13 @@ export const drawLayerDiagram = (canvas: HTMLCanvasElement, model: NamModel): vo
     ctx.fillRect(0, 0, width, height)
 
     const layers = model.config.layers
-    if (layers.length === 0) return
-
+    if (!isDefined(layers) || layers.length === 0) {
+        ctx.fillStyle = "#666"
+        ctx.font = "12px monospace"
+        ctx.textAlign = "center"
+        ctx.fillText(`Layer diagram not available for ${model.architecture}`, width / 2, height / 2)
+        return
+    }
     const layerWidth = 60
     const maxChannels = Math.max(...layers.map(layer => layer.channels))
     const spacing = (width - 100) / (layers.length + 1)
@@ -405,4 +410,74 @@ export const drawWeightDistributionByLayer = (
     ctx.fillText("Start", 20, height - 10)
     ctx.textAlign = "right"
     ctx.fillText("End", width - 20, height - 10)
+}
+
+export const drawNetworkGraph = (canvas: HTMLCanvasElement, model: NamModel): void => {
+    const ctx = canvas.getContext("2d")
+    if (!isDefined(ctx)) return
+    const width = canvas.width
+    const height = canvas.height
+    ctx.fillStyle = "#1a1a2e"
+    ctx.fillRect(0, 0, width, height)
+    const layers = model.config.layers
+    if (!isDefined(layers) || layers.length === 0) {
+        ctx.fillStyle = "#666"
+        ctx.font = "12px monospace"
+        ctx.textAlign = "center"
+        ctx.fillText(`Network graph not available for ${model.architecture}`, width / 2, height / 2)
+        return
+    }
+    const maxNodes = 12
+    const nodeRadius = 4
+    const padding = 40
+    const layerPositions: Array<{x: number, nodes: Array<{y: number}>}> = []
+    const totalLayers = layers.length + 2
+    const layerSpacing = (width - padding * 2) / (totalLayers - 1)
+    const getNodePositions = (count: number): Array<{y: number}> => {
+        const displayCount = Math.min(count, maxNodes)
+        const nodeSpacing = (height - padding * 2) / (displayCount + 1)
+        const nodes: Array<{y: number}> = []
+        for (let index = 0; index < displayCount; index++) {
+            nodes.push({y: padding + nodeSpacing * (index + 1)})
+        }
+        return nodes
+    }
+    layerPositions.push({x: padding, nodes: getNodePositions(1)})
+    for (let index = 0; index < layers.length; index++) {
+        const x = padding + layerSpacing * (index + 1)
+        const channels = layers[index].channels
+        layerPositions.push({x, nodes: getNodePositions(channels)})
+    }
+    layerPositions.push({x: width - padding, nodes: getNodePositions(1)})
+    ctx.strokeStyle = "#333"
+    ctx.lineWidth = 0.5
+    for (let layerIndex = 0; layerIndex < layerPositions.length - 1; layerIndex++) {
+        const currentLayer = layerPositions[layerIndex]
+        const nextLayer = layerPositions[layerIndex + 1]
+        for (const currentNode of currentLayer.nodes) {
+            for (const nextNode of nextLayer.nodes) {
+                ctx.beginPath()
+                ctx.moveTo(currentLayer.x, currentNode.y)
+                ctx.lineTo(nextLayer.x, nextNode.y)
+                ctx.stroke()
+            }
+        }
+    }
+    for (let layerIndex = 0; layerIndex < layerPositions.length; layerIndex++) {
+        const layer = layerPositions[layerIndex]
+        const isIO = layerIndex === 0 || layerIndex === layerPositions.length - 1
+        const isGated = layerIndex > 0 && layerIndex < layerPositions.length - 1 && layers[layerIndex - 1].gated
+        if (isIO) {
+            ctx.fillStyle = "#4a9eff"
+        } else if (isGated) {
+            ctx.fillStyle = "#ff6b6b"
+        } else {
+            ctx.fillStyle = "#4ecdc4"
+        }
+        for (const node of layer.nodes) {
+            ctx.beginPath()
+            ctx.arc(layer.x, node.y, nodeRadius, 0, Math.PI * 2)
+            ctx.fill()
+        }
+    }
 }

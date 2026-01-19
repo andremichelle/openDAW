@@ -8,4 +8,5 @@ export interface NamProcessorProtocol {
     setOutputGain(value: number): void
     setMix(value: number): void
     setBypass(value: boolean): void
+    setMono(value: boolean): void
 }
