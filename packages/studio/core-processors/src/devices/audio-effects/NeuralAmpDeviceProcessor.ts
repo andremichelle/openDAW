@@ -1,6 +1,6 @@
 import {EngineToClient, NeuralAmpDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {int, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioBuffer, dbToGain, Event, StereoMatrix} from "@opendaw/lib-dsp"
+import {AudioBuffer, dbToGain, Event, RenderQuantum, StereoMatrix} from "@opendaw/lib-dsp"
 import {EngineContext} from "../../EngineContext"
 import {Block, Processor} from "../../processing"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
@@ -83,8 +83,8 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
         this.#adapter = adapter
         this.#output = new AudioBuffer()
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
-        this.#inputs = [new Float32Array(128), new Float32Array(128)]
-        this.#outputs = [new Float32Array(128), new Float32Array(128)]
+        this.#inputs = [new Float32Array(RenderQuantum), new Float32Array(RenderQuantum)]
+        this.#outputs = [new Float32Array(RenderQuantum), new Float32Array(RenderQuantum)]
 
         const {namedParameter} = adapter
         this.parameterInputGain = this.own(this.bindParameter(namedParameter.inputGain))
