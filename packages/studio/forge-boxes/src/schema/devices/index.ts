@@ -24,6 +24,7 @@ import {MIDIOutputParameterBox} from "./instruments/MIDIOutputParameterBox"
 import {TidalDeviceBox} from "./audio-effects/TidalDeviceBox"
 import {DattorroReverbDeviceBox} from "./audio-effects/DattorroReverbDeviceBox"
 import {GateDeviceBox} from "./audio-effects/GateDeviceBox"
+import {NeuralAmpDeviceBox} from "./audio-effects/NeuralAmpDeviceBox"
 
 export const DeviceDefinitions = [
     UnknownAudioEffectDevice,
@@ -53,5 +54,6 @@ export const DeviceDefinitions = [
     TapeDeviceBox,
     ArpeggioDeviceBox,
     PitchDeviceBox,
-    ZeitgeistDeviceBox
+    ZeitgeistDeviceBox,
+    NeuralAmpDeviceBox
 ]

@@ -42,6 +42,7 @@ import {
     ModuleGainBox,
     ModuleMultiplierBox,
     NanoDeviceBox,
+    NeuralAmpDeviceBox,
     NoteClipBox,
     NoteEventBox,
     NoteEventCollectionBox,
@@ -127,6 +128,7 @@ import {MIDIOutputDeviceBoxAdapter} from "./devices/instruments/MIDIOutputDevice
 import {VelocityDeviceBoxAdapter} from "./devices/midi-effects/VelocityDeviceBoxAdapter"
 import {TidalDeviceBoxAdapter} from "./devices/audio-effects/TidalDeviceBoxAdapter"
 import {DattorroReverbDeviceBoxAdapter} from "./devices/audio-effects/DattorroReverbDeviceBoxAdapter"
+import {NeuralAmpDeviceBoxAdapter} from "./devices/audio-effects/NeuralAmpDeviceBoxAdapter"
 import {AudioPitchStretchBoxAdapter} from "./audio/AudioPitchStretchBoxAdapter"
 import {TransientMarkerBoxAdapter} from "./audio/TransientMarkerBoxAdapter"
 import {WarpMarkerBoxAdapter} from "./audio/WarpMarkerBoxAdapter"
@@ -217,6 +219,7 @@ export class BoxAdapters implements Terminable {
             visitModuleGainBox: (box: ModuleGainBox) => new ModuleGainAdapter(this.#context, box),
             visitModuleMultiplierBox: (box: ModuleMultiplierBox) => new ModuleMultiplierAdapter(this.#context, box),
             visitNanoDeviceBox: (box: NanoDeviceBox) => new NanoDeviceBoxAdapter(this.#context, box),
+            visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox) => new NeuralAmpDeviceBoxAdapter(this.#context, box),
             visitNoteClipBox: (box: NoteClipBox) => new NoteClipBoxAdapter(this.#context, box),
             visitNoteEventBox: (box: NoteEventBox) => new NoteEventBoxAdapter(this.#context, box),
             visitNoteEventCollectionBox: (box: NoteEventCollectionBox): BoxAdapter => new NoteEventCollectionBoxAdapter(this.#context, box),

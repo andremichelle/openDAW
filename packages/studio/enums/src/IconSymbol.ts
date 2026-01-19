@@ -76,6 +76,7 @@ export enum IconSymbol {
     Mixing,
     Mute,
     NanoWave,
+    NeuralAmp,
     New,
     NoAudio,
     Note,

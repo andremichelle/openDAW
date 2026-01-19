@@ -175,6 +175,11 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                         })
                     })
                 },
+                fetchNamWasm: async (): Promise<ArrayBuffer> => {
+                    const url = new URL("@opendaw/nam-wasm/nam.wasm", import.meta.url)
+                    const response = await fetch(url)
+                    return response.arrayBuffer()
+                },
                 notifyClipSequenceChanges: (changes: ClipSequencingUpdates): void => {
                     changes.stopped.forEach(uuid => {
                         for (let i = 0; i < this.#playingClips.length; i++) {

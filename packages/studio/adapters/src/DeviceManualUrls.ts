@@ -21,6 +21,7 @@ export namespace DeviceManualUrls {
     export const Tidal = "manuals/devices/audio/tidal"
     export const Revamp = "manuals/devices/audio/revamp"
     export const Modular = "manuals/devices/audio/modular"
+    export const NeuralAmp = "manuals/devices/audio/neural-amp"
 
     // Instruments
     export const Tape = "manuals/devices/instruments/tape"

@@ -1,0 +1,55 @@
+@use "@/mixins"
+
+component
+  display: flex
+  flex-direction: column
+  min-width: 140px
+  @include mixins.Control
+  position: relative
+
+  > div.model-section
+    display: flex
+    flex-direction: column
+    gap: 0.5em
+    padding: 0.5em
+    background: hsla(200, 40%, 10%, 0.3)
+    border-radius: 4px
+    margin-bottom: 0.75em
+
+    > h1
+      color: var(--color-dark)
+      font-size: 0.625rem
+      margin: 0
+
+    > span.model-name
+      font-size: 0.75rem
+      color: var(--color-light)
+      white-space: nowrap
+      overflow: hidden
+      text-overflow: ellipsis
+      max-width: 120px
+
+      &.empty
+        color: var(--color-shadow)
+        font-style: italic
+
+      &.error
+        color: var(--color-orange)
+
+    > button.browse-button
+      font-size: 0.625rem
+      padding: 0.25em 0.5em
+      background: var(--color-blue)
+      color: white
+      border: none
+      border-radius: 3px
+      cursor: pointer
+
+      &:hover
+        background: var(--color-blue-hover)
+
+  > div.controls
+    width: 100%
+    display: grid
+    grid-template-columns: 1fr 1em 1fr
+    justify-content: space-around
