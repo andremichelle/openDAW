@@ -1,5 +1,5 @@
 import {asInstanceOf, int, Option, quantizeFloor, Terminable, Terminator, UUID} from "@opendaw/lib-std"
-import {dbToGain, ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
+import {ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
 import {
     AudioFileBox,
     AudioPitchStretchBox,
@@ -17,12 +17,10 @@ import {RecordTrack} from "./RecordTrack"
 export namespace RecordAudio {
     type RecordAudioContext = {
         recordingWorklet: RecordingWorklet
-        mediaStream: MediaStream
+        sourceNode: AudioNode
         sampleManager: SampleLoaderManager
-        audioContext: AudioContext
         project: Project
         capture: Capture
-        gainDb: number
         outputLatency: number
     }
 
@@ -33,31 +31,13 @@ export namespace RecordAudio {
     }
 
     export const start = (
-        {
-            recordingWorklet,
-            mediaStream,
-            sampleManager,
-            audioContext,
-            project,
-            capture,
-            gainDb,
-            outputLatency
-        }: RecordAudioContext)
+        {recordingWorklet, sourceNode, sampleManager, project, capture, outputLatency}: RecordAudioContext)
         : Terminable => {
         const terminator = new Terminator()
         const beats = PPQN.fromSignature(1, project.timelineBox.signature.denominator.getValue())
         const {editing, engine, boxGraph, timelineBox} = project
         const originalUuid = recordingWorklet.uuid
         sampleManager.record(recordingWorklet)
-        const streamSource = audioContext.createMediaStreamSource(mediaStream)
-        const streamGain = audioContext.createGain()
-        streamGain.gain.value = dbToGain(gainDb)
-        streamSource.connect(streamGain)
-        recordingWorklet.own(Terminable.create(() => {
-            streamGain.disconnect()
-            streamSource.disconnect()
-        }))
-
         let fileBox: Option<AudioFileBox> = Option.None
         let currentTake: Option<TakeData> = Option.None
         let lastPosition: ppqn = 0
@@ -151,6 +131,7 @@ export namespace RecordAudio {
 
         terminator.ownAll(
             Terminable.create(() => {
+                sourceNode.disconnect(recordingWorklet)
                 if (recordingWorklet.numberOfFrames === 0 || fileBox.isEmpty()) {
                     console.debug("Abort recording audio.")
                     sampleManager.remove(originalUuid)
@@ -182,7 +163,7 @@ export namespace RecordAudio {
                 }
                 lastPosition = currentPosition
                 if (fileBox.isEmpty()) {
-                    streamGain.connect(recordingWorklet)
+                    sourceNode.connect(recordingWorklet)
                     editing.modify(() => {
                         fileBox = Option.wrap(createFileBox())
                         const position = quantizeFloor(currentPosition, beats)
