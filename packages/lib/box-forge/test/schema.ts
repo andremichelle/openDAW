@@ -19,6 +19,9 @@ const DefaultAudioInput = {
 const DefaultAudioOutput = {
     type: "field", name: "audioOutput", pointerRules: {mandatory: false, accepts: [PointerType.AudioOutput]}
 } satisfies FieldSchema<PointerType.AudioOutput> & FieldName
+const ExclusiveAudioInput = {
+    type: "field", name: "exclusiveInput", pointerRules: {mandatory: false, exclusive: true, accepts: [PointerType.AudioInput]}
+} satisfies FieldSchema<PointerType.AudioInput> & FieldName
 
 const NetworkBox: ClassSchema<PointerType> = {
     name: "NetworkBox",
@@ -125,7 +128,8 @@ const DelayBox: ClassSchema<PointerType> = {
         12: {type: "float32", name: "wet", constraints: "any", unit: "", pointerRules: DefaultParameterPointerRules},
         13: {type: "float32", name: "dry", constraints: "any", unit: "", pointerRules: DefaultParameterPointerRules},
         30: DefaultAudioInput,
-        31: DefaultAudioOutput
+        31: DefaultAudioOutput,
+        32: ExclusiveAudioInput
     } as const)
 }
 

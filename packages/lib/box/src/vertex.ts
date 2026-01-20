@@ -12,9 +12,10 @@ import {ObjectField} from "./object"
 export interface PointerRules<P extends PointerTypes> {
     readonly accepts: ReadonlyArray<P>
     readonly mandatory: boolean
+    readonly exclusive?: boolean
 }
 
-export const NoPointers: PointerRules<never> = Object.freeze({mandatory: false, accepts: []})
+export const NoPointers: PointerRules<never> = Object.freeze({mandatory: false, exclusive: false, accepts: []})
 
 export interface VertexVisitor<RETURN = void> {
     visitArrayField?(field: ArrayField): RETURN
