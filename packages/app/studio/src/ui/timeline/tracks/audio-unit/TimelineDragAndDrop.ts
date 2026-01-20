@@ -14,6 +14,7 @@ export type CreateParameters = {
     trackBoxAdapter: TrackBoxAdapter
     audioFileBox: AudioFileBox
     sample: Sample
+    type: "sample" | "file"
 }
 
 export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionCaptureTarget)> {
@@ -100,7 +101,7 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
                 return panic("Illegal State")
             }
             const audioFileBox: AudioFileBox = audioFileBoxFactory()
-            this.handleSample({event, trackBoxAdapter, audioFileBox, sample})
+            this.handleSample({event, trackBoxAdapter, audioFileBox, sample, type: data.type as "sample" | "file"})
         })
     }
 

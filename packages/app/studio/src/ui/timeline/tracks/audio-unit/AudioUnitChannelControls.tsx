@@ -28,7 +28,7 @@ type Construct = {
 }
 
 export const AudioUnitChannelControls = ({lifecycle, service, adapter}: Construct) => {
-    const {project, audioContext} = service
+    const {project} = service
     const {captureDevices, editing, midiLearning} = project
     const {volume, panning, mute, solo} = adapter.namedParameter
     const volumeControl = (
@@ -77,29 +77,34 @@ export const AudioUnitChannelControls = ({lifecycle, service, adapter}: Construc
         attachParameterContextMenu(editing, midiLearning, adapter.tracks, panning, panningControl),
         attachParameterContextMenu(editing, midiLearning, adapter.tracks, mute, muteControl),
         attachParameterContextMenu(editing, midiLearning, adapter.tracks, solo, soloControl),
-        captureOption.ifSome(capture => {
-            if (!isInstanceOf(capture, CaptureAudio)) {return}
-            const streamLifeCycle = lifecycle.own(new Terminator())
-            capture.stream.catchupAndSubscribe(optStream => {
-                streamRunning = false
-                streamLifeCycle.terminate()
-                return optStream.ifSome(stream => {
-                    const numberOfChannels = stream.getAudioTracks().at(0)?.getSettings().channelCount ?? 2
-                    const meterWorklet = service.audioWorklets.createMeter(numberOfChannels)
-                    const streamSource = audioContext.createMediaStreamSource(stream)
-                    streamSource.connect(meterWorklet)
-                    streamRunning = true
-                    streamLifeCycle.ownAll(
-                        Terminable.create(() => streamSource.disconnect()),
-                        meterWorklet.subscribe(({peak}) => {
-                            peaksInDb[0] = gainToDb(peak[0])
-                            peaksInDb[1] = gainToDb(peak[1] ?? peak[0])
-                        }),
-                        meterWorklet
-                    )
-                })
-            })
-        }) ?? Terminable.Empty,
+        captureOption.match({
+            none: () => Terminable.Empty,
+            some: capture => {
+                if (!isInstanceOf(capture, CaptureAudio)) {return Terminable.Empty}
+                const meterLifeCycle = lifecycle.own(new Terminator())
+                const connectMeter = () => {
+                    streamRunning = false
+                    meterLifeCycle.terminate()
+                    capture.outputNode.ifSome(outputNode => {
+                        const numberOfChannels = capture.effectiveChannelCount
+                        const meterWorklet = service.audioWorklets.createMeter(numberOfChannels)
+                        outputNode.connect(meterWorklet)
+                        streamRunning = true
+                        meterLifeCycle.ownAll(
+                            meterWorklet.subscribe(({peak}) => {
+                                peaksInDb[0] = gainToDb(peak[0])
+                                peaksInDb[1] = gainToDb(peak[1] ?? peak[0])
+                            }),
+                            meterWorklet
+                        )
+                    })
+                }
+                return Terminable.many(
+                    capture.stream.catchupAndSubscribe(() => connectMeter()),
+                    capture.captureBox.requestChannels.subscribe(() => connectMeter())
+                )
+            }
+        }),
         project.liveStreamReceiver.subscribeFloats(adapter.address, values => {
             if (streamRunning) {return}
             peaksInDb[0] = gainToDb(values[0])

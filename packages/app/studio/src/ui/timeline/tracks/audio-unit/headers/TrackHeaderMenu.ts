@@ -47,6 +47,21 @@ export const installTrackHeaderMenu = (service: StudioService,
                 }
             })),
         MenuItem.default({
+            label: "Force Mono",
+            checked: captureDevices.get(audioUnitBoxAdapter.uuid)
+                .mapOr(capture => isInstanceOf(capture, CaptureAudio)
+                    ? capture.requestChannels.mapOr(channels => channels === 1, false)
+                    : false, false),
+            hidden: captureDevices.get(audioUnitBoxAdapter.uuid)
+                .mapOr(capture => !isInstanceOf(capture, CaptureAudio), true)
+        }).setTriggerProcedure(() => captureDevices.get(audioUnitBoxAdapter.uuid)
+            .ifSome(capture => {
+                if (isInstanceOf(capture, CaptureAudio)) {
+                    const currentMono = capture.requestChannels.mapOr(channels => channels === 1, false)
+                    editing.modify(() => capture.requestChannels = currentMono ? 2 : 1)
+                }
+            })),
+        MenuItem.default({
             label: "Copy AudioUnit",
             shortcut: GlobalShortcuts["copy-device"].shortcut.format(),
             separatorBefore: true
@@ -110,7 +125,7 @@ export const installTrackHeaderMenu = (service: StudioService,
         }).setTriggerProcedure(() => editing.modify(() =>
             project.api.deleteAudioUnit(audioUnitBoxAdapter.box))),
         MenuItem.default({
-            label: `Delete ${TrackType.toLabelString(trackType)} Track`,
+            label: `Delete ${TrackType.toLabelString(trackBoxAdapter.type)} Track`,
             selectable: !audioUnitBoxAdapter.isOutput,
             hidden: audioUnitBoxAdapter.tracks.collection.size() === 1
         }).setTriggerProcedure(() => editing.modify(() => {

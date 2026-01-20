@@ -1,13 +1,6 @@
-import {asInstanceOf, int, Option, quantizeFloor, Terminable, Terminator, UUID} from "@opendaw/lib-std"
-import {dbToGain, ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
-import {
-    AudioFileBox,
-    AudioPitchStretchBox,
-    AudioRegionBox,
-    TrackBox,
-    ValueEventCollectionBox,
-    WarpMarkerBox
-} from "@opendaw/studio-boxes"
+import {asInstanceOf, int, Option, quantizeFloor, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
+import {ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
+import {AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {ColorCodes, SampleLoaderManager, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
 import {Project} from "../project"
 import {RecordingWorklet} from "../RecordingWorklet"
@@ -17,54 +10,33 @@ import {RecordTrack} from "./RecordTrack"
 export namespace RecordAudio {
     type RecordAudioContext = {
         recordingWorklet: RecordingWorklet
-        mediaStream: MediaStream
+        sourceNode: AudioNode
         sampleManager: SampleLoaderManager
-        audioContext: AudioContext
         project: Project
         capture: Capture
-        gainDb: number
         outputLatency: number
     }
 
     type TakeData = {
         trackBox: TrackBox
         regionBox: AudioRegionBox
-        warpMarkerBox: WarpMarkerBox
     }
 
     export const start = (
-        {
-            recordingWorklet,
-            mediaStream,
-            sampleManager,
-            audioContext,
-            project,
-            capture,
-            gainDb,
-            outputLatency
-        }: RecordAudioContext)
+        {recordingWorklet, sourceNode, sampleManager, project, capture, outputLatency}: RecordAudioContext)
         : Terminable => {
         const terminator = new Terminator()
         const beats = PPQN.fromSignature(1, project.timelineBox.signature.denominator.getValue())
         const {editing, engine, boxGraph, timelineBox} = project
         const originalUuid = recordingWorklet.uuid
         sampleManager.record(recordingWorklet)
-        const streamSource = audioContext.createMediaStreamSource(mediaStream)
-        const streamGain = audioContext.createGain()
-        streamGain.gain.value = dbToGain(gainDb)
-        streamSource.connect(streamGain)
-        recordingWorklet.own(Terminable.create(() => {
-            streamGain.disconnect()
-            streamSource.disconnect()
-        }))
-
         let fileBox: Option<AudioFileBox> = Option.None
         let currentTake: Option<TakeData> = Option.None
         let lastPosition: ppqn = 0
         let currentWaveformOffset: number = outputLatency
         let takeNumber: int = 0
 
-        const {tempoMap, env: {audioContext: {sampleRate}}, engine: {preferences: {settings: {recording}}}} = project
+        const {env: {audioContext: {sampleRate}}, engine: {preferences: {settings: {recording}}}} = project
         const {loopArea} = timelineBox
 
         const createFileBox = () => {
@@ -82,35 +54,26 @@ export namespace RecordAudio {
             takeNumber++
             const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Audio, forceNewTrack)
             const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
-            const stretchBox = AudioPitchStretchBox.create(boxGraph, UUID.generate())
-            WarpMarkerBox.create(boxGraph, UUID.generate(),
-                box => box.owner.refer(stretchBox.warpMarkers))
-            const warpMarkerBox = WarpMarkerBox.create(boxGraph, UUID.generate(),
-                box => box.owner.refer(stretchBox.warpMarkers))
             const regionBox = AudioRegionBox.create(boxGraph, UUID.generate(), box => {
                 box.file.refer(fileBox.unwrap())
                 box.events.refer(collectionBox.owners)
                 box.regions.refer(trackBox.regions)
                 box.position.setValue(position)
                 box.hue.setValue(ColorCodes.forTrackType(TrackType.Audio))
-                box.timeBase.setValue(TimeBase.Musical)
+                box.timeBase.setValue(TimeBase.Seconds)
                 box.label.setValue(`Take ${takeNumber}`)
-                box.playMode.refer(stretchBox)
                 box.waveformOffset.setValue(waveformOffset)
             })
             capture.addRecordedRegion(regionBox)
             project.selection.select(regionBox)
-            return {trackBox, regionBox, warpMarkerBox}
+            return {trackBox, regionBox}
         }
 
-        const finalizeTake = (take: TakeData, loopDurationPPQN: ppqn) => {
-            const {trackBox, regionBox, warpMarkerBox} = take
+        const finalizeTake = (take: TakeData, durationInSeconds: number) => {
+            const {trackBox, regionBox} = take
             if (regionBox.isAttached()) {
-                regionBox.duration.setValue(loopDurationPPQN)
-                regionBox.loopDuration.setValue(loopDurationPPQN)
-                const seconds = tempoMap.intervalToSeconds(0, loopDurationPPQN)
-                warpMarkerBox.position.setValue(loopDurationPPQN)
-                warpMarkerBox.seconds.setValue(seconds)
+                regionBox.duration.setValue(durationInSeconds)
+                regionBox.loopDuration.setValue(durationInSeconds)
             }
             const {olderTakeAction, olderTakeScope} = recording
             if (olderTakeScope === "all") {
@@ -151,14 +114,14 @@ export namespace RecordAudio {
 
         terminator.ownAll(
             Terminable.create(() => {
+                tryCatch(() => sourceNode.disconnect(recordingWorklet))
                 if (recordingWorklet.numberOfFrames === 0 || fileBox.isEmpty()) {
                     console.debug("Abort recording audio.")
                     sampleManager.remove(originalUuid)
                     recordingWorklet.terminate()
                 } else {
                     currentTake.ifSome(({regionBox: {duration}}) => {
-                        recordingWorklet.limit(Math.ceil(
-                            (currentWaveformOffset + tempoMap.intervalToSeconds(0, duration.getValue())) * sampleRate))
+                        recordingWorklet.limit(Math.ceil((currentWaveformOffset + duration.getValue()) * sampleRate))
                     })
                     fileBox.ifSome(fb => fb.endInSeconds.setValue(recordingWorklet.numberOfFrames / sampleRate))
                 }
@@ -168,41 +131,36 @@ export namespace RecordAudio {
                 const currentPosition = owner.getValue()
                 const loopEnabled = loopArea.enabled.getValue()
                 const loopFrom = loopArea.from.getValue()
-                const loopTo = loopArea.to.getValue()
                 const allowTakes = project.engine.preferences.settings.recording.allowTakes
                 if (loopEnabled && allowTakes && currentTake.nonEmpty() && currentPosition < lastPosition) {
                     editing.modify(() => {
                         currentTake.ifSome(take => {
-                            const actualDurationPPQN = take.regionBox.duration.getValue()
-                            finalizeTake(take, actualDurationPPQN)
-                            currentWaveformOffset += tempoMap.intervalToSeconds(0, actualDurationPPQN)
+                            const actualDurationInSeconds = take.regionBox.duration.getValue()
+                            finalizeTake(take, actualDurationInSeconds)
+                            currentWaveformOffset += actualDurationInSeconds
                         })
                         startNewTake(loopFrom)
                     }, false)
                 }
                 lastPosition = currentPosition
                 if (fileBox.isEmpty()) {
-                    streamGain.connect(recordingWorklet)
+                    sourceNode.connect(recordingWorklet)
                     editing.modify(() => {
                         fileBox = Option.wrap(createFileBox())
                         const position = quantizeFloor(currentPosition, beats)
                         currentTake = Option.wrap(createTakeRegion(position, currentWaveformOffset, false))
                     }, false)
                 }
-                currentTake.ifSome(({regionBox, warpMarkerBox}) => {
+                currentTake.ifSome(({regionBox}) => {
                     editing.modify(() => {
                         if (regionBox.isAttached()) {
                             const {duration, loopDuration} = regionBox
-                            const maxDuration = loopEnabled && allowTakes ? loopTo - regionBox.position.getValue() : Infinity
-                            const distanceInPPQN = Math.min(maxDuration, Math.floor(currentPosition - regionBox.position.getValue()))
-                            duration.setValue(distanceInPPQN)
-                            loopDuration.setValue(distanceInPPQN)
-                            warpMarkerBox.position.setValue(distanceInPPQN)
-                            const seconds = tempoMap.intervalToSeconds(0, distanceInPPQN)
-                            const totalSamples: int = Math.ceil((currentWaveformOffset + seconds) * sampleRate)
-                            recordingWorklet.setFillLength(totalSamples)
-                            fileBox.ifSome(fb => fb.endInSeconds.setValue(totalSamples / sampleRate))
-                            warpMarkerBox.seconds.setValue(seconds)
+                            const totalSeconds = recordingWorklet.numberOfFrames / sampleRate
+                            const takeSeconds = totalSeconds - currentWaveformOffset
+                            duration.setValue(takeSeconds)
+                            loopDuration.setValue(takeSeconds)
+                            recordingWorklet.setFillLength(recordingWorklet.numberOfFrames)
+                            fileBox.ifSome(fb => fb.endInSeconds.setValue(totalSeconds))
                         } else {
                             terminator.terminate()
                             currentTake = Option.None

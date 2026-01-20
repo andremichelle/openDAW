@@ -34,7 +34,11 @@ export const AudioUnitBox: BoxSchema<Pointers> = {
             22: {
                 type: "field",
                 name: "input",
-                pointerRules: {accepts: [Pointers.InstrumentHost, Pointers.AudioOutput], mandatory: false}
+                pointerRules: {
+                    accepts: [Pointers.InstrumentHost, Pointers.AudioOutput],
+                    mandatory: false,
+                    exclusive: true
+                }
             },
             23: {
                 type: "field",

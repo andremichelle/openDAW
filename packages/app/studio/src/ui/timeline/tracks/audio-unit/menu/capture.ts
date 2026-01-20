@@ -1,8 +1,7 @@
-import {MenuItem} from "@opendaw/studio-core"
+import {AudioDevices, Capture, CaptureAudio, CaptureMidi, MenuItem, MidiDevices, Recording} from "@opendaw/studio-core"
 import {Arrays, int, isInstanceOf, Option} from "@opendaw/lib-std"
 import {CaptureAudioBox} from "@opendaw/studio-boxes"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {AudioDevices, Capture, CaptureAudio, CaptureMidi, MidiDevices} from "@opendaw/studio-core"
 import {AudioUnitBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {BoxEditing} from "@opendaw/lib-box"
 import {StudioService} from "@/service/StudioService"
@@ -23,7 +22,8 @@ export namespace MenuCapture {
         if (isInstanceOf(capture, CaptureAudio)) {
             parent.addMenuItem(MenuItem.header({
                 label: "Audio Inputs",
-                icon: IconSymbol.AudioDevice
+                icon: IconSymbol.AudioDevice,
+                selectable: !Recording.isRecording
             }))
             const devices = AudioDevices.inputs
             if (devices.length === 0) {
@@ -34,7 +34,8 @@ export namespace MenuCapture {
                 parent.addMenuItem(...devices
                     .map(device => MenuItem.default({
                         label: device.label,
-                        checked: capture.streamDeviceId.contains(device.deviceId)
+                        checked: capture.streamDeviceId.contains(device.deviceId),
+                        selectable: !Recording.isRecording
                     }).setTriggerProcedure(() => {
                         editing.modify(() =>
                             capture.deviceId.setValue(Option.wrap(device.deviceId)), false)
