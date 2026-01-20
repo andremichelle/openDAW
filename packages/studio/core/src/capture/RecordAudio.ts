@@ -1,4 +1,4 @@
-import {asInstanceOf, int, Option, quantizeFloor, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, int, Option, quantizeFloor, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
 import {ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
 import {AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {ColorCodes, SampleLoaderManager, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
@@ -114,7 +114,7 @@ export namespace RecordAudio {
 
         terminator.ownAll(
             Terminable.create(() => {
-                sourceNode.disconnect(recordingWorklet)
+                tryCatch(() => sourceNode.disconnect(recordingWorklet))
                 if (recordingWorklet.numberOfFrames === 0 || fileBox.isEmpty()) {
                     console.debug("Abort recording audio.")
                     sampleManager.remove(originalUuid)
