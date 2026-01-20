@@ -16,11 +16,11 @@ export class RegionDragAndDrop extends TimelineDragAndDrop<RegionCaptureTarget> 
         this.#snapping = snapping
     }
 
-    handleSample({event, trackBoxAdapter, audioFileBox, sample}: CreateParameters): void {
+    handleSample({event, trackBoxAdapter, audioFileBox, sample, type}: CreateParameters): void {
         const pointerX = event.clientX - this.capturing.element.getBoundingClientRect().left
         const pointerPulse = Math.max(this.#snapping.xToUnitFloor(pointerX), 0)
         const boxGraph = this.project.boxGraph
-        const regionBox = sample.bpm === 0
+        const regionBox = type === "file" || sample.bpm === 0
             ? AudioContentFactory.createNotStretchedRegion({
                 boxGraph,
                 targetTrack: trackBoxAdapter.box,
@@ -28,8 +28,7 @@ export class RegionDragAndDrop extends TimelineDragAndDrop<RegionCaptureTarget> 
                 sample,
                 position: pointerPulse
             })
-            :
-            AudioContentFactory.createTimeStretchedRegion({
+            : AudioContentFactory.createTimeStretchedRegion({
                 boxGraph,
                 targetTrack: trackBoxAdapter.box,
                 audioFileBox,
