@@ -25,7 +25,6 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     #isMonitoring: boolean = false
     #requestChannels: Option<1 | 2> = Option.None
     #gainDb: number = 0.0
-
     #audioChain: Nullable<{
         sourceNode: MediaStreamAudioSourceNode
         gainNode: GainNode
@@ -78,9 +77,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     }
     get gainDb(): number {return this.#gainDb}
     get requestChannels(): Option<1 | 2> {return this.#requestChannels}
-    set requestChannels(value: 1 | 2) {
-        this.captureBox.requestChannels.setValue(value)
-    }
+    set requestChannels(value: 1 | 2) {this.captureBox.requestChannels.setValue(value)}
     get stream(): MutableObservableOption<MediaStream> {return this.#stream}
     get streamDeviceId(): Option<string> {
         return this.streamMediaTrack.map(settings => settings.getSettings().deviceId ?? "")
@@ -90,6 +87,8 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     get streamMediaTrack(): Option<MediaStreamTrack> {
         return this.#stream.flatMap(stream => Option.wrap(stream.getAudioTracks().at(0)))
     }
+    get outputNode(): Option<AudioNode> {return Option.wrap(this.#audioChain?.gainNode)}
+    get effectiveChannelCount(): number {return this.#audioChain?.gainNode.channelCount ?? 1}
 
     async prepareRecording(): Promise<void> {
         const {project} = this.manager
@@ -157,8 +156,8 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             const gotDeviceId = settings?.deviceId
             console.debug(`new stream. device requested: ${deviceId ?? "default"}, got: ${gotDeviceId ?? "unknown"}. channelCount requested: ${channelCount}, got: ${settings?.channelCount}`)
             if (isUndefined(deviceId) || deviceId === gotDeviceId) {
-                this.#stream.wrap(stream)
                 this.#rebuildAudioChain(stream)
+                this.#stream.wrap(stream)
             } else {
                 stream.getAudioTracks().forEach(track => track.stop())
                 return Errors.warn(`Could not find audio device with id: '${deviceId}' (got: '${gotDeviceId}')`)
@@ -209,7 +208,8 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
 
     #disconnectMonitoring(): void {
         if (isDefined(this.#audioChain)) {
-            this.#audioChain.gainNode.disconnect()
+            const {audioContext} = this.manager.project.env
+            this.#audioChain.gainNode.disconnect(audioContext.destination)
         }
     }
 }
