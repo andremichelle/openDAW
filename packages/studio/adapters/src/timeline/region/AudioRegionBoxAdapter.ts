@@ -49,7 +49,6 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
     readonly #box: AudioRegionBox
 
     readonly #durationConverter: TimeBaseConverter
-    readonly #loopOffsetConverter: TimeBaseConverter
     readonly #loopDurationConverter: TimeBaseConverter
     readonly #playMode: MutableObservableOption<AudioPlayMode>
     readonly #changeNotifier: Notifier<void>
@@ -68,9 +67,8 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
         this.#box = box
 
         this.#terminator = new Terminator()
-        const {timeBase, duration, loopOffset, loopDuration} = box
+        const {timeBase, duration, loopDuration} = box
         this.#durationConverter = TimeBaseConverter.aware(context.tempoMap, timeBase, duration)
-        this.#loopOffsetConverter = TimeBaseConverter.aware(context.tempoMap, timeBase, loopOffset)
         this.#loopDurationConverter = TimeBaseConverter.aware(context.tempoMap, timeBase, loopDuration)
         this.#playMode = new MutableObservableOption()
         this.#changeNotifier = new Notifier<void>()
@@ -157,12 +155,11 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
     get position(): ppqn {return this.#box.position.getValue()}
     get duration(): ppqn {return this.#durationConverter.toPPQN(this.position)}
     get complete(): ppqn {return this.position + this.duration}
-    get loopOffset(): ppqn {return this.#loopOffsetConverter.toPPQN(this.position)}
+    get loopOffset(): ppqn {return this.#box.loopOffset.getValue()}
     get loopDuration(): ppqn {return this.#loopDurationConverter.toPPQN(this.position)}
 
     resolveDuration(position: ppqn): ppqn {return this.#durationConverter.toPPQN(position)}
     resolveComplete(position: ppqn): ppqn {return position + this.resolveDuration(position)}
-    resolveLoopOffset(position: ppqn): ppqn {return this.#loopOffsetConverter.toPPQN(position)}
     resolveLoopDuration(position: ppqn): ppqn {return this.#loopDurationConverter.toPPQN(position)}
     get offset(): ppqn {return this.position - this.loopOffset}
     get mute(): boolean {return this.#box.mute.getValue()}
@@ -191,7 +188,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
     }
     get isMirrowed(): boolean {return this.optCollection.mapOr(adapter => adapter.numOwners > 1, false)}
     get canMirror(): boolean {return true}
-    get canResize(): boolean {return this.#playMode.nonEmpty()}
+    get canResize(): boolean {return true}
     get trackBoxAdapter(): Option<TrackBoxAdapter> {
         return this.#box.regions.targetVertex
             .map(vertex => this.#context.boxAdapters.adapterFor(vertex.box, TrackBoxAdapter))
@@ -203,7 +200,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
     }
     set position(value: ppqn) {this.#box.position.setValue(value)}
     set duration(value: ppqn) {this.#durationConverter.fromPPQN(value, this.position)}
-    set loopOffset(value: ppqn) {this.#loopOffsetConverter.fromPPQN(value, this.position)}
+    set loopOffset(value: ppqn) {this.#box.loopOffset.setValue(value)}
     set loopDuration(value: ppqn) {this.#loopDurationConverter.fromPPQN(value, this.position)}
 
     copyTo(params?: CopyToParams): AudioRegionBoxAdapter {
@@ -226,9 +223,9 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
                 box.waveformOffset.setValue(this.waveformOffset.getValue())
                 clonedPlayMode.ifSome(mode => box.playMode.refer(mode))
             }), AudioRegionBoxAdapter)
-        adapter.duration = params?.duration ?? this.resolveDuration(adapter.position)
-        adapter.loopOffset = params?.loopOffset ?? this.resolveLoopOffset(adapter.position)
+        adapter.loopOffset = params?.loopOffset ?? this.loopOffset
         adapter.loopDuration = params?.loopDuration ?? this.resolveLoopDuration(adapter.position)
+        adapter.duration = params?.duration ?? this.resolveDuration(adapter.position)
         return adapter
     }
 

@@ -49,10 +49,8 @@ export interface LoopableRegionBoxAdapter<CONTENT> extends RegionBoxAdapter<CONT
     get offset(): ppqn
     get loopOffset(): ppqn
     get loopDuration(): ppqn
+    set loopDuration(value: ppqn)
 
-    /** Resolve loopOffset at a given position (for preview during drag operations) */
-    resolveLoopOffset(position: ppqn): ppqn
-    /** Resolve loopDuration at a given position (for preview during drag operations) */
     resolveLoopDuration(position: ppqn): ppqn
 }
 

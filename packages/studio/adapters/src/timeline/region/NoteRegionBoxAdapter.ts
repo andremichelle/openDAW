@@ -133,7 +133,6 @@ export class NoteRegionBoxAdapter
 
     resolveDuration(_position: ppqn): ppqn {return this.duration}
     resolveComplete(position: ppqn): ppqn {return position + this.duration}
-    resolveLoopOffset(_position: ppqn): ppqn {return this.loopOffset}
     resolveLoopDuration(_position: ppqn): ppqn {return this.loopDuration}
     get mute(): boolean {return this.#box.mute.getValue()}
     get hue(): int {return this.#box.hue.getValue()}
