@@ -204,6 +204,24 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
     set loopOffset(value: ppqn) {this.#box.loopOffset.setValue(mod(value, this.loopDuration))}
     set loopDuration(value: ppqn) {this.#loopDurationConverter.fromPPQN(value, this.position)}
 
+    moveContentStart(delta: ppqn): void {
+        const oldPosition = this.position
+        const newPosition = oldPosition + delta
+        this.position = newPosition
+        this.loopDuration = this.loopDuration - delta
+        this.duration = this.duration - delta
+
+        if (this.timeBase === TimeBase.Seconds) {
+            const deltaSeconds = delta >= 0
+                ? this.#context.tempoMap.intervalToSeconds(oldPosition, newPosition)
+                : -this.#context.tempoMap.intervalToSeconds(newPosition, oldPosition)
+            this.#box.waveformOffset.setValue(this.waveformOffset.getValue() + deltaSeconds)
+        } else {
+            this.optWarpMarkers.ifSome(warpMarkers => warpMarkers.asArray()
+                .forEach(marker => marker.box.position.setValue(marker.position - delta)))
+        }
+    }
+
     copyTo(params?: CopyToParams): AudioRegionBoxAdapter {
         const eventCollection = this.optCollection.unwrap("Cannot make copy without event-collection")
         const eventTarget = params?.consolidate === true

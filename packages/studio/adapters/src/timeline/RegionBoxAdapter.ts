@@ -52,6 +52,7 @@ export interface LoopableRegionBoxAdapter<CONTENT> extends RegionBoxAdapter<CONT
     set loopDuration(value: ppqn)
 
     resolveLoopDuration(position: ppqn): ppqn
+    moveContentStart(delta: ppqn): void
 }
 
 export const RegionComparator: Comparator<AnyRegionBoxAdapter> = (a, b) => a.position - b.position
