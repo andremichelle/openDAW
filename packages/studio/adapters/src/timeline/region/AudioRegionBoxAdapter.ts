@@ -3,6 +3,7 @@ import {
     int,
     isInstanceOf,
     Maybe,
+    mod,
     MutableObservableOption,
     MutableObservableValue,
     Notifier,
@@ -200,7 +201,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
     }
     set position(value: ppqn) {this.#box.position.setValue(value)}
     set duration(value: ppqn) {this.#durationConverter.fromPPQN(value, this.position)}
-    set loopOffset(value: ppqn) {this.#box.loopOffset.setValue(value)}
+    set loopOffset(value: ppqn) {this.#box.loopOffset.setValue(mod(value, this.loopDuration))}
     set loopDuration(value: ppqn) {this.#loopDurationConverter.fromPPQN(value, this.position)}
 
     copyTo(params?: CopyToParams): AudioRegionBoxAdapter {
