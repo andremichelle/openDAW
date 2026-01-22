@@ -82,12 +82,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                         path: "/manuals/devices/audio/maximizer",
                         icon: EffectFactories.Maximizer.defaultIcon
                     },
-                    {
+                    /*{
                         type: "page",
                         label: "Neural Amp",
                         path: "/manuals/devices/audio/neural-amp",
                         icon: EffectFactories.AudioNamed.NeuralAmp.defaultIcon
-                    },
+                    },*/
                     {
                         type: "page",
                         label: "Revamp",

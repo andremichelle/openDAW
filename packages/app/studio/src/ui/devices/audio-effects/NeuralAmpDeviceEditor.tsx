@@ -9,7 +9,6 @@ import {Files, Html} from "@opendaw/lib-dom"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {StudioService} from "@/service/StudioService"
-import {EffectFactories} from "@opendaw/studio-core"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder"
 import {NamModel} from "@opendaw/nam-wasm"
 import {showNamModelDialog} from "./NeuralAmp/NamModelDialog"
@@ -140,6 +139,6 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
                       )}
-                      icon={EffectFactories.AudioNamed.NeuralAmp.defaultIcon}/>
+                      icon={/*EffectFactories.AudioNamed.NeuralAmp.defaultIcon*/IconSymbol.NeuralAmp}/>
     )
 }
