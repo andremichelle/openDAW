@@ -84,6 +84,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                     },
                     {
                         type: "page",
+                        label: "Neural Amp",
+                        path: "/manuals/devices/audio/neural-amp",
+                        icon: EffectFactories.AudioNamed.NeuralAmp.defaultIcon
+                    },
+                    {
+                        type: "page",
                         label: "Revamp",
                         path: "/manuals/devices/audio/revamp",
                         icon: EffectFactories.Revamp.defaultIcon

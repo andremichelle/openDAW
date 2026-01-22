@@ -35,7 +35,7 @@ export namespace RegionModifyStrategy {
     export const Identity: RegionModifyStrategy = Object.freeze({
         readPosition: (region: AnyRegionBoxAdapter): ppqn => region.position,
         readComplete: (region: AnyRegionBoxAdapter): ppqn => region.resolveComplete(region.position),
-        readLoopOffset: (region: AnyLoopableRegionBoxAdapter): ppqn => region.resolveLoopOffset(region.position),
+        readLoopOffset: (region: AnyLoopableRegionBoxAdapter): ppqn => region.loopOffset,
         readLoopDuration: (region: AnyLoopableRegionBoxAdapter): ppqn => region.resolveLoopDuration(region.position),
         readMirror: (region: AnyRegionBoxAdapter): boolean => region.isMirrowed,
         translateTrackIndex: (value: int): int => value,

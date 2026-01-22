@@ -1,0 +1,60 @@
+component
+  display: flex
+  flex-direction: column
+  gap: 1.25em
+  padding-top: 1em
+  padding-right: 1.5em
+  max-height: 80vh
+  overflow-y: auto
+  min-width: 400px
+  font-size: 10px
+
+  .name
+    color: var(--color-green)
+    font-size: 1.1em
+
+  .section
+    display: flex
+    flex-direction: column
+    gap: 0.5em
+
+    > h2
+      font-size: 0.75rem
+      color: var(--color-blue)
+      margin: 0
+      padding-bottom: 0.25em
+      border-bottom: 1px solid var(--color-divider)
+
+    canvas
+      width: 100%
+      border-radius: 4px
+
+  .stats
+    display: grid
+    grid-template-columns: repeat(2, 1fr)
+    gap: 0.4em 2em
+
+    &.single-column
+      grid-template-columns: 1fr
+      max-width: 50%
+
+  .stat
+    display: flex
+    gap: 1em
+
+    .label
+      color: var(--color-shadow)
+      flex-shrink: 0
+      min-width: 6em
+
+    .value
+      color: var(--color-cream)
+      overflow: hidden
+      text-overflow: ellipsis
+      white-space: nowrap
+      width: 13em
+      text-align: right
+
+  .empty
+    color: var(--color-shadow)
+    font-style: italic

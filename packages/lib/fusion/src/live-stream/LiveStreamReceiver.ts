@@ -137,6 +137,7 @@ export class LiveStreamReceiver implements Terminable {
     #memory: Option<ByteArrayInput> = Option.None
     #subscriptionFlags: Option<Uint8Array> = Option.None
     #numPackages: int = 0
+    #sabNumPackages: int = 0
 
     #structureVersion = -1
     #connected = false
@@ -159,16 +160,13 @@ export class LiveStreamReceiver implements Terminable {
                 sendShareLock: (lock: SharedArrayBuffer) => this.#optLock = Option.wrap(new Int8Array(lock)),
                 sendUpdateData: (data: ArrayBufferLike) => {
                     // SAB layout: [subscription flags (numPackages bytes)][data]
-                    // Store the raw SAB, views will be created in #updateDataViews after structure is known
+                    // Store the raw SAB and the numPackages it was created for
                     this.#sab = Option.wrap(data)
+                    this.#sabNumPackages = this.#numPackages
                     this.#updateDataViews()
                 },
                 sendUpdateStructure: (structure: ArrayBufferLike) => {
                     this.#updateStructure(new ByteArrayInput(structure))
-                    // Always recreate views after structure update
-                    // This handles both cases:
-                    // 1. Structure arrives before SAB: #sab might be empty or old, views won't work but that's ok
-                    // 2. SAB arrives before structure: #sab is new, now create correct views with new numPackages
                     this.#updateDataViews()
                 }
             }),
@@ -177,7 +175,7 @@ export class LiveStreamReceiver implements Terminable {
     }
 
     #updateDataViews(): void {
-        if (this.#sab.isEmpty() || this.#numPackages === 0) {return}
+        if (this.#sab.isEmpty() || this.#numPackages === 0 || this.#numPackages !== this.#sabNumPackages) {return}
         const data = this.#sab.unwrap()
         this.#subscriptionFlags = Option.wrap(new Uint8Array(data, 0, this.#numPackages))
         this.#memory = Option.wrap(new ByteArrayInput(data, this.#numPackages))
@@ -189,6 +187,7 @@ export class LiveStreamReceiver implements Terminable {
         this.#sab = Option.None
         this.#subscriptionFlags = Option.None
         this.#numPackages = 0
+        this.#sabNumPackages = 0
         this.#structureVersion = -1
         this.#connected = false
         Arrays.clear(this.#procedures)

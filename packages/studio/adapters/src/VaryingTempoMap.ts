@@ -22,6 +22,9 @@ export class VaryingTempoMap implements TempoMap {
     }
 
     ppqnToSeconds(position: ppqn): seconds {
+        if (position < 0) {
+            return -this.intervalToSeconds(position, 0)
+        }
         return this.intervalToSeconds(0, position)
     }
 

@@ -16,6 +16,8 @@ import {Capture} from "./Capture"
 import {CaptureDevices} from "./CaptureDevices"
 import {RecordAudio} from "./RecordAudio"
 import {AudioDevices} from "../AudioDevices"
+import {RenderQuantum} from "../RenderQuantum"
+import {RecordingWorklet} from "../RecordingWorklet"
 
 export class CaptureAudio extends Capture<CaptureAudioBox> {
     readonly #stream: MutableObservableOption<MediaStream>
@@ -29,6 +31,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         sourceNode: MediaStreamAudioSourceNode
         gainNode: GainNode
     }> = null
+    #preparedWorklet: Nullable<RecordingWorklet> = null
 
     constructor(manager: CaptureDevices, audioUnitBox: AudioUnitBox, captureAudioBox: CaptureAudioBox) {
         super(manager, audioUnitBox, captureAudioBox)
@@ -92,7 +95,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
 
     async prepareRecording(): Promise<void> {
         const {project} = this.manager
-        const {env: {audioContext}} = project
+        const {env: {audioContext, audioWorklets, sampleManager}} = project
         if (isUndefined(audioContext.outputLatency)) {
             const approved = RuntimeNotifier.approve({
                 headline: "Warning",
@@ -104,21 +107,30 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
                 return Promise.reject("Recording cancelled")
             }
         }
-        return this.#streamGenerator()
+        await this.#streamGenerator()
+        const audioChain = this.#audioChain
+        if (!isDefined(audioChain)) {
+            return Promise.reject("No audio chain available for recording.")
+        }
+        const {gainNode} = audioChain
+        const channelCount = gainNode.channelCount
+        const recordingWorklet = audioWorklets.createRecording(channelCount, RenderQuantum)
+        sampleManager.record(recordingWorklet)
+        gainNode.connect(recordingWorklet)
+        this.#preparedWorklet = recordingWorklet
     }
 
     startRecording(): Terminable {
         const {project} = this.manager
-        const {env: {audioContext, audioWorklets, sampleManager}} = project
+        const {env: {audioContext, sampleManager}} = project
         const audioChain = this.#audioChain
-        if (!isDefined(audioChain)) {
-            console.warn("No audio chain available for recording.")
+        const recordingWorklet = this.#preparedWorklet
+        if (!isDefined(audioChain) || !isDefined(recordingWorklet)) {
+            console.warn("No audio chain or worklet available for recording.")
             return Terminable.Empty
         }
+        this.#preparedWorklet = null
         const {gainNode} = audioChain
-        const channelCount = gainNode.channelCount
-        const numChunks = 128
-        const recordingWorklet = audioWorklets.createRecording(channelCount, numChunks)
         return RecordAudio.start({
             recordingWorklet,
             sourceNode: gainNode,

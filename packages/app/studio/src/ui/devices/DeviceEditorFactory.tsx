@@ -13,6 +13,7 @@ import {
     MIDIOutputDeviceBox,
     ModularDeviceBox,
     NanoDeviceBox,
+    NeuralAmpDeviceBox,
     PitchDeviceBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
@@ -43,6 +44,7 @@ import {
     MIDIOutputDeviceBoxAdapter,
     ModularDeviceBoxAdapter,
     NanoDeviceBoxAdapter,
+    NeuralAmpDeviceBoxAdapter,
     PitchDeviceBoxAdapter,
     PlayfieldDeviceBoxAdapter,
     PlayfieldSampleBoxAdapter,
@@ -85,6 +87,7 @@ import {MIDIOutputDeviceEditor} from "@/ui/devices/instruments/MIDIOutputDeviceE
 import {VelocityDeviceEditor} from "@/ui/devices/midi-effects/VelocityDeviceEditor"
 import {TidalDeviceEditor} from "@/ui/devices/audio-effects/TidalDeviceEditor"
 import {DattorroReverbDeviceEditor} from "@/ui/devices/audio-effects/DattorroReverbDeviceEditor"
+import {NeuralAmpDeviceEditor} from "@/ui/devices/audio-effects/NeuralAmpDeviceEditor"
 
 export namespace DeviceEditorFactory {
     export const toMidiEffectDeviceEditor = (service: StudioService, lifecycle: Lifecycle, box: Box, deviceHost: DeviceHost) =>
@@ -256,6 +259,12 @@ export namespace DeviceEditorFactory {
                                      service={service}
                                      adapter={service.project.boxAdapters.adapterFor(box, ModularDeviceBoxAdapter)}
                                      deviceHost={deviceHost}/>
+            ),
+            visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox) => (
+                <NeuralAmpDeviceEditor lifecycle={lifecycle}
+                                       service={service}
+                                       adapter={service.project.boxAdapters.adapterFor(box, NeuralAmpDeviceBoxAdapter)}
+                                       deviceHost={deviceHost}/>
             )
         }), `No AudioEffectDeviceEditor found for ${box}`)
 }

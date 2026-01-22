@@ -88,6 +88,14 @@ export class NoteRegionBoxAdapter
     set loopOffset(value: ppqn) {this.#box.loopOffset.setValue(value)}
     set loopDuration(value: ppqn) {this.#box.loopDuration.setValue(value)}
 
+    moveContentStart(delta: ppqn): void {
+        this.optCollection.ifSome(collection => collection.events.asArray()
+            .forEach(event => event.box.position.setValue(event.position - delta)))
+        this.position = this.position + delta
+        this.loopDuration = this.loopDuration - delta
+        this.duration = this.duration - delta
+    }
+
     subscribeChange(observer: Observer<void>): Subscription {return this.#changeNotifier.subscribe(observer)}
     accept<R>(visitor: RegionBoxAdapterVisitor<R>): Maybe<R> {return safeExecute(visitor.visitNoteRegionBoxAdapter, this)}
 
@@ -133,7 +141,6 @@ export class NoteRegionBoxAdapter
 
     resolveDuration(_position: ppqn): ppqn {return this.duration}
     resolveComplete(position: ppqn): ppqn {return position + this.duration}
-    resolveLoopOffset(_position: ppqn): ppqn {return this.loopOffset}
     resolveLoopDuration(_position: ppqn): ppqn {return this.loopDuration}
     get mute(): boolean {return this.#box.mute.getValue()}
     get hue(): int {return this.#box.hue.getValue()}

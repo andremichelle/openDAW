@@ -19,7 +19,7 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
     readComplete(region: AnyRegionBoxAdapter): ppqn {return region.resolveComplete(this.readPosition(region))}
     readLoopDuration(region: AnyLoopableRegionBoxAdapter): ppqn {return region.resolveLoopDuration(this.readPosition(region))}
     readMirror(region: AnyRegionBoxAdapter): boolean {return region.canMirror && region.isMirrowed !== this.#tool.mirroredCopy}
-    readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.resolveLoopOffset(this.readPosition(region))}
+    readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.loopOffset}
     iterateRange<R extends AnyRegionBoxAdapter>(regions: RegionCollection<R>, from: ppqn, to: ppqn): Iterable<R> {
         return regions.iterateRange(from - this.#tool.deltaPosition, to - this.#tool.deltaPosition)
     }
@@ -33,9 +33,15 @@ class UnselectedStrategy implements RegionModifyStrategy {
     translateTrackIndex(index: int): int {return index}
     readPosition(region: AnyRegionBoxAdapter): ppqn {return region.position}
     readComplete(region: AnyRegionBoxAdapter): ppqn {return region.resolveComplete(this.readPosition(region))}
-    readLoopDuration(region: AnyLoopableRegionBoxAdapter): ppqn {return region.resolveLoopDuration(this.readPosition(region))}
-    readMirror(region: AnyRegionBoxAdapter): boolean {return region.canMirror && (region.isMirrowed || (region.isSelected && this.#tool.mirroredCopy))}
-    readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.resolveLoopOffset(this.readPosition(region))}
+    readLoopDuration(region: AnyLoopableRegionBoxAdapter): ppqn {
+        return region.resolveLoopDuration(this.readPosition(region))
+    }
+    readMirror(region: AnyRegionBoxAdapter): boolean {
+        return region.canMirror && (region.isMirrowed || (region.isSelected && this.#tool.mirroredCopy))
+    }
+    readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {
+        return region.loopOffset
+    }
     iterateRange<R extends AnyRegionBoxAdapter>(regions: RegionCollection<R>, from: ppqn, to: ppqn): Iterable<R> {
         return regions.iterateRange(from, to)
     }

@@ -34,6 +34,7 @@ import {RegionStartModifier} from "@/ui/timeline/tracks/audio-unit/regions/Regio
 import {RegionDurationModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionDurationModifier.ts"
 import {RegionMoveModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionMoveModifier.ts"
 import {RegionLoopDurationModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionLoopDurationModifier.ts"
+import {RegionContentStartModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionContentStartModifier.ts"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {RegionDragAndDrop} from "@/ui/timeline/tracks/audio-unit/regions/RegionDragAndDrop.ts"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
@@ -51,7 +52,8 @@ const CursorMap = Object.freeze({
     "start": "w-resize",
     "complete": "e-resize",
     "loop-duration": Cursor.ExpandWidth,
-    "content-resize": Cursor.ExpandWidth
+    "content-start": Cursor.ExpandWidth,
+    "content-complete": Cursor.ExpandWidth
 }) satisfies Record<string, CssUtils.Cursor | Cursor>
 
 type Construct = {
@@ -255,10 +257,13 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                         const pointerIndex = manager.globalToIndex(event.clientY)
                         return manager.startRegionModifier(RegionMoveModifier.create(manager, regionSelection,
                             {element, snapping, pointerPulse, pointerIndex, reference}))
+                    case "content-start":
+                        return manager.startRegionModifier(RegionContentStartModifier.create(regionSelection.selected(),
+                            {element, snapping, pointerPulse, reference}))
                     case "loop-duration":
-                    case "content-resize":
+                    case "content-complete":
                         return manager.startRegionModifier(RegionLoopDurationModifier.create(regionSelection.selected(),
-                            {element, snapping, pointerPulse, reference, resize: target.part === "content-resize"}))
+                            {element, snapping, pointerPulse, reference, resize: target.part === "content-complete"}))
                     default: {
                         return Unhandled(target)
                     }
