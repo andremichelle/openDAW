@@ -1,7 +1,7 @@
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
 import {BoxEditing} from "@opendaw/lib-box"
 import {int, Option} from "@opendaw/lib-std"
-import {ppqn, RegionCollection} from "@opendaw/lib-dsp"
+import {ppqn, PPQN, RegionCollection} from "@opendaw/lib-dsp"
 import {
     AnyLoopableRegionBoxAdapter,
     AnyRegionBoxAdapter,
@@ -86,10 +86,19 @@ export class RegionContentStartModifier implements RegionModifier {
         const clientRect = this.#element.getBoundingClientRect()
         const newDelta = this.#snapping.computeDelta(
             this.#pointerPulse, clientX - clientRect.left, this.#reference.position)
-        if (this.#delta !== newDelta) {
-            this.#delta = newDelta
+        const clampedDelta = Math.min(newDelta, this.#computeMaxDelta())
+        if (this.#delta !== clampedDelta) {
+            this.#delta = clampedDelta
             this.#dispatchChange()
         }
+    }
+
+    #computeMaxDelta(): ppqn {
+        return this.#adapters.reduce((maxDelta, adapter) => {
+            const maxByDuration = adapter.duration - PPQN.SemiQuaver
+            const maxByLoopDuration = adapter.loopDuration - PPQN.SemiQuaver
+            return Math.min(maxDelta, maxByDuration, maxByLoopDuration)
+        }, Infinity)
     }
 
     approve(editing: BoxEditing): void {
