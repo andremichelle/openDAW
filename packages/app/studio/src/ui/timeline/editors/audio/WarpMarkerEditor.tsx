@@ -84,7 +84,7 @@ export const WarpMarkerEditor = ({
                                                 local = TransientMarkerUtils.secondsToUnits(target.position, warpMarkers)
                                             } else {
                                                 const x = point.x - canvas.getBoundingClientRect().left
-                                                local = noSnapping ? range.xToUnit(x) : snapping.xToUnitRound(x)
+                                                local = noSnapping ? range.xToUnit(x) - reader.offset : snapping.xToUnitRound(x) - reader.offset
                                             }
                                             const adjacentWarpMarkers = WarpMarkerUtils
                                                 .findAdjacent(local, warpMarkers, true)
@@ -98,7 +98,7 @@ export const WarpMarkerEditor = ({
                                                 cursorModel.setValue(null)
                                                 return
                                             }
-                                            cursorModel.setValue(local + reader.offset)
+                                            cursorModel.setValue(local)
                                         }
                                         audioPlayModeLifeCycle.ownAll(
                                             Events.subscribe(canvas, "pointermove",
