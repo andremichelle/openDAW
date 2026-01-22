@@ -1,4 +1,4 @@
-import {asInstanceOf, int, Option, quantizeFloor, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, int, Nullable, Option, quantizeFloor, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
 import {ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
 import {AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {ColorCodes, SampleLoaderManager, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
@@ -29,12 +29,13 @@ export namespace RecordAudio {
         const beats = PPQN.fromSignature(1, project.timelineBox.signature.denominator.getValue())
         const {editing, engine, boxGraph, timelineBox} = project
         const originalUuid = recordingWorklet.uuid
-        sampleManager.record(recordingWorklet)
+        // Note: sampleManager.record() and sourceNode.connect() are called in prepareRecording
         let fileBox: Option<AudioFileBox> = Option.None
         let currentTake: Option<TakeData> = Option.None
         let lastPosition: ppqn = 0
         let currentWaveformOffset: number = outputLatency
         let takeNumber: int = 0
+        let hadCountIn: boolean = false
 
         const {env: {audioContext: {sampleRate}}, engine: {preferences: {settings: {recording}}}} = project
         const {loopArea} = timelineBox
@@ -50,9 +51,9 @@ export namespace RecordAudio {
             return AudioFileBox.create(boxGraph, originalUuid, box => box.fileName.setValue(fileName))
         }
 
-        const createTakeRegion = (position: ppqn, waveformOffset: number, forceNewTrack: boolean): TakeData => {
+        const createTakeRegion = (position: ppqn, waveformOffset: number, excludeTrack: Nullable<TrackBox>): TakeData => {
             takeNumber++
-            const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Audio, forceNewTrack)
+            const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Audio, excludeTrack)
             const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
             const regionBox = AudioRegionBox.create(boxGraph, UUID.generate(), box => {
                 box.file.refer(fileBox.unwrap())
@@ -109,7 +110,8 @@ export namespace RecordAudio {
         }
 
         const startNewTake = (position: ppqn) => {
-            currentTake = Option.wrap(createTakeRegion(position, currentWaveformOffset, true))
+            const previousTrack = currentTake.mapOr(take => take.trackBox, null)
+            currentTake = Option.wrap(createTakeRegion(position, currentWaveformOffset, previousTrack))
         }
 
         terminator.ownAll(
@@ -127,8 +129,16 @@ export namespace RecordAudio {
                 }
             }),
             engine.position.catchupAndSubscribe(owner => {
-                if (!engine.isRecording.getValue()) {return}
+                const isCountingIn = engine.isCountingIn.getValue()
+                const isRecording = engine.isRecording.getValue()
+                if (!isCountingIn && !isRecording) {return}
                 const currentPosition = owner.getValue()
+                // During count-in, just track that we had one
+                if (isCountingIn) {
+                    hadCountIn = true
+                    return
+                }
+                // From here on, isRecording is true
                 const loopEnabled = loopArea.enabled.getValue()
                 const loopFrom = loopArea.from.getValue()
                 const allowTakes = project.engine.preferences.settings.recording.allowTakes
@@ -143,13 +153,19 @@ export namespace RecordAudio {
                     }, false)
                 }
                 lastPosition = currentPosition
+                // Create fileBox and region together when recording starts
                 if (fileBox.isEmpty()) {
-                    sourceNode.connect(recordingWorklet)
+                    // Capture all frames recorded before actual recording (including count-in)
+                    const preRecordingFrames = recordingWorklet.numberOfFrames
+                    const preRecordingSeconds = preRecordingFrames / sampleRate
+                    // If there was count-in, use pre-recording frames as offset; otherwise use outputLatency
+                    const waveformOffset = hadCountIn ? preRecordingSeconds : outputLatency
                     editing.modify(() => {
                         fileBox = Option.wrap(createFileBox())
                         const position = quantizeFloor(currentPosition, beats)
-                        currentTake = Option.wrap(createTakeRegion(position, currentWaveformOffset, false))
+                        currentTake = Option.wrap(createTakeRegion(position, waveformOffset, null))
                     }, false)
+                    currentWaveformOffset = waveformOffset
                 }
                 currentTake.ifSome(({regionBox}) => {
                     editing.modify(() => {
