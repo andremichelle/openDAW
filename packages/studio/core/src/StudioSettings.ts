@@ -2,6 +2,7 @@ import {z} from "zod"
 import {Browser} from "@opendaw/lib-dom"
 
 export const FpsOptions = [24, 25, 29.97, 30] as const
+export const OverlappingRegionsBehaviourOptions = ["clip", "push-existing", "keep-existing"] as const
 
 export const StudioSettingsSchema = z.object({
     "visibility": z.object({
@@ -36,6 +37,11 @@ export const StudioSettingsSchema = z.object({
         "dragging-use-pointer-lock": false,
         "modifying-controls-wheel": false,
         "normalize-mouse-wheel": true
+    }),
+    "editing": z.object({
+        "overlapping-regions-behaviour": z.enum(OverlappingRegionsBehaviourOptions)
+    }).default({
+        "overlapping-regions-behaviour": "clip"
     }),
     "debug": z.object({
         "footer-show-fps-meter": z.boolean(),

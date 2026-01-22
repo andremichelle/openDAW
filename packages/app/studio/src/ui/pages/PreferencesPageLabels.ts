@@ -1,5 +1,5 @@
 import {NestedLabels} from "@/ui/PreferencePanel"
-import {FpsOptions, StudioSettings} from "@opendaw/studio-core"
+import {FpsOptions, OverlappingRegionsBehaviourOptions, StudioSettings} from "@opendaw/studio-core"
 import {EngineSettings} from "@opendaw/studio-adapters"
 
 export namespace PreferencesPageLabels {
@@ -37,6 +37,12 @@ export namespace PreferencesPageLabels {
                 "normalize-mouse-wheel": "Normalize mouse wheel speed"
             }
         },
+        "editing": {
+            label: "Editing",
+            fields: {
+                "overlapping-regions-behaviour": "Overlapping regions behaviour"
+            }
+        },
         "debug": {
             label: "Debug",
             fields: {
@@ -52,6 +58,16 @@ export namespace PreferencesPageLabels {
     export const StudioSettingsOptions = {
         "time-display": {
             fps: FpsOptions.map(value => ({value, label: `${value}`}))
+        },
+        "editing": {
+            "overlapping-regions-behaviour": OverlappingRegionsBehaviourOptions.map(value => ({
+                value,
+                label: value === "clip"
+                    ? "Clip existing regions"
+                    : value === "push-existing"
+                        ? "Push existing regions"
+                        : "Keep existing regions"
+            }))
         }
     }
 
