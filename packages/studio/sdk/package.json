@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/studio-sdk",
-    "version": "0.0.98",
+    "version": "0.0.99",
     "license": "LGPL-3.0-or-later",
     "type": "module",
     "publishConfig": {
