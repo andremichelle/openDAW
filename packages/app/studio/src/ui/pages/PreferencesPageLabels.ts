@@ -63,10 +63,10 @@ export namespace PreferencesPageLabels {
             "overlapping-regions-behaviour": OverlappingRegionsBehaviourOptions.map(value => ({
                 value,
                 label: value === "clip"
-                    ? "Clip existing regions"
+                    ? "Clip existing"
                     : value === "push-existing"
-                        ? "Push existing regions"
-                        : "Keep existing regions"
+                        ? "Push existing"
+                        : "Keep existing"
             }))
         }
     }
