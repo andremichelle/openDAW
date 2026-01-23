@@ -43,3 +43,75 @@ Graph-based object modeling system with serialization, transactions, and pointer
 
 * **editing.ts** - Undo/redo system for graph modifications
 * **indexed-box.ts** - Indexed box implementation for efficient lookups
+
+## Transaction Mechanism
+
+The box system uses transactions to batch changes and ensure consistency. Understanding the transaction lifecycle is crucial for working with the system.
+
+### Transaction Lifecycle
+
+1. **`beginTransaction()`** - Starts a transaction, sets `#inTransaction = true`
+2. **Changes are made** - Field values updated, pointers modified
+3. **`endTransaction()`** - Commits changes and fires deferred notifications
+
+### Pointer Updates and Deferred Notifications
+
+When a pointer is changed via `refer()`, two things happen:
+
+1. **Immediate**: Graph edges are updated synchronously
+   - `graph.edges().connect(pointer, address)` is called
+   - The pointer hub's `incoming()` returns the new state immediately
+
+2. **Deferred**: Notifications are batched until `endTransaction()`
+   - Pointer changes are recorded in `#pointerTransactionState`
+   - At `endTransaction()`, notifications fire in the order changes were made:
+     ```typescript
+     initial.ifSome(address => vertex.pointerHub.onRemoved(pointer))
+     final.ifSome(address => vertex.pointerHub.onAdded(pointer))
+     ```
+
+### Implications for Adapters
+
+When creating adapters during a transaction:
+
+1. **`catchupAndSubscribe()`** on a pointer hub will:
+   - Catch up with current edges (immediately available)
+   - Subscribe to future `onAdded`/`onRemoved` notifications (deferred)
+
+2. **Order of notifications** at `endTransaction()`:
+   - Determined by the `index` field in `#pointerTransactionState`
+   - Index is assigned when the pointer change is recorded
+   - Earlier changes fire before later changes
+
+### Example: Creating a Track and Moving a Region
+
+```typescript
+editing.modify(() => {
+    // 1. Create new track (deferred: track added notification)
+    const newTrack = projectApi.createNoteTrack(audioUnit, index)
+
+    // 2. Get adapter - this creates TrackRegions which subscribes to pointer hub
+    //    At this point, no regions are on this track yet
+    const adapter = boxAdapters.adapterFor(newTrack, TrackBoxAdapter)
+
+    // 3. Move region to new track (deferred: region added notification)
+    regionBox.regions.refer(adapter.box.regions)
+})
+// After modify() returns, endTransaction() has been called:
+// - "track added" notification fires -> TracksManager.onAdd() -> UI created
+// - "region added" notification fires -> TrackRegions.onAdded() -> dispatchChange()
+```
+
+### Box Construction During Transaction
+
+When creating a box inside a transaction (`TrackBox.create()`):
+- The `#constructingBox` flag is set
+- Pointer updates during construction are added to `#deferredPointerUpdates`
+- These are processed at the start of `endTransaction()` before other notifications
+
+### Key Points
+
+- **Edges are synchronous**: `pointerHub.incoming()` reflects changes immediately
+- **Notifications are deferred**: `onAdded`/`onRemoved` fire at `endTransaction()`
+- **Order matters**: Notifications fire in the order changes were made
+- **Adapter creation timing**: Creating an adapter during a transaction means its subscriptions won't receive notifications for changes made earlier in the same transaction (those are caught up via `catchupAndSubscribe`)

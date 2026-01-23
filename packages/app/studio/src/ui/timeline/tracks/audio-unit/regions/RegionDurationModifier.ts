@@ -113,7 +113,7 @@ export class RegionDurationModifier implements RegionModifier {
         const adapters = this.#adapters.filter(({box}) => box.isAttached())
         const result = this.#adapters.map<{ region: AnyLoopableRegionBoxAdapter, duration: ppqn }>(region =>
             ({region, duration: this.#selectedModifyStrategy.readDuration(region)}))
-        this.#project.overlapResolver.apply(modifiedTracks, adapters, this, 0, () => {
+        this.#project.overlapResolver.apply(modifiedTracks, adapters, this, 0, (_trackResolver) => {
             result.forEach(({region, duration}) => region.duration = duration)
         })
     }

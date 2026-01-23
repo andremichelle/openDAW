@@ -107,7 +107,7 @@ export class RegionLoopDurationModifier implements RegionModifier {
                 duration: this.#selectedModifyStrategy.readDuration(region),
                 loopDuration: this.#selectedModifyStrategy.readLoopDuration(region)
             }))
-        this.#project.overlapResolver.apply(modifiedTracks, this.#adapters, this, 0, () => {
+        this.#project.overlapResolver.apply(modifiedTracks, this.#adapters, this, 0, (_trackResolver) => {
             result.forEach(({region, duration, loopDuration}) => {
                 region.duration = duration
                 region.loopDuration = loopDuration

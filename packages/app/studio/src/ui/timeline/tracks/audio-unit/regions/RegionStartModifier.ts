@@ -115,7 +115,7 @@ export class RegionStartModifier implements RegionModifier {
         const adapters = this.#adapters.filter(({box}) => box.isAttached())
         const result = this.#adapters.map<{ region: AnyLoopableRegionBoxAdapter, delta: ppqn }>(region =>
             ({region, delta: this.#selectedModifyStrategy.computeClampedDelta(region)}))
-        this.#project.overlapResolver.apply(modifiedTracks, adapters, this, 0, () => {
+        this.#project.overlapResolver.apply(modifiedTracks, adapters, this, 0, (_trackResolver) => {
             result.forEach(({region, delta}) => {
                 region.position += delta
                 region.duration -= delta
