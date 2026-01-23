@@ -10,7 +10,6 @@ import {
     JSONValue,
     Listeners,
     Option,
-    Optional,
     panic,
     Predicate,
     Predicates,
@@ -399,12 +398,27 @@ export class BoxGraph<BoxMap = any> {
         this.endTransaction()
     }
 
-    toJSON(): Optional<JSONValue> {
-        return this.#boxes.values().map(box => ({
-            name: box.name,
-            uuid: box.address.toString(),
-            fields: asDefined(box.toJSON())
-        }))
+    toJSON(): JSONValue {
+        const result: Record<string, { name: string, fields: JSONValue }> = {}
+        for (const box of this.#boxes.values()) {
+            result[box.address.toString()] = {
+                name: box.name,
+                fields: asDefined(box.toJSON())
+            }
+        }
+        return result
+    }
+
+    fromJSON(value: JSONValue): void {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) {
+            return panic("Expected object")
+        }
+        this.beginTransaction()
+        const entries = Object.entries(value as Record<string, { name: string, fields: JSONValue }>)
+        for (const [uuid, {name, fields}] of entries) {
+            this.createBox(name as keyof BoxMap, UUID.parse(uuid), box => box.fromJSON(fields))
+        }
+        this.endTransaction()
     }
 
     #assertTransaction(): void {
