@@ -75,7 +75,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
             (1.0 - eventMapping.x(value)) * (canvas.clientHeight - 2.0 * RangePadding - 1.0) + RangePadding + 0.5
     }
     const valueToPixel: Func<unitValue, number> = value => valueAxis.valueToAxis(value) * devicePixelRatio
-    const modifyContext = new ObservableModifyContext<ValueModifier>(service.project.editing)
+    const modifyContext = new ObservableModifyContext<ValueModifier>()
     const paintValues = createValuePainter({
         range,
         valueToPixel,
@@ -131,6 +131,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                                     selection.select(adapter)
                                     const clientRect = canvas.getBoundingClientRect()
                                     return modifyContext.startModifier(ValueMoveModifier.create({
+                                        editing,
                                         element: canvas,
                                         context,
                                         selection,
@@ -152,6 +153,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 if (target === null) {
                     if (altKey) {
                         return modifyContext.startModifier(ValuePaintModifier.create({
+                            editing,
                             element: canvas,
                             reader,
                             selection,
@@ -175,6 +177,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                         }, false).unwrapOrNull()
                         if (optCutEvent === null) {return Option.None}
                         return modifyContext.startModifier(ValueMoveModifier.create({
+                            editing,
                             element: canvas,
                             context,
                             selection,
@@ -196,6 +199,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
             if (target?.type !== "loop-duration") {return Option.None}
             const clientRect = canvas.getBoundingClientRect()
             return modifyContext.startModifier(ValueContentDurationModifier.create({
+                editing,
                 element: canvas,
                 pointerPulse: range.xToUnit(event.clientX - clientRect.left),
                 snapping,
@@ -230,6 +234,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
             const clientRect = canvas.getBoundingClientRect()
             if (target.type === "event") {
                 return modifyContext.startModifier(ValueMoveModifier.create({
+                    editing,
                     element: canvas,
                     context,
                     selection,
@@ -243,6 +248,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 }))
             } else if (target.type === "midpoint") {
                 return modifyContext.startModifier(ValueSlopeModifier.create({
+                    editing,
                     element: canvas,
                     valueAxis,
                     reference: target.event,

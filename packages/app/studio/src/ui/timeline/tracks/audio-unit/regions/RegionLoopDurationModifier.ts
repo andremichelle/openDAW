@@ -1,5 +1,4 @@
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
-import {BoxEditing} from "@opendaw/lib-box"
 import {Arrays, int, Option} from "@opendaw/lib-std"
 import {ppqn, PPQN, RegionCollection} from "@opendaw/lib-dsp"
 import {
@@ -9,7 +8,7 @@ import {
     UnionAdapterTypes
 } from "@opendaw/studio-adapters"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {RegionClipResolver, RegionModifyStrategy} from "@opendaw/studio-core"
+import {Project, RegionModifyStrategy} from "@opendaw/studio-core"
 import {Dragging} from "@opendaw/lib-dom"
 
 class SelectedModifyStrategy implements RegionModifyStrategy {
@@ -35,6 +34,7 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
 }
 
 type Construct = Readonly<{
+    project: Project
     element: Element
     snapping: Snapping
     pointerPulse: ppqn
@@ -50,6 +50,7 @@ export class RegionLoopDurationModifier implements RegionModifier {
         return adapters.length === 0 ? Option.None : Option.wrap(new RegionLoopDurationModifier(construct, adapters))
     }
 
+    readonly #project: Project
     readonly #element: Element
     readonly #snapping: Snapping
     readonly #pointerPulse: ppqn
@@ -60,8 +61,9 @@ export class RegionLoopDurationModifier implements RegionModifier {
 
     #deltaLoopDuration: int
 
-    private constructor({element, snapping, pointerPulse, reference, resize}: Construct,
+    private constructor({project, element, snapping, pointerPulse, reference, resize}: Construct,
                         adapter: ReadonlyArray<AnyLoopableRegionBoxAdapter>) {
+        this.#project = project
         this.#element = element
         this.#snapping = snapping
         this.#pointerPulse = pointerPulse
@@ -96,24 +98,21 @@ export class RegionLoopDurationModifier implements RegionModifier {
         if (change) {this.#dispatchChange()}
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         const modifiedTracks: ReadonlyArray<TrackBoxAdapter> =
             Arrays.removeDuplicates(this.#adapters.map(adapter => adapter.trackBoxAdapter.unwrap()))
-        const solver = RegionClipResolver.fromSelection(modifiedTracks, this.#adapters, this, 0)
         const result = this.#adapters.map<BeforeState>(region =>
             ({
                 region,
                 duration: this.#selectedModifyStrategy.readDuration(region),
                 loopDuration: this.#selectedModifyStrategy.readLoopDuration(region)
             }))
-        editing.modify(() => {
+        this.#project.overlapResolver.apply(modifiedTracks, this.#adapters, this, 0, () => {
             result.forEach(({region, duration, loopDuration}) => {
                 region.duration = duration
                 region.loopDuration = loopDuration
             })
-            solver()
         })
-        RegionClipResolver.validateTracks(modifiedTracks)
     }
 
     cancel(): void {

@@ -17,6 +17,7 @@ import {UINoteEvent} from "@/ui/timeline/editors/notes/UINoteEvent.ts"
 import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
+    editing: BoxEditing
     element: Element
     property: PropertyAccessor
     selection: Selection<NoteEventBoxAdapter>
@@ -30,6 +31,7 @@ export class PropertyDrawModifier implements NoteModifier, NoteModifyStrategy {
         return new PropertyDrawModifier(construct)
     }
 
+    readonly #editing: BoxEditing
     readonly #element: Element
     readonly #property: PropertyAccessor
     readonly #selection: Selection<NoteEventBoxAdapter>
@@ -42,7 +44,8 @@ export class PropertyDrawModifier implements NoteModifier, NoteModifyStrategy {
 
     #lastUnit: ppqn = NaN
 
-    private constructor({element, property, selection, snapping, valueAxis, reader}: Construct) {
+    private constructor({editing, element, property, selection, snapping, valueAxis, reader}: Construct) {
+        this.#editing = editing
         this.#element = element
         this.#property = property
         this.#selection = selection
@@ -99,11 +102,11 @@ export class PropertyDrawModifier implements NoteModifier, NoteModifyStrategy {
         }
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         const result: ReadonlyArray<{ adapter: NoteEventBoxAdapter, value: number }> =
             this.#reader.content.events.asArray()
                 .map(adapter => ({adapter, value: this.#modifyProperty(this.#property, adapter)}))
-        editing.modify(() => result.forEach(({adapter: {box}, value}) =>
+        this.#editing.modify(() => result.forEach(({adapter: {box}, value}) =>
             this.#property.writeValue(box, value)))
     }
 

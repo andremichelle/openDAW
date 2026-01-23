@@ -9,6 +9,7 @@ import {UINoteEvent} from "./UINoteEvent"
 import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
+    editing: BoxEditing
     element: Element
     snapping: Snapping
     pointerPulse: ppqn
@@ -20,6 +21,7 @@ export class NoteContentDurationModifier implements NoteModifier {
         return new NoteContentDurationModifier(construct)
     }
 
+    readonly #editing: BoxEditing
     readonly #element: Element
     readonly #snapping: Snapping
     readonly #pointerPulse: ppqn
@@ -28,7 +30,8 @@ export class NoteContentDurationModifier implements NoteModifier {
 
     #deltaLoopDuration: ppqn
 
-    private constructor({element, snapping, pointerPulse, reference}: Construct) {
+    private constructor({editing, element, snapping, pointerPulse, reference}: Construct) {
+        this.#editing = editing
         this.#element = element
         this.#snapping = snapping
         this.#pointerPulse = pointerPulse
@@ -61,9 +64,9 @@ export class NoteContentDurationModifier implements NoteModifier {
         }
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         if (this.#deltaLoopDuration === 0) {return}
-        editing.modify(() =>
+        this.#editing.modify(() =>
             this.#reference.contentDuration = this.readContentDuration(this.#reference))
     }
 

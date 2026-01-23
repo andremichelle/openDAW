@@ -249,21 +249,21 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 switch (target.part) {
                     case "start":
                         return manager.startRegionModifier(RegionStartModifier.create(regionSelection.selected(),
-                            {element, snapping, pointerPulse, reference}))
+                            {project, element, snapping, pointerPulse, reference}))
                     case "complete":
                         return manager.startRegionModifier(RegionDurationModifier.create(regionSelection.selected(),
-                            {element, snapping, pointerPulse, bounds: [reference.position, reference.complete]}))
+                            {project, element, snapping, pointerPulse, bounds: [reference.position, reference.complete]}))
                     case "position":
                         const pointerIndex = manager.globalToIndex(event.clientY)
                         return manager.startRegionModifier(RegionMoveModifier.create(manager, regionSelection,
                             {element, snapping, pointerPulse, pointerIndex, reference}))
                     case "content-start":
                         return manager.startRegionModifier(RegionContentStartModifier.create(regionSelection.selected(),
-                            {element, snapping, pointerPulse, reference}))
+                            {project, element, snapping, pointerPulse, reference}))
                     case "loop-duration":
                     case "content-complete":
                         return manager.startRegionModifier(RegionLoopDurationModifier.create(regionSelection.selected(),
-                            {element, snapping, pointerPulse, reference, resize: target.part === "content-complete"}))
+                            {project, element, snapping, pointerPulse, reference, resize: target.part === "content-complete"}))
                     default: {
                         return Unhandled(target)
                     }

@@ -54,7 +54,6 @@ import {Project} from "./Project"
 import {EffectFactory} from "../EffectFactory"
 import {EffectBox} from "../EffectBox"
 import {AudioContentFactory} from "./audio"
-import {RegionClipResolver} from "../ui"
 
 export type ClipRegionOptions = {
     name?: string
@@ -214,10 +213,22 @@ export class ProjectApi {
     }
 
     duplicateRegion<R extends AnyRegionBoxAdapter>(region: R): R {
+        const track = region.trackBoxAdapter.unwrap("Region is invalid")
         const clearFrom = region.position + region.duration
         const clearTo = region.complete + region.duration
-        RegionClipResolver.fromRange(region.trackBoxAdapter.unwrap("Region is invalid"), clearFrom, clearTo)()
-        return region.copyTo({position: region.complete, consolidate: true}) as R
+        // Resolve target track (for keep-existing mode)
+        const targetTrack = this.#project.overlapResolver.resolveTargetTrack(track, clearFrom, clearTo)
+        // Capture overlap state before creating (for clip/push-existing modes)
+        const solver = this.#project.overlapResolver.fromRange(targetTrack, clearFrom, clearTo)
+        // Create the duplicate on target track
+        const duplicate = region.copyTo({
+            position: region.complete,
+            consolidate: true,
+            track: targetTrack !== track ? targetTrack.box.regions : undefined
+        }) as R
+        // Apply overlap resolution
+        solver()
+        return duplicate
     }
 
     quantiseNotes(collection: NoteEventCollectionBox,

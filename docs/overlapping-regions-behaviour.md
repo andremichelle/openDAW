@@ -254,3 +254,58 @@ approve(editing: BoxEditing): void {
 | Resize region | If overlap after resize, resized region goes to track below |
 | Duplicate | If overlap, duplicate goes to track below |
 | Copy (Cmd+drag) | If overlap, copy goes to track below |
+
+---
+
+## Manual Test Checklist
+
+### Setup
+1. Open Preferences → **Editing** section
+2. Find **"Overlapping regions behaviour"** option
+3. Switch between: **"Clip existing regions"** and **"Push to new track"**
+
+### Test Matrix
+
+#### 1. Drop Sample (RegionDragAndDrop)
+- [ ] Drop sample onto **empty** area → Region lands there
+- [ ] Drop sample **on top of existing region** in **clip mode** → Existing region gets truncated
+- [ ] Drop sample **on top of existing region** in **push mode** → Existing region moves to track below
+
+#### 2. Move Region (RegionMoveModifier)
+- [ ] Drag region to **empty** position → Moves normally
+- [ ] Drag region **over another region** in **clip mode** → Overlapped region gets truncated
+- [ ] Drag region **over another region** in **push mode** → Overlapped region pushed to track below
+
+#### 3. Resize Region End (RegionDurationModifier)
+- [ ] Extend region **into empty space** → Resizes normally
+- [ ] Extend region **into another region** in **clip mode** → Overlapped region gets truncated
+- [ ] Extend region **into another region** in **push mode** → Overlapped region pushed down
+
+#### 4. Resize Region Start (RegionStartModifier)
+- [ ] Extend region start **into empty space** → Resizes normally
+- [ ] Extend region start **into another region** in **clip mode** → Overlapped region gets truncated
+- [ ] Extend region start **into another region** in **push mode** → Overlapped region pushed down
+
+#### 5. Resize Loop Duration (RegionLoopDurationModifier)
+- [ ] Extend loop **into empty space** → Extends normally
+- [ ] Extend loop **into another region** in **clip mode** → Overlapped region gets truncated
+- [ ] Extend loop **into another region** in **push mode** → Overlapped region pushed down
+
+#### 6. Duplicate Region (Cmd+D)
+- [ ] Duplicate where there's **no overlap** → Duplicate lands normally
+- [ ] Duplicate where it **overlaps existing region** in **clip mode** → Existing gets truncated
+- [ ] Duplicate where it **overlaps existing region** in **push mode** → Existing pushed down
+
+### Track Reuse Verification (push mode only)
+- [ ] Track of same type exists below with available space → Region goes there (no new track created)
+- [ ] No space available on existing tracks → New track is created below
+
+### Edge Cases
+- [ ] Multiple overlapping regions at once
+- [ ] Cross-track moves (moving region to a different track)
+- [ ] Undo/Redo after overlap resolution
+- [ ] Note regions (not just audio regions)
+
+### Regression Tests
+- [ ] Clip mode still works exactly as before
+- [ ] No overlap scenario works the same in both modes

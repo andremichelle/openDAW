@@ -1,11 +1,10 @@
 import {RegionCaptureTarget} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
-import {AudioContentFactory, RegionClipResolver} from "@opendaw/studio-core"
+import {AudioContentFactory} from "@opendaw/studio-core"
 import {CreateParameters, TimelineDragAndDrop} from "@/ui/timeline/tracks/audio-unit/TimelineDragAndDrop"
 import {Snapping} from "@/ui/timeline/Snapping"
 import {StudioService} from "@/service/StudioService"
 import {TransientPlayMode} from "@opendaw/studio-enums"
-import {AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
 
 export class RegionDragAndDrop extends TimelineDragAndDrop<RegionCaptureTarget> {
     readonly #snapping: Snapping
@@ -20,24 +19,32 @@ export class RegionDragAndDrop extends TimelineDragAndDrop<RegionCaptureTarget> 
         const pointerX = event.clientX - this.capturing.element.getBoundingClientRect().left
         const pointerPulse = Math.max(this.#snapping.xToUnitFloor(pointerX), 0)
         const boxGraph = this.project.boxGraph
-        const regionBox = type === "file" || sample.bpm === 0
+        // Calculate duration to determine target track and handle overlaps
+        const duration = AudioContentFactory.calculateDuration(sample)
+        const complete = pointerPulse + duration
+        // Resolve target track (handles keep-existing by finding non-overlapping track)
+        const targetTrack = this.project.overlapResolver.resolveTargetTrack(trackBoxAdapter, pointerPulse, complete)
+        // Capture overlap state before creating (handles clip/push-existing)
+        const solver = this.project.overlapResolver.fromRange(targetTrack, pointerPulse, complete)
+        // Create region on target track
+        type === "file" || sample.bpm === 0
             ? AudioContentFactory.createNotStretchedRegion({
                 boxGraph,
-                targetTrack: trackBoxAdapter.box,
+                targetTrack: targetTrack.box,
                 audioFileBox,
                 sample,
                 position: pointerPulse
             })
             : AudioContentFactory.createTimeStretchedRegion({
                 boxGraph,
-                targetTrack: trackBoxAdapter.box,
+                targetTrack: targetTrack.box,
                 audioFileBox,
                 sample,
                 position: pointerPulse,
                 playbackRate: 1.0,
                 transientPlayMode: TransientPlayMode.Pingpong
             })
-        const regionAdapter = this.project.boxAdapters.adapterFor(regionBox, AudioRegionBoxAdapter)
-        RegionClipResolver.fromRange(trackBoxAdapter, pointerPulse, pointerPulse + regionAdapter.duration)()
+        // Apply overlap resolution
+        solver()
     }
 }

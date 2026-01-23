@@ -23,6 +23,7 @@ import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
 import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
+    editing: BoxEditing
     element: Element
     reader: ValueEventOwnerReader
     selection: Selection<ValueEventBoxAdapter>
@@ -35,6 +36,7 @@ type Stroke = { position: ppqn, value: unitValue }
 export class ValuePaintModifier implements ValueModifier {
     static create(construct: Construct): ValuePaintModifier {return new ValuePaintModifier(construct)}
 
+    readonly #editing: BoxEditing
     readonly #element: Element
     readonly #reader: ValueEventOwnerReader
     readonly #selection: Selection<ValueEventBoxAdapter>
@@ -48,7 +50,8 @@ export class ValuePaintModifier implements ValueModifier {
     #lastValue: unitValue = NaN
     #lastIndex: int = 0
 
-    private constructor({element, reader, selection, snapping, valueAxis}: Construct) {
+    private constructor({editing, element, reader, selection, snapping, valueAxis}: Construct) {
+        this.#editing = editing
         this.#element = element
         this.#reader = reader
         this.#selection = selection
@@ -139,14 +142,14 @@ export class ValuePaintModifier implements ValueModifier {
         this.#dispatchChange()
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         this.#verifyStrokes()
         const offset = this.#reader.offset
         const min = Arrays.getFirst(this.#strokes, "Internal Error").position - offset
         const max = Arrays.getLast(this.#strokes, "Internal Error").position - offset
         const content = this.#reader.content
         const deletion = Array.from(content.events.iterateRange(min, max + 1))
-        editing.modify(() => {
+        this.#editing.modify(() => {
             deletion.forEach(event => event.box.delete())
             this.#selection.select(...this.#strokes.map(stroke => content.createEvent({
                 position: stroke.position - offset,

@@ -64,7 +64,7 @@ export class TracksManager implements Terminable {
             this.#currentClipModifier = option
             return {
                 update: (event: Dragging.Event): void => modifier.update(event),
-                approve: (): void => modifier.approve(this.#service.project.editing),
+                approve: (): void => modifier.approve(),
                 cancel: (): void => modifier.cancel(),
                 finally: (): void => {
                     this.service.regionModifierInProgress = false
@@ -87,7 +87,7 @@ export class TracksManager implements Terminable {
                 update: (event: Dragging.Event): void => modifier.update(event),
                 approve: (): void => {
                     console.debug(`approve(${print()})`)
-                    modifier.approve(this.#service.project.editing)
+                    modifier.approve()
                 },
                 cancel: (): void => {
                     console.debug(`cancel(${print()})`)

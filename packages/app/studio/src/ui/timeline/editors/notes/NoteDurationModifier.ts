@@ -32,6 +32,7 @@ class SelectedModifyStrategy implements NoteModifyStrategy {
 }
 
 type Construct = Readonly<{
+    editing: BoxEditing
     element: Element
     selection: Selection<NoteEventBoxAdapter>
     snapping: Snapping
@@ -44,6 +45,7 @@ export class NoteDurationModifier implements NoteModifier {
         return new NoteDurationModifier(construct)
     }
 
+    readonly #editing: BoxEditing
     readonly #element: Element
     readonly #selection: Selection<NoteEventBoxAdapter>
     readonly #snapping: Snapping
@@ -56,7 +58,8 @@ export class NoteDurationModifier implements NoteModifier {
     #aligned: boolean
     #deltaDuration: ppqn
 
-    private constructor({element, selection, snapping, pointerPulse, reference}: Construct) {
+    private constructor({editing, element, selection, snapping, pointerPulse, reference}: Construct) {
+        this.#editing = editing
         this.#element = element
         this.#selection = selection
         this.#snapping = snapping
@@ -103,7 +106,7 @@ export class NoteDurationModifier implements NoteModifier {
         }
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         if (this.#deltaDuration === 0) {return}
         const result = this.#selection.selected()
             .map<{ adapter: NoteEventBoxAdapter, duration: ppqn }>(adapter => ({
@@ -111,7 +114,7 @@ export class NoteDurationModifier implements NoteModifier {
                 duration: this.#selectedModifyStrategy.readComplete(adapter)
                     - this.#selectedModifyStrategy.readPosition(adapter)
             }))
-        editing.modify(() => result
+        this.#editing.modify(() => result
             .forEach(({adapter: {box}, duration}) => box.duration.setValue(duration)))
     }
 

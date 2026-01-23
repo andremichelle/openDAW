@@ -109,6 +109,7 @@ export const PitchEditor = ({
             if (target?.type !== "loop-duration") {return Option.None}
             const clientRect = canvas.getBoundingClientRect()
             return modifyContext.startModifier(NoteContentDurationModifier.create({
+                editing,
                 element: canvas,
                 pointerPulse: range.xToUnit(event.clientX - clientRect.left),
                 snapping,
@@ -123,6 +124,7 @@ export const PitchEditor = ({
             const pitch = positioner.yToPitch(event.clientY - clientRect.top)
             auditionNote(pitch, PPQN.SemiQuaver)
             return modifyContext.startModifier(NoteCreateModifier.create({
+                editing,
                 element: canvas,
                 pointerPulse: range.xToUnit(event.clientX - clientRect.left) - reader.offset,
                 pointerPitch: pitch,
@@ -240,6 +242,7 @@ export const PitchEditor = ({
                 const {pitch, duration} = noteEventBoxAdapter
                 auditionNote(pitch, duration)
                 const modifier = NoteMoveModifier.create({
+                    editing,
                     element: canvas,
                     selection,
                     positioner,
@@ -255,6 +258,7 @@ export const PitchEditor = ({
                 const {pitch, duration} = noteEventBoxAdapter
                 auditionNote(pitch, duration)
                 return modifyContext.startModifier(NoteDurationModifier.create({
+                    editing,
                     element: canvas,
                     selection,
                     pointerPulse: range.xToUnit(event.clientX - clientRect.left),

@@ -1,5 +1,4 @@
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
-import {BoxEditing} from "@opendaw/lib-box"
 import {int, Option} from "@opendaw/lib-std"
 import {ppqn, PPQN, RegionCollection} from "@opendaw/lib-dsp"
 import {
@@ -8,7 +7,7 @@ import {
     UnionAdapterTypes
 } from "@opendaw/studio-adapters"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {RegionModifyStrategy} from "@opendaw/studio-core"
+import {Project, RegionModifyStrategy} from "@opendaw/studio-core"
 import {Dragging} from "@opendaw/lib-dom"
 
 class SelectedModifyStrategy implements RegionModifyStrategy {
@@ -40,6 +39,7 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
 }
 
 type Construct = Readonly<{
+    project: Project
     element: Element
     snapping: Snapping
     pointerPulse: ppqn
@@ -52,6 +52,7 @@ export class RegionContentStartModifier implements RegionModifier {
         return adapters.length === 0 ? Option.None : Option.wrap(new RegionContentStartModifier(construct, adapters))
     }
 
+    readonly #project: Project
     readonly #element: Element
     readonly #snapping: Snapping
     readonly #pointerPulse: ppqn
@@ -61,8 +62,9 @@ export class RegionContentStartModifier implements RegionModifier {
 
     #delta: ppqn
 
-    private constructor({element, snapping, pointerPulse, reference}: Construct,
+    private constructor({project, element, snapping, pointerPulse, reference}: Construct,
                         adapters: ReadonlyArray<AnyLoopableRegionBoxAdapter>) {
+        this.#project = project
         this.#element = element
         this.#snapping = snapping
         this.#pointerPulse = pointerPulse
@@ -101,9 +103,9 @@ export class RegionContentStartModifier implements RegionModifier {
         }, Infinity)
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         if (this.#delta === 0) {return}
-        editing.modify(() => this.#adapters.forEach(region => region.moveContentStart(this.#delta)))
+        this.#project.editing.modify(() => this.#adapters.forEach(region => region.moveContentStart(this.#delta)))
     }
 
     cancel(): void {
