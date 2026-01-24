@@ -5,7 +5,7 @@ import {RegionModifyStrategies, RegionModifyStrategy, TimeGrid, TimelineRange} f
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {renderNotes} from "@/ui/timeline/renderer/notes.ts"
 import {RegionBound} from "@/ui/timeline/renderer/env.ts"
-import {renderAudio} from "@/ui/timeline/renderer/audio.ts"
+import {renderAudio, renderFading} from "@/ui/timeline/renderer/audio.ts"
 import {renderValueStream} from "@/ui/timeline/renderer/value.ts"
 import {Context2d} from "@opendaw/lib-dom"
 import {RegionPaintBucket} from "@/ui/timeline/tracks/audio-unit/regions/RegionPaintBucket"
@@ -114,7 +114,10 @@ export const renderRegions = (context: CanvasRenderingContext2D,
                         renderAudio(context, range, region.file, tempoMap, region.observableOptPlayMode, region.waveformOffset.getValue(),
                             region.gain.getValue(), bound, contentColor, pass)
                     }
-                    // TODO Record indicator?
+                    const {fading} = region
+                    renderFading(context, range, fading.in, fading.out, fading.inSlope, fading.outSlope,
+                        bound, position, position + region.duration, `hsla(${region.hue}, 60%, 30%, 0.5)`,
+                        `hsla(${region.hue}, 80%, 50%, 1.0)`)
                     const isRecording = region.file.getOrCreateLoader().state.type === "record"
                     if (isRecording) {}
                 },

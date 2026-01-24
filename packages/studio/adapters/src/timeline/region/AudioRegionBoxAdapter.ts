@@ -31,6 +31,7 @@ import {AudioPlayMode} from "../../audio/AudioPlayMode"
 import {AudioPitchStretchBoxAdapter} from "../../audio/AudioPitchStretchBoxAdapter"
 import {AudioTimeStretchBoxAdapter} from "../../audio/AudioTimeStretchBoxAdapter"
 import {WarpMarkerBoxAdapter} from "../../audio/WarpMarkerBoxAdapter"
+import {FadingAdapter} from "./FadingAdapter"
 
 type CopyToParams = {
     track?: Field<Pointers.RegionCollection>
@@ -53,6 +54,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
     readonly #loopDurationConverter: TimeBaseConverter
     readonly #playMode: MutableObservableOption<AudioPlayMode>
     readonly #changeNotifier: Notifier<void>
+    readonly #fadingAdapter: FadingAdapter
     readonly #constructing: boolean
 
     #fileAdapter: Option<AudioFileBoxAdapter> = Option.None
@@ -73,6 +75,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
         this.#loopDurationConverter = TimeBaseConverter.aware(context.tempoMap, timeBase, loopDuration)
         this.#playMode = new MutableObservableOption()
         this.#changeNotifier = new Notifier<void>()
+        this.#fadingAdapter = new FadingAdapter(box.fading)
 
         this.#isSelected = false
         this.#constructing = true
@@ -166,6 +169,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
     get mute(): boolean {return this.#box.mute.getValue()}
     get hue(): int {return this.#box.hue.getValue()}
     get gain(): MutableObservableValue<number> {return this.#box.gain}
+    get fading(): FadingAdapter {return this.#fadingAdapter}
     get file(): AudioFileBoxAdapter {return this.#fileAdapter.unwrap("Cannot access file.")}
     get observableOptPlayMode(): ObservableOption<AudioPlayMode> {return this.#playMode}
     get timeBase(): TimeBase {return asEnumValue(this.#box.timeBase.getValue(), TimeBase)}
@@ -241,6 +245,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
                 box.gain.setValue(this.gain.getValue())
                 box.waveformOffset.setValue(this.waveformOffset.getValue())
                 clonedPlayMode.ifSome(mode => box.playMode.refer(mode))
+                this.#fadingAdapter.copyTo(box.fading)
             }), AudioRegionBoxAdapter)
         adapter.loopDuration = params?.loopDuration ?? this.resolveLoopDuration(adapter.position)
         adapter.loopOffset = params?.loopOffset ?? this.loopOffset

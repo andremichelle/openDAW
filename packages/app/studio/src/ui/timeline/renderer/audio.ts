@@ -1,7 +1,7 @@
 import {Peaks, PeaksPainter} from "@opendaw/lib-fusion"
 import {TimelineRange} from "@opendaw/studio-core"
 import {AudioFileBoxAdapter, AudioPlayMode} from "@opendaw/studio-adapters"
-import {Option} from "@opendaw/lib-std"
+import {Curve, Option} from "@opendaw/lib-std"
 import {RegionBound} from "@/ui/timeline/renderer/env"
 import {dbToGain, LoopableRegion, PPQN, TempoChangeGrid, TempoMap} from "@opendaw/lib-dsp"
 
@@ -263,5 +263,77 @@ export const renderAudio = (context: CanvasRenderingContext2D,
                 y1: 3 + top + (channel + 1) * peaksHeight
             })
         }
+    }
+}
+
+export const renderFading = (
+    context: CanvasRenderingContext2D,
+    range: TimelineRange,
+    fadeIn: number,
+    fadeOut: number,
+    fadeInSlope: number,
+    fadeOutSlope: number,
+    {top, bottom}: RegionBound,
+    startPPQN: number,
+    endPPQN: number,
+    color: string,
+    handleColor: string
+): void => {
+    const height = bottom - top
+    const dpr = devicePixelRatio
+    const handleRadius = 5 * dpr
+    context.fillStyle = color
+    if (fadeIn > 0) {
+        const fadeInEndPPQN = startPPQN + (endPPQN - startPPQN) * fadeIn
+        const x0 = range.unitToX(startPPQN) * dpr
+        const x1 = range.unitToX(fadeInEndPPQN) * dpr
+        context.beginPath()
+        context.moveTo(x0, bottom)
+        const steps = Math.max(10, Math.abs(x1 - x0) / 2)
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps
+            const x = x0 + (x1 - x0) * t
+            const gain = Curve.normalizedAt(t, fadeInSlope)
+            const y = bottom - height * gain
+            context.lineTo(x, y)
+        }
+        context.lineTo(x0, bottom)
+        context.closePath()
+        context.fill()
+    }
+    if (fadeOut < 1) {
+        const fadeOutStartPPQN = startPPQN + (endPPQN - startPPQN) * fadeOut
+        const x0 = range.unitToX(fadeOutStartPPQN) * dpr
+        const x1 = range.unitToX(endPPQN) * dpr
+        context.beginPath()
+        context.moveTo(x0, top)
+        const steps = Math.max(10, Math.abs(x1 - x0) / 2)
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps
+            const x = x0 + (x1 - x0) * t
+            const gain = 1.0 - Curve.normalizedAt(t, fadeOutSlope)
+            const y = top + height * (1 - gain)
+            context.lineTo(x, y)
+        }
+        context.lineTo(x1, bottom)
+        context.lineTo(x0, bottom)
+        context.closePath()
+        context.fill()
+    }
+    const minHandleOffset = 8 * dpr
+    const fadeInHandleX = range.unitToX(startPPQN + (endPPQN - startPPQN) * fadeIn) * dpr
+    const fadeOutHandleX = range.unitToX(startPPQN + (endPPQN - startPPQN) * fadeOut) * dpr
+    const regionStartX = range.unitToX(startPPQN) * dpr
+    const regionEndX = range.unitToX(endPPQN) * dpr
+    const adjustedFadeInX = Math.max(fadeInHandleX, regionStartX + minHandleOffset)
+    const adjustedFadeOutX = Math.min(fadeOutHandleX, regionEndX - minHandleOffset)
+    if (adjustedFadeOutX - adjustedFadeInX > handleRadius * 4) {
+        context.fillStyle = handleColor
+        context.beginPath()
+        context.arc(adjustedFadeInX, top + handleRadius, handleRadius, 0, Math.PI * 2)
+        context.fill()
+        context.beginPath()
+        context.arc(adjustedFadeOutX, top + handleRadius, handleRadius, 0, Math.PI * 2)
+        context.fill()
     }
 }

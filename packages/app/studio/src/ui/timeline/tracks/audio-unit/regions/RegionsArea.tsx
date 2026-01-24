@@ -53,7 +53,9 @@ const CursorMap = Object.freeze({
     "complete": "e-resize",
     "loop-duration": Cursor.ExpandWidth,
     "content-start": Cursor.ExpandWidth,
-    "content-complete": Cursor.ExpandWidth
+    "content-complete": Cursor.ExpandWidth,
+    "fading-in": "ew-resize",
+    "fading-out": "ew-resize"
 }) satisfies Record<string, CssUtils.Cursor | Cursor>
 
 type Construct = {
@@ -264,6 +266,30 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                     case "content-complete":
                         return manager.startRegionModifier(RegionLoopDurationModifier.create(regionSelection.selected(),
                             {project, element, snapping, pointerPulse, reference, resize: target.part === "content-complete"}))
+                    case "fading-in":
+                    case "fading-out": {
+                        const audioRegion = target.region
+                        const isFadeIn = target.part === "fading-in"
+                        const originalValue = isFadeIn ? audioRegion.fading.in : audioRegion.fading.out
+                        const field = isFadeIn ? audioRegion.fading.inField : audioRegion.fading.outField
+                        const regionStartX = range.unitToX(audioRegion.position)
+                        const regionWidth = range.unitToX(audioRegion.position + audioRegion.duration) - regionStartX
+                        return Option.wrap({
+                            update: (dragEvent: Dragging.Event) => {
+                                const localX = dragEvent.clientX - clientRect.left - regionStartX
+                                const normalized = clamp(localX / regionWidth, 0, 1)
+                                editing.modify(() => {
+                                    if (isFadeIn) {
+                                        field.setValue(Math.min(normalized, audioRegion.fading.out - 0.01))
+                                    } else {
+                                        field.setValue(Math.max(normalized, audioRegion.fading.in + 0.01))
+                                    }
+                                }, false)
+                            },
+                            approve: () => editing.mark(),
+                            cancel: () => editing.modify(() => field.setValue(originalValue))
+                        } satisfies Dragging.Process)
+                    }
                     default: {
                         return Unhandled(target)
                     }

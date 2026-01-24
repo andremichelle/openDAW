@@ -117,39 +117,26 @@ export class OnceVoice implements Voice {
         this.#fadeOutBlockOffset = blockOffset
     }
 
-    process(bufferStart: int, bufferCount: int): void {
-        if (this.#state === VoiceState.Done) {
-            return
-        }
-
+    process(bufferStart: int, bufferCount: int, fadingGainBuffer: Float32Array): void {
+        if (this.#state === VoiceState.Done) {return}
         const [outL, outR] = this.#output.channels()
         const {frames, numberOfFrames} = this.#data
         const framesL = frames[0]
         const framesR = frames.length === 1 ? frames[0] : frames[1]
-
-        const segmentEnd = this.#segmentEnd
         const fadeLengthSamples = this.#fadeLengthSamples
         const fadeLengthInverse = this.#fadeLengthInverse
         const playbackRate = this.#playbackRate
         const fadeOutBlockOffset = this.#fadeOutBlockOffset
-
         let state = this.#state as VoiceState
         let fadeDirection = this.#fadeDirection
         let fadeProgress = this.#fadeProgress
         let readPosition = this.#readPosition
-
         for (let i = this.#blockOffset; i < bufferCount; i++) {
-            if (state === VoiceState.Done) {
-                break
-            }
-
+            if (state === VoiceState.Done) {break}
             const j = bufferStart + i
-
-            // Calculate amplitude based on state
             let amplitude: number
             if (state === VoiceState.Fading) {
                 if (fadeDirection > 0) {
-                    // Fading in
                     amplitude = fadeProgress * fadeLengthInverse
                     fadeProgress += 1.0
                     if (fadeProgress >= fadeLengthSamples) {
@@ -158,7 +145,6 @@ export class OnceVoice implements Voice {
                         fadeDirection = 0.0
                     }
                 } else {
-                    // Fading out - wait for fadeOutBlockOffset
                     if (i < fadeOutBlockOffset) {
                         amplitude = 1.0
                     } else {
@@ -171,27 +157,19 @@ export class OnceVoice implements Voice {
                     }
                 }
             } else {
-                // Active
                 amplitude = 1.0
             }
-
-            // Output audio if within valid range
-            // Voice never decides its own end - sequencer controls lifecycle
-            // (BPM can change while playing, which changes when segment should end)
             const readInt = readPosition | 0
             if (readInt >= 0 && readInt < numberOfFrames - 1) {
-                // Linear interpolation for sub-sample accuracy
                 const alpha = readPosition - readInt
                 const sL = framesL[readInt]
                 const sR = framesR[readInt]
-                outL[j] += (sL + alpha * (framesL[readInt + 1] - sL)) * amplitude
-                outR[j] += (sR + alpha * (framesR[readInt + 1] - sR)) * amplitude
+                const finalAmplitude = amplitude * fadingGainBuffer[i]
+                outL[j] += (sL + alpha * (framesL[readInt + 1] - sL)) * finalAmplitude
+                outR[j] += (sR + alpha * (framesR[readInt + 1] - sR)) * finalAmplitude
             }
-            // else: silence (beyond audio data)
-
             readPosition += playbackRate
         }
-
         this.#state = state
         this.#fadeDirection = fadeDirection
         this.#fadeProgress = fadeProgress

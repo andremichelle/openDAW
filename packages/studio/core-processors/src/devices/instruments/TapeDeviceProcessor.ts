@@ -1,5 +1,5 @@
 import {assert, Bits, int, isInstanceOf, Option, SortedSet, UUID} from "@opendaw/lib-std"
-import {AudioBuffer, AudioData, EventCollection, LoopableRegion, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioBuffer, AudioData, EventCollection, FadingEnvelope, LoopableRegion, RenderQuantum} from "@opendaw/lib-dsp"
 import {
     AudioClipBoxAdapter,
     AudioContentBoxAdapter,
@@ -37,6 +37,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
     readonly #audioOutput: AudioBuffer
     readonly #peaks: PeakBroadcaster
     readonly #lanes: SortedSet<UUID.Bytes, Lane>
+    readonly #fadingGainBuffer: Float32Array = new Float32Array(RenderQuantum)
 
     #enabled: boolean = true
 
@@ -121,7 +122,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                             for (const cycle of LoopableRegion.locateLoops(region, p0, p1)) {
                                 const timeStretchBoxAdapter = timeStretch.unwrap()
                                 this.#processPassTimestretch(lane, block, cycle,
-                                    optData.unwrap(), timeStretchBoxAdapter, transients, waveformOffset)
+                                    optData.unwrap(), timeStretchBoxAdapter, transients, waveformOffset, region.fading)
                             }
                         } else {
                             for (const cycle of LoopableRegion.locateLoops(region, p0, p1)) {
@@ -148,7 +149,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                             complete: Number.POSITIVE_INFINITY
                         }, sectionFrom, sectionTo)) {
                             this.#processPassTimestretch(lane, block, cycle, optData.unwrap(),
-                                timeStretch, transients, clip.waveformOffset.getValue())
+                                timeStretch, transients, clip.waveformOffset.getValue(), null)
                         }
                     } else {
                         for (const cycle of LoopableRegion.locateLoops({
@@ -218,8 +219,14 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             const offset = (currentSeconds + waveformOffset) * data.sampleRate
             this.#updateOrCreatePitchVoice(lane, data, playbackRate, offset, 0)
         }
+        const fadingConfig = isInstanceOf(adapter, AudioRegionBoxAdapter) ? adapter.fading : null
+        if (fadingConfig !== null && fadingConfig.hasFading) {
+            FadingEnvelope.fillGainBuffer(this.#fadingGainBuffer, cycle.resultStartValue, cycle.resultEndValue, bpn, fadingConfig)
+        } else {
+            this.#fadingGainBuffer.fill(1.0, 0, bpn)
+        }
         for (const voice of lane.voices) {
-            voice.process(bp0 | 0, bpn)
+            voice.process(bp0 | 0, bpn, this.#fadingGainBuffer)
         }
         lane.voices = lane.voices.filter(voice => !voice.done())
     }
@@ -278,11 +285,25 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                             data: AudioData,
                             timeStretch: AudioTimeStretchBoxAdapter,
                             transients: EventCollection<TransientMarkerBoxAdapter>,
-                            waveformOffset: number): void {
+                            waveformOffset: number,
+                            fadingConfig: FadingEnvelope.Config | null): void {
         for (const voice of lane.voices) {
             if (voice instanceof PitchVoice || voice instanceof DirectVoice) {
                 voice.startFadeOut(0)
             }
+        }
+        const {p0, p1, s0, s1} = block
+        const sn = s1 - s0
+        const pn = p1 - p0
+        const r0 = (cycle.resultStart - p0) / pn
+        const r1 = (cycle.resultEnd - p0) / pn
+        const bp0 = s0 + sn * r0
+        const bp1 = s0 + sn * r1
+        const bpn = (bp1 - bp0) | 0
+        if (fadingConfig !== null && fadingConfig.in > 0.0 || fadingConfig !== null && fadingConfig.out < 1.0) {
+            FadingEnvelope.fillGainBuffer(this.#fadingGainBuffer, cycle.resultStartValue, cycle.resultEndValue, bpn, fadingConfig)
+        } else {
+            this.#fadingGainBuffer.fill(1.0, 0, bpn)
         }
         lane.sequencer.process(
             this.#audioOutput,
@@ -291,7 +312,8 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             timeStretch,
             waveformOffset,
             block,
-            cycle
+            cycle,
+            this.#fadingGainBuffer
         )
         lane.voices = lane.voices.filter(voice =>
             (voice instanceof PitchVoice || voice instanceof DirectVoice) && !voice.done())

@@ -1,6 +1,6 @@
-import {AnyLoopableRegionBoxAdapter, AnyRegionBoxAdapter, UnionAdapterTypes} from "@opendaw/studio-adapters"
+import {AnyLoopableRegionBoxAdapter, AnyRegionBoxAdapter, AudioRegionBoxAdapter, UnionAdapterTypes} from "@opendaw/studio-adapters"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
-import {BinarySearch, Nullable, NumberComparator} from "@opendaw/lib-std"
+import {BinarySearch, Geom, isInstanceOf, Nullable, NumberComparator} from "@opendaw/lib-std"
 import {PointerRadiusDistance} from "@/ui/timeline/constants.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
@@ -14,6 +14,8 @@ export type RegionCaptureTarget =
     | { type: "region", part: "content-start", region: AnyRegionBoxAdapter }
     | { type: "region", part: "content-complete", region: AnyRegionBoxAdapter }
     | { type: "region", part: "loop-duration", region: AnyRegionBoxAdapter }
+    | { type: "region", part: "fading-in", region: AudioRegionBoxAdapter }
+    | { type: "region", part: "fading-out", region: AudioRegionBoxAdapter }
     | { type: "track", track: TrackContext }
 
 export namespace RegionCapturing {
@@ -56,6 +58,25 @@ export namespace RegionCapturing {
                     if (bottomEdge
                         && Math.abs(x - range.unitToX(region.offset + region.loopDuration)) <= PointerRadiusDistance) {
                         return {type: "region", part: "loop-duration", region}
+                    }
+                }
+                if (isInstanceOf(region, AudioRegionBoxAdapter)) {
+                    const {fading} = region
+                    const handleRadius = 6
+                    const minHandleOffset = 8
+                    const labelHeight = Math.ceil(9 * 1.5)
+                    const handleY = track.position + labelHeight + 1.0 + 5
+                    const regionStartX = range.unitToX(region.position)
+                    const regionEndX = range.unitToX(region.position + region.duration)
+                    const fadeInX = Math.max(range.unitToX(region.position + region.duration * fading.in), regionStartX + minHandleOffset)
+                    const fadeOutX = Math.min(range.unitToX(region.position + region.duration * fading.out), regionEndX - minHandleOffset)
+                    if (fadeOutX - fadeInX > handleRadius * 4) {
+                        if (Geom.isInsideCircle(x, y, fadeInX, handleY, handleRadius)) {
+                            return {type: "region", part: "fading-in", region}
+                        }
+                        if (Geom.isInsideCircle(x, y, fadeOutX, handleY, handleRadius)) {
+                            return {type: "region", part: "fading-out", region}
+                        }
                     }
                 }
                 return {type: "region", part: "position", region}
