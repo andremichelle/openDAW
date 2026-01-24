@@ -64,12 +64,16 @@ export namespace RegionCapturing {
                     const {fading} = region
                     const handleRadius = 6
                     const minHandleOffset = 8
-                    const labelHeight = Math.ceil(9 * 1.5)
-                    const handleY = track.position + labelHeight + 1.0 + 5
+                    // Match the renderer: labelHeight in device pixels, converted to CSS
+                    const dpr = devicePixelRatio
+                    const labelHeightDp = Math.ceil(9 * dpr * 1.5)
+                    const handleYFromTrackTop = (labelHeightDp + 1.0 + 5 * dpr) / dpr
+                    const handleY = track.position + handleYFromTrackTop
                     const regionStartX = range.unitToX(region.position)
                     const regionEndX = range.unitToX(region.position + region.duration)
-                    const fadeInX = Math.max(range.unitToX(region.position + region.duration * fading.in), regionStartX + minHandleOffset)
-                    const fadeOutX = Math.min(range.unitToX(region.position + region.duration * fading.out), regionEndX - minHandleOffset)
+                    // fading.in is PPQN from start, fading.out is PPQN from end
+                    const fadeInX = Math.max(range.unitToX(region.position + fading.in), regionStartX + minHandleOffset)
+                    const fadeOutX = Math.min(range.unitToX(region.position + region.duration - fading.out), regionEndX - minHandleOffset)
                     if (fadeOutX - fadeInX > handleRadius * 4) {
                         if (Geom.isInsideCircle(x, y, fadeInX, handleY, handleRadius)) {
                             return {type: "region", part: "fading-in", region}

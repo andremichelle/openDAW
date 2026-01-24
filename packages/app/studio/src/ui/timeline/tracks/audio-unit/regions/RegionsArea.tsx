@@ -272,17 +272,20 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                         const isFadeIn = target.part === "fading-in"
                         const originalValue = isFadeIn ? audioRegion.fading.in : audioRegion.fading.out
                         const field = isFadeIn ? audioRegion.fading.inField : audioRegion.fading.outField
-                        const regionStartX = range.unitToX(audioRegion.position)
-                        const regionWidth = range.unitToX(audioRegion.position + audioRegion.duration) - regionStartX
+                        const regionPosition = audioRegion.position
+                        const regionDuration = audioRegion.duration
                         return Option.wrap({
                             update: (dragEvent: Dragging.Event) => {
-                                const localX = dragEvent.clientX - clientRect.left - regionStartX
-                                const normalized = clamp(localX / regionWidth, 0, 1)
+                                const pointerPpqn = range.xToUnit(dragEvent.clientX - clientRect.left)
                                 editing.modify(() => {
                                     if (isFadeIn) {
-                                        field.setValue(Math.min(normalized, audioRegion.fading.out - 0.01))
+                                        // fadeIn is PPQN from start
+                                        const fadeInPpqn = clamp(pointerPpqn - regionPosition, 0, regionDuration - audioRegion.fading.out)
+                                        field.setValue(fadeInPpqn)
                                     } else {
-                                        field.setValue(Math.max(normalized, audioRegion.fading.in + 0.01))
+                                        // fadeOut is PPQN from end (backwards)
+                                        const fadeOutPpqn = clamp(regionPosition + regionDuration - pointerPpqn, 0, regionDuration - audioRegion.fading.in)
+                                        field.setValue(fadeOutPpqn)
                                     }
                                 }, false)
                             },

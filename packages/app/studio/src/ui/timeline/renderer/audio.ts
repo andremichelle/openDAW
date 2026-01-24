@@ -1,26 +1,40 @@
 import {Peaks, PeaksPainter} from "@opendaw/lib-fusion"
 import {TimelineRange} from "@opendaw/studio-core"
 import {AudioFileBoxAdapter, AudioPlayMode} from "@opendaw/studio-adapters"
-import {Curve, Option} from "@opendaw/lib-std"
+import {Curve, Option, TAU} from "@opendaw/lib-std"
 import {RegionBound} from "@/ui/timeline/renderer/env"
-import {dbToGain, LoopableRegion, PPQN, TempoChangeGrid, TempoMap} from "@opendaw/lib-dsp"
+import {
+    dbToGain,
+    FadingEnvelope,
+    LoopableRegion,
+    PPQN,
+    TempoChangeGrid,
+    TempoMap,
+} from "@opendaw/lib-dsp"
 
-type Segment = { x0: number, x1: number, u0: number, u1: number, outside: boolean }
-export const renderAudio = (context: CanvasRenderingContext2D,
-                            range: TimelineRange,
-                            file: AudioFileBoxAdapter,
-                            tempoMap: TempoMap,
-                            playMode: Option<AudioPlayMode>,
-                            waveformOffset: number,
-                            gain: number,
-                            {top, bottom}: RegionBound,
-                            contentColor: string,
-                            {
-                                rawStart,
-                                resultStart,
-                                resultEnd
-                            }: LoopableRegion.LoopCycle, clip: boolean = true) => {
-    if (file.peaks.isEmpty()) {return}
+type Segment = {
+    x0: number
+    x1: number
+    u0: number
+    u1: number
+    outside: boolean
+}
+export const renderAudio = (
+    context: CanvasRenderingContext2D,
+    range: TimelineRange,
+    file: AudioFileBoxAdapter,
+    tempoMap: TempoMap,
+    playMode: Option<AudioPlayMode>,
+    waveformOffset: number,
+    gain: number,
+    {top, bottom}: RegionBound,
+    contentColor: string,
+    {rawStart, resultStart, resultEnd}: LoopableRegion.LoopCycle,
+    clip: boolean = true,
+) => {
+    if (file.peaks.isEmpty()) {
+        return
+    }
     const peaks: Peaks = file.peaks.unwrap()
     const durationInSeconds = file.endInSeconds - file.startInSeconds
     const numFrames = peaks.numFrames
@@ -32,23 +46,46 @@ export const renderAudio = (context: CanvasRenderingContext2D,
     if (playMode.nonEmpty()) {
         const {warpMarkers} = playMode.unwrap()
         const markers = warpMarkers.asArray()
-        if (markers.length < 2) {return}
+        if (markers.length < 2) {
+            return
+        }
         const first = markers[0]
         const second = markers[1]
         const secondLast = markers[markers.length - 2]
         const last = markers[markers.length - 1]
-        const firstRate = (second.seconds - first.seconds) / (second.position - first.position)
-        const lastRate = (last.seconds - secondLast.seconds) / (last.position - secondLast.position)
-        const addSegment = (posStart: number, posEnd: number, audioStart: number, audioEnd: number, outside: boolean) => {
-            if (posStart >= posEnd) {return}
-            if (posStart > range.unitMax || posEnd < range.unitMin) {return}
-            const clippedStart = Math.max(posStart, range.unitMin - range.unitPadding)
+        const firstRate =
+            (second.seconds - first.seconds) /
+            (second.position - first.position)
+        const lastRate =
+            (last.seconds - secondLast.seconds) /
+            (last.position - secondLast.position)
+        const addSegment = (
+            posStart: number,
+            posEnd: number,
+            audioStart: number,
+            audioEnd: number,
+            outside: boolean,
+        ) => {
+            if (posStart >= posEnd) {
+                return
+            }
+            if (posStart > range.unitMax || posEnd < range.unitMin) {
+                return
+            }
+            const clippedStart = Math.max(
+                posStart,
+                range.unitMin - range.unitPadding,
+            )
             const clippedEnd = Math.min(posEnd, range.unitMax)
-            if (clippedStart >= clippedEnd) {return}
+            if (clippedStart >= clippedEnd) {
+                return
+            }
             const t0 = (clippedStart - posStart) / (posEnd - posStart)
             const t1 = (clippedEnd - posStart) / (posEnd - posStart)
-            let aStart = audioStart + t0 * (audioEnd - audioStart) + waveformOffset
-            let aEnd = audioStart + t1 * (audioEnd - audioStart) + waveformOffset
+            let aStart =
+                audioStart + t0 * (audioEnd - audioStart) + waveformOffset
+            let aEnd =
+                audioStart + t1 * (audioEnd - audioStart) + waveformOffset
             let x0 = range.unitToX(clippedStart) * devicePixelRatio
             let x1 = range.unitToX(clippedEnd) * devicePixelRatio
             if (aStart < 0.0) {
@@ -61,75 +98,142 @@ export const renderAudio = (context: CanvasRenderingContext2D,
                 x1 = x1 - ratio * (x1 - x0)
                 aEnd = durationInSeconds
             }
-            if (aStart >= aEnd) {return}
+            if (aStart >= aEnd) {
+                return
+            }
             segments.push({
                 x0,
                 x1,
                 u0: (aStart / durationInSeconds) * numFrames,
                 u1: (aEnd / durationInSeconds) * numFrames,
-                outside
+                outside,
             })
         }
-        const handleSegment = (segmentStart: number, segmentEnd: number, audioStartSeconds: number, audioEndSeconds: number) => {
-            if (segmentStart >= segmentEnd) {return}
+        const handleSegment = (
+            segmentStart: number,
+            segmentEnd: number,
+            audioStartSeconds: number,
+            audioEndSeconds: number,
+        ) => {
+            if (segmentStart >= segmentEnd) {
+                return
+            }
             if (clip) {
-                if (segmentEnd <= resultStart || segmentStart >= resultEnd) {return}
+                if (segmentEnd <= resultStart || segmentStart >= resultEnd) {
+                    return
+                }
                 const clippedStart = Math.max(segmentStart, resultStart)
                 const clippedEnd = Math.min(segmentEnd, resultEnd)
-                const t0 = (clippedStart - segmentStart) / (segmentEnd - segmentStart)
-                const t1 = (clippedEnd - segmentStart) / (segmentEnd - segmentStart)
-                const aStart = audioStartSeconds + t0 * (audioEndSeconds - audioStartSeconds)
-                const aEnd = audioStartSeconds + t1 * (audioEndSeconds - audioStartSeconds)
+                const t0 =
+                    (clippedStart - segmentStart) / (segmentEnd - segmentStart)
+                const t1 =
+                    (clippedEnd - segmentStart) / (segmentEnd - segmentStart)
+                const aStart =
+                    audioStartSeconds +
+                    t0 * (audioEndSeconds - audioStartSeconds)
+                const aEnd =
+                    audioStartSeconds +
+                    t1 * (audioEndSeconds - audioStartSeconds)
                 addSegment(clippedStart, clippedEnd, aStart, aEnd, false)
             } else {
-                const rate = (audioEndSeconds - audioStartSeconds) / (segmentEnd - segmentStart)
+                const rate =
+                    (audioEndSeconds - audioStartSeconds) /
+                    (segmentEnd - segmentStart)
                 // Before audible
                 if (segmentStart < resultStart) {
                     const endPos = Math.min(segmentEnd, resultStart)
-                    const aEnd = audioStartSeconds + (endPos - segmentStart) * rate
-                    addSegment(segmentStart, endPos, audioStartSeconds, aEnd, true)
+                    const aEnd =
+                        audioStartSeconds + (endPos - segmentStart) * rate
+                    addSegment(
+                        segmentStart,
+                        endPos,
+                        audioStartSeconds,
+                        aEnd,
+                        true,
+                    )
                 }
                 // Audible
                 if (segmentEnd > resultStart && segmentStart < resultEnd) {
                     const startPos = Math.max(segmentStart, resultStart)
                     const endPos = Math.min(segmentEnd, resultEnd)
-                    const aStart = audioStartSeconds + (startPos - segmentStart) * rate
-                    const aEnd = audioStartSeconds + (endPos - segmentStart) * rate
+                    const aStart =
+                        audioStartSeconds + (startPos - segmentStart) * rate
+                    const aEnd =
+                        audioStartSeconds + (endPos - segmentStart) * rate
                     addSegment(startPos, endPos, aStart, aEnd, false)
                 }
                 // After audible
                 if (segmentEnd > resultEnd) {
                     const startPos = Math.max(segmentStart, resultEnd)
-                    const aStart = audioStartSeconds + (startPos - segmentStart) * rate
-                    addSegment(startPos, segmentEnd, aStart, audioEndSeconds, true)
+                    const aStart =
+                        audioStartSeconds + (startPos - segmentStart) * rate
+                    addSegment(
+                        startPos,
+                        segmentEnd,
+                        aStart,
+                        audioEndSeconds,
+                        true,
+                    )
                 }
             }
         }
-        const visibleLocalStart = (clip ? resultStart : range.unitMin) - rawStart
+        const visibleLocalStart =
+            (clip ? resultStart : range.unitMin) - rawStart
         const visibleLocalEnd = (clip ? resultEnd : range.unitMax) - rawStart
         // With positive offset, audio from file start appears BEFORE first.position
         // With negative offset, audio from file end appears AFTER last.position
-        const extraNeededBefore = waveformOffset > 0 ? waveformOffset / firstRate : 0
-        const extraNeededAfter = waveformOffset < 0 ? -waveformOffset / lastRate : 0
-        const extrapolateStartLocal = Math.min(visibleLocalStart, first.position - extraNeededBefore)
-        const extrapolateEndLocal = Math.max(visibleLocalEnd, last.position + extraNeededAfter)
+        const extraNeededBefore =
+            waveformOffset > 0 ? waveformOffset / firstRate : 0
+        const extraNeededAfter =
+            waveformOffset < 0 ? -waveformOffset / lastRate : 0
+        const extrapolateStartLocal = Math.min(
+            visibleLocalStart,
+            first.position - extraNeededBefore,
+        )
+        const extrapolateEndLocal = Math.max(
+            visibleLocalEnd,
+            last.position + extraNeededAfter,
+        )
         // Extrapolate before the first warp marker
         if (extrapolateStartLocal < first.position) {
-            const audioStart = first.seconds + (extrapolateStartLocal - first.position) * firstRate
-            handleSegment(rawStart + extrapolateStartLocal, rawStart + first.position, audioStart, first.seconds)
+            const audioStart =
+                first.seconds +
+                (extrapolateStartLocal - first.position) * firstRate
+            handleSegment(
+                rawStart + extrapolateStartLocal,
+                rawStart + first.position,
+                audioStart,
+                first.seconds,
+            )
         }
         // Interior warp segments - only iterate visible range
-        const startIndex = Math.max(0, warpMarkers.floorLastIndex(visibleLocalStart))
+        const startIndex = Math.max(
+            0,
+            warpMarkers.floorLastIndex(visibleLocalStart),
+        )
         for (let i = startIndex; i < markers.length - 1; i++) {
             const w0 = markers[i]
-            if (w0.position > visibleLocalEnd) {break}
+            if (w0.position > visibleLocalEnd) {
+                break
+            }
             const w1 = markers[i + 1]
-            handleSegment(rawStart + w0.position, rawStart + w1.position, w0.seconds, w1.seconds)
+            handleSegment(
+                rawStart + w0.position,
+                rawStart + w1.position,
+                w0.seconds,
+                w1.seconds,
+            )
         }
         // Extrapolate after the last warp marker
         if (extrapolateEndLocal > last.position) {
-            const audioEnd = last.seconds + (extrapolateEndLocal - last.position) * lastRate
-            handleSegment(rawStart + last.position, rawStart + extrapolateEndLocal, last.seconds, audioEnd)
+            const audioEnd =
+                last.seconds + (extrapolateEndLocal - last.position) * lastRate
+            handleSegment(
+                rawStart + last.position,
+                rawStart + extrapolateEndLocal,
+                last.seconds,
+                audioEnd,
+            )
         }
     } else {
         // Non-stretch mode - audio plays at 100% original speed
@@ -142,13 +246,30 @@ export const renderAudio = (context: CanvasRenderingContext2D,
             tempoMap.ppqnToSeconds(ppqn) - regionStartSeconds + waveformOffset
 
         // Fixed step size for consistent rendering across zoom levels
-        const addSegmentDirect = (ppqnStart: number, ppqnEnd: number,
-                                  audioStart: number, audioEnd: number, outside: boolean) => {
-            if (ppqnStart >= ppqnEnd) {return}
-            if (ppqnEnd < range.unitMin - range.unitPadding || ppqnStart > range.unitMax) {return}
-            const clippedStart = Math.max(ppqnStart, range.unitMin - range.unitPadding)
+        const addSegmentDirect = (
+            ppqnStart: number,
+            ppqnEnd: number,
+            audioStart: number,
+            audioEnd: number,
+            outside: boolean,
+        ) => {
+            if (ppqnStart >= ppqnEnd) {
+                return
+            }
+            if (
+                ppqnEnd < range.unitMin - range.unitPadding ||
+                ppqnStart > range.unitMax
+            ) {
+                return
+            }
+            const clippedStart = Math.max(
+                ppqnStart,
+                range.unitMin - range.unitPadding,
+            )
             const clippedEnd = Math.min(ppqnEnd, range.unitMax)
-            if (clippedStart >= clippedEnd) {return}
+            if (clippedStart >= clippedEnd) {
+                return
+            }
             // Interpolate audio times for clipped range
             const t0 = (clippedStart - ppqnStart) / (ppqnEnd - ppqnStart)
             const t1 = (clippedEnd - ppqnStart) / (ppqnEnd - ppqnStart)
@@ -166,7 +287,9 @@ export const renderAudio = (context: CanvasRenderingContext2D,
                 x1 -= ratio * (x1 - x0)
                 aEnd = durationInSeconds
             }
-            if (aStart >= aEnd) {return}
+            if (aStart >= aEnd) {
+                return
+            }
             const u0 = (aStart / durationInSeconds) * numFrames
             const u1 = (aEnd / durationInSeconds) * numFrames
             if (u0 < u1 && x1 - x0 >= 1) {
@@ -175,11 +298,19 @@ export const renderAudio = (context: CanvasRenderingContext2D,
         }
 
         // Similar to stretch mode: handle clipping at region boundaries
-        const handleTempoSegment = (segStart: number, segEnd: number,
-                                    audioStart: number, audioEnd: number) => {
-            if (segStart >= segEnd) {return}
+        const handleTempoSegment = (
+            segStart: number,
+            segEnd: number,
+            audioStart: number,
+            audioEnd: number,
+        ) => {
+            if (segStart >= segEnd) {
+                return
+            }
             if (clip) {
-                if (segEnd <= resultStart || segStart >= resultEnd) {return}
+                if (segEnd <= resultStart || segStart >= resultEnd) {
+                    return
+                }
                 const clippedStart = Math.max(segStart, resultStart)
                 const clippedEnd = Math.min(segEnd, resultEnd)
                 const t0 = (clippedStart - segStart) / (segEnd - segStart)
@@ -214,21 +345,34 @@ export const renderAudio = (context: CanvasRenderingContext2D,
 
         // Calculate iteration bounds
         // Where does audioTime = 0? Solve: ppqnToSeconds(ppqn) - regionStartSeconds + waveformOffset = 0
-        const audioStartPPQN = tempoMap.secondsToPPQN(regionStartSeconds - waveformOffset)
+        const audioStartPPQN = tempoMap.secondsToPPQN(
+            regionStartSeconds - waveformOffset,
+        )
         // Where does audioTime = durationInSeconds?
-        const audioEndPPQN = tempoMap.secondsToPPQN(regionStartSeconds - waveformOffset + durationInSeconds)
+        const audioEndPPQN = tempoMap.secondsToPPQN(
+            regionStartSeconds - waveformOffset + durationInSeconds,
+        )
 
         // Determine visible iteration range (include padding on the left for smooth scrolling)
         const iterStart = clip
             ? Math.max(resultStart, range.unitMin - range.unitPadding)
-            : Math.max(Math.min(audioStartPPQN, resultStart), range.unitMin - range.unitPadding)
+            : Math.max(
+                  Math.min(audioStartPPQN, resultStart),
+                  range.unitMin - range.unitPadding,
+              )
         const iterEnd = clip
             ? Math.min(resultEnd, range.unitMax + TempoChangeGrid)
-            : Math.min(Math.max(audioEndPPQN, resultEnd), range.unitMax + TempoChangeGrid)
+            : Math.min(
+                  Math.max(audioEndPPQN, resultEnd),
+                  range.unitMax + TempoChangeGrid,
+              )
 
         // Dynamic step size: ensure each step is at least 1 device pixel wide
         const minStepSize = range.unitsPerPixel * devicePixelRatio
-        const stepSize = Math.max(TempoChangeGrid, Math.ceil(minStepSize / TempoChangeGrid) * TempoChangeGrid)
+        const stepSize = Math.max(
+            TempoChangeGrid,
+            Math.ceil(minStepSize / TempoChangeGrid) * TempoChangeGrid,
+        )
 
         // Align to grid for consistent rendering across zoom levels
         let currentPPQN = Math.floor(iterStart / stepSize) * stepSize
@@ -239,12 +383,20 @@ export const renderAudio = (context: CanvasRenderingContext2D,
         while (currentPPQN < iterEnd) {
             const nextPPQN = currentPPQN + stepSize
             // Incremental: get tempo at current position and compute step duration
-            const stepSeconds = PPQN.pulsesToSeconds(stepSize, tempoMap.getTempoAt(currentPPQN))
+            const stepSeconds = PPQN.pulsesToSeconds(
+                stepSize,
+                tempoMap.getTempoAt(currentPPQN),
+            )
             const nextAudioTime = currentAudioTime + stepSeconds
 
             // Skip if entirely outside audio file range
             if (nextAudioTime > 0 && currentAudioTime < durationInSeconds) {
-                handleTempoSegment(currentPPQN, nextPPQN, currentAudioTime, nextAudioTime)
+                handleTempoSegment(
+                    currentPPQN,
+                    nextPPQN,
+                    currentAudioTime,
+                    nextAudioTime,
+                )
             }
             currentPPQN = nextPPQN
             currentAudioTime = nextAudioTime
@@ -253,14 +405,17 @@ export const renderAudio = (context: CanvasRenderingContext2D,
 
     context.fillStyle = contentColor
     for (const {x0, x1, u0, u1, outside} of segments) {
-        context.globalAlpha = outside && !clip ? 0.25 : 1.00
+        context.globalAlpha = outside && !clip ? 0.25 : 1.0
         for (let channel = 0; channel < numberOfChannels; channel++) {
             PeaksPainter.renderBlocks(context, peaks, channel, {
-                u0, u1,
-                v0: -scale, v1: +scale,
-                x0, x1,
+                u0,
+                u1,
+                v0: -scale,
+                v1: +scale,
+                x0,
+                x1,
                 y0: 3 + top + channel * peaksHeight,
-                y1: 3 + top + (channel + 1) * peaksHeight
+                y1: 3 + top + (channel + 1) * peaksHeight,
             })
         }
     }
@@ -269,71 +424,65 @@ export const renderAudio = (context: CanvasRenderingContext2D,
 export const renderFading = (
     context: CanvasRenderingContext2D,
     range: TimelineRange,
-    fadeIn: number,
-    fadeOut: number,
-    fadeInSlope: number,
-    fadeOutSlope: number,
+    fading: FadingEnvelope.Config,
     {top, bottom}: RegionBound,
     startPPQN: number,
     endPPQN: number,
     color: string,
-    handleColor: string
+    handleColor: string,
 ): void => {
-    const height = bottom - top
+    const {
+        in: fadeIn,
+        out: fadeOut,
+        inSlope: fadeInSlope,
+        outSlope: fadeOutSlope,
+    } = fading
     const dpr = devicePixelRatio
-    const handleRadius = 5 * dpr
+    const height = bottom - top
+    const handleRadius = 3 * dpr
     context.fillStyle = color
     if (fadeIn > 0) {
-        const fadeInEndPPQN = startPPQN + (endPPQN - startPPQN) * fadeIn
+        const fadeInEndPPQN = startPPQN + fadeIn
         const x0 = range.unitToX(startPPQN) * dpr
         const x1 = range.unitToX(fadeInEndPPQN) * dpr
-        context.beginPath()
-        context.moveTo(x0, bottom)
-        const steps = Math.max(10, Math.abs(x1 - x0) / 2)
-        for (let i = 0; i <= steps; i++) {
-            const t = i / steps
-            const x = x0 + (x1 - x0) * t
-            const gain = Curve.normalizedAt(t, fadeInSlope)
-            const y = bottom - height * gain
-            context.lineTo(x, y)
-        }
-        context.lineTo(x0, bottom)
-        context.closePath()
-        context.fill()
-    }
-    if (fadeOut < 1) {
-        const fadeOutStartPPQN = startPPQN + (endPPQN - startPPQN) * fadeOut
-        const x0 = range.unitToX(fadeOutStartPPQN) * dpr
-        const x1 = range.unitToX(endPPQN) * dpr
+        const xn = x1 - x0
         context.beginPath()
         context.moveTo(x0, top)
-        const steps = Math.max(10, Math.abs(x1 - x0) / 2)
-        for (let i = 0; i <= steps; i++) {
-            const t = i / steps
-            const x = x0 + (x1 - x0) * t
-            const gain = 1.0 - Curve.normalizedAt(t, fadeOutSlope)
-            const y = top + height * (1 - gain)
-            context.lineTo(x, y)
+        let x = x0
+        for (const y of Curve.walk(fadeInSlope, xn, top + height, top)) {
+            context.lineTo(++x, y)
         }
-        context.lineTo(x1, bottom)
-        context.lineTo(x0, bottom)
+        context.lineTo(x1, top)
         context.closePath()
         context.fill()
     }
-    const minHandleOffset = 8 * dpr
-    const fadeInHandleX = range.unitToX(startPPQN + (endPPQN - startPPQN) * fadeIn) * dpr
-    const fadeOutHandleX = range.unitToX(startPPQN + (endPPQN - startPPQN) * fadeOut) * dpr
+    if (fadeOut > 0) {
+        const x0 = range.unitToX(endPPQN - fadeOut) * dpr
+        const x1 = range.unitToX(endPPQN) * dpr
+        const xn = Math.abs(x1 - x0)
+        context.beginPath()
+        context.moveTo(x0, top)
+        let x = x0
+        for (const y of Curve.walk(fadeOutSlope, xn, top, top + height)) {
+            context.lineTo(++x, y)
+        }
+        context.lineTo(x1, top)
+        context.closePath()
+        context.fill()
+    }
+    const fadeInHandleX = range.unitToX(startPPQN + fadeIn) * dpr
+    const fadeOutHandleX = range.unitToX(endPPQN - fadeOut) * dpr
     const regionStartX = range.unitToX(startPPQN) * dpr
     const regionEndX = range.unitToX(endPPQN) * dpr
-    const adjustedFadeInX = Math.max(fadeInHandleX, regionStartX + minHandleOffset)
-    const adjustedFadeOutX = Math.min(fadeOutHandleX, regionEndX - minHandleOffset)
+    const adjustedFadeInX = Math.max(fadeInHandleX, regionStartX)
+    const adjustedFadeOutX = Math.min(fadeOutHandleX, regionEndX)
     if (adjustedFadeOutX - adjustedFadeInX > handleRadius * 4) {
         context.fillStyle = handleColor
         context.beginPath()
-        context.arc(adjustedFadeInX, top + handleRadius, handleRadius, 0, Math.PI * 2)
+        context.arc(adjustedFadeInX, top, handleRadius, 0, TAU)
         context.fill()
         context.beginPath()
-        context.arc(adjustedFadeOutX, top + handleRadius, handleRadius, 0, Math.PI * 2)
+        context.arc(adjustedFadeOutX, top, handleRadius, 0, TAU)
         context.fill()
     }
 }

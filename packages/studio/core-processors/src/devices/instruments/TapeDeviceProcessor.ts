@@ -122,7 +122,8 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                             for (const cycle of LoopableRegion.locateLoops(region, p0, p1)) {
                                 const timeStretchBoxAdapter = timeStretch.unwrap()
                                 this.#processPassTimestretch(lane, block, cycle,
-                                    optData.unwrap(), timeStretchBoxAdapter, transients, waveformOffset, region.fading)
+                                    optData.unwrap(), timeStretchBoxAdapter, transients, waveformOffset, region.fading,
+                                    region.position, region.duration)
                             }
                         } else {
                             for (const cycle of LoopableRegion.locateLoops(region, p0, p1)) {
@@ -149,7 +150,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                             complete: Number.POSITIVE_INFINITY
                         }, sectionFrom, sectionTo)) {
                             this.#processPassTimestretch(lane, block, cycle, optData.unwrap(),
-                                timeStretch, transients, clip.waveformOffset.getValue(), null)
+                                timeStretch, transients, clip.waveformOffset.getValue(), null, 0, clip.duration)
                         }
                     } else {
                         for (const cycle of LoopableRegion.locateLoops({
@@ -219,9 +220,12 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             const offset = (currentSeconds + waveformOffset) * data.sampleRate
             this.#updateOrCreatePitchVoice(lane, data, playbackRate, offset, 0)
         }
-        const fadingConfig = isInstanceOf(adapter, AudioRegionBoxAdapter) ? adapter.fading : null
-        if (fadingConfig !== null && fadingConfig.hasFading) {
-            FadingEnvelope.fillGainBuffer(this.#fadingGainBuffer, cycle.resultStartValue, cycle.resultEndValue, bpn, fadingConfig)
+        if (isInstanceOf(adapter, AudioRegionBoxAdapter) && adapter.fading.hasFading) {
+            const regionPosition = adapter.position
+            const regionDuration = adapter.duration
+            const startPpqn = cycle.resultStart - regionPosition
+            const endPpqn = cycle.resultEnd - regionPosition
+            FadingEnvelope.fillGainBuffer(this.#fadingGainBuffer, startPpqn, endPpqn, regionDuration, bpn, adapter.fading)
         } else {
             this.#fadingGainBuffer.fill(1.0, 0, bpn)
         }
@@ -286,7 +290,9 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                             timeStretch: AudioTimeStretchBoxAdapter,
                             transients: EventCollection<TransientMarkerBoxAdapter>,
                             waveformOffset: number,
-                            fadingConfig: FadingEnvelope.Config | null): void {
+                            fadingConfig: FadingEnvelope.Config | null,
+                            regionPosition: number,
+                            regionDuration: number): void {
         for (const voice of lane.voices) {
             if (voice instanceof PitchVoice || voice instanceof DirectVoice) {
                 voice.startFadeOut(0)
@@ -300,8 +306,10 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         const bp0 = s0 + sn * r0
         const bp1 = s0 + sn * r1
         const bpn = (bp1 - bp0) | 0
-        if (fadingConfig !== null && fadingConfig.in > 0.0 || fadingConfig !== null && fadingConfig.out < 1.0) {
-            FadingEnvelope.fillGainBuffer(this.#fadingGainBuffer, cycle.resultStartValue, cycle.resultEndValue, bpn, fadingConfig)
+        if (fadingConfig !== null && FadingEnvelope.hasFading(fadingConfig)) {
+            const startPpqn = cycle.resultStart - regionPosition
+            const endPpqn = cycle.resultEnd - regionPosition
+            FadingEnvelope.fillGainBuffer(this.#fadingGainBuffer, startPpqn, endPpqn, regionDuration, bpn, fadingConfig)
         } else {
             this.#fadingGainBuffer.fill(1.0, 0, bpn)
         }

@@ -114,8 +114,7 @@ export const renderRegions = (context: CanvasRenderingContext2D,
                         renderAudio(context, range, region.file, tempoMap, region.observableOptPlayMode, region.waveformOffset.getValue(),
                             region.gain.getValue(), bound, contentColor, pass)
                     }
-                    const {fading} = region
-                    renderFading(context, range, fading.in, fading.out, fading.inSlope, fading.outSlope,
+                    renderFading(context, range, region.fading,
                         bound, position, position + region.duration, `hsla(${region.hue}, 60%, 30%, 0.5)`,
                         `hsla(${region.hue}, 80%, 50%, 1.0)`)
                     const isRecording = region.file.getOrCreateLoader().state.type === "record"
