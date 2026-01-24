@@ -77,53 +77,28 @@ import {Fading} from "@opendaw/studio-boxes"
 import {FadingEnvelope} from "@opendaw/lib-dsp"
 import {MutableObservableValue, unitValue} from "@opendaw/lib-std"
 
-/**
- * Adapter for the generated Fading object.
- * Implements FadingEnvelope.Config so it can be passed directly to DSP functions.
- */
 export class FadingAdapter implements FadingEnvelope.Config {
     readonly #fading: Fading
-
-    constructor(fading: Fading) {
-        this.#fading = fading
-    }
-
-    // Direct field accessors (postfix "Field") for subscriptions/mutations
+    constructor(fading: Fading) {this.#fading = fading}
     get inField(): MutableObservableValue<number> {return this.#fading.in}
     get outField(): MutableObservableValue<number> {return this.#fading.out}
     get inSlopeField(): MutableObservableValue<number> {return this.#fading.inSlope}
     get outSlopeField(): MutableObservableValue<number> {return this.#fading.outSlope}
-
-    // FadingEnvelope.Config implementation - value getters
     get in(): unitValue {return this.#fading.in.getValue()}
     get out(): unitValue {return this.#fading.out.getValue()}
     get inSlope(): unitValue {return this.#fading.inSlope.getValue()}
     get outSlope(): unitValue {return this.#fading.outSlope.getValue()}
-
-    // Check if any fading is active
-    get hasFading(): boolean {
-        return this.in > 0.0 || this.out < 1.0
-    }
-
-    // Delegate to FadingEnvelope for gain calculation
-    gainAt(normalizedPosition: unitValue): number {
-        return FadingEnvelope.gainAt(normalizedPosition, this)
-    }
-
-    // Fill a gain buffer with fading envelope (delegates to FadingEnvelope)
+    get hasFading(): boolean {return this.in > 0.0 || this.out < 1.0}
+    gainAt(normalizedPosition: unitValue): number {return FadingEnvelope.gainAt(normalizedPosition, this)}
     fillGainBuffer(gainBuffer: Float32Array, startNormalized: number, endNormalized: number, sampleCount: number): void {
         FadingEnvelope.fillGainBuffer(gainBuffer, startNormalized, endNormalized, sampleCount, this)
     }
-
-    // Copy values to another Fading object
     copyTo(target: Fading): void {
         target.in.setValue(this.in)
         target.out.setValue(this.out)
         target.inSlope.setValue(this.inSlope)
         target.outSlope.setValue(this.outSlope)
     }
-
-    // Reset to defaults (no fading)
     reset(): void {
         this.#fading.in.setValue(0.0)
         this.#fading.out.setValue(1.0)
@@ -179,50 +154,27 @@ export class AudioRegionBoxAdapter implements ... {
 import {Curve, int, unitValue} from "@opendaw/lib-std"
 
 export namespace FadingEnvelope {
-    /**
-     * Interface for fading configuration.
-     * FadingAdapter implements this interface directly.
-     */
     export interface Config {
-        readonly in: unitValue       // 0.0-1.0: normalized end of fade-in
-        readonly out: unitValue      // 0.0-1.0: normalized start of fade-out
-        readonly inSlope: unitValue  // 0.5 = linear
+        readonly in: unitValue
+        readonly out: unitValue
+        readonly inSlope: unitValue
         readonly outSlope: unitValue
     }
 
-    /**
-     * Calculate fade gain at a normalized position within region (0.0-1.0)
-     * Returns gain multiplier 0.0-1.0
-     */
     export const gainAt = (normalizedPosition: unitValue, config: Config): number => {
         const {in: fadeIn, out: fadeOut, inSlope, outSlope} = config
-
         let fadeInGain = 1.0
         let fadeOutGain = 1.0
-
         if (fadeIn > 0.0 && normalizedPosition < fadeIn) {
             fadeInGain = Curve.normalizedAt(normalizedPosition / fadeIn, inSlope)
         }
-
         if (fadeOut < 1.0 && normalizedPosition > fadeOut) {
             const progress = (normalizedPosition - fadeOut) / (1.0 - fadeOut)
             fadeOutGain = 1.0 - Curve.normalizedAt(progress, outSlope)
         }
-
         return Math.min(fadeInGain, fadeOutGain)
     }
 
-    /**
-     * Fill a gain buffer with the fading envelope.
-     * Uses Curve.walk for efficient envelope generation without per-sample pow() calls.
-     * The gain buffer can then be applied to audio by voices.
-     *
-     * @param gainBuffer - Float32Array to fill with gain values (length = RenderQuantum)
-     * @param startNormalized - Normalized position at block start (0.0-1.0)
-     * @param endNormalized - Normalized position at block end (0.0-1.0)
-     * @param sampleCount - Number of samples to fill
-     * @param config - Fading configuration (FadingAdapter implements this)
-     */
     export const fillGainBuffer = (
         gainBuffer: Float32Array,
         startNormalized: number,
@@ -231,26 +183,13 @@ export namespace FadingEnvelope {
         config: Config
     ): void => {
         const {in: fadeIn, out: fadeOut, inSlope, outSlope} = config
-
-        // Initialize to 1.0 (no attenuation)
         gainBuffer.fill(1.0, 0, sampleCount)
-
-        // No fading active - buffer already filled with 1.0
         if (fadeIn <= 0.0 && fadeOut >= 1.0) {return}
-
-        // Block entirely in unity region - buffer already filled with 1.0
         if (startNormalized >= fadeIn && endNormalized <= fadeOut) {return}
-
         const normalizedPerSample = (endNormalized - startNormalized) / sampleCount
-
-        // Fill fade-in region using Curve.walk
         if (fadeIn > 0.0 && startNormalized < fadeIn) {
             const fadeInEndNorm = Math.min(endNormalized, fadeIn)
-            const fadeInEndSample = Math.min(
-                sampleCount,
-                Math.ceil((fadeInEndNorm - startNormalized) / normalizedPerSample)
-            )
-
+            const fadeInEndSample = Math.min(sampleCount, Math.ceil((fadeInEndNorm - startNormalized) / normalizedPerSample))
             if (fadeInEndSample > 0) {
                 const startProgress = startNormalized / fadeIn
                 const endProgress = fadeInEndNorm / fadeIn
@@ -260,28 +199,19 @@ export namespace FadingEnvelope {
                 }
             }
         }
-
-        // Fill fade-out region using Curve.walk
         if (fadeOut < 1.0 && endNormalized > fadeOut) {
             const fadeOutStartNorm = Math.max(startNormalized, fadeOut)
-            const fadeOutStartSample = Math.max(
-                0,
-                Math.floor((fadeOutStartNorm - startNormalized) / normalizedPerSample)
-            )
+            const fadeOutStartSample = Math.max(0, Math.floor((fadeOutStartNorm - startNormalized) / normalizedPerSample))
             const steps = sampleCount - fadeOutStartSample
-
             if (steps > 0) {
                 const startProgress = (fadeOutStartNorm - fadeOut) / (1.0 - fadeOut)
                 const endProgress = (endNormalized - fadeOut) / (1.0 - fadeOut)
-                // Walk from 1.0 down to 0.0 (inverted)
                 const iterator = Curve.walk(outSlope, steps, 1.0 - startProgress, 1.0 - endProgress)
                 for (let i = fadeOutStartSample; i < sampleCount; i++) {
                     gainBuffer[i] = Math.min(gainBuffer[i], iterator.next().value)
                 }
             }
         }
-
-        // Handle overlap region (already handled by Math.min above)
     }
 }
 ```
@@ -294,35 +224,15 @@ Add a shared gain buffer and compute fading envelope once per region:
 
 ```typescript
 import {RenderQuantum} from "@opendaw/lib-dsp"
-import {FadingEnvelope} from "@opendaw/lib-dsp"
 
 export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProcessor, AudioGenerator {
-    // Shared gain buffer - reused each block to avoid allocations
     readonly #fadingGainBuffer: Float32Array = new Float32Array(RenderQuantum)
-
-    // ...
-
     #processBlock(lane: Lane, block: Block): void {
-        // ...
         for (const region of adapter.regions.collection.iterateRange(p0, p1)) {
             if (region.mute || !isInstanceOf(region, AudioRegionBoxAdapter)) {continue}
-
             const {fading} = region
-
-            // Compute fading envelope into shared gain buffer (once per region)
-            if (fading.hasFading) {
-                const startNormalized = /* compute from cycle */
-                const endNormalized = /* compute from cycle */
-                FadingEnvelope.fillGainBuffer(
-                    this.#fadingGainBuffer,
-                    startNormalized,
-                    endNormalized,
-                    fading
-                )
-            }
-
-            // Pass gain buffer to voice processing
-            // Voices apply: buffer[i] *= gainBuffer[i] for both channels
+            fading.fillGainBuffer(this.#fadingGainBuffer, startNormalized, endNormalized, sampleCount)
+            // Pass to voices
         }
     }
 }
@@ -332,40 +242,27 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
 
 #### File: `packages/studio/core-processors/src/devices/instruments/Tape/DirectVoice.ts`
 
-Update `process` method to accept an optional gain buffer:
+Update `process` method to accept the gain buffer:
 
 ```typescript
 export class DirectVoice {
-    // ... existing fields ...
-
-    /**
-     * Renders audio samples to the output buffer.
-     * @param bufferStart - Start position in the output buffer
-     * @param bufferCount - Number of samples to process
-     * @param fadingGainBuffer - Pre-computed fading gain buffer (filled with 1.0 if no fading)
-     */
     process(bufferStart: int, bufferCount: int, fadingGainBuffer: Float32Array): void {
         const [outL, outR] = this.#output.channels()
-        const {frames, numberOfFrames} = this.#data
         const framesL = frames[0]
         const framesR = frames.length === 1 ? frames[0] : frames[1]
-        // ... existing state variables ...
-
         for (let i = 0; i < bufferCount; i++) {
-            // ... existing amplitude calculation (voice fade-in/fade-out) ...
-
+            // ... existing voice amplitude calculation ...
             if (readPosition >= 0 && readPosition < numberOfFrames) {
                 const finalAmplitude = amplitude * fadingGainBuffer[i]
                 outL[j] += framesL[readPosition] * finalAmplitude
                 outR[j] += framesR[readPosition] * finalAmplitude
             }
-            // ... rest of processing ...
         }
     }
 }
 ```
 
-Apply similar changes to `PitchVoice.ts` and the time-stretch sequencer.
+Apply similar changes to `PitchVoice.ts` and `TimeStretchSequencer.ts` - all voice types receive the fadingGainBuffer.
 
 ---
 
@@ -458,32 +355,20 @@ Call `renderFading` after rendering the waveform, using a semi-transparent overl
 
 ### 6.1 Fading Handle Capturing
 
-#### File: `packages/app/studio/src/ui/timeline/editors/audio/AudioCapturing.ts`
+#### File: `packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts`
 
-Add capture targets for fading circle handles:
+Add capture targets for fading circle handles (slope editing deferred to future iteration):
 
 ```typescript
-export type AudioCaptureTarget =
-    | {type: "loop-duration", reader: AudioEventOwnerReader}
-    | {type: "fading-in", reader: AudioEventOwnerReader}
-    | {type: "fading-out", reader: AudioEventOwnerReader}
-    | {type: "fading-in-slope", reader: AudioEventOwnerReader}
-    | {type: "fading-out-slope", reader: AudioEventOwnerReader}
-
-// Use Geom.isInsideCircle for hit detection (see geom.ts addition below)
-// Fading in handle: circle at (fadeIn position, top of curve)
-// Fading out handle: circle at (fadeOut position, top of curve)
-// Slope handles: circles on the curve midpoint for bending
+export type RegionCaptureTarget =
+    | {type: "fading-in", reader: RegionReader}
+    | {type: "fading-out", reader: RegionReader}
 ```
 
 #### File: `packages/lib/std/src/geom.ts`
 
-Add circle hit detection to the Geom namespace:
-
 ```typescript
 export namespace Geom {
-    // ... existing code ...
-
     export const isInsideCircle = (x: number, y: number, cx: number, cy: number, radius: number): boolean => {
         const dx = x - cx
         const dy = y - cy
@@ -492,60 +377,45 @@ export namespace Geom {
 }
 ```
 
-### 6.2 Fading Editor Integration
+### 6.2 Fading Editor Integration (Main Timeline)
 
-#### File: `packages/app/studio/src/ui/timeline/editors/audio/AudioEditorCanvas.tsx`
+#### File: `packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionRenderer.ts`
 
-Add draggable fading circle handles:
+Add draggable fading circle handles on regions in the main timeline:
 
 ```typescript
-// In the canvas render callback:
-const {fading} = reader.audioContent
-
-// Render fading curves and circle handles
+const {fading} = region
 if (fading.hasFading) {
-    renderFading(context, range,
-        fading.in, fading.out,
-        fading.inSlope, fading.outSlope,
-        {top: 0, bottom: actualHeight},
-        reader.offset,
-        reader.offset + reader.loopDuration,
-        `hsla(${reader.hue}, 60%, 30%, 0.5)`)
-
-    // Render circle handles at fading positions
+    renderFading(context, range, fading.in, fading.out, fading.inSlope, fading.outSlope,
+        {top, bottom}, region.position, region.position + region.duration,
+        `hsla(${region.hue}, 60%, 30%, 0.5)`)
     const handleRadius = 5 * devicePixelRatio
     if (fading.in > 0) {
-        const x = range.unitToX(reader.offset + reader.loopDuration * fading.in) * devicePixelRatio
+        const x = range.unitToX(region.position + region.duration * fading.in) * devicePixelRatio
         context.beginPath()
         context.arc(x, top, handleRadius, 0, Math.PI * 2)
         context.fill()
     }
     if (fading.out < 1) {
-        const x = range.unitToX(reader.offset + reader.loopDuration * fading.out) * devicePixelRatio
+        const x = range.unitToX(region.position + region.duration * fading.out) * devicePixelRatio
         context.beginPath()
         context.arc(x, top, handleRadius, 0, Math.PI * 2)
         context.fill()
     }
 }
-
-// Add dragging handlers for fading circle handles
 Dragging.attach(canvas, event => {
     const target = capturing.captureEvent(event)
-    if (target?.type === "fading-in") {
-        // Drag horizontally to adjust fading.in ratio
-    }
-    if (target?.type === "fading-out") {
-        // Drag horizontally to adjust fading.out ratio
-    }
+    if (target?.type === "fading-in") { /* drag to adjust fading.inField */ }
+    if (target?.type === "fading-out") { /* drag to adjust fading.outField */ }
 })
 ```
 
 ### 6.3 Region Context Menu
 
-Add fading options to the region context menu for quick access:
+Add fading option to the region context menu:
 
 ```typescript
-MenuItem.default({label: "Reset Fades"})
+MenuItem.default({label: "Reset Fading"})
     .setTriggerProcedure(() => editing.modify(() => region.fading.reset()))
 ```
 
@@ -596,10 +466,11 @@ MenuItem.default({label: "Reset Fades"})
 | `packages/lib/std/src/geom.ts` | Add `isInsideCircle` to Geom namespace |
 | `packages/studio/core-processors/src/devices/instruments/Tape/DirectVoice.ts` | Add fadingGainBuffer parameter |
 | `packages/studio/core-processors/src/devices/instruments/Tape/PitchVoice.ts` | Add fadingGainBuffer parameter |
+| `packages/studio/core-processors/src/devices/instruments/Tape/TimeStretchSequencer.ts` | Add fadingGainBuffer parameter |
 | `packages/studio/core-processors/src/devices/instruments/TapeDeviceProcessor.ts` | Add shared gain buffer, fill and pass to voices |
 | `packages/app/studio/src/ui/timeline/renderer/audio.ts` | Add renderFading |
-| `packages/app/studio/src/ui/timeline/editors/audio/AudioEditorCanvas.tsx` | Add fading circle handles and editing |
-| `packages/app/studio/src/ui/timeline/editors/audio/AudioCapturing.ts` | Add fading circle capture targets |
+| `packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionRenderer.ts` | Add fading circle handles and editing |
+| `packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts` | Add fading circle capture targets |
 
 ---
 
@@ -654,10 +525,13 @@ voice.process(bufferStart, bufferCount, gainBuffer)
 ## 10. Notes
 
 ### Looping Regions
-Fades apply to each loop cycle independently. When a region loops, the fade-in and fade-out are computed relative to each individual loop iteration, not the total audible duration.
+Fades are based on `position` and `duration` only - loops are ignored. The fade envelope spans the full region duration regardless of loop settings.
 
 ### Time Base
-Fade ratios are independent of time base (Musical vs Seconds). They always represent a percentage of the current region/loop duration.
+Fading ratios are independent of time base (Musical vs Seconds). They always represent a percentage of the region duration.
 
-### Clips
-Consider whether `AudioClipBoxAdapter` should also support fades. If so, the same pattern can be applied to clips for consistency.
+### Rendering Location
+Fading curves are rendered ONLY in the main timeline view on regions, NOT in the audio editor (which shows a single loop cycle).
+
+### Slope Editing
+Slope adjustment will be implemented in a future iteration. This iteration focuses on fading in/out positions only.
