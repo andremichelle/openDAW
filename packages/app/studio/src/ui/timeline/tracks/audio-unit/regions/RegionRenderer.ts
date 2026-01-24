@@ -5,7 +5,8 @@ import {RegionModifyStrategies, RegionModifyStrategy, TimeGrid, TimelineRange} f
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {renderNotes} from "@/ui/timeline/renderer/notes.ts"
 import {RegionBound} from "@/ui/timeline/renderer/env.ts"
-import {renderAudio, renderFading} from "@/ui/timeline/renderer/audio.ts"
+import {renderAudio} from "@/ui/timeline/renderer/audio.ts"
+import {renderFading} from "@/ui/timeline/renderer/fading.ts"
 import {renderValueStream} from "@/ui/timeline/renderer/value.ts"
 import {Context2d} from "@opendaw/lib-dom"
 import {RegionPaintBucket} from "@/ui/timeline/tracks/audio-unit/regions/RegionPaintBucket"
@@ -33,38 +34,48 @@ export const renderRegions = (context: CanvasRenderingContext2D,
 
     const grid = true
     if (grid) {
-        const {timelineBoxAdapter: {signatureTrack}} = tracks.service.project
+        const {
+            timelineBoxAdapter: {signatureTrack}
+        } = tracks.service.project
         context.fillStyle = "rgba(0, 0, 0, 0.3)"
-        TimeGrid.fragment(signatureTrack, range, ({pulse}) => {
-            const x0 = Math.floor(range.unitToX(pulse) * devicePixelRatio)
-            context.fillRect(x0, 0, devicePixelRatio, height)
-        }, {minLength: 32})
+        TimeGrid.fragment(
+            signatureTrack,
+            range,
+            ({pulse}) => {
+                const x0 = Math.floor(range.unitToX(pulse) * devicePixelRatio)
+                context.fillRect(x0, 0, devicePixelRatio, height)
+            },
+            {minLength: 32}
+        )
     }
     const renderRegions = (strategy: RegionModifyStrategy, filterSelected: boolean, hideSelected: boolean): void => {
         const optTrack = tracks.getByIndex(strategy.translateTrackIndex(index))
-        if (optTrack.isEmpty()) {return}
+        if (optTrack.isEmpty()) {
+            return
+        }
         const trackBoxAdapter = optTrack.unwrap().trackBoxAdapter
         const trackDisabled = !trackBoxAdapter.enabled.getValue()
         const regions = strategy.iterateRange(trackBoxAdapter.regions.collection, unitMin, unitMax)
         const dpr = devicePixelRatio
 
         for (const [region, next] of Iterables.pairWise(regions)) {
-            if (region.isSelected ? hideSelected : !filterSelected) {continue}
+            if (region.isSelected ? hideSelected : !filterSelected) {
+                continue
+            }
 
             const actualComplete = strategy.readComplete(region)
             const position = strategy.readPosition(region)
             const complete = region.isSelected
                 ? actualComplete
-                // for audio region with playback auto-fit
-                : Math.min(actualComplete, next?.position ?? Number.POSITIVE_INFINITY) - unitsPerPixel
+                : // for no-stretched audio region
+                Math.min(actualComplete, next?.position ?? Number.POSITIVE_INFINITY) - unitsPerPixel
 
             const x0Int = Math.floor(range.unitToX(Math.max(position, unitMin)) * dpr)
             const x1Int = Math.max(Math.floor(range.unitToX(Math.min(complete, unitMax)) * dpr), x0Int + dpr)
             const xnInt = x1Int - x0Int
 
-            const {
-                labelColor, labelBackground, contentColor, contentBackground, loopStrokeColor
-            } = RegionPaintBucket.create(region, region.isSelected && !filterSelected, trackDisabled)
+            const {labelColor, labelBackground, contentColor, contentBackground, loopStrokeColor} =
+                RegionPaintBucket.create(region, region.isSelected && !filterSelected, trackDisabled)
 
             context.clearRect(x0Int, 0, xnInt, height)
             context.fillStyle = labelBackground
@@ -80,13 +91,14 @@ export const renderRegions = (context: CanvasRenderingContext2D,
             }
             const text = region.label.length === 0 ? "◻" : region.label
             context.fillText(Context2d.truncateText(context, text, maxTextWidth).text, x0Int + 1, 1 + labelHeight / 2)
-            if (!region.hasCollection) {continue}
+            if (!region.hasCollection) {
+                continue
+            }
             context.fillStyle = contentColor
             region.accept({
                 visitNoteRegionBoxAdapter: (region: NoteRegionBoxAdapter): void => {
                     for (const pass of LoopableRegion.locateLoops({
-                        position,
-                        complete,
+                        position, complete,
                         loopOffset: strategy.readLoopOffset(region),
                         loopDuration: strategy.readLoopDuration(region)
                     }, unitMin, unitMax)) {
@@ -100,8 +112,7 @@ export const renderRegions = (context: CanvasRenderingContext2D,
                 },
                 visitAudioRegionBoxAdapter: (region: AudioRegionBoxAdapter): void => {
                     for (const pass of LoopableRegion.locateLoops({
-                        position,
-                        complete,
+                        position, complete,
                         loopOffset: strategy.readLoopOffset(region),
                         loopDuration: strategy.readLoopDuration(region)
                     }, unitMin, unitMax)) {
@@ -111,12 +122,14 @@ export const renderRegions = (context: CanvasRenderingContext2D,
                             context.fillRect(x, labelHeight, 1, height - labelHeight)
                         }
                         const tempoMap = region.trackBoxAdapter.unwrap().context.tempoMap
-                        renderAudio(context, range, region.file, tempoMap, region.observableOptPlayMode, region.waveformOffset.getValue(),
-                            region.gain.getValue(), bound, contentColor, pass)
+                        renderAudio(context, range, region.file, tempoMap,
+                            region.observableOptPlayMode, region.waveformOffset.getValue(),
+                            region.gain.getValue(), bound, contentColor, pass
+                        )
                     }
-                    renderFading(context, range, region.fading,
-                        bound, position, position + region.duration, `hsla(${region.hue}, 60%, 30%, 0.5)`,
-                        `hsla(${region.hue}, 80%, 50%, 1.0)`)
+                    renderFading(context, range, region.fading, bound, position, complete,
+                        `rgba(0, 0, 0, 0.5)`, labelBackground
+                    )
                     const isRecording = region.file.getOrCreateLoader().state.type === "record"
                     if (isRecording) {}
                 },
@@ -131,8 +144,7 @@ export const renderRegions = (context: CanvasRenderingContext2D,
                     const valueToY = (value: unitValue): number => bottom + value * (top - bottom)
                     const events = region.events.unwrap()
                     for (const pass of LoopableRegion.locateLoops({
-                        position: position,
-                        complete: complete,
+                        position, complete,
                         loopOffset: strategy.readLoopOffset(region),
                         loopDuration: strategy.readLoopDuration(region)
                     }, unitMin, unitMax)) {

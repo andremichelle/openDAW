@@ -1,16 +1,9 @@
 import {Peaks, PeaksPainter} from "@opendaw/lib-fusion"
 import {TimelineRange} from "@opendaw/studio-core"
 import {AudioFileBoxAdapter, AudioPlayMode} from "@opendaw/studio-adapters"
-import {Curve, Option, TAU} from "@opendaw/lib-std"
+import {Option} from "@opendaw/lib-std"
 import {RegionBound} from "@/ui/timeline/renderer/env"
-import {
-    dbToGain,
-    FadingEnvelope,
-    LoopableRegion,
-    PPQN,
-    TempoChangeGrid,
-    TempoMap,
-} from "@opendaw/lib-dsp"
+import {dbToGain, LoopableRegion, PPQN, TempoChangeGrid, TempoMap} from "@opendaw/lib-dsp"
 
 type Segment = {
     x0: number
@@ -30,7 +23,7 @@ export const renderAudio = (
     {top, bottom}: RegionBound,
     contentColor: string,
     {rawStart, resultStart, resultEnd}: LoopableRegion.LoopCycle,
-    clip: boolean = true,
+    clip: boolean = true
 ) => {
     if (file.peaks.isEmpty()) {
         return
@@ -64,7 +57,7 @@ export const renderAudio = (
             posEnd: number,
             audioStart: number,
             audioEnd: number,
-            outside: boolean,
+            outside: boolean
         ) => {
             if (posStart >= posEnd) {
                 return
@@ -74,7 +67,7 @@ export const renderAudio = (
             }
             const clippedStart = Math.max(
                 posStart,
-                range.unitMin - range.unitPadding,
+                range.unitMin - range.unitPadding
             )
             const clippedEnd = Math.min(posEnd, range.unitMax)
             if (clippedStart >= clippedEnd) {
@@ -106,14 +99,14 @@ export const renderAudio = (
                 x1,
                 u0: (aStart / durationInSeconds) * numFrames,
                 u1: (aEnd / durationInSeconds) * numFrames,
-                outside,
+                outside
             })
         }
         const handleSegment = (
             segmentStart: number,
             segmentEnd: number,
             audioStartSeconds: number,
-            audioEndSeconds: number,
+            audioEndSeconds: number
         ) => {
             if (segmentStart >= segmentEnd) {
                 return
@@ -149,7 +142,7 @@ export const renderAudio = (
                         endPos,
                         audioStartSeconds,
                         aEnd,
-                        true,
+                        true
                     )
                 }
                 // Audible
@@ -172,7 +165,7 @@ export const renderAudio = (
                         segmentEnd,
                         aStart,
                         audioEndSeconds,
-                        true,
+                        true
                     )
                 }
             }
@@ -188,11 +181,11 @@ export const renderAudio = (
             waveformOffset < 0 ? -waveformOffset / lastRate : 0
         const extrapolateStartLocal = Math.min(
             visibleLocalStart,
-            first.position - extraNeededBefore,
+            first.position - extraNeededBefore
         )
         const extrapolateEndLocal = Math.max(
             visibleLocalEnd,
-            last.position + extraNeededAfter,
+            last.position + extraNeededAfter
         )
         // Extrapolate before the first warp marker
         if (extrapolateStartLocal < first.position) {
@@ -203,13 +196,13 @@ export const renderAudio = (
                 rawStart + extrapolateStartLocal,
                 rawStart + first.position,
                 audioStart,
-                first.seconds,
+                first.seconds
             )
         }
         // Interior warp segments - only iterate visible range
         const startIndex = Math.max(
             0,
-            warpMarkers.floorLastIndex(visibleLocalStart),
+            warpMarkers.floorLastIndex(visibleLocalStart)
         )
         for (let i = startIndex; i < markers.length - 1; i++) {
             const w0 = markers[i]
@@ -221,7 +214,7 @@ export const renderAudio = (
                 rawStart + w0.position,
                 rawStart + w1.position,
                 w0.seconds,
-                w1.seconds,
+                w1.seconds
             )
         }
         // Extrapolate after the last warp marker
@@ -232,7 +225,7 @@ export const renderAudio = (
                 rawStart + last.position,
                 rawStart + extrapolateEndLocal,
                 last.seconds,
-                audioEnd,
+                audioEnd
             )
         }
     } else {
@@ -251,7 +244,7 @@ export const renderAudio = (
             ppqnEnd: number,
             audioStart: number,
             audioEnd: number,
-            outside: boolean,
+            outside: boolean
         ) => {
             if (ppqnStart >= ppqnEnd) {
                 return
@@ -264,7 +257,7 @@ export const renderAudio = (
             }
             const clippedStart = Math.max(
                 ppqnStart,
-                range.unitMin - range.unitPadding,
+                range.unitMin - range.unitPadding
             )
             const clippedEnd = Math.min(ppqnEnd, range.unitMax)
             if (clippedStart >= clippedEnd) {
@@ -302,7 +295,7 @@ export const renderAudio = (
             segStart: number,
             segEnd: number,
             audioStart: number,
-            audioEnd: number,
+            audioEnd: number
         ) => {
             if (segStart >= segEnd) {
                 return
@@ -346,32 +339,32 @@ export const renderAudio = (
         // Calculate iteration bounds
         // Where does audioTime = 0? Solve: ppqnToSeconds(ppqn) - regionStartSeconds + waveformOffset = 0
         const audioStartPPQN = tempoMap.secondsToPPQN(
-            regionStartSeconds - waveformOffset,
+            regionStartSeconds - waveformOffset
         )
         // Where does audioTime = durationInSeconds?
         const audioEndPPQN = tempoMap.secondsToPPQN(
-            regionStartSeconds - waveformOffset + durationInSeconds,
+            regionStartSeconds - waveformOffset + durationInSeconds
         )
 
         // Determine visible iteration range (include padding on the left for smooth scrolling)
         const iterStart = clip
             ? Math.max(resultStart, range.unitMin - range.unitPadding)
             : Math.max(
-                  Math.min(audioStartPPQN, resultStart),
-                  range.unitMin - range.unitPadding,
-              )
+                Math.min(audioStartPPQN, resultStart),
+                range.unitMin - range.unitPadding
+            )
         const iterEnd = clip
             ? Math.min(resultEnd, range.unitMax + TempoChangeGrid)
             : Math.min(
-                  Math.max(audioEndPPQN, resultEnd),
-                  range.unitMax + TempoChangeGrid,
-              )
+                Math.max(audioEndPPQN, resultEnd),
+                range.unitMax + TempoChangeGrid
+            )
 
         // Dynamic step size: ensure each step is at least 1 device pixel wide
         const minStepSize = range.unitsPerPixel * devicePixelRatio
         const stepSize = Math.max(
             TempoChangeGrid,
-            Math.ceil(minStepSize / TempoChangeGrid) * TempoChangeGrid,
+            Math.ceil(minStepSize / TempoChangeGrid) * TempoChangeGrid
         )
 
         // Align to grid for consistent rendering across zoom levels
@@ -385,7 +378,7 @@ export const renderAudio = (
             // Incremental: get tempo at current position and compute step duration
             const stepSeconds = PPQN.pulsesToSeconds(
                 stepSize,
-                tempoMap.getTempoAt(currentPPQN),
+                tempoMap.getTempoAt(currentPPQN)
             )
             const nextAudioTime = currentAudioTime + stepSeconds
 
@@ -395,7 +388,7 @@ export const renderAudio = (
                     currentPPQN,
                     nextPPQN,
                     currentAudioTime,
-                    nextAudioTime,
+                    nextAudioTime
                 )
             }
             currentPPQN = nextPPQN
@@ -415,74 +408,8 @@ export const renderAudio = (
                 x0,
                 x1,
                 y0: 3 + top + channel * peaksHeight,
-                y1: 3 + top + (channel + 1) * peaksHeight,
+                y1: 3 + top + (channel + 1) * peaksHeight
             })
         }
-    }
-}
-
-export const renderFading = (
-    context: CanvasRenderingContext2D,
-    range: TimelineRange,
-    fading: FadingEnvelope.Config,
-    {top, bottom}: RegionBound,
-    startPPQN: number,
-    endPPQN: number,
-    color: string,
-    handleColor: string,
-): void => {
-    const {
-        in: fadeIn,
-        out: fadeOut,
-        inSlope: fadeInSlope,
-        outSlope: fadeOutSlope,
-    } = fading
-    const dpr = devicePixelRatio
-    const height = bottom - top
-    const handleRadius = 3 * dpr
-    context.fillStyle = color
-    if (fadeIn > 0) {
-        const fadeInEndPPQN = startPPQN + fadeIn
-        const x0 = range.unitToX(startPPQN) * dpr
-        const x1 = range.unitToX(fadeInEndPPQN) * dpr
-        const xn = x1 - x0
-        context.beginPath()
-        context.moveTo(x0, top)
-        let x = x0
-        for (const y of Curve.walk(fadeInSlope, xn, top + height, top)) {
-            context.lineTo(++x, y)
-        }
-        context.lineTo(x1, top)
-        context.closePath()
-        context.fill()
-    }
-    if (fadeOut > 0) {
-        const x0 = range.unitToX(endPPQN - fadeOut) * dpr
-        const x1 = range.unitToX(endPPQN) * dpr
-        const xn = Math.abs(x1 - x0)
-        context.beginPath()
-        context.moveTo(x0, top)
-        let x = x0
-        for (const y of Curve.walk(fadeOutSlope, xn, top, top + height)) {
-            context.lineTo(++x, y)
-        }
-        context.lineTo(x1, top)
-        context.closePath()
-        context.fill()
-    }
-    const fadeInHandleX = range.unitToX(startPPQN + fadeIn) * dpr
-    const fadeOutHandleX = range.unitToX(endPPQN - fadeOut) * dpr
-    const regionStartX = range.unitToX(startPPQN) * dpr
-    const regionEndX = range.unitToX(endPPQN) * dpr
-    const adjustedFadeInX = Math.max(fadeInHandleX, regionStartX)
-    const adjustedFadeOutX = Math.min(fadeOutHandleX, regionEndX)
-    if (adjustedFadeOutX - adjustedFadeInX > handleRadius * 4) {
-        context.fillStyle = handleColor
-        context.beginPath()
-        context.arc(adjustedFadeInX, top, handleRadius, 0, TAU)
-        context.fill()
-        context.beginPath()
-        context.arc(adjustedFadeOutX, top, handleRadius, 0, TAU)
-        context.fill()
     }
 }
