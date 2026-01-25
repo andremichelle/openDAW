@@ -45,19 +45,13 @@ export const renderFading = (context: CanvasRenderingContext2D,
         context.closePath()
         context.fill()
     }
-    const fadeInHandleX = range.unitToX(startPPQN + fadeIn) * dpr
-    const fadeOutHandleX = range.unitToX(endPPQN - fadeOut) * dpr
-    const regionStartX = range.unitToX(startPPQN) * dpr
-    const regionEndX = range.unitToX(endPPQN) * dpr
-    const adjustedFadeInX = Math.max(fadeInHandleX, regionStartX)
-    const adjustedFadeOutX = Math.min(fadeOutHandleX, regionEndX)
-    if (adjustedFadeOutX - adjustedFadeInX > handleRadius * 4) {
-        context.fillStyle = handleColor
-        context.beginPath()
-        context.arc(adjustedFadeInX, top, handleRadius, 0, TAU)
-        context.fill()
-        context.beginPath()
-        context.arc(adjustedFadeOutX, top, handleRadius, 0, TAU)
-        context.fill()
-    }
+    const x0 = Math.max(range.unitToX(startPPQN + fadeIn), range.unitToX(startPPQN)) * dpr
+    const x1 = Math.min(range.unitToX(endPPQN - fadeOut), range.unitToX(endPPQN)) * dpr
+    context.fillStyle = handleColor
+    context.beginPath()
+    context.arc(x0, top, handleRadius, 0, TAU)
+    context.fill()
+    context.beginPath()
+    context.arc(x1, top, handleRadius, 0, TAU)
+    context.fill()
 }

@@ -265,27 +265,25 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                     case "loop-duration":
                     case "content-complete":
                         return manager.startRegionModifier(RegionLoopDurationModifier.create(regionSelection.selected(),
-                            {project, element, snapping, pointerPulse, reference, resize: target.part === "content-complete"}))
+                            {
+                                project, element, snapping, pointerPulse, reference,
+                                resize: target.part === "content-complete"
+                            }))
                     case "fading-in":
                     case "fading-out": {
                         const audioRegion = target.region
                         const isFadeIn = target.part === "fading-in"
                         const originalValue = isFadeIn ? audioRegion.fading.in : audioRegion.fading.out
                         const field = isFadeIn ? audioRegion.fading.inField : audioRegion.fading.outField
-                        const regionPosition = audioRegion.position
-                        const regionDuration = audioRegion.duration
+                        const {position, duration, complete} = audioRegion
                         return Option.wrap({
                             update: (dragEvent: Dragging.Event) => {
                                 const pointerPpqn = range.xToUnit(dragEvent.clientX - clientRect.left)
                                 editing.modify(() => {
                                     if (isFadeIn) {
-                                        // fadeIn is PPQN from start
-                                        const fadeInPpqn = clamp(pointerPpqn - regionPosition, 0, regionDuration - audioRegion.fading.out)
-                                        field.setValue(fadeInPpqn)
+                                        field.setValue(clamp(pointerPpqn - position, 0, duration))
                                     } else {
-                                        // fadeOut is PPQN from end (backwards)
-                                        const fadeOutPpqn = clamp(regionPosition + regionDuration - pointerPpqn, 0, regionDuration - audioRegion.fading.in)
-                                        field.setValue(fadeOutPpqn)
+                                        field.setValue(clamp(complete - pointerPpqn, 0, duration))
                                     }
                                 }, false)
                             },

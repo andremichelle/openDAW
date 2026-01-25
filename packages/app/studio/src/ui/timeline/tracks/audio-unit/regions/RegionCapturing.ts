@@ -1,4 +1,9 @@
-import {AnyLoopableRegionBoxAdapter, AnyRegionBoxAdapter, AudioRegionBoxAdapter, UnionAdapterTypes} from "@opendaw/studio-adapters"
+import {
+    AnyLoopableRegionBoxAdapter,
+    AnyRegionBoxAdapter,
+    AudioRegionBoxAdapter,
+    UnionAdapterTypes
+} from "@opendaw/studio-adapters"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {BinarySearch, Geom, isInstanceOf, Nullable, NumberComparator} from "@opendaw/lib-std"
 import {PointerRadiusDistance} from "@/ui/timeline/constants.ts"
@@ -6,6 +11,7 @@ import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
 import {TimelineRange} from "@opendaw/studio-core"
+import {RegionLabel} from "@/ui/timeline/RegionLabel"
 
 export type RegionCaptureTarget =
     | { type: "region", part: "position", region: AnyRegionBoxAdapter }
@@ -43,6 +49,19 @@ export namespace RegionCapturing {
                     // too small to have other sensitive areas
                     return {type: "region", part: "position", region}
                 }
+                if (isInstanceOf(region, AudioRegionBoxAdapter)) {
+                    const {fading} = region
+                    const handleRadius = 6
+                    const handleY = track.position + RegionLabel.labelHeight()
+                    const fadeInX = range.unitToX(region.position + fading.in)
+                    const fadeOutX = range.unitToX(region.position + region.duration - fading.out)
+                    if (Geom.isInsideCircle(x, y, fadeInX, handleY, handleRadius)) {
+                        return {type: "region", part: "fading-in", region}
+                    }
+                    if (Geom.isInsideCircle(x, y, fadeOutX, handleY, handleRadius)) {
+                        return {type: "region", part: "fading-out", region}
+                    }
+                }
                 if (UnionAdapterTypes.isLoopableRegion(region)) {
                     const bottomEdge = y > track.position + size / 3 * 2
                     if (x - x0 < PointerRadiusDistance * 2) {
@@ -58,29 +77,6 @@ export namespace RegionCapturing {
                     if (bottomEdge
                         && Math.abs(x - range.unitToX(region.offset + region.loopDuration)) <= PointerRadiusDistance) {
                         return {type: "region", part: "loop-duration", region}
-                    }
-                }
-                if (isInstanceOf(region, AudioRegionBoxAdapter)) {
-                    const {fading} = region
-                    const handleRadius = 6
-                    const minHandleOffset = 8
-                    // Match the renderer: labelHeight in device pixels, converted to CSS
-                    const dpr = devicePixelRatio
-                    const labelHeightDp = Math.ceil(9 * dpr * 1.5)
-                    const handleYFromTrackTop = (labelHeightDp + 1.0 + 5 * dpr) / dpr
-                    const handleY = track.position + handleYFromTrackTop
-                    const regionStartX = range.unitToX(region.position)
-                    const regionEndX = range.unitToX(region.position + region.duration)
-                    // fading.in is PPQN from start, fading.out is PPQN from end
-                    const fadeInX = Math.max(range.unitToX(region.position + fading.in), regionStartX + minHandleOffset)
-                    const fadeOutX = Math.min(range.unitToX(region.position + region.duration - fading.out), regionEndX - minHandleOffset)
-                    if (fadeOutX - fadeInX > handleRadius * 4) {
-                        if (Geom.isInsideCircle(x, y, fadeInX, handleY, handleRadius)) {
-                            return {type: "region", part: "fading-in", region}
-                        }
-                        if (Geom.isInsideCircle(x, y, fadeOutX, handleY, handleRadius)) {
-                            return {type: "region", part: "fading-out", region}
-                        }
                     }
                 }
                 return {type: "region", part: "position", region}
