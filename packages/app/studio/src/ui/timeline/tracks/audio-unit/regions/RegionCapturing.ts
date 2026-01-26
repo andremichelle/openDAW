@@ -50,7 +50,7 @@ export namespace RegionCapturing {
                 }
                 if (isInstanceOf(region, AudioRegionBoxAdapter)) {
                     const {fading} = region
-                    const handleRadius = 6
+                    const handleRadius = 3
                     const handleY = track.position + RegionLabel.labelHeight()
                     const fadeInX = range.unitToX(region.position + fading.in)
                     const fadeOutX = range.unitToX(region.position + region.duration - fading.out)
