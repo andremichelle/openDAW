@@ -281,7 +281,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                             return Option.wrap({
                                 update: (dragEvent: Dragging.Event) => {
                                     const deltaY = startY - dragEvent.clientY
-                                    const newSlope = clamp(originalSlope + deltaY / 100, 0, 1)
+                                    const newSlope = clamp(originalSlope + deltaY * 0.01, 0.001, 0.999)
                                     editing.modify(() => slopeField.setValue(newSlope), false)
                                 },
                                 approve: () => editing.mark(),
