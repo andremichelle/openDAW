@@ -273,9 +273,23 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                     case "fading-out": {
                         const audioRegion = target.region
                         const isFadeIn = target.part === "fading-in"
-                        const originalFadeIn = audioRegion.fading.in
-                        const originalFadeOut = audioRegion.fading.out
                         const {position, duration, complete, fading} = audioRegion
+                        if (event.shiftKey) {
+                            const slopeField = isFadeIn ? fading.inSlopeField : fading.outSlopeField
+                            const originalSlope = slopeField.getValue()
+                            const startY = event.clientY
+                            return Option.wrap({
+                                update: (dragEvent: Dragging.Event) => {
+                                    const deltaY = startY - dragEvent.clientY
+                                    const newSlope = clamp(originalSlope + deltaY / 100, 0, 1)
+                                    editing.modify(() => slopeField.setValue(newSlope), false)
+                                },
+                                approve: () => editing.mark(),
+                                cancel: () => editing.modify(() => slopeField.setValue(originalSlope))
+                            } satisfies Dragging.Process)
+                        }
+                        const originalFadeIn = fading.in
+                        const originalFadeOut = fading.out
                         return Option.wrap({
                             update: (dragEvent: Dragging.Event) => {
                                 const pointerPpqn = range.xToUnit(dragEvent.clientX - clientRect.left)
