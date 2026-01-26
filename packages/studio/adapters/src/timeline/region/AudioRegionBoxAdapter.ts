@@ -204,7 +204,15 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
             .map(vertex => this.#context.boxAdapters.adapterFor(vertex.box, ValueEventCollectionBoxAdapter))
     }
     set position(value: ppqn) {this.#box.position.setValue(value)}
-    set duration(value: ppqn) {this.#durationConverter.fromPPQN(value, this.position)}
+    set duration(value: ppqn) {
+        this.#durationConverter.fromPPQN(value, this.position)
+        const totalFading = this.#fadingAdapter.in + this.#fadingAdapter.out
+        if (totalFading > value) {
+            const scale = value / totalFading
+            this.#fadingAdapter.inField.setValue(this.#fadingAdapter.in * scale)
+            this.#fadingAdapter.outField.setValue(this.#fadingAdapter.out * scale)
+        }
+    }
     set loopOffset(value: ppqn) {this.#box.loopOffset.setValue(mod(value, this.loopDuration))}
     set loopDuration(value: ppqn) {this.#loopDurationConverter.fromPPQN(value, this.position)}
 

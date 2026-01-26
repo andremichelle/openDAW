@@ -273,22 +273,33 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                     case "fading-out": {
                         const audioRegion = target.region
                         const isFadeIn = target.part === "fading-in"
-                        const originalValue = isFadeIn ? audioRegion.fading.in : audioRegion.fading.out
-                        const field = isFadeIn ? audioRegion.fading.inField : audioRegion.fading.outField
-                        const {position, duration, complete} = audioRegion
+                        const originalFadeIn = audioRegion.fading.in
+                        const originalFadeOut = audioRegion.fading.out
+                        const {position, duration, complete, fading} = audioRegion
                         return Option.wrap({
                             update: (dragEvent: Dragging.Event) => {
                                 const pointerPpqn = range.xToUnit(dragEvent.clientX - clientRect.left)
                                 editing.modify(() => {
                                     if (isFadeIn) {
-                                        field.setValue(clamp(pointerPpqn - position, 0, duration))
+                                        const newFadeIn = clamp(pointerPpqn - position, 0, duration)
+                                        fading.inField.setValue(newFadeIn)
+                                        if (newFadeIn + fading.out > duration) {
+                                            fading.outField.setValue(duration - newFadeIn)
+                                        }
                                     } else {
-                                        field.setValue(clamp(complete - pointerPpqn, 0, duration))
+                                        const newFadeOut = clamp(complete - pointerPpqn, 0, duration)
+                                        fading.outField.setValue(newFadeOut)
+                                        if (fading.in + newFadeOut > duration) {
+                                            fading.inField.setValue(duration - newFadeOut)
+                                        }
                                     }
                                 }, false)
                             },
                             approve: () => editing.mark(),
-                            cancel: () => editing.modify(() => field.setValue(originalValue))
+                            cancel: () => editing.modify(() => {
+                                fading.inField.setValue(originalFadeIn)
+                                fading.outField.setValue(originalFadeOut)
+                            })
                         } satisfies Dragging.Process)
                     }
                     default: {

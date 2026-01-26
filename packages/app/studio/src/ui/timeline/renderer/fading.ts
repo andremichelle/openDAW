@@ -11,7 +11,12 @@ export const renderFading = (context: CanvasRenderingContext2D,
                              endPPQN: number,
                              color: string,
                              handleColor: string): void => {
-    const {in: fadeIn, out: fadeOut, inSlope: fadeInSlope, outSlope: fadeOutSlope} = fading
+    const {inSlope: fadeInSlope, outSlope: fadeOutSlope} = fading
+    const duration = endPPQN - startPPQN
+    const totalFading = fading.in + fading.out
+    const scale = totalFading > duration ? duration / totalFading : 1.0
+    const fadeIn = fading.in * scale
+    const fadeOut = fading.out * scale
     const dpr = devicePixelRatio
     const height = bottom - top
     const handleRadius = 3 * dpr
@@ -32,7 +37,7 @@ export const renderFading = (context: CanvasRenderingContext2D,
     if (fadeOut > 0) {
         const x0 = range.unitToX(endPPQN - fadeOut) * dpr
         const x1 = range.unitToX(endPPQN) * dpr
-        const xn = Math.abs(x1 - x0)
+        const xn = x1 - x0
         context.beginPath()
         context.moveTo(x0, top)
         let x = x0
