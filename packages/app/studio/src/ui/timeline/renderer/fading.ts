@@ -24,9 +24,7 @@ export const renderFading = (context: CanvasRenderingContext2D,
         context.beginPath()
         context.moveTo(x0, top)
         let x = x0
-        for (const y of Curve.walk(fadeInSlope, xn, top + height, top)) {
-            context.lineTo(++x, y)
-        }
+        Curve.run(fadeInSlope, xn, top + height, top, y => context.lineTo(++x, y))
         context.lineTo(x1, top)
         context.closePath()
         context.fill()
@@ -38,9 +36,7 @@ export const renderFading = (context: CanvasRenderingContext2D,
         context.beginPath()
         context.moveTo(x0, top)
         let x = x0
-        for (const y of Curve.walk(fadeOutSlope, xn, top, top + height)) {
-            context.lineTo(++x, y)
-        }
+        Curve.run(fadeOutSlope, xn, top, top + height, y => context.lineTo(++x, y))
         context.lineTo(x1, top)
         context.closePath()
         context.fill()
