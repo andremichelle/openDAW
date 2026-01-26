@@ -16,7 +16,6 @@ export const renderFading = (context: CanvasRenderingContext2D,
     const scale = totalFading > duration ? duration / totalFading : 1.0
     const fadeIn = fading.in * scale
     const fadeOut = fading.out * scale
-    if (fadeIn === 0.0 && fadeOut === 0.0) {return}
     context.strokeStyle = color
     context.fillStyle = "rgba(0,0,0,0.25)"
     context.lineWidth = devicePixelRatio
