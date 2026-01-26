@@ -23,7 +23,7 @@ export class FadingAdapter implements FadingEnvelope.Config {
     reset(): void {
         this.#fading.in.setValue(0.0)
         this.#fading.out.setValue(0.0)
-        this.#fading.inSlope.setValue(0.5)
-        this.#fading.outSlope.setValue(0.5)
+        this.#fading.inSlope.setValue(0.75)
+        this.#fading.outSlope.setValue(0.25)
     }
 }
