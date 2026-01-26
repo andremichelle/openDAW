@@ -118,9 +118,7 @@ export const renderRegions = (context: CanvasRenderingContext2D,
                             region.gain.getValue(), bound, contentColor, pass
                         )
                     }
-                    renderFading(context, range, region.fading, bound, position, complete,
-                        `rgba(0, 0, 0, 0.5)`, labelBackground
-                    )
+                    renderFading(context, range, region.fading, bound, position, complete, labelBackground)
                     const isRecording = region.file.getOrCreateLoader().state.type === "record"
                     if (isRecording) {}
                 },
