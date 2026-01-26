@@ -1,9 +1,10 @@
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
-import {int, Option} from "@opendaw/lib-std"
+import {Arrays, int, isNotNull, Option} from "@opendaw/lib-std"
 import {ppqn, PPQN, RegionCollection} from "@opendaw/lib-dsp"
 import {
     AnyLoopableRegionBoxAdapter,
     AnyRegionBoxAdapter,
+    TrackBoxAdapter,
     UnionAdapterTypes
 } from "@opendaw/studio-adapters"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
@@ -105,7 +106,12 @@ export class RegionContentStartModifier implements RegionModifier {
 
     approve(): void {
         if (this.#delta === 0) {return}
-        this.#project.editing.modify(() => this.#adapters.forEach(region => region.moveContentStart(this.#delta)))
+        const modifiedTracks: ReadonlyArray<TrackBoxAdapter> = Arrays.removeDuplicates(this.#adapters
+            .map(adapter => adapter.trackBoxAdapter.unwrapOrNull()).filter(isNotNull))
+        const adapters = this.#adapters.filter(({box}) => box.isAttached())
+        this.#project.overlapResolver.apply(modifiedTracks, adapters, this, 0, () => {
+            this.#adapters.forEach(region => region.moveContentStart(this.#delta))
+        })
     }
 
     cancel(): void {
