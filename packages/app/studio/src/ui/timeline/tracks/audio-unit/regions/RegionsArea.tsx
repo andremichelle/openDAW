@@ -49,8 +49,8 @@ const className = Html.adoptStyleSheet(css, "RegionsArea")
 
 const CursorMap = Object.freeze({
     "position": "auto",
-    "start": "w-resize",
-    "complete": "e-resize",
+    "start": Cursor.LoopStart,
+    "complete": Cursor.LoopEnd,
     "loop-duration": Cursor.ExpandWidth,
     "content-start": Cursor.ExpandWidth,
     "content-complete": Cursor.ExpandWidth,
@@ -273,33 +273,22 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                     case "fading-out": {
                         const audioRegion = target.region
                         const isFadeIn = target.part === "fading-in"
-                        const originalFadeIn = audioRegion.fading.in
-                        const originalFadeOut = audioRegion.fading.out
+                        const originalValue = isFadeIn ? audioRegion.fading.in : audioRegion.fading.out
+                        const field = isFadeIn ? audioRegion.fading.inField : audioRegion.fading.outField
                         const {position, duration, complete, fading} = audioRegion
                         return Option.wrap({
                             update: (dragEvent: Dragging.Event) => {
                                 const pointerPpqn = range.xToUnit(dragEvent.clientX - clientRect.left)
                                 editing.modify(() => {
                                     if (isFadeIn) {
-                                        const newFadeIn = clamp(pointerPpqn - position, 0, duration)
-                                        fading.inField.setValue(newFadeIn)
-                                        if (newFadeIn + fading.out > duration) {
-                                            fading.outField.setValue(duration - newFadeIn)
-                                        }
+                                        field.setValue(clamp(pointerPpqn - position, 0, duration - fading.out))
                                     } else {
-                                        const newFadeOut = clamp(complete - pointerPpqn, 0, duration)
-                                        fading.outField.setValue(newFadeOut)
-                                        if (fading.in + newFadeOut > duration) {
-                                            fading.inField.setValue(duration - newFadeOut)
-                                        }
+                                        field.setValue(clamp(complete - pointerPpqn, 0, duration - fading.in))
                                     }
                                 }, false)
                             },
                             approve: () => editing.mark(),
-                            cancel: () => editing.modify(() => {
-                                fading.inField.setValue(originalFadeIn)
-                                fading.outField.setValue(originalFadeOut)
-                            })
+                            cancel: () => editing.modify(() => field.setValue(originalValue))
                         } satisfies Dragging.Process)
                     }
                     default: {
