@@ -30,8 +30,8 @@ export const AudioRegionBox: BoxSchema<Pointers> = {
                     fields: {
                         1: {type: "float32", name: "in", value: 0.0, constraints: "positive", unit: "ppqn"},
                         2: {type: "float32", name: "out", value: 0.0, constraints: "positive", unit: "ppqn"},
-                        3: {type: "float32", name: "in-slope", value: 0.5, constraints: "unipolar", unit: "ratio"},
-                        4: {type: "float32", name: "out-slope", value: 0.5, constraints: "unipolar", unit: "ratio"}
+                        3: {type: "float32", name: "in-slope", value: 0.75, constraints: "unipolar", unit: "ratio"},
+                        4: {type: "float32", name: "out-slope", value: 0.25, constraints: "unipolar", unit: "ratio"}
                     }
                 }
             }

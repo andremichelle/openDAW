@@ -37,7 +37,6 @@ export namespace RegionCapturing {
                     .rightMostMapped(tracks, y, NumberComparator, component => component.position)
                 if (trackIndex < 0 || trackIndex >= tracks.length) {return null}
                 const track = tracks[trackIndex]
-                const size = track.size
                 const position = Math.floor(range.xToUnit(x))
                 const region = track.trackBoxAdapter.regions.collection.lowerEqual(position)
                 if (region === null || position >= region.complete) {
@@ -63,7 +62,7 @@ export namespace RegionCapturing {
                     }
                 }
                 if (UnionAdapterTypes.isLoopableRegion(region)) {
-                    const bottomEdge = y > track.position + size / 3 * 2
+                    const bottomEdge = y > track.position + RegionLabel.labelHeight()
                     if (x - x0 < PointerRadiusDistance * 2) {
                         return bottomEdge
                             ? {type: "region", part: "content-start", region}
