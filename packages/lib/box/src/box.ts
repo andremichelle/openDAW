@@ -42,6 +42,7 @@ export type BoxConstruct<T extends PointerTypes> = {
     name: string
     pointerRules: PointerRules<T>
     resource?: ResourceType
+    ephemeral?: boolean
 }
 
 export abstract class Box<P extends PointerTypes = PointerTypes, F extends Fields = any> implements Vertex<P, F> {
@@ -54,16 +55,18 @@ export abstract class Box<P extends PointerTypes = PointerTypes, F extends Field
     readonly #name: string
     readonly #pointerRules: PointerRules<P>
     readonly #resource?: ResourceType
+    readonly #ephemeral: boolean
 
     readonly #fields: F
     readonly #creationIndex = Box.Index++
 
-    protected constructor({uuid, graph, name, pointerRules, resource}: BoxConstruct<P>) {
+    protected constructor({uuid, graph, name, pointerRules, resource, ephemeral}: BoxConstruct<P>) {
         this.#address = Address.compose(uuid)
         this.#graph = graph
         this.#name = name
         this.#pointerRules = pointerRules
         this.#resource = resource
+        this.#ephemeral = ephemeral === true
 
         this.#fields = this.initializeFields()
 
@@ -92,6 +95,7 @@ export abstract class Box<P extends PointerTypes = PointerTypes, F extends Field
     get address(): Address {return this.#address}
     get pointerRules(): PointerRules<P> {return this.#pointerRules}
     get resource(): ResourceType | undefined {return this.#resource}
+    get ephemeral(): boolean {return this.#ephemeral}
     get creationIndex(): number {return this.#creationIndex}
 
     @Lazy

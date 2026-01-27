@@ -7,23 +7,11 @@ import {
     isInstanceOf,
     Option,
     Predicate,
-    Predicates,
     SetMultimap,
     SortedSet,
     UUID
 } from "@opendaw/lib-std"
-import {
-    AudioFileBox,
-    AudioUnitBox,
-    AuxSendBox,
-    BoxIO,
-    BoxVisitor,
-    RootBox,
-    SelectionBox,
-    SoundfontFileBox,
-    TrackBox,
-    TransientMarkerBox
-} from "@opendaw/studio-boxes"
+import {AudioUnitBox, AuxSendBox, BoxIO, BoxVisitor, RootBox, TrackBox} from "@opendaw/studio-boxes"
 import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {ProjectSkeleton} from "./ProjectSkeleton"
 import {AnyRegionBox, UnionBoxTypes} from "../unions"
@@ -37,6 +25,7 @@ export namespace ProjectUtils {
     const excludeTimelinePredicate = (box: Box) => box.accept<BoxVisitor<boolean>>({
         visitTrackBox: (_box: TrackBox): boolean => true
     }) === true
+    const shouldExclude = (box: Box): boolean => box.ephemeral || box.name === AuxSendBox.ClassName
 
     export const extractAudioUnits = (audioUnitBoxes: ReadonlyArray<AudioUnitBox>,
                                       {boxGraph, mandatoryBoxes: {primaryAudioBus, rootBox}}: ProjectSkeleton,
@@ -47,22 +36,18 @@ export namespace ProjectUtils {
                                       } = {})
         : ReadonlyArray<AudioUnitBox> => {
         assert(Arrays.satisfy(audioUnitBoxes, isSameGraph), "AudioUnits must share the same BoxGraph")
-        // TODO Implement include options.
         assert(!options.includeAux && !options.includeBus, "Options are not yet implemented")
-        const excludeBox = options?.excludeTimeline === true ? excludeTimelinePredicate : Predicates.alwaysFalse
-        // Get dependencies using outgoing pointers only (no mandatory incoming following)
-        // This avoids pulling in boxes from previous copies that point to shared AudioFileBox
-        const baseDeps = audioUnitBoxes
-            .flatMap(box => Array.from(box.graph.dependenciesOf(box, {alwaysFollowMandatory: false, excludeBox}).boxes))
-        // Explicitly add instruments (they have mandatory incoming pointer to AudioUnitBox.input)
-        const instruments = audioUnitBoxes
-            .flatMap(audioUnitBox => audioUnitBox.input.pointerHub.incoming().map(({box}) => box))
-        // Deduplicate by UUID
+        const excludeBox = (box: Box): boolean =>
+            shouldExclude(box) || (options?.excludeTimeline === true && excludeTimelinePredicate(box))
         const seen = UUID.newSet<UUID.Bytes>(uuid => uuid)
-        const dependencies = [...baseDeps, ...instruments]
-            .filter(box => box.name !== SelectionBox.ClassName && box.name !== AuxSendBox.ClassName)
+        const dependencies = audioUnitBoxes
+            .flatMap(box => Array.from(box.graph.dependenciesOf(box, {
+                alwaysFollowMandatory: true,
+                stopAtResources: true,
+                excludeBox
+            }).boxes))
             .filter(box => {
-                if (seen.opt(box.address.uuid).nonEmpty()) {return false}
+                if (seen.hasKey(box.address.uuid)) {return false}
                 seen.add(box.address.uuid)
                 return true
             })
@@ -84,7 +69,6 @@ export namespace ProjectUtils {
         const regionBoxSet = new Set<AnyRegionBox>(regionBoxes)
         const trackBoxSet = new Set<TrackBox>()
         const audioUnitBoxSet = new SetMultimap<AudioUnitBox, TrackBox>()
-        // Collect AudioUnits and Tracks
         regionBoxes.forEach(regionBox => {
             const trackBox = asInstanceOf(regionBox.regions.targetVertex.unwrap().box, TrackBox)
             trackBoxSet.add(trackBox)
@@ -94,17 +78,20 @@ export namespace ProjectUtils {
         console.debug(`Found ${audioUnitBoxSet.keyCount()} audioUnits`)
         console.debug(`Found ${trackBoxSet.size} tracks`)
         const audioUnitBoxes = [...audioUnitBoxSet.keys()]
-        const excludeBox: Predicate<Box> =
-            box => (isInstanceOf(box, TrackBox) && !trackBoxSet.has(box))
-                || (UnionBoxTypes.isRegionBox(box) && !regionBoxSet.has(box))
+        const excludeBox: Predicate<Box> = (box: Box): boolean =>
+            shouldExclude(box)
+            || (isInstanceOf(box, TrackBox) && !trackBoxSet.has(box))
+            || (UnionBoxTypes.isRegionBox(box) && !regionBoxSet.has(box))
         const dependencies = audioUnitBoxes
-            .flatMap(box => Array.from(box.graph.dependenciesOf(box, {excludeBox, alwaysFollowMandatory: true}).boxes))
-            .filter(box => box.name !== SelectionBox.ClassName && box.name !== AuxSendBox.ClassName)
+            .flatMap(box => Array.from(box.graph.dependenciesOf(box, {
+                excludeBox,
+                alwaysFollowMandatory: true,
+                stopAtResources: true
+            }).boxes))
         const uuidMap = generateTransferMap(
             audioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBus.address.uuid)
         copy(uuidMap, boxGraph, audioUnitBoxes, dependencies)
         reorderAudioUnits(uuidMap, audioUnitBoxes, rootBox)
-        // reorder track indices
         audioUnitBoxSet.forEach((_, trackBoxes) => [...trackBoxes]
             .sort(compareIndex)
             .forEach((source: TrackBox, index) => {
@@ -113,7 +100,6 @@ export namespace ProjectUtils {
                     .unwrap("Target Track has not been copied")
                 asInstanceOf(box, TrackBox).index.setValue(index)
             }))
-        // move new regions to the target position
         const minPosition = regionBoxes.reduce((min, region) =>
             Math.min(min, region.position.getValue()), Number.MAX_VALUE)
         const delta = insertPosition - minPosition
@@ -121,7 +107,7 @@ export namespace ProjectUtils {
             const box = boxGraph
                 .findBox(uuidMap.get(source.address.uuid).target)
                 .unwrap("Target Track has not been copied")
-            const position = UnionBoxTypes.asRegionBox(box).position
+            const {position} = UnionBoxTypes.asRegionBox(box)
             position.setValue(position.getValue() + delta)
         })
     }
@@ -149,13 +135,10 @@ export namespace ProjectUtils {
                     target: UUID.generate()
                 })),
             ...dependencies
-                .map(({address: {uuid}, name}) =>
-                    ({
-                        source: uuid,
-                        target: name === AudioFileBox.ClassName || name === SoundfontFileBox.ClassName
-                            ? uuid
-                            : UUID.generate()
-                    }))
+                .map(box => ({
+                    source: box.address.uuid,
+                    target: box.resource === "external" ? box.address.uuid : UUID.generate()
+                }))
         ])
         return uuidMap
     }
@@ -164,15 +147,22 @@ export namespace ProjectUtils {
                   boxGraph: BoxGraph,
                   audioUnitBoxes: ReadonlyArray<AudioUnitBox>,
                   dependencies: ReadonlyArray<Box>) => {
-        // First, identify which file boxes already exist and should be skipped
-        const existingFileBoxUUIDs = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        const existingExternalResourceUUIDs = UUID.newSet<UUID.Bytes>(uuid => uuid)
         dependencies.forEach((source: Box) => {
-            if (source instanceof AudioFileBox || source instanceof SoundfontFileBox) {
-                if (boxGraph.findBox(source.address.uuid).nonEmpty()) {
-                    existingFileBoxUUIDs.add(source.address.uuid)
-                }
+            if (source.resource === "external" && boxGraph.findBox(source.address.uuid).nonEmpty()) {
+                existingExternalResourceUUIDs.add(source.address.uuid)
             }
         })
+        const isOwnedByExistingExternalResource = (box: Box): boolean => {
+            for (const [pointer, targetAddress] of box.outgoingEdges()) {
+                if (pointer.mandatory && !targetAddress.isBox()) {
+                    if (existingExternalResourceUUIDs.hasKey(targetAddress.uuid)) {
+                        return true
+                    }
+                }
+            }
+            return false
+        }
         PointerField.decodeWith({
             map: (_pointer: PointerField, newAddress: Option<Address>): Option<Address> =>
                 newAddress.map(address => uuidMap.opt(address.uuid).match({
@@ -189,19 +179,8 @@ export namespace ProjectUtils {
                 })
             dependencies
                 .forEach((source: Box) => {
-                    if (source instanceof AudioFileBox || source instanceof SoundfontFileBox) {
-                        // Those boxes keep their UUID. So if they are already in the graph, skip them.
-                        if (existingFileBoxUUIDs.opt(source.address.uuid).nonEmpty()) {
-                            return
-                        }
-                    }
-                    // Skip TransientMarkerBox if its owner AudioFileBox already exists
-                    if (source instanceof TransientMarkerBox) {
-                        const ownerUUID = source.owner.targetAddress.unwrap().uuid
-                        if (existingFileBoxUUIDs.opt(ownerUUID).nonEmpty()) {
-                            return
-                        }
-                    }
+                    if (existingExternalResourceUUIDs.hasKey(source.address.uuid)) {return}
+                    if (isOwnedByExistingExternalResource(source)) {return}
                     const input = new ByteArrayInput(source.toArrayBuffer())
                     const key = source.name as keyof BoxIO.TypeMap
                     const uuid = uuidMap.get(source.address.uuid).target

@@ -46,7 +46,7 @@ export class BoxForge<E extends PointerTypes> {
         this.#path = path
     }
 
-    writeClass(schema: ClassSchema<E>, option: ClassOptions, pointerRules: PointerRules<E>, resource?: ResourceType): void {
+    writeClass(schema: ClassSchema<E>, option: ClassOptions, pointerRules: PointerRules<E>, resource?: ResourceType, ephemeral?: boolean): void {
         const written: Maybe<ClassSchema<E>> = this.#written.get(schema.name)
         if (isDefined(written)) {
             if (written === schema) {
@@ -58,7 +58,7 @@ export class BoxForge<E extends PointerTypes> {
             }
         }
         const file: SourceFile = this.#project.createSourceFile(`${this.#path}/${schema.name}.ts`, header)
-        ClassWriter.write(this, file, schema, option, pointerRules, resource)
+        ClassWriter.write(this, file, schema, option, pointerRules, resource, ephemeral)
         this.#written.set(schema.name, schema)
     }
 
@@ -86,7 +86,7 @@ export class BoxForge<E extends PointerTypes> {
 
     #writeBoxClasses(): void {
         this.#schema.boxes.forEach((box: BoxSchema<E>) =>
-            this.writeClass(box.class, BoxClassOption, box.pointerRules ?? NoPointers, box.resource))
+            this.writeClass(box.class, BoxClassOption, box.pointerRules ?? NoPointers, box.resource, box.ephemeral))
     }
 
     #writeBoxIndex(): void {
@@ -209,8 +209,9 @@ class ClassWriter<E extends PointerTypes> {
         schema: ClassSchema<E>,
         option: ClassOptions,
         edges: PointerRules<E>,
-        resource?: ResourceType): void {
-        const writer = new ClassWriter<E>(generator, file, schema, option, edges, resource)
+        resource?: ResourceType,
+        ephemeral?: boolean): void {
+        const writer = new ClassWriter<E>(generator, file, schema, option, edges, resource, ephemeral)
         writer.#writeFieldsType()
         writer.#writeClass()
         writer.#writeImports()
@@ -222,6 +223,7 @@ class ClassWriter<E extends PointerTypes> {
     readonly #option: ClassOptions
     readonly #pointerRules: PointerRules<E>
     readonly #resource?: ResourceType
+    readonly #ephemeral?: boolean
 
     readonly #imports: SetMultimap<string, string>
     readonly #fieldPrinter: ReadonlyArray<FieldPrinter>
@@ -234,13 +236,15 @@ class ClassWriter<E extends PointerTypes> {
         schema: ClassSchema<E>,
         option: ClassOptions,
         pointerRules: PointerRules<E>,
-        resource?: ResourceType) {
+        resource?: ResourceType,
+        ephemeral?: boolean) {
         this.#generator = generator
         this.#file = file
         this.#schema = schema
         this.#option = option
         this.#pointerRules = pointerRules
         this.#resource = resource
+        this.#ephemeral = ephemeral
 
         this.#imports = new SetMultimap<string, string>([
             [STD_LIBRARY, option.import_std_lib],
@@ -301,6 +305,7 @@ class ClassWriter<E extends PointerTypes> {
             }
             this.#imports.addAll(STD_LIBRARY, ["Procedure", "safeExecute"])
             const resourceValue = isDefined(this.#resource) ? `"${this.#resource}"` : "undefined"
+            const ephemeralValue = this.#ephemeral === true ? "true" : "false"
             declaration.addMethod({
                 name: "create",
                 isStatic: true,
@@ -309,7 +314,7 @@ class ClassWriter<E extends PointerTypes> {
                     {name: "uuid", type: "UUID.Bytes"},
                     {name: "constructor", type: `Procedure<${className}>`, hasQuestionToken: true}
                 ],
-                statements: `return graph.stageBox(new ${className}({uuid, graph, name: "${className}", pointerRules: ${pointerRules}, resource: ${resourceValue}}), constructor)`,
+                statements: `return graph.stageBox(new ${className}({uuid, graph, name: "${className}", pointerRules: ${pointerRules}, resource: ${resourceValue}, ephemeral: ${ephemeralValue}}), constructor)`,
                 returnType: className
             })
             declaration.addProperty({
@@ -325,6 +330,13 @@ class ClassWriter<E extends PointerTypes> {
                 isStatic: true,
                 isReadonly: true,
                 initializer: resourceValue
+            })
+            declaration.addProperty({
+                name: "Ephemeral",
+                type: "boolean",
+                isStatic: true,
+                isReadonly: true,
+                initializer: ephemeralValue
             })
         } else {
             declaration.addMethod({
