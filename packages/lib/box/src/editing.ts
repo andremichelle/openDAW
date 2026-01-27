@@ -9,9 +9,39 @@ import {
     Observer,
     Option,
     Subscription,
-    SyncProvider
+    SyncProvider,
+    UUID
 } from "@opendaw/lib-std"
-import {Update} from "./updates"
+import {DeleteUpdate, NewUpdate, PointerUpdate, PrimitiveUpdate, Update} from "./updates"
+
+// Removes updates for boxes that were created AND deleted in the same transaction.
+// This prevents undo issues when a box is created and immediately deleted.
+const optimizeUpdates = (updates: ReadonlyArray<Update>): ReadonlyArray<Update> => {
+    const createdUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
+    const deletedUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
+    for (const update of updates) {
+        if (update instanceof NewUpdate) {
+            createdUuids.add(update.uuid)
+        } else if (update instanceof DeleteUpdate) {
+            deletedUuids.add(update.uuid)
+        }
+    }
+    const phantomUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
+    for (const uuid of createdUuids.values()) {
+        if (deletedUuids.hasKey(uuid)) {
+            phantomUuids.add(uuid)
+        }
+    }
+    if (phantomUuids.isEmpty()) {return updates}
+    return updates.filter(update => {
+        if (update instanceof NewUpdate || update instanceof DeleteUpdate) {
+            return !phantomUuids.hasKey(update.uuid)
+        } else if (update instanceof PointerUpdate || update instanceof PrimitiveUpdate) {
+            return !phantomUuids.hasKey(update.address.uuid)
+        }
+        return true
+    })
+}
 
 class Modification {
     readonly #updates: ReadonlyArray<Update>
@@ -144,8 +174,9 @@ export class BoxEditing implements Editing {
         const result = modifier()
         this.#graph.endTransaction()
         subscription.terminate()
-        if (updates.length > 0) {
-            this.#pending.push(new Modification(updates))
+        const optimized = optimizeUpdates(updates)
+        if (optimized.length > 0) {
+            this.#pending.push(new Modification(optimized))
         }
         this.#modifying = false
         this.#graph.edges().validateRequirements()
@@ -167,8 +198,9 @@ export class BoxEditing implements Editing {
             approve: () => {
                 this.#graph.endTransaction()
                 subscription.terminate()
-                if (updates.length > 0) {
-                    this.#pending.push(new Modification(updates))
+                const optimized = optimizeUpdates(updates)
+                if (optimized.length > 0) {
+                    this.#pending.push(new Modification(optimized))
                 }
                 this.#modifying = false
                 this.#inProcess = false
