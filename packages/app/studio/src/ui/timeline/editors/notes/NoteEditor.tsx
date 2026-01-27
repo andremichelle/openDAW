@@ -1,28 +1,11 @@
 import css from "./NoteEditor.sass?inline"
 import {Html, ShortcutManager} from "@opendaw/lib-dom"
-import {
-    ByteArrayInput,
-    ByteArrayOutput,
-    DefaultObservableValue,
-    int,
-    isInstanceOf,
-    Lifecycle,
-    Option,
-    Terminable,
-    UUID
-} from "@opendaw/lib-std"
+import {DefaultObservableValue, int, isInstanceOf, Lifecycle, Terminable, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {PitchEditor} from "@/ui/timeline/editors/notes/pitch/PitchEditor.tsx"
 import {PitchPositioner} from "@/ui/timeline/editors/notes/pitch/PitchPositioner.ts"
-import {
-    CaptureMidi,
-    ClipboardEntry,
-    ClipboardHandler,
-    ClipboardManager,
-    ClipboardUtils,
-    TimelineRange
-} from "@opendaw/studio-core"
+import {CaptureMidi, ClipboardManager, NotesClipboard, TimelineRange} from "@opendaw/studio-core"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {NoteEventBox} from "@opendaw/studio-boxes"
 import {PianoRoll} from "@/ui/timeline/editors/notes/pitch/PianoRoll.tsx"
@@ -40,7 +23,6 @@ import {NotePropertyVelocity, PropertyAccessor} from "@/ui/timeline/editors/note
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {createPitchMenu} from "@/ui/timeline/editors/notes/pitch/PitchMenu.ts"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
-import {ppqn} from "@opendaw/lib-dsp"
 
 const className = Html.adoptStyleSheet(css, "NoteEditor")
 
@@ -53,21 +35,7 @@ type Construct = {
     reader: NoteEventOwnerReader
 }
 
-type ClipboardNotes = ClipboardEntry<"notes">
-
 const scale = new ScaleConfig()
-
-const encodeMetadata = (min: ppqn, max: ppqn): ArrayBufferLike => {
-    const output = ByteArrayOutput.create()
-    output.writeFloat(min)
-    output.writeFloat(max)
-    return output.toArrayBuffer()
-}
-
-const decodeMetadata = (buffer: ArrayBufferLike): {min: ppqn, max: ppqn} => {
-    const input = new ByteArrayInput(buffer)
-    return {min: input.readFloat(), max: input.readFloat()}
-}
 
 export const NoteEditor =
     ({lifecycle, service, menu: {editMenu, viewMenu}, range, snapping, reader}: Construct) => {
@@ -164,46 +132,16 @@ export const NoteEditor =
             </div>
         )
         const shortcuts = ShortcutManager.get().createContext(element, "NoteEditor (Main)")
-        const copyNotes = (): Option<ClipboardNotes> => {
-            const selected = selection.selected()
-            if (selected.length === 0) {return Option.None}
-            const min = selected.reduce((acc, {position}) => Math.min(acc, position), Number.POSITIVE_INFINITY)
-            const max = selected.reduce((acc, {complete}) => Math.max(acc, complete), Number.NEGATIVE_INFINITY)
-            const data = ClipboardUtils.serializeBoxes(selected.map(adapter => adapter.box), encodeMetadata(min, max))
-            engine.setPosition(reader.offset + max)
-            return Option.wrap({type: "notes", data})
-        }
-        const CopyNotes: ClipboardHandler<ClipboardNotes> = {
-            canCopy: (): boolean => !engine.isPlaying.getValue() && selection.nonEmpty(),
-            canCut: (): boolean => !engine.isPlaying.getValue() && selection.nonEmpty(),
-            canPaste: (entry: ClipboardEntry): boolean => !engine.isPlaying.getValue() && entry.type === "notes",
-            copy: copyNotes,
-            cut: (): Option<ClipboardNotes> => {
-                const result = copyNotes()
-                result.ifSome(() => editing.modify(() => selection.selected().forEach(adapter => adapter.box.delete())))
-                return result
-            },
-            paste: (entry: ClipboardEntry): void => {
-                if (entry.type !== "notes" || engine.isPlaying.getValue()) {return}
-                const position = engine.position.getValue()
-                const targetAddress = reader.content.box.events.address
-                const {min, max} = decodeMetadata(ClipboardUtils.extractMetadata(entry.data))
-                const offset = Math.max(0, position - reader.offset) - min
-                editing.modify(() => {
-                    selection.deselectAll()
-                    const boxes = ClipboardUtils.deserializeBoxes<NoteEventBox>(
-                        entry.data,
-                        boxGraph,
-                        {
-                            mapPointer: () => Option.wrap(targetAddress),
-                            modifyBox: box => box.position.setValue(box.position.getValue() + offset)
-                        }
-                    )
-                    selection.select(...boxes.map(box => boxAdapters.adapterFor(box, NoteEventBoxAdapter)))
-                    engine.setPosition(Math.max(0, position - reader.offset) + reader.offset + (max - min))
-                })
-            }
-        }
+        const clipboardHandler = NotesClipboard.createHandler({
+            getEnabled: () => !engine.isPlaying.getValue(),
+            getPosition: () => engine.position.getValue() - reader.offset,
+            setPosition: position => engine.setPosition(position + reader.offset),
+            editing,
+            selection,
+            targetAddress: reader.content.box.events.address,
+            boxGraph,
+            boxAdapters
+        })
         lifecycle.ownAll(
             shortcuts,
             shortcuts.register(NoteEditorShortcuts["toggle-step-recording"].shortcut,
@@ -234,7 +172,7 @@ export const NoteEditor =
                     }
                 }
             }),
-            ClipboardManager.install<ClipboardNotes>(element, CopyNotes)
+            ClipboardManager.install(element, clipboardHandler)
         )
         return element
     }

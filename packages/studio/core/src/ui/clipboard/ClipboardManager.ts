@@ -1,7 +1,7 @@
 import {Client, Option, Subscription, Terminable} from "@opendaw/lib-std"
 import {Events, ReservedShortcuts} from "@opendaw/lib-dom"
 import {ContextMenu} from "./ContextMenu"
-import {MenuItem} from "./MenuItems"
+import {MenuItem} from "../menu/MenuItems"
 import {StudioPreferences} from "../../StudioPreferences"
 
 const CLIPBOARD_HEADER = "OPENDAW"

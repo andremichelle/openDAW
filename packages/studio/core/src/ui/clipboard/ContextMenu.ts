@@ -1,6 +1,6 @@
 import {Client, Option, Subscription} from "@opendaw/lib-std"
 import {Events} from "@opendaw/lib-dom"
-import {MenuItem, MenuRootData} from "./MenuItems"
+import {MenuItem, MenuRootData} from "../menu/MenuItems"
 
 export namespace ContextMenu {
     export const CONTEXT_MENU_EVENT_TYPE = "--context-menu" as const
