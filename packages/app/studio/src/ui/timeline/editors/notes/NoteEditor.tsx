@@ -187,18 +187,19 @@ export const NoteEditor =
                 if (entry.type !== "notes" || engine.isPlaying.getValue()) {return}
                 const position = engine.position.getValue()
                 const targetAddress = reader.content.box.events.address
+                const {min, max} = decodeMetadata(ClipboardUtils.extractMetadata(entry.data))
+                const offset = Math.max(0, position - reader.offset) - min
                 editing.modify(() => {
                     selection.deselectAll()
-                    const {metadata, boxes} = ClipboardUtils.deserializeBoxes<NoteEventBox>(
+                    const boxes = ClipboardUtils.deserializeBoxes<NoteEventBox>(
                         entry.data,
                         boxGraph,
-                        {mapPointer: () => Option.wrap(targetAddress)}
+                        {
+                            mapPointer: () => Option.wrap(targetAddress),
+                            modifyBox: box => box.position.setValue(box.position.getValue() + offset)
+                        }
                     )
-                    const {min, max} = decodeMetadata(metadata)
-                    const offset = Math.max(0, position - reader.offset) - min
-                    boxes.forEach(box => box.position.setValue(box.position.getValue() + offset))
-                    const adapters = boxes.map(box => boxAdapters.adapterFor(box, NoteEventBoxAdapter))
-                    selection.select(...adapters)
+                    selection.select(...boxes.map(box => boxAdapters.adapterFor(box, NoteEventBoxAdapter)))
                     engine.setPosition(Math.max(0, position - reader.offset) + reader.offset + (max - min))
                 })
             }

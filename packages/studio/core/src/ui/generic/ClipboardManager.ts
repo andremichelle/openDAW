@@ -54,12 +54,17 @@ export namespace ClipboardManager {
         }
         const performCopy = (): void => handler.copy().ifSome(writeEntry)
         const performCut = (): void => handler.cut().ifSome(writeEntry)
-        const performPaste = async (): Promise<void> => {
-            const text = await Option.async(navigator.clipboard.readText())
-            const entry = text.flatMap(decode)
-            if (entry.nonEmpty()) {
-                handler.paste(entry.unwrap())
-            } else {
+        const performPaste = async () => {
+            try {
+                const rawText = await navigator.clipboard.readText()
+                const text = Option.wrap(rawText)
+                const entry = text.flatMap(decode)
+                if (entry.nonEmpty()) {
+                    handler.paste(entry.unwrap())
+                } else {
+                    fallbackEntry.ifSome(entry => handler.paste(entry))
+                }
+            } catch (_error) {
                 fallbackEntry.ifSome(entry => handler.paste(entry))
             }
         }
@@ -67,18 +72,23 @@ export namespace ClipboardManager {
             Events.subscribe(element, "copy", (event: ClipboardEvent) => {
                 handler.copy().ifSome(entry => {
                     event.preventDefault()
+                    const encoded = encode(entry)
                     fallbackEntry = Option.wrap(entry)
-                    event.clipboardData?.setData("text/plain", encode(entry))
+                    event.clipboardData?.setData("text/plain", encoded)
+                    navigator.clipboard?.writeText(encoded).catch(() => {})
                 })
             }),
             Events.subscribe(element, "cut", (event: ClipboardEvent) => {
                 handler.cut().ifSome(entry => {
                     event.preventDefault()
+                    const encoded = encode(entry)
                     fallbackEntry = Option.wrap(entry)
-                    event.clipboardData?.setData("text/plain", encode(entry))
+                    event.clipboardData?.setData("text/plain", encoded)
+                    navigator.clipboard?.writeText(encoded).catch(() => {})
                 })
             }),
-            Events.subscribe(element, "paste", (event: ClipboardEvent) => {
+            Events.subscribe(document, "paste", (event: ClipboardEvent) => {
+                if (!element.contains(document.activeElement) && document.activeElement !== document.body) {return}
                 const text = event.clipboardData?.getData("text/plain") ?? ""
                 const entry = decode(text)
                 if (entry.nonEmpty()) {
@@ -89,6 +99,18 @@ export namespace ClipboardManager {
                         event.preventDefault()
                         handler.paste(entry)
                     })
+                }
+            }),
+            Events.subscribe(document, "keydown", (event: KeyboardEvent) => {
+                if (!element.contains(document.activeElement) && document.activeElement !== document.body) {return}
+                const isMod = event.metaKey || event.ctrlKey
+                if (!isMod || event.shiftKey || event.altKey) {return}
+                if (event.key === "c") {
+                    event.preventDefault()
+                    performCopy()
+                } else if (event.key === "x") {
+                    event.preventDefault()
+                    performCut()
                 }
             }),
             ContextMenu.subscribe(element, async collector => {
