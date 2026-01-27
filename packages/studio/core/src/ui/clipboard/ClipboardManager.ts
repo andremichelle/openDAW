@@ -50,77 +50,50 @@ export namespace ClipboardManager {
 
     export const install = <E extends AnyEntry>(element: HTMLElement, handler: ClipboardHandler<E>): Subscription => {
         const writeEntry = (entry: E): void => {
-            console.debug("[Clipboard] writeEntry: type:", entry.type, "dataLength:", entry.data.byteLength)
             fallbackEntry = Option.wrap(entry)
-            navigator.clipboard?.writeText(encode(entry))
-                .then(() => console.debug("[Clipboard] writeEntry: clipboard.writeText succeeded"))
-                .catch(err => console.debug("[Clipboard] writeEntry: clipboard.writeText failed:", err))
+            navigator.clipboard?.writeText(encode(entry)).catch(() => {})
         }
-        const performCopy = (): void => {
-            console.debug("[Clipboard] performCopy called")
-            handler.copy().ifSome(writeEntry)
-        }
-        const performCut = (): void => {
-            console.debug("[Clipboard] performCut called")
-            handler.cut().ifSome(writeEntry)
-        }
+        const performCopy = (): void => handler.copy().ifSome(writeEntry)
+        const performCut = (): void => handler.cut().ifSome(writeEntry)
         const performPaste = async () => {
-            console.debug("[Clipboard] performPaste called")
             try {
                 const rawText = await navigator.clipboard.readText()
-                console.debug("[Clipboard] performPaste: clipboard.readText succeeded, length:", rawText?.length)
                 const text = Option.wrap(rawText)
                 const entry = text.flatMap(decode)
                 if (entry.nonEmpty()) {
-                    console.debug("[Clipboard] performPaste: decoded entry, calling handler.paste")
                     handler.paste(entry.unwrap())
                 } else {
-                    console.debug("[Clipboard] performPaste: decode failed, trying fallback, hasFallback:", fallbackEntry.nonEmpty())
                     fallbackEntry.ifSome(entry => handler.paste(entry))
                 }
-            } catch (error) {
-                console.debug("[Clipboard] performPaste: clipboard.readText failed:", error, "trying fallback, hasFallback:", fallbackEntry.nonEmpty())
+            } catch (_error) {
                 fallbackEntry.ifSome(entry => handler.paste(entry))
             }
         }
         return Terminable.many(
             Events.subscribe(element, "copy", (event: ClipboardEvent) => {
-                console.debug("[Clipboard] NATIVE copy event fired")
                 handler.copy().ifSome(entry => {
-                    console.debug("[Clipboard] NATIVE copy: got entry, type:", entry.type)
                     event.preventDefault()
                     const encoded = encode(entry)
                     fallbackEntry = Option.wrap(entry)
                     event.clipboardData?.setData("text/plain", encoded)
-                    console.debug("[Clipboard] NATIVE copy: setData completed, length:", encoded.length)
                 })
             }),
             Events.subscribe(element, "cut", (event: ClipboardEvent) => {
-                console.debug("[Clipboard] NATIVE cut event fired")
                 handler.cut().ifSome(entry => {
-                    console.debug("[Clipboard] NATIVE cut: got entry, type:", entry.type)
                     event.preventDefault()
                     const encoded = encode(entry)
                     fallbackEntry = Option.wrap(entry)
                     event.clipboardData?.setData("text/plain", encoded)
-                    console.debug("[Clipboard] NATIVE cut: setData completed, length:", encoded.length)
                 })
             }),
             Events.subscribe(document, "paste", (event: ClipboardEvent) => {
-                console.debug("[Clipboard] NATIVE paste event fired, activeElement:", document.activeElement?.tagName)
-                if (!element.contains(document.activeElement) && document.activeElement !== document.body) {
-                    console.debug("[Clipboard] NATIVE paste: REJECTED - focus not in element and not body")
-                    return
-                }
+                if (!element.contains(document.activeElement) && document.activeElement !== document.body) {return}
                 const text = event.clipboardData?.getData("text/plain") ?? ""
-                console.debug("[Clipboard] NATIVE paste: got text, length:", text.length, "hasHeader:", text.startsWith(CLIPBOARD_HEADER))
                 const entry = decode(text)
                 if (entry.nonEmpty()) {
-                    console.debug("[Clipboard] NATIVE paste: decoded successfully, calling handler.paste")
                     event.preventDefault()
                     handler.paste(entry.unwrap())
                 } else {
-                    console.debug("[Clipboard] NATIVE paste: decode failed, trying fallback, hasFallback:", fallbackEntry.nonEmpty())
                     fallbackEntry.ifSome(entry => {
                         event.preventDefault()
                         handler.paste(entry)
@@ -128,25 +101,15 @@ export namespace ClipboardManager {
                 }
             }),
             Events.subscribe(document, "keydown", (event: KeyboardEvent) => {
-                if (!element.contains(document.activeElement) && document.activeElement !== document.body) {
-                    return
-                }
+                if (!element.contains(document.activeElement) && document.activeElement !== document.body) {return}
                 const isMod = event.metaKey || event.ctrlKey
-                if (!isMod || event.shiftKey || event.altKey) {
-                    return
-                }
+                if (!isMod || event.shiftKey || event.altKey) {return}
                 if (event.key === "c") {
-                    console.debug("[Clipboard] KEYDOWN: Cmd+C detected")
                     event.preventDefault()
                     performCopy()
                 } else if (event.key === "x") {
-                    console.debug("[Clipboard] KEYDOWN: Cmd+X detected")
                     event.preventDefault()
                     performCut()
-                } else if (event.key === "v") {
-                    console.debug("[Clipboard] KEYDOWN: Cmd+V detected")
-                    event.preventDefault()
-                    performPaste()
                 }
             }),
             ContextMenu.subscribe(element, async collector => {
