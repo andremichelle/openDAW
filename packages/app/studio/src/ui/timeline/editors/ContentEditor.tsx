@@ -210,8 +210,12 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
             })()
             )
             range.width = contentEditor.clientWidth
-            owner.ifSome(reader =>
-                range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16))
+            owner.ifSome(reader => {
+                range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16)
+                if (!engine.isPlaying.getValue()) {
+                    engine.setPosition(reader.offset)
+                }
+            })
         },
         none: () => {
             owner = Option.None
