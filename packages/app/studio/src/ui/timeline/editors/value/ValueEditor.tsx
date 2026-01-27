@@ -215,7 +215,13 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             xAxis={range.valueAxis}
                             yAxis={valueAxis}/>
     )
-    const shortcuts = ShortcutManager.get().createContext(canvas, "ValueEditor")
+    const element: HTMLElement = (
+        <div className={className} tabIndex={-1} onConnect={(self: HTMLElement) => self.focus()}>
+            {canvas}
+            {selectionRectangle}
+        </div>
+    )
+    const shortcuts = ShortcutManager.get().createContext(element, "ValueEditor")
     lifecycle.ownAll(
         shortcuts,
         shortcuts.register(ContentEditorShortcuts["select-all"].shortcut, () =>
@@ -298,7 +304,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
             }
         }),
         installValueContextMenu({element: canvas, capturing, editing, selection}),
-        ClipboardManager.install(canvas, ValuesClipboard.createHandler({
+        ClipboardManager.install(element, ValuesClipboard.createHandler({
             getEnabled: () => !engine.isPlaying.getValue(),
             getPosition: () => engine.position.getValue() - reader.offset,
             setPosition: position => engine.setPosition(position + reader.offset),
@@ -310,10 +316,5 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
             boxAdapters
         }))
     )
-    return (
-        <div className={className}>
-            {canvas}
-            {selectionRectangle}
-        </div>
-    )
+    return element
 }

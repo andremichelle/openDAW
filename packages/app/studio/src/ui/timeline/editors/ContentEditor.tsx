@@ -213,7 +213,6 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
             range.width = contentEditor.clientWidth
             owner.ifSome(reader =>
                 range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16))
-            AnimationFrame.once(() => element.focus())
         },
         none: () => {
             owner = Option.None
