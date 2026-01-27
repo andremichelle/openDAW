@@ -1,4 +1,5 @@
 export * from "./generic/ClipboardManager"
+export * from "./generic/ClipboardUtils"
 export * from "./generic/ContextMenu"
 export * from "./generic/MenuItems"
 export * from "./timeline/RegionClipResolver"

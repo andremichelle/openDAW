@@ -1,13 +1,14 @@
-import {Client, JSONValue, Option, Subscription, Terminable} from "@opendaw/lib-std"
+import {Client, Option, Subscription, Terminable} from "@opendaw/lib-std"
 import {Events, ReservedShortcuts} from "@opendaw/lib-dom"
 import {ContextMenu} from "./ContextMenu"
 import {MenuItem} from "./MenuItems"
 
-const CLIPBOARD_PREFIX = "OPENDAW:1:"
+const CLIPBOARD_HEADER = "OPENDAW"
+const CLIPBOARD_VERSION = 2
 
-export type ClipboardEntry<T extends string = string, D extends JSONValue = JSONValue> = {
+export type ClipboardEntry<T extends string = string> = {
     readonly type: T
-    readonly data: D
+    readonly data: ArrayBufferLike
 }
 
 export interface ClipboardHandler<E extends ClipboardEntry> {
@@ -24,10 +25,27 @@ export namespace ClipboardManager {
 
     let fallbackEntry: Option<AnyEntry> = Option.None
 
-    const encode = (entry: AnyEntry): string => `${CLIPBOARD_PREFIX}${JSON.stringify(entry)}`
-    const decode = (text: string): Option<AnyEntry> => text.startsWith(CLIPBOARD_PREFIX)
-        ? Option.tryCatch(() => JSON.parse(text.slice(CLIPBOARD_PREFIX.length)) as AnyEntry)
-        : Option.None
+    const encode = (entry: AnyEntry): string => {
+        const bytes = new Uint8Array(entry.data)
+        let binary = ""
+        for (let i = 0; i < bytes.length; i++) {binary += String.fromCharCode(bytes[i])}
+        return `${CLIPBOARD_HEADER}:${CLIPBOARD_VERSION}:${entry.type}:${btoa(binary)}`
+    }
+
+    const decode = (text: string): Option<AnyEntry> => {
+        const parts = text.split(":")
+        if (parts.length < 4 || parts[0] !== CLIPBOARD_HEADER) {return Option.None}
+        const version = parseInt(parts[1], 10)
+        if (version !== CLIPBOARD_VERSION) {return Option.None}
+        return Option.tryCatch(() => {
+            const type = parts[2]
+            const base64 = parts.slice(3).join(":")
+            const binary = atob(base64)
+            const bytes = new Uint8Array(binary.length)
+            for (let i = 0; i < binary.length; i++) {bytes[i] = binary.charCodeAt(i)}
+            return {type, data: bytes.buffer} as AnyEntry
+        })
+    }
 
     export const install = <E extends AnyEntry>(element: HTMLElement, handler: ClipboardHandler<E>): Subscription => {
         const writeEntry = (entry: E): void => {
