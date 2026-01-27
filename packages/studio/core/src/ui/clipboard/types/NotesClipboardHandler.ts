@@ -1,6 +1,7 @@
 import {ByteArrayInput, ByteArrayOutput, Option, Procedure, Provider, Selection} from "@opendaw/lib-std"
-import {Address, BoxEditing, BoxGraph} from "@opendaw/lib-box"
+import {Address, Box, BoxEditing, BoxGraph} from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
+import {Pointers} from "@opendaw/studio-enums"
 import {NoteEventBox} from "@opendaw/studio-boxes"
 import {BoxAdapters, NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
@@ -47,7 +48,14 @@ export namespace NotesClipboard {
             if (selected.length === 0) {return Option.None}
             const min = selected.reduce((acc, {position}) => Math.min(acc, position), Number.POSITIVE_INFINITY)
             const max = selected.reduce((acc, {complete}) => Math.max(acc, complete), Number.NEGATIVE_INFINITY)
-            const data = ClipboardUtils.serializeBoxes(selected.map(adapter => adapter.box), encodeMetadata(min, max))
+            const eventBoxes = selected.map(adapter => adapter.box)
+            const dependencies = eventBoxes.flatMap(box =>
+                Array.from(boxGraph.dependenciesOf(box, {
+                    alwaysFollowMandatory: true,
+                    excludeBox: (dep: Box) => dep.ephemeral
+                }).boxes))
+            const allBoxes = [...eventBoxes, ...dependencies]
+            const data = ClipboardUtils.serializeBoxes(allBoxes, encodeMetadata(min, max))
             setPosition(max)
             return Option.wrap({type: "notes", data})
         }
@@ -68,15 +76,22 @@ export namespace NotesClipboard {
                 const positionOffset = Math.max(0, position) - min
                 editing.modify(() => {
                     selection.deselectAll()
-                    const boxes = ClipboardUtils.deserializeBoxes<NoteEventBox>(
+                    const boxes = ClipboardUtils.deserializeBoxes(
                         entry.data,
                         boxGraph,
                         {
-                            mapPointer: () => Option.wrap(targetAddress),
-                            modifyBox: box => box.position.setValue(box.position.getValue() + positionOffset)
+                            mapPointer: pointer => pointer.pointerType === Pointers.NoteEvents
+                                ? Option.wrap(targetAddress)
+                                : Option.None,
+                            modifyBox: box => {
+                                if (box instanceof NoteEventBox) {
+                                    box.position.setValue(box.position.getValue() + positionOffset)
+                                }
+                            }
                         }
                     )
-                    selection.select(...boxes.map(box => boxAdapters.adapterFor(box, NoteEventBoxAdapter)))
+                    const noteEventBoxes = boxes.filter((box): box is NoteEventBox => box instanceof NoteEventBox)
+                    selection.select(...noteEventBoxes.map(box => boxAdapters.adapterFor(box, NoteEventBoxAdapter)))
                     setPosition(Math.max(0, position) + (max - min))
                 })
             }

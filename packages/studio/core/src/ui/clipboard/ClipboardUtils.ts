@@ -35,13 +35,13 @@ export namespace ClipboardUtils {
         return output.toArrayBuffer()
     }
 
-    export const deserializeBoxes = <T extends Box>(data: ArrayBufferLike,
-                                                    targetGraph: BoxGraph,
-                                                    options: {
-                                                        mapPointer: SpecialDecoder["map"]
-                                                        modifyBox?: Procedure<T>
-                                                        excludeBox?: Predicate<Box>
-                                                    }): ReadonlyArray<T> => {
+    export const deserializeBoxes = <T extends Box = Box>(data: ArrayBufferLike,
+                                                          targetGraph: BoxGraph,
+                                                          options: {
+                                                              mapPointer: SpecialDecoder["map"]
+                                                              modifyBox?: Procedure<T>
+                                                              excludeBox?: Predicate<Box>
+                                                          }): ReadonlyArray<T> => {
         const input = new ByteArrayInput(data)
         input.skip(input.readInt())
         const graphDataLength = input.readInt()

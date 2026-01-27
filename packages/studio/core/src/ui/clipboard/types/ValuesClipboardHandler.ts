@@ -1,6 +1,7 @@
 import {ArrayMultimap, ByteArrayInput, ByteArrayOutput, Option, Procedure, Provider, Selection} from "@opendaw/lib-std"
 import {Address, BoxEditing, BoxGraph} from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
+import {Pointers} from "@opendaw/studio-enums"
 import {ValueEventBox} from "@opendaw/studio-boxes"
 import {BoxAdapters, ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
@@ -81,7 +82,14 @@ export namespace ValuesClipboard {
             })
             const min = sorted[0].position
             const max = sorted[sorted.length - 1].position
-            const data = ClipboardUtils.serializeBoxes(sorted.map(adapter => adapter.box), encodeMetadata(min, max))
+            const eventBoxes = sorted.map(adapter => adapter.box)
+            const dependencies = eventBoxes.flatMap(box =>
+                Array.from(boxGraph.dependenciesOf(box, {
+                    alwaysFollowMandatory: true,
+                    excludeBox: dep => dep.ephemeral
+                }).boxes))
+            const allBoxes = [...eventBoxes, ...dependencies]
+            const data = ClipboardUtils.serializeBoxes(allBoxes, encodeMetadata(min, max))
             setPosition(max)
             return Option.wrap({type: "values", data})
         }
@@ -112,15 +120,22 @@ export namespace ValuesClipboard {
                             existingAdapters.push(adapter)
                         }
                     }
-                    const boxes = ClipboardUtils.deserializeBoxes<ValueEventBox>(
+                    const boxes = ClipboardUtils.deserializeBoxes(
                         entry.data,
                         boxGraph,
                         {
-                            mapPointer: () => Option.wrap(targetAddress),
-                            modifyBox: box => box.position.setValue(box.position.getValue() + positionOffset)
+                            mapPointer: pointer => pointer.pointerType === Pointers.ValueEvents
+                                ? Option.wrap(targetAddress)
+                                : Option.None,
+                            modifyBox: box => {
+                                if (box instanceof ValueEventBox) {
+                                    box.position.setValue(box.position.getValue() + positionOffset)
+                                }
+                            }
                         }
                     )
-                    const pastedAdapters = boxes.map(box => boxAdapters.adapterFor(box, ValueEventBoxAdapter))
+                    const valueEventBoxes = boxes.filter((box): box is ValueEventBox => box instanceof ValueEventBox)
+                    const pastedAdapters = valueEventBoxes.map(box => boxAdapters.adapterFor(box, ValueEventBoxAdapter))
                     resolveIndexConflicts(existingAdapters, pastedAdapters)
                     selection.select(...pastedAdapters)
                     setPosition(pastedMax)
