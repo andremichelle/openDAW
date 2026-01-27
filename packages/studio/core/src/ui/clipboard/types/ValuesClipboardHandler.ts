@@ -1,4 +1,4 @@
-import {ArrayMultimap, ByteArrayInput, ByteArrayOutput, Option, Procedure, Provider, Selection} from "@opendaw/lib-std"
+import {ByteArrayInput, ByteArrayOutput, Option, Procedure, Provider, Selection} from "@opendaw/lib-std"
 import {Address, BoxEditing, BoxGraph} from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
 import {Pointers} from "@opendaw/studio-enums"
@@ -34,32 +34,39 @@ export namespace ValuesClipboard {
         return {min: input.readFloat(), max: input.readFloat()}
     }
 
+    // At pastedMin: push pasted after existing → keep first (existing, index 0) and last (pasted, index 1)
+    // At pastedMax: unshift pasted before existing → keep first (pasted, index 0) and last (existing, index 1)
+    // Delete middle events, all pasted events survive
     const resolveIndexConflicts = (existingAdapters: ReadonlyArray<ValueEventBoxAdapter>,
-                                   pastedAdapters: ReadonlyArray<ValueEventBoxAdapter>): void => {
-        const pastedSet = new Set(pastedAdapters)
-        const isPasted = (adapter: ValueEventBoxAdapter): boolean => pastedSet.has(adapter)
-        const byPosition = new ArrayMultimap<ppqn, ValueEventBoxAdapter>()
-        for (const adapter of existingAdapters) {
-            byPosition.add(adapter.position, adapter)
-        }
-        for (const adapter of pastedAdapters) {
-            byPosition.add(adapter.position, adapter)
-        }
-        byPosition.forEach((_position, adapters) => {
-            if (adapters.length === 1) {
-                adapters[0].box.index.setValue(0)
-            } else {
-                // Existing first (index 0), pasted second (index 1)
-                const sorted = Array.from(adapters).sort((a, b) => (isPasted(a) ? 1 : 0) - (isPasted(b) ? 1 : 0))
-                for (let i = 1; i < sorted.length - 1; i++) {
-                    if (!isPasted(sorted[i])) {
-                        sorted[i].box.delete()
-                    }
-                }
-                sorted[0].box.index.setValue(0)
-                sorted[sorted.length - 1].box.index.setValue(1)
-            }
+                                   pastedAdapters: ReadonlyArray<ValueEventBoxAdapter>,
+                                   pastedMin: ppqn,
+                                   pastedMax: ppqn): ReadonlyArray<ValueEventBoxAdapter> => {
+        const sortedPasted = pastedAdapters.slice().sort((a, b) => {
+            const positionDiff = a.position - b.position
+            return positionDiff !== 0 ? positionDiff : a.index - b.index
         })
+        const deletedSet = new Set<ValueEventBoxAdapter>()
+        const handleBoundary = (position: ppqn, pastedFirst: boolean): void => {
+            const existingAtPos = existingAdapters
+                .filter(adapter => adapter.position === position)
+                .sort((a, b) => a.index - b.index)
+            const pastedAtPos = sortedPasted.filter(adapter => adapter.position === position)
+            const combined = pastedFirst
+                ? [...pastedAtPos, ...existingAtPos]
+                : [...existingAtPos, ...pastedAtPos]
+            if (combined.length <= 1) {return}
+            for (let i = 1; i < combined.length - 1; i++) {
+                combined[i].box.delete()
+                deletedSet.add(combined[i])
+            }
+            combined[0].box.index.setValue(0)
+            combined[combined.length - 1].box.index.setValue(1)
+        }
+        handleBoundary(pastedMin, false)
+        if (pastedMax !== pastedMin) {
+            handleBoundary(pastedMax, true)
+        }
+        return sortedPasted.filter(adapter => !deletedSet.has(adapter))
     }
 
     export const createHandler = ({
@@ -136,8 +143,8 @@ export namespace ValuesClipboard {
                     )
                     const valueEventBoxes = boxes.filter((box): box is ValueEventBox => box instanceof ValueEventBox)
                     const pastedAdapters = valueEventBoxes.map(box => boxAdapters.adapterFor(box, ValueEventBoxAdapter))
-                    resolveIndexConflicts(existingAdapters, pastedAdapters)
-                    selection.select(...pastedAdapters)
+                    const survivingPasted = resolveIndexConflicts(existingAdapters, pastedAdapters, pastedMin, pastedMax)
+                    selection.select(...survivingPasted)
                     setPosition(pastedMax)
                 })
             }
