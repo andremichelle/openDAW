@@ -23,7 +23,7 @@ import {
 import {Box, PointerField, Vertex} from "@opendaw/lib-box"
 import {SnapSelector} from "@/ui/timeline/SnapSelector.tsx"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {TimelineRange} from "@opendaw/studio-core"
+import {MenuItem, TimelineRange} from "@opendaw/studio-core"
 import {TimeAxis} from "@/ui/timeline/TimeAxis.tsx"
 import {TimelineRangeSlider} from "@/ui/timeline/TimelineRangeSlider.tsx"
 import {ValueEventsEditor} from "./value/ValueEventsEditor.tsx"
@@ -31,7 +31,6 @@ import {FlexSpacer} from "@/ui/components/FlexSpacer.tsx"
 import {PPQN} from "@opendaw/lib-dsp"
 import {AudioEditor} from "@/ui/timeline/editors/audio/AudioEditor.tsx"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {MenuItem} from "@opendaw/studio-core"
 import {EditorMenuCollector} from "@/ui/timeline/editors/EditorMenuCollector.ts"
 
 import {ClipReader} from "@/ui/timeline/editors/ClipReader.ts"
@@ -45,7 +44,7 @@ import {
 import {RegionReader} from "@/ui/timeline/editors/RegionReader.ts"
 import {Colors, Pointers} from "@opendaw/studio-enums"
 import {ParameterValueEditing} from "@/ui/timeline/editors/value/ParameterValueEditing.ts"
-import {AnimationFrame, deferNextFrame, Html, ShortcutManager} from "@opendaw/lib-dom"
+import {deferNextFrame, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 
 const className = Html.adoptStyleSheet(css, "ContentEditor")
