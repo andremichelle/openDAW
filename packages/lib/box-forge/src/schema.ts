@@ -32,10 +32,13 @@ export type ClassSchema<E extends PointerTypes> = {
     name: string
     fields: FieldRecord<E>
 }
+export type ResourceType = "external" | "internal"
+
 export type BoxSchema<E extends PointerTypes> = Referencable<E> & {
     type: "box"
     class: ClassSchema<E>
     ephemeral?: boolean
+    resource?: ResourceType
 }
 export type ObjectSchema<E extends PointerTypes> = {
     type: "object"

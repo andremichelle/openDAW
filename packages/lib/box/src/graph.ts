@@ -270,14 +270,33 @@ export class BoxGraph<BoxMap = any> {
     dependenciesOf(box: Box, options: {
         excludeBox?: Predicate<Box>
         alwaysFollowMandatory?: boolean
+        stopAtResources?: boolean
     } = {}): Dependencies {
         const excludeBox = isDefined(options.excludeBox) ? options.excludeBox : Predicates.alwaysFalse
         const alwaysFollowMandatory = isDefined(options.alwaysFollowMandatory) ? options.alwaysFollowMandatory : false
+        const stopAtResources = isDefined(options.stopAtResources) ? options.stopAtResources : false
         const boxes = new Set<Box>()
         const pointers = new Set<PointerField>()
         const trace = (box: Box): void => {
             if (boxes.has(box) || excludeBox(box)) {return}
             boxes.add(box)
+            // Handle resource boxes specially when stopAtResources is enabled
+            if (stopAtResources && isDefined(box.resource)) {
+                // Resource boxes are endpoints, but we still need their "children"
+                // Children = boxes that point to FIELDS within this box (not the box itself)
+                box.incomingEdges()
+                    .forEach(pointer => {
+                        pointers.add(pointer)
+                        // Only follow if pointer targets a FIELD (child), not the BOX (user)
+                        const targetsField = pointer.targetAddress.mapOr(address => !address.isBox(), false)
+                        if (pointer.mandatory && targetsField) {
+                            trace(pointer.box)
+                        }
+                    })
+                // Don't trace outgoing edges - resources are endpoints
+                return
+            }
+            // Normal box traversal
             box.outgoingEdges()
                 .filter(([pointer]) => !pointers.has(pointer))
                 .forEach(([source, targetAddress]: [PointerField, Address]) => {

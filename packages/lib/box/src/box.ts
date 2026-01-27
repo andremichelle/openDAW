@@ -34,11 +34,14 @@ import {ArrayField} from "./array"
 import {ObjectField} from "./object"
 import {PrimitiveField} from "./primitive"
 
+export type ResourceType = "external" | "internal"
+
 export type BoxConstruct<T extends PointerTypes> = {
     uuid: UUID.Bytes
     graph: BoxGraph
     name: string
     pointerRules: PointerRules<T>
+    resource?: ResourceType
 }
 
 export abstract class Box<P extends PointerTypes = PointerTypes, F extends Fields = any> implements Vertex<P, F> {
@@ -50,15 +53,17 @@ export abstract class Box<P extends PointerTypes = PointerTypes, F extends Field
     readonly #graph: BoxGraph
     readonly #name: string
     readonly #pointerRules: PointerRules<P>
+    readonly #resource?: ResourceType
 
     readonly #fields: F
     readonly #creationIndex = Box.Index++
 
-    protected constructor({uuid, graph, name, pointerRules}: BoxConstruct<P>) {
+    protected constructor({uuid, graph, name, pointerRules, resource}: BoxConstruct<P>) {
         this.#address = Address.compose(uuid)
         this.#graph = graph
         this.#name = name
         this.#pointerRules = pointerRules
+        this.#resource = resource
 
         this.#fields = this.initializeFields()
 
@@ -86,6 +91,7 @@ export abstract class Box<P extends PointerTypes = PointerTypes, F extends Field
     get parent(): Vertex {return this}
     get address(): Address {return this.#address}
     get pointerRules(): PointerRules<P> {return this.#pointerRules}
+    get resource(): ResourceType | undefined {return this.#resource}
     get creationIndex(): number {return this.#creationIndex}
 
     @Lazy
