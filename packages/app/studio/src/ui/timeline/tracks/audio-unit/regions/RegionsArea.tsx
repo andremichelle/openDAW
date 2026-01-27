@@ -49,11 +49,13 @@ const className = Html.adoptStyleSheet(css, "RegionsArea")
 
 const CursorMap = Object.freeze({
     "position": "auto",
-    "start": "w-resize",
-    "complete": "e-resize",
+    "start": Cursor.LoopStart,
+    "complete": Cursor.LoopEnd,
     "loop-duration": Cursor.ExpandWidth,
     "content-start": Cursor.ExpandWidth,
-    "content-complete": Cursor.ExpandWidth
+    "content-complete": Cursor.ExpandWidth,
+    "fading-in": "ew-resize",
+    "fading-out": "ew-resize"
 }) satisfies Record<string, CssUtils.Cursor | Cursor>
 
 type Construct = {
@@ -263,7 +265,57 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                     case "loop-duration":
                     case "content-complete":
                         return manager.startRegionModifier(RegionLoopDurationModifier.create(regionSelection.selected(),
-                            {project, element, snapping, pointerPulse, reference, resize: target.part === "content-complete"}))
+                            {
+                                project, element, snapping, pointerPulse, reference,
+                                resize: target.part === "content-complete"
+                            }))
+                    case "fading-in":
+                    case "fading-out": {
+                        const audioRegion = target.region
+                        const isFadeIn = target.part === "fading-in"
+                        const {position, duration, complete, fading} = audioRegion
+                        if (event.shiftKey) {
+                            const slopeField = isFadeIn ? fading.inSlopeField : fading.outSlopeField
+                            const originalSlope = slopeField.getValue()
+                            const startY = event.clientY
+                            return Option.wrap({
+                                update: (dragEvent: Dragging.Event) => {
+                                    const deltaY = startY - dragEvent.clientY
+                                    const newSlope = clamp(originalSlope + deltaY * 0.01, 0.001, 0.999)
+                                    editing.modify(() => slopeField.setValue(newSlope), false)
+                                },
+                                approve: () => editing.mark(),
+                                cancel: () => editing.modify(() => slopeField.setValue(originalSlope))
+                            } satisfies Dragging.Process)
+                        }
+                        const originalFadeIn = fading.in
+                        const originalFadeOut = fading.out
+                        return Option.wrap({
+                            update: (dragEvent: Dragging.Event) => {
+                                const pointerPpqn = range.xToUnit(dragEvent.clientX - clientRect.left)
+                                editing.modify(() => {
+                                    if (isFadeIn) {
+                                        const newFadeIn = clamp(pointerPpqn - position, 0, duration)
+                                        fading.inField.setValue(newFadeIn)
+                                        if (newFadeIn + fading.out > duration) {
+                                            fading.outField.setValue(duration - newFadeIn)
+                                        }
+                                    } else {
+                                        const newFadeOut = clamp(complete - pointerPpqn, 0, duration)
+                                        fading.outField.setValue(newFadeOut)
+                                        if (fading.in + newFadeOut > duration) {
+                                            fading.inField.setValue(duration - newFadeOut)
+                                        }
+                                    }
+                                }, false)
+                            },
+                            approve: () => editing.mark(),
+                            cancel: () => editing.modify(() => {
+                                fading.inField.setValue(originalFadeIn)
+                                fading.outField.setValue(originalFadeOut)
+                            })
+                        } satisfies Dragging.Process)
+                    }
                     default: {
                         return Unhandled(target)
                     }

@@ -1,11 +1,17 @@
-import {AnyLoopableRegionBoxAdapter, AnyRegionBoxAdapter, UnionAdapterTypes} from "@opendaw/studio-adapters"
+import {
+    AnyLoopableRegionBoxAdapter,
+    AnyRegionBoxAdapter,
+    AudioRegionBoxAdapter,
+    UnionAdapterTypes
+} from "@opendaw/studio-adapters"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
-import {BinarySearch, Nullable, NumberComparator} from "@opendaw/lib-std"
+import {BinarySearch, Geom, isInstanceOf, Nullable, NumberComparator} from "@opendaw/lib-std"
 import {PointerRadiusDistance} from "@/ui/timeline/constants.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
 import {TimelineRange} from "@opendaw/studio-core"
+import {RegionLabel} from "@/ui/timeline/RegionLabel"
 
 export type RegionCaptureTarget =
     | { type: "region", part: "position", region: AnyRegionBoxAdapter }
@@ -14,6 +20,8 @@ export type RegionCaptureTarget =
     | { type: "region", part: "content-start", region: AnyRegionBoxAdapter }
     | { type: "region", part: "content-complete", region: AnyRegionBoxAdapter }
     | { type: "region", part: "loop-duration", region: AnyRegionBoxAdapter }
+    | { type: "region", part: "fading-in", region: AudioRegionBoxAdapter }
+    | { type: "region", part: "fading-out", region: AudioRegionBoxAdapter }
     | { type: "track", track: TrackContext }
 
 export namespace RegionCapturing {
@@ -29,7 +37,6 @@ export namespace RegionCapturing {
                     .rightMostMapped(tracks, y, NumberComparator, component => component.position)
                 if (trackIndex < 0 || trackIndex >= tracks.length) {return null}
                 const track = tracks[trackIndex]
-                const size = track.size
                 const position = Math.floor(range.xToUnit(x))
                 const region = track.trackBoxAdapter.regions.collection.lowerEqual(position)
                 if (region === null || position >= region.complete) {
@@ -41,8 +48,21 @@ export namespace RegionCapturing {
                     // too small to have other sensitive areas
                     return {type: "region", part: "position", region}
                 }
+                if (isInstanceOf(region, AudioRegionBoxAdapter)) {
+                    const {fading} = region
+                    const handleRadius = 3
+                    const handleY = track.position + RegionLabel.labelHeight()
+                    const fadeInX = range.unitToX(region.position + fading.in)
+                    const fadeOutX = range.unitToX(region.position + region.duration - fading.out)
+                    if (Geom.isInsideCircle(x, y, fadeInX, handleY, handleRadius)) {
+                        return {type: "region", part: "fading-in", region}
+                    }
+                    if (Geom.isInsideCircle(x, y, fadeOutX, handleY, handleRadius)) {
+                        return {type: "region", part: "fading-out", region}
+                    }
+                }
                 if (UnionAdapterTypes.isLoopableRegion(region)) {
-                    const bottomEdge = y > track.position + size / 3 * 2
+                    const bottomEdge = y > track.position + RegionLabel.labelHeight()
                     if (x - x0 < PointerRadiusDistance * 2) {
                         return bottomEdge
                             ? {type: "region", part: "content-start", region}

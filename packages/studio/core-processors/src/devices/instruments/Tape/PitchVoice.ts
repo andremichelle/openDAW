@@ -60,7 +60,7 @@ export class PitchVoice {
         this.#playbackRate = rate
     }
 
-    process(bufferStart: int, bufferCount: int): void {
+    process(bufferStart: int, bufferCount: int, fadingGainBuffer: Float32Array): void {
         const [outL, outR] = this.#output.channels()
         const {frames, numberOfFrames} = this.#data
         const framesL = frames[0]
@@ -76,12 +76,10 @@ export class PitchVoice {
         let fadeProgress = this.#fadeProgress
         for (let i = 0; i < bufferCount; i++) {
             if (state === VoiceState.Done) {break}
-            // Skip samples until we reach the block offset where this voice should start
             if (i < blockOffset) {continue}
             const j = bufferStart + i
             let amplitude: number
             if (state === VoiceState.Fading && fadeDirection > 0) {
-                // Fading in
                 amplitude = fadeProgress / fadeLength
                 if (++fadeProgress >= fadeLength) {
                     state = VoiceState.Active
@@ -89,7 +87,6 @@ export class PitchVoice {
                     fadeDirection = 0.0
                 }
             } else if (state === VoiceState.Fading && fadeDirection < 0) {
-                // Fading out - wait for fadeOutBlockOffset
                 if (i < fadeOutBlockOffset) {
                     amplitude = 1.0
                 } else {
@@ -107,8 +104,9 @@ export class PitchVoice {
                 const alpha = readPosition - readInt
                 const sL = framesL[readInt]
                 const sR = framesR[readInt]
-                outL[j] += (sL + alpha * (framesL[readInt + 1] - sL)) * amplitude
-                outR[j] += (sR + alpha * (framesR[readInt + 1] - sR)) * amplitude
+                const finalAmplitude = amplitude * fadingGainBuffer[i]
+                outL[j] += (sL + alpha * (framesL[readInt + 1] - sL)) * finalAmplitude
+                outR[j] += (sR + alpha * (framesR[readInt + 1] - sR)) * finalAmplitude
             }
             readPosition += playbackRate
             if (state === VoiceState.Active && readPosition >= fadeOutThreshold) {

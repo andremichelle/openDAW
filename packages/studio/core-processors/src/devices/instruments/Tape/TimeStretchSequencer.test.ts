@@ -1,8 +1,10 @@
 import {describe, expect, it, beforeEach} from "vitest"
 import {TimeStretchSequencer} from "./TimeStretchSequencer"
-import {AudioBuffer, AudioData, EventCollection, LoopableRegion, Event} from "@opendaw/lib-dsp"
+import {AudioBuffer, AudioData, EventCollection, LoopableRegion, Event, RenderQuantum} from "@opendaw/lib-dsp"
 import {TransientPlayMode} from "@opendaw/studio-enums"
 import {Block, BlockFlag} from "../../../processing"
+
+const testFadingGainBuffer = new Float32Array(RenderQuantum).fill(1.0)
 
 // Test helper: minimal Event implementation for transient markers
 class TestTransientMarker implements Event {
@@ -131,7 +133,7 @@ function processBlocks(
         )
         const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
 
-        sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+        sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
         currentSample += samplesToProcess
         currentPpqn += ppqnToProcess
@@ -189,7 +191,7 @@ describe("TimeStretchSequencer", () => {
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
 
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 // RULE 1: Never more than 2 voices
                 expect(sequencer.voiceCount).toBeLessThanOrEqual(2)
@@ -302,13 +304,13 @@ describe("TimeStretchSequencer", () => {
             // Process first block normally
             const block1 = createBlock(0, 10, 0, 128, 120)
             const cycle1 = createCycle(0, 10, 0)
-            sequencer.process(output, data, transients as any, config as any, 0, block1, cycle1)
+            sequencer.process(output, data, transients as any, config as any, 0, block1, cycle1, testFadingGainBuffer)
             expect(sequencer.voiceCount).toBe(1)
 
             // Process discontinuous block (e.g., seek)
             const block2 = createBlock(960, 970, 0, 128, 120, BlockFlag.transporting | BlockFlag.playing | BlockFlag.discontinuous)
             const cycle2 = createCycle(960, 970, 0)
-            sequencer.process(output, data, transients as any, config as any, 0, block2, cycle2)
+            sequencer.process(output, data, transients as any, config as any, 0, block2, cycle2, testFadingGainBuffer)
 
             // Voices should exist (old fading + new, or just new if fade completed)
             expect(sequencer.voiceCount).toBeGreaterThanOrEqual(1)
@@ -347,7 +349,7 @@ describe("TimeStretchSequencer", () => {
                         120
                     )
                     const cycle = createCycle(ppqnOffset, ppqnOffset + (128 / 44100) * 1920, 0)
-                    sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                    sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
                 }
             }
             // At matching BPM, should maintain single voice throughout
@@ -416,7 +418,7 @@ describe("TimeStretchSequencer", () => {
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
 
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 if (sequencer.voiceCount > 0) sawVoice = true
                 maxVoiceCount = Math.max(maxVoiceCount, sequencer.voiceCount)
@@ -530,7 +532,7 @@ describe("TimeStretchSequencer", () => {
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
 
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 voiceCountHistory.push(sequencer.voiceCount)
 
@@ -602,7 +604,7 @@ describe("TimeStretchSequencer", () => {
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
 
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 if (sequencer.voiceCount > 0) {
                     sawVoice = true
@@ -657,7 +659,7 @@ describe("TimeStretchSequencer", () => {
                     currentSample, currentSample + samplesToProcess, bpm
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 currentSample += samplesToProcess
                 currentPpqn += ppqnToProcess
@@ -683,7 +685,7 @@ describe("TimeStretchSequencer", () => {
                     currentSample, currentSample + samplesToProcess, bpm
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 if (sequencer.voiceCount === 0 && !sawZeroAfterBpmChange) {
                     sawZeroAfterBpmChange = true
@@ -735,7 +737,7 @@ describe("TimeStretchSequencer", () => {
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
 
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 // After first voice spawns, should never have 0 voices with Repeat mode
                 if (currentSample > sampleRate * 0.1 && sequencer.voiceCount === 0) {
@@ -784,7 +786,7 @@ describe("TimeStretchSequencer", () => {
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
 
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 // After first voice spawns, should never have 0 voices with Pingpong mode
                 if (currentSample > sampleRate * 0.1 && sequencer.voiceCount === 0) {
@@ -838,7 +840,7 @@ describe("TimeStretchSequencer", () => {
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
 
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 if (sequencer.voiceCount > maxVoiceCount) {
                     maxVoiceCount = sequencer.voiceCount
@@ -898,7 +900,7 @@ describe("TimeStretchSequencer", () => {
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
 
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 if (sequencer.voiceCount === 2) {
                     if (twoVoiceStartSample === -1) {
@@ -981,7 +983,7 @@ describe("TimeStretchSequencer", () => {
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
 
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 if (sequencer.voiceCount > 0) sawVoice = true
                 maxVoiceCount = Math.max(maxVoiceCount, sequencer.voiceCount)
@@ -1052,7 +1054,7 @@ describe("TimeStretchSequencer", () => {
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
 
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 if (sequencer.voiceCount > 0) sawVoice = true
                 maxVoiceCount = Math.max(maxVoiceCount, sequencer.voiceCount)
@@ -1124,7 +1126,7 @@ describe("TimeStretchSequencer", () => {
                     currentSample, currentSample + samplesToProcess, bpm
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 currentSample += samplesToProcess
                 currentPpqn += ppqnToProcess
@@ -1152,7 +1154,7 @@ describe("TimeStretchSequencer", () => {
                     currentSample, currentSample + samplesToProcess, bpm
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 if (sequencer.voiceCount === 0 && !sawZeroVoices) {
                     sawZeroVoices = true
@@ -1200,7 +1202,7 @@ describe("TimeStretchSequencer", () => {
                     currentSample, currentSample + samplesToProcess, bpm
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 currentSample += samplesToProcess
                 currentPpqn += ppqnToProcess
@@ -1226,7 +1228,7 @@ describe("TimeStretchSequencer", () => {
                     currentSample, currentSample + samplesToProcess, bpm
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 if (sequencer.voiceCount === 0) {
                     sawZeroVoices = true
@@ -1286,7 +1288,7 @@ describe("TimeStretchSequencer", () => {
                     0, samplesToProcess, bpm
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 samplesProcessed += samplesToProcess
                 currentPpqn += ppqnToProcess
@@ -1319,7 +1321,7 @@ describe("TimeStretchSequencer", () => {
                     0, samplesToProcess, bpm
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 // Check output amplitude
                 const [outL] = output.channels()
@@ -1392,7 +1394,7 @@ describe("TimeStretchSequencer", () => {
                     0, samplesToProcess, bpm
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 samplesProcessed += samplesToProcess
                 currentPpqn += ppqnToProcess
@@ -1422,7 +1424,7 @@ describe("TimeStretchSequencer", () => {
                     0, samplesToProcess, bpm
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 const [outL] = output.channels()
                 for (let i = 0; i < samplesToProcess; i++) {
@@ -1507,7 +1509,7 @@ describe("TimeStretchSequencer", () => {
                     0, samplesToProcess, bpm
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 // Check if this block contains the transient
                 const blockContainsTransient = currentPpqn <= transientPpqn && currentPpqn + ppqnToProcess > transientPpqn
@@ -1598,7 +1600,7 @@ describe("TimeStretchSequencer", () => {
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
 
                 const voicesBefore = sequencer.voiceCount
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
                 const voicesAfter = sequencer.voiceCount
 
                 // Debug around crossfade region
@@ -1715,7 +1717,7 @@ describe("TimeStretchSequencer", () => {
                     0, samplesToProcess, bpm
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 // Check for gaps
                 const [outL] = output.channels()
@@ -1750,7 +1752,7 @@ describe("TimeStretchSequencer", () => {
                     0, samplesToProcess, bpm
                 )
                 const cycle = createCycle(currentPpqn, currentPpqn + ppqnToProcess, 0)
-                sequencer.process(output, data, transients as any, config as any, 0, block, cycle)
+                sequencer.process(output, data, transients as any, config as any, 0, block, cycle, testFadingGainBuffer)
 
                 // Check for gaps - but ALSO log voice count when gap occurs
                 const [outL] = output.channels()
