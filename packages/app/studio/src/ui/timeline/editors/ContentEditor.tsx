@@ -205,10 +205,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                     owner = Option.wrap(reader)
                     return createAudioEditor(reader)
                 }
-            }) ?? (() => {
-                return fallback(vertex.box)
-            })()
-            )
+            }) ?? (() => fallback(vertex.box))())
             range.width = contentEditor.clientWidth
             owner.ifSome(reader => {
                 range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16)
