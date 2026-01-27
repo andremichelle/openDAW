@@ -2,6 +2,7 @@ import {Client, Option, Subscription, Terminable} from "@opendaw/lib-std"
 import {Events, ReservedShortcuts} from "@opendaw/lib-dom"
 import {ContextMenu} from "./ContextMenu"
 import {MenuItem} from "./MenuItems"
+import {StudioPreferences} from "../../StudioPreferences"
 
 const CLIPBOARD_HEADER = "OPENDAW"
 const CLIPBOARD_VERSION = 2
@@ -114,6 +115,7 @@ export namespace ClipboardManager {
                 }
             }),
             ContextMenu.subscribe(element, async collector => {
+                if (!StudioPreferences.settings.editing["show-clipboard-menu"]) {return}
                 const {client} = collector
                 const text = await Option.async(navigator.clipboard.readText())
                 const entry = text.flatMap(decode)

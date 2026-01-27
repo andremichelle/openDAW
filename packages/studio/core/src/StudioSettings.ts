@@ -39,9 +39,11 @@ export const StudioSettingsSchema = z.object({
         "normalize-mouse-wheel": true
     }),
     "editing": z.object({
-        "overlapping-regions-behaviour": z.enum(OverlappingRegionsBehaviourOptions)
+        "overlapping-regions-behaviour": z.enum(OverlappingRegionsBehaviourOptions),
+        "show-clipboard-menu": z.boolean()
     }).default({
-        "overlapping-regions-behaviour": "clip"
+        "overlapping-regions-behaviour": "clip",
+        "show-clipboard-menu": false
     }),
     "debug": z.object({
         "footer-show-fps-meter": z.boolean(),

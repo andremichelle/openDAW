@@ -40,7 +40,8 @@ export namespace PreferencesPageLabels {
         "editing": {
             label: "Editing",
             fields: {
-                "overlapping-regions-behaviour": "Overlapping regions behaviour"
+                "overlapping-regions-behaviour": "Overlapping regions behaviour",
+                "show-clipboard-menu": "Show clipboard menu (Cut, Copy, Paste)"
             }
         },
         "debug": {
