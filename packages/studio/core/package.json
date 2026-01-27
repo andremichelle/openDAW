@@ -34,6 +34,7 @@
     },
     "dependencies": {
         "@opendaw/lib-box": "^0.0.69",
+        "@opendaw/nam-wasm": "^1.0.3",
         "@opendaw/lib-dawproject": "^0.0.54",
         "@opendaw/lib-dom": "^0.0.70",
         "@opendaw/lib-dsp": "^0.0.68",
