@@ -202,6 +202,7 @@ export class ValueMoveModifier implements ValueModifier {
         const obsolete: Array<ValueEventDraft> = []
         let index: int = 0
         let prev: ValueEventDraft = asDefined(value)
+        prev.index = 0
         for (const next of iterable) {
             if (prev.position === next.position) {
                 if (index === 0) {prev.index = 0}
