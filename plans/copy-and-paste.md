@@ -90,6 +90,7 @@ dependenciesOf(box: Box, options: {
 |-----|------|---------------|--------|
 | `AudioFileBox` | `std/AudioFileBox.ts` | `"external"` | References external audio file |
 | `SoundfontFileBox` | `std/SoundfontFileBox.ts` | `"external"` | References external soundfont file |
+| `GrooveBox` | `std/GrooveBoxes.ts` | `"internal"` | Project-level shared resource (prevents pulling in RootBox) |
 
 ### Critical Issue: Resource Children (TransientMarkerBox)
 
@@ -180,6 +181,13 @@ export const SoundfontFileBox: BoxSchema<Pointers> = {
     pointerRules: {...},
     resource: "external"  // NEW: references external soundfont file
 }
+```
+
+#### 2.3 Update GrooveBox Schema (`forge-boxes/src/schema/std/GrooveBoxes.ts`)
+```typescript
+// In createGrooveBox factory function
+pointerRules: {mandatory: true, accepts: [Pointers.Groove]},
+resource: "internal"  // NEW: project-level shared resource
 ```
 
 ### Phase 3: Update Dependency Collection
@@ -277,20 +285,27 @@ Starting from AudioRegionBox:
 | `alwaysFollowMandatory: false` + explicit instrument adding | `alwaysFollowMandatory: true` + `stopAtResources: true` |
 | `name === AudioFileBox.ClassName \|\| name === SoundfontFileBox.ClassName` | `box.resource === "external"` |
 | `instanceof AudioFileBox \|\| instanceof SoundfontFileBox` | `isDefined(box.resource)` |
-| `instanceof TransientMarkerBox` + owner UUID check | Automatic (same UUID as parent) |
+| `instanceof TransientMarkerBox` + owner UUID check | Automatic (skip if external resource already exists) |
 
-**REMAINS** (acceptable domain logic):
+**REMAINS** (acceptable domain logic, passed via `excludeBox` predicate):
 | Special Case | Reason |
 |--------------|--------|
 | Filter `ephemeral` boxes (SelectionBox) | Use `box.ephemeral` property |
-| Filter `AuxSendBox` | Complex routing logic - domain-specific exclusion |
+| Filter `AuxSendBox` | Would pull in bus system via mandatory `target-bus` pointer |
+| Filter `MIDIControllerBox` | MIDI mappings shouldn't copy; duplicates in same project would break |
 | Position/index adjustments in extractRegions | Unavoidable domain logic |
 
 #### 4.2 Refactored extractAudioUnits
 
 ```typescript
 export const extractAudioUnits = (audioUnitBoxes: ReadonlyArray<AudioUnitBox>, ...): ... => {
-    const excludeBox = options?.excludeTimeline === true ? excludeTimelinePredicate : Predicates.alwaysFalse
+    // Combine all exclusion predicates
+    const excludeBox = (box: Box): boolean => {
+        if (box.ephemeral) return true  // Skip ephemeral (SelectionBox, etc.)
+        if (box.name === AuxSendBox.ClassName) return true  // Skip aux sends (would pull in bus system)
+        if (options?.excludeTimeline === true && excludeTimelinePredicate(box)) return true
+        return false
+    }
 
     // Clean dependency collection - instruments included automatically!
     const dependencies = audioUnitBoxes
@@ -299,7 +314,6 @@ export const extractAudioUnits = (audioUnitBoxes: ReadonlyArray<AudioUnitBox>, .
             stopAtResources: true,
             excludeBox
         }).boxes))
-        .filter(box => !box.ephemeral && box.name !== AuxSendBox.ClassName)  // Domain exclusions only
 
     const uuidMap = generateTransferMap(audioUnitBoxes, dependencies, ...)
     copy(uuidMap, boxGraph, audioUnitBoxes, dependencies)
@@ -324,19 +338,39 @@ const generateTransferMap = (...): SortedSet<UUID.Bytes, UUIDMapper> => {
 
 ```typescript
 const copy = (uuidMap, boxGraph, audioUnitBoxes, dependencies) => {
-    // Collect existing resource UUIDs - generic!
+    // Collect existing external resource UUIDs
     const existingResourceUUIDs = UUID.newSet<UUID.Bytes>(uuid => uuid)
     dependencies.forEach((source: Box) => {
-        if (isDefined(source.resource) && boxGraph.findBox(source.address.uuid).nonEmpty()) {
+        if (source.resource === "external" && boxGraph.findBox(source.address.uuid).nonEmpty()) {
             existingResourceUUIDs.add(source.address.uuid)
         }
     })
+
+    // Helper: check if box is owned by an existing external resource
+    const isOwnedByExistingResource = (box: Box): boolean => {
+        for (const [pointer, targetAddress] of box.outgoingEdges()) {
+            if (pointer.mandatory && !targetAddress.isBox()) {  // Points to a FIELD
+                if (existingResourceUUIDs.opt(targetAddress.uuid).nonEmpty()) {
+                    return true  // Owner is existing external resource
+                }
+            }
+        }
+        return false
+    }
 
     PointerField.decodeWith({...}, () => {
         // Copy AudioUnitBoxes...
 
         dependencies.forEach((source: Box) => {
-            // Generic skip logic - no instanceof checks!
+            // Skip existing external resources
+            if (existingResourceUUIDs.opt(source.address.uuid).nonEmpty()) {
+                return
+            }
+            // Skip children of existing external resources (e.g., TransientMarkerBox)
+            if (isOwnedByExistingResource(source)) {
+                return
+            }
+            // Generic copy - no instanceof checks!
             if (existingResourceUUIDs.opt(source.address.uuid).nonEmpty()) {
                 return  // Skip existing resources (and their children with same UUID)
             }
@@ -384,13 +418,19 @@ export namespace CopyBuffer {
 export const copyBoxes = (
     boxes: ReadonlyArray<Box>,
     contentType: string,
-    boxGraph: BoxGraph
+    boxGraph: BoxGraph,
+    options: {
+        excludeTypes?: ReadonlyArray<string>  // Box class names to exclude (e.g., [AuxSendBox.ClassName])
+    } = {}
 ): CopyBuffer => {
+    const excludeTypes = new Set(options.excludeTypes ?? [])
+
     // Collect dependencies (includes resources and their children)
     const dependencies = boxes.flatMap(box =>
         Array.from(boxGraph.dependenciesOf(box, {
             alwaysFollowMandatory: true,
-            stopAtResources: true
+            stopAtResources: true,
+            excludeBox: box => excludeTypes.has(box.name)  // Apply exclusion at collection time
         }).boxes))
 
     // All boxes to copy: main boxes + dependencies
@@ -416,6 +456,15 @@ export const copyBoxes = (
         }))
     }
 }
+
+// Usage examples:
+copyBoxes(audioUnitBoxes, "audio-unit", boxGraph, {
+    excludeTypes: [AuxSendBox.ClassName, MIDIControllerBox.ClassName]
+})
+
+copyBoxes(effectBoxes, "audio-effect", boxGraph, {
+    excludeTypes: [MIDIControllerBox.ClassName]  // MIDI mappings shouldn't copy
+})
 ```
 
 #### 5.4 Paste is Consumer-Specific
@@ -681,19 +730,165 @@ Phase 6: Testing
 - Existing tests should pass without modification
 
 ### Resource Handling on Paste
-- **external**: Keep original UUID - the box references the same external entity
-- **internal**: Generate new UUID - creates a new instance within the project
 
-**Children of external resources** (e.g., `TransientMarkerBox` children of `AudioFileBox`):
-- Children should also keep their original UUID since they're logically part of the external resource
-- The paste function should detect children pointing to external resources and preserve their UUIDs
-- Alternative: Mark `TransientMarkerBox` as `resource: "external"` too (simpler but less flexible)
+| Box Type | UUID Handling | Example |
+|----------|---------------|---------|
+| `resource: "external"` | Keep original UUID | AudioFileBox, SoundfontFileBox |
+| `resource: "internal"` | Remap to target's existing resource | GrooveBox → target project's GrooveBox |
+| Regular box (no resource) | Generate new UUID | TrackBox, RegionBox, etc. |
+
+**External resources** keep their UUID because they reference the same external entity (audio file, soundfont).
+
+**Internal resources** are project-level singletons or shared resources. On paste, the consumer should remap pointers to the target project's existing resource rather than creating duplicates.
+
+All other boxes (including children of external resources like `TransientMarkerBox`) get new UUIDs.
 
 When pasting into a different project with external resources:
-1. External resource box is created with same UUID
-2. The external reference (file path, etc.) stays the same
-3. Children of the external resource are created with same UUIDs
-4. If the external file doesn't exist in target environment, it needs to be handled separately
+1. External resource box is created with same UUID (references same external file)
+2. Children (e.g., TransientMarkerBox) get new UUIDs but point to the same external resource
+3. If the external file doesn't exist in target environment, it needs to be handled separately
+
+### Dependency Analysis: Common Copy Scenarios
+
+#### Copying NoteEventBox(es)
+```
+NoteEventBox (new UUID)
+    └── events pointer → NoteEventCollectionBox.events (mandatory: false on target)
+        → STOP (shell)
+
+Result: [NoteEventBox] only
+Shell on paste: NoteEventCollectionBox (target container)
+```
+
+#### Copying AudioRegionBox
+```
+AudioRegionBox (new UUID)
+├── regions pointer → TrackBox.regions (mandatory: false on target) → STOP (shell)
+├── file pointer → AudioFileBox (mandatory: true)
+│   └── AudioFileBox (EXTERNAL - keep UUID, STOP traversal)
+│       └── TransientMarkerBox(es) (new UUID)
+│           via: mandatory field-level pointer (child of resource)
+├── events pointer → ValueEventCollectionBox (mandatory: true)
+│   └── ValueEventCollectionBox (new UUID)
+│       └── ValueEventBox(es) (new UUID)
+│           │   via: mandatory pointer to events field
+│           │
+│           └── ValueEventCurveBox (new UUID) - optional
+│                   via: mandatory pointer to ValueEventBox.interpolation field
+└── play-mode pointer → AudioPlayModeBox (mandatory: false) → included if present
+
+Result: [AudioRegionBox, AudioFileBox, TransientMarkerBox(es), ValueEventCollectionBox, ValueEventBox(es), ValueEventCurveBox(es)?, AudioPlayModeBox?]
+Shell on paste: TrackBox.regions field
+```
+
+#### Copying AudioUnitBox
+```
+AudioUnitBox (new UUID)
+├── collection pointer → RootBox.audio-units (mandatory: false on target) → STOP (shell)
+│
+├── TrackBox(es) (new UUID)
+│   │   via: mandatory pointer to AudioUnitBox.tracks field
+│   │
+│   ├── AudioRegionBox(es) (new UUID)
+│   │   │   via: mandatory pointer to TrackBox.regions field
+│   │   │
+│   │   ├── AudioFileBox (EXTERNAL - keep UUID, STOP traversal)
+│   │   │   └── TransientMarkerBox(es) (new UUID) - field-level children
+│   │   │
+│   │   └── ValueEventCollectionBox (new UUID)
+│   │       └── ValueEventBox(es) (new UUID)
+│   │           └── ValueEventCurveBox(es) (new UUID) - optional
+│   │
+│   ├── NoteRegionBox(es) (new UUID)
+│   │   │   via: mandatory pointer to TrackBox.regions field
+│   │   │
+│   │   └── NoteEventCollectionBox (new UUID)
+│   │       └── NoteEventBox(es) (new UUID)
+│   │
+│   └── ValueRegionBox(es) (new UUID)
+│       │   via: mandatory pointer to TrackBox.regions field
+│       │
+│       └── ValueEventCollectionBox (new UUID)
+│           └── ValueEventBox(es) (new UUID)
+│               └── ValueEventCurveBox(es) (new UUID) - optional
+│
+├── InstrumentDevice (new UUID)
+│   │   via: mandatory host pointer to AudioUnitBox.input field
+│   │
+│   └── SoundfontFileBox? (EXTERNAL - keep UUID if present)
+│
+├── AudioEffectDevices (new UUID)
+│       via: mandatory host pointer to AudioUnitBox.audio-effects field
+│
+├── MidiEffectDevices (new UUID)
+│       via: mandatory host pointer to AudioUnitBox.midi-effects field
+│
+└── AuxSendBox(es) - EXCLUDED via excludeBox predicate (would pull in AudioBusBox)
+
+Result: Complete AudioUnit with all tracks, regions, notes, automation, instruments, and effects
+Shell on paste: RootBox.audio-units field
+Exclusion: AuxSendBox passed to excludeBox predicate (would pull in entire bus system via target-bus mandatory pointer)
+```
+
+#### Copying AudioEffect (e.g., CompressorDeviceBox)
+```
+CompressorDeviceBox (new UUID)
+├── host → AudioUnitBox.audio-effects (mandatory: false on target) → STOP (shell)
+├── side-chain → AudioUnitBox/AudioBusBox (mandatory: false) → don't follow
+│
+├── [If automation exists on parameters]
+│   └── TrackBox(es) (new UUID)
+│       │   via: mandatory target pointer to parameter field (e.g., threshold)
+│       │
+│       ├── tracks → AudioUnitBox.tracks (mandatory: false on target) → STOP (shell)
+│       │
+│       └── ValueRegionBox(es) (new UUID)
+│           │   via: mandatory pointer to TrackBox.regions field
+│           │
+│           └── ValueEventCollectionBox (new UUID)
+│               └── ValueEventBox(es) (new UUID)
+│                   └── ValueEventCurveBox(es) (new UUID) - optional
+│
+└── [MIDIControllerBox - EXCLUDED via excludeTypes]
+        Would create duplicate MIDI mappings in same project
+
+Result without automation: Just the effect box
+Result with automation: Effect + TrackBox(es) + ValueRegionBox(es) + ValueEventBox(es) + ValueEventCurveBox(es)
+Shell on paste: AudioUnitBox.audio-effects field
+Exclusion: MIDIControllerBox (MIDI mappings shouldn't copy)
+```
+
+#### Copying MidiEffect (e.g., ZeitgeistDeviceBox)
+```
+ZeitgeistDeviceBox (new UUID)
+├── host → AudioUnitBox.midi-effects (mandatory: false on target) → STOP (shell)
+│
+└── groove → GrooveBox (INTERNAL resource - STOP traversal)
+        Without resource marking, would trace to RootBox via mandatory incoming edge!
+
+Result: ZeitgeistDeviceBox + GrooveBox reference
+Shell on paste: AudioUnitBox.midi-effects field
+Paste behavior: Remap GrooveBox pointer to target project's existing GrooveBox (don't create new)
+Note: GrooveBox marked as internal resource prevents pulling in entire project
+```
+
+#### Why AuxSendBox Needs Special Exclusion
+
+```typescript
+export const AuxSendBox: BoxSchema<Pointers> = {
+    type: "box",
+    class: {
+        name: "AuxSendBox",
+        fields: {
+            1: {type: "pointer", name: "audio-unit", pointerType: Pointers.AuxSend, mandatory: true},
+            2: {type: "pointer", name: "target-bus", pointerType: Pointers.AudioOutput, mandatory: true},
+            // ...
+        }
+    }
+}
+```
+
+The `target-bus` pointer is **mandatory** and points to `AudioBusBox`. If we followed this, we'd collect the entire bus routing system. Since bus routing is project-specific (not portable across projects), `AuxSendBox` is excluded by domain logic in `ProjectUtils`.
 
 ### Potential Future Resources
 
