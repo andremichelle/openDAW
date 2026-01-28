@@ -55,7 +55,10 @@ export namespace ClipboardUtils {
         sourceBoxes.forEach(box => typeCounts.set(box.name, (typeCounts.get(box.name) ?? 0) + 1))
         console.debug("Clipboard paste:", [...typeCounts.entries()].map(([type, count]) => `${type}: ${count}`).join(", "))
         const uuidMap = UUID.newSet<UUIDMapper>(({source}) => source)
-        sourceBoxes.forEach(box => uuidMap.add({source: box.address.uuid, target: UUID.generate()}))
+        sourceBoxes.forEach(box => {
+            const isExternal = box.resource === "external"
+            uuidMap.add({source: box.address.uuid, target: isExternal ? box.address.uuid : UUID.generate()})
+        })
         const result: Array<T> = []
         PointerField.decodeWith({
             map: (pointer, address) => {
@@ -65,6 +68,8 @@ export namespace ClipboardUtils {
                 return options.mapPointer(pointer, address)
             }
         }, () => sourceBoxes.forEach(sourceBox => {
+            const isExternal = sourceBox.resource === "external"
+            if (isExternal && targetGraph.findBox(sourceBox.address.uuid).nonEmpty()) {return}
             const inputStream = new ByteArrayInput(sourceBox.toArrayBuffer())
             const targetUuid = uuidMap.get(sourceBox.address.uuid).target
             targetGraph.createBox(sourceBox.name as keyof BoxIO.TypeMap, targetUuid, box => {
