@@ -163,7 +163,7 @@ export class BoxGraph<BoxMap = any> {
             terminate: () => {
                 entry.listeners.delete(listener)
                 if (entry.listeners.size === 0) {
-                    this.#deletionListeners.removeByKey(uuid)
+                    this.#deletionListeners.removeByKeyIfExist(uuid)
                 }
             }
         }
