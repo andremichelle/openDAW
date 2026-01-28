@@ -15,7 +15,6 @@ import {
 import {DeleteUpdate, NewUpdate, PointerUpdate, PrimitiveUpdate, Update} from "./updates"
 
 // Removes updates for boxes that were created AND deleted in the same transaction.
-// This prevents undo issues when a box is created and immediately deleted.
 const optimizeUpdates = (updates: ReadonlyArray<Update>): ReadonlyArray<Update> => {
     const createdUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
     const deletedUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)

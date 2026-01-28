@@ -1,4 +1,4 @@
-import {ByteArrayInput, ByteArrayOutput, Exec, Option, Procedure, Provider, Selection, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, ByteArrayOutput, Option, Procedure, Provider, Selection, UUID} from "@opendaw/lib-std"
 import {Box, BoxEditing, BoxGraph} from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
 import {Pointers} from "@opendaw/studio-enums"
@@ -38,7 +38,7 @@ export namespace RegionsClipboard {
         readonly boxGraph: BoxGraph
         readonly boxAdapters: BoxAdapters
         readonly getTracks: Provider<ReadonlyArray<TrackBoxAdapter>>
-        readonly getSelectedTrack: Provider<Option<TrackBoxAdapter>>
+        readonly getFocusedTrack: Provider<Option<TrackBoxAdapter>>
         readonly overlapResolver: RegionOverlapResolver
     }
 
@@ -80,7 +80,7 @@ export namespace RegionsClipboard {
                                       boxGraph,
                                       boxAdapters,
                                       getTracks,
-                                      getSelectedTrack,
+                                      getFocusedTrack,
                                       overlapResolver
                                   }: Context): ClipboardHandler<ClipboardRegions> => {
         const copyRegions = (): Option<ClipboardRegions> => {
@@ -134,58 +134,33 @@ export namespace RegionsClipboard {
                 const metadata = decodeMetadata(ClipboardUtils.extractMetadata(entry.data))
                 const positionOffset = Math.max(0, position) - metadata.minPosition
                 const allTracks = getTracks()
-                const selectedTrack = getSelectedTrack()
-                if (selectedTrack.isEmpty() || allTracks.length === 0) {return}
-                const selectedTrackIndex = allTracks.indexOf(selectedTrack.unwrap())
-                if (selectedTrackIndex === -1) {return}
-                const sourceTrackToTarget = UUID.newSet<{uuid: UUID.Bytes, target: TrackBoxAdapter | null}>(entry => entry.uuid)
+                const focusedTrack = getFocusedTrack()
+                if (focusedTrack.isEmpty() || allTracks.length === 0) {return}
+                const focusedTrackIndex = allTracks.indexOf(focusedTrack.unwrap())
+                if (focusedTrackIndex === -1) {return}
+                const sourceTrackToTarget = UUID.newSet<{uuid: UUID.Bytes, target: TrackBoxAdapter}>(entry => entry.uuid)
                 for (const trackInfo of metadata.tracks) {
-                    const targetIndex = selectedTrackIndex + trackInfo.offset
+                    const targetIndex = focusedTrackIndex + trackInfo.offset
                     const targetTrack = allTracks[targetIndex]
-                    if (targetTrack && targetTrack.type === trackInfo.type) {
-                        sourceTrackToTarget.add({uuid: trackInfo.uuid, target: targetTrack})
-                    } else {
-                        sourceTrackToTarget.add({uuid: trackInfo.uuid, target: null})
-                    }
+                    if (!targetTrack || targetTrack.type !== trackInfo.type) {return}
+                    sourceTrackToTarget.add({uuid: trackInfo.uuid, target: targetTrack})
                 }
                 editing.modify(() => {
                     selection.deselectAll()
                     const pastePosition = Math.max(0, position)
                     const pasteComplete = pastePosition + (metadata.maxPosition - metadata.minPosition)
-                    const overlapSolvers: Exec[] = []
-                    for (const {target} of sourceTrackToTarget.values()) {
-                        if (target !== null) {
-                            overlapSolvers.push(overlapResolver.fromRange(target, pastePosition, pasteComplete))
-                        }
-                    }
+                    const overlapSolvers = sourceTrackToTarget.values()
+                        .map(({target}) => overlapResolver.fromRange(target, pastePosition, pasteComplete))
                     const boxes = ClipboardUtils.deserializeBoxes(
                         entry.data,
                         boxGraph,
                         {
                             mapPointer: (pointer, address) => {
                                 if (pointer.pointerType === Pointers.RegionCollection) {
-                                    return address.flatMap(addr => {
-                                        const entry = sourceTrackToTarget.opt(addr.uuid)
-                                        return entry.flatMap(({target}) =>
-                                            target !== null ? Option.wrap(target.box.regions.address) : Option.None)
-                                    })
+                                    return address.flatMap(addr => sourceTrackToTarget.opt(addr.uuid)
+                                        .map(({target}) => target.box.regions.address))
                                 }
                                 return Option.None
-                            },
-                            excludeBox: (box: Box) => {
-                                if (UnionBoxTypes.isRegionBox(box)) {
-                                    const regionBox = UnionBoxTypes.asRegionBox(box)
-                                    return regionBox.regions.targetAddress
-                                        .map(addr => addr.uuid)
-                                        .match({
-                                            none: () => true,
-                                            some: trackUuid => {
-                                                const entry = sourceTrackToTarget.opt(trackUuid)
-                                                return entry.map(({target}) => target === null).unwrapOrElse(true)
-                                            }
-                                        })
-                                }
-                                return false
                             },
                             modifyBox: (box: Box) => {
                                 if (UnionBoxTypes.isRegionBox(box)) {

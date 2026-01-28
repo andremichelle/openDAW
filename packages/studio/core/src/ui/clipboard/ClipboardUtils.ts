@@ -56,7 +56,7 @@ export namespace ClipboardUtils {
         console.debug("Clipboard paste:", [...typeCounts.entries()].map(([type, count]) => `${type}: ${count}`).join(", "))
         const uuidMap = UUID.newSet<UUIDMapper>(({source}) => source)
         sourceBoxes.forEach(box => uuidMap.add({source: box.address.uuid, target: UUID.generate()}))
-        const result: T[] = []
+        const result: Array<T> = []
         PointerField.decodeWith({
             map: (pointer, address) => {
                 const remappedInternal = address.flatMap(addr =>

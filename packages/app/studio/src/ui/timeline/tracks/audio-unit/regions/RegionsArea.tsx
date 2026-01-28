@@ -86,7 +86,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
     const regionLocator = createRegionLocator(manager, regionSelection)
     const dragAndDrop = new RegionDragAndDrop(service, capturing, timeline.snapping)
     const shortcuts = ShortcutManager.get().createContext(() => element.contains(document.activeElement), "Regions")
-    const {engine, boxGraph, overlapResolver} = project
+    const {engine, boxGraph, overlapResolver, timelineFocus} = project
     const clipboardHandler = RegionsClipboard.createHandler({
         getEnabled: () => !engine.isPlaying.getValue(),
         getPosition: () => engine.position.getValue(),
@@ -96,7 +96,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         boxGraph,
         boxAdapters,
         getTracks: () => manager.tracks().map(track => track.trackBoxAdapter),
-        getSelectedTrack: () => Option.wrap(regionSelection.selected()[0]).flatMap(region => region.trackBoxAdapter),
+        getFocusedTrack: () => timelineFocus.track,
         overlapResolver
     })
     lifecycle.ownAll(
@@ -124,6 +124,15 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             return true
         }),
         installRegionContextMenu({timelineBox, element, service, capturing, selection: regionSelection, range}),
+        Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
+            const target = capturing.captureEvent(event)
+            if (target === null) {return}
+            if (target.type === "region") {
+                timelineFocus.focusRegion(target.region)
+            } else if (target.type === "track") {
+                timelineFocus.focusTrack(target.track.trackBoxAdapter)
+            }
+        }),
         Events.subscribeDblDwn(element, event => {
             const target = capturing.captureEvent(event)
             if (target === null) {return}

@@ -8,6 +8,7 @@ import {
     Class,
     DataInput,
     DataOutput,
+    Exec,
     Func,
     int,
     isDefined,
@@ -86,6 +87,9 @@ export abstract class Box<P extends PointerTypes = PointerTypes, F extends Field
     optField<K extends keyof F>(key: K): Option<F[K]> {return Option.wrap(this.#fields[key])}
     subscribe(propagation: Propagation, procedure: Procedure<Update>): Subscription {
         return this.graph.subscribeVertexUpdates(propagation, this.address, procedure)
+    }
+    subscribeDeletion(listener: Exec): Subscription {
+        return this.graph.subscribeDeletion(this.address.uuid, listener)
     }
 
     get box(): Box {return this}

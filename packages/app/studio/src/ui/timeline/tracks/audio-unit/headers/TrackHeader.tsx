@@ -86,6 +86,7 @@ export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAd
             }
         }),
         Events.subscribe(element, "pointerdown", () => {
+            project.timelineFocus.focusTrack(trackBoxAdapter)
             if (!audioUnitEditing.isEditing(audioUnitBoxAdapter.box.editing)) {
                 audioUnitEditing.edit(audioUnitBoxAdapter.box.editing)
             }

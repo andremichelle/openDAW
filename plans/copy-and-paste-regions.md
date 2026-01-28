@@ -7,16 +7,60 @@
 
 ## Overview
 
-Copy/paste regions within the same project. Follows standard DAW conventions: paste goes to the **selected track** (not source track), with relative track offsets preserved when copying from multiple tracks.
+Copy/paste regions within the same project. Follows standard DAW conventions: paste goes to the **focused track** (not source track), with relative track offsets preserved when copying from multiple tracks.
 
 **Scope**: Same project only. Cross-browser paste is not supported for regions.
 
 ## Design Principles
 
-1. **Paste to selection** - Regions paste to currently selected track, not source track
+1. **Paste to focus** - Regions paste to currently focused track, not source track
 2. **Relative positioning** - When copying from multiple tracks, vertical spacing is preserved
 3. **Clipboard independence** - Clipboard data is self-contained; deleting source tracks has no effect
-4. **Type compatibility** - Regions only paste to compatible track types
+4. **Type compatibility** - ALL regions must match target track types, or entire paste is skipped
+5. **Focus vs Selection** - Focus is single anchor point for paste; Selection is multiple items for batch operations
+
+---
+
+## Timeline Focus System
+
+### Why Focus Instead of Selection?
+
+Selection is unordered and can contain multiple items. When pasting, we need a single anchor point. The "focused" track/region is the most recently clicked item, which persists even after cut operations delete the selected regions.
+
+### Implementation
+
+```typescript
+// packages/studio/core/src/ui/timeline/TimelineFocus.ts
+export class TimelineFocus implements Terminable {
+    readonly #track: MutableObservableOption<TrackBoxAdapter>
+    readonly #region: MutableObservableOption<AnyRegionBoxAdapter>
+
+    focusTrack(track: TrackBoxAdapter): void
+    focusRegion(region: AnyRegionBoxAdapter): void
+    clearRegionFocus(): void
+    clear(): void
+}
+```
+
+### Focus Lifecycle
+
+- **Set on click**: Clicking a track header or region lane sets track focus
+- **Set on region click**: Clicking a region sets both region and track focus
+- **Cleared on deletion**: Uses `Box.subscribeDeletion()` to clear focus when the focused box is deleted
+- **Visual feedback**: Focused track's RegionLane gets `.focused` class for highlighting
+
+### Box.subscribeDeletion
+
+New method on `Box` that subscribes to deletion events:
+
+```typescript
+// packages/lib/box/src/box.ts
+subscribeDeletion(listener: Exec): Subscription {
+    return this.graph.subscribeDeletion(this.address.uuid, listener)
+}
+```
+
+Deletion listeners are stored in `BoxGraph.#deletionListeners` and notified during `unstageBox()`.
 
 ---
 
@@ -161,16 +205,20 @@ const canPasteToTrack = (trackType: TrackType, regionType: TrackType): boolean =
 | AudioRegionBox | TrackType.Audio |
 | ValueRegionBox | TrackType.Value |
 
-### Skip Incompatible
+### Skip Entire Paste on Type Mismatch
 
-If target track doesn't exist or isn't compatible, **skip that region**:
+If ANY target track doesn't exist or isn't compatible, **skip entire paste**:
 
 ```
-Paste with Track 5 selected (Notes track):
-  region A → Track 5 (Notes) ✓ paste
-  region B → Track 8 (doesn't exist) ✗ skip
-  region C → Track 9 (exists but is Notes, not Audio) ✗ skip
+Paste with Track 5 focused (Notes track):
+  region A → Track 5 (Notes) ✓
+  region B → Track 8 (doesn't exist) ✗
+  region C → Track 9 (exists but is Notes, not Audio) ✗
+
+Result: Entire paste skipped (no partial paste)
 ```
+
+This ensures we never create orphaned dependency boxes (clips, event collections) that would have invalid mandatory pointer requirements.
 
 ---
 
@@ -326,17 +374,12 @@ const pasteRegions = (
 
 ## Edge Cases
 
-### No Track Selected
-- Show error or use first compatible track
-- Alternative: paste to all original track types if they exist at any position
+### No Track Focused
+- Silently skip paste
 
-### Selected Track Incompatible with All Regions
-- Skip all regions, show warning
-- "Cannot paste: no compatible tracks at target position"
-
-### Some Regions Skip, Some Paste
-- Paste what's possible, skip the rest
-- Optional: show toast "Pasted 2 of 5 regions (3 skipped - incompatible tracks)"
+### Any Track Type Mismatch
+- Silently skip entire paste
+- No partial pastes to avoid orphaned dependency boxes
 
 ### Audio File Not in Project
 - AudioFileBox created with same UUID
@@ -345,34 +388,49 @@ const pasteRegions = (
 
 ### Cut Operation
 - Copy + delete source regions
-- Clipboard remains valid even after delete
+- Track focus persists (not cleared by deletion of selected regions)
+- Paste works because focus remained on the track
+
+### Focused Track Deleted
+- `TimelineFocus` subscribes via `Box.subscribeDeletion()`
+- Focus automatically cleared when tracked box is deleted
+- Works for both tracks and regions
 
 ---
 
 ## Implementation Checklist
 
-- [ ] Create `RegionsClipboardHandler` in `clipboard/types/`
-- [ ] Implement `canCopy()` - regions selected
-- [ ] Implement `canCut()` - regions selected
-- [ ] Implement `canPaste()` - content type is "regions" and track selected
-- [ ] Implement `copy()` - serialize with track offsets
-- [ ] Implement `cut()` - copy + delete
-- [ ] Implement `paste()` - deserialize with offset resolution
-- [ ] Register handler in `ClipboardManager`
-- [ ] Add keyboard shortcuts (Cmd+C/X/V when regions selected)
-- [ ] Selection after paste (select pasted regions)
+- [x] Create `RegionsClipboardHandler` in `clipboard/types/`
+- [x] Implement `canCopy()` - regions selected
+- [x] Implement `canCut()` - regions selected
+- [x] Implement `canPaste()` - content type is "regions" and engine not playing
+- [x] Implement `copy()` - serialize with track offsets and types
+- [x] Implement `cut()` - copy + delete
+- [x] Implement `paste()` - deserialize with offset resolution, skip on type mismatch
+- [x] Create `TimelineFocus` for track/region focus management
+- [x] Add `Box.subscribeDeletion()` for cleanup on box deletion
+- [x] Visual feedback - `.focused` class on RegionLane
+- [x] Integrate `RegionOverlapResolver` for paste positioning
+- [x] Selection after paste (select pasted regions)
+- [x] Move playhead to paste end position
 
 ---
 
-## Files to Create/Modify
+## Files Created/Modified
 
 ### New Files
 ```
 packages/studio/core/src/ui/clipboard/types/RegionsClipboardHandler.ts
+packages/studio/core/src/ui/timeline/TimelineFocus.ts
 ```
 
-### Modify
+### Modified
 ```
-packages/studio/core/src/ui/clipboard/ClipboardManager.ts - register handler
-packages/app/studio/src/ui/timeline/Timeline.tsx - integrate clipboard for regions
+packages/studio/core/src/project/Project.ts - added timelineFocus
+packages/lib/box/src/box.ts - added subscribeDeletion()
+packages/lib/box/src/graph.ts - added #deletionListeners and subscribeDeletion()
+packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionsArea.tsx - focus handling, clipboard integration
+packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionLane.tsx - focus visual feedback
+packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionLane.sass - .focused styling
+packages/app/studio/src/ui/timeline/tracks/audio-unit/headers/TrackHeader.tsx - focus on click
 ```

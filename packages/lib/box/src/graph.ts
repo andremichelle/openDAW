@@ -63,6 +63,7 @@ export class BoxGraph<BoxMap = any> {
         index: int
     }>
     readonly #finalizeTransactionObservers: Array<Exec>
+    readonly #deletionListeners: SortedSet<UUID.Bytes, { uuid: UUID.Bytes, listeners: Set<Exec> }>
 
     #inTransaction: boolean = false
     #constructingBox: boolean = false
@@ -78,6 +79,7 @@ export class BoxGraph<BoxMap = any> {
         this.#edges = new GraphEdges()
         this.#pointerTransactionState = Address.newSet(({pointer}) => pointer.address)
         this.#finalizeTransactionObservers = []
+        this.#deletionListeners = UUID.newSet<{ uuid: UUID.Bytes, listeners: Set<Exec> }>(entry => entry.uuid)
     }
 
     beginTransaction(): void {
@@ -154,12 +156,26 @@ export class BoxGraph<BoxMap = any> {
 
     subscribeEndTransaction(observer: Exec): void {this.#finalizeTransactionObservers.push(observer)}
 
+    subscribeDeletion(uuid: UUID.Bytes, listener: Exec): Subscription {
+        const entry = this.#deletionListeners.getOrCreate(uuid, () => ({uuid, listeners: new Set()}))
+        entry.listeners.add(listener)
+        return {
+            terminate: () => {
+                entry.listeners.delete(listener)
+                if (entry.listeners.size === 0) {
+                    this.#deletionListeners.removeByKey(uuid)
+                }
+            }
+        }
+    }
+
     unstageBox(box: Box): void {
         this.#assertTransaction()
         const deleted = this.#boxes.removeByKey(box.address.uuid)
         assert(deleted === box, `${box} could not be found to unstage`)
         this.#edges.unwatchVerticesOf(box)
         const update = new DeleteUpdate(box.address.uuid, box.name, box.toArrayBuffer())
+        this.#deletionListeners.removeByKeyIfExist(box.address.uuid)?.listeners.forEach(listener => listener())
         this.#updateListeners.proxy.onUpdate(update)
         this.#immediateUpdateListeners.proxy.onUpdate(update)
     }
