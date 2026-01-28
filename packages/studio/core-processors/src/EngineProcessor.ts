@@ -101,6 +101,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     readonly #controlFlags: Int32Array<SharedArrayBuffer>
     readonly #stemExports: ReadonlyArray<AudioUnit>
     readonly #ignoredRegions: SortedSet<UUID.Bytes, UUID.Bytes>
+    readonly #pendingResources: Set<Promise<unknown>> = new Set()
 
     #processQueue: Option<ReadonlyArray<Processor>> = Option.None
     #primaryOutput: Option<AudioUnit> = Option.None
@@ -203,10 +204,11 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                 prepareRecordingState: (countIn: boolean): void => this.#prepareRecordingState(countIn),
                 stopRecording: (): void => this.#stopRecording(),
                 queryLoadingComplete: (): Promise<boolean> =>
-                    Promise.resolve(this.#boxGraph.boxes().every(box => box.accept<BoxVisitor<boolean>>({
-                        visitAudioFileBox: (box: AudioFileBox) =>
-                            this.#sampleManager.getOrCreate(box.address.uuid).data.nonEmpty() && box.pointerHub.nonEmpty()
-                    }) ?? true)),
+                    Promise.all(this.#pendingResources).then(() =>
+                        this.#boxGraph.boxes().every(box => box.accept<BoxVisitor<boolean>>({
+                            visitAudioFileBox: (box: AudioFileBox) =>
+                                this.#sampleManager.getOrCreate(box.address.uuid).data.nonEmpty() && box.pointerHub.nonEmpty()
+                        }) ?? true)),
                 panic: () => this.#panic = true,
                 loadClickSound: (index: 0 | 1, data: AudioData): void => this.#metronome.loadClickSound(index, data),
                 noteSignal: (signal: NoteSignal) => {
@@ -385,6 +387,11 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                 this.#processQueue = Option.None
             }
         }
+    }
+
+    awaitResource(promise: Promise<unknown>): void {
+        this.#pendingResources.add(promise)
+        promise.finally(() => this.#pendingResources.delete(promise))
     }
 
     get preferences(): PreferencesClient<EngineSettings> {return this.#preferences}

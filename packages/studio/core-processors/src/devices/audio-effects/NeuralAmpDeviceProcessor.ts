@@ -113,6 +113,11 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
 
         this.#initInstance()
         this.readAllParameters()
+
+        const initialModelJson = adapter.modelJsonField.getValue()
+        if (initialModelJson.length > 0) {
+            context.awaitResource(NeuralAmpDeviceProcessor.fetchWasm(context.engineToClient))
+        }
     }
 
     get incoming(): Processor {return this}

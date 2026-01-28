@@ -1,6 +1,6 @@
-import {Errors, int, isDefined, Option, panic, Progress, Terminator, UUID} from "@opendaw/lib-std"
+import {Errors, int, isDefined, Option, panic, Progress, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
 import {AudioData, ppqn} from "@opendaw/lib-dsp"
-import {Communicator, Messenger} from "@opendaw/lib-runtime"
+import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
 import {
     EngineCommands,
     EngineToClient,
@@ -236,6 +236,9 @@ export class OfflineEngineRenderer {
         this.#progressPort.onmessage = (event: MessageEvent<{ frames: number }>) =>
             progress(event.data.frames / this.#sampleRate)
 
+        while (!await this.#engineCommands.queryLoadingComplete()) {
+            await Wait.timeSpan(TimeSpan.millis(100))
+        }
         this.play()
         this.#protocol.render(config).then(channels => {
             if (cancelled) {return}

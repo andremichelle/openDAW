@@ -94,10 +94,10 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             }
         )
 
-        const {resolve, promise} = Promise.withResolvers<void>()
+        const {resolve, promise: isReady} = Promise.withResolvers<void>()
         const messenger = Messenger.for(this.port)
         this.#project = project
-        this.#isReady = promise
+        this.#isReady = isReady
         this.#notifyClipNotification = this.#terminator.own(new Notifier<ClipNotification>())
         this.#notifyNoteSignals = this.#terminator.own(new Notifier<NoteSignal>())
         this.#playingClips = []

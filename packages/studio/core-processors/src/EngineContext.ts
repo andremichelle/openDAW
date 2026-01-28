@@ -21,6 +21,7 @@ export interface EngineContext extends BoxAdaptersContext, Terminable {
     registerProcessor(processor: Processor): Terminable
     registerEdge(source: Processor, target: Processor): Terminable
     subscribeProcessPhase(observer: Observer<ProcessPhase>): Subscription
+    awaitResource(promise: Promise<unknown>): void
     ignoresRegion(uuid: UUID.Bytes): boolean
     sendMIDIData(midiDeviceId: string, data: Uint8Array, relativeTimeInMs: number): void
 }
