@@ -42,7 +42,7 @@ import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@open
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
-import {TimelineRange} from "@opendaw/studio-core"
+import {ClipboardManager, RegionsClipboard, TimelineRange} from "@opendaw/studio-core"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 
 const className = Html.adoptStyleSheet(css, "RegionsArea")
@@ -86,12 +86,25 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
     const regionLocator = createRegionLocator(manager, regionSelection)
     const dragAndDrop = new RegionDragAndDrop(service, capturing, timeline.snapping)
     const shortcuts = ShortcutManager.get().createContext(() => element.contains(document.activeElement), "Regions")
+    const {engine, boxGraph} = project
+    const clipboardHandler = RegionsClipboard.createHandler({
+        getEnabled: () => !engine.isPlaying.getValue(),
+        getPosition: () => engine.position.getValue(),
+        setPosition: position => engine.setPosition(position),
+        editing,
+        selection: regionSelection,
+        boxGraph,
+        boxAdapters,
+        getTracks: () => manager.tracks().map(track => track.trackBoxAdapter),
+        getSelectedTrack: () => Option.wrap(regionSelection.selected()[0]).flatMap(region => region.trackBoxAdapter)
+    })
     lifecycle.ownAll(
         regionSelection.catchupAndSubscribe({
             onSelected: (selectable: AnyRegionBoxAdapter) => selectable.onSelected(),
             onDeselected: (selectable: AnyRegionBoxAdapter) => selectable.onDeselected()
         }),
         shortcuts,
+        ClipboardManager.install(element, clipboardHandler),
         shortcuts.register(RegionsShortcuts["select-all"].shortcut, () => {
             regionSelection.select(...manager.tracks()
                 .flatMap(({trackBoxAdapter: {regions}}) => regions.collection.asArray()))

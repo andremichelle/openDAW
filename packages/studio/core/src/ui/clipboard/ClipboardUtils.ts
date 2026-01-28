@@ -18,7 +18,6 @@ export namespace ClipboardUtils {
         const typeCounts = new Map<string, number>()
         boxes.forEach(box => typeCounts.set(box.name, (typeCounts.get(box.name) ?? 0) + 1))
         const types = [...typeCounts.entries()].map(([type, count]) => `${type}: ${count}`).join(", ")
-        console.debug("Clipboard copy:", types)
         const clipboardGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
         clipboardGraph.beginTransaction()
         boxes.forEach(sourceBox => {
@@ -32,7 +31,9 @@ export namespace ClipboardUtils {
         output.writeBytes(new Int8Array(metadata))
         output.writeInt(graphData.byteLength)
         output.writeBytes(new Int8Array(graphData))
-        return output.toArrayBuffer()
+        const arrayBuffer = output.toArrayBuffer()
+        console.debug(`Clipboard copy (${arrayBuffer.byteLength >> 10}kB): ${types}`)
+        return arrayBuffer
     }
 
     export const deserializeBoxes = <T extends Box = Box>(data: ArrayBufferLike,
