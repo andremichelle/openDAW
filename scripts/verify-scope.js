@@ -16,6 +16,24 @@ const EXPECTED_SCOPE = "@moises-ai";
 const OLD_SCOPE = "@opendaw";
 
 /**
+ * Collect all local workspace package names (both @opendaw and @moises-ai forms)
+ */
+function collectWorkspacePackageNames(rootDir) {
+  const names = new Set();
+  const packageFiles = findPackageJsonFiles(rootDir);
+  for (const file of packageFiles) {
+    const content = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (content.name) {
+      names.add(content.name);
+      if (content.name.startsWith(EXPECTED_SCOPE)) {
+        names.add(content.name.replace(EXPECTED_SCOPE, OLD_SCOPE));
+      }
+    }
+  }
+  return names;
+}
+
+/**
  * Recursively find all package.json files
  */
 function findPackageJsonFiles(dir, results = []) {
@@ -67,9 +85,12 @@ async function main() {
   console.log(`  Expected scope: ${EXPECTED_SCOPE}`);
   console.log(`  Checking for: ${OLD_SCOPE}\n`);
 
+  // Collect workspace package names to distinguish local vs external @opendaw packages
+  const packageFiles = findPackageJsonFiles(rootDir);
+  const workspaceNames = collectWorkspacePackageNames(rootDir);
+
   // Check all package.json files
   console.log("Checking package.json files...");
-  const packageFiles = findPackageJsonFiles(rootDir);
 
   for (const file of packageFiles) {
     const content = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -82,7 +103,8 @@ async function main() {
       errors++;
     }
 
-    // Check dependencies
+    // Check dependencies — only flag @opendaw deps that are workspace-local
+    // (they should have been renamed). External @opendaw packages are allowed.
     for (const depType of [
       "dependencies",
       "devDependencies",
@@ -90,9 +112,9 @@ async function main() {
     ]) {
       if (content[depType]) {
         for (const name of Object.keys(content[depType])) {
-          if (name.includes(OLD_SCOPE)) {
+          if (name.startsWith(OLD_SCOPE) && workspaceNames.has(name)) {
             console.error(`  ERROR: ${relativePath}`);
-            console.error(`         ${depType} contains ${OLD_SCOPE}: ${name}`);
+            console.error(`         ${depType} contains ${OLD_SCOPE}: ${name} (workspace package should be renamed)`);
             errors++;
           }
         }
