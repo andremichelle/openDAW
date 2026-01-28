@@ -1,4 +1,4 @@
-import {ByteArrayInput, ByteArrayOutput, Option, Procedure, Provider, Selection, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, ByteArrayOutput, Exec, Option, Procedure, Provider, Selection, UUID} from "@opendaw/lib-std"
 import {Box, BoxEditing, BoxGraph} from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
 import {Pointers} from "@opendaw/studio-enums"
@@ -12,6 +12,7 @@ import {
 } from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
 import {ClipboardUtils} from "../ClipboardUtils"
+import {RegionOverlapResolver} from "../../timeline/RegionOverlapResolver"
 
 type ClipboardRegions = ClipboardEntry<"regions">
 
@@ -38,6 +39,7 @@ export namespace RegionsClipboard {
         readonly boxAdapters: BoxAdapters
         readonly getTracks: Provider<ReadonlyArray<TrackBoxAdapter>>
         readonly getSelectedTrack: Provider<Option<TrackBoxAdapter>>
+        readonly overlapResolver: RegionOverlapResolver
     }
 
     const encodeMetadata = (metadata: RegionsMetadata): ArrayBufferLike => {
@@ -78,7 +80,8 @@ export namespace RegionsClipboard {
                                       boxGraph,
                                       boxAdapters,
                                       getTracks,
-                                      getSelectedTrack
+                                      getSelectedTrack,
+                                      overlapResolver
                                   }: Context): ClipboardHandler<ClipboardRegions> => {
         const copyRegions = (): Option<ClipboardRegions> => {
             const selected = selection.selected()
@@ -147,6 +150,14 @@ export namespace RegionsClipboard {
                 }
                 editing.modify(() => {
                     selection.deselectAll()
+                    const pastePosition = Math.max(0, position)
+                    const pasteComplete = pastePosition + (metadata.maxPosition - metadata.minPosition)
+                    const overlapSolvers: Exec[] = []
+                    for (const {target} of sourceTrackToTarget.values()) {
+                        if (target !== null) {
+                            overlapSolvers.push(overlapResolver.fromRange(target, pastePosition, pasteComplete))
+                        }
+                    }
                     const boxes = ClipboardUtils.deserializeBoxes(
                         entry.data,
                         boxGraph,
@@ -184,10 +195,11 @@ export namespace RegionsClipboard {
                             }
                         }
                     )
+                    overlapSolvers.forEach(solver => solver())
                     const regionBoxes = boxes.filter(UnionBoxTypes.isRegionBox)
                     const adapters = regionBoxes.map(box => RegionAdapters.for(boxAdapters, box))
                     selection.select(...adapters)
-                    setPosition(Math.max(0, position) + (metadata.maxPosition - metadata.minPosition))
+                    setPosition(pasteComplete)
                 })
             }
         }

@@ -86,7 +86,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
     const regionLocator = createRegionLocator(manager, regionSelection)
     const dragAndDrop = new RegionDragAndDrop(service, capturing, timeline.snapping)
     const shortcuts = ShortcutManager.get().createContext(() => element.contains(document.activeElement), "Regions")
-    const {engine, boxGraph} = project
+    const {engine, boxGraph, overlapResolver} = project
     const clipboardHandler = RegionsClipboard.createHandler({
         getEnabled: () => !engine.isPlaying.getValue(),
         getPosition: () => engine.position.getValue(),
@@ -96,7 +96,8 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         boxGraph,
         boxAdapters,
         getTracks: () => manager.tracks().map(track => track.trackBoxAdapter),
-        getSelectedTrack: () => Option.wrap(regionSelection.selected()[0]).flatMap(region => region.trackBoxAdapter)
+        getSelectedTrack: () => Option.wrap(regionSelection.selected()[0]).flatMap(region => region.trackBoxAdapter),
+        overlapResolver
     })
     lifecycle.ownAll(
         regionSelection.catchupAndSubscribe({
