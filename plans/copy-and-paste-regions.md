@@ -60,6 +60,30 @@ subscribeDeletion(listener: Exec): Subscription {
 }
 ```
 
+```typescript
+// packages/lib/box/src/graph.ts
+readonly #deletionListeners: SortedSet<Readonly<Uint8Array>, { uuid: UUID.Bytes, listeners: Set<Exec> }>
+
+subscribeDeletion(uuid: UUID.Bytes, listener: Exec): Subscription {
+    const entry = this.#deletionListeners.getOrCreate(uuid, () => ({uuid, listeners: new Set()}))
+    entry.listeners.add(listener)
+    return {
+        terminate: () => {
+            entry.listeners.delete(listener)
+            if (entry.listeners.size === 0) {
+                this.#deletionListeners.removeByKey(uuid)
+            }
+        }
+    }
+}
+
+unstageBox(box: Box): void {
+    // ... existing code ...
+    this.#deletionListeners.removeByKeyIfExist(box.address.uuid)?.listeners.forEach(listener => listener())
+    // ... rest of method ...
+}
+```
+
 Deletion listeners are stored in `BoxGraph.#deletionListeners` and notified during `unstageBox()`.
 
 ---
@@ -381,6 +405,39 @@ const pasteRegions = (
 - Silently skip entire paste
 - No partial pastes to avoid orphaned dependency boxes
 
+### External Resource Handling (AudioFileBox)
+
+External resources like `AudioFileBox` require special handling during paste:
+
+1. **UUID Preservation**: External resources keep their original UUID (not regenerated)
+2. **Skip if exists**: If the external resource already exists in the target graph, don't create a duplicate
+3. **Skip field-level children**: Boxes that point to fields within an existing external resource (e.g., `TransientMarkerBox` pointing to `AudioFileBox.transientMarkers`) are skipped to avoid duplicates
+
+```typescript
+// In ClipboardUtils.deserializeBoxes
+const skippedExternalUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
+clipboardGraph.boxes().forEach(box => {
+    if (box.resource === "external" && targetGraph.findBox(box.address.uuid).nonEmpty()) {
+        skippedExternalUuids.add(box.address.uuid)
+    }
+})
+
+const shouldSkipBox = (box: Box): boolean => {
+    if (options.excludeBox?.(box)) {return true}
+    // Skip external resources that already exist
+    if (box.resource === "external" && skippedExternalUuids.hasKey(box.address.uuid)) {return true}
+    // Skip boxes pointing to FIELDS within skipped external resources (children like TransientMarkerBox)
+    for (const [, targetAddress] of box.outgoingEdges()) {
+        if (skippedExternalUuids.hasKey(targetAddress.uuid) && !targetAddress.isBox()) {return true}
+    }
+    return false
+}
+```
+
+The `!targetAddress.isBox()` check distinguishes between:
+- `AudioRegionBox` → `AudioFileBox` (box-level reference, allowed)
+- `TransientMarkerBox` → `AudioFileBox.transientMarkers` (field-level reference, skipped)
+
 ### Audio File Not in Project
 - AudioFileBox created with same UUID
 - Audio won't play until file is available
@@ -429,6 +486,7 @@ packages/studio/core/src/ui/timeline/TimelineFocus.ts
 packages/studio/core/src/project/Project.ts - added timelineFocus
 packages/lib/box/src/box.ts - added subscribeDeletion()
 packages/lib/box/src/graph.ts - added #deletionListeners and subscribeDeletion()
+packages/studio/core/src/ui/clipboard/ClipboardUtils.ts - external resource handling, skip field-level children
 packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionsArea.tsx - focus handling, clipboard integration
 packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionLane.tsx - focus visual feedback
 packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionLane.sass - .focused styling

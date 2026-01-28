@@ -15,12 +15,14 @@ export namespace ClipboardUtils {
 
     export const serializeBoxes = (boxes: ReadonlyArray<Box>,
                                    metadata: ArrayBufferLike = new ArrayBuffer(0)): ArrayBufferLike => {
+        const uniqueBoxes = UUID.newSet<Box>(box => box.address.uuid)
+        boxes.forEach(box => uniqueBoxes.add(box))
         const typeCounts = new Map<string, number>()
-        boxes.forEach(box => typeCounts.set(box.name, (typeCounts.get(box.name) ?? 0) + 1))
+        uniqueBoxes.forEach(box => typeCounts.set(box.name, (typeCounts.get(box.name) ?? 0) + 1))
         const types = [...typeCounts.entries()].map(([type, count]) => `${type}: ${count}`).join(", ")
         const clipboardGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
         clipboardGraph.beginTransaction()
-        boxes.forEach(sourceBox => {
+        uniqueBoxes.forEach(sourceBox => {
             const input = new ByteArrayInput(sourceBox.toArrayBuffer())
             clipboardGraph.createBox(sourceBox.name as keyof BoxIO.TypeMap, sourceBox.address.uuid, box => box.read(input))
         })
@@ -50,7 +52,21 @@ export namespace ClipboardUtils {
         input.readBytes(graphData)
         const clipboardGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
         clipboardGraph.fromArrayBuffer(graphData.buffer)
-        const sourceBoxes = clipboardGraph.boxes().filter(box => !options.excludeBox?.(box))
+        const skippedExternalUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        clipboardGraph.boxes().forEach(box => {
+            if (box.resource === "external" && targetGraph.findBox(box.address.uuid).nonEmpty()) {
+                skippedExternalUuids.add(box.address.uuid)
+            }
+        })
+        const shouldSkipBox = (box: Box): boolean => {
+            if (options.excludeBox?.(box)) {return true}
+            if (box.resource === "external" && skippedExternalUuids.hasKey(box.address.uuid)) {return true}
+            for (const [, targetAddress] of box.outgoingEdges()) {
+                if (skippedExternalUuids.hasKey(targetAddress.uuid) && !targetAddress.isBox()) {return true}
+            }
+            return false
+        }
+        const sourceBoxes = clipboardGraph.boxes().filter(box => !shouldSkipBox(box))
         const typeCounts = new Map<string, number>()
         sourceBoxes.forEach(box => typeCounts.set(box.name, (typeCounts.get(box.name) ?? 0) + 1))
         console.debug("Clipboard paste:", [...typeCounts.entries()].map(([type, count]) => `${type}: ${count}`).join(", "))
@@ -59,6 +75,7 @@ export namespace ClipboardUtils {
             const isExternal = box.resource === "external"
             uuidMap.add({source: box.address.uuid, target: isExternal ? box.address.uuid : UUID.generate()})
         })
+        skippedExternalUuids.forEach(uuid => uuidMap.add({source: uuid, target: uuid}))
         const result: Array<T> = []
         PointerField.decodeWith({
             map: (pointer, address) => {
@@ -68,8 +85,6 @@ export namespace ClipboardUtils {
                 return options.mapPointer(pointer, address)
             }
         }, () => sourceBoxes.forEach(sourceBox => {
-            const isExternal = sourceBox.resource === "external"
-            if (isExternal && targetGraph.findBox(sourceBox.address.uuid).nonEmpty()) {return}
             const inputStream = new ByteArrayInput(sourceBox.toArrayBuffer())
             const targetUuid = uuidMap.get(sourceBox.address.uuid).target
             targetGraph.createBox(sourceBox.name as keyof BoxIO.TypeMap, targetUuid, box => {
