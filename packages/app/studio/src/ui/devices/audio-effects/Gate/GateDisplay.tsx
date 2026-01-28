@@ -1,10 +1,10 @@
 import css from "./GateDisplay.sass?inline"
-import {AnimationFrame, Html} from "@opendaw/lib-dom"
-import {Lifecycle, unitValue} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {AnimationFrame, Html} from "@moises-ai/lib-dom"
+import {Lifecycle, unitValue} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {CanvasPainter} from "@/ui/canvas/painter"
-import {GateDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {GateDeviceBoxAdapter} from "@moises-ai/studio-adapters"
 
 const className = Html.adoptStyleSheet(css, "GateDisplay")
 

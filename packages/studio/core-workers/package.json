@@ -1,5 +1,5 @@
 {
-    "name": "@opendaw/studio-core-workers",
+    "name": "@moises-ai/studio-core-workers",
     "version": "0.0.74",
     "license": "LGPL-3.0-or-later",
     "private": true,
@@ -12,16 +12,16 @@
         "test": "echo \"No tests to run\""
     },
     "dependencies": {
-        "@opendaw/lib-box": "^0.0.69",
-        "@opendaw/lib-dsp": "^0.0.68",
-        "@opendaw/lib-runtime": "^0.0.66",
-        "@opendaw/lib-std": "^0.0.65",
-        "@opendaw/studio-adapters": "^0.0.79",
-        "@opendaw/studio-boxes": "^0.0.71",
-        "@opendaw/studio-enums": "^0.0.60"
+        "@moises-ai/lib-box": "*",
+        "@moises-ai/lib-dsp": "*",
+        "@moises-ai/lib-runtime": "*",
+        "@moises-ai/lib-std": "*",
+        "@moises-ai/studio-adapters": "*",
+        "@moises-ai/studio-boxes": "*",
+        "@moises-ai/studio-enums": "*"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/typescript-config": "^0.0.28"
+        "@moises-ai/eslint-config": "*",
+        "@moises-ai/typescript-config": "*"
     }
 }

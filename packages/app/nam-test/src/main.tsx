@@ -1,7 +1,7 @@
 import "./style.sass"
-import {assert, isDefined, Nullable} from "@opendaw/lib-std"
-import {createElement, replaceChildren} from "@opendaw/lib-jsx"
-import {Communicator, Messenger} from "@opendaw/lib-runtime"
+import {assert, isDefined, Nullable} from "@moises-ai/lib-std"
+import {createElement, replaceChildren} from "@moises-ai/lib-jsx"
+import {Communicator, Messenger} from "@moises-ai/lib-runtime"
 import {NamProcessorProtocol} from "./protocol"
 import {
     computeStats,

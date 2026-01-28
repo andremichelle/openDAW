@@ -1,7 +1,7 @@
-import {RenderQuantum} from "@opendaw/lib-dsp"
+import {RenderQuantum} from "@moises-ai/lib-dsp"
 import {createNamModule, NamWasmModule} from "@opendaw/nam-wasm"
-import {isDefined} from "@opendaw/lib-std"
-import {Communicator, Messenger} from "@opendaw/lib-runtime"
+import {isDefined} from "@moises-ai/lib-std"
+import {Communicator, Messenger} from "@moises-ai/lib-runtime"
 import {NamProcessorProtocol} from "./protocol"
 
 registerProcessor("nam-test-processor", class NamTestProcessor extends AudioWorkletProcessor {

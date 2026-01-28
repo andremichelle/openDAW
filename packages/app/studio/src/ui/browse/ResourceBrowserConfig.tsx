@@ -1,4 +1,4 @@
-import {Exec, Lifecycle} from "@opendaw/lib-std"
+import {Exec, Lifecycle} from "@moises-ai/lib-std"
 import {StudioService} from "@/service/StudioService"
 import {ResourceSelection} from "@/ui/browse/ResourceSelection"
 import {AssetLocation} from "@/ui/browse/AssetLocation"

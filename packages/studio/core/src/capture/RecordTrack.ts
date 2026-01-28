@@ -1,7 +1,7 @@
-import {AudioUnitBox, TrackBox} from "@opendaw/studio-boxes"
-import {asInstanceOf, int, Nullable, UUID} from "@opendaw/lib-std"
-import {TrackType} from "@opendaw/studio-adapters"
-import {BoxEditing} from "@opendaw/lib-box"
+import {AudioUnitBox, TrackBox} from "@moises-ai/studio-boxes"
+import {asInstanceOf, int, Nullable, UUID} from "@moises-ai/lib-std"
+import {TrackType} from "@moises-ai/studio-adapters"
+import {BoxEditing} from "@moises-ai/lib-box"
 
 export namespace RecordTrack {
     export const findOrCreate = (editing: BoxEditing,

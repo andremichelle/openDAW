@@ -1,9 +1,10 @@
 {
-    "name": "@opendaw/studio-sdk",
+    "name": "@moises-ai/studio-sdk",
     "version": "0.0.101",
     "license": "LGPL-3.0-or-later",
     "type": "module",
     "publishConfig": {
+        "registry": "https://npm.pkg.github.com",
         "access": "public"
     },
     "description": "One-line installer for the complete OpenDAW Studio tool-chain",
@@ -39,23 +40,23 @@
         "prepublishOnly": "npm run sync-version"
     },
     "devDependencies": {
-        "@opendaw/typescript-config": "^0.0.28"
+        "@moises-ai/typescript-config": "*"
     },
     "dependencies": {
-        "@opendaw/lib-box": "^0.0.69",
-        "@opendaw/lib-dawproject": "^0.0.54",
-        "@opendaw/lib-dom": "^0.0.70",
-        "@opendaw/lib-dsp": "^0.0.68",
-        "@opendaw/lib-fusion": "^0.0.74",
-        "@opendaw/lib-jsx": "^0.0.70",
-        "@opendaw/lib-midi": "^0.0.50",
-        "@opendaw/lib-runtime": "^0.0.66",
-        "@opendaw/lib-std": "^0.0.65",
-        "@opendaw/lib-xml": "^0.0.51",
-        "@opendaw/studio-adapters": "^0.0.79",
-        "@opendaw/studio-boxes": "^0.0.71",
-        "@opendaw/studio-core": "^0.0.100",
-        "@opendaw/studio-enums": "^0.0.60"
+        "@moises-ai/lib-box": "*",
+        "@moises-ai/lib-dawproject": "*",
+        "@moises-ai/lib-dom": "*",
+        "@moises-ai/lib-dsp": "*",
+        "@moises-ai/lib-fusion": "*",
+        "@moises-ai/lib-jsx": "*",
+        "@moises-ai/lib-midi": "*",
+        "@moises-ai/lib-runtime": "*",
+        "@moises-ai/lib-std": "*",
+        "@moises-ai/lib-xml": "*",
+        "@moises-ai/studio-adapters": "*",
+        "@moises-ai/studio-boxes": "*",
+        "@moises-ai/studio-core": "*",
+        "@moises-ai/studio-enums": "*"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

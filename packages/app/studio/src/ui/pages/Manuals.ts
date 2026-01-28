@@ -1,6 +1,6 @@
-import {IconSymbol} from "@opendaw/studio-enums"
-import {EffectFactories} from "@opendaw/studio-core"
-import {InstrumentFactories} from "@opendaw/studio-adapters"
+import {IconSymbol} from "@moises-ai/studio-enums"
+import {EffectFactories} from "@moises-ai/studio-core"
+import {InstrumentFactories} from "@moises-ai/studio-adapters"
 
 export type Manual = ({
     type: "page"

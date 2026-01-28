@@ -1,11 +1,12 @@
 {
-    "name": "@opendaw/lib-midi",
+    "name": "@moises-ai/lib-midi",
     "version": "0.0.50",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "license": "LGPL-3.0-or-later",
     "publishConfig": {
+        "registry": "https://npm.pkg.github.com",
         "access": "public"
     },
     "exports": {
@@ -23,12 +24,12 @@
         "test": "echo \"No tests to run\""
     },
     "dependencies": {
-        "@opendaw/lib-dsp": "^0.0.68",
-        "@opendaw/lib-std": "^0.0.65"
+        "@moises-ai/lib-dsp": "*",
+        "@moises-ai/lib-std": "*"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/typescript-config": "^0.0.28"
+        "@moises-ai/eslint-config": "*",
+        "@moises-ai/typescript-config": "*"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

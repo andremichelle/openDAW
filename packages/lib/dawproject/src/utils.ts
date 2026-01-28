@@ -1,7 +1,7 @@
 import {BooleanParameterSchema, Interpolation, RealParameterSchema, Unit} from "./defaults"
-import {Xml} from "@opendaw/lib-xml"
-import {asDefined} from "@opendaw/lib-std"
-import {Interpolation as OpenDAWInterpolation, semitoneToHz} from "@opendaw/lib-dsp"
+import {Xml} from "@moises-ai/lib-xml"
+import {asDefined} from "@moises-ai/lib-std"
+import {Interpolation as OpenDAWInterpolation, semitoneToHz} from "@moises-ai/lib-dsp"
 
 export namespace ParameterEncoder {
     export const bool = (id: string, value: boolean, name?: string) => Xml.element({

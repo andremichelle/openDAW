@@ -13,13 +13,13 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {AudioUnitBoxAdapter, IndexComparator, TrackBoxAdapter} from "@opendaw/studio-adapters"
+} from "@moises-ai/lib-std"
+import {AudioUnitBoxAdapter, IndexComparator, TrackBoxAdapter} from "@moises-ai/studio-adapters"
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
 import {StudioService} from "@/service/StudioService.ts"
 import {AudioUnitTracks} from "@/ui/timeline/tracks/audio-unit/AudioUnitTracks.tsx"
 import {ClipModifier} from "./clips/ClipModifier"
-import {Dragging} from "@opendaw/lib-dom"
+import {Dragging} from "@moises-ai/lib-dom"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
 
 export interface TrackFactory {

@@ -24,8 +24,8 @@
         "test": "vitest run"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "^0.0.27",
-        "@moises-ai/typescript-config": "^0.0.28",
+        "@moises-ai/eslint-config": "*",
+        "@moises-ai/typescript-config": "*",
         "zod": "^4.1.12"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"

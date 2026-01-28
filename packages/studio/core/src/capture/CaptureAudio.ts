@@ -8,10 +8,10 @@ import {
     Option,
     RuntimeNotifier,
     Terminable
-} from "@opendaw/lib-std"
-import {dbToGain} from "@opendaw/lib-dsp"
-import {Promises} from "@opendaw/lib-runtime"
-import {AudioUnitBox, CaptureAudioBox} from "@opendaw/studio-boxes"
+} from "@moises-ai/lib-std"
+import {dbToGain} from "@moises-ai/lib-dsp"
+import {Promises} from "@moises-ai/lib-runtime"
+import {AudioUnitBox, CaptureAudioBox} from "@moises-ai/studio-boxes"
 import {Capture} from "./Capture"
 import {CaptureDevices} from "./CaptureDevices"
 import {RecordAudio} from "./RecordAudio"

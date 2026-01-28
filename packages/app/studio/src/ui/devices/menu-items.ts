@@ -1,13 +1,13 @@
-import {DeviceHost, Devices, EffectDeviceBoxAdapter, PresetDecoder, PresetEncoder} from "@opendaw/studio-adapters"
-import {EffectFactories, FilePickerAcceptTypes, MenuItem, Project} from "@opendaw/studio-core"
-import {BoxEditing, PrimitiveField, PrimitiveValues, StringField} from "@opendaw/lib-box"
-import {EmptyExec, isInstanceOf, panic, RuntimeNotifier} from "@opendaw/lib-std"
+import {DeviceHost, Devices, EffectDeviceBoxAdapter, PresetDecoder, PresetEncoder} from "@moises-ai/studio-adapters"
+import {EffectFactories, FilePickerAcceptTypes, MenuItem, Project} from "@moises-ai/studio-core"
+import {BoxEditing, PrimitiveField, PrimitiveValues, StringField} from "@moises-ai/lib-box"
+import {EmptyExec, isInstanceOf, panic, RuntimeNotifier} from "@moises-ai/lib-std"
 import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
 import {StudioService} from "@/service/StudioService"
-import {VaporisateurDeviceBox} from "@opendaw/studio-boxes"
-import {Files} from "@opendaw/lib-dom"
-import {RouteLocation} from "@opendaw/lib-jsx"
+import {VaporisateurDeviceBox} from "@moises-ai/studio-boxes"
+import {Files} from "@moises-ai/lib-dom"
+import {RouteLocation} from "@moises-ai/lib-jsx"
 
 export namespace MenuItems {
     export const forAudioUnitInput = (parent: MenuItem, service: StudioService, deviceHost: DeviceHost): void => {

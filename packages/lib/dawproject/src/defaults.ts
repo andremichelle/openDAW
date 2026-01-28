@@ -1,6 +1,6 @@
 // noinspection JSUnusedGlobalSymbols
-import type {int} from "@opendaw/lib-std"
-import {Xml} from "@opendaw/lib-xml"
+import type {int} from "@moises-ai/lib-std"
+import {Xml} from "@moises-ai/lib-xml"
 
 export interface Nameable {
     name?: string

@@ -1,4 +1,4 @@
-import {isDefined} from "@opendaw/lib-std"
+import {isDefined} from "@moises-ai/lib-std"
 import {NamModel} from "@opendaw/nam-wasm"
 
 // Colors matching DisplayPaint style

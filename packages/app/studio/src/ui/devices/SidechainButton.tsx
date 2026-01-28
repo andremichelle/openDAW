@@ -1,11 +1,11 @@
 import css from "./SidechainButton.sass?inline"
-import {createElement} from "@opendaw/lib-jsx"
-import {Option} from "@opendaw/lib-std"
-import {Address, BoxEditing, PointerField} from "@opendaw/lib-box"
-import {Html} from "@opendaw/lib-dom"
-import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
-import {LabeledAudioOutput, RootBoxAdapter} from "@opendaw/studio-adapters"
-import {MenuItem} from "@opendaw/studio-core"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Option} from "@moises-ai/lib-std"
+import {Address, BoxEditing, PointerField} from "@moises-ai/lib-box"
+import {Html} from "@moises-ai/lib-dom"
+import {Colors, IconSymbol, Pointers} from "@moises-ai/studio-enums"
+import {LabeledAudioOutput, RootBoxAdapter} from "@moises-ai/studio-adapters"
+import {MenuItem} from "@moises-ai/studio-core"
 import {MenuButton} from "@/ui/components/MenuButton"
 
 const className = Html.adoptStyleSheet(css, "SidechainButton")

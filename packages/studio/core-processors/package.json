@@ -1,5 +1,5 @@
 {
-    "name": "@opendaw/studio-core-processors",
+    "name": "@moises-ai/studio-core-processors",
     "version": "0.0.82",
     "license": "LGPL-3.0-or-later",
     "private": true,
@@ -13,18 +13,18 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@opendaw/lib-box": "^0.0.69",
-        "@opendaw/lib-dsp": "^0.0.68",
-        "@opendaw/lib-runtime": "^0.0.66",
-        "@opendaw/lib-std": "^0.0.65",
-        "@opendaw/studio-adapters": "^0.0.79",
-        "@opendaw/studio-boxes": "^0.0.71",
-        "@opendaw/studio-enums": "^0.0.60",
+        "@moises-ai/lib-box": "*",
+        "@moises-ai/lib-dsp": "*",
+        "@moises-ai/lib-runtime": "*",
+        "@moises-ai/lib-std": "*",
+        "@moises-ai/studio-adapters": "*",
+        "@moises-ai/studio-boxes": "*",
+        "@moises-ai/studio-enums": "*",
         "@types/audioworklet": "^0.0.77"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/typescript-config": "^0.0.28",
+        "@moises-ai/eslint-config": "*",
+        "@moises-ai/typescript-config": "*",
         "vitest": "^1.6.0"
     }
 }

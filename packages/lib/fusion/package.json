@@ -1,11 +1,12 @@
 {
-    "name": "@opendaw/lib-fusion",
+    "name": "@moises-ai/lib-fusion",
     "version": "0.0.74",
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "license": "LGPL-3.0-or-later",
     "sideEffects": false,
     "publishConfig": {
+        "registry": "https://npm.pkg.github.com",
         "access": "public"
     },
     "exports": {
@@ -23,14 +24,14 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@opendaw/lib-box": "^0.0.69",
-        "@opendaw/lib-dom": "^0.0.70",
-        "@opendaw/lib-runtime": "^0.0.66",
-        "@opendaw/lib-std": "^0.0.65"
+        "@moises-ai/lib-box": "*",
+        "@moises-ai/lib-dom": "*",
+        "@moises-ai/lib-runtime": "*",
+        "@moises-ai/lib-std": "*"
     },
     "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/typescript-config": "^0.0.28",
+        "@moises-ai/eslint-config": "*",
+        "@moises-ai/typescript-config": "*",
         "jsdom": "^25.0.1",
         "vitest": "^2.1.8"
     },

@@ -10,10 +10,10 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {ppqn, PPQN} from "@opendaw/lib-dsp"
-import {NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
-import {ColorCodes, NoteSignal, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
+} from "@moises-ai/lib-std"
+import {ppqn, PPQN} from "@moises-ai/lib-dsp"
+import {NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@moises-ai/studio-boxes"
+import {ColorCodes, NoteSignal, TrackType, UnionBoxTypes} from "@moises-ai/studio-adapters"
 import {Project} from "../project"
 import {Capture} from "./Capture"
 import {RecordTrack} from "./RecordTrack"

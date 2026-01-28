@@ -1,7 +1,7 @@
-import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
-import {Colors} from "@opendaw/studio-enums"
-import {isNull, Lifecycle} from "@opendaw/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {Colors} from "@moises-ai/studio-enums"
+import {isNull, Lifecycle} from "@moises-ai/lib-std"
 
 interface WeightStats {
     count: number

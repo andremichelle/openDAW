@@ -1,4 +1,4 @@
-import {isAbsent, isDefined, Nullable, Procedure, Subscription} from "@opendaw/lib-std"
+import {isAbsent, isDefined, Nullable, Procedure, Subscription} from "@moises-ai/lib-std"
 
 type KnownEventMap = WindowEventMap & MIDIInputEventMap & MIDIPortEventMap
 

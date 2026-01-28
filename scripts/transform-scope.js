@@ -59,9 +59,28 @@ function findPackageJsonFiles(dir, results = []) {
 }
 
 /**
+ * Collect all local workspace package names by scanning package.json files
+ */
+function collectWorkspacePackageNames(rootDir) {
+  const names = new Set();
+  const packageFiles = findPackageJsonFiles(rootDir);
+  for (const file of packageFiles) {
+    const content = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (content.name) {
+      // Add both the original and transformed name
+      names.add(content.name);
+      if (content.name.startsWith(OLD_SCOPE)) {
+        names.add(content.name.replace(OLD_SCOPE, NEW_SCOPE));
+      }
+    }
+  }
+  return names;
+}
+
+/**
  * Transform a package.json file
  */
-function transformPackageJson(filePath) {
+function transformPackageJson(filePath, workspacePackageNames) {
   const content = JSON.parse(fs.readFileSync(filePath, "utf8"));
   let modified = false;
 
@@ -80,11 +99,23 @@ function transformPackageJson(filePath) {
     if (content[depType]) {
       const newDeps = {};
       for (const [name, version] of Object.entries(content[depType])) {
-        const newName = name.startsWith(OLD_SCOPE)
-          ? name.replace(OLD_SCOPE, NEW_SCOPE)
-          : name;
-        newDeps[newName] = version;
-        if (newName !== name) modified = true;
+        // Only rename @opendaw deps that are local workspace packages.
+        // External @opendaw packages (e.g. @opendaw/nam-wasm) must keep
+        // their original scope so npm can fetch them from npmjs.org.
+        const transformedName = name.replace(OLD_SCOPE, NEW_SCOPE);
+        const isLocalPackage = name.startsWith(OLD_SCOPE) && workspacePackageNames.has(transformedName);
+        const newName = isLocalPackage ? transformedName : name;
+
+        // Use wildcard version for local workspace packages so npm resolves
+        // them from the monorepo instead of checking the scoped registry.
+        // Without this, npm tries to fetch from the @moises-ai GitHub
+        // Package Registry which may not have the latest upstream versions.
+        let newVersion = version;
+        if (isLocalPackage && version !== "*") {
+          newVersion = "*";
+        }
+        if (newName !== name || newVersion !== version) modified = true;
+        newDeps[newName] = newVersion;
       }
       content[depType] = newDeps;
     }
@@ -249,13 +280,27 @@ function findSourceFiles(dir, results = []) {
 
 /**
  * Transform a TypeScript source file (handles imports)
+ *
+ * Only renames @opendaw/package-name to @moises-ai/package-name when the
+ * package is a local workspace package. External @opendaw packages are left
+ * unchanged so they resolve from npmjs.org.
  */
-function transformSourceFile(filePath) {
+function transformSourceFile(filePath, workspacePackageNames) {
   let content = fs.readFileSync(filePath, "utf8");
   const original = content;
 
-  // Replace @opendaw references in import statements
-  content = content.replace(new RegExp(OLD_SCOPE.replace("@", "\\@"), "g"), NEW_SCOPE);
+  // Match @opendaw/package-name patterns and only replace workspace-local ones
+  content = content.replace(
+    new RegExp(OLD_SCOPE.replace("@", "\\@") + "/([\\w-]+)", "g"),
+    (match, packageName) => {
+      const transformed = `${NEW_SCOPE}/${packageName}`;
+      if (workspacePackageNames.has(transformed)) {
+        return transformed;
+      }
+      // Not a workspace package — keep original scope
+      return match;
+    }
+  );
 
   if (content !== original) {
     fs.writeFileSync(filePath, content);
@@ -272,12 +317,16 @@ async function main() {
 
   let totalChanges = 0;
 
+  // Collect workspace package names first so we can use workspace: protocol
+  const workspacePackageNames = collectWorkspacePackageNames(rootDir);
+  console.log(`Found ${workspacePackageNames.size} workspace packages\n`);
+
   // Transform all package.json files
   console.log("Processing package.json files...");
   const packageFiles = findPackageJsonFiles(rootDir);
 
   for (const file of packageFiles) {
-    if (transformPackageJson(file)) totalChanges++;
+    if (transformPackageJson(file, workspacePackageNames)) totalChanges++;
   }
 
   // Transform root package.json scripts separately (for --filter= args)
@@ -311,7 +360,7 @@ async function main() {
   const sourceFiles = findSourceFiles(packagesDir);
   let sourceFilesUpdated = 0;
   for (const file of sourceFiles) {
-    if (transformSourceFile(file)) sourceFilesUpdated++;
+    if (transformSourceFile(file, workspacePackageNames)) sourceFilesUpdated++;
   }
   console.log(`  Updated ${sourceFilesUpdated} source files`);
   totalChanges += sourceFilesUpdated;
