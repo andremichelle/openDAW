@@ -11,6 +11,7 @@ import {Checkbox} from "@/ui/components/Checkbox"
 import {ControlIndicator} from "@/ui/components/ControlIndicator"
 import {MidiKeys} from "@moises-ai/lib-dsp"
 import {SlotUtils} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotUtils"
+import {SampleSelector, SampleSelectStrategy} from "@/ui/devices/SampleSelector"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {ParameterLabel} from "@/ui/components/ParameterLabel"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
@@ -41,6 +42,7 @@ export const SlotEditor = ({lifecycle, service, adapter}: Construct) => {
     const playbackContext: CanvasRenderingContext2D = asDefined(playbackCanvas.getContext("2d"))
     const waveformPainter = new CanvasPainter(waveformCanvas, painter =>
         SlotUtils.waveform(painter, adapter, adapter.indexField.getValue() % 12, true))
+    const sampleSelector = new SampleSelector(service, SampleSelectStrategy.forPointerField(adapter.box.file))
     const createParameterLabel = (parameter: AutomatableParameterFieldAdapter) => (
         <div className="parameter-label">
             <div className="label">{parameter.name}</div>
@@ -54,9 +56,9 @@ export const SlotEditor = ({lifecycle, service, adapter}: Construct) => {
             </RelativeUnitValueDragging>
         </div>
     )
-
     lifecycle.ownAll(
         waveformPainter,
+        sampleSelector.configureDrop(waveformCanvas),
         adapter.indexField.catchupAndSubscribe(owner => labelNote.textContent = MidiKeys.toFullString(owner.getValue())),
         Dragging.attach(waveformCanvas, ({clientX}: PointerEvent) => {
             const {left, width} = waveformCanvas.getBoundingClientRect()
@@ -93,6 +95,7 @@ export const SlotEditor = ({lifecycle, service, adapter}: Construct) => {
             if (!pointer.isAttached()) {return}
             userEditingManager.audioUnit.edit(deviceAdapter.audioUnitBoxAdapter().box.editing)
         }),
+        adapter.box.file.subscribe(waveformPainter.requestUpdate),
         sampleStart.subscribe(waveformPainter.requestUpdate),
         sampleEnd.subscribe(waveformPainter.requestUpdate),
         service.project.liveStreamReceiver.subscribeFloats(adapter.address, array => {

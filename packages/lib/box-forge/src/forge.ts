@@ -191,6 +191,7 @@ type PointerRulesPrinter = Readonly<{
     union: string
     array: string
     mandatory: boolean
+    exclusive: boolean
 }>
 
 export const PrimitiveFields = Object.freeze({
@@ -271,7 +272,8 @@ class ClassWriter<E extends PointerTypes> {
             union: edgesUnion,
             array: edgesArray,
             isEmpty: noEdgeConstrains,
-            mandatory: edgeMandatory
+            mandatory: edgeMandatory,
+            exclusive: edgeExclusive
         } = this.#printPointerTypes(this.#pointerRules)
         const className = this.#schema.name
         const fieldsType = this.#fieldsTypeName()
@@ -291,7 +293,7 @@ class ClassWriter<E extends PointerTypes> {
                 this.#imports.add(BOX_LIBRARY, "NoPointers")
                 pointerRules = "NoPointers"
             } else {
-                pointerRules = `{accepts: [${edgesArray}], mandatory: ${edgeMandatory}}`
+                pointerRules = `{accepts: [${edgesArray}], mandatory: ${edgeMandatory}, exclusive: ${edgeExclusive}}`
             }
             this.#imports.addAll(STD_LIBRARY, ["Procedure", "safeExecute"])
             declaration.addMethod({
@@ -500,24 +502,24 @@ class ClassWriter<E extends PointerTypes> {
 
     #writeFieldConstruct(fieldKey: FieldKey,
                          fieldName: string,
-                         {array, mandatory, isEmpty}: PointerRulesPrinter,
+                         {array, mandatory, exclusive, isEmpty}: PointerRulesPrinter,
                          deprecated: boolean): string {
         let pointerRules: string
         if (isEmpty) {
             this.#imports.add(BOX_LIBRARY, "NoPointers")
             pointerRules = "pointerRules: NoPointers"
         } else {
-            pointerRules = `pointerRules: {accepts: [${array}], mandatory: ${mandatory}}`
+            pointerRules = `pointerRules: {accepts: [${array}], mandatory: ${mandatory}, exclusive: ${exclusive}}`
         }
         return `{${[`parent: this`, `fieldKey: ${fieldKey}`, `fieldName: "${fieldName}", deprecated: ${deprecated}`, pointerRules].join(",")}}`
     }
 
-    #writeEdgeProperty({array, mandatory, isEmpty}: PointerRulesPrinter): string {
+    #writeEdgeProperty({array, mandatory, exclusive, isEmpty}: PointerRulesPrinter): string {
         if (isEmpty) {
             this.#imports.add(BOX_LIBRARY, "NoPointers")
             return "pointerRules: NoPointers"
         } else {
-            return `pointerRules: {accepts: [${array}], mandatory: ${mandatory}}`
+            return `pointerRules: {accepts: [${array}], mandatory: ${mandatory}, exclusive: ${exclusive}}`
         }
     }
 
@@ -535,10 +537,11 @@ class ClassWriter<E extends PointerTypes> {
                 isEmpty: false,
                 union: types.join("|"),
                 array: types.join(","),
-                mandatory: rules.mandatory
+                mandatory: rules.mandatory,
+                exclusive: rules.exclusive === true
             }
         }
-        return {isEmpty: true, union: "UnreferenceableType", array: "", mandatory: false}
+        return {isEmpty: true, union: "UnreferenceableType", array: "", mandatory: false, exclusive: false}
     }
 
     #writeImports(): void {

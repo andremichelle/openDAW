@@ -5,8 +5,9 @@ import {AudioContentFactory, OpenSampleAPI, ProjectStorage, SampleStorage} from 
 import {HTMLSelection} from "@/ui/HTMLSelection"
 import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "../components/dialogs"
+import {ResourceSelection} from "@/ui/browse/ResourceSelection"
 
-export class SampleSelection {
+export class SampleSelection implements ResourceSelection {
     readonly #service: StudioService
     readonly #selection: HTMLSelection
 

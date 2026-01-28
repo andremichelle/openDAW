@@ -1,4 +1,4 @@
-import {isDefined, Nullable, Procedure, Subscription} from "@moises-ai/lib-std"
+import {isAbsent, isDefined, Nullable, Procedure, Subscription} from "@opendaw/lib-std"
 
 type KnownEventMap = WindowEventMap & MIDIInputEventMap & MIDIPortEventMap
 
@@ -49,9 +49,20 @@ export class Events {
 
     static readonly PreventDefault: Procedure<Event> = event => event.preventDefault()
 
-    static readonly isTextInput = (target: Nullable<EventTarget>): boolean => target instanceof HTMLInputElement
-        || target instanceof HTMLTextAreaElement
-        || (target instanceof HTMLElement && isDefined(target.getAttribute("contenteditable")))
+    static readonly isTextInput = (target: Nullable<EventTarget>): boolean => {
+        return target instanceof HTMLInputElement
+            || target instanceof HTMLTextAreaElement
+            || (target instanceof HTMLElement && isDefined(target.getAttribute("contenteditable")))
+    }
+
+    /**
+     * Detects keyboard events triggered by browser autofill (e.g., Safari).
+     * Autofill events often have empty or missing key/code properties.
+     */
+    static isAutofillEvent(event: KeyboardEvent): boolean {
+        return isAbsent(event.key) || event.key === ""
+            || event.key === "Unidentified" || isAbsent(event.code) || event.code === ""
+    }
 }
 
 export interface PointerCaptureTarget extends EventTarget {

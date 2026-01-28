@@ -136,6 +136,9 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                 fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2> {
                     return dispatcher.dispatchAndReturn(this.fetchSoundfont, uuid)
                 }
+                fetchNamWasm(): Promise<ArrayBuffer> {
+                    return dispatcher.dispatchAndReturn(this.fetchNamWasm)
+                }
                 notifyClipSequenceChanges(changes: ClipSequencingUpdates): void {
                     dispatcher.dispatchAndForget(this.notifyClipSequenceChanges, changes)
                 }

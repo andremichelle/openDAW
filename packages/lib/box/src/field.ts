@@ -48,7 +48,7 @@ export class Field<P extends PointerTypes = PointerTypes, F extends Fields = Fie
         this.#pointerRules = pointerRules
         this.#deprecated = deprecated
 
-        if (pointerRules.mandatory) {this.graph.edges().watchVertex(this)}
+        if (pointerRules.mandatory || pointerRules.exclusive) {this.graph.edges().watchVertex(this)}
     }
 
     accept<RETURN>(visitor: VertexVisitor<RETURN>): Maybe<RETURN> {
@@ -91,6 +91,7 @@ export class Field<P extends PointerTypes = PointerTypes, F extends Fields = Fie
         incoming.forEach(pointer => {
             pointer.defer()
             if (pointer.mandatory || (this.pointerRules.mandatory && incoming.length === 1)) {
+                console.warn(`[Field.disconnect] Deleting ${pointer.box} because pointer.mandatory=${pointer.mandatory} or (field.mandatory=${this.pointerRules.mandatory} and lastPointer=${incoming.length === 1})`)
                 pointer.box.delete()
             }
         })

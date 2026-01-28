@@ -1,7 +1,7 @@
 {
-    "name": "@moises-ai/lab",
+    "name": "@opendaw/lab",
     "private": true,
-    "version": "0.0.93",
+    "version": "0.0.100",
     "type": "module",
     "license": "LGPL-3.0-or-later",
     "scripts": {
@@ -11,20 +11,20 @@
         "lint": "eslint \"src/**/*.ts\""
     },
     "dependencies": {
-        "@moises-ai/lib-box": "^0.0.67",
-        "@moises-ai/lib-dom": "^0.0.67",
-        "@moises-ai/lib-dsp": "^0.0.65",
-        "@moises-ai/lib-jsx": "^0.0.67",
-        "@moises-ai/lib-runtime": "^0.0.65",
-        "@moises-ai/lib-std": "^0.0.65",
-        "@moises-ai/studio-adapters": "^0.0.76",
-        "@moises-ai/studio-boxes": "^0.0.68",
-        "@moises-ai/studio-core": "^0.0.93",
-        "@moises-ai/studio-enums": "^0.0.57"
+        "@opendaw/lib-box": "^0.0.69",
+        "@opendaw/lib-dom": "^0.0.70",
+        "@opendaw/lib-dsp": "^0.0.68",
+        "@opendaw/lib-jsx": "^0.0.70",
+        "@opendaw/lib-runtime": "^0.0.66",
+        "@opendaw/lib-std": "^0.0.65",
+        "@opendaw/studio-adapters": "^0.0.79",
+        "@opendaw/studio-boxes": "^0.0.71",
+        "@opendaw/studio-core": "^0.0.100",
+        "@opendaw/studio-enums": "^0.0.60"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "^0.0.27",
-        "@moises-ai/typescript-config": "^0.0.28",
+        "@opendaw/eslint-config": "^0.0.27",
+        "@opendaw/typescript-config": "^0.0.28",
         "@types/node": "^22.15.18",
         "eslint": "^8.57.0",
         "sass": "^1.88.0",

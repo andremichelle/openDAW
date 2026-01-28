@@ -1,0 +1,4 @@
+{
+    "extends": "@opendaw/typescript-config/vite.json",
+    "include": ["src"]
+}

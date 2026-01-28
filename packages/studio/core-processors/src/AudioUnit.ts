@@ -36,7 +36,7 @@ export class AudioUnit implements Terminable {
                 this.#midiDeviceChain.invalidateWiring()
                 this.#audioDeviceChain.invalidateWiring()
                 this.#input.ifSome(input => input.terminate())
-                this.#input = owner.getValue().flatMap((input: AudioUnitInputAdapter) =>
+                this.#input = owner.flatMap((input: AudioUnitInputAdapter) =>
                     Option.wrap(InstrumentDeviceProcessorFactory.create(context, input.box.box)))
             })
         )

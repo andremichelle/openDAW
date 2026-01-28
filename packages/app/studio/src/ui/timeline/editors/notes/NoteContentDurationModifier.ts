@@ -1,12 +1,12 @@
-import {int, Notifier, Observer, Option, Terminable} from "@moises-ai/lib-std"
+import {int, Notifier, Observer, Option, Terminable} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {BoxEditing} from "@moises-ai/lib-box"
+import {BoxEditing} from "@opendaw/lib-box"
 import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {ppqn} from "@moises-ai/lib-dsp"
+import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {UINoteEvent} from "./UINoteEvent"
-import {Dragging} from "@moises-ai/lib-dom"
+import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
     element: Element
@@ -46,7 +46,7 @@ export class NoteContentDurationModifier implements NoteModifier {
     showPropertyLine(): Option<Line> {return Option.None}
     readContentDuration(region: NoteEventOwnerReader): number {
         return Math.max(region.loopDuration + this.#deltaLoopDuration,
-            Math.min(region.loopDuration, this.#snapping.value(region.position)))
+            Math.min(region.loopDuration, PPQN.SemiQuaver))
     }
     selectedModifyStrategy(): NoteModifyStrategy {return NoteModifyStrategy.Identity}
     unselectedModifyStrategy(): NoteModifyStrategy {return NoteModifyStrategy.Identity}

@@ -47,7 +47,7 @@ export const ChannelOutputSelector = ({lifecycle, project, adapter}: Construct) 
             <MenuButton
                 root={MenuItem.root()
                     .setRuntimeChildrenProcedure(parent => {
-                        const inputUUID = adapter.input.getValue().unwrapOrNull()?.uuid ?? UUID.Lowest
+                        const inputUUID = adapter.input.adapter().unwrapOrNull()?.uuid ?? UUID.Lowest
                         const outputUUID = adapter.output.adapter.unwrapOrNull()?.uuid ?? UUID.Lowest
                         parent
                             .addMenuItem(...project.rootBoxAdapter.audioBusses.adapters()

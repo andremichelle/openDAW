@@ -1,7 +1,19 @@
-import {asInstanceOf, byte, int, Notifier, Option, quantizeCeil, quantizeFloor, Terminable, Terminator, UUID} from "@moises-ai/lib-std"
-import {ppqn, PPQN} from "@moises-ai/lib-dsp"
-import {NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@moises-ai/studio-boxes"
-import {ColorCodes, NoteSignal, TrackType, UnionBoxTypes} from "@moises-ai/studio-adapters"
+import {
+    asInstanceOf,
+    byte,
+    int,
+    Notifier,
+    Nullable,
+    Option,
+    quantizeCeil,
+    quantizeFloor,
+    Terminable,
+    Terminator,
+    UUID
+} from "@opendaw/lib-std"
+import {ppqn, PPQN} from "@opendaw/lib-dsp"
+import {NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
+import {ColorCodes, NoteSignal, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
 import {Project} from "../project"
 import {Capture} from "./Capture"
 import {RecordTrack} from "./RecordTrack"
@@ -38,18 +50,18 @@ export namespace RecordMidi {
         let currentTake: Option<TakeData> = Option.None
         let lastPosition: ppqn = 0
         let positionOffset: ppqn = 0
-        let takeNumber: int = 0
+        let takeCount: int = 0
 
-        const createTakeRegion = (position: ppqn, forceNewTrack: boolean): TakeData => {
-            takeNumber++
-            const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Notes, forceNewTrack)
+        const createTakeRegion = (position: ppqn, excludeTrack: Nullable<TrackBox>): TakeData => {
+            takeCount++
+            const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Notes, excludeTrack)
             const collection = NoteEventCollectionBox.create(boxGraph, UUID.generate())
             const regionBox = NoteRegionBox.create(boxGraph, UUID.generate(), box => {
                 box.regions.refer(trackBox.regions)
                 box.events.refer(collection.owners)
                 box.position.setValue(position)
                 box.hue.setValue(ColorCodes.forTrackType(TrackType.Notes))
-                box.label.setValue(`Take ${takeNumber}`)
+                box.label.setValue(`Take ${takeCount}`)
             })
             capture.addRecordedRegion(regionBox)
             project.selection.select(regionBox)
@@ -97,7 +109,8 @@ export namespace RecordMidi {
         }
 
         const startNewTake = (position: ppqn) => {
-            currentTake = Option.wrap(createTakeRegion(position, true))
+            const previousTrack = currentTake.mapOr(take => take.trackBox, null)
+            currentTake = Option.wrap(createTakeRegion(position, previousTrack))
         }
 
         terminator.own(position.catchupAndSubscribe(owner => {
@@ -107,12 +120,14 @@ export namespace RecordMidi {
             const loopEnabled = loopArea.enabled.getValue()
             const loopFrom = loopArea.from.getValue()
             const loopTo = loopArea.to.getValue()
-            const loopDurationPPQN = loopTo - loopFrom
             const allowTakes = project.engine.preferences.settings.recording.allowTakes
             if (loopEnabled && allowTakes && currentTake.nonEmpty() && currentPosition < lastPosition) {
-                positionOffset += loopDurationPPQN
                 editing.modify(() => {
-                    currentTake.ifSome(take => finalizeTake(take, loopDurationPPQN))
+                    currentTake.ifSome(take => {
+                        const actualDurationPPQN = take.regionBox.duration.getValue()
+                        finalizeTake(take, actualDurationPPQN)
+                        positionOffset += actualDurationPPQN
+                    })
                     startNewTake(loopFrom)
                 }, false)
             }
@@ -120,7 +135,7 @@ export namespace RecordMidi {
             if (currentTake.isEmpty()) {
                 editing.modify(() => {
                     const pos = quantizeFloor(currentPosition, beats)
-                    currentTake = Option.wrap(createTakeRegion(pos, false))
+                    currentTake = Option.wrap(createTakeRegion(pos, null))
                 }, false)
             }
             currentTake.ifSome(({regionBox, collection}) => {

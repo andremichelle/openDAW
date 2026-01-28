@@ -14,12 +14,14 @@ export namespace DeviceManualUrls {
     export const DattorroReverb = "manuals/devices/audio/dattorro-reverb"
     export const Maximizer = "manuals/devices/audio/maximizer"
     export const Compressor = "manuals/devices/audio/compressor"
+    export const Gate = "manuals/devices/audio/gate"
     export const Reverb = "manuals/devices/audio/cheap-reverb"
     export const Crusher = "manuals/devices/audio/crusher"
     export const Fold = "manuals/devices/audio/fold"
     export const Tidal = "manuals/devices/audio/tidal"
     export const Revamp = "manuals/devices/audio/revamp"
     export const Modular = "manuals/devices/audio/modular"
+    export const NeuralAmp = "manuals/devices/audio/neural-amp"
 
     // Instruments
     export const Tape = "manuals/devices/instruments/tape"

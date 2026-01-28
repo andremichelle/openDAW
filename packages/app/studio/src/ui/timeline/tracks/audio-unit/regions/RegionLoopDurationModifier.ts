@@ -1,17 +1,16 @@
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
-import {BoxEditing} from "@moises-ai/lib-box"
-import {Arrays, int, Option} from "@moises-ai/lib-std"
-import {ppqn, RegionCollection} from "@moises-ai/lib-dsp"
+import {BoxEditing} from "@opendaw/lib-box"
+import {Arrays, int, Option} from "@opendaw/lib-std"
+import {ppqn, PPQN, RegionCollection} from "@opendaw/lib-dsp"
 import {
     AnyLoopableRegionBoxAdapter,
     AnyRegionBoxAdapter,
     TrackBoxAdapter,
     UnionAdapterTypes
-} from "@moises-ai/studio-adapters"
+} from "@opendaw/studio-adapters"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {RegionClipResolver} from "@moises-ai/studio-core"
-import {RegionModifyStrategy} from "@moises-ai/studio-core"
-import {Dragging} from "@moises-ai/lib-dom"
+import {RegionClipResolver, RegionModifyStrategy} from "@opendaw/studio-core"
+import {Dragging} from "@opendaw/lib-dom"
 
 class SelectedModifyStrategy implements RegionModifyStrategy {
     readonly #tool: RegionLoopDurationModifier
@@ -21,10 +20,10 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
     readPosition(region: AnyRegionBoxAdapter): ppqn {return region.position}
     readDuration(region: AnyLoopableRegionBoxAdapter): ppqn {return Math.max(region.duration, this.readLoopDuration(region) - region.loopOffset)}
     readComplete(region: AnyLoopableRegionBoxAdapter): ppqn {return region.position + this.readDuration(region)}
-    readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.resolveLoopOffset(this.readPosition(region))}
+    readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.loopOffset}
     readLoopDuration(region: AnyLoopableRegionBoxAdapter): ppqn {
         if (!region.canResize) {return region.loopDuration}
-        return Math.max(Math.min(this.#tool.snapping.value(region.position), region.loopDuration),
+        return Math.max(Math.min(PPQN.SemiQuaver, region.loopDuration),
             region.loopDuration + this.#tool.deltaLoopDuration)
     }
     readMirror(region: AnyRegionBoxAdapter): boolean {return region.isMirrowed}

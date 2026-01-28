@@ -8,10 +8,10 @@ import {
     Option,
     Selection,
     Unhandled
-} from "@moises-ai/lib-std"
-import {createElement} from "@moises-ai/lib-jsx"
+} from "@opendaw/lib-std"
+import {createElement} from "@opendaw/lib-jsx"
 import {CutCursor} from "@/ui/timeline/CutCursor.tsx"
-import {ppqn} from "@moises-ai/lib-dsp"
+import {PPQN, ppqn} from "@opendaw/lib-dsp"
 import {installAutoScroll} from "@/ui/AutoScroll.ts"
 import {Config} from "@/ui/timeline/Config.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
@@ -21,7 +21,7 @@ import {
     RegionAdapters,
     RegionEditing,
     UnionBoxTypes
-} from "@moises-ai/studio-adapters"
+} from "@opendaw/studio-adapters"
 import {createRegionLocator} from "@/ui/timeline/tracks/audio-unit/regions/RegionSelectionLocator.ts"
 import {installRegionContextMenu} from "@/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
@@ -34,14 +34,15 @@ import {RegionStartModifier} from "@/ui/timeline/tracks/audio-unit/regions/Regio
 import {RegionDurationModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionDurationModifier.ts"
 import {RegionMoveModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionMoveModifier.ts"
 import {RegionLoopDurationModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionLoopDurationModifier.ts"
+import {RegionContentStartModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionContentStartModifier.ts"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {RegionDragAndDrop} from "@/ui/timeline/tracks/audio-unit/regions/RegionDragAndDrop.ts"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
-import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@moises-ai/lib-dom"
+import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
-import {TimelineRange} from "@moises-ai/studio-core"
+import {TimelineRange} from "@opendaw/studio-core"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 
 const className = Html.adoptStyleSheet(css, "RegionsArea")
@@ -51,7 +52,8 @@ const CursorMap = Object.freeze({
     "start": "w-resize",
     "complete": "e-resize",
     "loop-duration": Cursor.ExpandWidth,
-    "content-resize": Cursor.ExpandWidth
+    "content-start": Cursor.ExpandWidth,
+    "content-complete": Cursor.ExpandWidth
 }) satisfies Record<string, CssUtils.Cursor | Cursor>
 
 type Construct = {
@@ -208,6 +210,10 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 const scale = event.deltaY * 0.01
                 const rect = element.getBoundingClientRect()
                 range.scaleBy(scale, range.xToValue(event.clientX - rect.left))
+            } else if (event.altKey) {
+                event.preventDefault()
+                event.stopPropagation()
+                range.moveUnitBy(Math.sign(event.deltaY) * PPQN.SemiQuaver * 2)
             } else {
                 const deltaX = event.deltaX
                 const threshold = 5.0
@@ -251,10 +257,13 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                         const pointerIndex = manager.globalToIndex(event.clientY)
                         return manager.startRegionModifier(RegionMoveModifier.create(manager, regionSelection,
                             {element, snapping, pointerPulse, pointerIndex, reference}))
+                    case "content-start":
+                        return manager.startRegionModifier(RegionContentStartModifier.create(regionSelection.selected(),
+                            {element, snapping, pointerPulse, reference}))
                     case "loop-duration":
-                    case "content-resize":
+                    case "content-complete":
                         return manager.startRegionModifier(RegionLoopDurationModifier.create(regionSelection.selected(),
-                            {element, snapping, pointerPulse, reference, resize: target.part === "content-resize"}))
+                            {element, snapping, pointerPulse, reference, resize: target.part === "content-complete"}))
                     default: {
                         return Unhandled(target)
                     }

@@ -228,20 +228,22 @@ export class ValueMoveModifier implements ValueModifier {
             // Remove ALL events from the collection first to prevent duplicates during sorts
             obsoleteEvents.forEach(event => collection.remove(event))
             pairs.forEach(({stock}) => { if (stock !== null) collection.remove(stock) })
-            const adapters: Array<ValueEventBoxAdapter> = []
+            const reusedAdapters: Array<ValueEventBoxAdapter> = []
             for (const {stock, target} of pairs) {
                 const adapter = isNull(stock)
                     ? this.#collection.createEvent(target)
                     : stock.copyFrom(target)
-                adapters.push(adapter)
+                if (!isNull(stock)) {
+                    reusedAdapters.push(adapter)
+                }
                 if (target.isSelected && !adapter.isSelected) {
                     this.#selection.select(adapter)
                 } else if (!target.isSelected && adapter.isSelected) {
                     this.#selection.deselect(adapter)
                 }
             }
-            // Add all back, then delete obsolete boxes
-            adapters.forEach(adapter => collection.add(adapter))
+            // Add back only the reused adapters (new ones are already added via onAdded)
+            reusedAdapters.forEach(adapter => collection.add(adapter))
             obsoleteEvents.forEach(event => event.box.delete())
         })
         this.#dispatchChange()

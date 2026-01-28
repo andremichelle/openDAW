@@ -85,6 +85,11 @@ export class OfflineEngineRenderer {
                     }
                 })
             }),
+            fetchNamWasm: async (): Promise<ArrayBuffer> => {
+                const url = new URL("@opendaw/nam-wasm/nam.wasm", import.meta.url)
+                const response = await fetch(url)
+                return response.arrayBuffer()
+            },
             notifyClipSequenceChanges: (): void => {},
             switchMarkerState: (): void => {}
         })

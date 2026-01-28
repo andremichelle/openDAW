@@ -3,7 +3,7 @@ import {int} from "@moises-ai/lib-std"
 
 export class AudioAnalyser {
     static readonly DEFAULT_SIZE = 512
-    static readonly DECAY = 0.90
+    static readonly DEFAULT_DECAY = 0.90
 
     readonly #fftSize: number
     readonly #numBins: number
@@ -13,12 +13,15 @@ export class AudioAnalyser {
     readonly #window: Float32Array
     readonly #bins: Float32Array
     readonly #waveform: Float32Array
+    readonly #decay: number
 
     #index: number = 0
 
     decay: boolean = false
 
-    constructor(size: int = AudioAnalyser.DEFAULT_SIZE) {
+    constructor({size, decay}: { size?: int, decay?: number } = {}) {
+        size ??= AudioAnalyser.DEFAULT_SIZE
+        this.#decay = decay ?? AudioAnalyser.DEFAULT_DECAY
         this.#fftSize = size << 1
         this.#fft = new FFT(this.#fftSize)
         this.#real = new Float32Array(this.#fftSize)
@@ -69,7 +72,7 @@ export class AudioAnalyser {
             if (this.#bins[i] < energy) {
                 this.#bins[i] = energy
             } else if (this.decay) {
-                this.#bins[i] *= AudioAnalyser.DECAY
+                this.#bins[i] *= this.#decay
             }
         }
         this.#index = 0

@@ -314,6 +314,9 @@ class EventArrayImpl<E extends Event> implements Omit<EventArray<E>, "iterateRan
     constructor(private readonly comparator: Comparator<E>) {}
 
     add(event: E): void {
+        if (this.#array.includes(event)) {
+            throw new Error(`Duplicate event added: ${event}`)
+        }
         ++this.modCount
         this.#array.push(event)
         if (this.#array.length > 1) {

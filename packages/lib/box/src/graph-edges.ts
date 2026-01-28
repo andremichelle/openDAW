@@ -7,12 +7,14 @@ import {Box} from "./box"
 export class GraphEdges {
     readonly #requiresTarget: SortedSet<Address, PointerField>
     readonly #requiresPointer: SortedSet<Address, Vertex>
+    readonly #requiresExclusive: SortedSet<Address, Vertex>
     readonly #incoming: SortedSet<Address, [Address, Array<PointerField>]>
     readonly #outgoing: SortedSet<Address, [PointerField, Address]>
 
     constructor() {
         this.#requiresTarget = Address.newSet<PointerField>(source => source.address)
         this.#requiresPointer = Address.newSet<Vertex>(vertex => vertex.address)
+        this.#requiresExclusive = Address.newSet<Vertex>(vertex => vertex.address)
         this.#incoming = Address.newSet<[Address, Array<PointerField>]>(([address]) => address)
         this.#outgoing = Address.newSet<[PointerField, Address]>(([source]) => source.address)
     }
@@ -24,10 +26,16 @@ export class GraphEdges {
             }
             this.#requiresTarget.add(vertex)
         } else {
-            if (!vertex.pointerRules.mandatory) {
+            const {mandatory, exclusive} = vertex.pointerRules
+            if (!mandatory && !exclusive) {
                 return panic("watchVertex called but has no edge requirement")
             }
-            this.#requiresPointer.add(vertex)
+            if (mandatory) {
+                this.#requiresPointer.add(vertex)
+            }
+            if (exclusive) {
+                this.#requiresExclusive.add(vertex)
+            }
         }
     }
 
@@ -36,6 +44,7 @@ export class GraphEdges {
         for (const {address: {uuid}} of boxes) {
             this.#removeSameBox(this.#requiresTarget, uuid, map)
             this.#removeSameBox(this.#requiresPointer, uuid, map)
+            this.#removeSameBox(this.#requiresExclusive, uuid, map)
         }
         for (const box of boxes) {
             const outgoingLinks = this.outgoingEdgesOf(box)
@@ -93,6 +102,7 @@ export class GraphEdges {
             // assert(pointer.isAttached(), `Pointer ${pointer.address.toString()} is not attached`)
             if (pointer.isEmpty()) {
                 if (pointer.mandatory) {
+                    console.warn(`[GraphEdges] Validation failed: Pointer ${pointer.toString()} requires an edge.`)
                     return panic(`Pointer ${pointer.toString()} requires an edge.`)
                 } else {
                     return panic(`Illegal state: ${pointer} has no edge requirements.`)
@@ -103,10 +113,18 @@ export class GraphEdges {
             // assert(target.isAttached(), `Target ${target.address.toString()} is not attached`)
             if (target.pointerHub.isEmpty()) {
                 if (target.pointerRules.mandatory) {
+                    console.warn(`[GraphEdges] Validation failed: Target ${target.toString()} requires an edge.`)
                     return panic(`Target ${target.toString()} requires an edge.`)
                 } else {
                     return panic(`Illegal state: ${target} has no edge requirements.`)
                 }
+            }
+        })
+        this.#requiresExclusive.forEach(target => {
+            const count = target.pointerHub.size()
+            if (count > 1) {
+                console.warn(`[GraphEdges] Validation failed: Target ${target.toString()} is exclusive but has ${count} incoming pointers.`)
+                return panic(`Target ${target.toString()} is exclusive but has ${count} incoming pointers.`)
             }
         })
         // console.debug(`GraphEdges validation took ${performance.now() - now} ms.`)

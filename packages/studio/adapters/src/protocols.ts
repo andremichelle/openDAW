@@ -29,6 +29,7 @@ export interface EngineToClient {
     error(reason: unknown): void
     fetchAudio(uuid: UUID.Bytes): Promise<AudioData>
     fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2>
+    fetchNamWasm(): Promise<ArrayBuffer>
     notifyClipSequenceChanges(changes: ClipSequencingUpdates): void
     switchMarkerState(state: Nullable<[UUID.Bytes, int]>): void
     ready(): void

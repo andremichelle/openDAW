@@ -13,13 +13,13 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@moises-ai/lib-std"
-import {AudioUnitBoxAdapter, IndexComparator, TrackBoxAdapter} from "@moises-ai/studio-adapters"
+} from "@opendaw/lib-std"
+import {AudioUnitBoxAdapter, IndexComparator, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
 import {StudioService} from "@/service/StudioService.ts"
 import {AudioUnitTracks} from "@/ui/timeline/tracks/audio-unit/AudioUnitTracks.tsx"
 import {ClipModifier} from "./clips/ClipModifier"
-import {AnimationFrame, Dragging} from "@moises-ai/lib-dom"
+import {Dragging} from "@opendaw/lib-dom"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
 
 export interface TrackFactory {
@@ -147,12 +147,8 @@ export class TracksManager implements Terminable {
 
     #subscribe(): Terminable {
         const {project} = this.#service
-        const {rootBoxAdapter, userEditingManager} = project
+        const {rootBoxAdapter} = project
         return Terminable.many(
-            userEditingManager.audioUnit.catchupAndSubscribe(optVertex => optVertex
-                .ifSome(({box: {address: {uuid}}}) => this.#audioUnits.opt(uuid)
-                    .ifSome(({unitTracks}) => AnimationFrame.once(() =>
-                        unitTracks.scrollIntoView({behavior: "instant"}))))),
             rootBoxAdapter.audioUnits.catchupAndSubscribe({
                 onAdd: (audioUnitBoxAdapter: AudioUnitBoxAdapter) => {
                     const audioUnitLifecycle = this.#terminator.spawn()

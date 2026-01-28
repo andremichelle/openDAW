@@ -9,17 +9,15 @@
   "scripts": {
     "cert": "bash ./scripts/cert.sh",
     "clean": "bash ./scripts/clean.sh",
-    "build": "turbo build",
-    "dev:studio": "turbo run dev --filter=@moises-ai/app-studio",
-    "dev:lab": "turbo run dev --filter=@moises-ai/lab",
+    "build": "turbo build --output-logs=full",
+    "dev:studio": "turbo run dev --filter=@opendaw/app-studio",
+    "dev:lab": "turbo run dev --filter=@opendaw/lab",
+    "dev:nam-test": "turbo run dev --filter=@opendaw/nam-test",
     "dev:yjs-server": "turbo run dev --filter=yjs-server",
     "test": "turbo run test --concurrency=1",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "publish-sdk": "lerna publish",
-    "apply-scope": "node scripts/transform-scope.js",
-    "verify-scope": "node scripts/verify-scope.js",
-    "sync-upstream": "bash scripts/sync-upstream.sh"
+    "publish-sdk": "lerna publish"
   },
   "devDependencies": {
     "@types/ssh2-sftp-client": "^9.0.5",

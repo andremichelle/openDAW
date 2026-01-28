@@ -1,12 +1,11 @@
 {
-    "name": "@moises-ai/lib-jsx",
-    "version": "0.0.67",
+    "name": "@opendaw/lib-jsx",
+    "version": "0.0.70",
     "license": "LGPL-3.0-or-later",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "publishConfig": {
-        "registry": "https://npm.pkg.github.com",
         "access": "public"
     },
     "exports": {
@@ -24,12 +23,12 @@
         "test": "echo \"No tests to run\""
     },
     "dependencies": {
-        "@moises-ai/lib-dom": "^0.0.67",
-        "@moises-ai/lib-std": "^0.0.65"
+        "@opendaw/lib-dom": "^0.0.70",
+        "@opendaw/lib-std": "^0.0.65"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "^0.0.27",
-        "@moises-ai/typescript-config": "^0.0.28"
+        "@opendaw/eslint-config": "^0.0.27",
+        "@opendaw/typescript-config": "^0.0.28"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

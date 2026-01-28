@@ -36,6 +36,7 @@ import {
     ValueRegionBox
 } from "@moises-ai/studio-boxes"
 import {
+    AnyRegionBoxAdapter,
     AudioUnitBoxAdapter,
     AudioUnitFactory,
     CaptureBox,
@@ -53,6 +54,7 @@ import {Project} from "./Project"
 import {EffectFactory} from "../EffectFactory"
 import {EffectBox} from "../EffectBox"
 import {AudioContentFactory} from "./audio"
+import {RegionClipResolver} from "../ui"
 
 export type ClipRegionOptions = {
     name?: string
@@ -209,6 +211,13 @@ export class ProjectApi {
             box.clips.refer(trackBox.clips)
             box.events.refer(events.owners)
         })
+    }
+
+    duplicateRegion<R extends AnyRegionBoxAdapter>(region: R): R {
+        const clearFrom = region.position + region.duration
+        const clearTo = region.complete + region.duration
+        RegionClipResolver.fromRange(region.trackBoxAdapter.unwrap("Region is invalid"), clearFrom, clearTo)()
+        return region.copyTo({position: region.complete, consolidate: true}) as R
     }
 
     quantiseNotes(collection: NoteEventCollectionBox,

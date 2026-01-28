@@ -1,12 +1,13 @@
-import {asDefined, isAbsent, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
-import {InstrumentFactories, Soundfont} from "@moises-ai/studio-adapters"
-import {OpenSoundfontAPI, ProjectStorage, SoundfontStorage} from "@moises-ai/studio-core"
+import {asDefined, isAbsent, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {InstrumentFactories, Soundfont} from "@opendaw/studio-adapters"
+import {OpenSoundfontAPI, ProjectStorage, SoundfontStorage} from "@opendaw/studio-core"
 import {HTMLSelection} from "@/ui/HTMLSelection"
 import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "../components/dialogs"
-import {SoundfontFileBox} from "@moises-ai/studio-boxes"
+import {SoundfontFileBox} from "@opendaw/studio-boxes"
+import {ResourceSelection} from "@/ui/browse/ResourceSelection"
 
-export class SoundfontSelection {
+export class SoundfontSelection implements ResourceSelection {
     readonly #service: StudioService
     readonly #selection: HTMLSelection
 

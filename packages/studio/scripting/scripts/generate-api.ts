@@ -18,10 +18,7 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
     const visited = new Set<string>()
     const output: string[] = []
 
-    console.log('Root directory:', rootDir)
-    console.log('Scanning for packages...')
     const packageMap = findAllPackages(rootDir)
-    console.log(`Found ${packageMap.size} packages`)
 
     function findAllPackages(rootDir: string): Map<string, string> {
         const packages = new Map<string, string>()
@@ -145,7 +142,6 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
     }
 
     function getExportedNames(filePath: string, importNames: Set<string>): Map<string, { node: ts.Node, sourceFile: ts.SourceFile }> {
-        console.log(`  Searching ${path.basename(filePath)} for: ${Array.from(importNames).join(', ')}`)
 
         const sourceText = fs.readFileSync(filePath, 'utf-8')
         const sourceFile = ts.createSourceFile(
@@ -170,7 +166,6 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
             }
         })
 
-        console.log(`    Imported names in this file: ${Array.from(importedNames).join(', ')}`)
 
         // Find requested exports and collect their type dependencies
         const additionalTypesToFind = new Set<string>()
@@ -179,14 +174,12 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
             if (hasExportModifier(statement)) {
                 const name = getDeclarationName(statement)
                 if (name && importNames.has(name)) {
-                    console.log(`    ✓ Found ${name}`)
                     exports.set(name, { node: statement, sourceFile })
 
                     // Extract type dependencies that are imported
                     const typeRefs = extractTypeReferences(statement)
                     typeRefs.forEach(ref => {
                         if (importedNames.has(ref) && !importNames.has(ref) && !exports.has(ref)) {
-                            console.log(`      → needs ${ref}`)
                             additionalTypesToFind.add(ref)
                         }
                     })
@@ -234,12 +227,10 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
 
         // Recursively fetch the additional types we found
         if (additionalTypesToFind.size > 0) {
-            console.log(`    Recursively fetching dependencies: ${Array.from(additionalTypesToFind).join(', ')}`)
             const moreExports = getExportedNames(filePath, additionalTypesToFind)
             moreExports.forEach((data, name) => exports.set(name, data))
         }
 
-        console.log(`  Returning ${exports.size} exports`)
         return exports
     }
 
@@ -299,8 +290,6 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
             }
         })
 
-        console.log(`\nProcessing file: ${filePath}`)
-        console.log(`Re-exported names: ${Array.from(reExportedNames).join(', ')}`)
 
         // Collect all type dependencies needed
         const typeDependencies = new Map<string, string>() // name -> source file
@@ -320,11 +309,9 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
             }
         })
 
-        console.log(`Type dependencies needed: ${Array.from(typeDependencies.keys()).join(', ')}`)
 
         // Fetch type dependencies from their source files
         typeDependencies.forEach((sourceFilePath, typeName) => {
-            console.log(`Fetching ${typeName} from ${path.basename(sourceFilePath)}`)
             const result = getExportedNames(sourceFilePath, new Set([typeName]))
             const printer = ts.createPrinter()
 

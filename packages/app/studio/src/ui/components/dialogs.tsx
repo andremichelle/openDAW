@@ -1,4 +1,4 @@
-import {createElement, JsxValue} from "@moises-ai/lib-jsx"
+import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {Button, Dialog, DialogHandler} from "@/ui/components/Dialog.tsx"
 import {
     Arrays,
@@ -10,15 +10,16 @@ import {
     Provider,
     RuntimeNotification,
     Terminable,
-    Terminator
-} from "@moises-ai/lib-std"
+    Terminator,
+    tryCatch
+} from "@opendaw/lib-std"
 import {Surface} from "@/ui/surface/Surface.tsx"
-import {Colors, IconSymbol} from "@moises-ai/studio-enums"
-import {Box, BoxGraph} from "@moises-ai/lib-box"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Box, BoxGraph} from "@opendaw/lib-box"
 import {BoxDebugView} from "./BoxDebugView"
 import {BoxesDebugView} from "@/ui/components/BoxesDebugView.tsx"
 import {ProgressBar} from "@/ui/components/ProgressBar.tsx"
-import {Browser} from "@moises-ai/lib-dom"
+import {Browser} from "@opendaw/lib-dom"
 
 export namespace Dialogs {
     type Default = {
@@ -243,10 +244,25 @@ export namespace Dialogs {
                     cancelable={true}
                     style={{minWidth: "32rem", minHeight: "32rem"}}
                     buttons={[{
-                        text: "Ok",
-                        primary: true,
-                        onClick: handler => handler.close()
-                    }]}>
+                        text: "Copy JSON",
+                        primary: false,
+                        onClick: handler => {
+                            const {status, value, error} = tryCatch(() =>
+                                JSON.stringify(box.toJSON(), null, 2))
+                            if (status === "success") {
+                                navigator.clipboard.writeText(value)
+                                    .then(EmptyExec, EmptyExec)
+                                    .finally(() => handler.close())
+                            } else {
+                                console.warn(error)
+                            }
+                        }
+                    },
+                        {
+                            text: "Ok",
+                            primary: true,
+                            onClick: handler => handler.close()
+                        }]}>
                 <div style={{padding: "1em 0"}}>
                     <BoxDebugView box={box}/>
                 </div>

@@ -47,6 +47,11 @@ export const installRegionContextMenu =
                 MenuItem.default({label: "Delete", shortcut: "⌫"})
                     .setTriggerProcedure(() => editing.modify(() => selection.selected().slice()
                         .forEach(adapter => adapter.box.delete()))),
+                MenuItem.default({label: "Duplicate"})
+                    .setTriggerProcedure(() => editing.modify(() => {
+                        selection.deselectAll()
+                        selection.select(project.api.duplicateRegion(region))
+                    })),
                 MenuItem.default({
                     label: "Mute",
                     checked: region.mute,
