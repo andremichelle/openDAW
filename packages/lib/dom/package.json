@@ -1,6 +1,6 @@
 {
     "name": "@moises-ai/lib-dom",
-    "version": "0.0.67",
+    "version": "0.0.70",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
@@ -24,13 +24,13 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@moises-ai/lib-runtime": "^0.0.65",
-        "@moises-ai/lib-std": "^0.0.65",
+        "@moises-ai/lib-runtime": "*",
+        "@moises-ai/lib-std": "*",
         "@types/wicg-file-system-access": "^2023.10.6"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "^0.0.27",
-        "@moises-ai/typescript-config": "^0.0.28"
+        "@moises-ai/eslint-config": "*",
+        "@moises-ai/typescript-config": "*"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

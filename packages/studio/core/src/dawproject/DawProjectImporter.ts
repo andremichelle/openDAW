@@ -35,9 +35,12 @@ import {
     NotesSchema,
     PointsSchema,
     ProjectSchema,
+    RealPointSchema,
     SendSchema,
     SendType,
+    TempoAutomationConverter,
     TimelineSchema,
+    TimeSignaturePointSchema,
     TrackSchema,
     TransportSchema,
     WarpsSchema
@@ -59,11 +62,13 @@ import {
     NoteEventCollectionBox,
     NoteRegionBox,
     RootBox,
+    SignatureEventBox,
     TimelineBox,
     TrackBox,
     UnknownAudioEffectDeviceBox,
     UnknownMidiEffectDeviceBox,
     UserInterfaceBox,
+    ValueEventBox,
     ValueEventCollectionBox
 } from "@moises-ai/studio-boxes"
 import {
@@ -72,6 +77,7 @@ import {
     ColorCodes,
     InstrumentBox,
     InstrumentFactories,
+    InterpolationFieldAdapter,
     ProjectSkeleton,
     TrackType
 } from "@moises-ai/studio-adapters"
@@ -439,6 +445,70 @@ export namespace DawProjectImport {
                     box.playMode.refer(pitchStretch)
                 })
             }
+            const readTempoAutomation = (tempoAutomation: PointsSchema): void => {
+                const points = tempoAutomation.points
+                if (!isDefined(points) || points.length === 0) {return}
+                const minBpm = timelineBox.tempoTrack.minBpm.getValue()
+                const maxBpm = timelineBox.tempoTrack.maxBpm.getValue()
+                const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+                timelineBox.tempoTrack.events.refer(collectionBox.owners)
+                timelineBox.tempoTrack.enabled.setValue(true)
+                points
+                    .filter((point): point is RealPointSchema => isInstanceOf(point, RealPointSchema))
+                    .forEach(point => {
+                        const eventBox = ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                            box.position.setValue(point.time * PPQN.Quarter)
+                            box.index.setValue(0)
+                            box.value.setValue(TempoAutomationConverter.bpmToNormalized(point.value, minBpm, maxBpm))
+                            box.events.refer(collectionBox.events)
+                        })
+                        const interpolation = TempoAutomationConverter.fromDawProjectInterpolation(point.interpolation)
+                        InterpolationFieldAdapter.write(eventBox.interpolation, interpolation)
+                    })
+            }
+
+            ifDefined(arrangement.tempoAutomation, readTempoAutomation)
+
+            const readSignatureAutomation = (signatureAutomation: PointsSchema): void => {
+                const points = signatureAutomation.points
+                if (!isDefined(points) || points.length === 0) {return}
+                const signaturePoints = points
+                    .filter((point): point is TimeSignaturePointSchema => isInstanceOf(point, TimeSignaturePointSchema))
+                    .sort((pointA, pointB) => pointA.time - pointB.time)
+                if (signaturePoints.length === 0) {return}
+                // First point at or near time 0 sets the base signature
+                const firstPoint = signaturePoints[0]
+                const firstPointIsAtStart = Number(firstPoint.time) < 0.001
+                if (firstPointIsAtStart) {
+                    timelineBox.signature.nominator.setValue(firstPoint.numerator)
+                    timelineBox.signature.denominator.setValue(firstPoint.denominator)
+                }
+                // Remaining points become SignatureEventBox instances
+                const eventsToCreate = firstPointIsAtStart ? signaturePoints.slice(1) : signaturePoints
+                if (eventsToCreate.length === 0) {return}
+                timelineBox.signatureTrack.enabled.setValue(true)
+                let prevPpqn = 0
+                let prevNominator = timelineBox.signature.nominator.getValue()
+                let prevDenominator = timelineBox.signature.denominator.getValue()
+                eventsToCreate.forEach((point, index) => {
+                    const currentPpqn = point.time * PPQN.Quarter
+                    const barDuration = PPQN.fromSignature(prevNominator, prevDenominator)
+                    const relativePosition = Math.max(1, Math.round((currentPpqn - prevPpqn) / barDuration))
+                    SignatureEventBox.create(boxGraph, UUID.generate(), box => {
+                        box.index.setValue(index)
+                        box.relativePosition.setValue(relativePosition)
+                        box.nominator.setValue(point.numerator)
+                        box.denominator.setValue(point.denominator)
+                        box.events.refer(timelineBox.signatureTrack.events)
+                    })
+                    prevPpqn = prevPpqn + relativePosition * barDuration
+                    prevNominator = point.numerator
+                    prevDenominator = point.denominator
+                })
+            }
+
+            ifDefined(arrangement.timeSignatureAutomation, readSignatureAutomation)
+
             return Promise.all(arrangement?.lanes?.lanes?.filter(timeline => isInstanceOf(timeline, LanesSchema))
                 .map(readLane) ?? [])
         }

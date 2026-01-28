@@ -67,4 +67,17 @@ export class FFT {
             if (size === this.#n) {break}
         }
     }
+
+    inverse(real: Float32Array, imag: Float32Array): void {
+        const n = this.#n
+        for (let i = 0; i < n; i++) {
+            imag[i] = -imag[i]
+        }
+        this.process(real, imag)
+        const scale = 1 / n
+        for (let i = 0; i < n; i++) {
+            real[i] *= scale
+            imag[i] = -imag[i] * scale
+        }
+    }
 }

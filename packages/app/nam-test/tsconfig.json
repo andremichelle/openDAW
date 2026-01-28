@@ -1,0 +1,4 @@
+{
+    "extends": "@moises-ai/typescript-config/vite.json",
+    "include": ["src"]
+}

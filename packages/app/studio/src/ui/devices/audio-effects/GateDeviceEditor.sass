@@ -1,0 +1,53 @@
+@use "@/mixins"
+
+component
+  display: grid
+  grid-template-columns: repeat(3, auto) 1fr
+  grid-template-rows: auto auto 1fr
+  row-gap: 0.25em
+  column-gap: 0.5em
+  align-items: start
+  position: relative
+  @include mixins.Control
+
+  > section
+    width: 100%
+    height: 100%
+    border-radius: 2px
+    position: absolute
+    border: 1px color-mix(in srgb, var(--color) 6%, transparent) solid
+    background-color: color-mix(in srgb, var(--color) 5%, transparent)
+    pointer-events: none
+
+    &.envelope
+      --color: var(--color-blue)
+
+    &.bounds
+      --color: var(--color-orange)
+
+  > div.sidechain
+    width: 100%
+    padding: 2px 0
+    display: flex
+
+  > div.inverse
+    width: 100%
+    height: 100%
+    padding: 3px 0
+    display: flex
+    align-items: end
+
+    > *
+      width: 100%
+
+  > div.control
+    padding: 4px 4px 1px 4px
+    display: grid
+    grid-template-rows: auto auto
+    justify-content: center
+
+    > h3
+      font-size: 9px
+      height: 12px
+      text-align: center
+      color: var(--color-shadow)

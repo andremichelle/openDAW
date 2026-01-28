@@ -1,7 +1,8 @@
 {
     "name": "@moises-ai/studio-sdk",
-    "version": "0.0.93",
+    "version": "0.0.101",
     "license": "LGPL-3.0-or-later",
+    "type": "module",
     "publishConfig": {
         "registry": "https://npm.pkg.github.com",
         "access": "public"
@@ -21,24 +22,41 @@
         "synth",
         "fx"
     ],
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        }
+    },
     "files": [
+        "dist/**/*",
         "README.md"
     ],
+    "scripts": {
+        "sync-version": "node scripts/sync-version.js",
+        "build": "npm run sync-version && tsc",
+        "prepublishOnly": "npm run sync-version"
+    },
+    "devDependencies": {
+        "@moises-ai/typescript-config": "*"
+    },
     "dependencies": {
-        "@moises-ai/lib-box": "^0.0.67",
-        "@moises-ai/lib-dawproject": "^0.0.51",
-        "@moises-ai/lib-dom": "^0.0.67",
-        "@moises-ai/lib-dsp": "^0.0.65",
-        "@moises-ai/lib-fusion": "^0.0.71",
-        "@moises-ai/lib-jsx": "^0.0.67",
-        "@moises-ai/lib-midi": "^0.0.47",
-        "@moises-ai/lib-runtime": "^0.0.65",
-        "@moises-ai/lib-std": "^0.0.65",
-        "@moises-ai/lib-xml": "^0.0.51",
-        "@moises-ai/studio-adapters": "^0.0.76",
-        "@moises-ai/studio-boxes": "^0.0.68",
-        "@moises-ai/studio-core": "^0.0.93",
-        "@moises-ai/studio-enums": "^0.0.57"
+        "@moises-ai/lib-box": "*",
+        "@moises-ai/lib-dawproject": "*",
+        "@moises-ai/lib-dom": "*",
+        "@moises-ai/lib-dsp": "*",
+        "@moises-ai/lib-fusion": "*",
+        "@moises-ai/lib-jsx": "*",
+        "@moises-ai/lib-midi": "*",
+        "@moises-ai/lib-runtime": "*",
+        "@moises-ai/lib-std": "*",
+        "@moises-ai/lib-xml": "*",
+        "@moises-ai/studio-adapters": "*",
+        "@moises-ai/studio-boxes": "*",
+        "@moises-ai/studio-core": "*",
+        "@moises-ai/studio-enums": "*"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

@@ -1,26 +1,19 @@
 import css from "./CompressorDeviceEditor.sass?inline"
-import {
-    AutomatableParameterFieldAdapter,
-    CompressorDeviceBoxAdapter,
-    DeviceHost,
-    LabeledAudioOutput
-} from "@moises-ai/studio-adapters"
-import {Address} from "@moises-ai/lib-box"
-import {Lifecycle, Option} from "@moises-ai/lib-std"
+import {AutomatableParameterFieldAdapter, CompressorDeviceBoxAdapter, DeviceHost} from "@moises-ai/studio-adapters"
+import {Lifecycle} from "@moises-ai/lib-std"
 import {createElement, Frag} from "@moises-ai/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {Html} from "@moises-ai/lib-dom"
 import {StudioService} from "@/service/StudioService"
-import {EffectFactories, MenuItem} from "@moises-ai/studio-core"
+import {EffectFactories} from "@moises-ai/studio-core"
 import {ParameterToggleButton} from "@/ui/devices/ParameterToggleButton"
 import {ParameterLabel} from "@/ui/components/ParameterLabel"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import {Meters} from "@/ui/devices/audio-effects/Compressor/Meters"
 import {CompressionCurve} from "@/ui/devices/audio-effects/Compressor/CompressionCurve"
-import {MenuButton} from "@/ui/components/MenuButton"
-import {Colors, IconSymbol} from "@moises-ai/studio-enums"
+import {SidechainButton} from "@/ui/devices/SidechainButton"
 
 const className = Html.adoptStyleSheet(css, "CompressorDeviceEditor")
 
@@ -58,35 +51,6 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
             </RelativeUnitValueDragging>
         </Frag>
     )
-    const sideChain = adapter.sideChain
-    const createSideChainMenu = (parent: MenuItem) => {
-        const isSelected = (address: Address) =>
-            sideChain.targetAddress.mapOr(other => other.equals(address), false)
-        const createSelectableItem = (output: LabeledAudioOutput): MenuItem => {
-            if (output.children().nonEmpty()) {
-                return MenuItem.default({label: output.label})
-                    .setRuntimeChildrenProcedure(subParent =>
-                        output.children().ifSome(children => {
-                            for (const child of children) {
-                                subParent.addMenuItem(createSelectableItem(child))
-                            }
-                        }))
-            }
-            return MenuItem.default({
-                label: output.label,
-                checked: isSelected(output.address)
-            }).setTriggerProcedure(() => editing.modify(() =>
-                sideChain.targetAddress = Option.wrap(output.address)))
-        }
-        sideChain.targetAddress.ifSome(() =>
-            parent.addMenuItem(MenuItem.default({label: "Remove Sidechain"})
-                .setTriggerProcedure(() => editing.modify(() =>
-                    sideChain.targetAddress = Option.None))))
-        parent.addMenuItem(MenuItem.header({label: "Tracks", icon: IconSymbol.OpenDAW, color: Colors.orange}))
-        for (const output of project.rootBoxAdapter.labeledAudioOutputs()) {
-            parent.addMenuItem(createSelectableItem(output))
-        }
-    }
     return (
         <DeviceEditor lifecycle={lifecycle}
                       project={project}
@@ -101,10 +65,9 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
                                                                  editing={editing}
                                                                  parameter={parameter}/>
                                       ))}
-                                  <MenuButton onInit={button => sideChain.catchupAndSubscribe(pointer =>
-                                      button.classList.toggle("has-source", pointer.nonEmpty()))}
-                                              root={MenuItem.root().setRuntimeChildrenProcedure(createSideChainMenu)}
-                                              appearance={{tinyTriangle: true}}>Sidechain</MenuButton>
+                                  <SidechainButton sideChain={adapter.sideChain}
+                                                   rootBoxAdapter={project.rootBoxAdapter}
+                                                   editing={editing}/>
                               </div>
                               <div className="control-section">
                                   <div className="controls">

@@ -11,7 +11,8 @@ export type RegionCaptureTarget =
     | { type: "region", part: "position", region: AnyRegionBoxAdapter }
     | { type: "region", part: "start", region: AnyLoopableRegionBoxAdapter }
     | { type: "region", part: "complete", region: AnyRegionBoxAdapter }
-    | { type: "region", part: "content-resize", region: AnyRegionBoxAdapter }
+    | { type: "region", part: "content-start", region: AnyRegionBoxAdapter }
+    | { type: "region", part: "content-complete", region: AnyRegionBoxAdapter }
     | { type: "region", part: "loop-duration", region: AnyRegionBoxAdapter }
     | { type: "track", track: TrackContext }
 
@@ -41,13 +42,15 @@ export namespace RegionCapturing {
                     return {type: "region", part: "position", region}
                 }
                 if (UnionAdapterTypes.isLoopableRegion(region)) {
-                    if (x - x0 < PointerRadiusDistance * 2) {
-                        return {type: "region", part: "start", region}
-                    }
                     const bottomEdge = y > track.position + size / 3 * 2
+                    if (x - x0 < PointerRadiusDistance * 2) {
+                        return bottomEdge
+                            ? {type: "region", part: "content-start", region}
+                            : {type: "region", part: "start", region}
+                    }
                     if (x1 - x < PointerRadiusDistance * 2) {
                         return bottomEdge
-                            ? {type: "region", part: "content-resize", region}
+                            ? {type: "region", part: "content-complete", region}
                             : {type: "region", part: "complete", region}
                     }
                     if (bottomEdge

@@ -1,6 +1,6 @@
 {
     "name": "@moises-ai/studio-core",
-    "version": "0.0.93",
+    "version": "0.0.100",
     "license": "LGPL-3.0-or-later",
     "publishConfig": {
         "registry": "https://npm.pkg.github.com",
@@ -34,16 +34,17 @@
         "test": "vitest run --config vitest.config.ts"
     },
     "dependencies": {
-        "@moises-ai/lib-box": "^0.0.67",
-        "@moises-ai/lib-dawproject": "^0.0.51",
-        "@moises-ai/lib-dom": "^0.0.67",
-        "@moises-ai/lib-dsp": "^0.0.65",
-        "@moises-ai/lib-fusion": "^0.0.71",
-        "@moises-ai/lib-runtime": "^0.0.65",
-        "@moises-ai/lib-std": "^0.0.65",
-        "@moises-ai/studio-adapters": "^0.0.76",
-        "@moises-ai/studio-boxes": "^0.0.68",
-        "@moises-ai/studio-enums": "^0.0.57",
+        "@moises-ai/lib-box": "*",
+        "@moises-ai/lib-dawproject": "*",
+        "@moises-ai/lib-dom": "*",
+        "@moises-ai/lib-dsp": "*",
+        "@moises-ai/lib-fusion": "*",
+        "@moises-ai/lib-runtime": "*",
+        "@moises-ai/lib-std": "*",
+        "@opendaw/nam-wasm": "^1.0.3",
+        "@moises-ai/studio-adapters": "*",
+        "@moises-ai/studio-boxes": "*",
+        "@moises-ai/studio-enums": "*",
         "dropbox": "^10.34.0",
         "y-websocket": "^1.4.5",
         "yjs": "^13.6.27",
@@ -56,11 +57,11 @@
     "devDependencies": {
         "@ffmpeg/ffmpeg": "^0.12.15",
         "@ffmpeg/util": "^0.12.2",
-        "@moises-ai/eslint-config": "^0.0.27",
-        "@moises-ai/studio-core-processors": "^0.0.79",
-        "@moises-ai/studio-core-workers": "^0.0.71",
-        "@moises-ai/studio-forge-boxes": "^0.0.68",
-        "@moises-ai/typescript-config": "^0.0.28"
+        "@moises-ai/eslint-config": "*",
+        "@moises-ai/studio-core-processors": "*",
+        "@moises-ai/studio-core-workers": "*",
+        "@moises-ai/studio-forge-boxes": "*",
+        "@moises-ai/typescript-config": "*"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

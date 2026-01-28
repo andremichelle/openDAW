@@ -1,7 +1,7 @@
-import {BooleanParameterSchema, RealParameterSchema, Unit} from "./defaults"
+import {BooleanParameterSchema, Interpolation, RealParameterSchema, Unit} from "./defaults"
 import {Xml} from "@moises-ai/lib-xml"
 import {asDefined} from "@moises-ai/lib-std"
-import {semitoneToHz} from "@moises-ai/lib-dsp"
+import {Interpolation as OpenDAWInterpolation, semitoneToHz} from "@moises-ai/lib-dsp"
 
 export namespace ParameterEncoder {
     export const bool = (id: string, value: boolean, name?: string) => Xml.element({
@@ -30,4 +30,34 @@ export namespace ParameterDecoder {
         }
         return schema.value
     }
+}
+
+export namespace TempoAutomationConverter {
+    /**
+     * Converts a normalized value (0-1) to BPM using the given min/max range.
+     */
+    export const normalizedToBpm = (normalized: number, minBpm: number, maxBpm: number): number =>
+        minBpm + normalized * (maxBpm - minBpm)
+
+    /**
+     * Converts a BPM value to normalized (0-1) using the given min/max range.
+     */
+    export const bpmToNormalized = (bpm: number, minBpm: number, maxBpm: number): number =>
+        (bpm - minBpm) / (maxBpm - minBpm)
+
+    /**
+     * Converts openDAW interpolation type to DawProject interpolation.
+     * - "none" (hold/step) → Interpolation.HOLD
+     * - "linear" or "curve" → Interpolation.LINEAR
+     */
+    export const toDawProjectInterpolation = (interpolation: OpenDAWInterpolation): Interpolation =>
+        interpolation.type === "none" ? Interpolation.HOLD : Interpolation.LINEAR
+
+    /**
+     * Converts DawProject interpolation to openDAW interpolation type.
+     * - Interpolation.HOLD → Interpolation.None
+     * - Interpolation.LINEAR → Interpolation.Linear
+     */
+    export const fromDawProjectInterpolation = (interpolation: Interpolation | undefined): OpenDAWInterpolation =>
+        interpolation === Interpolation.HOLD ? OpenDAWInterpolation.None : OpenDAWInterpolation.Linear
 }

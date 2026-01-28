@@ -6,6 +6,7 @@ import {
     DattorroReverbDeviceBox,
     DelayDeviceBox,
     FoldDeviceBox,
+    GateDeviceBox,
     GrooveShuffleBox,
     MaximizerDeviceBox,
     ModularAudioInputBox,
@@ -13,6 +14,7 @@ import {
     ModularBox,
     ModularDeviceBox,
     ModuleConnectionBox,
+    NeuralAmpDeviceBox,
     PitchDeviceBox,
     RevampDeviceBox,
     ReverbDeviceBox,
@@ -120,6 +122,7 @@ export namespace EffectFactories {
                 box.label.setValue("Delay")
                 box.index.setValue(index)
                 box.host.refer(hostField)
+                box.version.setValue(1)
             })
     }
 
@@ -163,6 +166,21 @@ export namespace EffectFactories {
         create: ({boxGraph}, hostField, index): CompressorDeviceBox =>
             CompressorDeviceBox.create(boxGraph, UUID.generate(), box => {
                 box.label.setValue("Compressor")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
+    export const Gate: EffectFactory = {
+        defaultName: "Gate",
+        defaultIcon: IconSymbol.Gate,
+        description: "Attenuates signals below a threshold to reduce noise",
+        manualPage: DeviceManualUrls.Gate,
+        separatorBefore: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index): GateDeviceBox =>
+            GateDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("Gate")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
@@ -245,6 +263,21 @@ export namespace EffectFactories {
             })
     }
 
+    export const NeuralAmp: EffectFactory = {
+        defaultName: "Neural Amp",
+        defaultIcon: IconSymbol.NeuralAmp,
+        description: "Neural network-based amp modeling using NAM models",
+        manualPage: DeviceManualUrls.NeuralAmp,
+        separatorBefore: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index): NeuralAmpDeviceBox =>
+            NeuralAmpDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("Neural Amp")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
     export const Modular: EffectFactory = {
         defaultName: "🔇 Create New Modular Audio Effect (inaudible yet)",
         defaultIcon: IconSymbol.Box,
@@ -286,7 +319,7 @@ export namespace EffectFactories {
 
     export const MidiNamed = {Arpeggio, Pitch, Velocity, Zeitgeist}
     export const AudioNamed = {
-        StereoTool, Compressor, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal, Maximizer
+        StereoTool, Compressor, Gate, Delay, Reverb, DattorroReverb, Revamp, Crusher, Fold, Tidal, Maximizer /*NeuralAmp*/
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(MidiNamed)
     export const AudioList: ReadonlyArray<Readonly<EffectFactory>> = Object.values(AudioNamed)

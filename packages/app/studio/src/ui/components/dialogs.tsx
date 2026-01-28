@@ -10,7 +10,8 @@ import {
     Provider,
     RuntimeNotification,
     Terminable,
-    Terminator
+    Terminator,
+    tryCatch
 } from "@moises-ai/lib-std"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {Colors, IconSymbol} from "@moises-ai/studio-enums"
@@ -243,10 +244,25 @@ export namespace Dialogs {
                     cancelable={true}
                     style={{minWidth: "32rem", minHeight: "32rem"}}
                     buttons={[{
-                        text: "Ok",
-                        primary: true,
-                        onClick: handler => handler.close()
-                    }]}>
+                        text: "Copy JSON",
+                        primary: false,
+                        onClick: handler => {
+                            const {status, value, error} = tryCatch(() =>
+                                JSON.stringify(box.toJSON(), null, 2))
+                            if (status === "success") {
+                                navigator.clipboard.writeText(value)
+                                    .then(EmptyExec, EmptyExec)
+                                    .finally(() => handler.close())
+                            } else {
+                                console.warn(error)
+                            }
+                        }
+                    },
+                        {
+                            text: "Ok",
+                            primary: true,
+                            onClick: handler => handler.close()
+                        }]}>
                 <div style={{padding: "1em 0"}}>
                     <BoxDebugView box={box}/>
                 </div>

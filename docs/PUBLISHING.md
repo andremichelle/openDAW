@@ -6,7 +6,7 @@ This document describes how to publish the OpenDAW packages under the `@moises-a
 
 This fork of [andremichelle/openDAW](https://github.com/andremichelle/openDAW) publishes packages under the `@moises-ai` scope to GitHub Package Registry instead of npm.
 
-**Key design principle**: We use a transform script that can be re-run after upstream merges to minimize merge conflicts. The script transforms `@opendaw/*` package names to `@moises-ai/*`.
+**Key design principle**: We use a transform script that can be re-run after upstream merges to minimize merge conflicts. The script transforms `@opendaw/*` package names to `@moises-ai/*`, converts internal dependency versions to wildcards for workspace resolution, and preserves external `@opendaw` packages (like `@opendaw/nam-wasm`) that should resolve from npmjs.org.
 
 ## Package Structure
 
@@ -44,6 +44,7 @@ These packages have `"private": true` and are not published:
 - `@moises-ai/studio-core-processors` - Audio processors (built into core)
 - `@moises-ai/studio-forge-boxes` - Code generator
 - `@moises-ai/lib-box-forge` - Box forge infrastructure
+- `@moises-ai/nam-test` - Neural amp modeling test app
 - `@moises-ai/eslint-config` - ESLint configuration
 - `@moises-ai/typescript-config` - TypeScript configuration
 - `yjs-server` - Collaboration server (no scope)
@@ -113,74 +114,75 @@ npx lerna publish from-package --yes --no-private
 
 This fork is designed to stay in sync with [andremichelle/openDAW](https://github.com/andremichelle/openDAW).
 
-### Using the Sync Script (Recommended)
+### Sync Process
 
 ```bash
-npm run sync-upstream
-```
+# 1. Create a branch for the sync
+git checkout -b sync-upstream-YYYY-MM-DD
 
-This script will:
-1. Fetch changes from upstream
-2. Create a backup branch
-3. Merge upstream/main
-4. Re-apply the scope transformation
-5. Reinstall dependencies
-6. Build to verify everything works
-
-### Manual Sync Process
-
-If you prefer to sync manually or need to resolve conflicts:
-
-```bash
-# 1. Fetch upstream changes
+# 2. Fetch and merge upstream
 git fetch upstream
-
-# 2. Merge upstream (resolve conflicts if needed)
 git merge upstream/main
 
-# 3. Re-apply scope transformation
-npm run apply-scope
+# 3. Resolve conflicts — accept upstream for ALL conflicted files
+#    The transform script will reapply our scope changes afterward.
+git diff --name-only --diff-filter=U | xargs -I{} git checkout --theirs "{}"
+git add -A
+git commit -m "chore: merge upstream/main"
 
-# 4. Reinstall dependencies (lockfile will change)
+# 4. Restore all package.json files from upstream to ensure a clean transform
+#    (previous transforms may have written stale scope references)
+git checkout upstream/main -- $(find packages -name 'package.json' -not -path '*/node_modules/*' -maxdepth 4) package.json
+
+# 5. Re-apply scope transformation
+node scripts/transform-scope.js
+
+# 6. Delete stale lockfile and reinstall
+rm -f package-lock.json
 npm install
 
-# 5. Build and test
+# 7. Build and test
 npm run build
 npm test
 
-# 6. Commit the changes
-git add .
+# 8. Commit and push
+git add -A
 git commit -m "chore: sync with upstream, reapply scope transformation"
+git push -u origin sync-upstream-YYYY-MM-DD
 ```
 
 ### Handling Merge Conflicts
 
-Most conflicts will be in `package.json` files. After resolving:
+**Accept upstream for all conflicts.** The transform script handles all scope-related changes, so there's no need to manually resolve conflicts:
 
-1. Keep the upstream's structural changes
-2. Don't worry about the `@opendaw` scope - the transform script will fix it
-3. Run `npm run apply-scope` to reapply the scope transformation
-4. Run `npm install` to update the lockfile
+1. Run `git checkout --theirs` on all conflicted files
+2. Restore `package.json` files from upstream for a clean starting point
+3. Run `node scripts/transform-scope.js` to reapply all scope transformations
+4. Delete `package-lock.json` and run `npm install` to regenerate it
+
+> **Why delete `package-lock.json`?** The upstream lockfile references `@opendaw` packages on npmjs.org. After scope transformation, these entries become invalid. A fresh `npm install` generates a correct lockfile using workspace resolution.
 
 ## Scripts Reference
 
-### `npm run apply-scope`
+> **Note:** After an upstream merge, the `npm run` aliases for these scripts may be overwritten. Run the scripts directly with `node` or `bash` instead.
 
-Transforms all `@opendaw/*` package names to `@moises-ai/*`. This script:
-- Updates all `package.json` files
+### `node scripts/transform-scope.js`
+
+Transforms the codebase from `@opendaw` to `@moises-ai` scope. This script:
+- Renames `@opendaw/*` packages to `@moises-ai/*` in all `package.json` files
+- **Only renames workspace-local packages** — external `@opendaw` dependencies (e.g. `@opendaw/nam-wasm`) are preserved so they resolve from npmjs.org
+- **Converts internal dependency versions to `"*"`** — ensures npm resolves workspace packages locally instead of checking the GitHub Package Registry (which may not have the latest upstream versions)
 - Updates `turbo.json` task references
 - Updates `lerna.json` registry configuration
+- Updates `tsconfig.json` extends references
+- Updates TypeScript/JavaScript source file imports (workspace packages only)
 - Sets `publishConfig` for publishable packages
 
-This script is idempotent - you can run it multiple times safely.
+This script is idempotent — you can run it multiple times safely.
 
-### `npm run verify-scope`
+### `node scripts/verify-scope.js`
 
 Verifies that all scope transformations have been applied correctly. Returns exit code 0 if everything is correct, 1 if there are issues.
-
-### `npm run sync-upstream`
-
-Helper script to sync with upstream repository. See "Syncing with Upstream" section above.
 
 ## Installing Packages from GitHub Registry
 
@@ -233,11 +235,19 @@ npx lerna version 0.1.0 --yes
 2. Verify your `GITHUB_TOKEN` has `read:packages` scope
 3. Check that the package has been published (check the Packages tab in GitHub)
 
+### "No matching version found" (ETARGET) during `npm install`
+
+This happens when npm checks the GitHub Package Registry for `@moises-ai` workspace packages and the registry doesn't have the latest upstream versions. The transform script prevents this by using wildcard (`"*"`) versions for internal deps. If you see this error:
+
+1. Ensure you ran `node scripts/transform-scope.js` after restoring `package.json` files from upstream
+2. Verify internal deps use `"*"` versions: `grep -r '"@moises-ai/' packages/*/package.json | grep -v '"*"'`
+3. Delete `package-lock.json` and re-run `npm install`
+
 ### Build fails after upstream sync
 
-1. Run `npm run apply-scope` to ensure all scopes are transformed
+1. Run `node scripts/transform-scope.js` to ensure all scopes are transformed
 2. Delete `node_modules` and `package-lock.json`, then run `npm install`
-3. Check for any new dependencies that might need scope transformation
+3. Check for any new external `@opendaw` dependencies that should NOT be renamed (the script handles this automatically for workspace packages)
 
 ### GitHub Action fails to publish
 
@@ -255,9 +265,22 @@ npx lerna version 0.1.0 --yes
 ### Why a Transform Script?
 
 The transform script approach was chosen to:
-1. **Minimize merge conflicts**: Upstream changes to `package.json` files merge cleanly
+1. **Minimize merge conflicts**: Upstream changes to `package.json` files merge cleanly — just accept upstream and re-run the script
 2. **Easy re-application**: After any upstream sync, just run the script again
 3. **Separation of concerns**: Moises-specific configuration is isolated in the script
+
+### Wildcard Versions for Workspace Packages
+
+Internal `@moises-ai` dependencies use `"*"` instead of caret ranges (e.g. `"^0.0.68"`). This is necessary because:
+
+- npm always checks the scoped registry (`npm.pkg.github.com`) for `@moises-ai` packages, even when they exist locally as workspace packages
+- If the registry doesn't have the version that the caret range requires, `npm install` fails with `ETARGET`
+- Using `"*"` matches any version, so npm resolves from the local workspace without hitting the registry
+- At publish time, Lerna replaces `"*"` with the actual version numbers
+
+### External @opendaw Packages
+
+Not all `@opendaw/*` packages are local to this monorepo. External packages like `@opendaw/nam-wasm` are published to npmjs.org and must keep their original scope. The transform script detects which packages are workspace-local and only renames those, leaving external `@opendaw` dependencies untouched in both `package.json` and source imports.
 
 ### File Locations
 

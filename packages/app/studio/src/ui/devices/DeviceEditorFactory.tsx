@@ -9,9 +9,11 @@ import {
     DattorroReverbDeviceBox,
     DelayDeviceBox,
     FoldDeviceBox,
+    GateDeviceBox,
     MIDIOutputDeviceBox,
     ModularDeviceBox,
     NanoDeviceBox,
+    NeuralAmpDeviceBox,
     PitchDeviceBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
@@ -38,9 +40,11 @@ import {
     DelayDeviceBoxAdapter,
     DeviceHost,
     FoldDeviceBoxAdapter,
+    GateDeviceBoxAdapter,
     MIDIOutputDeviceBoxAdapter,
     ModularDeviceBoxAdapter,
     NanoDeviceBoxAdapter,
+    NeuralAmpDeviceBoxAdapter,
     PitchDeviceBoxAdapter,
     PlayfieldDeviceBoxAdapter,
     PlayfieldSampleBoxAdapter,
@@ -76,12 +80,14 @@ import {StudioService} from "@/service/StudioService"
 import {SoundfontDeviceEditor} from "@/ui/devices/instruments/SoundfontDeviceEditor"
 import {MaximizerDeviceEditor} from "@/ui/devices/audio-effects/MaximizerDeviceEditor"
 import {CompressorDeviceEditor} from "@/ui/devices/audio-effects/CompressorDeviceEditor"
+import {GateDeviceEditor} from "@/ui/devices/audio-effects/GateDeviceEditor"
 import {CrusherDeviceEditor} from "@/ui/devices/audio-effects/CrusherDeviceEditor"
 import {FoldDeviceEditor} from "@/ui/devices/audio-effects/FoldDeviceEditor"
 import {MIDIOutputDeviceEditor} from "@/ui/devices/instruments/MIDIOutputDeviceEditor"
 import {VelocityDeviceEditor} from "@/ui/devices/midi-effects/VelocityDeviceEditor"
 import {TidalDeviceEditor} from "@/ui/devices/audio-effects/TidalDeviceEditor"
 import {DattorroReverbDeviceEditor} from "@/ui/devices/audio-effects/DattorroReverbDeviceEditor"
+import {NeuralAmpDeviceEditor} from "@/ui/devices/audio-effects/NeuralAmpDeviceEditor"
 
 export namespace DeviceEditorFactory {
     export const toMidiEffectDeviceEditor = (service: StudioService, lifecycle: Lifecycle, box: Box, deviceHost: DeviceHost) =>
@@ -230,6 +236,12 @@ export namespace DeviceEditorFactory {
                                         adapter={service.project.boxAdapters.adapterFor(box, CompressorDeviceBoxAdapter)}
                                         deviceHost={deviceHost}/>
             ),
+            visitGateDeviceBox: (box: GateDeviceBox) => (
+                <GateDeviceEditor lifecycle={lifecycle}
+                                  service={service}
+                                  adapter={service.project.boxAdapters.adapterFor(box, GateDeviceBoxAdapter)}
+                                  deviceHost={deviceHost}/>
+            ),
             visitReverbDeviceBox: (box: ReverbDeviceBox) => (
                 <ReverbDeviceEditor lifecycle={lifecycle}
                                     service={service}
@@ -247,6 +259,12 @@ export namespace DeviceEditorFactory {
                                      service={service}
                                      adapter={service.project.boxAdapters.adapterFor(box, ModularDeviceBoxAdapter)}
                                      deviceHost={deviceHost}/>
+            ),
+            visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox) => (
+                <NeuralAmpDeviceEditor lifecycle={lifecycle}
+                                       service={service}
+                                       adapter={service.project.boxAdapters.adapterFor(box, NeuralAmpDeviceBoxAdapter)}
+                                       deviceHost={deviceHost}/>
             )
         }), `No AudioEffectDeviceEditor found for ${box}`)
 }

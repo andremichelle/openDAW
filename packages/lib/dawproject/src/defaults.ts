@@ -1,3 +1,4 @@
+// noinspection JSUnusedGlobalSymbols
 import type {int} from "@moises-ai/lib-std"
 import {Xml} from "@moises-ai/lib-xml"
 
@@ -11,7 +12,6 @@ export interface Referenceable extends Nameable {
     id?: string
 }
 
-// noinspection JSUnusedGlobalSymbols
 export enum Unit {
     LINEAR = "linear",
     NORMALIZED = "normalized",
@@ -24,32 +24,27 @@ export enum Unit {
     BPM = "bpm"
 }
 
-// noinspection JSUnusedGlobalSymbols
 export enum Interpolation {
     HOLD = "hold",
     LINEAR = "linear"
 }
 
-// noinspection JSUnusedGlobalSymbols
 export enum TimeUnit {
     BEATS = "beats",
     SECONDS = "seconds"
 }
 
-// noinspection JSUnusedGlobalSymbols
 export enum SendType {
     PRE = "pre",
     POST = "post"
 }
 
-// noinspection JSUnusedGlobalSymbols
 export enum DeviceRole {
     NOTE_FX = "noteFX",
     INSTRUMENT = "instrument",
     AUDIO_FX = "audioFX"
 }
 
-// noinspection JSUnusedGlobalSymbols
 export enum ChannelRole {
     REGULAR = "regular",
     MASTER = "master",
@@ -58,7 +53,6 @@ export enum ChannelRole {
     VCA = "vca"
 }
 
-// noinspection JSUnusedGlobalSymbols
 export enum AudioAlgorithm {
     REPITCH = "repitch",
     STRETCH = "stretch"
@@ -522,7 +516,6 @@ export class DeviceSchema implements Referenceable {
 @Xml.Class("BuiltinDevice")
 export class BuiltinDeviceSchema extends DeviceSchema {}
 
-// noinspection JSUnusedGlobalSymbols
 export enum EqBandType {
     HIGH_PASS = "highPass",
     LOW_PASS = "lowPass",

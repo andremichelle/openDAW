@@ -1,6 +1,6 @@
 {
     "name": "@moises-ai/studio-adapters",
-    "version": "0.0.76",
+    "version": "0.0.79",
     "license": "LGPL-3.0-or-later",
     "publishConfig": {
         "registry": "https://npm.pkg.github.com",
@@ -24,18 +24,18 @@
         "test": "echo \"No tests to run\""
     },
     "dependencies": {
-        "@moises-ai/lib-box": "^0.0.67",
-        "@moises-ai/lib-dsp": "^0.0.65",
-        "@moises-ai/lib-fusion": "^0.0.71",
-        "@moises-ai/lib-runtime": "^0.0.65",
-        "@moises-ai/lib-std": "^0.0.65",
-        "@moises-ai/studio-boxes": "^0.0.68",
-        "@moises-ai/studio-enums": "^0.0.57",
+        "@moises-ai/lib-box": "*",
+        "@moises-ai/lib-dsp": "*",
+        "@moises-ai/lib-fusion": "*",
+        "@moises-ai/lib-runtime": "*",
+        "@moises-ai/lib-std": "*",
+        "@moises-ai/studio-boxes": "*",
+        "@moises-ai/studio-enums": "*",
         "soundfont2": "^0.5.0"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "^0.0.27",
-        "@moises-ai/typescript-config": "^0.0.28"
+        "@moises-ai/eslint-config": "*",
+        "@moises-ai/typescript-config": "*"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

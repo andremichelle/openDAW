@@ -8,9 +8,11 @@ import {
     DattorroReverbDeviceBox,
     DelayDeviceBox,
     FoldDeviceBox,
+    GateDeviceBox,
     MIDIOutputDeviceBox,
     ModularDeviceBox,
     NanoDeviceBox,
+    NeuralAmpDeviceBox,
     PitchDeviceBox,
     PlayfieldDeviceBox,
     RevampDeviceBox,
@@ -35,9 +37,11 @@ import {
     DattorroReverbDeviceBoxAdapter,
     DelayDeviceBoxAdapter,
     FoldDeviceBoxAdapter,
+    GateDeviceBoxAdapter,
     MIDIOutputDeviceBoxAdapter,
     ModularDeviceBoxAdapter,
     NanoDeviceBoxAdapter,
+    NeuralAmpDeviceBoxAdapter,
     PitchDeviceBoxAdapter,
     PlayfieldDeviceBoxAdapter,
     RevampDeviceBoxAdapter,
@@ -74,12 +78,14 @@ import {UnknownMidiEffectDeviceProcessor} from "./devices/midi-effects/UnknownMi
 import {SoundfontDeviceProcessor} from "./devices/instruments/SoundfontDeviceProcessor"
 import {MaximizerDeviceProcessor} from "./devices/audio-effects/MaximizerDeviceProcessor"
 import {CompressorDeviceProcessor} from "./devices/audio-effects/CompressorDeviceProcessor"
+import {GateDeviceProcessor} from "./devices/audio-effects/GateDeviceProcessor"
 import {CrusherDeviceProcessor} from "./devices/audio-effects/CrusherDeviceProcessor"
 import {FoldDeviceProcessor} from "./devices/audio-effects/FoldDeviceProcessor"
 import {MIDIOutputDeviceProcessor} from "./devices/instruments/MIDIOutputDeviceProcessor"
 import {VelocityDeviceProcessor} from "./devices/midi-effects/VelocityDeviceProcessor"
 import {TidalDeviceProcessor} from "./devices/audio-effects/TidalDeviceProcessor"
 import {DattorroReverbDeviceProcessor} from "./devices/audio-effects/DattorroReverbDeviceProcessor"
+import {NeuralAmpDeviceProcessor} from "./devices/audio-effects/NeuralAmpDeviceProcessor"
 
 export namespace InstrumentDeviceProcessorFactory {
     export const create = (context: EngineContext,
@@ -131,6 +137,8 @@ export namespace AudioEffectDeviceProcessorFactory {
                 new MaximizerDeviceProcessor(context, context.boxAdapters.adapterFor(box, MaximizerDeviceBoxAdapter)),
             visitCompressorDeviceBox: (box: CompressorDeviceBox): AudioEffectDeviceProcessor =>
                 new CompressorDeviceProcessor(context, context.boxAdapters.adapterFor(box, CompressorDeviceBoxAdapter)),
+            visitGateDeviceBox: (box: GateDeviceBox): AudioEffectDeviceProcessor =>
+                new GateDeviceProcessor(context, context.boxAdapters.adapterFor(box, GateDeviceBoxAdapter)),
             visitDelayDeviceBox: (box: DelayDeviceBox): AudioEffectDeviceProcessor =>
                 new DelayDeviceProcessor(context, context.boxAdapters.adapterFor(box, DelayDeviceBoxAdapter)),
             visitDattorroReverbDeviceBox: (box: DattorroReverbDeviceBox): AudioEffectDeviceProcessor =>
@@ -146,6 +154,8 @@ export namespace AudioEffectDeviceProcessorFactory {
             visitRevampDeviceBox: (box: RevampDeviceBox): AudioEffectDeviceProcessor =>
                 new RevampDeviceProcessor(context, context.boxAdapters.adapterFor(box, RevampDeviceBoxAdapter)),
             visitModularDeviceBox: (box: ModularDeviceBox): AudioEffectDeviceProcessor =>
-                new NopDeviceProcessor(context, context.boxAdapters.adapterFor(box, ModularDeviceBoxAdapter))
+                new NopDeviceProcessor(context, context.boxAdapters.adapterFor(box, ModularDeviceBoxAdapter)),
+            visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox): AudioEffectDeviceProcessor =>
+                new NeuralAmpDeviceProcessor(context, context.boxAdapters.adapterFor(box, NeuralAmpDeviceBoxAdapter))
         }), `Could not create audio-effect for'${box.name}'`)
 }

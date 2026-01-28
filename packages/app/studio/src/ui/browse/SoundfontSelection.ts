@@ -5,8 +5,9 @@ import {HTMLSelection} from "@/ui/HTMLSelection"
 import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "../components/dialogs"
 import {SoundfontFileBox} from "@moises-ai/studio-boxes"
+import {ResourceSelection} from "@/ui/browse/ResourceSelection"
 
-export class SoundfontSelection {
+export class SoundfontSelection implements ResourceSelection {
     readonly #service: StudioService
     readonly #selection: HTMLSelection
 

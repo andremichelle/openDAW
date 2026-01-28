@@ -1,6 +1,6 @@
 {
     "name": "@moises-ai/lib-dawproject",
-    "version": "0.0.51",
+    "version": "0.0.54",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
@@ -24,14 +24,14 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@moises-ai/lib-dsp": "^0.0.65",
-        "@moises-ai/lib-runtime": "^0.0.65",
-        "@moises-ai/lib-xml": "^0.0.51",
+        "@moises-ai/lib-dsp": "*",
+        "@moises-ai/lib-runtime": "*",
+        "@moises-ai/lib-xml": "*",
         "jszip": "^3.10.1"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "^0.0.27",
-        "@moises-ai/typescript-config": "^0.0.28",
+        "@moises-ai/eslint-config": "*",
+        "@moises-ai/typescript-config": "*",
         "jsdom": "^26.1.0"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"

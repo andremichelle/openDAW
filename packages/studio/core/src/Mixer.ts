@@ -83,7 +83,7 @@ export class Mixer implements Terminable {
         const processUpstreamChannels = (adapter: AudioUnitBoxAdapter) => {
             if (touched.has(adapter)) {return}
             touched.add(adapter)
-            adapter.input.getValue().ifSome(input => {
+            adapter.input.adapter().ifSome(input => {
                 if (input.type === "bus") {
                     input.box.input.pointerHub
                         .filter(Pointers.AudioOutput)

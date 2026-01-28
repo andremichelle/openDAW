@@ -1,7 +1,7 @@
 {
     "name": "@moises-ai/lab",
     "private": true,
-    "version": "0.0.93",
+    "version": "0.0.100",
     "type": "module",
     "license": "LGPL-3.0-or-later",
     "scripts": {
@@ -11,20 +11,20 @@
         "lint": "eslint \"src/**/*.ts\""
     },
     "dependencies": {
-        "@moises-ai/lib-box": "^0.0.67",
-        "@moises-ai/lib-dom": "^0.0.67",
-        "@moises-ai/lib-dsp": "^0.0.65",
-        "@moises-ai/lib-jsx": "^0.0.67",
-        "@moises-ai/lib-runtime": "^0.0.65",
-        "@moises-ai/lib-std": "^0.0.65",
-        "@moises-ai/studio-adapters": "^0.0.76",
-        "@moises-ai/studio-boxes": "^0.0.68",
-        "@moises-ai/studio-core": "^0.0.93",
-        "@moises-ai/studio-enums": "^0.0.57"
+        "@moises-ai/lib-box": "*",
+        "@moises-ai/lib-dom": "*",
+        "@moises-ai/lib-dsp": "*",
+        "@moises-ai/lib-jsx": "*",
+        "@moises-ai/lib-runtime": "*",
+        "@moises-ai/lib-std": "*",
+        "@moises-ai/studio-adapters": "*",
+        "@moises-ai/studio-boxes": "*",
+        "@moises-ai/studio-core": "*",
+        "@moises-ai/studio-enums": "*"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "^0.0.27",
-        "@moises-ai/typescript-config": "^0.0.28",
+        "@moises-ai/eslint-config": "*",
+        "@moises-ai/typescript-config": "*",
         "@types/node": "^22.15.18",
         "eslint": "^8.57.0",
         "sass": "^1.88.0",

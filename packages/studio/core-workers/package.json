@@ -1,6 +1,6 @@
 {
     "name": "@moises-ai/studio-core-workers",
-    "version": "0.0.71",
+    "version": "0.0.74",
     "license": "LGPL-3.0-or-later",
     "private": true,
     "exports": {
@@ -12,16 +12,16 @@
         "test": "echo \"No tests to run\""
     },
     "dependencies": {
-        "@moises-ai/lib-box": "^0.0.67",
-        "@moises-ai/lib-dsp": "^0.0.65",
-        "@moises-ai/lib-runtime": "^0.0.65",
-        "@moises-ai/lib-std": "^0.0.65",
-        "@moises-ai/studio-adapters": "^0.0.76",
-        "@moises-ai/studio-boxes": "^0.0.68",
-        "@moises-ai/studio-enums": "^0.0.57"
+        "@moises-ai/lib-box": "*",
+        "@moises-ai/lib-dsp": "*",
+        "@moises-ai/lib-runtime": "*",
+        "@moises-ai/lib-std": "*",
+        "@moises-ai/studio-adapters": "*",
+        "@moises-ai/studio-boxes": "*",
+        "@moises-ai/studio-enums": "*"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "^0.0.27",
-        "@moises-ai/typescript-config": "^0.0.28"
+        "@moises-ai/eslint-config": "*",
+        "@moises-ai/typescript-config": "*"
     }
 }

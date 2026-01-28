@@ -57,7 +57,6 @@ export class YSync<T> implements Terminable {
             boxGraph.createBox(name, uuid, box => YMapper.applyFromBoxMap(box, fields))
         })
         boxGraph.endTransaction()
-        boxGraph.verifyPointers()
         return sync
     }
 

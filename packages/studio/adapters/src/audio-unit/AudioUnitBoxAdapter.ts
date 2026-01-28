@@ -61,11 +61,11 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
     get input(): AudioUnitInput {return this.#input}
     get midiEffects(): IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost> {return this.#midiEffects}
     get audioEffects(): IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost> {return this.#audioEffects}
-    get inputAdapter(): Option<AudioUnitInputAdapter> {return this.#input.getValue()}
+    get inputAdapter(): Option<AudioUnitInputAdapter> {return this.#input.adapter()}
     get auxSends(): IndexedBoxAdapterCollection<AuxSendBoxAdapter, Pointers.AuxSend> {return this.#auxSends}
     get output(): AudioUnitOutput {return this.#output}
-    get isBus(): boolean {return this.input.getValue().mapOr(adapter => adapter.type === "bus", false)}
-    get isInstrument(): boolean {return this.input.getValue().mapOr(adapter => adapter.type === "instrument", false)}
+    get isBus(): boolean {return this.input.adapter().mapOr(adapter => adapter.type === "bus", false)}
+    get isInstrument(): boolean {return this.input.adapter().mapOr(adapter => adapter.type === "instrument", false)}
     get isOutput(): boolean {
         return this.#box.output.targetVertex.mapOr(output =>
             output.box.address.equals(this.#context.rootBoxAdapter.address), false)
@@ -75,15 +75,15 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
     get inputField(): Field<Pointers.InstrumentHost | Pointers.AudioOutput> {return this.#box.input}
     get audioEffectsField(): Field<Pointers.AudioEffectHost> {return this.#box.audioEffects}
     get tracksField(): Field<Pointers.TrackCollection> {return this.#box.tracks}
-    get minimizedField(): BooleanField {return this.#input.getValue().unwrap().minimizedField}
+    get minimizedField(): BooleanField {return this.#input.adapter().unwrap().minimizedField}
     get isAudioUnit(): boolean {return true}
-    get label(): string {return this.#input.getValue().mapOr(input => input.labelField.getValue(), "")}
+    get label(): string {return this.#input.adapter().mapOr(input => input.labelField.getValue(), "")}
 
     deviceHost(): DeviceHost {return this}
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this}
 
     * labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
-        const optInput = this.input.getValue()
+        const optInput = this.input.adapter()
         if (optInput.nonEmpty()) {
             yield* optInput.unwrap().labeledAudioOutputs()
         }

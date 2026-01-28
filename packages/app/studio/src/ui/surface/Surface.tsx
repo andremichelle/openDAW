@@ -49,6 +49,7 @@ export class Surface implements TerminableOwner {
     }>(undefined, ({priority: a}, {priority: b}) => b - a)
 
     static dispatchGlobalKey(type: KeyEventType, event: KeyboardEvent): void {
+        if (Events.isAutofillEvent(event)) {return}
         if (Keyboard.isControlKey(event) && event.code === "KeyA") {
             if (!Events.isTextInput(event.target)) {
                 event.preventDefault()

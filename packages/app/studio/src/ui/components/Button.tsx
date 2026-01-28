@@ -21,7 +21,7 @@ export const Button = ({lifecycle, onClick, style, className, appearance}: Butto
                              appearance={appearance}
                              dataClass="button">
             {input}
-            <label htmlFor={id}>{children}</label>
+            <label htmlFor={id} style={{cursor: appearance?.cursor ?? "auto"}}>{children}</label>
         </ButtonCheckboxRadio>
     )
 }

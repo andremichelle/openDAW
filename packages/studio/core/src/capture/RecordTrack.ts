@@ -1,14 +1,19 @@
 import {AudioUnitBox, TrackBox} from "@moises-ai/studio-boxes"
-import {asInstanceOf, int, UUID} from "@moises-ai/lib-std"
+import {asInstanceOf, int, Nullable, UUID} from "@moises-ai/lib-std"
 import {TrackType} from "@moises-ai/studio-adapters"
 import {BoxEditing} from "@moises-ai/lib-box"
 
 export namespace RecordTrack {
-    export const findOrCreate = (editing: BoxEditing, audioUnitBox: AudioUnitBox, type: TrackType, forceCreate: boolean = false): TrackBox => {
+    export const findOrCreate = (editing: BoxEditing,
+                                 audioUnitBox: AudioUnitBox,
+                                 type: TrackType,
+                                 excludeTrack: Nullable<TrackBox> = null): TrackBox => {
         let index: int = 0 | 0
-        for (const trackBox of audioUnitBox.tracks.pointerHub.incoming()
-            .map(({box}) => asInstanceOf(box, TrackBox))) {
-            if (!forceCreate) {
+        const trackBoxes = audioUnitBox.tracks.pointerHub.incoming()
+            .map(({box}) => asInstanceOf(box, TrackBox))
+            .sort((a, b) => a.index.getValue() - b.index.getValue())
+        for (const trackBox of trackBoxes) {
+            if (trackBox !== excludeTrack) {
                 const hasNoRegions = trackBox.regions.pointerHub.isEmpty()
                 const matchesType = trackBox.type.getValue() === type
                 if (hasNoRegions && matchesType) {return trackBox}

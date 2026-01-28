@@ -52,8 +52,8 @@ export class GlobalSampleLoaderManager implements SampleLoaderManager, SamplePro
     }
 
     invalidate(uuid: UUID.Bytes): void {
-        this.#cache.removeByKey(uuid)
-        this.#pending.removeByKey(uuid)
+        this.#cache.removeByKeyIfExist(uuid)
+        this.#pending.removeByKeyIfExist(uuid)
         this.#loaders.opt(uuid).ifSome(loader => {
             loader.invalidate()
             if (loader instanceof DefaultSampleLoader) {

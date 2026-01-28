@@ -1,6 +1,6 @@
 {
     "name": "@moises-ai/studio-boxes",
-    "version": "0.0.68",
+    "version": "0.0.71",
     "license": "LGPL-3.0-or-later",
     "publishConfig": {
         "registry": "https://npm.pkg.github.com",
@@ -23,14 +23,14 @@
         "test": "echo \"No tests to run\""
     },
     "dependencies": {
-        "@moises-ai/lib-box": "^0.0.67",
-        "@moises-ai/lib-std": "^0.0.65",
-        "@moises-ai/studio-enums": "^0.0.57"
+        "@moises-ai/lib-box": "*",
+        "@moises-ai/lib-std": "*",
+        "@moises-ai/studio-enums": "*"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "^0.0.27",
-        "@moises-ai/studio-forge-boxes": "^0.0.68",
-        "@moises-ai/typescript-config": "^0.0.28"
+        "@moises-ai/eslint-config": "*",
+        "@moises-ai/studio-forge-boxes": "*",
+        "@moises-ai/typescript-config": "*"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

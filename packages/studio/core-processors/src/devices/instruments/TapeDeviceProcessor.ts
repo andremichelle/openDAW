@@ -186,7 +186,10 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         }
         const asPlayModePitch = adapter.asPlayModePitchStretch
         if (adapter.isPlayModeNoStretch) {
-            const offset = (cycle.resultStartValue * data.numberOfFrames + waveformOffset * data.sampleRate) | 0
+            const rawStartSeconds = this.context.tempoMap.ppqnToSeconds(cycle.rawStart)
+            const resultStartSeconds = this.context.tempoMap.ppqnToSeconds(cycle.resultStart)
+            const elapsedSeconds = resultStartSeconds - rawStartSeconds
+            const offset = ((elapsedSeconds + waveformOffset) * data.sampleRate) | 0
             this.#updateOrCreateDirectVoice(lane, data, offset, 0)
         } else if (asPlayModePitch.isEmpty()) {
             const audioDurationSamples = data.numberOfFrames

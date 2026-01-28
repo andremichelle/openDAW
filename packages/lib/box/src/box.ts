@@ -62,7 +62,7 @@ export abstract class Box<P extends PointerTypes = PointerTypes, F extends Field
 
         this.#fields = this.initializeFields()
 
-        if (pointerRules.mandatory) {this.graph.edges().watchVertex(this)}
+        if (pointerRules.mandatory || pointerRules.exclusive) {this.graph.edges().watchVertex(this)}
     }
 
     protected abstract initializeFields(): F

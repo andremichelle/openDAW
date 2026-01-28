@@ -1,6 +1,6 @@
 {
     "name": "@moises-ai/lib-box-forge",
-    "version": "0.0.68",
+    "version": "0.0.71",
     "private": true,
     "sideEffects": false,
     "license": "LGPL-3.0-or-later",
@@ -16,15 +16,15 @@
         "test": "npm run gen && vitest run"
     },
     "dependencies": {
-        "@moises-ai/lib-box": "^0.0.67",
-        "@moises-ai/lib-dom": "^0.0.67",
-        "@moises-ai/lib-runtime": "^0.0.65",
-        "@moises-ai/lib-std": "^0.0.65",
+        "@moises-ai/lib-box": "*",
+        "@moises-ai/lib-dom": "*",
+        "@moises-ai/lib-runtime": "*",
+        "@moises-ai/lib-std": "*",
         "ts-morph": "^25.0.1",
         "tsx": "^4.20.3"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "^0.0.27",
-        "@moises-ai/typescript-config": "^0.0.28"
+        "@moises-ai/eslint-config": "*",
+        "@moises-ai/typescript-config": "*"
     }
 }

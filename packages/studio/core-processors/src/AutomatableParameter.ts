@@ -63,6 +63,7 @@ export class AutomatableParameter<T extends PrimitiveValues = any> implements Te
         this.#broadcasting.unwrap().terminate()
         this.#broadcasting = Option.None
         this.#value = this.#adapter.getValue()
+        this.#notifier.notify(this)
     }
 
     own<T extends Terminable>(terminable: T): T {return this.#terminator.own<T>(terminable)}

@@ -1,4 +1,4 @@
-import {MenuItem} from "@moises-ai/studio-core"
+import {CaptureAudio, MenuItem, Project} from "@moises-ai/studio-core"
 import {isInstanceOf, Procedure, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
 import {AudioUnitBoxAdapter, DeviceAccepts, ProjectUtils, TrackBoxAdapter, TrackType} from "@moises-ai/studio-adapters"
 import {DebugMenus} from "@/ui/menu/debug"
@@ -6,13 +6,12 @@ import {MidiImport} from "@/ui/timeline/MidiImport.ts"
 import {CaptureMidiBox, TrackBox} from "@moises-ai/studio-boxes"
 import {StudioService} from "@/service/StudioService"
 import {MenuCapture} from "@/ui/timeline/tracks/audio-unit/menu/capture"
-import {Project} from "@moises-ai/studio-core"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
 export const installTrackHeaderMenu = (service: StudioService,
                                        audioUnitBoxAdapter: AudioUnitBoxAdapter,
                                        trackBoxAdapter: TrackBoxAdapter): Procedure<MenuItem> => parent => {
-    const inputAdapter = audioUnitBoxAdapter.input.getValue()
+    const inputAdapter = audioUnitBoxAdapter.input.adapter()
     if (inputAdapter.isEmpty()) {return parent}
     const accepts: DeviceAccepts = inputAdapter.unwrap("Cannot unwrap input adapter").accepts
     const acceptMidi = audioUnitBoxAdapter.captureBox.mapOr(box => isInstanceOf(box, CaptureMidiBox), false)
@@ -36,8 +35,36 @@ export const installTrackHeaderMenu = (service: StudioService,
         MenuCapture.createItem(service, audioUnitBoxAdapter,
             trackBoxAdapter, editing, captureDevices.get(audioUnitBoxAdapter.uuid)),
         MenuItem.default({
+            label: "Input monitoring",
+            checked: captureDevices.get(audioUnitBoxAdapter.uuid)
+                .mapOr(capture => isInstanceOf(capture, CaptureAudio) ? capture.isMonitoring : false, false),
+            hidden: captureDevices.get(audioUnitBoxAdapter.uuid)
+                .mapOr(capture => !isInstanceOf(capture, CaptureAudio), true)
+        }).setTriggerProcedure(() => captureDevices.get(audioUnitBoxAdapter.uuid)
+            .ifSome(capture => {
+                if (isInstanceOf(capture, CaptureAudio)) {
+                    capture.isMonitoring = !capture.isMonitoring
+                }
+            })),
+        MenuItem.default({
+            label: "Force Mono",
+            checked: captureDevices.get(audioUnitBoxAdapter.uuid)
+                .mapOr(capture => isInstanceOf(capture, CaptureAudio)
+                    ? capture.requestChannels.mapOr(channels => channels === 1, false)
+                    : false, false),
+            hidden: captureDevices.get(audioUnitBoxAdapter.uuid)
+                .mapOr(capture => !isInstanceOf(capture, CaptureAudio), true)
+        }).setTriggerProcedure(() => captureDevices.get(audioUnitBoxAdapter.uuid)
+            .ifSome(capture => {
+                if (isInstanceOf(capture, CaptureAudio)) {
+                    const currentMono = capture.requestChannels.mapOr(channels => channels === 1, false)
+                    editing.modify(() => capture.requestChannels = currentMono ? 2 : 1)
+                }
+            })),
+        MenuItem.default({
             label: "Copy AudioUnit",
-            shortcut: GlobalShortcuts["copy-device"].shortcut.format()
+            shortcut: GlobalShortcuts["copy-device"].shortcut.format(),
+            separatorBefore: true
         }).setTriggerProcedure(() => {
             const copies = editing.modify(() => ProjectUtils
                 .extractAudioUnits([trackBoxAdapter.audioUnit], project.skeleton), false).unwrap()
@@ -92,9 +119,15 @@ export const installTrackHeaderMenu = (service: StudioService,
             separatorBefore: true
         }).setTriggerProcedure(() => MidiImport.toTracks(project, audioUnitBoxAdapter)),
         MenuItem.default({
-            label: "Delete Track",
+            label: `Delete '${audioUnitBoxAdapter.input.label.unwrapOrElse("No Input")}'`,
             selectable: !audioUnitBoxAdapter.isOutput,
             separatorBefore: true
+        }).setTriggerProcedure(() => editing.modify(() =>
+            project.api.deleteAudioUnit(audioUnitBoxAdapter.box))),
+        MenuItem.default({
+            label: `Delete ${TrackType.toLabelString(trackBoxAdapter.type)} Track`,
+            selectable: !audioUnitBoxAdapter.isOutput,
+            hidden: audioUnitBoxAdapter.tracks.collection.size() === 1
         }).setTriggerProcedure(() => editing.modify(() => {
             if (audioUnitBoxAdapter.tracks.collection.size() === 1) {
                 project.api.deleteAudioUnit(audioUnitBoxAdapter.box)
@@ -102,11 +135,6 @@ export const installTrackHeaderMenu = (service: StudioService,
                 audioUnitBoxAdapter.deleteTrack(trackBoxAdapter)
             }
         })),
-        MenuItem.default({
-            label: `Delete '${audioUnitBoxAdapter.input.label.unwrapOrElse("No Input")}'`,
-            selectable: !audioUnitBoxAdapter.isOutput
-        }).setTriggerProcedure(() => editing.modify(() =>
-            project.api.deleteAudioUnit(audioUnitBoxAdapter.box))),
         DebugMenus.debugBox(audioUnitBoxAdapter.box)
     )
 }

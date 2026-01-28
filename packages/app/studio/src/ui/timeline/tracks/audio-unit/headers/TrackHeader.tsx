@@ -107,7 +107,7 @@ export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAd
                 if (data.type === "midi-effect") {
                     if (data.start_index !== null) {return}
                     const factory = EffectFactories.MidiNamed[data.device]
-                    if (factory.type !== audioUnitBoxAdapter.input.getValue().unwrapOrNull()?.accepts) {
+                    if (factory.type !== audioUnitBoxAdapter.input.adapter().unwrapOrNull()?.accepts) {
                         return
                     }
                     const effectField = audioUnitBoxAdapter.box.midiEffects

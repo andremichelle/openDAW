@@ -1,11 +1,10 @@
 import {DeviceHost, Devices, EffectDeviceBoxAdapter, PresetDecoder, PresetEncoder} from "@moises-ai/studio-adapters"
-import {MenuItem} from "@moises-ai/studio-core"
+import {EffectFactories, FilePickerAcceptTypes, MenuItem, Project} from "@moises-ai/studio-core"
 import {BoxEditing, PrimitiveField, PrimitiveValues, StringField} from "@moises-ai/lib-box"
 import {EmptyExec, isInstanceOf, panic, RuntimeNotifier} from "@moises-ai/lib-std"
 import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
 import {StudioService} from "@/service/StudioService"
-import {EffectFactories, FilePickerAcceptTypes, Project} from "@moises-ai/studio-core"
 import {VaporisateurDeviceBox} from "@moises-ai/studio-boxes"
 import {Files} from "@moises-ai/lib-dom"
 import {RouteLocation} from "@moises-ai/lib-jsx"
@@ -31,6 +30,7 @@ export namespace MenuItems {
                 .setRuntimeChildrenProcedure(parent => parent.addMenuItem(...EffectFactories.MidiList
                     .map(entry => MenuItem.default({
                         label: entry.defaultName,
+                        icon: entry.defaultIcon,
                         separatorBefore: entry.separatorBefore
                     }).setTriggerProcedure(() => editing.modify(() =>
                         api.insertEffect(deviceHost.midiEffects.field(), entry, 0))))
@@ -39,6 +39,7 @@ export namespace MenuItems {
                 .setRuntimeChildrenProcedure(parent => parent.addMenuItem(...EffectFactories.AudioList
                     .map(entry => MenuItem.default({
                         label: entry.defaultName,
+                        icon: entry.defaultIcon,
                         separatorBefore: entry.separatorBefore
                     }).setTriggerProcedure(() => editing.modify(() =>
                         api.insertEffect(deviceHost.audioEffects.field(), entry, 0))))
@@ -153,6 +154,7 @@ export namespace MenuItems {
                     .addMenuItem(...EffectFactories.AudioList
                         .map(factory => MenuItem.default({
                             label: factory.defaultName,
+                            icon: factory.defaultIcon,
                             separatorBefore: factory.separatorBefore
                         }).setTriggerProcedure(() =>
                             editing.modify(() => api.insertEffect(host.audioEffects.field(), factory, adapter.indexField.getValue() + 1))))
@@ -163,6 +165,7 @@ export namespace MenuItems {
                         .addMenuItem(...EffectFactories.MidiList
                             .map(factory => MenuItem.default({
                                 label: factory.defaultName,
+                                icon: factory.defaultIcon,
                                 separatorBefore: factory.separatorBefore
                             }).setTriggerProcedure(() => editing.modify(() => api
                                 .insertEffect(host.midiEffects.field(), factory, adapter.indexField.getValue() + 1))))
