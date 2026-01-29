@@ -152,8 +152,8 @@ export const renderRegions = (context: CanvasRenderingContext2D,
             const isEditing = tracks.service.project.userEditingManager.timeline.isEditing(region.box)
             if (isEditing) {
                 context.fillStyle = labelBackground
-                context.fillRect(x1Int - dpr, labelHeight, dpr, height - labelHeight)
-                context.fillRect(x0Int, labelHeight, dpr, height - labelHeight)
+                context.fillRect(x1Int - dpr, labelHeight, dpr, height - labelHeight - dpr)
+                context.fillRect(x0Int, labelHeight, dpr, height - labelHeight - dpr)
                 context.fillRect(x0Int, height - dpr, xnInt, height - dpr)
             }
         }
