@@ -85,7 +85,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
     const capturing: ElementCapturing<RegionCaptureTarget> = RegionCapturing.create(element, manager, range)
     const regionLocator = createRegionLocator(manager, regionSelection)
     const dragAndDrop = new RegionDragAndDrop(service, capturing, timeline.snapping)
-    const shortcuts = ShortcutManager.get().createContext(() => element.contains(document.activeElement), "Regions")
+    const shortcuts = ShortcutManager.get().createContext(element, "Regions")
     const {engine, boxGraph, overlapResolver, timelineFocus} = project
     const clipboardHandler = RegionsClipboard.createHandler({
         getEnabled: () => !engine.isPlaying.getValue(),
@@ -126,6 +126,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         installRegionContextMenu({timelineBox, element, service, capturing, selection: regionSelection, range}),
         Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
             const target = capturing.captureEvent(event)
+            timelineFocus.clear()
             if (target === null) {return}
             if (target.type === "region") {
                 timelineFocus.focusRegion(target.region)

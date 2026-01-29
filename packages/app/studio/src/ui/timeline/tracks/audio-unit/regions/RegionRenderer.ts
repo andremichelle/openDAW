@@ -23,10 +23,10 @@ export const renderRegions = (context: CanvasRenderingContext2D,
     // subtract one pixel to avoid making special cases for a possible outline
     const unitMin = range.unitMin - range.unitPadding - range.unitsPerPixel
     const unitMax = range.unitMax
-    const unitsPerPixel = range.unitsPerPixel
 
-    const fontSize = RegionLabel.fontSize() * devicePixelRatio
-    const labelHeight = RegionLabel.labelHeight() * devicePixelRatio
+    const dpr = devicePixelRatio
+    const fontSize = RegionLabel.fontSize() * dpr
+    const labelHeight = RegionLabel.labelHeight() * dpr
     const bound: RegionBound = {top: labelHeight + 1.0, bottom: height - 2.5}
 
     context.clearRect(0, 0, width, height)
@@ -41,22 +41,18 @@ export const renderRegions = (context: CanvasRenderingContext2D,
             signatureTrack,
             range,
             ({pulse}) => {
-                const x0 = Math.floor(range.unitToX(pulse) * devicePixelRatio)
-                context.fillRect(x0, 0, devicePixelRatio, height)
+                const x0 = Math.floor(range.unitToX(pulse) * dpr)
+                context.fillRect(x0, 0, dpr, height)
             },
             {minLength: 32}
         )
     }
     const renderRegions = (strategy: RegionModifyStrategy, filterSelected: boolean, hideSelected: boolean): void => {
         const optTrack = tracks.getByIndex(strategy.translateTrackIndex(index))
-        if (optTrack.isEmpty()) {
-            return
-        }
+        if (optTrack.isEmpty()) {return}
         const trackBoxAdapter = optTrack.unwrap().trackBoxAdapter
         const trackDisabled = !trackBoxAdapter.enabled.getValue()
         const regions = strategy.iterateRange(trackBoxAdapter.regions.collection, unitMin, unitMax)
-        const dpr = devicePixelRatio
-
         for (const [region, next] of Iterables.pairWise(regions)) {
             if (region.isSelected ? hideSelected : !filterSelected) {continue}
             const actualComplete = strategy.readComplete(region)
@@ -64,9 +60,9 @@ export const renderRegions = (context: CanvasRenderingContext2D,
             const complete = region.isSelected
                 ? actualComplete
                 : // for no-stretched audio region
-                Math.min(actualComplete, next?.position ?? Number.POSITIVE_INFINITY) - unitsPerPixel
-            const x0Int = Math.floor(range.unitToX(Math.max(position, unitMin)) * dpr)
-            const x1Int = Math.max(Math.floor(range.unitToX(Math.min(complete, unitMax)) * dpr), x0Int + dpr)
+                Math.min(actualComplete, next?.position ?? Number.POSITIVE_INFINITY)
+            const x0Int = Math.floor((range.unitToX(Math.max(position, unitMin)) + 1) * dpr)
+            const x1Int = Math.max((Math.floor(range.unitToX(Math.min(complete, unitMax))) * dpr), x0Int + dpr)
             const xnInt = x1Int - x0Int
             const {labelColor, labelBackground, contentColor, contentBackground, loopStrokeColor} =
                 RegionPaintBucket.create(region, region.isSelected && !filterSelected, trackDisabled)
@@ -75,7 +71,7 @@ export const renderRegions = (context: CanvasRenderingContext2D,
             context.fillRect(x0Int, 0, xnInt, labelHeight)
             context.fillStyle = contentBackground
             context.fillRect(x0Int, labelHeight, xnInt, height - labelHeight)
-            const maxTextWidth = xnInt - 4 // subtract text-padding
+            const maxTextWidth = xnInt - 3 * dpr // subtract text-padding
             context.fillStyle = labelColor
             if (strategy.readMirror(region)) {
                 context.font = `italic ${fontSize}px ${fontFamily}`
@@ -83,7 +79,7 @@ export const renderRegions = (context: CanvasRenderingContext2D,
                 context.font = `${fontSize}px ${fontFamily}`
             }
             const text = region.label.length === 0 ? "◻" : region.label
-            context.fillText(Context2d.truncateText(context, text, maxTextWidth).text, x0Int + 1, 1 + labelHeight / 2)
+            context.fillText(Context2d.truncateText(context, text, maxTextWidth).text, x0Int + 3 * dpr, 1 + labelHeight / 2)
             if (!region.hasCollection) {continue}
             context.fillStyle = contentColor
             region.accept({
