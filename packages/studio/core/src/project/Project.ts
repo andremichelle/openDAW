@@ -28,6 +28,11 @@ import {
     BoxAdapters,
     BoxAdaptersContext,
     ClipSequencing,
+    DeviceBoxAdapter,
+    DeviceBoxUtils,
+    Devices,
+    FilteredSelection,
+    isVertexOfBox,
     ParameterFieldAdapters,
     ProcessorOptions,
     ProjectMandatoryBoxes,
@@ -110,6 +115,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly captureDevices: CaptureDevices
     readonly editing: BoxEditing
     readonly selection: VertexSelection
+    readonly deviceSelection: FilteredSelection<DeviceBoxAdapter>
     readonly boxAdapters: BoxAdapters
     readonly userEditingManager: UserEditingManager
     readonly parameterFieldAdapters: ParameterFieldAdapters
@@ -141,6 +147,13 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.selection = new VertexSelection(this.editing, this.boxGraph)
         this.parameterFieldAdapters = new ParameterFieldAdapters()
         this.boxAdapters = this.#terminator.own(new BoxAdapters(this))
+        this.deviceSelection = this.#terminator.own(this.selection.createFilteredSelection(
+            isVertexOfBox(DeviceBoxUtils.isDeviceBox),
+            {
+                fx: (adapter: DeviceBoxAdapter) => adapter.box,
+                fy: vertex => this.boxAdapters.adapterFor(vertex.box, Devices.isAny)
+            }
+        ))
         this.tempoMap = new VaryingTempoMap(this.timelineBoxAdapter)
         this.userEditingManager = new UserEditingManager(this.editing)
         this.liveStreamReceiver = this.#terminator.own(new LiveStreamReceiver())

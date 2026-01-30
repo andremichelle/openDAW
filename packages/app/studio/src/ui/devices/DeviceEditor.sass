@@ -15,6 +15,10 @@ component
   &:not(.enabled)
     filter: brightness(0.5) grayscale(1.0)
 
+  &.selected > header
+    border-radius: 0 0 3px 3px
+    background-color: rgba(white, 0.03)
+
   > header
     display: grid
     grid-template-columns: auto auto 1fr
@@ -25,10 +29,6 @@ component
     font-size: 11px
     overflow: hidden
     color: var(--color-blue)
-
-    &.selected
-      border-radius: 0 0 3px 3px
-      background-color: rgba(white, 0.03)
 
     &::after
       content: ""
