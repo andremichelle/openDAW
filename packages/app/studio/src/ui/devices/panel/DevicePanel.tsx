@@ -242,8 +242,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
             selection: service.project.deviceSelection,
             boxGraph: service.project.boxGraph,
             boxAdapters: service.project.boxAdapters,
-            getMidiEffectsField: () => getCurrentDeviceHost().map(host => host.audioUnitBoxAdapter().midiEffectsField),
-            getAudioEffectsField: () => getCurrentDeviceHost().map(host => host.audioUnitBoxAdapter().audioEffectsField)
+            getHost: () => getCurrentDeviceHost().map(host => host.audioUnitBoxAdapter())
         })),
         Events.subscribe(element, "keydown", (event: KeyboardEvent) => {
             if (Keyboard.isDelete(event)) {

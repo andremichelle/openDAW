@@ -1,13 +1,15 @@
 import {ByteArrayInput, ByteArrayOutput, int, Option, Provider} from "@opendaw/lib-std"
-import {Box, BoxEditing, BoxGraph, Field} from "@opendaw/lib-box"
+import {Box, BoxEditing, BoxGraph} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {
     AudioEffectDeviceAdapter,
+    AudioUnitBoxAdapter,
     BoxAdapters,
     DeviceBoxAdapter,
     DeviceBoxUtils,
     Devices,
     FilteredSelection,
+    InstrumentDeviceBoxAdapter,
     MidiEffectDeviceAdapter
 } from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
@@ -16,6 +18,7 @@ import {ClipboardUtils} from "../ClipboardUtils"
 type ClipboardDevices = ClipboardEntry<"devices">
 
 type DeviceMetadata = {
+    hasInstrument: boolean
     midiEffectCount: int
     midiEffectMaxIndex: int
     audioEffectCount: int
@@ -29,12 +32,12 @@ export namespace DevicesClipboard {
         readonly selection: FilteredSelection<DeviceBoxAdapter>
         readonly boxGraph: BoxGraph
         readonly boxAdapters: BoxAdapters
-        readonly getMidiEffectsField: Provider<Option<Field<Pointers.MIDIEffectHost>>>
-        readonly getAudioEffectsField: Provider<Option<Field<Pointers.AudioEffectHost>>>
+        readonly getHost: Provider<Option<AudioUnitBoxAdapter>>
     }
 
     const encodeMetadata = (metadata: DeviceMetadata): ArrayBufferLike => {
         const output = ByteArrayOutput.create()
+        output.writeBoolean(metadata.hasInstrument)
         output.writeInt(metadata.midiEffectCount)
         output.writeInt(metadata.midiEffectMaxIndex)
         output.writeInt(metadata.audioEffectCount)
@@ -45,6 +48,7 @@ export namespace DevicesClipboard {
     const decodeMetadata = (buffer: ArrayBufferLike): DeviceMetadata => {
         const input = new ByteArrayInput(buffer)
         return {
+            hasInstrument: input.readBoolean(),
             midiEffectCount: input.readInt(),
             midiEffectMaxIndex: input.readInt(),
             audioEffectCount: input.readInt(),
@@ -58,22 +62,24 @@ export namespace DevicesClipboard {
                                       selection,
                                       boxGraph,
                                       boxAdapters,
-                                      getMidiEffectsField,
-                                      getAudioEffectsField
+                                      getHost
                                   }: Context): ClipboardHandler<ClipboardDevices> => {
         const copyDevices = (): Option<ClipboardDevices> => {
             const selected = selection.selected()
             if (selected.length === 0) {return Option.None}
+            let instrument: InstrumentDeviceBoxAdapter | null = null
             const midiEffects: Array<MidiEffectDeviceAdapter> = []
             const audioEffects: Array<AudioEffectDeviceAdapter> = []
             for (const adapter of selected) {
-                if (adapter.type === "midi-effect") {
+                if (adapter.type === "instrument") {
+                    instrument = adapter as InstrumentDeviceBoxAdapter
+                } else if (adapter.type === "midi-effect") {
                     midiEffects.push(adapter as MidiEffectDeviceAdapter)
                 } else if (adapter.type === "audio-effect") {
                     audioEffects.push(adapter as AudioEffectDeviceAdapter)
                 }
             }
-            if (midiEffects.length === 0 && audioEffects.length === 0) {return Option.None}
+            if (instrument === null && midiEffects.length === 0 && audioEffects.length === 0) {return Option.None}
             const midiEffectMaxIndex = midiEffects.length > 0
                 ? midiEffects.reduce((max, adapter) => Math.max(max, adapter.indexField.getValue()), Number.NEGATIVE_INFINITY)
                 : 0
@@ -81,7 +87,7 @@ export namespace DevicesClipboard {
                 ? audioEffects.reduce((max, adapter) => Math.max(max, adapter.indexField.getValue()), Number.NEGATIVE_INFINITY)
                 : 0
             const deviceBoxes = selected
-                .filter(adapter => adapter.type === "midi-effect" || adapter.type === "audio-effect")
+                .filter(adapter => adapter.type === "instrument" || adapter.type === "midi-effect" || adapter.type === "audio-effect")
                 .map(adapter => adapter.box)
             const dependencies = deviceBoxes.flatMap(box =>
                 Array.from(boxGraph.dependenciesOf(box, {
@@ -90,6 +96,7 @@ export namespace DevicesClipboard {
                 }).boxes))
             const allBoxes = [...deviceBoxes, ...dependencies]
             const metadata: DeviceMetadata = {
+                hasInstrument: instrument !== null,
                 midiEffectCount: midiEffects.length,
                 midiEffectMaxIndex,
                 audioEffectCount: audioEffects.length,
@@ -105,19 +112,32 @@ export namespace DevicesClipboard {
             copy: copyDevices,
             cut: (): Option<ClipboardDevices> => {
                 const result = copyDevices()
-                result.ifSome(() => editing.modify(() =>
-                    selection.selected().forEach(adapter => adapter.box.delete())))
+                result.ifSome(() => {
+                    const optHost = getHost()
+                    if (optHost.isEmpty()) {return}
+                    const host = optHost.unwrap()
+                    const selected = new Set(selection.selected().filter(adapter => adapter.type !== "instrument"))
+                    const remainingMidi = host.midiEffects.adapters().filter(adapter => !selected.has(adapter))
+                    const remainingAudio = host.audioEffects.adapters().filter(adapter => !selected.has(adapter))
+                    editing.modify(() => {
+                        selected.forEach(adapter => adapter.box.delete())
+                        remainingMidi.forEach((adapter, index) => adapter.indexField.setValue(index))
+                        remainingAudio.forEach((adapter, index) => adapter.indexField.setValue(index))
+                    })
+                })
                 return result
             },
             paste: (entry: ClipboardEntry): void => {
                 if (entry.type !== "devices" || !getEnabled()) {return}
-                const optMidiField = getMidiEffectsField()
-                const optAudioField = getAudioEffectsField()
-                if (optMidiField.isEmpty() && optAudioField.isEmpty()) {return}
+                const optHost = getHost()
+                if (optHost.isEmpty()) {return}
+                const host = optHost.unwrap()
                 const metadata = decodeMetadata(ClipboardUtils.extractMetadata(entry.data))
                 const selected = selection.selected()
+                const selectedInstrument = selected.find(adapter => adapter.type === "instrument")
                 const selectedMidiEffects = selected.filter(adapter => adapter.type === "midi-effect") as MidiEffectDeviceAdapter[]
                 const selectedAudioEffects = selected.filter(adapter => adapter.type === "audio-effect") as AudioEffectDeviceAdapter[]
+                const replaceInstrument = metadata.hasInstrument && selectedInstrument !== undefined
                 const midiInsertIndex = selectedMidiEffects.length > 0
                     ? selectedMidiEffects.reduce((max, adapter) => Math.max(max, adapter.indexField.getValue()), -1) + 1
                     : 0
@@ -126,26 +146,21 @@ export namespace DevicesClipboard {
                     : 0
                 editing.modify(() => {
                     selection.deselectAll()
-                    optMidiField.ifSome(field => {
-                        for (const pointer of field.pointerHub.incoming()) {
-                            if (DeviceBoxUtils.isEffectDeviceBox(pointer.box)) {
-                                const currentIndex = pointer.box.index.getValue()
-                                if (currentIndex >= midiInsertIndex) {
-                                    pointer.box.index.setValue(currentIndex + metadata.midiEffectCount)
-                                }
-                            }
+                    if (replaceInstrument) {
+                        selectedInstrument.box.delete()
+                    }
+                    for (const adapter of host.midiEffects.adapters()) {
+                        const currentIndex = adapter.indexField.getValue()
+                        if (currentIndex >= midiInsertIndex) {
+                            adapter.indexField.setValue(currentIndex + metadata.midiEffectCount)
                         }
-                    })
-                    optAudioField.ifSome(field => {
-                        for (const pointer of field.pointerHub.incoming()) {
-                            if (DeviceBoxUtils.isEffectDeviceBox(pointer.box)) {
-                                const currentIndex = pointer.box.index.getValue()
-                                if (currentIndex >= audioInsertIndex) {
-                                    pointer.box.index.setValue(currentIndex + metadata.audioEffectCount)
-                                }
-                            }
+                    }
+                    for (const adapter of host.audioEffects.adapters()) {
+                        const currentIndex = adapter.indexField.getValue()
+                        if (currentIndex >= audioInsertIndex) {
+                            adapter.indexField.setValue(currentIndex + metadata.audioEffectCount)
                         }
-                    })
+                    }
                     let midiIdx = midiInsertIndex
                     let audioIdx = audioInsertIndex
                     const boxes = ClipboardUtils.deserializeBoxes(
@@ -153,11 +168,14 @@ export namespace DevicesClipboard {
                         boxGraph,
                         {
                             mapPointer: pointer => {
-                                if (pointer.pointerType === Pointers.MIDIEffectHost && optMidiField.nonEmpty()) {
-                                    return Option.wrap(optMidiField.unwrap().address)
+                                if (pointer.pointerType === Pointers.InstrumentHost && replaceInstrument) {
+                                    return Option.wrap(host.inputField.address)
                                 }
-                                if (pointer.pointerType === Pointers.AudioEffectHost && optAudioField.nonEmpty()) {
-                                    return Option.wrap(optAudioField.unwrap().address)
+                                if (pointer.pointerType === Pointers.MIDIEffectHost) {
+                                    return Option.wrap(host.midiEffectsField.address)
+                                }
+                                if (pointer.pointerType === Pointers.AudioEffectHost) {
+                                    return Option.wrap(host.audioEffectsField.address)
                                 }
                                 return Option.None
                             },
@@ -169,10 +187,11 @@ export namespace DevicesClipboard {
                                         box.index.setValue(audioIdx++)
                                     }
                                 }
-                            }
+                            },
+                            excludeBox: box => DeviceBoxUtils.isInstrumentDeviceBox(box) && !replaceInstrument
                         }
                     )
-                    const deviceBoxes = boxes.filter(box => DeviceBoxUtils.isEffectDeviceBox(box))
+                    const deviceBoxes = boxes.filter(box => DeviceBoxUtils.isDeviceBox(box))
                     selection.select(...deviceBoxes.map(box => boxAdapters.adapterFor(box, Devices.isAny)))
                 })
             }
