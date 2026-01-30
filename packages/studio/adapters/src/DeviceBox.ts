@@ -19,19 +19,11 @@ export type EffectDeviceBox = {
 } & DeviceBox
 
 export namespace DeviceBoxUtils {
-    export const isDeviceBox = (box: Box): box is DeviceBox =>
-        "host" in box && isInstanceOf(box.host, PointerField) &&
-        "label" in box && isInstanceOf(box.label, StringField) &&
-        "enabled" in box && isInstanceOf(box.enabled, BooleanField) &&
-        "minimized" in box && isInstanceOf(box.minimized, BooleanField)
-
+    export const isDeviceBox = (box: Box): box is DeviceBox => box.tags.type === "device"
     export const isInstrumentDeviceBox = (box: Box): box is InstrumentDeviceBox =>
-        isDeviceBox(box) && box.host.pointerType === Pointers.InstrumentHost
-
+        isDeviceBox(box) && box.tags.deviceType === "instrument"
     export const isEffectDeviceBox = (box: Box): box is EffectDeviceBox =>
-        isDeviceBox(box) && "index" in box && isInstanceOf(box.index, Int32Field) &&
-        (box.host.pointerType === Pointers.MIDIEffectHost || box.host.pointerType === Pointers.AudioEffectHost)
-
+        isDeviceBox(box) && (box.tags.deviceType === "audio-effect" || box.tags.deviceType === "midi-effect")
     export const lookupHostField = (box: Maybe<Box>): PointerField =>
         isDefined(box) && "host" in box && isInstanceOf(box.host, PointerField)
             ? box.host : panic(`Could not find 'host' field in '${box?.name}'`)

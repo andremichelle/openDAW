@@ -46,7 +46,7 @@ export class BoxForge<E extends PointerTypes> {
         this.#path = path
     }
 
-    writeClass(schema: ClassSchema<E>, option: ClassOptions, pointerRules: PointerRules<E>, resource?: ResourceType, ephemeral?: boolean): void {
+    writeClass(schema: ClassSchema<E>, option: ClassOptions, pointerRules: PointerRules<E>, resource?: ResourceType, ephemeral?: boolean, tags?: Record<string, string>): void {
         const written: Maybe<ClassSchema<E>> = this.#written.get(schema.name)
         if (isDefined(written)) {
             if (written === schema) {
@@ -58,7 +58,7 @@ export class BoxForge<E extends PointerTypes> {
             }
         }
         const file: SourceFile = this.#project.createSourceFile(`${this.#path}/${schema.name}.ts`, header)
-        ClassWriter.write(this, file, schema, option, pointerRules, resource, ephemeral)
+        ClassWriter.write(this, file, schema, option, pointerRules, resource, ephemeral, tags)
         this.#written.set(schema.name, schema)
     }
 
@@ -86,7 +86,7 @@ export class BoxForge<E extends PointerTypes> {
 
     #writeBoxClasses(): void {
         this.#schema.boxes.forEach((box: BoxSchema<E>) =>
-            this.writeClass(box.class, BoxClassOption, box.pointerRules ?? NoPointers, box.resource, box.ephemeral))
+            this.writeClass(box.class, BoxClassOption, box.pointerRules ?? NoPointers, box.resource, box.ephemeral, box.tags))
     }
 
     #writeBoxIndex(): void {
@@ -159,7 +159,7 @@ type ClassOptions = Readonly<{
 }>
 
 export const BoxClassOption: ClassOptions = {
-    import_std_lib: ["Maybe", "safeExecute", "UUID"],
+    import_std_lib: ["Maybe", "Optional", "safeExecute", "UUID"],
     import_box_lib: ["Box", "BoxConstruct", "BoxGraph", "ResourceType"],
     extends: "Box",
     construct: "BoxConstruct",
@@ -210,8 +210,9 @@ class ClassWriter<E extends PointerTypes> {
         option: ClassOptions,
         edges: PointerRules<E>,
         resource?: ResourceType,
-        ephemeral?: boolean): void {
-        const writer = new ClassWriter<E>(generator, file, schema, option, edges, resource, ephemeral)
+        ephemeral?: boolean,
+        tags?: Record<string, string>): void {
+        const writer = new ClassWriter<E>(generator, file, schema, option, edges, resource, ephemeral, tags)
         writer.#writeFieldsType()
         writer.#writeClass()
         writer.#writeImports()
@@ -224,6 +225,7 @@ class ClassWriter<E extends PointerTypes> {
     readonly #pointerRules: PointerRules<E>
     readonly #resource?: ResourceType
     readonly #ephemeral?: boolean
+    readonly #tags?: Record<string, string>
 
     readonly #imports: SetMultimap<string, string>
     readonly #fieldPrinter: ReadonlyArray<FieldPrinter>
@@ -237,7 +239,8 @@ class ClassWriter<E extends PointerTypes> {
         option: ClassOptions,
         pointerRules: PointerRules<E>,
         resource?: ResourceType,
-        ephemeral?: boolean) {
+        ephemeral?: boolean,
+        tags?: Record<string, string>) {
         this.#generator = generator
         this.#file = file
         this.#schema = schema
@@ -245,7 +248,7 @@ class ClassWriter<E extends PointerTypes> {
         this.#pointerRules = pointerRules
         this.#resource = resource
         this.#ephemeral = ephemeral
-
+        this.#tags = tags
         this.#imports = new SetMultimap<string, string>([
             [STD_LIBRARY, option.import_std_lib],
             [BOX_LIBRARY, option.import_box_lib]
@@ -326,7 +329,7 @@ class ClassWriter<E extends PointerTypes> {
             })
             declaration.addProperty({
                 name: "Resource",
-                type: "ResourceType | undefined",
+                type: "Optional<ResourceType>",
                 isStatic: true,
                 isReadonly: true,
                 initializer: resourceValue
@@ -337,6 +340,16 @@ class ClassWriter<E extends PointerTypes> {
                 isStatic: true,
                 isReadonly: true,
                 initializer: ephemeralValue
+            })
+            const tagsValue = isDefined(this.#tags)
+                ? `Object.freeze(${JSON.stringify(Object.fromEntries(Object.entries(this.#tags).map(([key, value]) => [Strings.hyphenToCamelCase(key), value])))})`
+                : "Object.freeze({})"
+            declaration.addProperty({
+                name: "Tags",
+                type: "Readonly<Record<string, string>>",
+                isStatic: true,
+                isReadonly: true,
+                initializer: tagsValue
             })
         } else {
             declaration.addMethod({
@@ -363,6 +376,11 @@ class ClassWriter<E extends PointerTypes> {
                 parameters: [{name: "visitor", type: "BoxVisitor<R>"}],
                 returnType: "Maybe<R>",
                 statements: `return safeExecute(visitor.visit${className}, this)`
+            })
+            declaration.addGetAccessor({
+                name: "tags",
+                returnType: "Readonly<Record<string, string>>",
+                statements: `return ${className}.Tags`
             })
         }
         declaration.addGetAccessors(this.#fieldPrinter.map(printer => ({
