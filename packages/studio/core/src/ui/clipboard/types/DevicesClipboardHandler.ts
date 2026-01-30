@@ -92,8 +92,8 @@ export namespace DevicesClipboard {
             const dependencies = deviceBoxes.flatMap(box =>
                 Array.from(boxGraph.dependenciesOf(box, {
                     alwaysFollowMandatory: true,
-                    excludeBox: (dep: Box) => dep.ephemeral
-                }).boxes))
+                    excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
+                }).boxes).filter(dep => dep.resource === "external"))
             const allBoxes = [...deviceBoxes, ...dependencies]
             const metadata: DeviceMetadata = {
                 hasInstrument: instrument !== null,
