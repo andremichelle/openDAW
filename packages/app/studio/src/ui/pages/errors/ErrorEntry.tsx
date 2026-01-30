@@ -87,6 +87,8 @@ Error Information:
 ${JSON.stringify(errorData, null, 2)}
 \`\`\`
 
+Before fixing it, tell me how to reproduce it!
+
 Please analyze the error stack trace and logs to identify the root cause and suggest a fix.`
                      navigator.clipboard.writeText(prompt).then(() => {
                          RuntimeNotifier.info({
