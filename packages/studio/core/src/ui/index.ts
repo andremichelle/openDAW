@@ -1,6 +1,7 @@
 export * from "./clipboard/ClipboardManager"
 export * from "./clipboard/ClipboardUtils"
 export * from "./clipboard/ContextMenu"
+export * from "./clipboard/types/DevicesClipboardHandler"
 export * from "./clipboard/types/NotesClipboardHandler"
 export * from "./clipboard/types/RegionsClipboardHandler"
 export * from "./clipboard/types/ValuesClipboardHandler"
