@@ -1,14 +1,15 @@
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
 import {BoxEditing} from "@opendaw/lib-box"
-import {int, Option} from "@opendaw/lib-std"
+import {Arrays, int, isNotNull, Option} from "@opendaw/lib-std"
 import {ppqn, PPQN, RegionCollection} from "@opendaw/lib-dsp"
 import {
     AnyLoopableRegionBoxAdapter,
     AnyRegionBoxAdapter,
+    TrackBoxAdapter,
     UnionAdapterTypes
 } from "@opendaw/studio-adapters"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {RegionModifyStrategy} from "@opendaw/studio-core"
+import {RegionClipResolver, RegionModifyStrategy} from "@opendaw/studio-core"
 import {Dragging} from "@opendaw/lib-dom"
 
 class SelectedModifyStrategy implements RegionModifyStrategy {
@@ -103,7 +104,15 @@ export class RegionContentStartModifier implements RegionModifier {
 
     approve(editing: BoxEditing): void {
         if (this.#delta === 0) {return}
-        editing.modify(() => this.#adapters.forEach(region => region.moveContentStart(this.#delta)))
+        const modifiedTracks: ReadonlyArray<TrackBoxAdapter> = Arrays.removeDuplicates(this.#adapters
+            .map(adapter => adapter.trackBoxAdapter.unwrapOrNull()).filter(isNotNull))
+        const solver = RegionClipResolver
+            .fromSelection(modifiedTracks, this.#adapters.filter(({box}) => box.isAttached()), this, 0)
+        editing.modify(() => {
+            this.#adapters.forEach(region => region.moveContentStart(this.#delta))
+            solver()
+        })
+        RegionClipResolver.validateTracks(modifiedTracks)
     }
 
     cancel(): void {
