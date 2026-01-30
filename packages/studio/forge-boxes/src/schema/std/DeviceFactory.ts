@@ -48,6 +48,7 @@ export namespace DeviceFactory {
 
     export const createInstrument = <FIELDS extends FieldRecord<Pointers>>(
         name: string,
+        content: "notes" | "audio",
         fields: Objects.Disjoint<typeof InstrumentDeviceAttributes, FIELDS> & FieldRecord<Pointers>,
         ...pointers: Array<Pointers>
     ): BoxSchema<Pointers> => {
@@ -56,7 +57,7 @@ export namespace DeviceFactory {
             type: "box",
             class: {name, fields: mergeFields(InstrumentDeviceAttributes, fields as DisjointFields)},
             pointerRules: {accepts: DefaultAudioPointers.concat(pointers), mandatory: false},
-            tags: {type: "device", "device-type": "instrument"}
+            tags: {type: "device", "device-type": "instrument", content}
         }
     }
 

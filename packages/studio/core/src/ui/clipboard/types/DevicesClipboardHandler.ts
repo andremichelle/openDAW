@@ -1,4 +1,4 @@
-import {ByteArrayInput, ByteArrayOutput, int, Option, Provider} from "@opendaw/lib-std"
+import {ByteArrayInput, ByteArrayOutput, int, isDefined, Option, Optional, Provider, RuntimeNotifier} from "@opendaw/lib-std"
 import {Box, BoxEditing, BoxGraph} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {
@@ -18,8 +18,11 @@ import {ClipboardUtils} from "../ClipboardUtils"
 
 type ClipboardDevices = ClipboardEntry<"devices">
 
+type InstrumentContent = "notes" | "audio"
+
 type DeviceMetadata = {
     hasInstrument: boolean
+    instrumentContent: InstrumentContent | ""
     midiEffectCount: int
     midiEffectMaxIndex: int
     audioEffectCount: int
@@ -39,6 +42,7 @@ export namespace DevicesClipboard {
     const encodeMetadata = (metadata: DeviceMetadata): ArrayBufferLike => {
         const output = ByteArrayOutput.create()
         output.writeBoolean(metadata.hasInstrument)
+        output.writeString(metadata.instrumentContent)
         output.writeInt(metadata.midiEffectCount)
         output.writeInt(metadata.midiEffectMaxIndex)
         output.writeInt(metadata.audioEffectCount)
@@ -50,6 +54,7 @@ export namespace DevicesClipboard {
         const input = new ByteArrayInput(buffer)
         return {
             hasInstrument: input.readBoolean(),
+            instrumentContent: input.readString() as InstrumentContent | "",
             midiEffectCount: input.readInt(),
             midiEffectMaxIndex: input.readInt(),
             audioEffectCount: input.readInt(),
@@ -100,8 +105,12 @@ export namespace DevicesClipboard {
                     excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
                 }).boxes).filter(dep => dep.resource === "external"))
             const allBoxes = [...deviceBoxes, ...dependencies]
+            const instrumentContent = instrument !== null
+                ? (instrument.box.tags.content as Optional<InstrumentContent>) ?? ""
+                : ""
             const metadata: DeviceMetadata = {
                 hasInstrument: instrument !== null,
+                instrumentContent,
                 midiEffectCount: midiEffects.length,
                 midiEffectMaxIndex,
                 audioEffectCount: audioEffects.length,
@@ -142,7 +151,18 @@ export namespace DevicesClipboard {
                 const selectedInstrument = selected.find(adapter => adapter.type === "instrument")
                 const selectedMidiEffects = selected.filter(adapter => adapter.type === "midi-effect") as MidiEffectDeviceAdapter[]
                 const selectedAudioEffects = selected.filter(adapter => adapter.type === "audio-effect") as AudioEffectDeviceAdapter[]
-                const replaceInstrument = metadata.hasInstrument && selectedInstrument !== undefined
+                let replaceInstrument = metadata.hasInstrument && isDefined(selectedInstrument)
+                if (replaceInstrument && isDefined(selectedInstrument)) {
+                    const selectedContent = selectedInstrument.box.tags.content as Optional<InstrumentContent>
+                    if (isDefined(selectedContent) && metadata.instrumentContent !== ""
+                        && selectedContent !== metadata.instrumentContent) {
+                        RuntimeNotifier.info({
+                            headline: "Incompatible Instrument",
+                            message: `Cannot replace a '${selectedContent}' instrument with a '${metadata.instrumentContent}' instrument.`
+                        }).finally()
+                        replaceInstrument = false
+                    }
+                }
                 const midiInsertIndex = selectedMidiEffects.length > 0
                     ? selectedMidiEffects.reduce((max, adapter) => Math.max(max, adapter.indexField.getValue()), -1) + 1
                     : 0
@@ -151,7 +171,7 @@ export namespace DevicesClipboard {
                     : 0
                 editing.modify(() => {
                     selection.deselectAll()
-                    if (replaceInstrument) {
+                    if (replaceInstrument && isDefined(selectedInstrument)) {
                         selectedInstrument.box.delete()
                     }
                     for (const adapter of host.midiEffects.adapters()) {

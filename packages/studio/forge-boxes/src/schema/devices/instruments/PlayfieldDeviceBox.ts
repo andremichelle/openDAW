@@ -3,7 +3,7 @@ import {Pointers} from "@opendaw/studio-enums"
 import {DeviceFactory} from "../../std/DeviceFactory"
 import {ParameterPointerRules, UnipolarConstraints} from "../../std/Defaults"
 
-export const PlayfieldDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("PlayfieldDeviceBox", {
+export const PlayfieldDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("PlayfieldDeviceBox", "notes", {
     10: {type: "field", name: "samples", pointerRules: {accepts: [Pointers.Sample], mandatory: false}}
 })
 
