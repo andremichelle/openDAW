@@ -1,6 +1,7 @@
 import css from "./DevicePanel.sass?inline"
 import {
     asDefined,
+    isAbsent,
     Lifecycle,
     MutableObservableOption,
     ObservableOption,
@@ -244,6 +245,12 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
             boxAdapters: service.project.boxAdapters,
             getHost: () => getCurrentDeviceHost().map(host => host.audioUnitBoxAdapter())
         })),
+        Events.subscribe(devices, "pointerdown", (event: PointerEvent) => {
+            const target = event.target
+            if (target instanceof Element && isAbsent(target.closest("[data-drag]"))) {
+                service.project.deviceSelection.deselectAll()
+            }
+        }),
         Events.subscribe(element, "keydown", (event: KeyboardEvent) => {
             if (Keyboard.isDelete(event)) {
                 const {deviceSelection, editing} = service.project

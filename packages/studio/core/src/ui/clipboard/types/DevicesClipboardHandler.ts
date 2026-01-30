@@ -8,6 +8,7 @@ import {
     DeviceBoxAdapter,
     DeviceBoxUtils,
     Devices,
+    EffectDeviceBox,
     FilteredSelection,
     InstrumentDeviceBoxAdapter,
     MidiEffectDeviceAdapter
@@ -80,15 +81,19 @@ export namespace DevicesClipboard {
                 }
             }
             if (instrument === null && midiEffects.length === 0 && audioEffects.length === 0) {return Option.None}
+            midiEffects.sort((a, b) => a.indexField.getValue() - b.indexField.getValue())
+            audioEffects.sort((a, b) => a.indexField.getValue() - b.indexField.getValue())
             const midiEffectMaxIndex = midiEffects.length > 0
-                ? midiEffects.reduce((max, adapter) => Math.max(max, adapter.indexField.getValue()), Number.NEGATIVE_INFINITY)
+                ? midiEffects[midiEffects.length - 1].indexField.getValue()
                 : 0
             const audioEffectMaxIndex = audioEffects.length > 0
-                ? audioEffects.reduce((max, adapter) => Math.max(max, adapter.indexField.getValue()), Number.NEGATIVE_INFINITY)
+                ? audioEffects[audioEffects.length - 1].indexField.getValue()
                 : 0
-            const deviceBoxes = selected
-                .filter(adapter => adapter.type === "instrument" || adapter.type === "midi-effect" || adapter.type === "audio-effect")
-                .map(adapter => adapter.box)
+            const deviceBoxes = [
+                ...(instrument !== null ? [instrument.box] : []),
+                ...midiEffects.map(adapter => adapter.box),
+                ...audioEffects.map(adapter => adapter.box)
+            ]
             const dependencies = deviceBoxes.flatMap(box =>
                 Array.from(boxGraph.dependenciesOf(box, {
                     alwaysFollowMandatory: true,
@@ -161,8 +166,6 @@ export namespace DevicesClipboard {
                             adapter.indexField.setValue(currentIndex + metadata.audioEffectCount)
                         }
                     }
-                    let midiIdx = midiInsertIndex
-                    let audioIdx = audioInsertIndex
                     const boxes = ClipboardUtils.deserializeBoxes(
                         entry.data,
                         boxGraph,
@@ -179,19 +182,20 @@ export namespace DevicesClipboard {
                                 }
                                 return Option.None
                             },
-                            modifyBox: box => {
-                                if (DeviceBoxUtils.isEffectDeviceBox(box)) {
-                                    if (box.tags.deviceType === "midi-effect") {
-                                        box.index.setValue(midiIdx++)
-                                    } else if (box.tags.deviceType === "audio-effect") {
-                                        box.index.setValue(audioIdx++)
-                                    }
-                                }
-                            },
                             excludeBox: box => DeviceBoxUtils.isInstrumentDeviceBox(box) && !replaceInstrument
                         }
                     )
                     const deviceBoxes = boxes.filter(box => DeviceBoxUtils.isDeviceBox(box))
+                    const newMidiEffects = deviceBoxes
+                        .filter((box): box is EffectDeviceBox =>
+                            DeviceBoxUtils.isEffectDeviceBox(box) && box.tags.deviceType === "midi-effect")
+                        .sort((a, b) => a.index.getValue() - b.index.getValue())
+                    const newAudioEffects = deviceBoxes
+                        .filter((box): box is EffectDeviceBox =>
+                            DeviceBoxUtils.isEffectDeviceBox(box) && box.tags.deviceType === "audio-effect")
+                        .sort((a, b) => a.index.getValue() - b.index.getValue())
+                    newMidiEffects.forEach((box, idx) => box.index.setValue(midiInsertIndex + idx))
+                    newAudioEffects.forEach((box, idx) => box.index.setValue(audioInsertIndex + idx))
                     selection.select(...deviceBoxes.map(box => boxAdapters.adapterFor(box, Devices.isAny)))
                 })
             }
