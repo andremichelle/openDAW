@@ -346,7 +346,7 @@ class ClassWriter<E extends PointerTypes> {
                 : "Object.freeze({})"
             declaration.addProperty({
                 name: "Tags",
-                type: "Readonly<Record<string, string>>",
+                type: "Readonly<Record<string, string | number | boolean>>",
                 isStatic: true,
                 isReadonly: true,
                 initializer: tagsValue
@@ -379,7 +379,7 @@ class ClassWriter<E extends PointerTypes> {
             })
             declaration.addGetAccessor({
                 name: "tags",
-                returnType: "Readonly<Record<string, string>>",
+                returnType: "Readonly<Record<string, string | number | boolean>>",
                 statements: `return ${className}.Tags`
             })
         }

@@ -3,10 +3,10 @@ import {Box, BoxEditing, BoxGraph} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {
     AudioEffectDeviceAdapter,
-    AudioUnitBoxAdapter,
     BoxAdapters,
     DeviceBoxAdapter,
     DeviceBoxUtils,
+    DeviceHost,
     Devices,
     EffectDeviceBox,
     FilteredSelection,
@@ -36,7 +36,7 @@ export namespace DevicesClipboard {
         readonly selection: FilteredSelection<DeviceBoxAdapter>
         readonly boxGraph: BoxGraph
         readonly boxAdapters: BoxAdapters
-        readonly getHost: Provider<Option<AudioUnitBoxAdapter>>
+        readonly getHost: Provider<Option<DeviceHost>>
     }
 
     const encodeMetadata = (metadata: DeviceMetadata): ArrayBufferLike => {
@@ -70,8 +70,10 @@ export namespace DevicesClipboard {
                                       boxAdapters,
                                       getHost
                                   }: Context): ClipboardHandler<ClipboardDevices> => {
+        const isCopyable = (adapter: DeviceBoxAdapter): boolean => adapter.box.tags.copyable !== false
+        const copyableSelected = (): ReadonlyArray<DeviceBoxAdapter> => selection.selected().filter(isCopyable)
         const copyDevices = (): Option<ClipboardDevices> => {
-            const selected = selection.selected()
+            const selected = copyableSelected()
             if (selected.length === 0) {return Option.None}
             let instrument: InstrumentDeviceBoxAdapter | null = null
             const midiEffects: Array<MidiEffectDeviceAdapter> = []
@@ -120,8 +122,8 @@ export namespace DevicesClipboard {
             return Option.wrap({type: "devices", data})
         }
         return {
-            canCopy: (): boolean => getEnabled() && selection.nonEmpty(),
-            canCut: (): boolean => getEnabled() && selection.nonEmpty(),
+            canCopy: (): boolean => getEnabled() && copyableSelected().length > 0,
+            canCut: (): boolean => getEnabled() && copyableSelected().length > 0,
             canPaste: (entry: ClipboardEntry): boolean => getEnabled() && entry.type === "devices",
             copy: copyDevices,
             cut: (): Option<ClipboardDevices> => {
@@ -152,6 +154,7 @@ export namespace DevicesClipboard {
                 const selectedMidiEffects = selected.filter(adapter => adapter.type === "midi-effect") as MidiEffectDeviceAdapter[]
                 const selectedAudioEffects = selected.filter(adapter => adapter.type === "audio-effect") as AudioEffectDeviceAdapter[]
                 let replaceInstrument = metadata.hasInstrument && isDefined(selectedInstrument)
+                    && selectedInstrument.box.tags.copyable !== false
                 if (replaceInstrument && isDefined(selectedInstrument)) {
                     const selectedContent = selectedInstrument.box.tags.content as Optional<InstrumentContent>
                     if (isDefined(selectedContent) && metadata.instrumentContent !== ""

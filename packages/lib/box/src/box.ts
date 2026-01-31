@@ -76,7 +76,7 @@ export abstract class Box<P extends PointerTypes = PointerTypes, F extends Field
 
     protected abstract initializeFields(): F
 
-    abstract get tags(): Readonly<Record<string, string>>
+    abstract get tags(): Readonly<Record<string, string | number | boolean>>
     abstract accept<VISITOR extends VertexVisitor<any>>(visitor: VISITOR): VISITOR extends VertexVisitor<infer R> ? Maybe<R> : void
 
     fields(): ReadonlyArray<Field> {return Object.values(this.#fields)}

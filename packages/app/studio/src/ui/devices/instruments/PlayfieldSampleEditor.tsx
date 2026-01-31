@@ -60,7 +60,6 @@ export const PlayfieldSampleEditor = ({lifecycle, service, adapter, deviceHost}:
                           lifecycle.ownAll(
                               Terminable.create(() => noteLifeTime.terminate()),
                               TextTooltip.default(deviceLabel, () => "Go back to device"),
-                              TextTooltip.default(playLabel, () => "Play sample"),
                               Events.subscribe(playLabel, "dblclick", event => event.stopPropagation()),
                               Events.subscribe(playLabel, "pointerdown", (event: PointerEvent) => {
                                   event.stopPropagation()

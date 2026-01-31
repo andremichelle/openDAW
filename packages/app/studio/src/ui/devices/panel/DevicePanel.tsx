@@ -243,7 +243,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
             selection: service.project.deviceSelection,
             boxGraph: service.project.boxGraph,
             boxAdapters: service.project.boxAdapters,
-            getHost: () => getCurrentDeviceHost().map(host => host.audioUnitBoxAdapter())
+            getHost: () => getCurrentDeviceHost()
         })),
         Events.subscribe(devices, "pointerdown", (event: PointerEvent) => {
             const target = event.target
@@ -257,7 +257,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
                 if (deviceSelection.isEmpty()) {return}
                 const optHost = getCurrentDeviceHost()
                 if (optHost.isEmpty()) {return}
-                const host = optHost.unwrap().audioUnitBoxAdapter()
+                const host = optHost.unwrap()
                 const selected = new Set(deviceSelection.selected().filter(adapter => adapter.type !== "instrument"))
                 if (selected.size === 0) {return}
                 event.preventDefault()

@@ -39,7 +39,7 @@ export type BoxSchema<E extends PointerTypes> = Referencable<E> & {
     class: ClassSchema<E>
     ephemeral?: boolean
     resource?: ResourceType
-    tags?: Record<string, string>
+    tags?: Record<string, string | number | boolean>
 }
 export type ObjectSchema<E extends PointerTypes> = {
     type: "object"
