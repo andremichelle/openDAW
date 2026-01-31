@@ -87,6 +87,7 @@ export class TrackBoxAdapter implements BoxAdapter {
     get targetDeviceName(): Option<string> {
         return this.#box.target.targetVertex.flatMap(targetVertex => {
             const vertex = targetVertex.box
+            console.debug("targetDeviceName", vertex)
             if (vertex instanceof AudioUnitBox) {
                 const adapter = this.#context.boxAdapters.adapterFor(vertex, AudioUnitBoxAdapter)
                 return adapter.input.label
@@ -102,6 +103,7 @@ export class TrackBoxAdapter implements BoxAdapter {
         const targetVertex = this.#box.target.targetVertex
         if (targetVertex.nonEmpty()) {
             const vertex = targetVertex.unwrap().box
+            console.debug("#catchupAndSubscribeTargetDeviceName", vertex)
             if (vertex instanceof AudioUnitBox) {
                 const adapter = this.#context.boxAdapters.adapterFor(vertex, AudioUnitBoxAdapter)
                 return adapter.input.catchupAndSubscribeLabelChange(option => observer(option))

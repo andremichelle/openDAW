@@ -34,7 +34,7 @@ import {NoEffectPlaceholder} from "@/ui/devices/panel/NoEffectPlaceholder"
 import {DeviceMount} from "@/ui/devices/panel/DeviceMount"
 import {Box} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {ClipboardManager, DevicesClipboard, Project, ProjectProfile} from "@opendaw/studio-core"
+import {Project, ProjectProfile} from "@opendaw/studio-core"
 import {ShadertoyPreview} from "@/ui/devices/panel/ShadertoyPreview"
 
 const className = Html.adoptStyleSheet(css, "DevicePanel")
@@ -237,14 +237,6 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         Events.subscribe(element, "wheel", (event: WheelEvent) => scrollModel.moveBy(event.deltaX), {passive: true}),
         installAutoScroll(devices, (deltaX, _deltaY) => scrollModel.position += deltaX, {padding: [0, 32, 0, 0]}),
         DevicePanelDragAndDrop.install(service.project, devices, midiEffectsContainer, instrumentContainer, audioEffectsContainer),
-        ClipboardManager.install(devices, DevicesClipboard.createHandler({
-            getEnabled: () => getCurrentDeviceHost().nonEmpty(),
-            editing: service.project.editing,
-            selection: service.project.deviceSelection,
-            boxGraph: service.project.boxGraph,
-            boxAdapters: service.project.boxAdapters,
-            getHost: () => getCurrentDeviceHost()
-        })),
         Events.subscribe(devices, "pointerdown", (event: PointerEvent) => {
             const target = event.target
             if (target instanceof Element && isAbsent(target.closest("[data-drag]"))) {

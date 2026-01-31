@@ -3,8 +3,9 @@ import {Editing, Errors, Lifecycle, ObservableValue, panic, Procedure, Provider}
 import {createElement, Group, JsxValue} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
-import {MenuItem, Project} from "@opendaw/studio-core"
-import {DeviceBoxAdapter, DeviceType, EffectDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {ClipboardManager, DevicesClipboard, MenuItem, Project} from "@opendaw/studio-core"
+import {DeviceBoxAdapter, DeviceHost, DeviceType, EffectDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {Option} from "@opendaw/lib-std"
 import {DebugMenus} from "@/ui/menu/debug.ts"
 import {DragDevice} from "@/ui/AnyDragData"
 import {DragAndDrop} from "@/ui/DragAndDrop"
@@ -70,22 +71,15 @@ export const DeviceEditor =
         const color = getColorFor(type)
         return (
             <div className={Html.buildClassList(className, customClassName)}
-                 tabIndex={0}
                  onInit={element => {
-                     const updateSelected = () =>
-                         element.classList.toggle("selected", project.deviceSelection.isSelected(adapter))
                      lifecycle.ownAll(
                          enabledField.catchupAndSubscribe((owner: ObservableValue<boolean>) =>
                              element.classList.toggle("enabled", owner.getValue())),
                          minimizedField.catchupAndSubscribe((owner: ObservableValue<boolean>) =>
-                             element.classList.toggle("minimized", owner.getValue())),
-                         project.deviceSelection.catchupAndSubscribe({
-                             onSelected: updateSelected,
-                             onDeselected: updateSelected
-                         })
+                             element.classList.toggle("minimized", owner.getValue()))
                      )
                  }} data-drag>
-                <header onpointerdown={event => {
+                <header tabIndex={0} onpointerdown={event => {
                     const {deviceSelection} = project
                     if (event.shiftKey) {
                         if (deviceSelection.isSelected(adapter)) {
@@ -98,6 +92,22 @@ export const DeviceEditor =
                         deviceSelection.select(adapter)
                     }
                 }} onInit={element => {
+                    const updateSelected = () =>
+                        element.classList.toggle("selected", project.deviceSelection.isSelected(adapter))
+                    lifecycle.ownAll(
+                        project.deviceSelection.catchupAndSubscribe({
+                            onSelected: updateSelected,
+                            onDeselected: updateSelected
+                        }),
+                        ClipboardManager.install(element, DevicesClipboard.createHandler({
+                            getEnabled: () => true,
+                            editing: project.editing,
+                            selection: project.deviceSelection,
+                            boxGraph: project.boxGraph,
+                            boxAdapters: project.boxAdapters,
+                            getHost: (): Option<DeviceHost> => Option.wrap(adapter.deviceHost())
+                        }))
+                    )
                     if (type === "midi-effect" || type === "audio-effect") {
                         const effect = adapter as EffectDeviceBoxAdapter
                         lifecycle.own(DragAndDrop.installSource(element, () => ({
