@@ -4,6 +4,7 @@ import {
     AssertType,
     Class,
     isDefined,
+    Option,
     panic,
     SortedSet,
     Subscription,
@@ -22,16 +23,16 @@ import {
     AudioUnitBox,
     AuxSendBox,
     BoxVisitor,
-    MaximizerDeviceBox,
     CompressorDeviceBox,
     CrusherDeviceBox,
-    GateDeviceBox,
     DattorroReverbDeviceBox,
     DelayDeviceBox,
     DeviceInterfaceKnobBox,
     FoldDeviceBox,
+    GateDeviceBox,
     GrooveShuffleBox,
     MarkerBox,
+    MaximizerDeviceBox,
     MIDIOutputDeviceBox,
     ModularAudioInputBox,
     ModularAudioOutputBox,
@@ -183,6 +184,8 @@ export class BoxAdapters implements Terminable {
         }
         return panic("Unknown checkType method")
     }
+
+    optAdapter(box: Box): Option<BoxAdapter> {return this.#adapters.opt(box.address.uuid)}
 
     #create(unknownBox: Box): BoxAdapter {
         return asDefined(unknownBox.accept<BoxVisitor<BoxAdapter>>({

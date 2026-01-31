@@ -57,7 +57,7 @@ export class TrackBoxAdapter implements BoxAdapter {
             }
         }
         return Terminable.many(
-            this.#catchupAndSubscribeTargetDeviceName(option => {
+            this.#catchupAndSubscribeTargetName(option => {
                 if (path[0].equals(option)) {return}
                 path[0] = option
                 updater()
@@ -72,48 +72,57 @@ export class TrackBoxAdapter implements BoxAdapter {
 
     get context(): BoxAdaptersContext {return this.#context}
 
-    set targetDeviceName(value: string) {
+    set targetName(value: string) {
         this.#box.target.targetVertex.ifSome(targetVertex => {
-            const vertex = targetVertex.box
-            if (vertex instanceof AudioUnitBox) {
-                const adapter = this.#context.boxAdapters.adapterFor(vertex, AudioUnitBoxAdapter)
-                return adapter.input.adapter().ifSome(({labelField}) => labelField.setValue(value))
-            } else if ("label" in vertex && vertex.label instanceof StringField) {
-                return vertex.label.setValue(value)
+            const box = targetVertex.box
+            if (box instanceof AudioUnitBox) {
+                const adapter = this.#context.boxAdapters.adapterFor(box, AudioUnitBoxAdapter)
+                adapter.input.adapter().ifSome(input => input.labelField.setValue(value))
+                return
             }
+            this.#context.boxAdapters.optAdapter(box).ifSome(adapter => {
+                if ("labelField" in adapter && adapter.labelField instanceof StringField) {
+                    adapter.labelField.setValue(value)
+                }
+            })
         })
     }
 
-    get targetDeviceName(): Option<string> {
+    get targetName(): Option<string> {
         return this.#box.target.targetVertex.flatMap(targetVertex => {
-            const vertex = targetVertex.box
-            console.debug("targetDeviceName", vertex)
-            if (vertex instanceof AudioUnitBox) {
-                const adapter = this.#context.boxAdapters.adapterFor(vertex, AudioUnitBoxAdapter)
+            const box = targetVertex.box
+            if (box instanceof AudioUnitBox) {
+                const adapter = this.#context.boxAdapters.adapterFor(box, AudioUnitBoxAdapter)
                 return adapter.input.label
-            } else if ("label" in vertex && vertex.label instanceof StringField) {
-                return Option.wrap(vertex.label.getValue())
-            } else {
-                return Option.wrap(vertex.name)
             }
+            const optAdapter = this.#context.boxAdapters.optAdapter(box)
+            if (optAdapter.nonEmpty()) {
+                const adapter = optAdapter.unwrap()
+                if ("labelField" in adapter && adapter.labelField instanceof StringField) {
+                    return Option.wrap(adapter.labelField.getValue())
+                }
+            }
+            return Option.wrap(box.name)
         })
     }
 
-    #catchupAndSubscribeTargetDeviceName(observer: Observer<Option<string>>): Subscription {
+    #catchupAndSubscribeTargetName(observer: Observer<Option<string>>): Subscription {
         const targetVertex = this.#box.target.targetVertex
         if (targetVertex.nonEmpty()) {
-            const vertex = targetVertex.unwrap().box
-            console.debug("#catchupAndSubscribeTargetDeviceName", vertex)
-            if (vertex instanceof AudioUnitBox) {
-                const adapter = this.#context.boxAdapters.adapterFor(vertex, AudioUnitBoxAdapter)
+            const box = targetVertex.unwrap().box
+            if (box instanceof AudioUnitBox) {
+                const adapter = this.#context.boxAdapters.adapterFor(box, AudioUnitBoxAdapter)
                 return adapter.input.catchupAndSubscribeLabelChange(option => observer(option))
-            } else if ("label" in vertex && vertex.label instanceof StringField) {
-                return vertex.label.catchupAndSubscribe(owner => observer(Option.wrap(owner.getValue())))
-            } else {
-                // This will probably not happen. It is just a fallback.
-                observer(Option.wrap(vertex.name))
-                return Terminable.Empty
             }
+            const optAdapter = this.#context.boxAdapters.optAdapter(box)
+            if (optAdapter.nonEmpty()) {
+                const adapter = optAdapter.unwrap()
+                if ("labelField" in adapter && adapter.labelField instanceof StringField) {
+                    return adapter.labelField.catchupAndSubscribe(owner => observer(Option.wrap(owner.getValue())))
+                }
+            }
+            observer(Option.wrap(box.name))
+            return Terminable.Empty
         }
         observer(Option.None)
         return Terminable.Empty

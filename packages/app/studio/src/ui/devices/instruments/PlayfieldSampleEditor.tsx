@@ -25,7 +25,6 @@ export const PlayfieldSampleEditor = ({lifecycle, service, adapter, deviceHost}:
     const {project} = service
     const {engine, liveStreamReceiver, userEditingManager} = project
     const audioUnitBoxAdapter = deviceHost.audioUnitBoxAdapter()
-    const fileName = adapter.file().mapOr(file => file.box.fileName.getValue(), "N/A")
     const deviceName = adapter.device().labelField.getValue()
     const goDevice = () => userEditingManager.audioUnit.edit(deviceHost.audioUnitBoxAdapter().box.editing)
     return (
@@ -51,14 +50,16 @@ export const PlayfieldSampleEditor = ({lifecycle, service, adapter, deviceHost}:
                                   {deviceName}
                               </span>
                           )
+                          const fileNameLabel: HTMLElement = (<span/>)
                           const playLabel: HTMLElement = (
                               <span className="play-label">
-                                  <Icon symbol={IconSymbol.Play}/> {fileName}
+                                  <Icon symbol={IconSymbol.Play}/> {fileNameLabel}
                               </span>
                           )
                           let noteLifeTime = Terminable.Empty
                           lifecycle.ownAll(
                               Terminable.create(() => noteLifeTime.terminate()),
+                              adapter.labelField.catchupAndSubscribe(owner => fileNameLabel.textContent = owner.getValue()),
                               TextTooltip.default(deviceLabel, () => "Go back to device"),
                               Events.subscribe(playLabel, "dblclick", event => event.stopPropagation()),
                               Events.subscribe(playLabel, "pointerdown", (event: PointerEvent) => {

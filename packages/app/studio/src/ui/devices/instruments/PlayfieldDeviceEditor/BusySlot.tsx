@@ -115,16 +115,19 @@ export const BusySlot = ({
             fileHandlerSubscription.terminate()
             if (pointer.isEmpty()) {return}
             sample.file().ifSome(file => {
-                fileHandlerSubscription = file.getOrCreateLoader().subscribe(state => {
-                    if (state.type === "loaded") {
-                        labelName.textContent = file.box.fileName.getValue()
-                        waveformPainter.requestUpdate()
-                    } else if (state.type === "progress") {
-                        labelName.textContent = `Loading... (${Math.round(state.progress * 100.0)}%)`
-                    } else if (state.type === "error") {
-                        labelName.textContent = state.reason
-                    }
-                })
+                fileHandlerSubscription = Terminable.many(
+                    file.getOrCreateLoader().subscribe(state => {
+                        if (state.type === "loaded") {
+                            labelName.textContent = file.box.fileName.getValue()
+                            waveformPainter.requestUpdate()
+                        } else if (state.type === "progress") {
+                            labelName.textContent = `Loading... (${Math.round(state.progress * 100.0)}%)`
+                        } else if (state.type === "error") {
+                            labelName.textContent = state.reason
+                        }
+                    }),
+                    file.box.fileName.subscribe(() => labelName.textContent = file.box.fileName.getValue())
+                )
             })
         }),
         service.project.liveStreamReceiver.subscribeFloats(sample.address, array => sample.file().flatMap(file => file.data)
