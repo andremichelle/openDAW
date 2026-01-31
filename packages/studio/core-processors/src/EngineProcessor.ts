@@ -258,7 +258,11 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                     this.#context = Option.None
                     this.#valid = false
                     this.#ignoredRegions.clear()
+                    // First disconnect all edges across all units before terminating any unit
+                    this.#audioUnits.forEach(unit => unit.invalidateWiring())
                     this.#terminator.terminate()
+                    this.#audioUnits.forEach(unit => unit.terminate())
+                    this.#audioUnits.clear()
                 }
             }),
             this.#rootBoxAdapter.audioUnits.catchupAndSubscribe({

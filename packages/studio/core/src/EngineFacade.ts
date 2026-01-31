@@ -62,6 +62,7 @@ export class EngineFacade implements Engine {
     assertWorklet(): void {this.#worklet.unwrap("No worklet available")}
 
     releaseWorklet(): void {
+        this.#worklet.ifSome(worklet => worklet.terminate())
         this.#preferencesFacade.releaseHost()
         this.#lifecycle.terminate()
         this.#worklet = Option.None

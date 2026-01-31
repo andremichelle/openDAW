@@ -36,7 +36,7 @@ export class AudioDeviceChain implements DeviceChain {
         this.#auxSends = UUID.newSet(device => device.adapter.uuid)
         this.#channelStrip = this.#terminator.own(new ChannelStripProcessor(this.#audioUnit.context, this.#audioUnit.adapter))
         this.#effects = UUID.newSet(({device}) => device.uuid)
-        this.#disconnector = this.#terminator.own(new Terminator())
+        this.#disconnector = new Terminator()
 
         this.#terminator.ownAll(
             this.#audioUnit.adapter.audioEffects.catchupAndSubscribe({
@@ -78,7 +78,8 @@ export class AudioDeviceChain implements DeviceChain {
                     this.#wire()
                     this.#needsWiring = false
                 }
-            })
+            }),
+            this.#disconnector
         )
     }
 
