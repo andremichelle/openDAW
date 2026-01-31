@@ -120,7 +120,7 @@ export class OdieService {
         }
     }
 
-    // [ANTIGRAVITY] Validate API Connection for active provider
+    // Validate API Connection for active provider
     async validateConnection(): Promise<void> {
         this.connectionStatus.setValue("checking")
         const provider = this.ai.getActiveProvider()
@@ -558,7 +558,7 @@ ${JSON.stringify({
             const newAll = [...all]
             let content = `Error: ${errMsg}`
 
-            // [ANTIGRAVITY] Intercept 404 / Model Not Found (Sync Error)
+            // Intercept 404 / Model Not Found (Sync Error)
             if (errMsg.includes("404") || errMsg.includes("Not Found") || errMsg.includes("Failed to fetch")) {
                 content = "```json\n" + JSON.stringify({
                     ui_component: "error_card",

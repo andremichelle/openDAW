@@ -1,6 +1,6 @@
 import { ObservableValue } from "@opendaw/lib-std"
 
-// -- TOOLING INTERFACES (The Nervous System) --
+// Tooling Interfaces
 
 export interface LLMTool {
     name: string
@@ -36,7 +36,7 @@ export interface ProviderConfig {
     baseUrl?: string
     modelId?: string
     forceAgentMode?: boolean // Manual Override
-    // [Gemini 3 Spec]
+    // Gemini 3 Spec
     thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high'
     mediaResolution?: 'low' | 'medium' | 'high' | 'ultra_high'
 }

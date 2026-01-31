@@ -246,7 +246,7 @@ export class Gemini3Provider implements LLMProvider {
         const baseIdentity = systemMsg ? systemMsg.content : ""
         const systemPromptText = context ? JSON.stringify(context) : ""
 
-        const toolProtocol = `\n\n[TOOL PROTOCOL]\nUse tools for DAW control (playback, tracks, mixer) and UI widgets when requested.`
+        const toolProtocol = `\n\nUse tools for DAW control (playback, tracks, mixer) and UI widgets when requested.`
         const systemInstruction = {
             parts: [{ text: baseIdentity + "\n\n" + systemPromptText + toolProtocol }]
         }

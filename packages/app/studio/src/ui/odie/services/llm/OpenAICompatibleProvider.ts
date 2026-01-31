@@ -17,7 +17,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     private config: ProviderConfig = {}
 
-    // [ANTIGRAVITY] Callback for persistence
+    // Callback for persistence
     public onConfigChange?: (newConfig: ProviderConfig) => void
 
     // Cache for capabilities to avoid spamming /api/show
@@ -175,7 +175,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     }
 
     configure(config: ProviderConfig) {
-        // [ANTIGRAVITY] Clean up baseUrl to ensure it's a root or appropriate endpoint
+        // Clean up baseUrl to ensure it's a root or appropriate endpoint
         if (config.baseUrl && this.id === "ollama") {
             let clean = config.baseUrl.trim()
             if (clean.endsWith("/api/chat")) clean = clean.replace(/\/api\/chat\/?$/, "")
@@ -224,7 +224,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
                             this.debugLog += `[Auto-Detect] Success. Using: ${model}\n`
 
                             this.config.modelId = model
-                            // [ANTIGRAVITY] Persist the auto-detected model
+                            // Persist the auto-detected model
                             if (this.onConfigChange) this.onConfigChange({ ...this.config })
                         } else {
                             this.debugLog += `[Auto-Detect] Failed. No models found.\n`
@@ -503,7 +503,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
                 this.debugLog += `[Fatal] ${e.message}\n`
                 console.error(e)
 
-                // [ANTIGRAVITY] Enhanced CORS/Network Error Detection
+                // Enhanced CORS/Network Error Detection
                 const isCORSorNetworkError = e instanceof TypeError || e.message === "Failed to fetch" || e.message.includes("NetworkError")
 
                 if (isCORSorNetworkError && (targetUrl.includes("localhost") || targetUrl.includes("127.0.0.1"))) {
@@ -598,7 +598,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
             const timeout2 = setTimeout(() => controller2.abort(), 10000)
 
             try {
-                // [ANTIGRAVITY] Optimization: If we are on HTTPS, direct fetch to HTTP localhost will ALWAYS fail CORS/Mixed Content.
+                // Optimization: If we are on HTTPS, direct fetch to HTTP localhost will ALWAYS fail CORS/Mixed Content.
                 // In this case, Strategy 2 is a waste of time. Skip and let Strategy 3 (Proxy) handle it.
                 if (location.protocol === "https:" && targetUrl2.startsWith("http://")) {
                     log += `\nSkipping Strategy 2 (Direct HTTP to HTTPS origin will fail).`
@@ -648,7 +648,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
                     try {
                         const controller3 = new AbortController()
-                        const timeout3 = setTimeout(() => controller3.abort(), 5000) // [ANTIGRAVITY] Increased to 5s to avoid flakiness
+                        const timeout3 = setTimeout(() => controller3.abort(), 5000) // Increased to 5s to avoid flakiness
                         const res = await fetch(fallbackUrl, { signal: controller3.signal })
                         clearTimeout(timeout3)
 
@@ -660,10 +660,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
                                 data.models.forEach((m: any) => foundModels.add(m.name || m.id || m.model))
                                 if (foundModels.size > 0) {
                                     log += `\n🎯 Auto-Detect Success! Switching baseUrl to: ${fallbackBase}`
-                                    // [ANTIGRAVITY] AUTO-HEAL: Update the instance URL so chat works
+                                    // AUTO-HEAL: Update the instance URL so chat works
                                     // Note: This overrides the user's bad config for this session.
                                     this.config.baseUrl = fallbackBase
-                                    // [ANTIGRAVITY] AUTO-HEAL: Persist the working URL
+                                    // AUTO-HEAL: Persist the working URL
                                     if (this.onConfigChange) this.onConfigChange({ ...this.config })
                                     break // Stop trying fallbacks
 
@@ -675,7 +675,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
                     }
                 }
 
-                // [ANTIGRAVITY] If we found models via Strategy 3, clear the previous errors in debug log
+                // If we found models via Strategy 3, clear the previous errors in debug log
                 // so that validate() returns a success status.
                 if (foundModels.size > 0 && log.includes("Error:")) {
                     log = log.replace(/\[Strategy 1\][\s\S]*?\[Strategy 3\]/, "[Strategy 1 & 2 Failed (CORS/Network), but Strategy 3 Saved the Day]\n\n[Strategy 3]")

@@ -207,7 +207,7 @@ export const OdieSidebar = (props: { service: StudioService, lifecycle: Terminat
             }
         }))
 
-        // [ANTIGRAVITY] Subscribe to View State (Settings / Chat)
+        // Subscribe to View State (Settings / Chat)
         lifecycle.own(odieService.viewState.subscribe((observer: any) => {
             const state = observer.getValue()
             if (state === "settings") {

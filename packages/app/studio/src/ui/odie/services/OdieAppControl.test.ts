@@ -4,7 +4,7 @@ import { mockStudio } from './mocks/MockStudioService'
 import { OdieAppControl } from './OdieAppControl'
 import { StudioService } from '@/service/StudioService'
 
-describe('OdieAppControl (The Nervous System)', () => {
+describe('OdieAppControl', () => {
     let odie: OdieAppControl
 
     beforeEach(() => {
@@ -13,7 +13,7 @@ describe('OdieAppControl (The Nervous System)', () => {
         odie = new OdieAppControl(mockStudio as unknown as StudioService)
     })
 
-    describe('The Heart (Transport)', () => {
+    describe('Transport', () => {
         it('should trigger PLAY when requested', () => {
             // Act
             odie.play()
@@ -47,7 +47,7 @@ describe('OdieAppControl (The Nervous System)', () => {
         })
     })
 
-    describe('The Hands (Mixer)', () => {
+    describe('Mixer', () => {
         it('should find a track and set VOLUME', async () => {
             // Arrange: Simulator setup
             const track = mockStudio.addFakeTrack("Kick")
@@ -94,7 +94,7 @@ describe('OdieAppControl (The Nervous System)', () => {
         })
     })
 
-    describe('The Eyes (Arrangement)', () => {
+    describe('Arrangement', () => {
         it('should LIST tracks', () => {
             mockStudio.addFakeTrack("Voice")
             mockStudio.addFakeTrack("Guitar")
@@ -120,7 +120,7 @@ describe('OdieAppControl (The Nervous System)', () => {
         })
     })
 
-    describe('The Nervous System (GenUI Resolution)', () => {
+    describe('GenUI Parameter Resolution', () => {
         it('should resolve Track VOLUME', async () => {
             mockStudio.addFakeTrack("Kick")
             const adapter = odie.resolveParameter("Kick/volume")
