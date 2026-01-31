@@ -22,7 +22,7 @@ import { TestPage } from "@/ui/pages/TestPage"
 import { OdieSidebar } from "@/ui/odie/OdieSidebar"
 
 export const App = (service: StudioService) => {
-    console.log("%c OpenDAW Next: Odie Integrated ", "background: purple; color: white; font-size: 20px")
+    console.log("%c OpenDAW Next: Odie Integrated ", "background: #06b6d4; color: white; font-size: 20px")
     const terminator = new Terminator()
     return (
         <Frag>

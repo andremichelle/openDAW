@@ -1,0 +1,2265 @@
+Starting CodeRabbit review in plain text mode...
+
+Connecting to review service
+Setting up
+Analyzing
+Reviewing
+
+============================================================================
+File: packages/app/studio/public/manuals/cloud-backup.md
+Line: 1 to 9
+Type: potential_issue
+
+Comment:
+Enrich the desc metadata field with meaningful content.
+
+The desc field value "Documentation" is too generic and doesn't convey the purpose of the page. This metadata likely serves SEO, indexing, or discovery purposes. Replace it with a concise, descriptive summary of the page's content.
+
+Example: "Learn how to back up your openDAW projects to Google Drive or Dropbox using cloud backup."
+
+
+
+
+📝 Proposed metadata enhancement
+
+- desc: Documentation
++ desc: Learn how to back up your openDAW projects using Google Drive or Dropbox with OAuth authentication.
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/cloud-backup.md around lines 1 - 9, Update the frontmatter desc field to a concise, meaningful summary that describes the page’s purpose instead of the generic "Documentation"; specifically replace the desc value with a short sentence such as "Learn how to back up your openDAW projects to cloud services like Google Drive and Dropbox using the Studio cloud backup feature," ensuring the new text accurately reflects the page content for SEO and discovery.
+
+
+
+============================================================================
+File: packages/app/studio/public/manuals/cloud-backup.md
+Line: 4 to 7
+Type: nitpick
+
+Comment:
+Remove redundant tag: "Studio Manual" is already the category.
+
+The tag array includes "Studio Manual", which duplicates the value in the category field. Consider removing it to avoid redundancy, unless there's a specific reason to maintain both (e.g., for search/filter logic).
+
+
+
+
+🏷️ Proposed tag refinement
+
+  tags:
+    - manual
+-   - Studio Manual
+    - cloud-backup
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/cloud-backup.md around lines 4 - 7, The tags array contains a redundant entry "Studio Manual" that duplicates the existing category field; update the frontmatter by removing "Studio Manual" from the tags list (leave other tags intact) unless there's an explicit search/filter requirement that needs both, ensuring the "tags" array no longer repeats the "category" value.
+
+
+
+============================================================================
+File: packages/app/studio/public/manuals/odie/free-ai-guide.md
+Line: 44
+Type: potential_issue
+
+Comment:
+Add blank line before heading (MD022 violation).
+
+Markdown headings should be surrounded by blank lines per markdown linting standards.
+
+
+
+🔧 Proposed fix
+
+ 4.  Verify: Type /keys in the chat to see your "Battery Health".
++
+ ### The "Auto-Failover" Engine
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/odie/free-ai-guide.md at line 44, Add a single blank line immediately before the heading line '### The "Auto-Failover" Engine' so the heading is separated from the preceding content, satisfying the MD022 lint rule; locate the heading string in the file and insert one empty line above it.
+
+
+
+============================================================================
+File: packages/app/studio/public/manuals/odie/local-models.md
+Line: 51 to 52
+Type: potential_issue
+
+Comment:
+Add blank line after heading.
+
+Markdown linting requires a blank line after headings. Line 51's heading is directly followed by content on line 52.
+
+
+
+🔍 Proposed fix
+
+ ## 🔮 Roadmap: The Future of Local
++
+ We are actively working to bring parity to local models.
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/odie/local-models.md around lines 51 - 52, The heading "## 🔮 Roadmap: The Future of Local" is immediately followed by content causing a markdown lint error; insert a single blank line after that heading so the paragraph "We are actively working to bring parity to local models." is separated by one empty line from the heading to satisfy markdown linting.
+
+
+
+============================================================================
+File: packages/app/studio/public/manuals/odie/free-ai-guide.md
+Line: 23
+Type: potential_issue
+
+Comment:
+Add blank line before heading (MD022 violation).
+
+Markdown headings should be surrounded by blank lines per markdown linting standards.
+
+
+
+🔧 Proposed fix
+
+ Imagine you have 5 keys.
++
+ ### How It Works
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/odie/free-ai-guide.md at line 23, Insert a blank line immediately above the "### How It Works" heading in free-ai-guide.md to satisfy MD022; locate the heading string "### How It Works" and ensure there is an empty line before it so the heading is surrounded by blank lines per markdown linting rules.
+
+
+
+============================================================================
+File: packages/app/studio/public/manuals/odie/local-models.md
+Line: 31
+Type: potential_issue
+
+Comment:
+Fix trailing whitespace.
+
+Line 31 contains trailing spaces that violate markdown linting standards.
+
+
+
+🔍 Proposed fix
+
+- > - Audio Stability: For music production, VRAM is the "Gold Standard". Running AI on your CPU consumes the same processing power used for your audio plugins and synth engines.
++ > - Audio Stability: For music production, VRAM is the "Gold Standard". Running AI on your CPU consumes the same processing power used for your audio plugins and synth engines.
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/odie/local-models.md at line 31, Remove the trailing whitespace at the end of the markdown heading line "Finding Your Fit: Local AI performance is dictated by your GPU and RAM." (the string shown in the diff) so the line ends immediately after "RAM." with no extra spaces; update the file to save the corrected line to satisfy markdown lint rules.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/setup/OdieSetup.sass
+Line: 4 to 14
+Type: potential_issue
+
+Comment:
+Critical: Missing class selector prefix.
+
+The selector component on Line 4 is missing the . prefix for a class selector. This will cause the entire component block to fail.
+
+
+
+
+🐛 Proposed fix
+
+-component
++.component
+     max-width: 900px
+     margin: 0 auto
+     padding-top: 2rem
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/setup/OdieSetup.sass around lines 4 - 14, The SASS selector named "component" is missing the class prefix and should be changed to a class selector; update the selector "component" in OdieSetup.sass to ".component" (or the intended class name with a leading dot) so the block is a valid class selector and the styles apply correctly.
+
+
+
+============================================================================
+File: packages/app/studio/src/boot.ts
+Line: 97
+Type: nitpick
+
+Comment:
+Extra blank line.
+
+Minor formatting: an additional blank line was added here.
+
+Prompt for AI Agent:
+In @packages/app/studio/src/boot.ts at line 97, Remove the extraneous blank line at or around line 97 in packages/app/studio/src/boot.ts so the file formatting matches surrounding lines; simply delete the extra empty line to restore consistent spacing (no code changes required).
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/components/TextInput.sass
+Line: 5
+Type: nitpick
+
+Comment:
+Consider removing redundant width declaration.
+
+The width: 100% is already set as an inline style on the contentEditable div (line 18 of TextInput.tsx: style={{ width: "100%" }}). Inline styles have higher specificity, making this CSS rule redundant. Consider removing one of these declarations for clarity.
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/components/TextInput.sass at line 5, The SASS rule "width: 100%" in TextInput.sass is redundant with the inline style on the contentEditable div inside the TextInput component (the element using style={{ width: "100%" }}); remove the duplicate declaration from TextInput.sass to avoid confusion and rely on the component's inline style, or alternatively remove the inline style and keep the SASS rule—pick one approach and delete the other so only a single width declaration remains.
+
+
+
+============================================================================
+File: packages/studio/core-processors/src/Metronome.ts
+Line: 35
+Type: potential_issue
+
+Comment:
+Critical: Incorrect accent detection logic ignores beat subdivision.
+
+The new formula beatIndex % curr.nominator === 0 fails when beatSubDivision > 1. Since beatIndex counts steps of size 1/denominator (where denominator = curr.denominator * beatSubDivision), the accent check must also account for the subdivision factor.
+
+Examples:
+- 4/4 time with beatSubDivision=2 (eighth-note clicks): Current code accents every 4 eighth notes (every half measure) instead of every 8 eighth notes (every measure).
+- 3/4 time with beatSubDivision=2: Current code accents every 3 eighth notes (every half measure) instead of every 6 eighth notes (every measure).
+
+The correct accent occurs once per measure, which is every nominator * beatSubDivision steps.
+
+
+
+
+🔧 Proposed fix
+
+-                        this.#clicks.push(new Click(s0 + distanceToEvent, beatIndex % curr.nominator === 0, gain))
++                        this.#clicks.push(new Click(s0 + distanceToEvent, beatIndex % (curr.nominator * beatSubDivision) === 0, gain))
+
+Prompt for AI Agent:
+In @packages/studio/core-processors/src/Metronome.ts at line 35, The accent logic is wrong because it ignores beatSubDivision; update the accent check used when creating Click instances (the line that pushes new Click in Metronome) to test divisibility against curr.nominator  beatSubDivision (i.e., treat a measure as nominator  beatSubDivision steps) instead of curr.nominator alone so accents occur once per measure even when beatSubDivision > 1; locate the new Click(...) push and replace the boolean expression beatIndex % curr.nominator === 0 with a check that uses curr.nominator * beatSubDivision.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/OdieHistoryPanel.tsx
+Line: 97 to 103
+Type: nitpick
+
+Comment:
+Avoid using any type annotation.
+
+The event parameter is typed as any, which bypasses type safety. Use a proper event type instead.
+
+
+
+🔒 Use proper typing
+
+-onclick={(e: any) => {
++onclick={(e: MouseEvent) => {
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/OdieHistoryPanel.tsx around lines 97 - 103, The inline onclick handler in OdieHistoryPanel.tsx currently types the event as "any"; change it to a proper React event type (e.g., React.MouseEvent or React.MouseEvent) for the parameter used in the span onclick so TypeScript enforces correct typing, keep the call to e.stopPropagation(), and ensure React is imported or the React namespace is available for the type reference.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/OdieHistoryPanel.tsx
+Line: 62
+Type: nitpick
+
+Comment:
+Unusual semicolon pattern.
+
+The leading semicolon before the IIFE pattern ; (Object.entries(groups)... is unusual. While functional, it suggests defensive coding against missing semicolons elsewhere.
+
+
+Consider removing it for cleaner code:
+-; (Object.entries(groups) as [string, ChatSession[]][]).forEach(([groupName, sessions]) => {
++(Object.entries(groups) as [string, ChatSession[]][]).forEach(([groupName, sessions]) => {
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/OdieHistoryPanel.tsx at line 62, Remove the unnecessary leading semicolon before the expression that iterates groups; locate the line in OdieHistoryPanel.tsx where you have "; (Object.entries(groups) as [string, ChatSession[]][]).forEach(([groupName, sessions]) => {", and simply start the statement with "Object.entries(groups)..." so the forEach runs without the defensive semicolon; keep the cast to [string, ChatSession[]][] and the existing callback unchanged.
+
+
+
+============================================================================
+File: packages/app/studio/public/manuals/odie/developer/testing.md
+Line: 20 to 25
+Type: potential_issue
+
+Comment:
+Add blank lines around headings for better readability.
+
+Markdown style guidelines require blank lines before and after headings. Missing blank lines at:
+- Line 22: After "### The Verification Pyramid"
+- Line 43: After "Coverage:"
+
+
+
+
+📝 Proposed fix
+
+ ### The Verification Pyramid
++
+ 1.  Static Analysis (TypeScript): Ensures OdieToolDefinitions match the Zod schemas.
+
+
+ Coverage:
++
+ *   Comparison Tables (CSS alignment).
+
+
+
+
+
+Also applies to: 41-45
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/odie/developer/testing.md around lines 20 - 25, The markdown headings lack surrounding blank lines which harms readability; insert a single blank line before and after the "### The Verification Pyramid" heading and likewise ensure a blank line before and after the "Coverage:" heading (and any other headings in the same section) so that each heading is separated by empty lines from the preceding and following paragraphs; update the manual text near the occurrences of "### The Verification Pyramid" and "Coverage:" accordingly.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieTransport.ts
+Line: 33 to 41
+Type: nitpick
+
+Comment:
+Consider consistent state checking across transport actions.
+
+The play() method checks state before executing, but stop() does not. For consistency and to avoid redundant engine calls, consider checking state in stop() as well.
+
+
+
+♻️ Suggested refactor
+
+ stop(): void {
+-    this.studio.engine.stop(false)
++    if (this.isPlaying || this.isRecording) {
++        this.studio.engine.stop(false)
++    }
+ }
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/OdieTransport.ts around lines 33 - 41, The stop() method should mirror play() by checking this.isPlaying before calling the engine to avoid redundant calls; update stop() to: if (this.isPlaying) { this.studio.engine.stop(false) } (and ensure any state mutation or side-effects that mark isPlaying false remain correct after the call), referencing the stop() method and the isPlaying property and the studio.engine.stop(false) call.
+
+
+
+============================================================================
+File: packages/app/studio/public/manuals/odie/genui-features.md
+Line: 24
+Type: potential_issue
+
+Comment:
+Fix markdown formatting and grammar for consistency.
+
+Several style issues detected:
+1. Line 51: "Piano-roll" should be hyphenated when used as a compound adjective
+2. Missing blank lines around headings (lines 24, 38, 43, 48, 53) per markdown style guidelines
+
+
+
+
+📝 Proposed fixes
+
+For line 51:
+-Feature: Piano-roll style display of notes and duration.
++Feature: Piano-roll-style display of notes and duration.
+
+
+For heading spacing, add blank lines before each widget subsection heading. Example:
+ Pixel Perfect: It always aligns with your current Theme.
+ 
++
+ ---
+ 
+ ## 📖 2. Reference: The Widget Library
++
+ ### 📊 Comparison Table
+
+
+Apply similar spacing fixes for headings at lines 43, 48, and 53.
+
+
+
+
+Also applies to: 38-38, 43-43, 48-48, 51-51, 53-53
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/odie/genui-features.md at line 24, The markdown headings in the document need consistent spacing and a grammar fix: add a blank line before each top-level subsection heading (e.g., before "The \"Magic\" Behind the Knobs" and the other subsection headings currently without spacing) to follow markdown style, and change occurrences of "Piano roll" used as a compound adjective to "Piano-roll" for correct hyphenation; locate headings by their text and update spacing and the "Piano-roll" wording accordingly.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/OdieHistoryPanel.tsx
+Line: 44 to 48
+Type: potential_issue
+
+Comment:
+Add explicit type="button" to prevent form submission.
+
+Buttons without an explicit type default to type="submit", which can cause unintended form submissions. Always specify type="button" for non-submit buttons.
+
+
+
+🔘 Fix button type
+
+-
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/OdieHistoryPanel.tsx around lines 44 - 48, The close button in OdieHistoryPanel uses a plain  with onclick={onClose} but lacks an explicit type, causing it to default to type="submit" and potentially trigger form submissions; update the button element (the one using onClose) to include type="button" so it behaves as a non-submit control (while keeping the existing onClose handler intact).
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/OdieChat.tsx
+Line: 23 to 34
+Type: nitpick
+
+Comment:
+Inefficient DOM manipulation pattern.
+
+The render function clears all children in a loop (line 26) and recreates the entire child tree on every update. Consider more efficient DOM updates or use a virtual DOM approach.
+
+
+
+♻️ More efficient clearing pattern
+
+-while (contentContainer.firstChild) contentContainer.firstChild.remove()
++contentContainer.innerHTML = "" // More efficient for clearing all children
+
+
+Or better yet, consider updating only changed elements rather than recreating the entire tree.
+
+
+
+
+============================================================================
+File: packages/app/studio/public/manuals/odie/developer/genui-engine.md
+Line: 21
+Type: nitpick
+
+Comment:
+Consider addressing markdown formatting for consistency.
+
+The static analysis tool flags multiple formatting issues throughout the document:
+- Missing blank lines around headings (MD022): Lines 21, 25, 28, 39, 65, 79, 97, 110, 122, 132
+- Missing blank lines around code fences (MD031): Lines 31, 42, 66, 80
+
+While these don't affect the document's functionality or content quality, addressing them improves readability and consistency with markdown best practices.
+
+
+
+
+Also applies to: 25-25, 28-28, 31-31, 39-39, 42-42, 65-65, 66-66, 79-79, 80-80, 97-97, 110-110, 122-122, 132-132
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/odie/developer/genui-engine.md at line 21, The markdown has missing blank lines around several headings and code fences causing MD022/MD031 warnings; add a single blank line before and after each heading (e.g., The "Hijack" Renderer and the other section titles present in the document) and ensure there is a blank line above and below each fenced code block (the code fences currently flagged in the file). Update the document so every heading is separated by an empty line from surrounding text and each  code fence has a blank line before the opening  and after the closing ```, then re-run the linter to confirm MD022 and MD031 are resolved.
+
+
+
+============================================================================
+File: packages/app/studio/public/manuals/odie/chat-interface.md
+Line: 31
+Type: nitpick
+
+Comment:
+Consider adding blank lines after headings for improved readability.
+
+The static analysis tool flags missing blank lines below several headings (lines 31, 35, 44). While this doesn't affect functionality, adding blank lines after headings improves markdown readability and consistency with common style guides.
+
+
+
+
+📝 Proposed formatting improvements
+
+ ### A. The Header
++
+ Top of the sidebar.
+
+
+ ### B. The Stream
++
+  The conversation log.
+
+
+ ### C. The Input Cockpit
++
+ Top-tier control for your commands.
+
+
+
+
+Also applies to: 35-35, 44-44
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/odie/chat-interface.md at line 31, Add a blank line immediately after each top-level heading to satisfy markdown style and improve readability: insert a single empty line after the heading "### A. The Header" and likewise after the other headings identified (the heading at line with "###" containing the text corresponding to lines 35 and 44) so each heading is followed by one blank line before the paragraph or next element.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/OdieHistoryPanel.tsx
+Line: 116 to 135
+Type: potential_issue
+
+Comment:
+Add explicit type="button" to action buttons.
+
+Both the Cancel and Delete buttons need explicit type="button" attributes to prevent unintended form submissions.
+
+
+
+🔘 Fix button types
+
+- {
+
+- {
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/OdieHistoryPanel.tsx around lines 116 - 135, Add an explicit type="button" attribute to both action buttons (the element with className "cancel-action-btn" and the element with className "delete-action-btn") to prevent unintended form submissions; keep their existing inline styles and event handlers, just add type="button" to each JSX button element.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/ChatHistoryService.ts
+Line: 45 to 51
+Type: nitpick
+
+Comment:
+Consider handling localStorage quota exceeded errors.
+
+The save method catches errors but only logs them. If localStorage quota is exceeded, users won't be notified that their chat history failed to save. Consider adding user-facing error notifications for storage failures.
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/ChatHistoryService.ts around lines 45 - 51, The save() method in ChatHistoryService currently swallows storage errors and only logs them; update it to detect quota/storage-related errors (e.g., DOMException with code/name or message indicating QuotaExceededError) and surface a user-facing notification when saving fails for STORAGE_KEY instead of only console.error. Use the app's existing UI notification/toast mechanism (e.g., NotificationService, ToastService, or the same UI helper used elsewhere) to show a clear message to the user about storage being full and suggest actions (clear history or free space), and ensure the save() still logs the full error for debugging.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/OdieChat.tsx
+Line: 8 to 10
+Type: potential_issue
+
+Comment:
+Messages observable is never synchronized with the service.
+
+A local messages observable is created but never populated from service. The subscription on line 35 will never trigger because nothing updates this observable. This appears to be incomplete state management.
+
+
+Should this be connected to the service's message state? For example:
+
+
+🔧 Possible fix to sync with service
+
+-const messages = new DefaultObservableValue([])
++// Subscribe to service messages instead of creating local state
++const messages = service.messages // or however the service exposes messages
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/OdieChat.tsx around lines 8 - 10, The local DefaultObservableValue messages in OdieChat is never synchronized with the OdieService, so its subscription never fires; update OdieChat to initialize and keep messages in sync with the service by subscribing to the service's message observable or using the service's messages value directly (e.g., replace or set DefaultObservableValue from service.messages and subscribe to service message updates), ensure you unsubscribe on unmount and use the service-provided methods/events on OdieService to update messages.
+
+
+
+============================================================================
+File: packages/app/studio/public/manuals/odie/introduction.md
+Line: 51
+Type: nitpick
+
+Comment:
+Consider adding a blank line after the heading for consistency.
+
+The heading on line 51 is missing a blank line below it per markdown style guidelines (MD022). While this doesn't affect functionality, adding the blank line improves readability and consistency.
+
+
+
+
+📝 Proposed formatting improvement
+
+ ## 💪 3. Getting Started
++
+ Odie is designed to be Zero-Config for basic usage, but powerful for power users.
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/odie/introduction.md at line 51, Add a single blank line immediately after the Markdown heading in packages/app/studio/public/manuals/odie/introduction.md (the heading at line ~51) to satisfy MD022; locate the heading token (e.g., any line starting with one or more # in the file) and insert an empty line beneath it so the heading is separated from the following paragraph/content.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieAppControl.test.ts
+Line: 123 to 141
+Type: nitpick
+
+Comment:
+Consider testing adapter mutations and additional parameters.
+
+The GenUI resolution tests verify basic adapter retrieval. Consider expanding coverage to test:
+
+1. Setting values through resolved adapters
+2. Other parameter types (if supported)
+3. Invalid parameter names for existing tracks
+
+
+
+
+📋 Suggested additional test cases
+
+it('should allow setting value through resolved adapter', async () => {
+    const track = mockStudio.addFakeTrack("Bass")
+    const adapter = odie.resolveParameter("Bass/volume")
+    
+    adapter?.setValue(-6.0)
+    expect(track.volume.getValue()).toBe(-6.0)
+})
+
+it('should return null for invalid parameter', async () => {
+    mockStudio.addFakeTrack("Kick")
+    const adapter = odie.resolveParameter("Kick/invalid")
+    expect(adapter).toBeNull()
+})
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/OdieAppControl.test.ts around lines 123 - 141, Add tests that verify adapter mutations and invalid-parameter handling: after creating a track with mockStudio.addFakeTrack("Bass"), call odie.resolveParameter("Bass/volume"), confirm the adapter is defined, call adapter.setValue(-6.0) and assert the underlying track.volume.getValue() equals -6.0; and add a test that creates a track (e.g., "Kick"), calls odie.resolveParameter("Kick/invalid") and asserts the result is null to cover unknown parameter names.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/OdieSidebar.sass
+Line: 146 to 149
+Type: nitpick
+
+Comment:
+Investigate the source of the unwanted filter instead of using !important.
+
+The !important override suggests there's a conflicting style applying an unwanted filter to SVG icons. This creates a specificity war that makes the stylesheet harder to maintain.
+
+
+
+Consider one of these approaches:
+1. Identify where the glow filter is applied and remove it at the source
+2. Increase the specificity of this selector (e.g., .RailBtn > svg) instead of using !important
+3. Ensure this stylesheet is loaded after the conflicting one
+
+
+♻️ Diagnostic script to find conflicting filter rules
+
+#!/bin/bash
+# Search for filter properties that might be adding the glow effect
+rg -n "filter:\s*(drop-shadow|blur|brightness)" --type=sass --type=css -g '!/node_modules/'
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/OdieSidebar.sass around lines 146 - 149, The SVG rule currently uses a global selector with filter: none !important to suppress a glow; instead locate and remove or change the original rule that adds the glow (search for filter: drop-shadow/blur/brightness in SASS/CSS), or replace the global override by increasing specificity for the exact component (e.g., target the sidebar button selector such as .RailBtn > svg or the OdieSidebar component class + svg) so you can set filter: none without !important, and if necessary ensure this stylesheet is imported after the conflicting stylesheet so the more specific rule wins.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieAppControl.test.ts
+Line: 50 to 95
+Type: nitpick
+
+Comment:
+Enhance mixer test coverage for edge cases.
+
+The mixer tests are well-structured, but consider adding:
+
+1. Lower bound clamping for volume (e.g., 
+📋 Suggested additional test cases
+
+it('should clamp VOLUME  {
+    const track = mockStudio.addFakeTrack("Quiet")
+    await odie.setVolume("Quiet", -100.0)
+    // Assert against expected minimum (e.g., -60.0 or -Infinity)
+    expect(track.volume.getValue()).toBeLessThanOrEqual(-60.0)
+})
+
+it('should clamp PAN to upper bound', async () => {
+    const track = mockStudio.addFakeTrack("Right")
+    await odie.setPan("Right", 2.0)
+    expect(track.panning.getValue()).toBe(1.0)
+})
+
+it('should fail cleanly when muting non-existent track', async () => {
+    const result = await odie.mute("Ghost", true)
+    expect(result.success).toBe(false)
+})
+
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieAppControl.test.ts
+Line: 16 to 48
+Type: nitpick
+
+Comment:
+Consider additional transport test coverage.
+
+The transport tests cover the basic happy path and one guard condition. Consider adding:
+
+1. Test for stop() when already stopped
+2. Test for setting loop to false (currently only tests true)
+3. Test for playback state transitions
+
+
+
+
+📋 Suggested additional test cases
+
+it('should NOT trigger STOP if already stopped', () => {
+    // Arrange
+    mockStudio.engine.isPlaying.setValue(false)
+    
+    // Act
+    odie.stop()
+    
+    // Assert - verify idempotency
+    expect(mockStudio.engine.stop).not.toHaveBeenCalled()
+})
+
+it('should toggle LOOP off', () => {
+    mockStudio.transport.loop.setValue(true)
+    odie.setLoop(false)
+    expect(mockStudio.transport.loop.getValue()).toBe(false)
+})
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/OdieAppControl.test.ts around lines 16 - 48, Add the missing transport unit tests to cover idempotency and more loop toggling: add a test that sets mockStudio.engine.isPlaying.setValue(false) then calls odie.stop() and asserts mockStudio.engine.stop was not called to verify STOP is no-op when already stopped; add a test that sets mockStudio.transport.loop.setValue(true) then calls odie.setLoop(false) and asserts mockStudio.transport.loop.getValue() is false to cover turning loop off; and add at least one test exercising playback state transitions by toggling mockStudio.engine.isPlaying (set true/false) around odie.play() and odie.stop() calls and asserting expected calls to mockStudio.engine.play/stop and transport.loop/state changes.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieAppControl.test.ts
+Line: 97 to 121
+Type: nitpick
+
+Comment:
+Add error handling tests for track operations.
+
+The arrangement tests cover basic functionality but lack error handling scenarios.
+
+
+
+Consider adding:
+
+it('should return empty array when no tracks exist', () => {
+    const list = odie.listTracks()
+    expect(list).toEqual([])
+})
+
+it('should handle invalid track type gracefully', async () => {
+    const result = await odie.addTrack('invalid-type' as any, "Test")
+    expect(result).toBe(false)
+})
+
+it('should handle duplicate track names', async () => {
+    await odie.addTrack('synth', "MyTrack")
+    const result = await odie.addTrack('synth', "MyTrack")
+    // Define expected behavior: should it succeed, fail, or auto-rename?
+})
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/OdieAppControl.test.ts around lines 97 - 121, Add error-handling unit tests around odie.listTracks and odie.addTrack to cover edge cases: add a test that odie.listTracks() returns an empty array when mockStudio has no tracks; add a test that calling await odie.addTrack('invalid-type' as any, "Test") resolves to false (and does not call mockStudio.project.api.createInstrument); and add a test for duplicate names by first calling await odie.addTrack('synth', "MyTrack") then calling it again and asserting the expected behavior (decide/assert either false or auto-rename) and verifying whether mockStudio.project.api.createInstrument was called once or twice accordingly. Ensure each test uses the existing mockStudio and checks/mock calls to mockStudio.project.api.createInstrument to validate side effects.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/genui/GenUISchema.ts
+Line: 20 to 25
+Type: nitpick
+
+Comment:
+Replace any with unknown for better type safety.
+
+The onValue and offValue properties use any, which bypasses TypeScript's type checking. Consider using unknown instead to maintain type safety while allowing flexible value types.
+
+
+
+
+♻️ Proposed refactor
+
+ export interface UISwitch extends UIComponentBase {
+     type: "switch"
+     targetParam: string
+-    onValue?: any
+-    offValue?: any
++    onValue?: unknown
++    offValue?: unknown
+ }
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/genui/GenUISchema.ts around lines 20 - 25, Change the UISwitch interface so its onValue and offValue use unknown instead of any: update the properties on the UISwitch type declaration (UISwitch, onValue, offValue) and then fix any call sites that assume a specific type by adding appropriate type guards, runtime checks, or explicit casts where those properties are read/used to narrow unknown to the expected type.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/llm/OllamaCapabilityService.ts
+Line: 16
+Type: nitpick
+
+Comment:
+Consider adding a specific return type instead of any[].
+
+The return type Promise reduces type safety. Consider defining an interface for the hardware status model or using a more specific type.
+
+
+
+
+♻️ Example interface
+
+interface HardwareStatus {
+    name: string
+    // Add other fields based on the /api/ps response structure
+}
+
+async getHardwareStatus(baseUrl: string): Promise {
+    // ...
+}
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/llm/OllamaCapabilityService.ts at line 16, The getHardwareStatus method currently returns Promise, which weakens type safety; define a HardwareStatus interface matching the /api/ps response (e.g., name: string plus any other fields returned) and change the signature of getHardwareStatus(baseUrl: string) to return Promise; update the method implementation to type-cast/parse the fetched response into HardwareStatus[] and adjust any callers of getHardwareStatus to expect HardwareStatus objects.
+
+
+
+============================================================================
+File: packages/app/studio/public/manuals/odie/introduction.md
+Line: 31
+Type: potential_issue
+
+Comment:
+Remove trailing whitespace.
+
+Line 31 contains an unnecessary trailing space. Removing it cleans up the file and prevents potential diff noise in future edits.
+
+
+
+
+🧹 Proposed fix
+
+-*   History: It remembers that you are working on a "Lofi Hip Hop" track from 20 minutes ago.
++*   History: It remembers that you are working on a "Lofi Hip Hop" track from 20 minutes ago.
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/odie/introduction.md at line 31, Remove the trailing whitespace on line 31 of the document: open packages/app/studio/public/manuals/odie/introduction.md, edit line 31 to delete the unnecessary space at the end of the line, and save the file so the file no longer contains that trailing whitespace.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieSignal.ts
+Line: 1 to 15
+Type: nitpick
+
+Comment:
+Replace any with unknown for the result property.
+
+Line 8 uses any for the result field, which bypasses type checking. Consider using unknown instead to maintain type safety while allowing flexible result types.
+
+
+
+
+♻️ Proposed refactor
+
+ export type OdieSignal =
+     | { type: "project-loaded", name: string }
+     | { type: "track-added", name: string, kind: string }
+     | { type: "effect-added", track: string, effect: string }
+     | { type: "region-created", track: string, time: number }
+     | { type: "note-added", track: string, pitch: number, start: number }
+     | { type: "param-changed", track: string, param: string, value: number }
+-    | { type: "analysis-complete", track: string, result: any }
++    | { type: "analysis-complete", track: string, result: unknown }
+     | { type: "thought-complete", content: string }
+     | { type: "mindset-changed", mode: string }
+     | { type: "tool-executed", tool: string, success: boolean }
+     | { type: "api-rotated", providerId: string }
+     | { type: "info", message: string }
+     | { type: "success", message: string }
+     | { type: "error", message: string }
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/OdieSignal.ts around lines 1 - 15, The union type OdieSignal uses any for the result field in the { type: "analysis-complete", track: string, result: any } variant; change that any to unknown and update any call sites handling analysis-complete to properly narrow/cast result before use (e.g., using type guards or explicit casts) so type safety is preserved while keeping flexibility.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/llm/verification_rig.ts
+Line: 60 to 65
+Type: nitpick
+
+Comment:
+Silent error swallowing impedes debugging.
+
+The empty catch block on line 65 silently suppresses all errors, making it difficult to diagnose fetch failures during test execution. Even in a test harness, logging errors would help identify issues like network problems, malformed URLs, or Response parsing failures.
+
+
+
+
+♻️ Proposed fix to log caught errors
+
+         try {
+             const res = await fetch(targetUrl2)
+             if (res.ok) {
+                 // ... (Mocked response parsing)
+             }
+-        } catch (e) { }
++        } catch (e) {
++            console.error('Fetch failed:', e)
++        }
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/llm/verification_rig.ts around lines 60 - 65, The empty catch in verification_rig.ts silently swallows fetch errors; replace the empty block in the try/catch around the fetch to log the error (including targetUrl2 and the error/stack) using the module's logger if available (e.g., logger.error) or console.error, and/or rethrow if callers need to observe failures so test harnesses can surface network/parse issues.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/OdieMessageList.sass
+Line: 200 to 213
+Type: nitpick
+
+Comment:
+Verify z-index layering with other app modals.
+
+z-index: 10000 is quite high. Ensure this doesn't conflict with other modal overlays in the application, or consider using a CSS custom property (e.g., var(--z-modal-image)) for centralized z-index management.
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/OdieMessageList.sass around lines 200 - 213, The .odie-image-modal rule uses a hardcoded z-index: 10000 which can conflict with other overlays; replace the literal with a CSS variable (e.g., var(--z-modal-image)) and add a sensible fallback, update any global CSS or theme file to define --z-modal-image centrally, and verify existing modal components (those using --z-modal, --z-overlay, or similar) to ensure consistent stacking order and avoid collisions.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/OdieSuggestions.tsx
+Line: 58
+Type: potential_issue
+
+Comment:
+Ensure subscription cleanup on unmount to prevent memory leaks.
+
+The Terminator lifecycle object manages subscriptions via lifecycle.own(), but lifecycle.terminate() is never called. If the component is removed from the DOM, subscriptions will persist, causing memory leaks.
+
+Depending on your JSX framework's lifecycle hooks, expose or invoke cleanup when the component unmounts.
+
+
+
+
+Also applies to: 202-222
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/OdieSuggestions.tsx at line 58, The component creates a Terminator instance (const lifecycle = new Terminator()) and uses lifecycle.own() for subscriptions but never calls lifecycle.terminate(), causing leaks; add an unmount cleanup that calls lifecycle.terminate() (e.g., a React useEffect with a cleanup returning () => lifecycle.terminate()) within the OdieSuggestions component so all lifecycle.own() subscriptions (including those around the code at the lifecycle.own() usages in the 202-222 region) are disposed when the component unmounts.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/App.tsx
+Line: 25
+Type: potential_issue
+
+Comment:
+Consider removing or using a proper logging mechanism for production.
+
+The console.log statement with styled output announces Odie integration. While harmless, production applications typically avoid console statements for cleaner output and better observability practices. Consider using a proper logging service or removing this for production builds.
+
+
+
+
+🧹 Suggested approaches
+
+Option 1: Remove for production (simplest)
+-    console.log("%c OpenDAW Next: Odie Integrated ", "background: purple; color: white; font-size: 20px")
+
+
+Option 2: Use conditional logging
+-    console.log("%c OpenDAW Next: Odie Integrated ", "background: purple; color: white; font-size: 20px")
++    if (import.meta.env.DEV) {
++        console.log("%c OpenDAW Next: Odie Integrated ", "background: purple; color: white; font-size: 20px")
++    }
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/App.tsx at line 25, Remove or replace the top-level console.log("%c OpenDAW Next: Odie Integrated ", ...) in App.tsx with a production-safe approach: either delete it, wrap it in a development-only guard (e.g., if (process.env.NODE_ENV !== 'production') { / console.log... / }), or replace it with your app logging abstraction (e.g., logger.info('OpenDAW Next: Odie Integrated') or telemetry.trackEvent(...)) so styled console output is not emitted in production.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/UserService.ts
+Line: 73 to 76
+Type: potential_issue
+
+Comment:
+Shallow merge in update() will overwrite nested objects.
+
+The update method uses a shallow merge, which means updating a nested object like identity will completely replace it rather than merging its properties. For example, update({ identity: { role: "mixer" } }) would remove the existing location field.
+
+
+
+
+🔧 Proposed fix
+
+Consider using a deep merge utility or requiring callers to provide complete nested objects. Alternatively, document this behavior clearly:
+
+ public update(partial: Partial) {
+     const current = this.dna.getValue()
+-    this.save({ ...current, ...partial })
++    // Deep merge nested objects
++    const updated = {
++        ...current,
++        ...partial,
++        ...(partial.identity && { identity: { ...current.identity, ...partial.identity } }),
++        ...(partial.sonicFingerprint && { sonicFingerprint: { ...current.sonicFingerprint, ...partial.sonicFingerprint } }),
++        ...(partial.techRider && { techRider: { ...current.techRider, ...partial.techRider } })
++    }
++    this.save(updated)
+ }
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/UserService.ts around lines 73 - 76, The update method in UserService (method: update, accessing this.dna.getValue() and calling this.save) currently performs a shallow merge which will replace nested objects like identity instead of merging their properties; fix by performing a deep merge of current and partial (e.g., use a deepMerge utility such as lodash.merge or an internal recursive merge helper) before calling this.save so nested fields are preserved, or explicitly document/require callers to pass complete nested objects if deep merging is not desired.
+
+
+
+============================================================================
+File: packages/app/studio/public/manuals/odie/developer/system-overview.md
+Line: 88
+Type: potential_issue
+
+Comment:
+Fix section numbering inconsistency.
+
+Section "📖 2. Service Reference" duplicates the number from "🛡️ 2. Philosophy". The sections should be numbered sequentially: 1, 2, 3, 4.
+
+
+
+📝 Proposed fix
+
+-## 📖 2. Service Reference
++## 📖 3. Service Reference
+
+
+-## 💪 3. Task: Bootstrapping Odie
++## 💪 4. Task: Bootstrapping Odie
+
+
+
+
+Also applies to: 102-102
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/odie/developer/system-overview.md at line 88, Update the duplicated section header numbers so they read sequentially: change the header text "📖 2. Service Reference" to "📖 3. Service Reference" (and similarly any other "2." headings like the one at the second occurrence) and then increment any following section numbers accordingly so the sequence becomes 1, 2, 3, 4; locate and edit the headers by matching their visible titles ("🛡️ 2. Philosophy", "📖 2. Service Reference") and update the numeric prefixes to maintain proper order.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/UserService.ts
+Line: 51 to 62
+Type: potential_issue
+
+Comment:
+Shallow merge may not properly handle nested object defaults.
+
+Line 57 uses a shallow merge which will replace entire nested objects (identity, sonicFingerprint, techRider) rather than merging their properties. If the stored data has incomplete nested objects, default values for missing nested properties won't be applied.
+
+
+
+
+🔧 Proposed fix with deep merge
+
+ private load() {
+     try {
+         const raw = localStorage.getItem(this.STORAGE_KEY)
+         if (raw) {
+             const parsed = JSON.parse(raw)
+-            // Merge with default to ensure all fields exist (schema evolution)
+-            this.dna.setValue({ ...DEFAULT_DNA, ...parsed })
++            // Deep merge with default to ensure all nested fields exist (schema evolution)
++            this.dna.setValue({
++                ...DEFAULT_DNA,
++                ...parsed,
++                identity: { ...DEFAULT_DNA.identity, ...parsed.identity },
++                sonicFingerprint: { ...DEFAULT_DNA.sonicFingerprint, ...parsed.sonicFingerprint },
++                techRider: { ...DEFAULT_DNA.techRider, ...parsed.techRider }
++            })
+         }
+     } catch (e) {
+         console.error("UserService: Failed to load profile", e)
+     }
+ }
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/UserService.ts around lines 51 - 62, The load() method currently does a shallow merge ({ ...DEFAULT_DNA, ...parsed }) so nested objects like identity, sonicFingerprint, and techRider get fully replaced and missing nested defaults are lost; replace the shallow merge with a deep merge of DEFAULT_DNA and parsed (e.g., use a small utility mergeDeep(objA, objB) or a well-known helper like lodash.merge) and pass the result to this.dna.setValue so nested properties from DEFAULT_DNA are preserved while values from parsed override specific fields; ensure the deep merge handles non-object values safely (arrays/primitive overwrite) and still runs inside the existing try/catch.
+
+
+
+============================================================================
+File: packages/app/studio/public/manuals/odie/developer/system-overview.md
+Line: 44 to 54
+Type: potential_issue
+
+Comment:
+Fix typo: "Obeserves" → "Observes".
+
+The Mermaid diagram contains a typo on line 45.
+
+
+
+📝 Proposed fix
+
+     %% Read Path
+-    StudioStore -->|Obeserves Changes| Knowledge[Knowledge Service]
++    StudioStore -->|Observes Changes| Knowledge[Knowledge Service]
+     Knowledge -->|Injects Context| Brain
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/odie/developer/system-overview.md around lines 44 - 54, Fix the typo in the Mermaid diagram label between StudioStore and Knowledge: change the arrow label text "Obeserves Changes" to "Observes Changes" so the line "StudioStore -->|Obeserves Changes| Knowledge[Knowledge Service]" reads "StudioStore -->|Observes Changes| Knowledge[Knowledge Service]".
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/AIService.test.ts
+Line: 5 to 15
+Type: nitpick
+
+Comment:
+Improve localStorage mock to match the Storage interface.
+
+The mock has two issues:
+1. The length property is static (always 0) but should reflect the actual number of stored items
+2. The as any type assertion bypasses type safety
+
+
+
+
+♻️ Proposed fix
+
+     beforeEach(() => {
+-        global.localStorage = {
++        const mockStore: Record = {}
++        global.localStorage = {
+-            store: {} as Record,
+-            getItem(key: string) { return this.store[key] || null },
+-            setItem(key: string, value: string) { this.store[key] = value },
+-            removeItem(key: string) { delete this.store[key] },
+-            clear() { this.store = {} },
+-            key(n: number) { return Object.keys(this.store)[n] },
+-            length: 0
+-        } as any
++            getItem(key: string) { return mockStore[key] || null },
++            setItem(key: string, value: string) { mockStore[key] = value },
++            removeItem(key: string) { delete mockStore[key] },
++            clear() { Object.keys(mockStore).forEach(k => delete mockStore[k]) },
++            key(n: number) { return Object.keys(mockStore)[n] || null },
++            get length() { return Object.keys(mockStore).length }
++        } as Storage
+     })
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/AIService.test.ts around lines 5 - 15, The localStorage mock in the beforeEach is incorrect: change the mock assigned to global.localStorage (used in beforeEach) to fully implement the Storage interface instead of using "as any" and make length dynamic; specifically, keep a private store: Record, implement getItem, setItem (ensure values are strings), removeItem, clear, key, and provide length as a getter that returns Object.keys(this.store).length, and type the mock explicitly as Storage (or assert via unknown->Storage) so TypeScript type safety is preserved while matching the real Storage behavior.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/components/VisualKnob.tsx
+Line: 78 to 123
+Type: potential_issue
+
+Comment:
+Add accessibility attributes to SVG.
+
+The SVG element lacks alternative text for screen readers. Add role="img" and aria-label to make this component accessible.
+
+
+
+♿ Accessibility fix
+
+-
++
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/components/VisualKnob.tsx around lines 78 - 123, The SVG in VisualKnob (the svg constant) is missing accessibility attributes; add role="img" and an aria-label to the  element (use a passed-in prop like ariaLabel or a sensible fallback such as the knob's label/name, e.g. ariaLabel ?? label ?? 'knob') so screen readers can announce it; update the VisualKnob component props to accept ariaLabel if not already present and apply role="img" and aria-label={ariaLabelFallback} on the SVG element.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/OdieSettings.sass
+Line: 125 to 130
+Type: nitpick
+
+Comment:
+Consider responsive width for .config-group.
+
+The fixed width: 1100px will cause horizontal scrolling on smaller viewports. Consider using max-width with a percentage fallback for better responsiveness.
+
+
+
+📝 Proposed fix
+
+     .config-group
+         display: flex
+         flex-direction: column
+         gap: 20px
+-        width: 1100px
++        width: 100%
++        max-width: 1100px
+         margin: 0 auto
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/OdieSettings.sass around lines 125 - 130, The .config-group rule uses a fixed width (1100px) which breaks on small viewports; change it to a fluid layout by replacing width: 1100px with a max-width: 1100px and a responsive fallback like width: 100% (and optionally add horizontal padding or box-sizing: border-box) so the container caps at 1100px on large screens but shrinks on smaller screens without causing horizontal scrolling.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/setup/OdieSetupView.tsx
+Line: 563 to 578
+Type: nitpick
+
+Comment:
+Remove debug console.log statements.
+
+The debug logging on lines 564 and 567 should be removed before production. The error logging on line 571 is acceptable, but consider using a proper logging service instead of console.error for better observability.
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/setup/OdieSetupView.tsx around lines 563 - 578, In OdieSetupView remove the two debug console.log calls used during development (the console.log statements near the success/flow branches inside the setup handler in the OdieSetupView component) so they are not output in production; keep the existing error logging but replace any console.error usage with the app's standard logging utility (or a centralized logger) if available, otherwise leave the error log as-is—target the console.log lines inside the setup callback/handler in OdieSetupView and delete them.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/OdieSuggestions.tsx
+Line: 140 to 144
+Type: nitpick
+
+Comment:
+Handle potential clipboard API failures.
+
+navigator.clipboard.writeText can throw if permissions are denied or in non-secure contexts. Consider wrapping in try-catch to prevent unhandled promise rejections.
+
+
+
+🔧 Proposed fix
+
+             suggestions.push({
+                 label: "Copy", type: "system", action: () => {
+-                    if (lastMsg && lastMsg.content) navigator.clipboard.writeText(lastMsg.content)
++                    if (lastMsg && lastMsg.content) {
++                        navigator.clipboard.writeText(lastMsg.content).catch(() => {
++                            // Silently fail or show feedback
++                        })
++                    }
+                 }, icon: "📋"
+             })
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/OdieSuggestions.tsx around lines 140 - 144, The clipboard write in the suggestions.push entry (the action lambda) can reject; make the action async and wrap the await navigator.clipboard.writeText(lastMsg.content) call in a try/catch so failures don’t cause unhandled promise rejections; in the catch, handle the error (e.g., processLogger.error or show a user-facing toast) and optionally fall back or silently ignore if lastMsg is missing, referencing the suggestions.push(...) action and lastMsg variables to locate the change.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/llm/OllamaCapabilityService.ts
+Line: 86 to 91
+Type: nitpick
+
+Comment:
+Consider simplifying or documenting future intent for calculateTier.
+
+The method currently ignores both parameters and always returns "tier1". While the comments explain the rationale, this raises questions:
+
+1. If the parameters will never be used, consider simplifying to a constant or removing parameters entirely.
+2. If this is a placeholder for future sophisticated tier logic, add a TODO comment to clarify.
+
+
+
+
+♻️ Option 1: Simplify to constant
+
+If tier will always be "tier1" for local models:
+-private calculateTier(_caps: ModelCapabilities, _name: string): ModelTier {
+-    // User Mandate: Treat Local Models just like API Models.
+-    // We assume ANY local model the user has chosen is capable.
+-    // We remove all "nanny logic" that downgrades small models.
+-    return "tier1"
+-}
++// User Mandate: Treat Local Models just like API Models.
++// We assume ANY local model the user has chosen is capable.
++private readonly DEFAULT_LOCAL_MODEL_TIER: ModelTier = "tier1"
+
+
+Then use suggestedTier: this.DEFAULT_LOCAL_MODEL_TIER in the inspect method.
+
+
+
+♻️ Option 2: Add TODO for future logic
+
+If tier calculation may be enhanced later:
+ private calculateTier(_caps: ModelCapabilities, _name: string): ModelTier {
+     // User Mandate: Treat Local Models just like API Models.
+     // We assume ANY local model the user has chosen is capable.
+     // We remove all "nanny logic" that downgrades small models.
++    // TODO: Future enhancement may use caps.parameterSize, caps.quantization, 
++    // or _name pattern matching to suggest different tiers based on capabilities.
+     return "tier1"
+ }
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/llm/OllamaCapabilityService.ts around lines 86 - 91, The calculateTier method always returns "tier1" and ignores its parameters; either remove unused parameters and make the intent explicit by returning a constant (e.g., use a class constant like DEFAULT_LOCAL_MODEL_TIER and reference it from inspect) or mark it as a future placeholder by keeping the signature but adding a TODO comment clarifying planned logic; update inspect to use the constant (suggestedTier: this.DEFAULT_LOCAL_MODEL_TIER) if you choose the constant approach so callers no longer rely on a no-op method.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/setup/OdieSetupView.tsx
+Line: 379 to 382
+Type: nitpick
+
+Comment:
+Replace alert() with inline validation.
+
+Similar to line 202, this alert() usage (line 380) should be replaced with inline validation messages for better UX.
+
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/llm/verification_rig.ts
+Line: 8 to 9
+Type: nitpick
+
+Comment:
+Inconsistent console usage throughout the file.
+
+The code saves originalConsole but then uses console.log in the test function (lines 83, 86-87) while using originalConsole.log in the main runner (lines 74, 132-135). For consistency and clarity, either use originalConsole everywhere or remove the saved reference if the console mock (line 9) will remain commented out.
+
+
+
+
+♻️ Proposed fix for consistency
+
+Since the console mock is commented out, you can simplify by using console everywhere:
+
+-// Mock Console
+-const originalConsole = { ...console };
+-// console.log = () => {}; 
+
+
+And update the main runner:
+
+-    originalConsole.log("🧪 Starting Verification Rig (Isolated): Odie Local Model Detection");
++    console.log("🧪 Starting Verification Rig (Isolated): Odie Local Model Detection");
+
+
+-    originalConsole.log("\n--- SUMMARY ---");
+-    originalConsole.log(Total: ${passed + failed});
+-    originalConsole.log(Passed: ${passed});
+-    originalConsole.log(Failed: ${failed});
++    console.log("\n--- SUMMARY ---");
++    console.log(Total: ${passed + failed});
++    console.log(Passed: ${passed});
++    console.log(Failed: ${failed});
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/llm/verification_rig.ts around lines 8 - 9, The file inconsistently mixes originalConsole and console (saved as originalConsole) — decide on one approach: either remove the unused originalConsole variable and use console.* everywhere (update the main runner calls that reference originalConsole.log and originalConsole.error to console.log/console.error), or re-enable and use originalConsole everywhere (replace console.log calls in the test function with originalConsole.log and ensure the mock/commented override remains intentional). Update all references to the console API (e.g., originalConsole, console.log calls in the test function and main runner, and originalConsole.error) to follow the chosen consistent usage.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/setup/OdieSetupView.tsx
+Line: 261
+Type: potential_issue
+
+Comment:
+Consider XSS risk with innerHTML.
+
+While ollamaGuidance is currently set internally (lines 132-138), using innerHTML creates a potential XSS vulnerability if the guidance logic changes to include external data. Consider using textContent or a safer rendering method.
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/setup/OdieSetupView.tsx at line 261, The code assigns HTML via innerHTML to render ollamaGuidance in OdieSetupView which risks XSS if that guidance becomes external; change the rendering to use textContent (or in React, render the guidance string into JSX like {ollamaGuidance} instead of dangerouslySetInnerHTML/innerHTML), or if you must allow HTML, run the guidance through a sanitizer (e.g., DOMPurify) before setting it; update the code referencing ollamaGuidance and the DOM write site in OdieSetupView to use safe rendering or sanitization.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/llm/OllamaCapabilityService.ts
+Line: 18 to 21
+Type: refactor_suggestion
+
+Comment:
+Extract duplicated URL normalization logic.
+
+The URL normalization code (lines 18-21) is duplicated in the inspect method (lines 42-45). This violates the DRY principle and makes maintenance harder.
+
+
+
+
+♻️ Proposed refactor
+
+Extract to a private method:
+
+private normalizeBaseUrl(baseUrl: string): string {
+    let root = baseUrl
+    if (root.endsWith("/v1") || root.endsWith("/v1/")) root = root.replace(/\/v1\/?$/, "")
+    if (root.endsWith("/api/chat")) root = root.replace(/\/api\/chat$/, "")
+    if (root.endsWith("/")) root = root.slice(0, -1)
+    return root
+}
+
+
+Then use it in both methods:
+ async getHardwareStatus(baseUrl: string): Promise {
+     try {
+-        let root = baseUrl
+-        if (root.includes("/v1")) root = root.replace(/\/v1\/?$/, "")
+-        if (root.includes("/api/chat")) root = root.replace(/\/api\/chat$/, "")
+-        if (root.endsWith("/")) root = root.slice(0, -1)
++        const root = this.normalizeBaseUrl(baseUrl)
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/llm/OllamaCapabilityService.ts around lines 18 - 21, Extract the duplicated URL normalization into a private helper and call it from both locations: create a private method named normalizeBaseUrl(baseUrl: string): string that contains the normalization logic (removing trailing "/v1", "/api/chat", and trailing slash) and return the cleaned root, then replace the in-place normalization in the constructor/init block (where root is derived from baseUrl) and in the inspect method to call this.normalizeBaseUrl(baseUrl) instead; ensure the helper is used by any other place in OllamaCapabilityService that performs the same replacement to remove duplication.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/OdieSuggestions.tsx
+Line: 157 to 197
+Type: potential_issue
+
+Comment:
+Add explicit type="button" to prevent unintended form submission.
+
+The button element lacks an explicit type attribute. The default type is "submit", which can cause unintended form submissions if this component is ever placed inside a form.
+
+
+
+🔧 Proposed fix
+
+             const chip =  {
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/OdieSuggestions.tsx around lines 157 - 197, The button JSX created in the const chip lacks an explicit type, so it defaults to type="submit" and can trigger form submissions; update the button element (the one assigned to const chip with handlers onmouseenter, onmouseleave, and onclick that calls s.action or service.sendMessage) to include type="button" to prevent unintended form submits.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/setup/OdieSetupView.tsx
+Line: 65 to 586
+Type: nitpick
+
+Comment:
+Consider splitting this component.
+
+The OdieSetupView component is 521 lines, which makes it difficult to maintain and test. Consider extracting each step renderer into separate components:
+- OdieSetupStep1 (AI Engine selection)
+- OdieSetupStep2 (Introduction)
+- OdieSetupStep3 (Profile setup)
+
+This would improve:
+- Code organization and readability
+- Testability of individual steps
+- Reusability of form components
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/setup/OdieSetupView.tsx around lines 65 - 586, OdieSetupView is too large—extract each step renderer into its own component (create OdieSetupStep1 for AI Engine selection, OdieSetupStep2 for the intro, and OdieSetupStep3 for profile setup) by moving the JSX and local UI logic for each step out of OdieSetupView and into those components; lift shared state (currentStep, selectedEngine, profile data, validation errors) and handlers (onNext, onPrev, onEngineSelect, onProfileChange, onSubmit) up into OdieSetupView and pass them as typed props to the new step components, preserve any helper functions used by multiple steps as utilities or callbacks, update OdieSetupView to render the appropriate step component based on currentStep, and add small unit tests for each new OdieSetupStepX to verify rendering and prop-driven behavior.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/llm/OpenAICompatibleProvider.ts
+Line: 157 to 175
+Type: nitpick
+
+Comment:
+Validate method uses debugLog before it's set.
+
+In validate(), this.debugLog is checked for error messages (line 163), but debugLog is only populated by fetchModels(). This works because fetchModels() is called first, but the dependency is implicit and could break if the flow changes.
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/llm/OpenAICompatibleProvider.ts around lines 157 - 175, The validate() method reads this.debugLog to classify fetch failures but relies implicitly on fetchModels() to populate debugLog; make this dependency explicit by having fetchModels() return both models and debugLog (or have fetchModels() set debugLog before any early returns) and update validate() to use the returned debugLog (or check the now-guaranteed this.debugLog after fetchModels finishes) so debugLog is never consumed before being set; locate validate() and fetchModels() in OpenAICompatibleProvider and adjust their signatures/return handling accordingly.
+
+
+
+============================================================================
+File: providers_source.tmp
+Line: 112 to 123
+Type: nitpick
+
+Comment:
+Key rotation may exhaust all keys without recovery.
+
+The rotateKey() method marks the current key as 'exhausted' before rotating. Once all keys are exhausted, the method returns false and keys remain marked exhausted permanently within the session. Consider adding a method to reset exhausted keys after a cooldown period.
+
+Prompt for AI Agent:
+In @providers_source.tmp around lines 112 - 123, The rotateKey() implementation marks the current key 'exhausted' and can permanently leave all keys in that state; add a recovery mechanism such as a resetExhaustedKeys(cooldownMs: number) method that iterates keyStatus and clears 'exhausted' flags older than a cooldown or resets all to 'active', and invoke it from rotateKey() when the rotation loop fails to find a usable key (before returning false) so that rotateKey can attempt rotation again after reset; use existing symbols rotateKey, markCurrentKey, keyStatus, activeKeyIndex and keyRing to implement the reset and to track timestamps if needed (e.g., maintain a parallel keyExhaustedAt map) so exhausted keys can recover instead of remaining permanently exhausted.
+
+
+
+============================================================================
+File: providers_source.tmp
+Line: 639 to 642
+Type: potential_issue
+
+Comment:
+File contains duplicate imports and appears to be incorrectly concatenated.
+
+This file contains duplicate imports (lines 639-642 repeat lines 1-2) and the entire OpenAICompatibleProvider class is duplicated. This suggests an incorrect file merge or copy-paste error. The file should contain either:
+1. Just Gemini3Provider, or
+2. Be split into separate files
+
+Prompt for AI Agent:
+In @providers_source.tmp around lines 639 - 642, The file has duplicate import statements (ObservableValue, DefaultObservableValue, LLMProvider, Message, ProviderConfig, LLMTool, checkModelTier, ollamaInspector, ModelCapabilities) and a duplicated OpenAICompatibleProvider class, indicating a bad merge; remove the repeated import block and delete the duplicated OpenAICompatibleProvider definition so the file contains only the intended provider (e.g., keep Gemini3Provider) or split into two files (one exporting OpenAICompatibleProvider and one exporting Gemini3Provider), and ensure exports/imports and any references to checkModelTier, ollamaInspector, and ModelCapabilities remain correct after cleanup.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/llm/OllamaCapabilityService.ts
+Line: 18 to 21
+Type: potential_issue
+
+Comment:
+Fix URL normalization logic mismatch.
+
+The condition checks are broader than the regex replacements:
+- Line 19: includes("/v1") matches "/v1" anywhere, but /\/v1\/?$/ only replaces it at the end
+- Line 20: includes("/api/chat") matches anywhere, but /\/api\/chat$/ only replaces at the end
+
+This creates a bug: if the URL is http://example.com/v1/other/path, the includes check passes but the replacement doesn't match, leaving the URL malformed.
+
+
+
+
+🐛 Proposed fix
+
+Option 1: Match the regex pattern to the condition
+ let root = baseUrl
+-if (root.includes("/v1")) root = root.replace(/\/v1\/?$/, "")
+-if (root.includes("/api/chat")) root = root.replace(/\/api\/chat$/, "")
++if (root.endsWith("/v1") || root.endsWith("/v1/")) root = root.replace(/\/v1\/?$/, "")
++if (root.endsWith("/api/chat")) root = root.replace(/\/api\/chat$/, "")
+ if (root.endsWith("/")) root = root.slice(0, -1)
+
+
+Option 2: Use a more forgiving regex (if /v1 can appear anywhere)
+ let root = baseUrl
+-if (root.includes("/v1")) root = root.replace(/\/v1\/?$/, "")
+-if (root.includes("/api/chat")) root = root.replace(/\/api\/chat$/, "")
++root = root.replace(/\/v1(\/.*)?$/, "")
++root = root.replace(/\/api\/chat$/, "")
+ if (root.endsWith("/")) root = root.slice(0, -1)
+
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/llm/ModelPolicy.ts
+Line: 21 to 38
+Type: nitpick
+
+Comment:
+Remove console.log from production code and address unused parameter.
+
+The modelId parameter is accepted but never used in the logic—every model receives identical "tier1" permissions. If this is intentional per the "Operation Unshackle" comment, consider:
+
+1. Removing the console.log (or using a debug flag)
+2. Documenting that this function is a placeholder for future policy enforcement, or simplifying it to a constant
+
+
+
+🔧 Proposed fix
+
+ export const checkModelTier = (
+-    modelId: string
++    _modelId: string // Unused: all models get unrestricted access per Operation Unshackle
+ ): ModelValidation => {
+-    // OPERATION UNSHACKLE:
+-    // The user requested to remove all "random rules" and limitations.
+-    // We trust the user. If they selected a model, they want it to act as an Agent.
+-    // No more checking parameters. No more whitelists.
+-
+-    console.log("🔓 Operation Unshackle: Granting Tier 1 Access to", modelId)
++    // OPERATION UNSHACKLE: All models get unrestricted agent access.
++    // Future: Re-enable tiered policies if needed.
+ 
+     return {
+         tier: "tier1",
+
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/llm/OllamaCapabilityService.ts
+Line: 24
+Type: nitpick
+
+Comment:
+Add timeout to fetch requests for better reliability.
+
+Network requests without timeouts can hang indefinitely. Consider adding a timeout using AbortSignal.
+
+
+
+
+♻️ Example implementation
+
++const controller = new AbortController()
++const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout
++
+ const response = await fetch(url, {
++    signal: controller.signal
+ })
++clearTimeout(timeoutId)
+
+
+Or create a helper function for reuse across both methods.
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/llm/OllamaCapabilityService.ts at line 24, The fetch call in OllamaCapabilityService (the line with "const response = await fetch(url)") lacks a timeout and can hang; wrap fetch with an AbortController/AbortSignal and a timer to abort after a reasonable timeout, then pass that signal into fetch and clear the timer after completion; implement this logic as a small reusable helper (e.g., fetchWithTimeout) and replace the direct fetch in the OllamaCapabilityService methods with calls to that helper to ensure all requests time out reliably.
+
+
+
+============================================================================
+File: providers_source.tmp
+Line: 1102 to 1103
+Type: potential_issue
+
+Comment:
+Duplicate comment detected.
+
+Line 1103 is a duplicate of line 1102.
+
+
+
+🧹 Proposed fix
+
+             // If user passed .../v1 or .../api/chat, strip it.
+-            // If user passed .../v1 or .../api/chat, strip it.
+
+Prompt for AI Agent:
+In @providers_source.tmp around lines 1102 - 1103, Remove the duplicated comment "// If user passed .../v1 or .../api/chat, strip it." so only a single instance remains immediately above the code that strips /v1 or /api/chat from the user-provided URL (look for the comment text and the URL-normalization logic near it); keep the single explanatory comment and delete the redundant line.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/setup/OdieSetupView.tsx
+Line: 65 to 67
+Type: potential_issue
+
+Comment:
+Critical: Memory leak - lifecycle never cleaned up.
+
+The Terminator lifecycle is created but never terminated when the component unmounts. All subscriptions registered via lifecycle.own() will remain active indefinitely, causing memory leaks.
+
+
+
+
+🔧 Ensure lifecycle cleanup on component unmount
+
+The component framework should provide a cleanup/unmount hook. Add lifecycle termination there:
+
+ export const OdieSetupView = ({ service }: { service: OdieService }) => {
+     const lifecycle = new Terminator()
++    
++    // Add cleanup when component unmounts (adjust to your framework's lifecycle method)
++    onUnmount(() => {
++        lifecycle.terminate()
++    })
+
+
+If your framework doesn't support unmount hooks, you'll need to return the lifecycle and let the parent manage cleanup.
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/setup/OdieSetupView.tsx around lines 65 - 67, The Terminator lifecycle instance (created in OdieSetupView) is never terminated, causing subscriptions registered via lifecycle.own() to leak; fix by terminating it when the component unmounts—if this is a React function component wrap the lifecycle creation in useEffect and call lifecycle.terminate() in the cleanup return, otherwise implement componentWillUnmount to call Terminator.terminate() (or return the lifecycle to the parent) so all lifecycle.own() subscriptions are cleaned up.
+
+
+
+============================================================================
+File: providers_source.tmp
+Line: 765 to 766
+Type: potential_issue
+
+Comment:
+Duplicate line detected.
+
+Line 766 is a duplicate of line 765.
+
+
+
+🧹 Proposed fix
+
+                             this.debugLog += [Auto-Detect] Success. Using: ${model}\n
+-                            this.debugLog += [Auto-Detect] Success. Using: ${model}\n
+
+Prompt for AI Agent:
+In @providers_source.tmp around lines 765 - 766, The code appends the same debug message twice to this.debugLog; remove the duplicate so only a single line like this.debugLog += [Auto-Detect] Success. Using: ${model}\n remains (locate the duplicate Append in the code that uses this.debugLog during auto-detection and delete the redundant statement), then run existing tests or a quick debug run to confirm no other logic depends on the duplicated append.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/setup/OdieSetupView.tsx
+Line: 428 to 430
+Type: potential_issue
+
+Comment:
+Critical: Memory leak from repeated observable creation.
+
+Creating a new DefaultObservableValue and subscriptions inside the renderer (lines 428-430) causes a memory leak. Every time this code runs, new subscriptions are added without cleaning up the previous ones. The combined observable and its subscriptions accumulate over time.
+
+
+
+
+🔧 Move observable creation outside the renderer
+
+Create the combined observable once, outside the renderer function:
+
++    // Create combined observable outside render functions (after line 83)
++    const profileTabAndDna = new DefaultObservableValue({ 
++        tab: activeProfileTab.getValue(), 
++        dna: userService.dna.getValue() 
++    })
++    lifecycle.own(activeProfileTab.subscribe(obs => 
++        profileTabAndDna.setValue({ 
++            tab: obs.getValue(), 
++            dna: userService.dna.getValue() 
++        })
++    ))
++    lifecycle.own(userService.dna.subscribe(obs => 
++        profileTabAndDna.setValue({ 
++            tab: activeProfileTab.getValue(), 
++            dna: obs.getValue() 
++        })
++    ))
+
+     const renderStep3 = () => (
+         // ... existing code ...
+                             
+-                                {(() => {
+-                                    const combined = new DefaultObservableValue({ tab: activeProfileTab.getValue(), dna: userService.dna.getValue() })
+-                                    lifecycle.own(activeProfileTab.subscribe(obs => combined.setValue({ tab: obs.getValue(), dna: userService.dna.getValue() })))
+-                                    lifecycle.own(userService.dna.subscribe(obs => combined.setValue({ tab: activeProfileTab.getValue(), dna: obs.getValue() })))
+-
+-                                    return ObserverView(lifecycle, combined, ({ tab, dna }) => {
++                                {ObserverView(lifecycle, profileTabAndDna, ({ tab, dna }) => {
+                                         // ... rest of the code
+-                                    })
+-                                })()}
++                                })}
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/setup/OdieSetupView.tsx around lines 428 - 430, The renderer is creating a new DefaultObservableValue and subscribing to it each render, causing the combined observable and subscriptions (the variable named combined and any DefaultObservableValue instances) to accumulate; move creation of the combined observable out of the OdieSetupView render path (e.g., into module scope or create it once via useMemo/useRef) and then in the component subscribe to that single observable inside a useEffect that returns a cleanup function to unsubscribe, ensuring you reuse the same combined observable instance and remove previous subscriptions to prevent the memory leak.
+
+
+
+============================================================================
+File: packages/app/studio/public/manuals/odie/developer/dual-brain.md
+Line: 78 to 80
+Type: potential_issue
+
+Comment:
+Remove duplicate "Step 1" heading.
+
+Lines 78-79 both contain "### Step 1:" headers. The first one appears to be a leftover.
+
+
+
+📝 Proposed fix
+
+ ### Step 1: Update the Provider Config
+-### Step 1: Register the Provider
++### Step 1: Register the Provider
+ Edit src/ui/odie/services/AIService.ts (Note: The service is AIService, not OdieAIService).
+
+
+Or simply remove line 78 entirely since it has no content.
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/odie/developer/dual-brain.md around lines 78 - 80, Remove the duplicate "### Step 1:" markdown header (the empty/leftover one) so only the meaningful "### Step 1: Register the Provider" header remains in the dual-brain.md content; simply delete the redundant header line and verify the surrounding paragraph structure is unchanged.
+
+
+
+============================================================================
+File: providers_source.tmp
+Line: 1176 to 1177
+Type: potential_issue
+
+Comment:
+Duplicate break statement - dead code.
+
+Line 1177 is unreachable as line 1176 already breaks from the loop.
+
+
+
+🧹 Proposed fix
+
+                                     break // Stop trying fallbacks
+-                                    break // Stop trying fallbacks
+
+Prompt for AI Agent:
+In @providers_source.tmp around lines 1176 - 1177, There is a duplicate break statement causing dead code; remove the second redundant "break" so the loop that stops trying fallbacks only contains a single break (i.e., keep the first break and delete the subsequent duplicate break inside the fallback loop).
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/llm/OpenAICompatibleProvider.ts
+Line: 361 to 364
+Type: potential_issue
+
+Comment:
+Remove or guard debug logging in production.
+
+Line 363 logs raw stream data to console on every JSON chunk. This can leak sensitive information and clutter the console in production.
+
+
+
+🧹 Suggested fix
+
+-                            // DEBUG: Log Raw Stream Chunk to catch malformed JSON from Local Models
+-                            // console.log("[Stream Raw]", jsonStr) 
+-                            if (jsonStr.startsWith("{")) console.log("[Stream Raw]", jsonStr.substring(0, 50)) // Log preview
++                            // Uncomment for debugging: console.log("[Stream Raw]", jsonStr.substring(0, 50))
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/llm/OpenAICompatibleProvider.ts around lines 361 - 364, The code in OpenAICompatibleProvider logs raw stream chunks via console.log when jsonStr startsWith("{"), which can leak sensitive data; remove the unconditional console.log or guard it behind a debug flag or environment check (e.g., only run when NODE_ENV !== 'production' or when a provider.debug / logger.isDebugEnabled flag is true), or replace with a safe logger call (processLogger.debug) that respects log levels before calling JSON.parse on jsonStr.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieFeedbackService.ts
+Line: 25 to 32
+Type: nitpick
+
+Comment:
+Add error handling for IndexedDB initialization failure.
+
+The openDB call can fail (e.g., private browsing mode, storage quota exceeded, or browser restrictions). Since dbPromise is awaited in both log() and export(), an unhandled rejection during construction will cause all subsequent operations to fail silently or throw.
+
+
+
+♻️ Suggested improvement
+
+ constructor() {
+     this.dbPromise = openDB(this.dbName, 1, {
+         upgrade(db) {
+             const store = db.createObjectStore("feedback", { keyPath: "id" })
+             store.createIndex("by-rating", "rating")
+         },
+-    })
++    }).catch(err => {
++        console.error("OdieFeedbackService: Failed to open IndexedDB", err)
++        throw err
++    })
+ }
+
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/mocks/MockStudioService.ts
+Line: 6 to 7
+Type: potential_issue
+
+Comment:
+Remove duplicate comment.
+
+Line 7 is a duplicate of line 6.
+
+
+
+🧹 Proposed fix
+
+ // Mock Types needed for the interface
+-// Mock Types needed for the interface
+ interface MockAdapter {
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/mocks/MockStudioService.ts around lines 6 - 7, Remove the duplicated comment "// Mock Types needed for the interface" so it only appears once at the top of MockStudioService (the file currently containing two identical lines); simply delete the redundant line to keep a single informative comment and ensure no other comments or code are altered.
+
+
+
+============================================================================
+File: packages/app/studio/public/manuals/odie/command-reference.md
+Line: 16 to 32
+Type: potential_issue
+
+Comment:
+Add blank lines before subheadings for markdown compliance.
+
+Three subheadings are missing blank lines above them, violating the MD022 rule. This improves readability and follows markdown best practices.
+
+
+
+
+📝 Proposed fix
+
+ ## 📘 1. Concepts: Slash vs. Natural
+ 
+ ### Slash Commands (/)
+ These bypass the LLM reasoning entirely. They are hardcoded execution paths for system utilities. Use these for debugging or instant state checks.
+    Speed*: Instant (
+
+Prompt for AI Agent:
+In @packages/app/studio/public/manuals/odie/command-reference.md around lines 16 - 32, The markdown file has subheadings missing a preceding blank line (violating MD022); add a single blank line before each subheading title such as "### Slash Commands (/)", "### Natural Language", and "### A. Slash Utilities" so each H3 is separated by an empty line from the previous paragraph or horizontal rule; update those heading instances in command-reference.md accordingly to restore Markdown compliance and readability.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieFeedbackService.ts
+Line: 37 to 46
+Type: nitpick
+
+Comment:
+Consider adding error handling for database write failures.
+
+The db.put() operation can fail due to storage quota or transaction errors. Currently, failures will propagate as unhandled promise rejections to the caller.
+
+
+
+♻️ Suggested improvement
+
+ async log(entry: Omit) {
+-    const db = await this.dbPromise
+-    const fullEntry: FeedbackEntry = {
+-        ...entry,
+-        id: UUID.generate().toString(),
+-        timestamp: Date.now()
++    try {
++        const db = await this.dbPromise
++        const fullEntry: FeedbackEntry = {
++            ...entry,
++            id: UUID.generate().toString(),
++            timestamp: Date.now()
++        }
++        await db.put("feedback", fullEntry)
++        console.debug("Feedback Logged:", fullEntry)
++    } catch (err) {
++        console.error("OdieFeedbackService: Failed to log feedback", err)
+     }
+-    await db.put("feedback", fullEntry)
+-    console.debug("Feedback Logged:", fullEntry)
+ }
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/OdieFeedbackService.ts around lines 37 - 46, The log method in OdieFeedbackService risk unhandled rejections from db.put; wrap the await this.dbPromise and the await db.put("feedback", fullEntry) in a try/catch, catch any error, record/report it (e.g., processLogger.error or console.error with context including fullEntry and the error), and decide whether to rethrow or return a failure indicator; ensure the UUID.generate()/timestamp creation still occurs before the write so the logged error contains the fullEntry details and reference the OdieFeedbackService.log, dbPromise, db.put, and FeedbackEntry symbols when making the change.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieToolDefinitions.ts
+Line: 128 to 137
+Type: nitpick
+
+Comment:
+Add JSON Schema constraints for count-in bars.
+
+The description mentions "Number of bars (1-4)" but the schema doesn't enforce this range. Add minimum and maximum constraints for better validation.
+
+
+
+
+♻️ Proposed fix
+
+             properties: {
+-                bars: { type: "number", description: "Number of bars (1-4)." }
++                bars: { 
++                    type: "number", 
++                    description: "Number of bars (1-4).",
++                    minimum: 1,
++                    maximum: 4
++                }
+             },
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/OdieToolDefinitions.ts around lines 128 - 137, The JSON Schema for the tool with name "transport_set_count_in" declares bars but lacks range constraints; update the schema for that tool (in OdieToolDefinitions.ts) to add "minimum": 1 and "maximum": 4 to the bars property so the value is validated to be between 1 and 4 (inclusive), keeping the type "number" and leaving "required": ["bars"] intact.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieToolDefinitions.ts
+Line: 139 to 148
+Type: nitpick
+
+Comment:
+Add JSON Schema constraints for BPM range.
+
+The description mentions BPM is "typically between 60 and 200" but the schema doesn't enforce this. Consider adding minimum and maximum constraints for validation.
+
+
+
+
+♻️ Proposed fix
+
+             properties: {
+-                bpm: { type: "number", description: "Tempo, typically between 60 and 200." }
++                bpm: { 
++                    type: "number", 
++                    description: "Tempo in beats per minute.",
++                    minimum: 20,
++                    maximum: 300
++                }
+             },
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/OdieToolDefinitions.ts around lines 139 - 148, The BPM parameter schema on the "transport_set_bpm" tool lacks range constraints; update the bpm property in the parameters object for "transport_set_bpm" to include validation (e.g., add "minimum": 60 and "maximum": 200, and optionally "type": "integer" if you want whole BPMs) so the JSON Schema enforces the described 60–200 BPM range during validation.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieToolDefinitions.ts
+Line: 38 to 48
+Type: nitpick
+
+Comment:
+Consider adding default value to schema.
+
+The description mentions "default: true" for countIn, but JSON Schema supports specifying defaults explicitly using the default keyword, which can help tools auto-populate values.
+
+
+
+
+♻️ Proposed enhancement
+
+             properties: {
+-                countIn: { type: "boolean", description: "Enable count-in before recording starts (default: true)." }
++                countIn: { 
++                    type: "boolean", 
++                    description: "Enable count-in before recording starts.",
++                    default: true
++                }
+             },
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/OdieToolDefinitions.ts around lines 38 - 48, The JSON schema for the "recording_start" tool currently documents a default for countIn only in the description; add an explicit default in the schema by updating the parameters.properties.countIn entry for the recording_start tool to include "default": true so tooling can auto-populate the value (locate the recording_start object in OdieToolDefinitions.ts and modify properties.countIn to add the default key).
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieToolDefinitions.ts
+Line: 163 to 174
+Type: nitpick
+
+Comment:
+Add JSON Schema constraints for volume range.
+
+The description mentions "Range: -Infinity to +6.0" but the schema doesn't enforce the maximum. Add a maximum constraint to prevent invalid values.
+
+
+
+
+♻️ Proposed fix
+
+             properties: {
+                 trackName: { type: "string", description: "Exact name of the track (e.g. 'Kick', 'Bass')." },
+-                db: { type: "number", description: "Volume level in dB. Max 6.0." }
++                db: { 
++                    type: "number", 
++                    description: "Volume level in dB. Range: -Infinity to +6.0.",
++                    maximum: 6.0
++                }
+             },
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/OdieToolDefinitions.ts around lines 163 - 174, The mixer_volume tool schema lacks an upper bound for the db parameter; update the mixer_volume tool definition so the parameters.properties.db includes a maximum: 6.0 constraint (keeping the type number and description) to enforce the stated "+6.0" limit for the db value.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/llm/OllamaCapabilityService.ts
+Line: 66 to 75
+Type: potential_issue
+
+Comment:
+Remove redundant default tier assignment.
+
+Line 71 sets suggestedTier to "tier3" as a default, but this is immediately overwritten by calculateTier on line 75. This assignment serves no purpose and may confuse readers about the actual tier logic.
+
+
+
+
+🧹 Proposed fix
+
+ const caps: ModelCapabilities = {
+     parameterSize: details.parameter_size || "Unknown",
+     quantization: details.quantization_level || "Unknown",
+     family: details.family || "Unknown",
+     contextWindow: data.model_info?.["llama.context_length"] || 4096, // Heuristic default
+-    suggestedTier: "tier3" // Default to safe
++    suggestedTier: "tier1" // Set below by calculateTier
+ }
+
+ // --- TIER LOGIC (The Physics Check) ---
+ caps.suggestedTier = this.calculateTier(caps, modelName)
+
+
+Or better yet, set it after calling calculateTier:
+ const caps: ModelCapabilities = {
+     parameterSize: details.parameter_size || "Unknown",
+     quantization: details.quantization_level || "Unknown",
+     family: details.family || "Unknown",
+     contextWindow: data.model_info?.["llama.context_length"] || 4096, // Heuristic default
+-    suggestedTier: "tier3" // Default to safe
++    suggestedTier: this.calculateTier({
++        parameterSize: details.parameter_size || "Unknown",
++        quantization: details.quantization_level || "Unknown",
++        family: details.family || "Unknown",
++        contextWindow: data.model_info?.["llama.context_length"] || 4096,
++        suggestedTier: "tier3" // Temp value for type satisfaction
++    }, modelName)
+ }
+
+-// --- TIER LOGIC (The Physics Check) ---
+-caps.suggestedTier = this.calculateTier(caps, modelName)
+
+
+Actually, the simplest fix:
+ const caps: ModelCapabilities = {
+     parameterSize: details.parameter_size || "Unknown",
+     quantization: details.quantization_level || "Unknown",
+     family: details.family || "Unknown",
+     contextWindow: data.model_info?.["llama.context_length"] || 4096,
+-    suggestedTier: "tier3" // Default to safe
++    suggestedTier: "tier1" // Placeholder, set below
+ }
+
+ // --- TIER LOGIC (The Physics Check) ---
+ caps.suggestedTier = this.calculateTier(caps, modelName)
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/llm/OllamaCapabilityService.ts around lines 66 - 75, The default assignment of suggestedTier to "tier3" on the ModelCapabilities object is redundant because it is immediately overwritten by this.calculateTier; remove the initial suggestedTier: "tier3" property from the caps initialization (or alternatively move the assignment so suggestedTier is set only after calling this.calculateTier) to avoid confusion and dead code around the caps object and calculateTier usage.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/setup/OdieSetupView.tsx
+Line: 86 to 88
+Type: potential_issue
+
+Comment:
+Move side effect to a proper lifecycle hook.
+
+Modifying service.studio.layout.odieVisible directly during component initialization can cause unpredictable behavior if the component re-initializes or during testing. This side effect should be executed in a proper mount/effect hook.
+
+
+
+
+♻️ Refactor to use effect hook
+
+-    // Layout: Hide Chat Overlay during Setup
+-    if (service.studio) {
+-        service.studio.layout.odieVisible.setValue(false)
+-    }
++    // Layout: Hide Chat Overlay during Setup
++    onMount(() => {
++        if (service.studio) {
++            service.studio.layout.odieVisible.setValue(false)
++        }
++    })
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/setup/OdieSetupView.tsx around lines 86 - 88, The component OdieSetupView currently mutates service.studio.layout.odieVisible during initialization; move that mutation into a mount effect (e.g., React's useEffect or useLayoutEffect) inside OdieSetupView so the side effect runs on component mount, and optionally restore the previous value on unmount; reference service.studio.layout.odieVisible and perform set/assign within the effect rather than at top-level render to avoid unpredictable behavior and test flakiness.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieToolDefinitions.ts
+Line: 176 to 186
+Type: nitpick
+
+Comment:
+Add JSON Schema constraints for pan range.
+
+The description mentions "Range: -1.0 (Left) to 1.0 (Right)" but the schema doesn't enforce this. Add minimum and maximum constraints for validation.
+
+
+
+
+♻️ Proposed fix
+
+             properties: {
+                 trackName: { type: "string", description: "Exact name of the track." },
+-                pan: { type: "number", description: "Pan value between -1.0 and 1.0." }
++                pan: { 
++                    type: "number", 
++                    description: "Pan value. -1.0 = Left, 0.0 = Center, 1.0 = Right.",
++                    minimum: -1.0,
++                    maximum: 1.0
++                }
+             },
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/OdieToolDefinitions.ts around lines 176 - 186, The JSON Schema for the "mixer_pan" tool currently describes pan range in text but doesn't enforce it; update the parameters schema for the "mixer_pan" tool (within OdieToolDefinitions) to add numeric constraints to the pan property by adding "minimum": -1.0 and "maximum": 1.0 so that validation enforces the -1.0 to 1.0 range while keeping "type": "number" and the existing required fields.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/ContextService.ts
+Line: 102 to 112
+Type: potential_issue
+
+Comment:
+Potential memory leak: subscription not tracked for cleanup.
+
+The subscription created in onProjectLoaded via project.selection.subscribe() is not stored or cleaned up. If projects are loaded/unloaded multiple times, subscriptions will accumulate.
+
+
+
+🔧 Suggested fix pattern
+
++private selectionSubscription?: { unsubscribe?: () => void }
++
+ private onProjectLoaded(project: Project) {
++    // Clean up previous subscription
++    this.selectionSubscription?.unsubscribe?.()
++    
+     // Subscribe to Selection
+     if (project.selection) {
+-        project.selection.subscribe({
++        this.selectionSubscription = project.selection.subscribe({
+             onSelected: (_item: any) => this.scanSelection(project),
+             onDeselected: (_item: any) => this.scanSelection(project)
+         })
+     }
+     // Initial Scan
+     this.scanSelection(project)
+ }
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/ContextService.ts around lines 102 - 112, The subscription created in onProjectLoaded via project.selection.subscribe is never stored or disposed, which can leak when projects reload; update ContextService (e.g., add a Map or property on the ContextService instance keyed by Project or project.id) to store the returned subscription object from project.selection.subscribe, and then unsubscribe/dispose that stored subscription in the corresponding teardown path (e.g., onProjectUnloaded or ContextService.dispose) before removing it from the map; ensure you still call scanSelection(project) initially and guard for missing project.selection when subscribing/unsubscribing.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieToolDefinitions.ts
+Line: 262 to 284
+Type: nitpick
+
+Comment:
+Consider adding default value to schema.
+
+Similar to countIn in recording_start, the db parameter description mentions "default: -6.0" but this could be specified in the schema using the default keyword.
+
+
+
+
+♻️ Proposed enhancement
+
+                 trackName: { type: "string", description: "Name of the source track." },
+                 auxName: { type: "string", description: "Name of the target Aux Bus." },
+-                db: { type: "number", description: "Initial send level in dB (default: -6.0)." }
++                db: { 
++                    type: "number", 
++                    description: "Initial send level in dB.",
++                    default: -6.0
++                }
+             },
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/OdieToolDefinitions.ts around lines 262 - 284, The mixer_add_send tool schema declares a db parameter with "default: -6.0" only in the description; update the parameters schema for the tool named "mixer_add_send" to include a default value by adding "default": -6.0 to the db property in the parameters.properties object (and optionally remove or keep the description note). This ensures the JSON Schema uses the default keyword for db so callers and validators will pick up the -6.0 default.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieCapabilityService.ts
+Line: 51 to 59
+Type: nitpick
+
+Comment:
+Consider gating console logging behind a debug flag.
+
+The console.log and console.warn calls will appear in production. Consider using a debug flag or logging service to control verbosity.
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/OdieCapabilityService.ts around lines 51 - 59, The console.log/console.warn in the capability matching loop should be gated by a debug flag or replaced with the app's logging utility: wrap the logging calls in a check (e.g., this.debugEnabled or a config flag) or call a logger method (e.g., this.logger.debug / this.logger.warn) instead of console; update the loop in OdieCapabilityService that iterates over CAPABILITY_MAP and the fallback returning DEFAULT_CAPABILITIES so logs only emit when debugging is enabled.
+
+
+
+============================================================================
+File: packages/app/studio/src/ui/odie/services/OdieToolExecutor.ts
+Line: 8 to 20
+Type: nitpick
+
+Comment:
+Consider adding stricter types to ExecutorContext.
+
+contextState: any and setGenUiPayload: (payload: any) => void lose type safety. If these have known shapes, defining interfaces would catch misuse at compile time.
+
+Prompt for AI Agent:
+In @packages/app/studio/src/ui/odie/services/OdieToolExecutor.ts around lines 8 - 20, ExecutorContext currently uses loose types for contextState and setGenUiPayload; replace these anys with concrete interfaces (e.g., GenUiPayload and ContextState) that describe the expected shape, update ExecutorContext to use contextState: ContextState and setGenUiPayload: (payload: GenUiPayload) => void, and adjust any callers of ExecutorContext (e.g., where setGenUiPayload or contextState are read/written) to conform to the new types so the compiler can catch mismatches.
+
+

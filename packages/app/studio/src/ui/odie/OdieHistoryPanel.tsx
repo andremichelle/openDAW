@@ -9,7 +9,6 @@ interface PanelProps {
 
 export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
 
-    // Subscribe to history updates
     const redraw = () => {
         const root = document.getElementById("odie-history-list")
         if (root) {
@@ -18,7 +17,6 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
         }
     }
 
-    // Main Container
     const container = <div className="HistoryPanel" style={{
         flex: "1",
         display: "flex", flexDirection: "column",
@@ -33,7 +31,6 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
         `}</style>
     </div> as HTMLElement
 
-    // Header
     const header = <div style={{
         padding: "16px",
         borderBottom: "1px solid var(--border-dim)",
@@ -49,13 +46,11 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
     </div>
     container.appendChild(header)
 
-    // List Container
     const listContainer = <div id="odie-history-list" style={{
         flex: "1", overflowY: "auto", padding: "12px"
     }}></div>
     container.appendChild(listContainer)
 
-    // Render Logic
     const renderList = (root: HTMLElement) => {
         const groups = chatHistory.getGroupedSessions()
 
@@ -76,7 +71,7 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
                         margin: "0 0 2px 0",
                         color: "var(--text-primary)",
                         position: "relative",
-                        overflow: "hidden" // Ensure slide effects stay contained
+                        overflow: "hidden"
                     }}
                         onclick={() => {
                             service.loadSession(session.id)
@@ -88,36 +83,33 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
                         <div className="meta-row" style={{ fontSize: "11px", color: "var(--text-tertiary)", display: "flex", justifyContent: "space-between", alignItems: "center", height: "20px" }}>
                             <span>{new Date(session.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
 
-                            {/* Standard Delete Trigger */}
                             <span className="delete-trigger"
                                 style={{
                                     opacity: "0", transition: "opacity 0.2s", fontSize: "14px", cursor: "pointer",
                                     padding: "2px 6px", borderRadius: "4px"
                                 }}
-                                onclick={(e: any) => {
+                                onclick={(e: MouseEvent) => {
                                     e.stopPropagation()
-                                    // Show Confirm overlay
                                     const overlay = item.querySelector(".confirm-overlay") as HTMLElement
                                     if (overlay) overlay.style.display = "flex"
                                 }}
                             >🗑</span>
                         </div>
 
-                        {/* Confirmation Overlay (Initially Hidden) */}
                         <div className="confirm-overlay" style={{
                             display: "none",
                             position: "absolute", top: "0", left: "0", right: "0", bottom: "0",
-                            background: "var(--bg-surface-2)", // Match hover state
+                            background: "var(--bg-surface-2)",
                             alignItems: "center", justifyContent: "flex-end",
                             padding: "0 12px", gap: "8px",
                             zIndex: "10"
-                        }} onclick={(e) => e.stopPropagation()}>
+                        }} onclick={(e: MouseEvent) => e.stopPropagation()}>
 
                             <button className="cancel-action-btn" style={{
                                 background: "none", border: "1px solid var(--border-dim)", color: "var(--text-primary)",
                                 padding: "4px 10px", borderRadius: "4px", fontSize: "11px", cursor: "pointer",
                                 transition: "all 0.1s"
-                            }} onclick={(e) => {
+                            }} onclick={(e: MouseEvent) => {
                                 e.stopPropagation()
                                 const overlay = item.querySelector(".confirm-overlay") as HTMLElement
                                 if (overlay) overlay.style.display = "none"
@@ -127,17 +119,14 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
                                 background: "var(--color-red)", border: "none", color: "white",
                                 padding: "4px 12px", borderRadius: "4px", fontSize: "11px", cursor: "pointer", fontWeight: "600",
                                 transition: "all 0.1s"
-                            }} onclick={(e) => {
-                                // [ANTIGRAVITY] Removed preventDefault to ensure native click behavior
+                            }} onclick={(e: MouseEvent) => {
                                 e.stopPropagation()
-                                console.log("🗑 DELETING SESSION:", session.id)
                                 chatHistory.deleteSession(session.id)
                             }}>Delete</button>
                         </div>
 
                     </div> as HTMLElement
 
-                    // Show delete trigger on hover
                     item.onmouseenter = () => {
                         const trigger = item.querySelector(".delete-trigger") as HTMLElement
                         if (trigger) trigger.style.opacity = "0.7"
@@ -154,10 +143,8 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
 
     renderList(listContainer as HTMLElement)
 
-    // React to changes
     const binding = chatHistory.sessions.subscribe(() => redraw())
 
-    // Cleanup helper attached to container
     const cleanupContainer = container as HTMLElement & { cleanup?: () => void }
     cleanupContainer.cleanup = () => binding.terminate()
 

@@ -6,35 +6,28 @@ import { ContextService } from "./ContextService"
 import { ODIE_MOLECULAR_KNOWLEDGE } from "../data/OdieKnowledgeBase"
 
 const STORAGE_KEY_CONFIGS = "odie_provider_configs"
-const STORAGE_KEY_ACTIVE = "odie_provider_active" // [FIX] Uniform Key
+const STORAGE_KEY_ACTIVE = "odie_provider_active"
 
 export class AIService {
     readonly providers: LLMProvider[] = []
     readonly activeProviderId = new DefaultObservableValue<string>("gemini")
     readonly wizardCompleted = new DefaultObservableValue<boolean>(false)
 
-    // The Brain
     readonly contextService = new ContextService()
-
-    // Helper map to store configs in memory so we can save them
     private configMap = new Map<string, any>()
 
     constructor() {
-        // Register Providers (The Dual Core Strategy)
-
-        // 1. Google Gemini (Standard Intelligence & Vision)
+        // Register Providers
         this.providers.push(new Gemini3Provider())
 
-        // 3. Ollama (Local)
         const ollama = new OpenAICompatibleProvider(
             "ollama",
             "Ollama (Local)",
-            "http://localhost:11434",
+            "/api/ollama",
             false
         )
-        // [ANTIGRAVITY] Auto-Heal Persistence Wiring
+
         ollama.onConfigChange = (newConfig) => {
-            console.log(`[AIService] Persisting Auto-Healed Config for ${ollama.id}`)
             this.setConfig(ollama.id, newConfig)
         }
         this.providers.push(ollama)
@@ -51,7 +44,7 @@ export class AIService {
         localStorage.setItem("odie_wizard_completed", "true")
     }
 
-    resetWizard() { // Debugging helper
+    resetWizard() {
         this.wizardCompleted.setValue(false)
         localStorage.removeItem("odie_wizard_completed")
     }
@@ -73,13 +66,8 @@ export class AIService {
     }
 
     setConfig(providerId: string, config: ProviderConfig) {
-        // 1. Update In-Memory Map
         this.configMap.set(providerId, config)
-
-        // 2. Persist to Storage
         this.saveSettings()
-
-        // 3. Notify the provider
         const provider = this.providers.find(p => p.id === providerId)
         if (provider) {
             provider.configure(config)
@@ -93,23 +81,19 @@ export class AIService {
         }
     }
 
-    streamChat(messages: Message[], context?: any, tools?: any[], onFinal?: (msg: Message) => void, onStatusChange?: (status: string, model?: string) => void): ObservableValue<string> {
+    streamChat(messages: Message[], context?: any, tools?: any[], onFinal?: (msg: Message) => void, onStatusChange?: (status: string, model?: string) => void): ObservableValue<{ content: string; thoughts?: string }> {
         const provider = this.getActiveProvider()
 
-        // Safety check
         if (!provider) {
-            console.error("No active provider found")
-            return new DefaultObservableValue("Error: No AI Provider selected.")
+            return new DefaultObservableValue({ content: "Error: No AI Provider selected." })
         }
 
-        // Ensure provider is configured before use
         const config = this.getConfig(provider.id)
         provider.configure(config)
 
-        // 1. Get the current "Soul" of the DAW
+        // DAW Context injection
         const dawContext = this.contextService.scan(config.modelId, config.forceAgentMode)
 
-        // 2. Format it into a System Instruction
         const contextPrompt = `
 [SYSTEM CONTEXT]
 Project: ${dawContext.global.projectName}
@@ -122,11 +106,10 @@ View: ${dawContext.focus.activeView}
 Active Track: ${dawContext.focus.selectedTrackName || "None"}
 Plugins: ${dawContext.focus.selectedTrackPlugins?.join(", ") || "None"}
 
-[INTERNAL KNOWLEDGE BASE]
+[KNOWLEDGE BASE]
 ${ODIE_MOLECULAR_KNOWLEDGE}
 `
 
-        // 3. Inject deeply
         const modifiedMessages = [...messages]
         const systemIndex = modifiedMessages.findIndex(m => m.role === 'system')
 
@@ -136,16 +119,14 @@ ${ODIE_MOLECULAR_KNOWLEDGE}
                 content: modifiedMessages[systemIndex].content + "\n" + contextPrompt
             }
         } else {
-            // No system prompt? Create one.
             modifiedMessages.unshift({
                 role: 'system',
                 content: `You are Odie, an AI Assistant in OpenDAW.\n${contextPrompt}`,
-                id: "system-init", // Dummy ID
-                timestamp: Date.now() // Dummy timestamp
+                id: "system-init",
+                timestamp: Date.now()
             })
         }
 
-        // 4. Send the enriched payload WITH TOOLS
         return provider.streamChat(modifiedMessages, context, tools, onFinal, onStatusChange)
     }
 
@@ -159,7 +140,6 @@ ${ODIE_MOLECULAR_KNOWLEDGE}
 
             if (rawConfigs) {
                 const json = JSON.parse(rawConfigs)
-                // Hydrate Map from JSON Object
                 Object.keys(json).forEach(key => {
                     this.configMap.set(key, json[key])
                 })
@@ -169,67 +149,50 @@ ${ODIE_MOLECULAR_KNOWLEDGE}
             if (active && this.providers.find(p => p.id === active)) {
                 this.activeProviderId.setValue(active)
             } else {
-                // [ANTIGRAVITY] Default to Gemini for new users (Local is power-user option)
                 this.activeProviderId.setValue("gemini")
             }
 
-            // AUTO-MIGRATION: Fix Mixed Content and Path issues for existing users
+            // Migration logic
             const ollamaConfig = this.configMap.get("ollama")
             if (ollamaConfig) {
-                // [ANTIGRAVITY] Fix: Reverted strict localhost enforcement.
-                // We trust the user's config. The provider will now attempt auto-detection.
-
-                if (!ollamaConfig.baseUrl || ollamaConfig.baseUrl.trim() === "") {
-                    // Empty config? Default to standard Ollama.
-                    // [ANTIGRAVITY] Use Proxy Path to avoid CORS in dev
-                    ollamaConfig.baseUrl = "/api/ollama/api/chat"
+                // FORCE PROXY if using default or direct localhost (CORS bypass)
+                if (!ollamaConfig.baseUrl ||
+                    ollamaConfig.baseUrl.trim() === "" ||
+                    ollamaConfig.baseUrl.includes("localhost:11434") ||
+                    ollamaConfig.baseUrl.includes("127.0.0.1:11434")) {
+                    ollamaConfig.baseUrl = "/api/ollama"
                     this.configMap.set("ollama", ollamaConfig)
                     this.saveSettings()
                 }
 
                 if (ollamaConfig.baseUrl && ollamaConfig.baseUrl.includes("openrouter.ai")) {
-                    console.warn("Correcting corrupted Ollama config...")
-                    ollamaConfig.baseUrl = "https://openrouter.ai/api/v1/chat/completions" // Correct OpenRouter endpoint
+                    ollamaConfig.baseUrl = "https://openrouter.ai/api/v1/chat/completions"
                     this.configMap.set("ollama", ollamaConfig)
                     this.saveSettings()
                 }
             }
 
-            // Fix 4: Bad Model ID (Gemini/GPT in Ollama)
             if (this.configMap.has("ollama")) {
                 const ollamaConfig = this.configMap.get("ollama")!
                 if (ollamaConfig.modelId === "llama3") {
-                    console.warn("Clearing legacy 'llama3' default to allow auto-detect.")
                     ollamaConfig.modelId = ""
                     this.configMap.set("ollama", ollamaConfig)
                     this.saveSettings()
                 }
             } else {
-                this.configMap.set("ollama", { baseUrl: "/api/ollama/api/chat", modelId: "" })
+                this.configMap.set("ollama", { baseUrl: "/api/ollama", modelId: "" })
                 this.saveSettings()
             }
 
-
-
-
             this.providers.forEach(p => {
                 const cfg = this.configMap.get(p.id)
-                if (cfg) {
-                    p.configure(cfg)
-                }
+                if (cfg) p.configure(cfg)
             })
 
-            // [ANTIGRAVITY] REMOVED: Auto-fallback to Ollama if no key
-            // This was overriding user's saved provider choice!
-            // The connection indicator will show "No API" if key is missing - that's the correct UX.
-            // Users can then add a key or switch providers themselves.
-
         } catch (e) {
-            console.error("Failed to load AI settings", e)
+            console.error("Odie: Failed to load settings", e)
         }
     }
-
-
 
     private saveSettings() {
         const obj: any = {}

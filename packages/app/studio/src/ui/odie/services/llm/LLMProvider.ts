@@ -22,6 +22,7 @@ export interface Message {
     id: string
     role: "user" | "model" | "system" | "function"
     content: string
+    thoughts?: string // [Ollamas] Internal monologue/reasoning
     tool_calls?: ToolCall[] // If the model decided to call a tool
     name?: string // For function role
     timestamp: number
@@ -69,7 +70,7 @@ export interface LLMProvider {
         tools?: LLMTool[],
         onFinal?: (msg: Message) => void, // Called when stream completes with full message
         onStatusChange?: (status: string, model?: string) => void // Meta-Events
-    ): ObservableValue<string>
+    ): ObservableValue<{ content: string, thoughts?: string }>
 
     // Optional: Fetch list of available models (for Local AI / OpenRouter)
     fetchModels?(): Promise<string[]>

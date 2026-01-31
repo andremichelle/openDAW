@@ -18,7 +18,7 @@ export interface VisualKnobProps {
     design?: typeof HaloDesign
     color?: string
 
-    suggestionValue?: unitValue // Odie's Proposed Value (Purple)
+    suggestionValue?: unitValue // Odie's Proposed Value (Cyan)
     originalValue?: unitValue   // The value before Odie touched it (Grey)
 }
 
@@ -101,11 +101,11 @@ export const VisualKnob = ({ value: rawValue, design, color, suggestionValue, or
                     />
                 )}
 
-                {/* 4. Suggestion Value (Odie Purple - High Vis) */}
+                {/* 4. Suggestion Value (Odie Cyan - High Vis) */}
                 {suggestionPathD && (
                     <path
                         d={suggestionPathD}
-                        stroke="#a78bfa"
+                        stroke="#06b6d4"
                         stroke-width={3}
                         stroke-linecap="round"
                     />

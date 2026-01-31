@@ -153,14 +153,14 @@ component
         margin-bottom: 8px
         display: block
 
-    // -- PASSPORT CARD (Overview) --
+    // -- PROFILE CARD (Overview) --
     .overview-tab
         width: 100%
         height: 100%
         display: flex
         flex-direction: column
 
-    .passport-card
+    .profile-card
         background: linear-gradient(135deg, #1a1a1a 0%, #111 100%)
         border: 1px solid rgba(255,255,255,0.1)
         border-radius: 16px
@@ -169,7 +169,6 @@ component
         overflow: hidden
         box-shadow: 0 20px 40px rgba(0,0,0,0.3)
 
-        // Holographic effect overlay
         &::after
             content: ""
             position: absolute
@@ -180,20 +179,20 @@ component
             background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.03) 35%, transparent 40%)
             pointer-events: none
 
-    .passport-header
+    .profile-header
         display: flex
         justify-content: space-between
         margin-bottom: 24px
         border-bottom: 1px dashed rgba(255,255,255,0.1)
         padding-bottom: 16px
 
-        .passport-id
+        .profile-id
             font-family: monospace
             color: var(--color-gray)
             font-size: 12px
             letter-spacing: 1px
 
-        .passport-status
+        .profile-status
             font-size: 10px
             font-weight: 700
             color: #10b981
@@ -202,11 +201,11 @@ component
             border-radius: 4px
             border: 1px solid rgba(16, 185, 129, 0.2)
 
-    .passport-body
+    .profile-body
         display: flex
         gap: 24px
 
-    .passport-photo
+    .profile-photo
         width: 100px
         flex-shrink: 0
         
@@ -220,7 +219,7 @@ component
             box-shadow: 0 4px 20px rgba(0,0,0,0.5)
             border: 2px solid rgba(255,255,255,0.1)
 
-    .passport-details
+    .profile-details
         flex: 1
 
     .detail-row
@@ -253,7 +252,7 @@ component
         grid-template-columns: 1fr 1fr
         gap: 16px
 
-    .passport-footer
+    .profile-footer
         margin-top: 24px
         padding-top: 16px
         border-top: 1px dashed rgba(255,255,255,0.1)

@@ -1,5 +1,4 @@
 import type { OdieService } from "../OdieService"
-// [ANTIGRAVITY] Cleaned Up Legacy Imports
 
 export type CommandHandler = (service: OdieService, args: string[]) => Promise<string | void>
 
@@ -33,9 +32,9 @@ export class OdieCommandRegistry {
             description: "Start Transport",
             usage: "/play",
             execute: async (s) => {
-                if (!s.appControl) return "[ERR] Nervous System Disconnected"
+                if (!s.appControl) return "Error: Connection lost"
                 s.appControl.play()
-                return "[PLAY] Playing"
+                return "Playing"
             }
         })
 
@@ -44,9 +43,9 @@ export class OdieCommandRegistry {
             description: "Stop Transport",
             usage: "/stop",
             execute: async (s) => {
-                if (!s.appControl) return "[ERR] Nervous System Disconnected"
+                if (!s.appControl) return "Error: Connection lost"
                 s.appControl.stop()
-                return "[STOP] Stopped"
+                return "Stopped"
             }
         })
 
@@ -55,10 +54,10 @@ export class OdieCommandRegistry {
             description: "Start Recording",
             usage: "/record [countIn? (true/false, default: true)]",
             execute: async (s, args) => {
-                if (!s.appControl) return "[ERR] Nervous System Disconnected"
+                if (!s.appControl) return "Error: Connection lost"
                 const countIn = args[0] !== "false" && args[0] !== "no"
                 s.appControl.record(countIn)
-                return countIn ? "[REC] Recording (Count-In)" : "[REC] Recording (Immediate)"
+                return countIn ? "Recording (Count-In)" : "Recording (Immediate)"
             }
         })
 
@@ -67,26 +66,24 @@ export class OdieCommandRegistry {
             description: "Add a new track",
             usage: "/add [type] [name?]",
             execute: async (s, args) => {
-                // [ANTIGRAVITY] Unlocked: Pass type directly to OdieAppControl
-                // This allows 'tape', 'playfield', 'arpeggio' etc. to work dynamically via the Factory Lookup
                 const type = args[0] || "synth"
                 const name = args.slice(1).join(" ") || "New Track"
 
-                if (!s.appControl) return "[ERR] Nervous System Disconnected"
+                if (!s.appControl) return "Error: Connection lost"
 
                 const result = await s.appControl.addTrack(type, name)
-                return result.success ? `[OK] ${result.message}` : `❌ ${result.reason}`
+                return result.success ? result.message : `Error: ${result.reason}`
             }
         })
 
         this.register({
             id: "/new",
-            description: "Start a new project (Reset)",
+            description: "Start a new project",
             usage: "/new",
             execute: async (s) => {
-                if (!s.appControl) return "[ERR] Nervous System Disconnected"
+                if (!s.appControl) return "Error: Connection lost"
                 await s.appControl.newProject()
-                return "[NEW] New Project Created (Reset)"
+                return "New Project Created"
             }
         })
 
@@ -95,10 +92,10 @@ export class OdieCommandRegistry {
             description: "List available samples",
             usage: "/samples",
             execute: async (s) => {
-                if (!s.appControl) return "[ERR] Nervous System Disconnected"
+                if (!s.appControl) return "Error: Connection lost"
                 const samples = await s.appControl.listSamples()
-                if (samples.length === 0) return "(Empty) No samples found."
-                let report = "## SAMPLES Available Samples\n\n"
+                if (samples.length === 0) return "No samples found."
+                let report = "## Available Samples\n\n"
                 report += samples.map(s => `- ${s.name}`).join("\n")
                 return report
             }
@@ -109,10 +106,10 @@ export class OdieCommandRegistry {
             description: "List available soundfonts",
             usage: "/soundfonts",
             execute: async (s) => {
-                if (!s.appControl) return "[ERR] Nervous System Disconnected"
+                if (!s.appControl) return "Error: Connection lost"
                 const sfs = await s.appControl.listSoundfonts()
-                if (sfs.length === 0) return "(Empty) No soundfonts found."
-                let report = "## SOUNDFONTS Available Soundfonts\n\n"
+                if (sfs.length === 0) return "No soundfonts found."
+                let report = "## Available Soundfonts\n\n"
                 report += sfs.map(s => `- ${s.name}`).join("\n")
                 return report
             }
@@ -125,10 +122,10 @@ export class OdieCommandRegistry {
             execute: async (s, args) => {
                 const trackName = args[0]
                 const query = args.slice(1).join(" ")
-                if (!trackName || !query) return "[ERR] Usage: /set-nano [trackName] [sampleQuery]"
-                if (!s.appControl) return "[ERR] Nervous System Disconnected"
+                if (!trackName || !query) return "Usage: /set-nano [trackName] [sampleQuery]"
+                if (!s.appControl) return "Error: Connection lost"
                 const res = await s.appControl.setNanoSample(trackName, query)
-                return res.success ? `[OK] ${res.message}` : `[ERR] ${res.reason}`
+                return res.success ? res.message : `Error: ${res.reason}`
             }
         })
 
@@ -140,10 +137,10 @@ export class OdieCommandRegistry {
                 const trackName = args[0]
                 const padIndex = parseInt(args[1], 10)
                 const query = args.slice(2).join(" ")
-                if (!trackName || isNaN(padIndex) || !query) return "[ERR] Usage: /set-pad [trackName] [padIndex] [sampleQuery]"
-                if (!s.appControl) return "[ERR] Nervous System Disconnected"
+                if (!trackName || isNaN(padIndex) || !query) return "Usage: /set-pad [trackName] [padIndex] [sampleQuery]"
+                if (!s.appControl) return "Error: Connection lost"
                 const res = await s.appControl.setPlayfieldPad(trackName, padIndex, query)
-                return res.success ? `[OK] ${res.message}` : `[ERR] ${res.reason}`
+                return res.success ? res.message : `Error: ${res.reason}`
             }
         })
 
@@ -154,10 +151,10 @@ export class OdieCommandRegistry {
             execute: async (s, args) => {
                 const trackName = args[0]
                 const query = args.slice(1).join(" ")
-                if (!trackName || !query) return "[ERR] Usage: /set-sf [trackName] [soundfontQuery]"
-                if (!s.appControl) return "[ERR] Nervous System Disconnected"
+                if (!trackName || !query) return "Usage: /set-sf [trackName] [soundfontQuery]"
+                if (!s.appControl) return "Error: Connection lost"
                 const res = await s.appControl.setSoundfont(trackName, query)
-                return res.success ? `[OK] ${res.message}` : `[ERR] ${res.reason}`
+                return res.success ? res.message : `Error: ${res.reason}`
             }
         })
 
@@ -165,77 +162,75 @@ export class OdieCommandRegistry {
             id: "/help",
             description: "List commands",
             usage: "/help",
-            execute: async () => `## ODIE USER MANUAL
+            execute: async () => `## Odie Help
 
-### Natural Language (The Brain)
-Odie understands music production context. Just ask naturally:
+### Natural Language
+Odie understands music production context. Ask naturally:
 
 | Category | Examples |
 | :--- | :--- |
-| **Workflow** | _"Add a generic drum track"_, _"Delete the selected region"_, _"Split clip here"_ |
+| **Workflow** | _"Add a drum track"_, _"Delete selected region"_, _"Split clip here"_ |
 | **Mixing** | _"Set volume to -3dB"_, _"Pan this track left"_, _"Add a Reverb"_ |
 | **Transport** | _"Set tempo to 140 bpm"_, _"Loop this section"_ |
-| **GenUI** | _"Show me a vintage compressor"_, _"Compare EQ vs Filter"_ |
+| **GenUI** | _"Show a vintage compressor"_, _"Compare EQ vs Filter"_ |
 
 ---
 
-### Precision Tools (Slash Commands)
+### Commands
 Direct control over the Studio and Chat.
 
 #### Transport & Project
 | Command | Description |
 | :--- | :--- |
-| \`/play\` | [PLAY] **Play** |
-| \`/stop\` | [STOP] **Stop** |
-| \`/record\` | [REC] **Record** (Add \`false\` to skip count-in) |
-| \`/new\` | [NEW] **New Project** (Reset Studio) |
+| \`/play\` | Start transport |
+| \`/stop\` | Stop transport |
+| \`/record\` | Start recording (Add \`false\` for no count-in) |
+| \`/new\` | Create new project |
 
 #### Tracks & Effects
 | Command | Description |
 | :--- | :--- |
-| \`/add [type]\` | **Add Track** (e.g. \`/add audio\`, \`/add drums\`) |
-| \`/list\` | [LIST] **List All Tracks** |
-| \`/effect [track] [type]\` | **Add Audio FX** (e.g. \`/effect Bass Reverb\`) |
-| \`/meff [track] [type]\` | **Add MIDI FX** (e.g. \`/meff Keys Arpeggiator\`) |
+| \`/add [type]\` | Add track (e.g. \`/add audio\`, \`/add drums\`) |
+| \`/list\` | List all tracks |
+| \`/effect [track] [type]\` | Add audio effect (e.g. \`/effect Bass Reverb\`) |
+| \`/meff [track] [type]\` | Add MIDI effect (e.g. \`/meff Keys Arpeggiator\`) |
 
-#### Assets (Power User)
+#### Assets
 | Command | Description |
 | :--- | :--- |
-| \`/samples\` | [SAMPLES] **List Samples** |
-| \`/soundfonts\` | [SOUNDFONTS] **List Soundfonts** |
-| \`/set-nano [track] [query]\` | **Load Sampler** (Direct Load) |
-| \`/set-sf [track] [query]\` | **Load Soundfont** (Direct Load) |
+| \`/samples\` | List samples |
+| \`/soundfonts\` | List soundfonts |
+| \`/set-nano [track] [query]\` | Load sampler directly |
+| \`/set-sf [track] [query]\` | Load soundfont directly |
 
-#### Chat Control
+#### Chat
 | Command | Description |
 | :--- | :--- |
-| \`/clear\` | [WIPE] **Wipe Chat History** |
+| \`/clear\` | Clear chat history |
 `
         })
 
-        // [ANTIGRAVITY] Dev Tools Menu
         this.register({
             id: "/dev",
             description: "Show Developer Commands",
             usage: "/dev",
-            execute: async () => `## DEVELOPER TOOLS
+            execute: async () => `## Developer Tools
 
 | Command | Description |
 | :--- | :--- |
-| \`/debug\` | [DEBUG] Dump State (Console Log) |
-| \`/verify3ui\` | [TEST] Test GenUI (Render Widgets) |
-| \`/keys\` | [KEYS] API Key Status |
+| \`/debug\` | Dump state to console |
+| \`/verify-ui\` | Test GenUI rendering |
+| \`/keys\` | API key status |
 `
         })
 
-        // [ANTIGRAVITY] New Utility Commands
         this.register({
             id: "/clear",
             description: "Clear Chat History",
             usage: "/clear",
             execute: async (s) => {
                 s.messages.setValue([])
-                return "[WIPE] Chat History Cleared."
+                return "Chat History Cleared"
             }
         })
 
@@ -245,30 +240,28 @@ Direct control over the Studio and Chat.
             usage: "/debug",
             execute: async (s) => {
                 const info = s.lastDebugInfo.getValue()
-                console.log("[DEBUG] Odie Debug Dump", info)
-                return "[DEBUG] Debug info dumped to Chrome Console."
+                console.log("Odie Debug Dump", info)
+                return "Debug info dumped to console"
             }
         })
 
         this.register({
             id: "/purge",
-            description: "Factory Reset (Clear Data & Reload)",
+            description: "Factory Reset",
             usage: "/purge",
             execute: async (_s) => {
-                // [ANTIGRAVITY] Nuclear Option for Testing Onboarding
-                console.log("[PURGE] PURGING ODIE DATA...")
+                console.log("Purging Odie Data...")
                 localStorage.clear()
                 location.reload()
-                return "[PURGE] Goodbye."
+                return "Purged"
             }
         })
 
         this.register({
-            id: "/verify3ui",
+            id: "/verify-ui",
             description: "Test GenUI Rendering",
-            usage: "/verify3ui",
+            usage: "/verify-ui",
             execute: async (s) => {
-                // Mock Payload
                 s.genUiPayload.setValue({
                     title: "System Diagnostics",
                     root: {
@@ -283,7 +276,7 @@ Direct control over the Studio and Chat.
                     }
                 })
                 s.visible.setValue(true)
-                return "[TEST] GenUI Test Payload Injected."
+                return "GenUI Test Payload Injected"
             }
         })
 
@@ -293,13 +286,13 @@ Direct control over the Studio and Chat.
             description: "Add an audio effect to a track",
             usage: "/effect [track] [type]",
             execute: async (s, args) => {
-                if (args.length < 2) return "[ERR] Usage: /effect [track] [type]"
+                if (args.length < 2) return "Usage: /effect [track] [type]"
                 const type = args[args.length - 1]
                 const track = args.slice(0, -1).join(" ")
 
-                if (!s.appControl) return "[ERR] Nervous System Disconnected"
+                if (!s.appControl) return "Error: Connection lost"
                 const res = await s.appControl.addEffect(track, type)
-                return res.success ? `[OK] ${res.message}` : `[ERR] ${res.reason}`
+                return res.success ? res.message : `Error: ${res.reason}`
             }
         })
 
@@ -308,13 +301,13 @@ Direct control over the Studio and Chat.
             description: "Add a MIDI effect to a track",
             usage: "/meff [track] [type]",
             execute: async (s, args) => {
-                if (args.length < 2) return "[ERR] Usage: /meff [track] [type]"
+                if (args.length < 2) return "Usage: /meff [track] [type]"
                 const type = args[args.length - 1]
                 const track = args.slice(0, -1).join(" ")
 
-                if (!s.appControl) return "[ERR] Nervous System Disconnected"
+                if (!s.appControl) return "Error: Connection lost"
                 const res = await s.appControl.addMidiEffect(track, type)
-                return res.success ? `[OK] ${res.message}` : `[ERR] ${res.reason}`
+                return res.success ? res.message : `Error: ${res.reason}`
             }
         })
 
@@ -323,40 +316,39 @@ Direct control over the Studio and Chat.
             description: "List all tracks",
             usage: "/list",
             execute: async (s) => {
-                if (!s.appControl) return "[ERR] Nervous System Disconnected"
+                if (!s.appControl) return "Error: Connection lost"
                 const tracks = s.appControl.listTracks()
-                if (tracks.length === 0) return "(Empty) No tracks."
-                return "## TRACKS List\n" + tracks.map((t, i) => `${i + 1}. **${t}**`).join("\n")
+                if (tracks.length === 0) return "No tracks found."
+                return "## Track List\n" + tracks.map((t, i) => `${i + 1}. **${t}**`).join("\n")
             }
         })
 
-        // [ANTIGRAVITY] Infinity API Library Status Command
         this.register({
             id: "/keys",
-            description: "Show API Key Library status",
+            description: "Show API Key status",
             usage: "/keys",
             execute: async (s, _args) => {
                 const provider = s.ai.getActiveProvider()
 
                 if (!isProviderWithKeyStatuses(provider)) {
-                    return "[WARN] Key status not available for current provider."
+                    return "Warning: Key status not available for current provider."
                 }
 
                 const statuses = provider.getKeyStatuses()
                 if (!statuses || statuses.length === 0) {
-                    return "(Empty) No API keys in library. Add keys in Settings."
+                    return "No API keys configured."
                 }
 
-                let report = "## KEYS Infinity API Library\n\n"
+                let report = "## API Key Library\n\n"
                 report += "| # | Key | Status | Active |\n"
                 report += "|---|-----|--------|--------|\n"
 
                 for (let i = 0; i < statuses.length; i++) {
                     const k = statuses[i]
-                    const statusIcon = k.status === 'ready' ? '[OK]' :
-                        k.status === 'exhausted' ? '[WAIT]' :
-                            k.status === 'invalid' ? '[ERR]' : '[?]'
-                    const activeIcon = k.isActive ? ' <--- ACTIVE' : ''
+                    const statusIcon = k.status === 'ready' ? '✓' :
+                        k.status === 'exhausted' ? '⌛' :
+                            k.status === 'invalid' ? '✗' : '?'
+                    const activeIcon = k.isActive ? ' •' : ''
                     report += `| ${i + 1} | ${k.key} | ${statusIcon} ${k.status.toUpperCase()} | ${activeIcon} |\n`
                 }
 
@@ -368,10 +360,7 @@ Direct control over the Studio and Chat.
                 return report
             }
         })
-
-
-
-    } // End Constructor
+    }
 
     register(def: CommandDef) {
         this.commands.set(def.id, def)
@@ -389,7 +378,7 @@ Direct control over the Studio and Chat.
             const result = await def.execute(service, args)
             return typeof result === "string" ? result : null
         } catch (e) {
-            return `❌ Error executing ${cmd}: ${(e instanceof Error) ? e.message : String(e)}`
+            return `Error: ${(e instanceof Error) ? e.message : String(e)}`
         }
     }
 }

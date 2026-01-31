@@ -8,7 +8,7 @@ import { AutomatableParameterFieldAdapter } from "@opendaw/studio-adapters"
 // --- STYLES ---
 const containerStyle = (layout: "row" | "column" | "grid", gap: number = 4) => ({
     display: "flex",
-    flexDirection: layout === "grid" ? "row" : layout, // Grid TODO
+    flexDirection: layout === "grid" ? "row" : layout,
     flexWrap: layout === "grid" ? "wrap" : "nowrap",
     gap: `${gap}px`,
     alignItems: "center",
@@ -20,8 +20,8 @@ const containerStyle = (layout: "row" | "column" | "grid", gap: number = 4) => (
 })
 
 // --- MOCK ADAPTER FACTORY ---
-// In the real system, this will look up actual Project parameters.
-// For the prototype, we return a dummy adapter so the UI renders without crashing.
+// In the actual system, this resolves real Project parameters.
+// Fallback adapter for prototype rendering.
 const getMockAdapter = (paramName: string): AutomatableParameterFieldAdapter<number> => {
     return {
         name: paramName,
@@ -29,7 +29,6 @@ const getMockAdapter = (paramName: string): AutomatableParameterFieldAdapter<num
         value: 0.5,
         displayValue: "50%",
         normalizedValue: 0.5,
-        // Mocking the critical methods needed by ParameterLabel
         catchupAndSubscribeControlSources: (_cb: any) => ({ terminate: () => { } }),
         catchupAndSubscribe: (_cb: any) => ({ terminate: () => { } }),
         subscribe: (_cb: any) => ({ terminate: () => { } }),
@@ -39,45 +38,41 @@ const getMockAdapter = (paramName: string): AutomatableParameterFieldAdapter<num
     } as any
 }
 
-
-// [ANTIGRAVITY] Real Parameter Resolution
 type ParamResolver = (target: string) => AutomatableParameterFieldAdapter<number> | null
 
-export const LoomRenderer = (props: { lifecycle: Lifecycle, component: UIComponent, resolver?: ParamResolver, key?: string | number }) => {
+export const GenUIRenderer = (props: { lifecycle: Lifecycle, component: UIComponent, resolver?: ParamResolver, key?: string | number }) => {
     const { lifecycle, component, resolver } = props
 
-    // Explicit check to ensure TS knows component type
     if (!component || !component.type) return <div style={{ color: "red" }}>Invalid Component</div>
 
     switch (component.type) {
         case "container":
-            return <LoomContainer lifecycle={lifecycle} component={component as UIContainer} resolver={resolver} />
+            return <GenUIContainer lifecycle={lifecycle} component={component as UIContainer} resolver={resolver} />
         case "knob":
-            return <LoomKnob lifecycle={lifecycle} component={component as UIKnob} resolver={resolver} />
+            return <GenUIKnob lifecycle={lifecycle} component={component as UIKnob} resolver={resolver} />
         case "switch":
-            return <LoomSwitch lifecycle={lifecycle} component={component as UISwitch} />
+            return <GenUISwitch lifecycle={lifecycle} component={component as UISwitch} />
         case "label":
             const label = component as any
             return <div style={{ ...label.style }} className={`genui-label-${label.variant || "body"}`}>{label.text}</div>
         case "meter":
-            return <div style={{ width: "10px", height: "50px", background: "#333" }}></div> // Placeholder
+            return <div style={{ width: "10px", height: "50px", background: "#333" }}></div>
         default:
             return <div style={{ color: "red" }}>Unknown Component: {(component as any).type}</div>
     }
 }
 
-const LoomContainer = ({ lifecycle, component, resolver }: { lifecycle: Lifecycle, component: UIContainer, resolver?: ParamResolver }) => {
+const GenUIContainer = ({ lifecycle, component, resolver }: { lifecycle: Lifecycle, component: UIContainer, resolver?: ParamResolver }) => {
     return (
         <div style={containerStyle(component.layout, component.gap) as any}>
             {component.children.map((child, i) => (
-                <LoomRenderer key={child.id || i} lifecycle={lifecycle} component={child} resolver={resolver} />
+                <GenUIRenderer key={child.id || i} lifecycle={lifecycle} component={child} resolver={resolver} />
             ))}
         </div>
     )
 }
 
-const LoomKnob = ({ lifecycle, component, resolver }: { lifecycle: Lifecycle, component: UIKnob, resolver?: ParamResolver }) => {
-    // 1. Try to resolve real parameter
+const GenUIKnob = ({ lifecycle, component, resolver }: { lifecycle: Lifecycle, component: UIKnob, resolver?: ParamResolver }) => {
     let adapter: AutomatableParameterFieldAdapter<number> = null as any
 
     if (resolver) {
@@ -85,11 +80,10 @@ const LoomKnob = ({ lifecycle, component, resolver }: { lifecycle: Lifecycle, co
         if (found) {
             adapter = found
         } else {
-            console.warn(`[Loom] Could not resolve parameter: ${component.targetParam}`)
+            console.warn(`[GenUI] Could not resolve parameter: ${component.targetParam}`)
         }
     }
 
-    // 2. Fallback to Mock if not found (keeps UI from crashing)
     if (!adapter) {
         adapter = getMockAdapter(component.targetParam)
     }
@@ -97,17 +91,16 @@ const LoomKnob = ({ lifecycle, component, resolver }: { lifecycle: Lifecycle, co
     return (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
             <span style={{ fontSize: "10px", marginBottom: "2px", opacity: "0.7" }}>{component.label || component.targetParam}</span>
-            {/* We wrap it in the standard Dragging behavior for authenticity */}
             <RelativeUnitValueDragging lifecycle={lifecycle}
                 parameter={adapter as any}
-                editing={{} as any} // Mock BoxEditing
+                editing={{} as any}
                 supressValueFlyout={false}>
                 <ParameterLabel
                     lifecycle={lifecycle}
-                    adapter={null as any} // The low-level component might need the DeviceAdapter, mock null for now
+                    adapter={null as any}
                     parameter={adapter as any}
-                    midiLearning={{} as any} // Mock MIDILearning
-                    editing={{} as any} // Mock BoxEditing
+                    midiLearning={{} as any}
+                    editing={{} as any}
                     framed={true}
                     standalone={false}
                 />
@@ -116,7 +109,6 @@ const LoomKnob = ({ lifecycle, component, resolver }: { lifecycle: Lifecycle, co
     )
 }
 
-// TODO: Implement Switch
-const LoomSwitch = ({ lifecycle: _lifecycle, component }: { lifecycle: Lifecycle, component: UISwitch }) => {
+const GenUISwitch = ({ lifecycle: _lifecycle, component }: { lifecycle: Lifecycle, component: UISwitch }) => {
     return <div style={{ border: "1px solid white", padding: "2px" }}>SW: {component.label}</div>
 }

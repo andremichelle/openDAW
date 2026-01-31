@@ -10,7 +10,7 @@ export const OdieChat = ({ service }: { service: OdieService }) => {
     const messages = new DefaultObservableValue<Message[]>([])
 
     // -- Components --
-    const chatFace = <div style={{
+    const chatRoot = <div style={{
         position: "absolute", width: "100%", height: "100%",
         display: "flex", flexDirection: "column", background: "var(--color-panel-background)"
     } as any}>
@@ -21,7 +21,7 @@ export const OdieChat = ({ service }: { service: OdieService }) => {
 
     // Render loop for Chat
     const renderChat = (_msgs: Message[]) => {
-        const contentContainer = chatFace.querySelector("#chat-content") as HTMLElement
+        const contentContainer = chatRoot.querySelector("#chat-content") as HTMLElement
         if (!contentContainer) return
         while (contentContainer.firstChild) contentContainer.firstChild.remove()
 
@@ -40,7 +40,7 @@ export const OdieChat = ({ service }: { service: OdieService }) => {
         width: "100%", height: "100%",
         overflow: "hidden"
     }}>
-        {chatFace}
+        {chatRoot}
     </div> as HTMLElement
 
     return container

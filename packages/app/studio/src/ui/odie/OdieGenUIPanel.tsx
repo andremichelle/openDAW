@@ -1,8 +1,7 @@
 import { createElement } from "@opendaw/lib-jsx"
 import { Lifecycle } from "@opendaw/lib-std"
 import { Html } from "@opendaw/lib-dom"
-import { LoomRenderer } from "./genui/LoomRenderer"
-// [ANTIGRAVITY] Cleaned Up Imports
+import { GenUIRenderer } from "./genui/GenUIRenderer"
 import type { OdieService } from "./OdieService"
 
 // --- STYLES ---
@@ -10,8 +9,8 @@ const css = `
     component {
         display: flex;
         flex-direction: column;
-        width: 320px; /* Base width */
-        max-height: 60vh; /* Max vertical height */
+        width: 320px;
+        max-height: 60vh;
         background: #1a1a1a;
         color: #eee;
         font-family: 'Inter', sans-serif;
@@ -49,20 +48,17 @@ const className = Html.adoptStyleSheet(css, "genui-panel")
 export const OdieGenUIPanel = (props: { lifecycle: Lifecycle, service: OdieService }) => {
     const { lifecycle, service } = props
 
-    // State container
     const content = <div className="genui-content" />
 
-    // Subscribe to payload updates
     lifecycle.own(service.genUiPayload.subscribe(obs => {
         const payload = obs.getValue()
         // Clear previous content
         while (content.firstChild) content.lastChild?.remove()
 
         if (!payload) {
-            // Placeholder state
             content.appendChild(
                 <div style={{ color: "#666", textAlign: "center", marginTop: "20px", fontSize: "12px" }}>
-                    Waiting for Loom Projection...
+                    No active interface.
                 </div>
             )
             return
@@ -70,14 +66,13 @@ export const OdieGenUIPanel = (props: { lifecycle: Lifecycle, service: OdieServi
 
         // Render new payload
         const resolver = (path: string) => service.appControl?.resolveParameter(path) ?? null
-        content.appendChild(<LoomRenderer lifecycle={lifecycle} component={payload.root} resolver={resolver} />)
+        content.appendChild(<GenUIRenderer lifecycle={lifecycle} component={payload.root} resolver={resolver} />)
     }))
 
     return (
         <div className={className}>
             <div className="genui-header">
-                <span>The Loom</span>
-                <span style={{ color: "#4CAF50" }}>ONLINE</span>
+                <span>Studio Controls</span>
             </div>
             {content}
         </div>

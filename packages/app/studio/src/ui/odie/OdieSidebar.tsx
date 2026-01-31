@@ -112,8 +112,8 @@ export const OdieSidebar = (props: { service: StudioService, lifecycle: Terminat
     const header = <div className="Header">
         {/* Clean Title Area */}
         <div className="title-group">
-            <span className="brand">ODIE</span>
-            <span className="status">Online</span>
+            <span className="brand">Odie</span>
+            <span className="status">Ready</span>
         </div>
 
         {/* Window Controls Only */}
@@ -144,12 +144,8 @@ export const OdieSidebar = (props: { service: StudioService, lifecycle: Terminat
     chatView.appendChild(messageListContainer)
     chatView.appendChild(inputContainer)
 
-
-    // OVERLAY CONTAINER
     const container = <div id="odie-sidebar" className={`${className} OdieOverlay`}>
-        {/* THE LOOM HUD - Floating Sidecar */}
         <div className="sidecar-container">
-            {/* <OdieGenUIPanel lifecycle={lifecycle} service={odieService} /> */}
         </div>
 
         <div className="inner-layout">
@@ -167,7 +163,6 @@ export const OdieSidebar = (props: { service: StudioService, lifecycle: Terminat
 
     const initOdie = () => {
         if (odieService) return
-        console.log("🤖 Booting Odie lazy...")
         odieService = service.getOdie()
 
         // Load Children Components (Parallel Boot)
@@ -245,7 +240,7 @@ export const OdieSidebar = (props: { service: StudioService, lifecycle: Terminat
 
                 const settingsContent = OdieSettings({ service: odieService!, lifecycle: modalLifecycle, onBack: close, isEmbedded: false })
                 overlay = OdieModalFrame({
-                    title: "System Config",
+                    title: "Settings",
                     icon: "⚙️",
                     width: "1100px",
                     onClose: close,

@@ -11,9 +11,9 @@ interface inputProps {
     service: OdieService
 }
 
-const CockpitButton = ({ icon, label, onClick, pulse = false, id }: any) => {
+const ActionButton = ({ icon, label, onClick, pulse = false, id }: any) => {
     return <button
-        className={`CockpitButton ${pulse ? 'pulse' : ''}`}
+        className={`ActionButton ${pulse ? 'pulse' : ''}`}
         id={id}
         title={label}
         onclick={(e: Event) => {
@@ -33,7 +33,7 @@ export const OdieInput = ({ service }: inputProps) => {
 
     const textarea = <textarea
         className="InputArea"
-        placeholder="Message Odie..."
+        placeholder="Ask anything..."
     /> as HTMLTextAreaElement
 
     const adjustHeight = () => {
@@ -59,47 +59,32 @@ export const OdieInput = ({ service }: inputProps) => {
     setTimeout(() => { if (document.body.contains(textarea)) textarea.focus() }, 100)
 
 
-    // ==========================================
-    // STATUS BAR (REBUILT - KISS PRINCIPLE)
-    // One function. One call. One result.
-    // ==========================================
-
+    // --- Status Indicator ---
     const statusDot = <div className="status-dot"></div> as HTMLElement
     const providerLabel = <span className="provider-label">...</span> as HTMLElement
     const activityLabel = <span className="activity-label">...</span> as HTMLElement
 
-    // Single function to update indicator (pure, no side effects)
     const setIndicator = (state: "checking" | "connected" | "disconnected" | "thinking", label: string) => {
         statusDot.className = "status-dot " + state
         activityLabel.innerText = label
         activityLabel.classList.toggle("active", state !== "connected")
     }
 
-    // Get display name for provider (with model name for Ollama)
     const getProviderDisplayName = (providerId: string): string => {
         if (providerId === "ollama") {
             const config = service.ai.getConfig("ollama")
             const modelId = config?.modelId
-            if (modelId) {
-                // Format: "LOCAL: qwen3:30b" → cleaner display
-                return `LOCAL: ${modelId.toUpperCase()}`
-            }
-            return "LOCAL"
+            return modelId ? `LOCAL: ${modelId.toUpperCase()}` : "LOCAL"
         }
         if (providerId === "gemini-3") return "GEMINI 3"
-        if (providerId === "gemini") return "GEMINI"
         return providerId.toUpperCase()
     }
 
-    // THE CORE FUNCTION: Check provider and validate connection
     const refreshStatus = async () => {
         const providerId = service.ai.activeProviderId.getValue()
         const provider = service.ai.getActiveProvider()
 
-        // Update provider name immediately
         providerLabel.innerText = getProviderDisplayName(providerId)
-
-        // Show checking state
         setIndicator("checking", "Checking...")
 
         if (!provider) {
@@ -107,22 +92,17 @@ export const OdieInput = ({ service }: inputProps) => {
             return
         }
 
-        // Validate the connection
         if (typeof provider.validate === "function") {
             try {
                 const result = await provider.validate()
-                console.log(`🔍 [Status] ${providerId}: ${result.ok ? "✅" : "❌"} ${result.message}`)
                 setIndicator(
                     result.ok ? "connected" : "disconnected",
                     result.ok ? "Ready" : "No API"
                 )
             } catch (e) {
-                console.error(`🔍 [Status] ${providerId}: Error`, e)
                 setIndicator("disconnected", "Error")
             }
         } else {
-            // No validation available - assume connected
-            console.log(`🔍 [Status] ${providerId}: No validate method, assuming connected`)
             setIndicator("connected", "Ready")
         }
     }
@@ -202,7 +182,7 @@ export const OdieInput = ({ service }: inputProps) => {
                             }}
                         /> as HTMLInputElement
 
-                        return <CockpitButton
+                        return <ActionButton
                             icon="📎"
                             label="Attach File"
                             onClick={() => fileInput.click()}

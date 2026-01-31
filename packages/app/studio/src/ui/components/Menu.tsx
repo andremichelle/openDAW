@@ -1,63 +1,63 @@
 import css from "./Menu.sass?inline"
-import {DefaultMenuData, HeaderMenuData, InputValueMenuData, MenuItem} from "@opendaw/studio-core"
-import {createElement, Frag} from "@opendaw/lib-jsx"
-import {int, isDefined, Lifecycle, Nullable, Option, panic, Terminable, Terminator} from "@opendaw/lib-std"
-import {Icon} from "@/ui/components/Icon.tsx"
-import {Surface} from "@/ui/surface/Surface.tsx"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
+import { DefaultMenuData, HeaderMenuData, InputValueMenuData, MenuItem } from "@opendaw/studio-core"
+import { createElement, Frag } from "@opendaw/lib-jsx"
+import { int, isDefined, Lifecycle, Nullable, Option, panic, Terminable, Terminator } from "@opendaw/lib-std"
+import { Icon } from "@/ui/components/Icon.tsx"
+import { Surface } from "@/ui/surface/Surface.tsx"
+import { Colors, IconSymbol } from "@opendaw/studio-enums"
+import { AnimationFrame, Events, Html } from "@opendaw/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "menu")
 
-export const HeaderMenuDataElement = ({data}: { data: HeaderMenuData }) => (
+export const HeaderMenuDataElement = ({ data }: { data: HeaderMenuData }) => (
     <div className={Html.buildClassList("header")}
-         style={{"--color": data?.color?.toString() ?? Colors.gray.toString()}}>
-        <div className="icon-space"/>
-        {data.icon && <Icon symbol={data.icon} style={{margin: "0 0.25em", fontSize: "1.25em"}}/>}
+        style={{ "--color": data?.color?.toString() ?? Colors.gray.toString() }}>
+        <div className="icon-space" />
+        {data.icon && <Icon symbol={data.icon} style={{ margin: "0 0.25em", fontSize: "1.25em" }} />}
         <div className="label">{data.label}</div>
-        <div className="shortcut"/>
+        <div className="shortcut" />
     </div>
 )
 
-export const DefaultMenuDataElement = ({data}: { data: DefaultMenuData }) => (
+export const DefaultMenuDataElement = ({ data }: { data: DefaultMenuData }) => (
     <div className={Html.buildClassList("default", data.checked && "checked")}>
         <svg classList="check-icon" viewBox="0 0 12 12">
-            <path d="M2 7L5 10L10 3"/>
+            <path d="M2 7L5 10L10 3" />
         </svg>
-        {data.icon && <Icon symbol={data.icon} style={{margin: "0 0.25em", fontSize: "1.25em"}}/>}
+        {data.icon && <Icon symbol={data.icon} style={{ margin: "0 0.25em", fontSize: "1.25em" }} />}
         <div className="label">{data.label}</div>
         <div className="shortcut">{[...data.shortcut ?? []].map(s => <span>{s}</span>)}</div>
         <svg classList="children-icon" viewBox="0 0 12 12">
-            <path d="M4 2L8 6L4 10"/>
+            <path d="M4 2L8 6L4 10" />
         </svg>
     </div>
 )
 
 export const ValueSliderMenuDataElement = (
-    {data: {icon, model, valueMapping, stringMapping, name, color, minValueWidth}, lifecycle}: {
+    { data: { icon, model, valueMapping, stringMapping, name, color, minValueWidth }, lifecycle }: {
         data: InputValueMenuData,
         lifecycle: Lifecycle
     }) => {
-    const valueLabel: HTMLElement = (<div className="value" style={{minWidth: minValueWidth}}/>)
-    const unitLabel: HTMLElement = (<div className="unit"/>)
+    const valueLabel: HTMLElement = (<div className="value" style={{ minWidth: minValueWidth }} />)
+    const unitLabel: HTMLElement = (<div className="unit" />)
     const update = (value: number) => {
-        const {unit, value: string} = stringMapping.x(value)
+        const { unit, value: string } = stringMapping.x(value)
         valueLabel.textContent = string
         unitLabel.textContent = unit
     }
     return (
         <div className="input-value"
-             style={{"--color": color?.toString() ?? Colors.gray.toString()}}>
-            <Icon symbol={icon} style={{margin: "0 0.25em", fontSize: "1.25em"}}/>
+            style={{ "--color": color?.toString() ?? Colors.gray.toString() }}>
+            <Icon symbol={icon} style={{ margin: "0 0.25em", fontSize: "1.25em" }} />
             <div className="name">{name}</div>
-            <input type="range" min="0" max="1" step="any" data-close-on-blur onInit={element => {
+            <input type="range" min="0" max="1" step="any" aria-label={name} data-close-on-blur onInit={element => {
                 element.oninput = () => model.setValue(valueMapping.y(element.valueAsNumber))
                 lifecycle.own(model.catchupAndSubscribe((owner) => {
                     const value = owner.getValue()
                     update(value)
                     element.valueAsNumber = valueMapping.x(value)
                 }))
-            }}/>
+            }} />
             {valueLabel}
             {unitLabel}
         </div>
@@ -107,7 +107,7 @@ export class Menu implements Terminable, Lifecycle {
         this.#item = item
         this.#groupId = groupId
 
-        const {element, scrollUp, container, scrollDown} = this.#createHtml()
+        const { element, scrollUp, container, scrollDown } = this.#createHtml()
         this.#element = element
         this.#scrollUp = scrollUp
         this.#container = container
@@ -126,12 +126,12 @@ export class Menu implements Terminable, Lifecycle {
         }
     }
 
-    own<T extends Terminable>(terminable: T): T {return this.#terminator.own(terminable)}
-    ownAll<T extends Terminable>(...terminables: Array<T>): void {this.#terminator.ownAll(...terminables)}
-    spawn(): Terminator {return this.#terminator.spawn()}
+    own<T extends Terminable>(terminable: T): T { return this.#terminator.own(terminable) }
+    ownAll<T extends Terminable>(...terminables: Array<T>): void { this.#terminator.ownAll(...terminables) }
+    spawn(): Terminator { return this.#terminator.spawn() }
 
-    get root(): Menu {return this.#parent.isEmpty() ? this : this.#parent.unwrap().root}
-    get element(): HTMLElement {return this.#element}
+    get root(): Menu { return this.#parent.isEmpty() ? this : this.#parent.unwrap().root }
+    get element(): HTMLElement { return this.#element }
 
     moveTo(x: int, y: int): void {
         this.#x = x | 0
@@ -141,7 +141,7 @@ export class Menu implements Terminable, Lifecycle {
 
     attach(parentElement: Element): void {
         parentElement.appendChild(this.#element)
-        const {right, bottom, width, height} = this.#element.getBoundingClientRect()
+        const { right, bottom, width, height } = this.#element.getBoundingClientRect()
         const owner = Surface.get(parentElement).owner
         const innerWidth = owner.innerWidth
         const innerHeight = owner.innerHeight
@@ -192,7 +192,7 @@ export class Menu implements Terminable, Lifecycle {
     }
 
     #onPointerLeave(_item: MenuItem, itemElement: HTMLElement, event: PointerEvent): void {
-        if (this.#isChild(event.relatedTarget as Node)) {return}
+        if (this.#isChild(event.relatedTarget as Node)) { return }
         itemElement.classList.remove("selected")
         this.#closeChildMenu()
     }
@@ -217,23 +217,23 @@ export class Menu implements Terminable, Lifecycle {
         const childMenu = this.#childMenu.unwrap()
         let target: Nullable<Node> = node
         while (null !== target) {
-            if (target === this.#element) {return false}
-            if (target === childMenu.#element) {return true}
+            if (target === this.#element) { return false }
+            if (target === childMenu.#element) { return true }
             target = target.parentNode
         }
         return false
     }
 
     #closeChildMenu(): void {
-        if (this.#childMenu.isEmpty()) {return}
+        if (this.#childMenu.isEmpty()) { return }
         this.#element.focus()
         this.#childMenu.unwrap().terminate()
         this.#childMenu = Option.None
     }
 
     #createHtml(): MenuHtmlStructure {
-        const scrollUp = <div className="scroll up"><Icon symbol={IconSymbol.RoundUp}/></div>
-        const scrollDown = <div className="scroll down"><Icon symbol={IconSymbol.RoundDown}/></div>
+        const scrollUp = <div className="scroll up"><Icon symbol={IconSymbol.RoundUp} /></div>
+        const scrollDown = <div className="scroll down"><Icon symbol={IconSymbol.RoundDown} /></div>
         const container = <div className="container">{
             this.#item.collectChildren()
                 .filter((item: MenuItem) => !item.hidden)
@@ -247,11 +247,11 @@ export class Menu implements Terminable, Lifecycle {
                                 if (item.data === undefined) {
                                     return panic("")
                                 } else if (item.data.type === "header") {
-                                    return <HeaderMenuDataElement data={item.data}/>
+                                    return <HeaderMenuDataElement data={item.data} />
                                 } else if (item.data.type === "default") {
-                                    return <DefaultMenuDataElement data={item.data}/>
+                                    return <DefaultMenuDataElement data={item.data} />
                                 } else if (item.data.type === "input-value") {
-                                    return <ValueSliderMenuDataElement data={item.data} lifecycle={this}/>
+                                    return <ValueSliderMenuDataElement data={item.data} lifecycle={this} />
                                 }
                             })()}
                         </div>
@@ -265,12 +265,12 @@ export class Menu implements Terminable, Lifecycle {
                     itemElement.onpointerenter = () => this.#onPointerEnter(item, itemElement)
                     itemElement.onpointerleave = (event: PointerEvent) => this.#onPointerLeave(item, itemElement, event)
                     itemElement.onpointerup = (event: PointerEvent) => {
-                        if (Date.now() - this.#openTime < Menu.MIN_TIME_MS) {return}
+                        if (Date.now() - this.#openTime < Menu.MIN_TIME_MS) { return }
                         this.#onPointerUp(item, itemElement, event)
                     }
                     return (
                         <Frag>
-                            {item.separatorBefore && <hr/>}
+                            {item.separatorBefore && <hr />}
                             {itemElement}
                         </Frag>
                     )
@@ -284,7 +284,7 @@ export class Menu implements Terminable, Lifecycle {
                 {scrollDown}
             </nav>
         )
-        return {element, scrollUp, container, scrollDown}
+        return { element, scrollUp, container, scrollDown }
     }
 
     #setupScrolling(): void {
@@ -293,11 +293,11 @@ export class Menu implements Terminable, Lifecycle {
         this.#terminator.own(Events.subscribe(this.element, "wheel", (event: WheelEvent) => {
             event.preventDefault()
             scroll(Math.sign(event.deltaY) * this.#computeEmInPixels() * 1.5)
-        }, {passive: false}))
+        }, { passive: false }))
         const setup = (button: HTMLElement, direction: number) => {
             const scrolling = new Terminator()
             button.onpointerenter = () => {
-                if (!this.#canScroll(direction)) {return}
+                if (!this.#canScroll(direction)) { return }
                 scrolling.own(AnimationFrame.add(() => {
                     if (this.#canScroll(direction)) {
                         scroll(direction)
@@ -317,5 +317,5 @@ export class Menu implements Terminable, Lifecycle {
             || (0 < direction && this.#container.scrollTop < this.#container.scrollHeight - this.#container.clientHeight)
     }
 
-    #computeEmInPixels(): number {return parseInt(getComputedStyle(this.#element).fontSize)}
+    #computeEmInPixels(): number { return parseInt(getComputedStyle(this.#element).fontSize) }
 }

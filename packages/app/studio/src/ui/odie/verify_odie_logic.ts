@@ -13,14 +13,14 @@ class MockOdieService {
     async handleWidgetAction(action: any) {
         console.log("MockService received:", JSON.stringify(action))
 
-        // [ANTIGRAVITY] Priority: Error Actions (No Dependencies)
+        // Priority: Error Actions
         if (action.name === "error_action" && action.context?.actionId) {
             this.handleErrorAction(action.context.actionId)
             return
         }
 
         if (!this.appControl) {
-            console.warn("🧠 [Gen UI] Widget action received but no appControl available")
+            console.warn("[Gen UI] Widget action received but no appControl available")
             return
         }
     }

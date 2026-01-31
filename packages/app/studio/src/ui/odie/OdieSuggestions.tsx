@@ -7,26 +7,26 @@ type SuggestionType = "chat" | "action" | "system"
 interface Suggestion {
     label: string
     type: SuggestionType
-    action?: () => void // Direct execution override
-    prompt?: string // Text to send
+    action?: () => void
+    prompt?: string
     icon?: string
 }
 
 const COLORS = {
     chat: {
-        bg: "rgba(34, 197, 94, 0.1)", // Green
+        bg: "rgba(34, 197, 94, 0.1)",
         border: "rgba(34, 197, 94, 0.3)",
         text: "#4ade80",
         hover: "rgba(34, 197, 94, 0.2)"
     },
     action: {
-        bg: "rgba(59, 130, 246, 0.1)", // Blue
+        bg: "rgba(59, 130, 246, 0.1)",
         border: "rgba(59, 130, 246, 0.3)",
         text: "#60a5fa",
         hover: "rgba(59, 130, 246, 0.2)"
     },
     system: {
-        bg: "rgba(168, 85, 247, 0.1)", // Purple
+        bg: "rgba(168, 85, 247, 0.1)",
         border: "rgba(168, 85, 247, 0.3)",
         text: "#c084fc",
         hover: "rgba(168, 85, 247, 0.2)"
@@ -41,14 +41,11 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
         overflowX: "auto",
         padding: "12px 16px",
         whiteSpace: "nowrap",
-        // Hide scrollbar
-        // scrollbarWidth: "none", // This is fine usually but let's be safe
         borderBottom: "1px solid rgba(255,255,255,0.05)",
-        background: "rgba(15, 23, 42, 0.5)" // Subtle bg
+        background: "rgba(15, 23, 42, 0.5)"
     }}>
     </div> as HTMLElement
 
-    // Scrollbar hiding for Webkit
     const style = <style>{`
         .odie-suggestions::-webkit-scrollbar { display: none; }
         .odie-suggestions { -ms-overflow-style: none; scrollbar-width: none; }
@@ -57,7 +54,6 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
 
     const lifecycle = new Terminator()
 
-    // Wrapper for chips
     const chipsWrapper = <div style={{ display: "flex", gap: "8px" }}></div> as HTMLElement
     container.appendChild(chipsWrapper)
 
@@ -68,34 +64,30 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
         const isModel = lastMsg?.role === "model"
         const suggestions: Suggestion[] = []
 
-        // --- 1. PROJECT STATE SENSORS (The "Eyes") ---
+        // --- PROJECT STATE ---
         let isPlaying = false
         let trackCount = 0
         let hasProject = false
 
         if (service.studio) {
             try {
-                // Check Playback
                 if (service.studio.engine?.isPlaying) {
                     isPlaying = service.studio.engine.isPlaying.getValue()
                 }
 
-                // Check Tracks
                 if (service.studio.hasProfile && service.studio.profile?.project?.rootBoxAdapter) {
                     hasProject = true
                     const adapters = service.studio.profile.project.rootBoxAdapter.audioUnits.adapters()
-                    // Filter out master output usually? "adapters()" returns array of wrappers.
-                    // Let's assume length is good enough proxy.
                     trackCount = adapters.length
                 }
             } catch (e) {
-                // console.warn("OdieSensors Error", e)
+                // Ignore state errors during sync
             }
         }
 
-        // --- 2. DYNAMIC SUGGESTIONS ---
+        // --- DYNAMIC SUGGESTIONS ---
 
-        // A. Transport (Always relevant)
+        // Transport
         if (hasProject) {
             if (isPlaying) {
                 suggestions.push({ label: "Stop", type: "action", action: () => service.studio?.engine.stop(), icon: "⏹️" })
@@ -105,7 +97,7 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
             }
         }
 
-        // B. Composition / Project State
+        // Project Management
         if (hasProject) {
             if (trackCount < 2) {
                 suggestions.push({ label: "Add Track", type: "action", prompt: "Add a generic instrument track", icon: "🎹" })
@@ -115,35 +107,30 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
                 suggestions.push({ label: "Export Mixdown", type: "system", prompt: "Export a mixdown", icon: "💿" })
             }
         } else {
-            // No Project Loaded
             suggestions.push({ label: "New Project", type: "system", action: () => service.studio?.newProject(), icon: "✨" })
             suggestions.push({ label: "Open Project", type: "system", action: () => service.studio?.browseLocalProjects(), icon: "📂" })
         }
 
-        // C. Chat Context (The "Ears")
+        // Chat Context
         if (messages.length === 0) {
-            // Starter Pack
-            suggestions.push({ label: "Give ideas", type: "chat", prompt: "Suggest some creative next steps for this song.", icon: "💡" })
+            suggestions.push({ label: "Ideas", type: "chat", prompt: "Suggest some creative next steps for this song.", icon: "💡" })
         } else {
             const content = lastMsg?.content.toLowerCase() || ""
 
-            // Content Analysis
             if (content.includes("track") || content.includes("channel")) {
                 if (trackCount > 0) suggestions.push({ label: "List Tracks", type: "action", prompt: "List all tracks", icon: "📋" })
                 else suggestions.push({ label: "Add Track", type: "action", prompt: "Add a new track", icon: "➕" })
             }
             if (content.includes("error") || content.includes("failed")) {
-                suggestions.push({ label: "Fix it", type: "chat", prompt: "How can I fix the error?", icon: "🔧" })
+                suggestions.push({ label: "Resolve error", type: "chat", prompt: "How can I fix the error?", icon: "🔧" })
             }
 
-            // Copy Utility
             suggestions.push({
                 label: "Copy", type: "system", action: () => {
                     if (lastMsg && lastMsg.content) navigator.clipboard.writeText(lastMsg.content)
                 }, icon: "📋"
             })
 
-            // Chat Flow
             if (isModel) {
                 suggestions.push(
                     { label: "Tell me more", type: "chat", prompt: "Elaborate on that.", icon: "💬" }
@@ -178,7 +165,6 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
                     e.currentTarget.style.transform = "translateY(0)"
                 }}
                 onclick={(e: any) => {
-                    // Visual feedback
                     const btn = e.currentTarget as HTMLElement
                     btn.style.transform = "scale(0.95)"
                     setTimeout(() => {
@@ -199,25 +185,15 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
         })
     }
 
-    // --- SUBSCRIPTIONS ---
-
-    // 1. Chat Updates
     lifecycle.own(service.messages.subscribe(() => render()))
 
-    // 2. Studio Updates (Dynamic Binding)
-    // Since service.studio is not observable itself, we might check it once or assume it's there.
-    // If it's available at mount (which it should be in OdieSidebar), we bind.
     if (service.studio) {
-        // Bind Playback
         if (service.studio.engine?.isPlaying) {
             lifecycle.own(service.studio.engine.isPlaying.subscribe(() => render()))
         }
-
-        // Use a safe studio update listener if available, otherwise rely on manual updates
-        // We avoid accessing studio.profile directly here as it may panic if no project is loaded.
     }
 
-    render() // Initial
+    render()
 
     return container
 }

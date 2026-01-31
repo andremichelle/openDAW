@@ -38,7 +38,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
         const statuses = provider.getKeyStatuses ? provider.getKeyStatuses() : keyLibrary.map((k, i) => ({ key: '•••' + k.slice(-4), status: 'unknown', isActive: i === 0 }))
 
         return <div className="input-row" style={{ alignItems: "flex-start" }}>
-            <label className="label" style={{ marginTop: "8px" }}>Infinity Keys</label>
+            <label className="label" style={{ marginTop: "8px" }}>API Keys</label>
             <div style={{ flex: "1" }}>
                 <div className="key-ring-list">
                     {keyLibrary.map((key, idx) => {
@@ -78,7 +78,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
                         <a href="https://aistudio.google.com/app/apikey" target="_blank" className="odie-btn" style={{ flex: "0.5", fontSize: "9px", textDecoration: "none" }}>Get Key ↗</a>
                     </div>
                 </div>
-                <div style={{ fontSize: "9px", color: "var(--color-gray)", marginTop: "6px", opacity: "0.6" }}>Odie will rotate keys automatically to avoid rate limits.</div>
+                <div style={{ fontSize: "9px", color: "var(--color-gray)", marginTop: "6px", opacity: "0.6" }}>Keys are used to avoid rate limits.</div>
             </div>
         </div>
     }
@@ -86,8 +86,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
     const ConfigCard = ({ providerId, overrides }: { providerId: string, overrides?: any }) => {
         const provider = service.ai.getProvider(providerId)
 
-        // [ANTIGRAVITY] Robust Fallback: Never show a blank page.
-        // If the provider fails to load, we substitute a "Ghost" provider to keep the UI structure intact.
+        // Robust Fallback
         const safeProvider = provider || {
             id: providerId,
             manifest: { name: "Provider Error", description: "This provider could not be loaded." },
@@ -145,7 +144,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
         if (!isEmbedded && provider) setTimeout(() => runValidation(), 0)
         const isActive = service.ai.activeProviderId.getValue() === providerId
 
-        return <div className={`config-card ${isActive ? 'active-brain' : ''}`} style={{ border: "none", background: "none", padding: "0" }}>
+        return <div className={`config-card ${isActive ? 'active-provider' : ''}`} style={{ border: "none", background: "none", padding: "0" }}>
             <div className="provider-header">
                 <div className="info">
                     <h3>{title}</h3>
@@ -252,7 +251,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
                     </div>
                 </div>
                 <div className="switch-info">
-                    Odie Brain Switch: Use this to toggle between Cloud and Local processing.
+                    Provider Switch: Toggle between Cloud and Local processing.
                 </div>
             </div>
             {!isEmbedded && <button onclick={onBack} style={{ background: "none", border: "none", fontSize: "16px", cursor: "pointer", color: "var(--color-gray)" }}>✕</button>}
@@ -297,8 +296,8 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
                             <p style={{ margin: "0", fontSize: "11px", fontStyle: "italic" }}>Note: Google disconnects this data from your Account, API Key, and Project before any human review occurs.</p>
                         </div>
                         <div>
-                            <p style={{ margin: "0 0 4px 0", color: "var(--color-bright)" }}><strong>Infinity Key Strategy</strong></p>
-                            <p style={{ margin: "0" }}>Rotate multiple free keys to multiply your total rate limits for an uninterrupted session.</p>
+                            <p style={{ margin: "0 0 4px 0", color: "var(--color-bright)" }}><strong>Key Rotation</strong></p>
+                            <p style={{ margin: "0" }}>Use multiple keys to avoid rate limits for an uninterrupted session.</p>
                         </div>
                     </div>
                 </div>
@@ -315,8 +314,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
 
             content.appendChild(row)
         } else if (id.includes("ollama")) {
-            // [ANTIGRAVITY] Safe Access: specific block for Local to add Hardware Fit
-            // Fallback to a ghost provider if the registry is out of sync to prevent UI crashes
+            // Local check for Hardware Fit
             const realProvider = service.ai.getProvider(id)
             const provider = realProvider || {
                 id: id,
@@ -334,14 +332,14 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
                             <p style={{ margin: "0" }}>Local models run strictly on your machine. No data leaves your hardware, making this the ideal choice for high-security environments.</p>
                         </div>
                         <div style={{ marginBottom: "16px" }}>
-                            <p style={{ margin: "0 0 4px 0", color: "var(--color-bright)" }}><strong>Finding Your Fit</strong></p>
-                            <p style={{ margin: "0 0 8px 0" }}>Ollama automatically detects your hardware. If a model is too big for your Graphics Card (GPU), it moves to your slower System Memory (CPU). Run <code>ollama ps</code> in your terminal while Odie is active; if it shows "100% CPU", the model is too heavy for your machine's muscles and will be sluggish.</p>
-                            <p style={{ margin: "0", fontSize: "11px", fontStyle: "italic", color: "var(--color-gray)" }}>Goal: Find the largest version that fits entirely on your Graphics Card.</p>
+                            <p style={{ margin: "0 0 4px 0", color: "var(--color-bright)" }}><strong>Hardware Performance</strong></p>
+                            <p style={{ margin: "0 0 8px 0" }}>Local models use your machine's resources. If a model is too large for your Graphics Card (GPU), it moves to System Memory (CPU), which is slower. Run <code>ollama ps</code> in your terminal; if it shows "100% CPU", the model may be slow.</p>
+                            <p style={{ margin: "0", fontSize: "11px", fontStyle: "italic", color: "var(--color-gray)" }}>Goal: Use a model that fits on your Graphics Card.</p>
                         </div>
                         <div style={{ marginBottom: "0" }}>
                             <p style={{ margin: "0 0 4px 0", color: "var(--color-bright)" }}><strong>Audio Priority</strong></p>
-                            <p style={{ margin: "0 0 8px 0" }}>Odie is a side-car subsystem. While it runs in an isolated process, keeping your model in the <strong>GPU (VRAM)</strong> is the "Elite Standard."</p>
-                            <p style={{ margin: "0 0 8px 0" }}>Running AI on your CPU consumes the same "muscles" used for audio math and plugins. If the AI is too heavy, your audio may pop or glitch.</p>
+                            <p style={{ margin: "0 0 8px 0" }}>Keeping your model in the <strong>GPU (VRAM)</strong> is recommended.</p>
+                            <p style={{ margin: "0 0 8px 0" }}>Running AI on your CPU uses resources needed for audio processing. If the AI is too heavy, your audio may pop or glitch.</p>
                         </div>
                     </div>
                 </div>

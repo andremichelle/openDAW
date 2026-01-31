@@ -5,7 +5,7 @@ import { AIService } from "./services/AIService"
 
 import { Message } from "./services/llm/LLMProvider"
 import { OdieAppControl } from "./services/OdieAppControl"
-import { odiePersona } from "./services/OdiePersonaService"
+import { odiePersona, OdieContext } from "./services/OdiePersonaService"
 import { chatHistory } from "./services/ChatHistoryService"
 import { OdieTools } from "./services/OdieToolDefinitions"
 import { commandRegistry } from "./services/OdieCommandRegistry"
@@ -18,24 +18,21 @@ export class OdieService {
     readonly messages = new DefaultObservableValue<Message[]>([])
     readonly open = new DefaultObservableValue<boolean>(false)
     readonly width = new DefaultObservableValue<number>(450)
-    readonly visible = new DefaultObservableValue<boolean>(false) // Helper for 'open' + 'width > 0'
+    readonly visible = new DefaultObservableValue<boolean>(false)
 
-    // [ANTIGRAVITY] Activity State for UI
+    // Activity State for UI
     readonly isGenerating = new DefaultObservableValue<boolean>(false)
     readonly activeModelName = new DefaultObservableValue<string>("Gemini")
     readonly activityStatus = new DefaultObservableValue<string>("Ready")
 
-    // [ANTIGRAVITY] Connection State for Status Indicator
+    // Connection State for Status Indicator
     // Values: "unknown" | "connected" | "disconnected" | "checking"
-    // Start with "checking" so UI shows yellow until validation completes
     readonly connectionStatus = new DefaultObservableValue<"unknown" | "connected" | "disconnected" | "checking">("checking")
 
-    // [ANTIGRAVITY] The Loom (Generative UI) State
-    // Holds the current "Hologram" payload to be rendered
+    // Interface State
     readonly genUiPayload = new DefaultObservableValue<import("./genui/GenUISchema").GenUIPayload | null>(null)
 
-    // [ANTIGRAVITY] Diagnostic Port (Glass Box)
-    // Allows external rigs to see exactly what context the brain received
+    // Diagnostic Info
     readonly lastDebugInfo = new DefaultObservableValue<{
         systemPrompt: string
         projectContext: any
@@ -52,23 +49,21 @@ export class OdieService {
     readonly showHistory = new DefaultObservableValue<boolean>(false)
 
     readonly ai = new AIService()
-    private toolExecutor = new OdieToolExecutor()
+    readonly #toolExecutor = new OdieToolExecutor()
 
 
 
-    // The Nervous System
-    // We lazily import the AppControl to avoid circular dependencies with Studio/InstrumentFactories
+    // Studio Control
     public appControl?: OdieAppControl
 
     public studio?: StudioService
 
     constructor() {
-        // [    ANTIGRAVITY] Expose for Debugging/Extraction
+        // Expose for debugging
         ; (window as any).odie = this;
 
         try {
-            // [ANTIGRAVITY] Pivot: Always boot to Chat. No blocked Wizard.
-            // If setup is missing, we handle it responsively in sendMessage.
+            // Default to chat view
             this.viewState.setValue("chat")
 
             // Auto-Save History
@@ -78,8 +73,7 @@ export class OdieService {
                 this.saveCurrentSession()
             })
 
-            // [ANTIGRAVITY] Model Indicator Sync
-            // React to provider changes to update the UI badge
+            // Model Indicator Sync
             this.ai.activeProviderId.subscribe(observer => {
                 const id = observer.getValue()
                 let label = "Unknown"
@@ -96,7 +90,6 @@ export class OdieService {
 
                 this.activeModelName.setValue(label)
 
-                // [ANTIGRAVITY] Re-validate connection when provider changes
                 this.validateConnection()
             })
             // Initial Sync
@@ -108,19 +101,15 @@ export class OdieService {
                 this.activeModelName.setValue("Gemini 3")
             }
 
-            // [ANTIGRAVITY] Initial connection validation on boot
             this.validateConnection()
 
-            // [ANTIGRAVITY] History Sync
-            // If the active session is deleted from history (e.g. via sidebar), we must clear the UI
-            // otherwise we are left in a "Ghost Chat" state.
-            this.activeSessionId = null // Ensure init
+            // History Sync
+            this.activeSessionId = null
             chatHistory.sessions.subscribe(observer => {
                 if (this.activeSessionId) {
                     const sessions = observer.getValue()
-                    const exists = sessions.find((s: any) => s.id === this.activeSessionId)
+                    const exists = sessions.find((s: { id: string }) => s.id === this.activeSessionId)
                     if (!exists) {
-                        console.log("🧹 [OdieService] Active session was deleted externally. Resetting view.")
                         this.startNewChat()
                     }
                 }
@@ -133,15 +122,10 @@ export class OdieService {
 
     // [ANTIGRAVITY] Validate API Connection for active provider
     async validateConnection(): Promise<void> {
-        console.log("🔍 [Connection] Starting validation...")
         this.connectionStatus.setValue("checking")
-        const providerId = this.ai.activeProviderId.getValue()
         const provider = this.ai.getActiveProvider()
 
-        console.log(`🔍 [Connection] Provider: ${providerId}, has validate: ${typeof provider?.validate === "function"}`)
-
         if (!provider) {
-            console.log("🔍 [Connection] No provider found → disconnected")
             this.connectionStatus.setValue("disconnected")
             return
         }
@@ -150,15 +134,11 @@ export class OdieService {
         if (typeof provider.validate === "function") {
             try {
                 const result = await provider.validate()
-                console.log(`🔍 [Connection] ${providerId}: ${result.ok ? "✅ Connected" : "❌ Disconnected"} - ${result.message}`)
                 this.connectionStatus.setValue(result.ok ? "connected" : "disconnected")
             } catch (e) {
-                console.error(`🔍 [Connection] ${providerId}: Validation failed`, e)
                 this.connectionStatus.setValue("disconnected")
             }
         } else {
-            // No validate method - assume connected (rare case)
-            console.log(`🔍 [Connection] ${providerId}: No validate method → connected (assumed)`)
             this.connectionStatus.setValue("connected")
         }
     }
@@ -175,24 +155,18 @@ export class OdieService {
     async connectStudio(studio: StudioService) {
         this.studio = studio
         this.ai.setStudio(studio)
-        // 🔌 Wire the Nervous System
-        console.log("🔌 Odie: Connecting to Studio (Dynamic)...")
         try {
-            console.log("🔍 Debug: Checking OdieAppControl symbol:", OdieAppControl);
             if (!OdieAppControl) {
-                console.error("❌ CRTICAL: OdieAppControl import is undefined!");
-                throw new Error("OdieAppControl is undefined (Circular Dependency?)");
+                throw new Error("OdieAppControl is undefined");
             }
             this.appControl = new OdieAppControl(studio)
-            console.log("✅ OdieAppControl Instantiated Successfully:", this.appControl);
         } catch (e) {
-            console.error("❌ Failed to load OdieAppControl:", e);
-            (window as any).__ODIE_LOAD_ERROR__ = e;
+            console.error("Failed to load OdieAppControl:", e);
         }
     }
 
     async sendMessage(text: string) {
-        // --- 1. Command Interception (Slash Commands) ---
+        // --- Command Interception (Slash Commands) ---
         if (text.startsWith("/")) {
             const [cmd, ...args] = text.trim().split(" ")
             if (commandRegistry.has(cmd)) {
@@ -215,9 +189,7 @@ export class OdieService {
             }
         }
 
-        // --- 1.5 Fast Path (Natural Language Interceptor) ---
-        // [ANTIGRAVITY] Optimization: Zero-Latency routing for common commands
-        // This makes "play" work as fast as "/play"
+        // --- Fast Path Interaction ---
         const fastPathMap: Array<[RegExp, string, (match: RegExpMatchArray) => string[]]> = [
             [/^play$/i, "/play", () => []],
             [/^start$/i, "/play", () => []],
@@ -226,8 +198,8 @@ export class OdieService {
             [/^record$/i, "/record", () => []],
             [/^list$/i, "/list", () => []],
             [/^list tracks$/i, "/list", () => []],
-            [/^add (.*) track$/i, "/add", (m) => [m[1]]], // "add synth track" -> /add synth
-            [/^add (.*)$/i, "/add", (m) => [m[1]]], // "add synth" -> /add synth
+            [/^add (.*) track$/i, "/add", (m) => [m[1]]],
+            [/^add (.*)$/i, "/add", (m) => [m[1]]],
             [/^new project$/i, "/new", () => []],
             [/^clear$/i, "/new", () => []],
         ]
@@ -235,9 +207,7 @@ export class OdieService {
         for (const [regex, cmd, getArgs] of fastPathMap) {
             const match = text.trim().match(regex)
             if (match) {
-                console.log(`⚡ [Odie FastPath] Intercepted "${text}" -> ${cmd}`)
-                const services = commandRegistry
-                if (services.has(cmd)) {
+                if (commandRegistry.has(cmd)) {
                     // UI Feedback: Show user message
                     const userMsg: Message = { id: Date.now().toString(), role: "user", content: text, timestamp: Date.now() }
                     const currentStart = this.messages.getValue()
@@ -257,7 +227,7 @@ export class OdieService {
             }
         }
 
-        // --- 2. Normal AI Flow ---
+        // --- Standard AI Interaction ---
         const userMsg: Message = { id: crypto.randomUUID(), role: "user", content: text, timestamp: Date.now() }
         const startMsgs = this.messages.getValue()
         this.messages.setValue([...startMsgs, userMsg])
@@ -269,24 +239,18 @@ export class OdieService {
 
 
         try {
-            // [ANTIGRAVITY] Responsive Error Handling: Check Configuration First
             const provider = this.ai.getActiveProvider()
             const config = provider ? this.ai.getConfig(provider.id) : {}
-
-            // Check if we need setup: No provider OR (provider needs key AND key is missing)
-            // Note: "ollama" (local) often doesn't need a key, or has one but valid check handles it.
-            // Simple check: If provider ID is missing or (not local AND no key)
             const needsSetup = !provider || (provider.id !== "ollama" && (!config.apiKey || config.apiKey.length < 5))
 
             if (needsSetup) {
-                console.warn("⚠️ Odie: Missing Configuration. Triggering Error Card.")
                 const errorCard = {
                     ui_component: "error_card",
                     data: {
                         title: "Setup Required",
-                        message: "I need a brain to think! Please connect an AI provider in settings.",
+                        message: "Please connect an AI provider in settings.",
                         actions: [
-                            { label: "⚙️ Open Settings", id: "open_settings" }
+                            { label: "Settings", id: "open_settings" }
                         ]
                     }
                 }
@@ -304,11 +268,7 @@ export class OdieService {
             }
 
 
-            // --- Cortex Injection: Dynamic Personal & Memory ---
-            // const provider = this.ai.getActiveProvider() // Already got above
-            // const config = provider ? this.ai.getConfig(provider.id) : {} // Already got above
-
-            // [ANTIGRAVITY] Smart Track Focus - Help AI understand context
+            // Context Preparation
             const focusState = this.ai.contextService.state.getValue().focus
             const trackList = this.safeListTracks()
 
@@ -330,7 +290,7 @@ export class OdieService {
                 }
             }
 
-            const projectContext = {
+            const projectContext: OdieContext = {
                 userQuery: text,
                 modelId: config.modelId,
                 providerId: provider ? provider.id : undefined,
@@ -342,42 +302,33 @@ export class OdieService {
                     trackList: trackList,
                     selectionSummary: this.safeInspectSelection(),
                     loopEnabled: this.studio.transport.loop.getValue(),
-                    // [ANTIGRAVITY] Smart Focus Hints
                     focusHints: {
                         selectedTrack: selectedTrack,
                         recentlyDiscussedTrack: recentlyDiscussedTrack,
                         hint: selectedTrack
-                            ? `User currently has "${selectedTrack}" selected. If they refer to "the track" or "it", they likely mean this.`
+                            ? `User has "${selectedTrack}" selected.`
                             : recentlyDiscussedTrack
-                                ? `We were recently discussing "${recentlyDiscussedTrack}". If the user refers to "it" or "the track", they might mean this.`
-                                : "No track is currently focused. Ask the user which track if their question is track-specific."
+                                ? `Discussing "${recentlyDiscussedTrack}".`
+                                : "No track focused."
                     }
                 } : undefined
             }
 
-            console.log("🧠 OdieService: Context Payload", projectContext)
-
-            // Generate the Brain's instruction for this turn
             const systemPrompt = await odiePersona.generateSystemPrompt(projectContext)
 
-            // [ANTIGRAVITY] Cognitive Preset Injection
             const focus = await import("./services/OdieFocusService").then(m => m.odieFocus.getFocus())
-            const roleAny = odiePersona.mapFocusToRole(projectContext, focus)
-            const cognitiveProfile = odiePersona.getCognitiveProfile(roleAny)
+            const role = odiePersona.mapFocusToRole(projectContext, focus)
+            const cognitiveProfile = odiePersona.getCognitiveProfile(role)
 
-            // Inject into Context for debug visibility & Provider consumption
             if (cognitiveProfile) {
-                (projectContext as any).thinkingLevel = cognitiveProfile.thinkingLevel
+                projectContext.thinkingLevel = cognitiveProfile.thinkingLevel
             }
 
             const systemMsg: Message = { id: "system-turn", role: "system", content: systemPrompt, timestamp: Date.now() }
 
-            // Filter out old system messages and inject the fresh one
             const cleanHistory = [...startMsgs, userMsg].filter(m => m.role !== "system")
             const history = [systemMsg, ...cleanHistory]
 
-            // [ANTIGRAVITY] DIAGNOSTIC PORT: Update Debug Info
-            // This is the "Glass Box" snapshot
             this.lastDebugInfo.setValue({
                 systemPrompt: systemPrompt,
                 projectContext: projectContext,
@@ -385,50 +336,38 @@ export class OdieService {
                 timestamp: Date.now()
             })
 
-            // -- WIRED NERVOUS SYSTEM --
-            // We pass OdieTools to the LLM.
-            // onFinal is called when the message finishes. We check for tool calls there.
-            // [ANTIGRAVITY] DUAL-BRAIN: Passing projectContext so Image Model can "See" the music context.
-
-            // Status Callback: Propagate Gemini status updates to UI
+            // Stream standard chat interaction
             const handleStatus = (status: string, model?: string) => {
                 this.activityStatus.setValue(status)
                 if (model) this.activeModelName.setValue(model)
             }
 
-            this.isGenerating.setValue(true) // START THINKING
+            this.isGenerating.setValue(true)
             const stream = await this.ai.streamChat(history, projectContext, OdieTools, async (finalMsg) => {
-                this.isGenerating.setValue(false) // STOP THINKING
-                this.activityStatus.setValue("Ready") // Reset status
-                this.activeModelName.setValue("Gemini") // Reset model label
-                console.log("⚡ Odie Reflex Arc: Final Message Received:", finalMsg)
+                this.isGenerating.setValue(false)
+                this.activityStatus.setValue("Ready")
+                this.activeModelName.setValue("Gemini")
 
                 if (finalMsg.tool_calls && finalMsg.tool_calls.length > 0) {
-                    this.isGenerating.setValue(true) // RE-THINKING (TOOL EXECUTION)
-                    const successes: string[] = []  // For display, no AI follow-up
-                    const failures: string[] = []   // For structured tool errors
-                    const errors: string[] = []     // For AI follow-up
-                    const analysisResults: { name: string; result: string }[] = [] // For analysis tools that need AI interpretation
+                    this.isGenerating.setValue(true)
+                    const successes: string[] = []
+                    const failures: string[] = []
+                    const errors: string[] = []
+                    const analysisResults: { name: string; result: string }[] = []
                     if (this.appControl) {
-                        console.log("⚡ Odie Reflex Arc: Executing Tool Calls...", finalMsg.tool_calls)
-
                         for (const call of finalMsg.tool_calls) {
                             try {
-                                let success = false
-
-
-                                // [ANTIGRAVITY] Refactored Tool Execution
                                 const executorContext: ExecutorContext = {
                                     studio: this.studio!,
                                     appControl: this.appControl,
                                     ai: this.ai,
-                                    setGenUiPayload: (payload: any) => this.genUiPayload.setValue(payload),
+                                    setGenUiPayload: (payload: unknown) => this.genUiPayload.setValue(payload as any),
                                     setSidebarVisible: (visible: boolean) => this.visible.setValue(visible),
                                     contextState: this.ai.contextService.state.getValue(),
                                     recentMessages: this.messages.getValue()
                                 }
 
-                                const result = await this.toolExecutor.execute(call, executorContext)
+                                const result = await this.#toolExecutor.execute(call, executorContext)
 
                                 if (result.userMessage) {
                                     if (result.success) successes.push(result.userMessage)
@@ -437,12 +376,9 @@ export class OdieService {
 
                                 if (result.systemError) {
                                     errors.push(result.systemError)
-                                    // Mirror behavior: Show dialog for errors
-                                    // Though OdieToolExecutor doesn't do UI, we do it here if it's an error
                                     if (result.systemError.startsWith("❌")) {
-                                        // Simple heuristic to extract msg
                                         Dialogs.info({
-                                            headline: `Odie Failed: ${call.name}`,
+                                            headline: `Tool Failed: ${call.name}`,
                                             message: result.systemError.replace("❌ Error: ", "")
                                         })
                                     }
@@ -450,34 +386,21 @@ export class OdieService {
 
                                 if (result.analysisData) {
                                     analysisResults.push({ name: call.name, result: result.analysisData })
-                                    success = true
-                                } else {
-                                    success = result.success
-                                }
-
-
-                                if (!success && call.name !== "arrangement_list_tracks") {
-                                    // [ANTIGRAVITY] Legacy generic hints removed.
-                                    // We now rely on specific error messages in 'failures' array.
-                                    // errors.push(`❌ Failed: ${call.name}.`)
                                 }
                             } catch (e) {
-                                console.error("Tool Execution Failed", e)
                                 const errMsg = (e instanceof Error) ? e.message : String(e)
                                 errors.push(`❌ Error: ${call.name} - ${errMsg}`)
 
-                                // 🚨 VISIBLE ERROR REPORTING FOR USER
                                 Dialogs.info({
-                                    headline: `Odie Failed: ${call.name}`,
+                                    headline: `Tool Failed: ${call.name}`,
                                     message: errMsg
                                 })
                             }
                         }
                     }
 
-                    // --- FEEDBACK LOOP (AGENTIC RECURSION) ---
+                    // Feedback Loop
                     if (errors.length > 0) {
-                        // ERRORS occurred - trigger full AI follow-up to explain
                         const feedbackMsg: Message = {
                             id: crypto.randomUUID(),
                             role: "system",
@@ -485,11 +408,9 @@ export class OdieService {
                             timestamp: Date.now()
                         }
 
-                        // 1. Replace the orphan placeholder with feedback, preserve ID for follow-up stream
                         const currentMessages = this.messages.getValue()
                         const originalIdx = currentMessages.findIndex(m => m.id === assistantMsg.id)
 
-                        // Insert feedbackMsg before the placeholder, and keep the placeholder for the follow-up
                         if (originalIdx !== -1) {
                             const newMessages = [...currentMessages]
                             newMessages.splice(originalIdx, 0, feedbackMsg)
@@ -498,16 +419,15 @@ export class OdieService {
                             this.messages.setValue([...currentMessages, feedbackMsg])
                         }
 
-                        // 2. Recurse: Send Tool Output back to Brain
-                        console.log("🧠 Odie Agentic Loop: Sending feedback to model...")
                         const nextHistory = [...history, finalMsg, feedbackMsg]
 
                         const nextStream = this.ai.streamChat(nextHistory, undefined, OdieTools, async () => {
-                            console.log("✅ Odie Agentic Loop: Turn Complete")
+                            console.log("Agent turn complete")
                         })
 
                         nextStream.subscribe(obs => {
-                            const newText = obs.getValue()
+                            const val = obs.getValue()
+                            const newText = val.content
                             const all = this.messages.getValue()
                             const targetIdx = all.findIndex(m => m.id === assistantMsg.id)
                             if (targetIdx === -1) return
@@ -520,8 +440,6 @@ export class OdieService {
                             this.messages.setValue(newAll)
                         })
                     } else if (analysisResults.length > 0) {
-                        // ANALYSIS tools need AI follow-up to explain results
-                        // Create proper function response messages for each result
                         const functionResponseMsgs: Message[] = analysisResults.map(ar => ({
                             id: crypto.randomUUID(),
                             role: "function" as const,
@@ -530,7 +448,6 @@ export class OdieService {
                             timestamp: Date.now()
                         }))
 
-                        // Show "Analyzing..." status first
                         const currentMessages = this.messages.getValue()
                         const originalIdx = currentMessages.findIndex(m => m.id === assistantMsg.id)
                         if (originalIdx !== -1) {
@@ -539,28 +456,14 @@ export class OdieService {
                             this.messages.setValue(newMessages)
                         }
 
-                        // Send function responses back to AI for interpretation
-                        // Per Gemini spec: Model's tool call -> functionResponse(s) -> Model explains
-                        // Allow render_widget for Gen UI, but exclude analysis tools to prevent loops
                         const renderOnlyTools = OdieTools.filter(t => t.name === "render_widget")
-                        console.log("🧠 Odie Analysis Loop: Sending function responses to model for explanation...")
                         const nextHistory = [...history, finalMsg, ...functionResponseMsgs]
 
                         let lastStreamContent = ""
                         const nextStream = this.ai.streamChat(nextHistory, undefined, renderOnlyTools, async (finalResponse) => {
-                            console.log("✅ Odie Analysis Loop: Explanation Complete")
-                            console.log("🔬 [Analysis Loop] Final response:", {
-                                hasContent: !!finalResponse.content,
-                                contentLength: finalResponse.content?.length || 0,
-                                hasToolCalls: !!(finalResponse.tool_calls && finalResponse.tool_calls.length > 0),
-                                toolCalls: finalResponse.tool_calls?.map(tc => tc.name)
-                            })
-
-                            // If no content was streamed but we completed, check for empty response
-                            // Use Gen UI to show clickable track options for better UX!
                             if (!lastStreamContent && !finalResponse.content) {
                                 const trackList = this.safeListTracks().filter(t => t !== "Output")
-                                const genUIFallback = `I analyzed the data but need more context. Which track's reverb would you like to fix?\n\n\`\`\`json
+                                const genUIFallback = `Context needed. Which track would you like to update?\n\n\`\`\`json
 ${JSON.stringify({
                                     ui_component: "step_list",
                                     data: {
@@ -568,7 +471,7 @@ ${JSON.stringify({
                                         steps: trackList.map(t => `🎚️ ${t}`)
                                     }
                                 }, null, 2)}
-\`\`\`\n\n*Tap a track above, or type the name to continue!*`
+\`\`\`\n\n*Select a track above to continue.*`
 
                                 const all = this.messages.getValue()
                                 const targetIdx = all.findIndex(m => m.id === assistantMsg.id)
@@ -584,27 +487,23 @@ ${JSON.stringify({
                         })
 
                         nextStream.subscribe(obs => {
-                            const newText = obs.getValue()
+                            const val = obs.getValue()
+                            const newText = val.content
                             lastStreamContent = newText || ""
-                            console.log(`🔄 [Analysis Loop] Stream update received:`, newText?.substring(0, 100) || "(empty)")
                             const all = this.messages.getValue()
                             const targetIdx = all.findIndex(m => m.id === assistantMsg.id)
-                            if (targetIdx === -1) {
-                                console.warn("⚠️ [Analysis Loop] Target message not found in messages array!")
-                                return
-                            }
+                            if (targetIdx === -1) return
 
                             const newAll = [...all]
                             newAll[targetIdx] = {
                                 ...newAll[targetIdx],
-                                content: newText || "Analyzing..."
+                                content: newText || "Processing..."
                             }
                             this.messages.setValue(newAll)
                         })
                     } else if (successes.length > 0 || failures.length > 0) {
-                        // SUCCESS or PARTIAL - tools executed, display results
                         const parts = [...successes, ...failures]
-                        const brief = parts.join("\n") + " [[STATUS: OK]]"
+                        const brief = parts.join("\n")
                         const all = this.messages.getValue()
                         const targetIdx = all.findIndex(m => m.id === assistantMsg.id)
                         if (targetIdx !== -1) {
@@ -614,17 +513,14 @@ ${JSON.stringify({
                                 content: brief
                             }
                             this.messages.setValue(newAll)
-                            console.log("✅ Odie Silent Success: Tools executed, brief confirmation sent.")
                         }
                     }
                 }
 
-                // [ANTIGRAVITY] DONE THINKING
                 this.isGenerating.setValue(false)
 
-                // [ANTIGRAVITY] SIGNAL DISPATCH - Event Driven Test Rig
                 this.studio?.odieEvents.notify({
-                    type: "thought-complete",
+                    type: "action-complete",
                     content: this.messages.getValue().at(-1)?.content || ""
                 })
 
@@ -636,7 +532,9 @@ ${JSON.stringify({
             // CRITICAL: Update by message ID, not position, to prevent overwriting other messages (e.g., /verify report)
             const targetMsgId = assistantMsg.id
             const disposer = stream.subscribe((observable) => {
-                const newText = observable.getValue()
+                const val = observable.getValue()
+                const newText = val.content
+                const thoughts = val.thoughts
 
                 const all = this.messages.getValue()
                 const targetIdx = all.findIndex(m => m.id === targetMsgId)
@@ -645,7 +543,8 @@ ${JSON.stringify({
                 const newAll = [...all]
                 newAll[targetIdx] = {
                     ...newAll[targetIdx],
-                    content: newText || "..."
+                    content: newText || "...",
+                    thoughts: thoughts
                 }
                 this.messages.setValue(newAll)
             })
@@ -681,7 +580,6 @@ ${JSON.stringify({
             }
             this.messages.setValue(newAll)
 
-            // [ANTIGRAVITY] ERROR STOP
             this.isGenerating.setValue(false)
         }
     }
@@ -744,15 +642,9 @@ ${JSON.stringify({
     }
 
     /**
-     * [A2UI] Handle Widget Action
-     * Bridges Gen UI widget interactions (like knob adjustments) to OdieAppControl.
-     * Also handles simple Error Card actions.
+     * Handle Interface Widget Action
      */
     async handleWidgetAction(action: any) {
-        // [ANTIGRAVITY] Debug Handling
-        console.log("⚡ [OdieService] handleWidgetAction received:", JSON.stringify(action))
-
-        // [ANTIGRAVITY] Priority: Error Actions (No Dependencies)
         if (action.name === "error_action" && action.context?.actionId) {
             this.handleErrorAction(action.context.actionId)
             return
@@ -779,7 +671,6 @@ ${JSON.stringify({
         }
         */
         if (!this.appControl) {
-            console.warn("🧠 [Gen UI] Widget action received but no appControl available")
             return
         }
 

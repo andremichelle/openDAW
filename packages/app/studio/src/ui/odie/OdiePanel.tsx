@@ -38,7 +38,7 @@ export const OdiePanel = ({ service }: Construct) => {
                 background: "var(--color-gap)"
             }}>
             <header>
-                <Icon symbol={IconSymbol.Robot} /> <span>Odie</span>
+                <span>Odie</span>
                 <div style={{ flex: "1" }} />
                 {closeButton}
             </header>

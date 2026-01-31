@@ -4,7 +4,6 @@ import { createElement } from "@opendaw/lib-jsx"
 import { OdieModalFrame } from "./components/OdieModalFrame"
 import { userService } from "./services/UserService"
 import { DefaultObservableValue, ObservableValue, Terminator } from "@opendaw/lib-std"
-import { Button } from "@/ui/components/Button"
 import { TextInput } from "@/ui/components/TextInput"
 import { Colors } from "@opendaw/studio-enums"
 import { Html } from "@opendaw/lib-dom"
@@ -13,10 +12,9 @@ import DefaultAvatarImg from "./assets/default_avatar_placeholder.png"
 const className = Html.adoptStyleSheet(css, "OdieProfileModal")
 
 export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
-    // -- STATE --
     const lifecycle = new Terminator()
 
-    // Optimistic Models (synced back to service)
+    // Optimistic Models
     const nameModel = new DefaultObservableValue<string>(userService.dna.getValue().name)
     const locationModel = new DefaultObservableValue<string>(userService.dna.getValue().identity.location)
     const genreModel = new DefaultObservableValue<string>(userService.dna.getValue().sonicFingerprint.primaryGenre)
@@ -24,7 +22,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
     const influencesModel = new DefaultObservableValue<string>(userService.dna.getValue().influences.join(", "))
 
     // View State
-    const activeTab$ = new DefaultObservableValue<string>("overview") // overview | identity | sound | studio | goals
+    const activeTab$ = new DefaultObservableValue<string>("overview")
     const showAvatarMenu$ = new DefaultObservableValue<boolean>(false)
 
     // Sync to UserService
@@ -44,17 +42,17 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
             const reader = new FileReader()
             reader.onload = (evt) => {
                 userService.update({ avatar: evt.target?.result as string })
-                render() // Force re-render to show new avatar
+                render()
             }
             reader.readAsDataURL(file)
         }
     }
 
-    const getDna = () => userService.dna.getValue()
+    const getProfile = () => userService.dna.getValue()
 
     const render = () => {
         container.innerHTML = ""
-        const dna = getDna()
+        const profile = getProfile()
         const activeTab = activeTab$.getValue()
 
         // -- SIDEBAR ACTIONS --
@@ -72,27 +70,27 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
         let tabContent
 
         if (activeTab === "overview") {
-            const hasName = dna.name.trim().length > 0
-            const displayRole = dna.identity.role.charAt(0).toUpperCase() + dna.identity.role.slice(1).replace("_", " ")
-            const displayGenre = dna.sonicFingerprint.primaryGenre || "Unknown Genre"
-            const influences = dna.influences.slice(0, 3).join(", ") || "None Listed"
+            const hasName = profile.name.trim().length > 0
+            const displayRole = profile.identity.role.charAt(0).toUpperCase() + profile.identity.role.slice(1).replace("_", " ")
+            const displayGenre = profile.sonicFingerprint.primaryGenre || "Unknown Genre"
+            const influences = profile.influences.slice(0, 3).join(", ") || "None Listed"
 
             tabContent = <div className="overview-tab">
-                <div className="passport-card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                    <div className="passport-header">
-                        <div className="passport-id" style={{ opacity: 0.5 }}>ODIE-ID: {Math.random().toString(36).substr(2, 9).toUpperCase()}</div>
-                        <div className="passport-status">STATUS: ACTIVE</div>
+                <div className="profile-card" style={{ flex: "1", display: "flex", flexDirection: "column" }}>
+                    <div className="profile-header">
+                        <div className="profile-id" style={{ opacity: "0.5" }}>PROFILE-ID: {Math.random().toString(36).substr(2, 9).toUpperCase()}</div>
+                        <div className="profile-status">STATUS: ACTIVE</div>
                     </div>
-                    <div className="passport-body" style={{ flex: 1 }}>
-                        <div className="passport-photo">
+                    <div className="profile-body" style={{ flex: "1" }}>
+                        <div className="profile-photo">
                             <div className="photo-frame" style={{
-                                backgroundImage: `url(${dna.avatar || DefaultAvatarImg})`
+                                backgroundImage: `url(${profile.avatar || DefaultAvatarImg})`
                             }}></div>
                         </div>
-                        <div className="passport-details">
+                        <div className="profile-details">
                             <div className="detail-row main">
                                 <div className="detail-label">IDENTITY</div>
-                                <div className="detail-value highlight" style={{ fontSize: "24px" }}>{hasName ? dna.name : "ANONYMOUS PRODUCER"}</div>
+                                <div className="detail-value highlight" style={{ fontSize: "24px" }}>{hasName ? profile.name : "ANONYMOUS PRODUCER"}</div>
                             </div>
                             <div className="detail-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr", gap: "24px" }}>
                                 <div className="detail-row">
@@ -101,28 +99,27 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
                                 </div>
                                 <div className="detail-row">
                                     <div className="detail-label">LEVEL</div>
-                                    <div className="detail-value">{dna.level.toUpperCase()}</div>
+                                    <div className="detail-value">{profile.level.toUpperCase()}</div>
                                 </div>
                                 <div className="detail-row">
                                     <div className="detail-label">LOCATION</div>
-                                    <div className="detail-value">{dna.identity.location || "Unknown"}</div>
+                                    <div className="detail-value">{profile.identity.location || "Unknown"}</div>
                                 </div>
                             </div>
                             <div className="detail-grid" style={{ marginTop: "24px" }}>
                                 <div className="detail-row">
-                                    <div className="detail-label">SONIC FINGERPRINT</div>
-                                    <div className="detail-value" style={{ color: Colors.blue }}>{displayGenre}</div>
+                                    <div className="detail-label">SONIC PROFILE</div>
+                                    <div className="detail-value" style={{ color: Colors.blue.toString() }}>{displayGenre}</div>
                                 </div>
                                 <div className="detail-row">
                                     <div className="detail-label">TOP INFLUENCES</div>
-                                    <div className="detail-value" style={{ opacity: 0.8 }}>{influences}</div>
+                                    <div className="detail-value" style={{ opacity: "0.8" }}>{influences}</div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div className="passport-footer">
-                        <div className="barcode" style={{ opacity: 0.1 }}>||| || ||| || |||| |||</div>
-                        <div className="issued">ISSUED: 2026.01.07</div>
+                    <div className="profile-footer">
+                        <div className="issued">CREATED: 2026.01.07</div>
                     </div>
                 </div>
             </div>
@@ -131,25 +128,25 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
             tabContent = <div>
                 <div className="section">
                     <label className="label">Artist Name / Alias</label>
-                    <TextInput lifecycle={lifecycle} model={nameModel} className="profile-input" placeholder="Simon LeBon" />
+                    <TextInput lifecycle={lifecycle} model={nameModel} className="profile-input" placeholder="Artist Name" />
                 </div>
                 <div className="section">
                     <label className="label">Primary Role</label>
-                    <select className="native-input" onchange={(e: any) => userService.update({ identity: { ...dna.identity, role: e.target.value } })}>
+                    <select className="native-input" onchange={(e: any) => userService.update({ identity: { ...profile.identity, role: e.target.value } })}>
                         {["producer", "songwriter", "mixer", "sound_designer", "artist"].map(r =>
-                            <option value={r} selected={dna.identity.role === r}>{r.toUpperCase().replace("_", " ")}</option>
+                            <option value={r} selected={profile.identity.role === r}>{r.toUpperCase().replace("_", " ")}</option>
                         )}
                     </select>
                 </div>
                 <div className="section">
-                    <label className="label">Location (City/Planet)</label>
-                    <TextInput lifecycle={lifecycle} model={locationModel} className="profile-input" placeholder="Planet Earth" />
+                    <label className="label">Location</label>
+                    <TextInput lifecycle={lifecycle} model={locationModel} className="profile-input" placeholder="Location" />
                 </div>
                 <div className="section">
                     <label className="label">Experience Level</label>
                     <div className="level-grid">
                         {["beginner", "intermediate", "advanced", "pro"].map(l => (
-                            <div className={`level-btn ${dna.level === l ? 'active' : ''}`}
+                            <div className={`level-btn ${profile.level === l ? 'active' : ''}`}
                                 onclick={() => { userService.update({ level: l as any }); render() }}>
                                 {l.charAt(0).toUpperCase() + l.slice(1)}
                             </div>
@@ -178,22 +175,22 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
             tabContent = <div>
                 <div className="section">
                     <label className="label">Workflow Preference</label>
-                    <select className="native-input" onchange={(e: any) => userService.update({ techRider: { ...dna.techRider, workflow: e.target.value } })}>
-                        <option value="in-the-box" selected={dna.techRider.workflow === "in-the-box"}>In-The-Box (Software Only)</option>
-                        <option value="hybrid" selected={dna.techRider.workflow === "hybrid"}>Hybrid (Hardware + Software)</option>
-                        <option value="outboard-heavy" selected={dna.techRider.workflow === "outboard-heavy"}>Outboard Heavy (Analog)</option>
-                        <option value="recording-focus" selected={dna.techRider.workflow === "recording-focus"}>Recording Focus (Live Instruments)</option>
+                    <select className="native-input" onchange={(e: any) => userService.update({ techRider: { ...profile.techRider, workflow: e.target.value } })}>
+                        <option value="in-the-box" selected={profile.techRider.workflow === "in-the-box"}>In-The-Box (Software Only)</option>
+                        <option value="hybrid" selected={profile.techRider.workflow === "hybrid"}>Hybrid (Hardware + Software)</option>
+                        <option value="outboard-heavy" selected={profile.techRider.workflow === "outboard-heavy"}>Outboard Heavy (Analog)</option>
+                        <option value="recording-focus" selected={profile.techRider.workflow === "recording-focus"}>Recording Focus (Live Instruments)</option>
                     </select>
                 </div>
                 <div className="section">
                     <label className="label">Studio Integrations (Hardware / Key VSTs)</label>
                     <div className="input-hint">
-                        Tell Odie what else is in your studio (e.g. Moog Sub37, Serum, Push 2).
+                        List your key gear (e.g. Moog Sub37, Serum, Push 2).
                     </div>
                     <textarea className="input-textarea"
                         placeholder="List your key gear..."
-                        onchange={(e: any) => userService.update({ techRider: { ...dna.techRider, integrations: e.target.value.split(",").map((s: string) => s.trim()) } })}
-                    >{dna.techRider.integrations.join(", ")}</textarea>
+                        onchange={(e: any) => userService.update({ techRider: { ...profile.techRider, integrations: e.target.value.split(",").map((s: string) => s.trim()) } })}
+                    >{profile.techRider.integrations.join(", ")}</textarea>
                 </div>
             </div>
         }
@@ -204,7 +201,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
                     <textarea className="input-textarea" style={{ height: "120px" }}
                         placeholder="What are you working towards? (e.g. Finish an EP, Learn Sound Design)"
                         onchange={(e: any) => userService.update({ goals: e.target.value.split(",").map((s: string) => s.trim()) })}
-                    >{dna.goals.join(", ")}</textarea>
+                    >{profile.goals.join(", ")}</textarea>
                 </div>
             </div>
         }
@@ -212,7 +209,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
         // -- LAYOUT ASSEMBLY --
         const showMenu = showAvatarMenu$.getValue()
         const avatarStyle = {
-            backgroundImage: `url(${dna.avatar || DefaultAvatarImg})`,
+            backgroundImage: `url(${profile.avatar || DefaultAvatarImg})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             fontSize: '0'
@@ -231,7 +228,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
                     <div className="label">Upload Photo</div>
                     <div className="sub">JPG/PNG (Max 2MB)</div>
                 </div>
-                {dna.avatar && <div className="menu-item delete" onclick={() => {
+                {profile.avatar && <div className="menu-item delete" onclick={() => {
                     userService.update({ avatar: undefined })
                     render()
                 }}>
@@ -241,8 +238,8 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
         </div>
 
         const info = <div>
-            <div className="info-name">{dna.name || "Anonymous"}</div>
-            <div className="info-level">{dna.level.toUpperCase()}</div>
+            <div className="info-name">{profile.name || "Anonymous"}</div>
+            <div className="info-level">{profile.level.toUpperCase()}</div>
         </div>
 
         const sidebar = <div className="sidebar">
@@ -262,7 +259,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
         const main = <div className="main">
             {activeTab !== "overview" && <h2>
                 {activeTab === "identity" && "Artist Identity"}
-                {activeTab === "sound" && "Sonic Fingerprint"}
+                {activeTab === "sound" && "Sonic Profile"}
                 {activeTab === "studio" && "Technical Rider"}
                 {activeTab === "goals" && "Career Goals"}
             </h2>}
@@ -281,7 +278,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
     render()
 
     return OdieModalFrame({
-        title: "Artist Passport",
+        title: "Artist Profile",
         width: "850px",
         height: "600px",
         onClose: () => {

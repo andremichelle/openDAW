@@ -35,7 +35,7 @@ export class OdieToolExecutor {
 
         try {
             switch (name) {
-                // --- PROJECT ---
+                // Project
                 case "project_create":
                     await ctx.appControl.createProject()
                     return { success: true, userMessage: "Created new project" }
@@ -46,13 +46,13 @@ export class OdieToolExecutor {
 
                 case "project_export_mix":
                     const mExp = await ctx.appControl.exportMixdown()
-                    return { success: mExp, userMessage: mExp ? "Export initiated (Dialog)" : undefined }
+                    return { success: mExp, userMessage: mExp ? "Export initiated" : undefined }
 
                 case "project_export_stems":
                     const sExp = await ctx.appControl.exportStems()
-                    return { success: sExp, userMessage: sExp ? "Export Stems initiated (Dialog)" : undefined }
+                    return { success: sExp, userMessage: sExp ? "Export Stems initiated" : undefined }
 
-                // --- TRANSPORT ---
+                // Transport
                 case "transport_play":
                     await ctx.appControl.play()
                     return { success: true, userMessage: "Playing" }
@@ -80,11 +80,11 @@ export class OdieToolExecutor {
                     const success = await ctx.appControl.setTimeSignature(num, denom)
                     return {
                         success,
-                        userMessage: success ? `Time Sig set to ${num}/${denom}` : `Failed to set time signature`
+                        userMessage: success ? `Time Signature set to ${num}/${denom}` : `Failed to set time signature`
                     }
                 }
 
-                // --- RECORDING ---
+                // Recording
                 case "recording_start":
                     await ctx.appControl.record(args.countIn !== false)
                     return { success: true, userMessage: "Recording" }
@@ -94,8 +94,8 @@ export class OdieToolExecutor {
                     return { success: true, userMessage: "Recording Stopped" }
 
 
-                // --- TRACKS (Arrangement & Notes) ---
-                case "track_add": // Alias
+                // Tracks
+                case "track_add":
                 case "arrangement_add_track": {
                     const res = await ctx.appControl.addTrack(args.type || "synth", args.name || "New Track")
                     return {
@@ -120,7 +120,7 @@ export class OdieToolExecutor {
                     }
                 }
 
-                case "track_delete": // Alias
+                case "track_delete":
                 case "arrangement_delete_track":
                     const delSuccess = await ctx.appControl.deleteTrack(args.name)
                     return {
@@ -128,7 +128,7 @@ export class OdieToolExecutor {
                         userMessage: delSuccess ? `Deleted track: "${args.name}"` : `Failed to delete track: ${args.name}`
                     }
 
-                case "track_list": // Alias
+                case "track_list":
                 case "arrangement_list_tracks": {
                     const tracks = await ctx.appControl.listTracks()
                     if (tracks.length === 0) return { success: true, userMessage: "No tracks found." }
@@ -146,7 +146,7 @@ export class OdieToolExecutor {
                     }
                 }
 
-                // --- MIXER ---
+                // Mixer
                 case "mixer_volume": {
                     const result = await ctx.appControl.setVolume(args.trackName, parseFloat(String(args.db)))
                     return {
@@ -198,7 +198,7 @@ export class OdieToolExecutor {
                 }
 
 
-                // --- EDITING ---
+                // Editing
                 case "region_split": {
                     const result = await ctx.appControl.splitRegion(args.trackName, parseFloat(String(args.time || 0)))
                     return {
@@ -222,27 +222,26 @@ export class OdieToolExecutor {
                 }
 
 
-                // --- VIEW ---
+                // View
                 case "view_switch":
                     const vSwitch = await ctx.appControl.switchScreen(args.screen as any)
                     return { success: vSwitch, userMessage: vSwitch ? `Switched to ${args.screen} view` : undefined }
                 case "view_toggle_keyboard":
                     await ctx.appControl.toggleKeyboard()
-                    return { success: true, userMessage: "Toggled on-screen keyboard" }
+                    return { success: true, userMessage: "Toggled keyboard" }
 
 
-                // --- GENERATIVE UI ---
+                // Generative UI
                 case "render_interface":
                     ctx.setGenUiPayload(args)
                     ctx.setSidebarVisible(true)
                     return { success: true, userMessage: "Generated Interface: " + args.title }
 
 
-                // --- ANALYSIS & SIGNAL CHAIN ---
+                // Analysis
                 case "inspect_selection": {
                     const analysis = ctx.appControl.inspectSelection()
-                    // Try parsing JSON for user friendly summary
-                    let summary = "🧐 Selection analyzed."
+                    let summary = "Selection analyzed."
                     try {
                         const data = JSON.parse(analysis)
                         const items = Array.isArray(data) ? data : [data]
@@ -251,7 +250,7 @@ export class OdieToolExecutor {
                         const deviceCount = items.filter((i: any) => i.type === "device" || i.type === "unknown").length
 
                         if (items.length === 0) {
-                            summary = "Nothing selected right now."
+                            summary = "Nothing selected."
                         } else {
                             const parts: string[] = []
                             if (trackCount > 0) parts.push(`${trackCount} track${trackCount > 1 ? 's' : ''}`)
@@ -268,24 +267,20 @@ export class OdieToolExecutor {
                     let trackName = args.trackName
                     if (!trackName) {
                         trackName = ctx.contextState.focus?.selectedTrackName
-                        if (!trackName) throw new Error("Missing 'trackName' argument (and no track selected)")
+                        if (!trackName) throw new Error("Missing 'trackName' argument")
                     }
-                    // Fire and forget analysis
                     void ctx.appControl.analyzeTrack(trackName)
-                    return { success: true, userMessage: `Analyzed ${trackName}. Check details in my response.` }
+                    return { success: true, userMessage: `Analyzed ${trackName}.` }
                 }
 
                 case "get_track_details": {
                     let trackName = args.trackName as string | undefined
                     if (!trackName) {
-                        // Smart Inference logic
                         const trackList = await ctx.appControl.listTracks()
-                        // 1. Check selected
                         const selected = ctx.contextState.focus?.selectedTrackName
                         if (selected && trackList.includes(selected)) {
                             trackName = selected
                         }
-                        // 2. Check recent history (simplistic check)
                         if (!trackName) {
                             for (const msg of (ctx.recentMessages || []).slice().reverse().slice(0, 6)) {
                                 if (!msg.content) continue
@@ -304,8 +299,8 @@ export class OdieToolExecutor {
                     const details = ctx.appControl.getTrackDetails(trackName)
                     return {
                         success: true,
-                        userMessage: `Analyzing signal chain for "${trackName}"...`,
-                        analysisData: details // Return full JSON for AI
+                        userMessage: `Analyzing "${trackName}" details...`,
+                        analysisData: details
                     }
                 }
 
@@ -337,7 +332,7 @@ export class OdieToolExecutor {
                     const result = await ctx.appControl.verifyAction(args.action, args.expectedChange)
                     return {
                         success: true,
-                        userMessage: `Verifying action: ${args.action}...`,
+                        userMessage: `Verifying: ${args.action}`,
                         analysisData: result
                     }
                 }
@@ -345,7 +340,6 @@ export class OdieToolExecutor {
 
                 default:
                     console.warn(`Unknown Tool: ${name}`)
-                    // Return failure but not throw
                     return { success: false, systemError: `Unknown Tool: ${name}` }
             }
         } catch (e: any) {
@@ -353,7 +347,6 @@ export class OdieToolExecutor {
             return {
                 success: false,
                 systemError: `Error: ${name} - ${e.message}`,
-                // We could also return a userMessage for the dialog if we want
             }
         }
     }

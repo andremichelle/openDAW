@@ -11,7 +11,7 @@ export const OdieButton = ({ service, lifecycle }: { service: StudioService, lif
             lifecycle={lifecycle}
             model={service.layout.odieVisible}
             appearance={{
-                activeColor: Colors.purple,
+                activeColor: Colors.blue,
                 tooltip: "Odie AI Assistant",
                 cursor: "pointer"
             }}>
