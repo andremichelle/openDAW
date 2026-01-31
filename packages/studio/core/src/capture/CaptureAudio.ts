@@ -30,6 +30,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     #audioChain: Nullable<{
         sourceNode: MediaStreamAudioSourceNode
         gainNode: GainNode
+        channelCount: 1 | 2
     }> = null
     #preparedWorklet: Nullable<RecordingWorklet> = null
 
@@ -91,7 +92,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         return this.#stream.flatMap(stream => Option.wrap(stream.getAudioTracks().at(0)))
     }
     get outputNode(): Option<AudioNode> {return Option.wrap(this.#audioChain?.gainNode)}
-    get effectiveChannelCount(): number {return this.#audioChain?.gainNode.channelCount ?? 1}
+    get effectiveChannelCount(): number {return this.#audioChain?.channelCount ?? 1}
 
     async prepareRecording(): Promise<void> {
         const {project} = this.manager
@@ -112,8 +113,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         if (!isDefined(audioChain)) {
             return Promise.reject("No audio chain available for recording.")
         }
-        const {gainNode} = audioChain
-        const channelCount = gainNode.channelCount
+        const {gainNode, channelCount} = audioChain
         const recordingWorklet = audioWorklets.createRecording(channelCount, RenderQuantum)
         sampleManager.record(recordingWorklet)
         gainNode.connect(recordingWorklet)
@@ -154,7 +154,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         }
         this.#stopStream()
         const deviceId = this.deviceId.getValue().unwrapOrUndefined() ?? AudioDevices.defaultInput?.deviceId
-        const channelCount = this.#requestChannels.unwrapOrElse(1)
+        const channelCount = this.#requestChannels.unwrapOrElse(2)
         return AudioDevices.requestStream({
             deviceId: isDefined(deviceId) ? {exact: deviceId} : undefined,
             echoCancellation: false,
@@ -189,14 +189,12 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         const sourceNode = audioContext.createMediaStreamSource(stream)
         const gainNode = audioContext.createGain()
         gainNode.gain.value = dbToGain(this.#gainDb)
-        const streamChannelCount = stream.getAudioTracks().at(0)?.getSettings().channelCount ?? 1
-        const requestMono = this.#requestChannels.mapOr(channels => channels === 1, false)
-        if (requestMono && streamChannelCount === 2) {
-            gainNode.channelCount = 1
-            gainNode.channelCountMode = "explicit"
-        }
+        const streamChannelCount: 1 | 2 = Math.min(stream.getAudioTracks().at(0)?.getSettings().channelCount ?? 2, 2) as 1 | 2
+        const channelCount = this.#requestChannels.unwrapOrElse(streamChannelCount)
+        gainNode.channelCount = channelCount
+        gainNode.channelCountMode = "explicit"
         sourceNode.connect(gainNode)
-        this.#audioChain = {sourceNode, gainNode}
+        this.#audioChain = {sourceNode, gainNode, channelCount}
         if (wasMonitoring || this.#isMonitoring) {
             this.#connectMonitoring()
         }
