@@ -1,15 +1,48 @@
 export const KNOWLEDGE_MODULES = {
     'Schema': `
-### 🧬 1. The Box Schema (DNA)
-OpenDAW is a directed acyclic graph (DAG) of **82 reactive nodes** called "Boxes".
-- **Foundation**: RootBox (Entry), TimelineBox (Master), UserInterfaceBox (Layout).
-- **Composition**: TrackBox, NoteClipBox (MIDI), NoteEventBox (Atomic Note), AudioRegionBox.
-- **Devices (35 types)**: Vaporisateur (Granular), Tape (Lo-Fi), Playfield (Sampler), ModularBox.
-- **Automation**: ValueClipBox, ValueEventBox, ValueEventCurveBox.
-- **Trace**: NoteEventBox (Pos/Pitch) -> NoteRegionBox -> TrackBox -> AudioUnitBox.
+### 🧬 1. The Functional Schema (Common Sense)
+OpenDAW uses native devices for specific musical roles. You MUST map user intents to these native tools.
+
+**Instruments (WHAT & WHY):**
+- **Playfield**: The Drum Engine. Use for "drums", "sample pads", "percussion", "one-shots".
+- **Nano**: Classic Subtractive Synth. Use for "bass", "leads", "synth sounds", "analog warmth".
+- **Soundfont**: General MIDI Sample Player. Use for "piano", "orchestral", "strings", "realistic".
+- **Vaporisateur**: Granular Engine. Use for "ambient", "texture", "granular sound design".
+- **Tape**: Disrupted Lo-Fi Sampler. Use for "lo-fi", "vintage character", "wobbly samples".
+
+**Effects (WHAT & WHY):**
+- **NeuralAmp**: AI-powered Saturation. Use for "warmth", "overdrive", "tube grit".
+- **Crusher**: Digital Lo-fi. Use for "bitcrushing", "digital distortion", "sample reduction".
+- **Fold**: Wavefolder. Use for "aggressive harmonics", "complex distortion".
+- **Maximizer**: Lookahead Limiter. Use for "loudness", "peak control", "final chain".
+- **Tidal**: Multi-Modulation. Use for "chorus", "flanger", "phaser".
+- **Revamp / Dattorro / Reverb**: Space & Depth. Dattorro is "premium algorithmic space".
+- **Compressor / Gate**: Dynamic logic & Rhythm precision.
+- **Delay / StereoTool**: Time-based echoes & Stereo imaging.
+
+**MIDI Processors (Logic):**
+- **Velocity / Pitch**: Utility MIDI transformation.
+
+### 🛠️ 2. The Standard Workflows
+Follow these sequences for reliable control:
+
+**A. Designing/Modifying a Sound:**
+1. Call \`get_track_details(trackName)\` to identify the current instrument and effect index.
+2. Note the \`parameters\` paths (e.g., \`osc1.wave\`, \`cutoff\`).
+3. Use \`set_device_param\` with the correct \`deviceType\`, \`deviceIndex\`, and \`paramPath\`.
+
+**B. Understanding the Arrangement:**
+1. Call \`get_project_overview()\` for a bird's eye view.
+2. Use \`notes_get(trackName)\` to see what MIDI is currently on a track.
+3. Use \`inspect_selection()\` to react to what the user has clicked on.
+
+**C. Adding Effects:**
+1. Add the effect with \`mixer_add_effect\`.
+2. Find its index by calling \`get_track_details\`.
+3. Tweak its settings with \`set_device_param\`.
 `,
     'API': `
-### 🎮 2. The ProjectApi (Gatekeeper)
+### 🎮 2. The ProjectApi(Gatekeeper)
 ALL mutations MUST occur within \`project.editing.modify\` blocks using the \`ProjectApi\`.
 - **Track Management**: \`createNoteTrack\`, \`createAudioTrack\`, \`deleteAudioUnit\`.
 - **Instrument/FX**: \`createInstrument(factory, opts)\`, \`insertEffect(field, factory, index)\`.

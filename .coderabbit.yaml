@@ -1,0 +1,45 @@
+# CodeRabbit Configuration for OpenDAW "Gold Master" Review
+# Strictness Level: High (Senior Developer Persona)
+
+version: "2"
+
+options:
+  # We want a thorough, assertive review style
+  profile: "assertive"
+  
+  # Tone instructions
+  language: "en-US"
+  
+reviews:
+  # Enable high-level summary
+  high_level_summary: true
+  
+  # Enable auto-review for all PRs
+  auto_review:
+    enabled: true
+
+  # Strict instructions per path
+  path_instructions:
+    # ODIE CORE UI: Strict Clean Code & Anti-Slop
+    - path: "packages/app/studio/src/ui/odie/**"
+      instructions: |
+        You are a Senior Frontend Architect reviewing this code.
+        Rules:
+        1. **Anti-AI Slop**: Flag any "robotic" comments (e.g., "// Step 1: Get data"), generic variables (`const data`, `const result`), or overuse of glassmorphism.
+        2. **Clean Code**: Enforce deeply nested logic flattening (Guard Clauses).
+        3. **Security**: Ensure no hardcoded secrets or "Paranoid Android" redundant checks.
+        4. **Performance**: Watch for unnecessary re-renders in OdieRenderEngine.
+        
+    # TESTS: Robustness
+    - path: "**/*.test.ts"
+      instructions: |
+        Verify that tests are not just checking the "happy path". 
+        Ensure assertions are meaningful (e.g. not just checking if result exists, but checking content).
+        
+    # PUBLIC API: Stability
+    - path: "packages/lib-*/**"
+      instructions: "Ensure backward compatibility and proper typing. No `any`."
+
+chat:
+  # Disable playful art for this serious audit
+  art: false

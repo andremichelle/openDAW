@@ -187,7 +187,7 @@ const MessageBubble = ({ message, onRetry, onWidgetAction }: { message: Message,
                                     odieResponse: message.content,
                                     rating: 'positive'
                                 })
-                                triggerGlow(e.currentTarget, "#4ade80") // Green glow
+                                triggerGlow(e.currentTarget, "#73edb0") // Green glow
                             }}
                         />
                         <ActionButton
@@ -198,7 +198,7 @@ const MessageBubble = ({ message, onRetry, onWidgetAction }: { message: Message,
                                     odieResponse: message.content,
                                     rating: 'negative'
                                 })
-                                triggerGlow(e.currentTarget, "#f87171") // Red glow
+                                triggerGlow(e.currentTarget, "#ff4d5e") // Red glow
                             }}
                         />
                         <ActionButton
@@ -214,7 +214,7 @@ const MessageBubble = ({ message, onRetry, onWidgetAction }: { message: Message,
                                         comment: fb
                                     })
                                 }
-                                triggerGlow(e.currentTarget, "#06b6d4") // Cyan glow
+                                triggerGlow(e.currentTarget, "#4de4ff") // Cyan glow
                             }}
                         />
                     </div>

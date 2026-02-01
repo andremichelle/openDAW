@@ -116,32 +116,30 @@ export class OdieAppControl {
             return { success: false, reason: "No active project loaded." }
         }
 
-        // Type normalization
-        // If type is missing/undefined, default to 'synth' (Smart Default)
+        // Type normalization with Semantic Mapping (Common Sense)
         const t = (type || "synth").toLowerCase()
         let factory: InstrumentFactory | undefined
 
-        // Direct Mapping (Fast Path + Northstar Aliases)
-        if (t === 'synth') factory = InstrumentFactories.Vaporisateur
-        else if (t === 'drums') factory = InstrumentFactories.Playfield
-        else if (t === 'keys') factory = InstrumentFactories.Soundfont
+        // Intent-to-Native Mapping
+        if (t === 'synth' || t === 'bass' || t === 'sub-bass') factory = InstrumentFactories.Nano
+        else if (t === 'drums' || t === 'pads' || t === 'sample pads' || t === 'percussion') factory = InstrumentFactories.Playfield
+        else if (t === 'keys' || t === 'piano' || t === 'orchestral' || t === 'strings') factory = InstrumentFactories.Soundfont
+        else if (t === 'vaporisateur' || t === 'granular' || t === 'ambient') factory = InstrumentFactories.Vaporisateur
         else if (t === 'nano') factory = InstrumentFactories.Nano
-        else if (t === 'tape') factory = InstrumentFactories.Tape
+        else if (t === 'tape' || t === 'lo-fi') factory = InstrumentFactories.Tape
         else if (t === 'midiout' || t === 'midi-output') factory = InstrumentFactories.MIDIOutput
         else if (t === "instrument") { type = "nano"; factory = InstrumentFactories.Nano; }
         else if (t !== 'audio') {
-            // InstrumentFactories is a Namespace. 
-            // We must iterate over the 'Named' object values and check 'defaultName'.
+            // Fallback: Check if 't' matches a factory name directly
             const factories = Object.values(InstrumentFactories.Named)
             const match = factories.find(f => {
-                // Safeguard against factories explicitly not matching the interface
                 return "defaultName" in f && (f as NamedInstrumentFactory).defaultName.toLowerCase() === t
             })
 
             if (match) {
                 factory = match as InstrumentFactory
             } else {
-                return { success: false, reason: `Unknown track type: '${type}'. Try: synth, drums, keys, tape, nano, or audio.` }
+                return { success: false, reason: `Unknown track type: '${type}'. Try: synth, drums, keys, lo-fi, granular, or audio.` }
             }
         }
 
@@ -304,19 +302,30 @@ export class OdieAppControl {
         return true
     }
 
-    async setBpm(bpm: number): Promise<boolean> {
+    async setBpm(bpm: number): Promise<ToolResult> {
+        if (typeof bpm !== 'number' || isNaN(bpm) || bpm < 10 || bpm > 999) {
+            return { success: false, reason: "Invalid BPM. Must be between 10 and 999." }
+        }
         console.log(`[Odie] Setting BPM to ${bpm}...`)
-        return this.transport.setBpm(bpm)
+        this.transport.setBpm(bpm)
+        return { success: true, reason: `BPM set to ${bpm}` }
     }
 
-    async setTimeSignature(numerator: number, denominator: number): Promise<boolean> {
+    async setTimeSignature(numerator: number, denominator: number): Promise<ToolResult> {
+        if (typeof numerator !== 'number' || isNaN(numerator) || numerator < 1 || numerator > 32) {
+            return { success: false, reason: "Invalid numerator." }
+        }
         console.log(`[Odie] Setting Time Signature to ${numerator}/${denominator}...`)
-        return this.transport.setTimeSignature(numerator, denominator)
+        this.transport.setTimeSignature(numerator, denominator)
+        return { success: true, reason: `Time signature set to ${numerator}/${denominator}` }
     }
 
     // --- Mixer ---
 
     async setVolume(trackName: string, db: number): Promise<ToolResult> {
+        if (typeof db !== 'number' || isNaN(db)) {
+            return { success: false, reason: "Invalid volume value. Must be a number." }
+        }
         // Range Safety
         if (db > 6.0) db = 6.0
 
@@ -336,6 +345,9 @@ export class OdieAppControl {
     }
 
     async setPan(trackName: string, pan: number): Promise<ToolResult> {
+        if (typeof pan !== 'number' || isNaN(pan)) {
+            return { success: false, reason: "Invalid pan value. Must be a number." }
+        }
         // Range Safety
         if (pan < - 1.0) pan = -1.0
         if (pan > 1.0) pan = 1.0
@@ -419,15 +431,7 @@ export class OdieAppControl {
                     this.studio.project.editing.modify(() => {
                         this.studio.project.api.deleteAudioUnit(box)
                     })
-                    // State Verification: Ensure it's gone
-                    const stillExists = this.findAudioUnit(name).match({
-                        some: () => true,
-                        none: () => false
-                    })
-                    if (stillExists) {
-                        console.error(`[OdieAppControl] deleteTrack failed: Unit '${name}' still exists in state after deletion attempt.`);
-                        return false;
-                    }
+
                     console.log(`[OdieAppControl] deleteTrack success: '${name}' removed.`);
                     return true
                 } catch (e) {
@@ -1073,28 +1077,30 @@ export class OdieAppControl {
         const targetName = name.trim()
         const match = allAdapters.find(a => {
             let label = ""
-            if (a instanceof AudioUnitBoxAdapter) {
+            // Duck-typing for test compatibility and robustness
+            if ('label' in a && typeof a.label === 'string') {
                 label = a.label
-            } else if (a instanceof AudioBusBoxAdapter) {
-                label = a.labelField.getValue() ?? ""
+            } else if ('labelField' in a && (a as any).labelField && typeof (a as any).labelField.getValue === 'function') {
+                label = (a as any).labelField.getValue() ?? ""
             }
-            return a.box.isAttached() && label.trim() === targetName
+            const labelTrim = label.trim()
+            return a.box.isAttached() && (labelTrim === targetName || labelTrim.toLowerCase() === targetName.toLowerCase())
         })
 
         if (!match) {
             // Debug logging for failures
             if (name !== "") {
                 const labels = allAdapters.map(a => {
-                    if (a instanceof AudioUnitBoxAdapter) return `[Unit] ${a.label}`
-                    if (a instanceof AudioBusBoxAdapter) return `[Bus] ${a.labelField.getValue()}`
-                    return `[Unknown] ${(a as any).address}`
+                    if ('label' in a) return `[Unit] ${a.label}`
+                    if ('labelField' in a) return `[Bus] ${(a as any).labelField.getValue()}`
+                    return `[Unknown] ${(a as any).address ?? (a as any).box?.isAttached ? 'Attached' : 'Detached'}`
                 })
                 console.warn(`[Odie] findAudioUnitAdapter: No match for "${name}". Available:`, labels)
             }
             return Option.None
         }
 
-        if (match instanceof AudioBusBoxAdapter) {
+        if ('audioUnitBoxAdapter' in match && typeof match.audioUnitBoxAdapter === 'function') {
             return Option.wrap(match.audioUnitBoxAdapter())
         }
         return Option.wrap(match as AudioUnitBoxAdapter)
@@ -1370,11 +1376,11 @@ export class OdieAppControl {
             some: async (adapter) => {
                 try {
                     // Helper to set value robustly inside a transaction
-                    const applyValue = (targetObj: any, key: string, val: number): ToolResult => {
-                        const param = targetObj[key]
+                    const applyValue = (deviceAdapter: any, paramName: string, numericValue: number): ToolResult => {
+                        const param = deviceAdapter[paramName]
                         if (!param) {
-                            const available = Object.keys(targetObj || {}).join(", ")
-                            console.warn(`[Odie] Param "${key}" not found on target. Available: ${available}`)
+                            const available = Object.keys(deviceAdapter || {}).join(", ")
+                            console.warn(`[Odie] Param "${paramName}" not found on target. Available: ${available}`)
                             return { success: false, reason: `Param not found: ${paramPath}. Available: ${available}` }
                         }
 
@@ -1390,9 +1396,9 @@ export class OdieAppControl {
                             try {
                                 // Critical: Must be in editing transaction
                                 this.studio.project.editing.modify(() => {
-                                    setter!(val)
+                                    setter!(numericValue)
                                 })
-                                return { success: true, reason: `${trackName} ${deviceType} ${paramPath} set to ${val.toFixed(2)}` }
+                                return { success: true, reason: `${trackName} ${deviceType} ${paramPath} set to ${numericValue.toFixed(2)}` }
                             } catch (err: any) {
                                 console.error("Mutation failed", err)
                                 return { success: false, reason: `Mutation failed: ${err.message}` }

@@ -67,8 +67,6 @@ export class OdieService {
             this.viewState.setValue("chat")
 
             // Auto-Save History
-
-            // Auto-Save History
             this.messages.subscribe(() => {
                 this.saveCurrentSession()
             })
@@ -510,7 +508,7 @@ ${JSON.stringify({
                             const newAll = [...all]
                             newAll[targetIdx] = {
                                 ...newAll[targetIdx],
-                                content: brief
+                                content: newAll[targetIdx].content ? `${newAll[targetIdx].content}\n\n${brief}` : brief
                             }
                             this.messages.setValue(newAll)
                         }

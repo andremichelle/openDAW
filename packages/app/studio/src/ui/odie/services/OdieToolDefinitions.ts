@@ -309,5 +309,122 @@ export const OdieTools: LLMTool[] = [
             },
             required: ["sourceName", "targetBusName"]
         }
+    },
+    // --- ANALYSIS & DISCOVERY ---
+    {
+        name: "inspect_selection",
+        description: "Get details about currently selected items in the studio (tracks, regions, etc.).",
+        parameters: { type: "object", properties: {}, required: [] }
+    },
+    {
+        name: "get_track_details",
+        description: "Get a complete report of a track, including its mixer settings, instrument parameters, and effect chain.",
+        parameters: {
+            type: "object",
+            properties: {
+                trackName: { type: "string", description: "Name of the track to inspect." }
+            },
+            required: ["trackName"]
+        }
+    },
+    {
+        name: "get_project_overview",
+        description: "Get a high-level overview of the entire project (BPM, track list, etc.).",
+        parameters: { type: "object", properties: {}, required: [] }
+    },
+    {
+        name: "analyze_track",
+        description: "Perform a deep analysis of a track's timeline and regions.",
+        parameters: {
+            type: "object",
+            properties: {
+                trackName: { type: "string", description: "Name of the track to analyze." }
+            },
+            required: ["trackName"]
+        }
+    },
+    // --- DEEP CONTROL ---
+    {
+        name: "set_device_param",
+        description: "Set a specific parameter on an instrument or effect. Use get_track_details first to find valid param paths.",
+        parameters: {
+            type: "object",
+            properties: {
+                trackName: { type: "string", description: "Name of the track." },
+                deviceType: {
+                    type: "string",
+                    enum: ["instrument", "effect", "midiEffect", "mixer"],
+                    description: "Level of the parameter."
+                },
+                deviceIndex: { type: "number", description: "Index of the effect (0-based) if deviceType is 'effect' or 'midiEffect'." },
+                paramPath: { type: "string", description: "The parameter path (e.g., 'cutoff', 'release', 'wet')." },
+                value: { type: "number", description: "The new value (usually 0.0 to 1.0, or db for gain)." }
+            },
+            required: ["trackName", "deviceType", "paramPath", "value"]
+        }
+    },
+    {
+        name: "notes_add",
+        description: "Add a sequence of MIDI notes to a track.",
+        parameters: {
+            type: "object",
+            properties: {
+                trackName: { type: "string", description: "Name of the target track." },
+                notes: {
+                    type: "array",
+                    items: {
+                        type: "object",
+                        properties: {
+                            startTime: { type: "number", description: "Start time in Bars (1-based)." },
+                            duration: { type: "number", description: "Duration in Bars." },
+                            pitch: { type: "number", description: "MIDI Pitch (0-127). Middle C is 60." },
+                            velocity: { type: "number", description: "Velocity (0-127)." }
+                        },
+                        required: ["startTime", "duration", "pitch", "velocity"]
+                    }
+                }
+            },
+            required: ["trackName", "notes"]
+        }
+    },
+    {
+        name: "notes_get",
+        description: "Get a list of MIDI notes currently on a track.",
+        parameters: {
+            type: "object",
+            properties: {
+                trackName: { type: "string", description: "Name of the track." }
+            },
+            required: ["trackName"]
+        }
+    },
+    // --- UTILITY ---
+    {
+        name: "view_switch",
+        description: "Switch the studio layout/screen.",
+        parameters: {
+            type: "object",
+            properties: {
+                screen: { type: "string", enum: ["arrangement", "scene"] }
+            },
+            required: ["screen"]
+        }
+    },
+    {
+        name: "view_toggle_keyboard",
+        description: "Show or hide the software piano keyboard.",
+        parameters: { type: "object", properties: {}, required: [] }
+    },
+    {
+        name: "verify_action",
+        description: "Perform a 'Verification Loop' to audit the studio state after a complex mutation.",
+        parameters: {
+            type: "object",
+            properties: {
+                action: { type: "string", description: "The action that was performed." },
+                expectedChange: { type: "string", description: "The expected result (e.g., 'Track Soloed')." }
+            },
+            required: ["action", "expectedChange"]
+        }
     }
 ]

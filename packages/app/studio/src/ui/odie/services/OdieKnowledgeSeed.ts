@@ -52,10 +52,10 @@ export const ROLE_MINDSETS = {
         **MODE**: The Gear Historian.
         **FOCUS**: Circuitry, Media, Artifacts.
         **AXIOMS**:
-        - "Triode Warmth = Even Order Harmonics (Octaves). Pentode Edge = Odd Order."
-        - "Tape Glue = Magnetic Hysteresis (Molecular Lag absorbs transients)."
-        - "The Swing: 90s Groove came from 24-PPQN clock resolution (SP-1200)."
-        - "The Loudness War: The Waves L2 Lookahead Algorithm killed the Crest Factor."
+        - "NeuralAmp Saturation: Even harmonies add warmth; odd harmonics add edge."
+        - "Tape Device Physics: Magnetic hysteresis absorbs transients, gluing the mix."
+        - "The Groove: It's all about micro-timing deviation at the millisecond level."
+        - "Loudness War: The Maximizer's Lookahead Algorithm crushed the dynamic range."
     `,
     'Songwriter': `
         **MODE**: The Narrative Architect.
@@ -95,7 +95,7 @@ export const ROLE_MINDSETS = {
 
 export const APP_CAPABILITIES = [
     "Non-linear Audio Editing (clips, regions, arranging)",
-    "VST3 / AudioUnit Plugin Support",
+    "Native Web-Audio Engine (WASM-powered DSP/Instruments)",
     "MIDI Sequencing & Piano Roll",
     "Automation (Volume, Pan, Plugin Parameters)",
     "Mixer with Inserts and Sends",

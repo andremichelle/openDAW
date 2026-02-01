@@ -1,4 +1,4 @@
-# Claude Code Instructions
+# Gemini Code Instructions
 
 ## Coding Style
 
@@ -11,3 +11,12 @@
   - Use `isAbsent(value)` instead of `value === undefined || value === null`
   - **Never use falsy checks like `!value` or `if (!value)` for null/undefined checks** - always use `!isDefined(value)` or `isAbsent(value)`
   - Never write `| null` or `| undefined` inline - always use the lib-std types.
+
+## Build & Troubleshooting
+
+### Missing `GateDeviceBox` / `NeuralAmpDeviceBox`
+If the build fails with "has no exported member named 'GateDeviceBox'", it means the **generated** box files are missing. These files are gitignored and must be generated locally.
+**Fix:** Run `npm run build -w @opendaw/studio-forge-boxes` then rebuild `studio-boxes`.
+
+### Upstream Parity
+Always verify `andre-vanilla` and `upstream/main` commit hashes match before assuming code divergence.

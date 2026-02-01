@@ -67,20 +67,20 @@ export class OdieToolExecutor {
 
                 case "transport_set_bpm": {
                     const bpm = parseFloat(String(args.bpm))
-                    const success = await ctx.appControl.setBpm(bpm)
+                    const result = await ctx.appControl.setBpm(bpm)
                     return {
-                        success,
-                        userMessage: success ? `BPM set to ${bpm}` : `BPM ${bpm} is out of range. Valid range: 20-999.`
+                        success: result.success,
+                        userMessage: result.success ? `BPM set to ${bpm}` : result.reason
                     }
                 }
 
                 case "transport_set_time_signature": {
                     const num = parseInt(String(args.numerator))
                     const denom = parseInt(String(args.denominator))
-                    const success = await ctx.appControl.setTimeSignature(num, denom)
+                    const result = await ctx.appControl.setTimeSignature(num, denom)
                     return {
-                        success,
-                        userMessage: success ? `Time Signature set to ${num}/${denom}` : `Failed to set time signature`
+                        success: result.success,
+                        userMessage: result.success ? `Time Signature set to ${num}/${denom}` : result.reason
                     }
                 }
 
@@ -92,6 +92,12 @@ export class OdieToolExecutor {
                 case "recording_stop":
                     await ctx.appControl.stopRecording()
                     return { success: true, userMessage: "Recording Stopped" }
+
+                case "transport_set_count_in": {
+                    const bars = parseInt(String(args.bars))
+                    await ctx.appControl.setCountIn(bars)
+                    return { success: true, userMessage: `Count-in set to ${bars} bars` }
+                }
 
 
                 // Tracks
@@ -143,6 +149,17 @@ export class OdieToolExecutor {
                     return {
                         success: result.success,
                         userMessage: result.success ? `Added ${notes.length} MIDI notes to "${track}"` : `Failed to add notes to "${track}": ${result.reason}`
+                    }
+                }
+
+                case "notes_get":
+                case "arrangement_get_notes": {
+                    const result = await ctx.appControl.getMidiNotes(args.trackName)
+                    if (!result.notes || result.notes.length === 0) return { success: true, userMessage: `No notes found on "${args.trackName}"` }
+                    return {
+                        success: true,
+                        userMessage: `Found ${result.notes.length} notes on "${args.trackName}"`,
+                        analysisData: JSON.stringify(result.notes)
                     }
                 }
 
