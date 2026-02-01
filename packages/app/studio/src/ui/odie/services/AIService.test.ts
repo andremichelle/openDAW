@@ -16,11 +16,10 @@ describe('AIService', () => {
 
     it('should register core providers on initialization', () => {
         const service = new AIService()
-        expect(service.providers.length).toBe(3)
+        expect(service.providers.length).toBe(2)
 
         const ids = service.providers.map(p => p.id)
         expect(ids).toContain('ollama')
-        expect(ids).toContain('gemini')
         expect(ids).toContain('gemini-3')
     })
 
@@ -29,12 +28,12 @@ describe('AIService', () => {
 
         const ollamaConfig = service.getConfig('ollama')
         // Ollama uses the proxy path
-        expect(ollamaConfig.baseUrl).toBe('/api/ollama/api/chat')
+        expect(ollamaConfig.baseUrl).toBe('/api/ollama')
     })
 
     it('should allow switching active provider', () => {
         const service = new AIService()
-        service.setActiveProvider('gemini')
-        expect(service.getActiveProvider()?.id).toBe('gemini')
+        service.setActiveProvider('gemini-3')
+        expect(service.getActiveProvider()?.id).toBe('gemini-3')
     })
 })

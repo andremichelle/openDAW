@@ -5,7 +5,6 @@ import { AudioUnitType, IconSymbol } from "@opendaw/studio-enums"
 import {
     RegionEditing,
     AudioUnitBoxAdapter,
-    AudioBusBoxAdapter,
     AnyRegionBoxAdapter,
     NoteRegionBoxAdapter,
     AudioRegionBoxAdapter,

@@ -90,7 +90,7 @@ describe('Odie AI Comprehension', () => {
                 if (tool.name === 'region_move') { args.trackName = "Kick"; args.time = 0; args.newTime = 4 }
                 if (tool.name === 'region_copy') { args.trackName = "Kick"; args.time = 0; args.newTime = 4 }
 
-                const result = await executor.execute({ name: tool.name, arguments: args }, ctx)
+                const result = await executor.execute({ id: "mock-id", name: tool.name, arguments: args }, ctx)
                 expect(result.systemError ?? "").not.toContain('Unknown Tool')
             }
         })
@@ -107,6 +107,7 @@ describe('Odie AI Comprehension', () => {
         it('should correctly handle "set_device_param" for common musical paths', async () => {
             mockStudio.addFakeTrack("Lead")
             const result = await executor.execute({
+                id: "mock-id",
                 name: "set_device_param",
                 arguments: {
                     trackName: "Lead",
@@ -125,7 +126,7 @@ describe('Odie AI Comprehension', () => {
             ctx.recentMessages = []
 
             try {
-                await executor.execute({ name: "get_track_details", arguments: {} }, ctx)
+                await executor.execute({ id: "mock-id", name: "get_track_details", arguments: {} }, ctx)
             } catch (e: any) {
                 expect(e.message).toContain("No track specified")
             }
@@ -135,10 +136,10 @@ describe('Odie AI Comprehension', () => {
             mockStudio.addFakeTrack("Sub Bass")
             ctx.contextState.focus = {}
             ctx.recentMessages = [
-                { role: "user", content: "Tell me about the Sub Bass" }
+                { id: "msg-123", timestamp: Date.now(), role: "user", content: "Tell me about the Sub Bass" }
             ]
 
-            const result = await executor.execute({ name: "get_track_details", arguments: {} }, ctx)
+            const result = await executor.execute({ id: "mock-id", name: "get_track_details", arguments: {} }, ctx)
             expect(result.success).toBe(true)
             expect(result.analysisData).toContain('Sub Bass')
         })
@@ -147,7 +148,7 @@ describe('Odie AI Comprehension', () => {
     describe('Output Integrity', () => {
         it('should return valid data structure in analysisData', async () => {
             mockStudio.addFakeTrack("Kick")
-            const result = await executor.execute({ name: "get_track_details", arguments: { trackName: "Kick" } }, ctx)
+            const result = await executor.execute({ id: "mock-id", name: "get_track_details", arguments: { trackName: "Kick" } }, ctx)
 
             expect(result.success).toBe(true)
             expect(typeof result.analysisData).toBe('string')

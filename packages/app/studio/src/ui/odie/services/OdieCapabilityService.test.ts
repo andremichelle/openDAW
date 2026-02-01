@@ -30,8 +30,8 @@ describe("OdieCapabilityService", () => {
         const localCaps = { canGenUI: false, canGenImages: false, canReasonDeeply: false };
         const localPrompt = OdieCapabilityService.getSystemInstruction(localCaps);
 
-        expect(localPrompt).toContain("Text-Only mode");
-        expect(localPrompt).toContain("Use Markdown tables");
+        expect(localPrompt).toContain("Text-only mode");
+        expect(localPrompt).toContain("Use standard Markdown");
         expect(localPrompt).not.toContain("interactive widgets");
     });
 

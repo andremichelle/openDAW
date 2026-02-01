@@ -21,31 +21,13 @@ vi.mock('@/ui/components/dialogs', () => ({
 import { OdieAppControl } from './OdieAppControl'
 import { mockStudio } from './mocks/MockStudioService'
 import { StudioService } from '@/service/StudioService'
-import { OdieToolExecutor, ExecutorContext } from './OdieToolExecutor'
 
 describe('Odie Resilience & Safety', () => {
     let appControl: OdieAppControl
-    let executor: OdieToolExecutor
-    let ctx: ExecutorContext
 
     beforeEach(() => {
         mockStudio.reset()
         appControl = new OdieAppControl(mockStudio as unknown as StudioService)
-        executor = new OdieToolExecutor()
-
-        ctx = {
-            studio: mockStudio as unknown as StudioService,
-            appControl,
-            ai: {} as any,
-            setGenUiPayload: vi.fn(),
-            setSidebarVisible: vi.fn(),
-            contextState: {
-                focus: {
-                    selectedTrackName: "Kick"
-                }
-            },
-            recentMessages: []
-        }
     })
 
     describe('Defensive API Benchmarks (Malformed Inputs)', () => {

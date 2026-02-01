@@ -107,7 +107,7 @@ describe('OdieAppControl', () => {
 
         it('should ADD a Synth Track', async () => {
             const result = await odie.addTrack('synth', "My Hero")
-            expect(result).toBe(true)
+            expect(result.success).toBe(true)
             expect(mockStudio.project.api.createInstrument).toHaveBeenCalled()
             // We could check arguments if we mocked Imports,
             // but for now we verify the API method was called.
@@ -115,7 +115,7 @@ describe('OdieAppControl', () => {
 
         it('should ADD a Drum Track', async () => {
             const result = await odie.addTrack('drums', "Beat")
-            expect(result).toBe(true)
+            expect(result.success).toBe(true)
             expect(mockStudio.project.api.createInstrument).toHaveBeenCalled()
         })
     })

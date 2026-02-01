@@ -9,9 +9,12 @@ import { DefaultObservableValue } from "@opendaw/lib-std"
 export class MockStudioService {
 
     // --- TRANSPORT MOCK ---
+    private _loop = new DefaultObservableValue<boolean>(false)
+
     readonly transport = {
-        loop: new DefaultObservableValue<boolean>(false)
-    } as const
+        loop: this._loop,
+        setLoop: vi.fn((val: boolean) => this._loop.setValue(val))
+    }
 
     // --- ENGINE MOCK ---
     readonly engine = {

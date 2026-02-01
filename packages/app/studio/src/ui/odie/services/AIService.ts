@@ -10,7 +10,7 @@ const STORAGE_KEY_ACTIVE = "odie_provider_active"
 
 export class AIService {
     readonly providers: LLMProvider[] = []
-    readonly activeProviderId = new DefaultObservableValue<string>("gemini")
+    readonly activeProviderId = new DefaultObservableValue<string>("gemini-3")
     readonly wizardCompleted = new DefaultObservableValue<boolean>(false)
 
     readonly contextService = new ContextService()

@@ -60,13 +60,13 @@ describe('Odie Generative Verification', () => {
     describe('The C-Major Scale Test', () => {
         it('should add notes to an existing region on the track', async () => {
             const trackName = "Lead Synth"
-            const track = mockStudio.addFakeTrack(trackName)
+            mockStudio.addFakeTrack(trackName)
 
             // Mock the region
             const mockCreateEvent = vi.fn()
 
             // Create an instance of the mocked class
-            const fakeRegion = new NoteRegionBoxAdapter() as any
+            const fakeRegion = Object.create(NoteRegionBoxAdapter.prototype) as any
             fakeRegion.position = 0
             fakeRegion.duration = 16
             fakeRegion.complete = 16
@@ -79,7 +79,7 @@ describe('Odie Generative Verification', () => {
             // Manually inject the region into the adapter
             // Type-cast to any because we are extending the mock dynamically
             const adapter = (mockStudio as any)._fakeAdapters.find((a: any) => a.label === trackName)
-            adapter.regions.collection.asArray = () => [fakeRegion]
+            adapter.regions = { collection: { asArray: () => [fakeRegion] } }
 
             // Define C-Major Scale Notes
             const cMajorScale = [
@@ -94,6 +94,7 @@ describe('Odie Generative Verification', () => {
             ]
 
             const result = await executor.execute({
+                id: "mock-id",
                 name: "notes_add",
                 arguments: {
                     trackName: trackName,
