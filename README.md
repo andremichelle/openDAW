@@ -112,8 +112,6 @@ evolves.
 - [X] Preset API
 - [X] Full implementation of connecting several cloud services to store samples, projects, and presets
 - [X] Implement audio playback algorithms (pitch, stretch, absolute) including interpolation
-- [ ] ~~Sample editor~~
-- [ ] ~~Pushing event flow and painting routines into SDK~~
 
 #### 2026/Q1
 
