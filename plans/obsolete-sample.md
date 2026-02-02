@@ -1,5 +1,7 @@
 # Plan: Obsolete Sample Cleanup
 
+## Status: FULLY IMPLEMENTED
+
 ## Problem
 - Recorded and imported samples are stored in OPFS via SampleStorage
 - When an AudioFileBox is deleted (because no region references it), the box is removed from the BoxGraph
@@ -7,10 +9,10 @@
 - OPFS gets crowded over time with orphaned sample files
 
 ## Requirements
-1. Track which samples are user-created (recorded/imported) vs preset/library
-2. When a tracked AudioFileBox is deleted, delete the physical file from SampleStorage
-3. Prompt user for confirmation before deletion (dialog exists)
-4. Add StudioPreference to auto-delete without dialog
+1. ✅ Track which samples are user-created (recorded/imported) vs preset/library
+2. ✅ When a tracked AudioFileBox is deleted, delete the physical file from SampleStorage
+3. ✅ Prompt user for confirmation before deletion
+4. ✅ Add StudioPreference to auto-delete without dialog
 
 ## Design Decision: Option B - Track in Project
 
@@ -30,99 +32,37 @@ Adding a `source` field to AudioFileBox schema doesn't work because:
   - Samples dragged from already stored samples (library/browser)
 - When an AudioFileBox is deleted and its UUID is in the set, delete from SampleStorage
 
-### Why It Doesn't Go Out of Sync
-- The trigger is `BoxGraph.subscribeToAllUpdates` with `DeleteUpdate` for AudioFileBox
-- Project already has this subscription (see `#unregisterSample`)
-- When the AudioFileBox is deleted, we check if its UUID is in our tracked set
-- If yes → prompt for deletion (or auto-delete based on preference)
-- If no → the sample is from a saved project or library, leave it alone
+## Implementation Summary
 
-## Existing Infrastructure
+### Files Modified
 
-### Project already subscribes to AudioFileBox deletions:
-```typescript
-this.#terminator.own(this.boxGraph.subscribeToAllUpdates({
-    onUpdate: (update) => {
-        if (update instanceof NewUpdate && update.name === AudioFileBox.ClassName) {
-            this.#registerSample(update.uuid)
-        } else if (update instanceof DeleteUpdate && update.name === AudioFileBox.ClassName) {
-            this.#unregisterSample(update.uuid)
-        }
-    }
-}))
-```
+1. **`packages/studio/core/src/project/Project.ts`**
+   - Added `#userCreatedSamples: SortedSet<UUID.Bytes, UUID.Bytes>` field
+   - Added `trackUserCreatedSample(uuid: UUID.Bytes): void` public method
+   - Added `#deleteUserCreatedSample(uuid: UUID.Bytes): void` private method
+   - Updated `subscribeToAllUpdates` to call `#deleteUserCreatedSample` on AudioFileBox deletion
+   - Checks `StudioPreferences.settings.storage["auto-delete-orphaned-samples"]`
+   - Shows confirmation dialog via `RuntimeNotifier.approve()` if not auto-delete
 
-### Storage already has deleteItem method:
-```typescript
-// In Storage.ts base class
-async deleteItem(uuid: UUID.Bytes): Promise<void> {
-    const path = `${this.folder}/${UUID.toString(uuid)}`
-    const uuids = await this.loadTrashedIds()
-    uuids.push(UUID.toString(uuid))
-    await this.saveTrashedIds(uuids)
-    await Workers.Opfs.delete(path)
-}
-```
+2. **`packages/studio/core/src/StudioSettings.ts`**
+   - Added `storage` section with `auto-delete-orphaned-samples` boolean (default: false)
 
-## Implementation
+3. **`packages/app/studio/src/ui/pages/PreferencesPageLabels.ts`**
+   - Added labels for "Storage" section and "Auto-delete orphaned samples" preference
 
-### 1. Add tracking set to Project
-```typescript
-// In Project class
-readonly #userCreatedSamples: SortedSet<UUID.Bytes, UUID.Bytes> = UUID.newSet(uuid => uuid)
+4. **`packages/studio/core/src/capture/RecordAudio.ts`**
+   - Subscribe to recordingWorklet state changes
+   - When state becomes "loaded", call `project.trackUserCreatedSample(originalUuid)`
 
-trackUserCreatedSample(uuid: UUID.Bytes): void {
-    this.#userCreatedSamples.add(uuid)
-}
+5. **`packages/app/studio/src/ui/devices/SampleSelector.ts`**
+   - In `browse()`: Track sample after successful import
+   - In `configureDrop()`: Track sample when dropping file (not when dropping existing sample)
 
-isUserCreatedSample(uuid: UUID.Bytes): boolean {
-    return this.#userCreatedSamples.hasKey(uuid)
-}
-```
+6. **`packages/app/studio/src/ui/timeline/tracks/audio-unit/TimelineDragAndDrop.ts`**
+   - In `drop()`: Track sample when dropping file (not when dropping existing sample)
 
-### 2. Update deletion handler in Project
-```typescript
-// In the existing subscribeToAllUpdates callback
-} else if (update instanceof DeleteUpdate && update.name === AudioFileBox.ClassName) {
-    this.#unregisterSample(update.uuid)
-    if (this.isUserCreatedSample(update.uuid)) {
-        this.#promptOrDeleteSample(update.uuid)
-    }
-}
-```
-
-### 3. Add deletion logic
-```typescript
-async #promptOrDeleteSample(uuid: UUID.Bytes): Promise<void> {
-    const autoDelete = StudioPreferences.settings.storage["auto-delete-orphaned-samples"]
-    if (autoDelete) {
-        await this.sampleManager.storage.deleteItem(uuid)
-    } else {
-        // Show confirmation dialog
-        // If confirmed, delete
-    }
-    this.#userCreatedSamples.delete(UUID.toString(uuid))
-}
-```
-
-### 4. Call trackUserCreatedSample after SampleStorage.save
-- Called right after `SampleStorage.save()` completes successfully
-- This is the safest single point for both recordings and file imports
-- NOT called when dragging from stored samples (library/browser) - these don't go through save()
-
-### 5. Add StudioPreference
-```typescript
-// In StudioPreferences schema
-storage: {
-    "auto-delete-orphaned-samples": false
-}
-```
-
-## Files to Modify
-- `packages/studio/core/src/project/Project.ts` - add tracking set and deletion logic
-- `packages/studio/core/src/RecordingWorklet.ts` - call trackUserCreatedSample after save (line ~121, in #finalize)
-- `packages/studio/core/src/samples/SampleService.ts` - call trackUserCreatedSample after save (line ~54)
-- `packages/studio/core/src/StudioPreferences.ts` - add preference
+7. **`packages/app/studio/src/ui/pages/CodeEditorPage.tsx`**
+   - In `addSample()`: Track sample after import if project exists
 
 ## Edge Cases
 - Multiple regions referencing same AudioFileBox: AudioFileBox is only deleted when ALL references are gone (handled by BoxGraph)

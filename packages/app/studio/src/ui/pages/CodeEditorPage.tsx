@@ -6,7 +6,7 @@ import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {Option, panic, RuntimeNotifier} from "@opendaw/lib-std"
+import {Option, panic, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {ScriptHost} from "@opendaw/studio-scripting"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {MenuItem} from "@opendaw/studio-core"
@@ -35,12 +35,15 @@ const Examples = {
 const className = Html.adoptStyleSheet(css, "CodeEditorPage")
 
 export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}: PageContext<StudioService>) => {
+    const pendingSamples = UUID.newSet<UUID.Bytes>(uuid => uuid)
     const host = new ScriptHost({
         openProject: (buffer: ArrayBufferLike, name?: string): void => {
             const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
             boxGraph.fromArrayBuffer(buffer)
             const mandatoryBoxes = ProjectSkeleton.findMandatoryBoxes(boxGraph)
             const project = Project.fromSkeleton(service, {boxGraph, mandatoryBoxes})
+            pendingSamples.forEach(uuid => project.trackUserCreatedSample(uuid))
+            pendingSamples.clear()
             service.projectProfileService.setProject(project, name ?? "Scripted Project")
             service.switchScreen("default")
         },
@@ -53,9 +56,17 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                 })
             })
         },
-        addSample: (data: AudioData, name: string): Promise<Sample> => service.sampleService.importFile({
-            name, arrayBuffer: WavFile.encodeFloats(data)
-        })
+        addSample: async (data: AudioData, name: string): Promise<Sample> => {
+            const sample = await service.sampleService.importFile({
+                name, arrayBuffer: WavFile.encodeFloats(data)
+            })
+            const uuid = UUID.parse(sample.uuid)
+            service.optProject.match({
+                none: () => {pendingSamples.add(uuid)},
+                some: project => {project.trackUserCreatedSample(uuid)}
+            })
+            return sample
+        }
     }, scriptWorkerUrl)
     return (
         <div className={className}>

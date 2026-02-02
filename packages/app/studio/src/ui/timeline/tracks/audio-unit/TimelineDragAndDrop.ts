@@ -63,6 +63,7 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
                 console.warn(error)
                 return
             }
+            this.project.trackUserCreatedSample(UUID.parse(value.uuid))
             sample = value
         } else if (data.type === "instrument") {
             editing.modify(() => this.project.api.createAnyInstrument(InstrumentFactories[data.device]))

@@ -53,6 +53,12 @@ export namespace PreferencesPageLabels {
                 "enable-beta-features": "Enable Experimental Features",
                 "enable-debug-menu": "Enable Debug Menu"
             }
+        },
+        "storage": {
+            label: "Storage",
+            fields: {
+                "auto-delete-orphaned-samples": "Auto-delete orphaned samples"
+            }
         }
     }
 

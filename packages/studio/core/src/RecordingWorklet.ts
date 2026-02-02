@@ -5,6 +5,7 @@ import {
     Observer,
     Option,
     panic,
+    Procedure,
     Progress,
     Subscription,
     Terminable,
@@ -40,6 +41,7 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
     #isRecording: boolean = true
     #limitSamples: int = Number.POSITIVE_INFINITY
     #state: SampleLoaderState = {type: "record"}
+    #onSaved: Option<Procedure<UUID.Bytes>> = Option.None
 
     constructor(context: BaseAudioContext, config: RingBuffer.Config) {
         super(context, "recording-processor", {
@@ -66,7 +68,14 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
 
     own<T extends Terminable>(terminable: T): T {return this.#terminator.own(terminable)}
 
-    limit(count: int): void {this.#limitSamples = count}
+    limit(count: int): void {
+        this.#limitSamples = count
+        if (this.numberOfFrames >= this.#limitSamples) {
+            this.#finalize().catch(error => console.warn(error))
+        }
+    }
+
+    set onSaved(callback: Procedure<UUID.Bytes>) {this.#onSaved = Option.wrap(callback)}
 
     setFillLength(value: int): void {this.#peakWriter.numFrames = value}
 
@@ -119,6 +128,7 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
             meta
         }
         await SampleStorage.get().save(sample)
+        this.#onSaved.ifSome(callback => callback(this.uuid))
         this.#setState({type: "loaded"})
         this.terminate()
         return sample
