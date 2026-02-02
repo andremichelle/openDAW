@@ -11,8 +11,7 @@
 
 **openDAW** is a next-generation web-based Digital Audio Workstation (DAW) designed to **democratize** music production
 and to **resurface the process of making music** by making **high-quality** creation tools accessible to everyone, with
-a strong focus on **education** and data-privacy. Please consider supporting this project
-on [Patreon](https://www.patreon.com/join/openDAW) or [ko-fi](https://ko-fi.com/opendaw).
+a strong focus on **education** and data-privacy.
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/andremichelle/openDAW/main/assets/studio-teaser.png"/>
