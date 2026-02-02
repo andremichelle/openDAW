@@ -117,10 +117,10 @@ evolves.
 
 #### 2026/Q1
 
-- [ ] Fade-in and out on audio-regions
+- [X] Fade-in and out on audio-regions
 - [X] Signature automation track
 - [X] Tempo automation track
-- [ ] Fine-tune recording including loops (takes)
+- [X] Fine-tune recording including loops (takes)
 
 #### 2026/Q2
 
