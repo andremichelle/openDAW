@@ -216,8 +216,6 @@ participate, visit our [Contribute](https://opendaw.org/contribute) page.
 * [opendaw.org (website)](https://opendaw.org)
 * [openDAW on Discord](https://discord.opendaw.studio)
 * [openDAW SDK](https://www.npmjs.com/org/opendaw)
-* [openDAW on Patreon](https://www.patreon.com/join/openDAW)
-* [openDAW on ko-fi](https://ko-fi.com/opendaw)
 * [LinkedIn](https://www.linkedin.com/company/opendaw-org/)
 * [Instagram](https://www.instagram.com/opendaw.studio)
 
