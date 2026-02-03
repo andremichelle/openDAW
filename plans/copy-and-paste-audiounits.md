@@ -438,22 +438,22 @@ cut: (): Option<ClipboardAudioUnits> => {
 
 ## Implementation Checklist
 
-- [ ] Create `AudioUnitsClipboardHandler.ts` in `packages/studio/core/src/ui/clipboard/types/`
-- [ ] Define `AudioUnitClipboardMetadata` type
-- [ ] Implement `encodeMetadata()` / `decodeMetadata()`
-- [ ] Implement `canCopy()` - audio unit is edited/focused
-- [ ] Implement `canCut()` - audio unit is edited/focused AND not output
-- [ ] Implement `canPaste()` - content type is "audio-units"
-- [ ] Implement `copy()` - serialize with dependency collection
-- [ ] Implement `cut()` - copy + delete (skip output)
-- [ ] Implement `paste()` with two paths:
-  - [ ] Normal paste: insert after current audio unit, reorder by type
-  - [ ] Output paste: replace existing output's devices and tracks
-- [ ] Add `reorderAudioUnitsAfterPaste()` helper
-- [ ] Add `pasteOutputReplacement()` helper
-- [ ] Install handler in HeadersArea or AudioUnitsTimeline
-- [ ] Export from `packages/studio/core/src/ui/index.ts`
-- [ ] Add context menu items (Cut/Copy/Paste) to audio unit header menu
+- [x] Create `AudioUnitsClipboardHandler.ts` in `packages/studio/core/src/ui/clipboard/types/`
+- [x] Define `AudioUnitClipboardMetadata` type
+- [x] Implement `encodeMetadata()` / `decodeMetadata()`
+- [x] Implement `canCopy()` - audio unit is edited/focused
+- [x] Implement `canCut()` - audio unit is edited/focused AND not output
+- [x] Implement `canPaste()` - content type is "audio-units"
+- [x] Implement `copy()` - serialize with dependency collection
+- [x] Implement `cut()` - copy + delete (skip output)
+- [x] Implement `paste()` with two paths:
+  - [x] Normal paste: insert after current audio unit, reorder by type
+  - [x] Output paste: replace existing output's devices and tracks
+- [x] Add `reorderAudioUnitsAfterPaste()` helper
+- [x] Add `pasteOutputReplacement()` helper
+- [x] Install handler in AudioUnitsTimeline
+- [x] Export from `packages/studio/core/src/ui/index.ts`
+- [ ] Add context menu items (Cut/Copy/Paste) to audio unit header menu (optional)
 
 ---
 
