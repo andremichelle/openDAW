@@ -85,6 +85,8 @@ export class EngineFacade implements Engine {
     get project(): Project {return this.#worklet.unwrap("No worklet to get project").project}
     get sampleRate(): number {return this.#worklet.isEmpty() ? 44_100 : this.#worklet.unwrap().context.sampleRate}
     get preferences(): EnginePreferences {return this.#preferencesFacade}
+    get perfBuffer(): Float32Array {return this.#worklet.mapOr(worklet => worklet.perfBuffer, new Float32Array(0))}
+    get perfIndex(): number {return this.#worklet.mapOr(worklet => worklet.perfIndex, 0)}
 
     isReady(): Promise<void> {return this.#worklet.mapOr(worklet => worklet.isReady(), Promise.resolve())}
     queryLoadingComplete(): Promise<boolean> {

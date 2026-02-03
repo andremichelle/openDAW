@@ -36,6 +36,7 @@ import {BoxIO} from "@opendaw/studio-boxes"
 import {Engine} from "./Engine"
 import {Project} from "./project"
 import {MIDIReceiver} from "./midi"
+import {HRClockWorker} from "./HRClockWorker"
 import type {SoundFont2} from "soundfont2"
 
 export class EngineWorklet extends AudioWorkletNode implements Engine {
@@ -63,6 +64,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #commands: EngineCommands
     readonly #isReady: Promise<void>
 
+    #perfBuffer: Float32Array = new Float32Array(0)
+    #perfIndex: number = 0
+
     constructor(context: BaseAudioContext,
                 project: Project,
                 exportConfiguration?: ExportStemsConfiguration,
@@ -75,6 +79,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             this.#countInBeatsRemaining.setValue(state.countInBeatsRemaining)
             this.#playbackTimestamp.setValue(state.playbackTimestamp)
             this.#bpm.setValue(state.bpm)
+            this.#perfBuffer = state.perfBuffer
+            this.#perfIndex = state.perfIndex
             this.#position.setValue(state.position) // This must be the last to handle the state values before
         })
 
@@ -87,6 +93,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 processorOptions: {
                     syncStreamBuffer: reader.buffer,
                     controlFlagsBuffer: controlFlagsSAB,
+                    hrClockBuffer: HRClockWorker.get().sab,
                     project: project.toArrayBuffer(),
                     exportConfiguration,
                     options
@@ -229,6 +236,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get project(): Project {return this.#project}
     get preferences(): PreferencesHost<EngineSettings> {return this.#preferences}
+    get perfBuffer(): Float32Array {return this.#perfBuffer}
+    get perfIndex(): number {return this.#perfIndex}
 
     isReady(): Promise<void> {return this.#isReady}
     queryLoadingComplete(): Promise<boolean> {return this.#commands.queryLoadingComplete()}

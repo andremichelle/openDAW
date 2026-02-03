@@ -32,145 +32,103 @@ For audio at 48kHz:
 - 1 render quantum (128 samples) = ~2.67ms
 - `Date.now()` with 1ms resolution may miss subtle timing issues
 
-### SharedArrayBuffer Layout
+### SharedArrayBuffer Layout (32 bytes)
 ```
-[0] = request counter (AudioWorklet increments to request)
-[1-2] = timestamp (Float64 for performance.now())
-[3] = response counter (Worker increments after writing)
+int32[0]: request counter (AudioWorklet increments on each signal)
+int32[1]: start response counter (which request the start timestamp is for)
+int32[2]: end response counter (which request the end timestamp is for)
+float64[2]: start timestamp (bytes 16-23)
+float64[3]: end timestamp (bytes 24-31)
 ```
 
 ### Signal-Based Flow
 1. Worker blocks: `Atomics.wait(sab, 0, lastSeenRequest)`
-2. AudioWorklet needs time: `Atomics.add(sab, 0, 1)` + `Atomics.notify(sab, 0)`
-3. Worker wakes, writes `performance.now()` as Float64 to `[1-2]`, increments `[3]`
-4. Worker blocks again on new request counter value
-5. AudioWorklet reads timestamp from `[1-2]`
+2. AudioWorklet signals start: `Atomics.add(sab, 0, 1)` (counter becomes odd)
+3. Worker wakes, writes timestamp to start slot + stores counter in int32[1]
+4. AudioWorklet does processing...
+5. AudioWorklet signals end: `Atomics.add(sab, 0, 1)` (counter becomes even)
+6. Worker wakes, writes timestamp to end slot + stores counter in int32[2]
 
-### Alternative: 1ms Polling (Simpler but less precise)
-Paul noted: "if your app already has a poll loop, 1ms polling might be fine"
+### Key Insight: Counter Validation
+The critical problem with async timestamps is that reads are always stale. If the
+worker falls behind, we might read mismatched timestamps (start from render N-3,
+end from render N-2), producing garbage values.
 
-But this provides no benefit over `Date.now()` - same ~1ms resolution with extra Worker complexity.
+**Solution**: Worker writes both timestamp AND counter. HRClock validates that
+`endCounter === startCounter + 1` before using the measurement. Invalid pairs
+are dropped (return 0) rather than producing false spikes.
 
 ## Implementation Files
 
 ### `packages/studio/core/src/HRClockWorker.ts`
+Singleton Worker with inline script (Blob URL). Writes to separate slots based on counter parity.
 ```typescript
-// Main thread: creates Worker + SharedArrayBuffer
-export class HRClockWorker {
-    readonly sab: SharedArrayBuffer
-    readonly worker: Worker
-
-    constructor() {
-        this.sab = new SharedArrayBuffer(32) // enough for atomics + float64
-        this.worker = new Worker(new URL('./hr-clock-worker.js', import.meta.url))
-        this.worker.postMessage({sab: this.sab})
-    }
-
-    terminate(): void {
-        this.worker.terminate()
-    }
-}
-```
-
-### `packages/studio/core/src/hr-clock-worker.ts`
-```typescript
-// Worker script - provides high-res timestamps on demand
-let sab: SharedArrayBuffer
-let int32View: Int32Array
-let float64View: Float64Array
-
-self.onmessage = (event: MessageEvent<{sab: SharedArrayBuffer}>) => {
-    sab = event.data.sab
-    int32View = new Int32Array(sab)
-    float64View = new Float64Array(sab)
-
-    let lastRequest = 0
-    while (true) {
-        // Wait for request (blocks until signaled)
-        Atomics.wait(int32View, 0, lastRequest)
-        lastRequest = Atomics.load(int32View, 0)
-
-        // Write high-resolution timestamp
-        float64View[1] = performance.now()
-
-        // Signal completion
-        Atomics.add(int32View, 2, 1)
-        Atomics.notify(int32View, 2)
-    }
+// Worker writes to slot based on odd/even counter
+const isStart = (lastCounter & 1) === 1
+if (isStart) {
+    float64[2] = performance.now()
+    Atomics.store(int32, 1, lastCounter)  // Store which request this is for
+} else {
+    float64[3] = performance.now()
+    Atomics.store(int32, 2, lastCounter)
 }
 ```
 
 ### `packages/studio/core-processors/src/HRClock.ts`
+AudioWorklet side. Validates counter pairs before using measurements.
 ```typescript
-// AudioWorklet side: requests and reads timestamps
-export class HRClock {
-    readonly #int32View: Int32Array
-    readonly #float64View: Float64Array
-
-    constructor(sab: SharedArrayBuffer) {
-        this.#int32View = new Int32Array(sab)
-        this.#float64View = new Float64Array(sab)
+start(): number {
+    // Read response counters and timestamps
+    const startCounter = Atomics.load(this.#int32View, 1)
+    const endCounter = Atomics.load(this.#int32View, 2)
+    const startTs = this.#float64View[2]
+    const endTs = this.#float64View[3]
+    // Signal for new start timestamp
+    this.#signal()
+    // Only use if counters indicate a valid pair from same render
+    let elapsed = 0
+    if (this.#prevStartCounter > 0 && this.#prevEndCounter === this.#prevStartCounter + 1) {
+        elapsed = this.#prevEndTs - this.#prevStartTs
     }
+    // Store for next frame
+    this.#prevStartCounter = startCounter
+    this.#prevEndCounter = endCounter
+    this.#prevStartTs = startTs
+    this.#prevEndTs = endTs
+    return elapsed
+}
 
-    now(): number {
-        // Request timestamp
-        Atomics.add(this.#int32View, 0, 1)
-        Atomics.notify(this.#int32View, 0)
-
-        // Wait for response (with timeout)
-        const lastResponse = Atomics.load(this.#int32View, 2)
-        Atomics.wait(this.#int32View, 2, lastResponse, 10) // 10ms timeout
-
-        // Read timestamp
-        return this.#float64View[1]
-    }
+end(): void {
+    this.#signal()  // Signal for end timestamp
 }
 ```
 
-## Buffer Underrun Detection Strategy
-
-### Using High-Resolution Clock
+## Usage in EngineProcessor
 ```typescript
-// In EngineProcessor
-#checkUnderrun(): void {
-    const now = this.#hrClock.now()
-    if (this.#lastCheckTime > 0) {
-        const elapsed = now - this.#lastCheckTime
-        const expectedMs = (RenderQuantum / sampleRate) * 1000
-
-        // If we took significantly longer than expected
-        if (elapsed > expectedMs * 1.5) {
-            this.#underrunCount++
-            if (this.#underrunCount >= 10) {
-                // Signal underrun via SharedArrayBuffer
-                Atomics.store(this.#controlFlags, 1, 1)
-            }
-        } else {
-            this.#underrunCount = 0
-        }
-    }
-    this.#lastCheckTime = now
+render(): boolean {
+    const elapsed = this.#hrClock.start()  // Returns elapsed of PREVIOUS render
+    // ... processing ...
+    this.#hrClock.end()
+    this.#perfBuffer[this.#perfWriteIndex] = elapsed
+    this.#perfWriteIndex = (this.#perfWriteIndex + 1) % PERF_BUFFER_SIZE
 }
-```
-
-### Main Thread Detection via SharedArrayBuffer Polling
-```typescript
-// In EngineWorklet constructor
-const underrunPollInterval = setInterval(() => {
-    if (Atomics.load(this.#controlFlags, 1) === 1) {
-        clearInterval(underrunPollInterval)
-        this.#notifyUnderrun.notify()
-    }
-}, 100)
 ```
 
 ## Issues Encountered
 
-1. **MessagePort callbacks don't fire under load**: When audio thread overloads CPU, main thread event loop is starved. MessagePort messages are queued but callbacks don't execute until console opens (changes Chrome scheduling).
+1. **Reads are always stale**: When we signal the worker and immediately read, we get the
+   timestamp from a PREVIOUS signal, not the current one. This is fundamental to the async nature.
 
-2. **setInterval polling works better**: Independent of event loop, fires reliably.
+2. **Worker thread starvation**: With empty/light projects, the audio thread runs so fast
+   that the worker doesn't get scheduled between signals. Multiple signals queue up before
+   the worker responds.
 
-3. **Date.now() resolution**: 1ms is too coarse for short measurement windows. Need to measure over longer periods (64+ blocks = ~170ms) for reliable detection.
+3. **Mismatched timestamps cause spikes**: If we read start from signal N-3 and end from
+   signal N-2, the elapsed time is garbage. This caused false red spikes in the display.
+
+4. **Solution: Counter validation**: By having the worker write which counter value each
+   timestamp corresponds to, we can verify that start/end are from the same render.
+   Invalid pairs are dropped (return 0) instead of showing false data.
 
 ## Future
 Paul mentioned there's discussion about adding `performance.now()` or similar high-resolution timing to AudioWorkletGlobalScope directly.

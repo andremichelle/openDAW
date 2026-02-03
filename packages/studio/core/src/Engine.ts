@@ -33,4 +33,6 @@ export interface Engine extends Terminable {
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>>
     get project(): Project
     get preferences(): EnginePreferences
+    get perfBuffer(): Float32Array
+    get perfIndex(): number
 }

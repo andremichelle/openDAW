@@ -14,6 +14,7 @@ import {Html} from "@opendaw/lib-dom"
 import {MenuItem, MidiDevices, StudioPreferences} from "@opendaw/studio-core"
 import {Manual, Manuals} from "@/ui/pages/Manuals"
 import {HorizontalPeakMeter} from "@/ui/components/HorizontalPeakMeter"
+import {PerformanceStats} from "@/ui/header/PerformanceStats"
 import {gainToDb} from "@opendaw/lib-dsp"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
@@ -113,6 +114,8 @@ export const Header = ({lifecycle, service}: Construct) => {
                 location.origin.includes("dev.opendaw.studio")
                 && (<h5 style={{color: Colors.cream.toString()}}>DEV VERSION (UNSTABLE)</h5>)}
             <div style={{flex: "2 0 0"}}/>
+            <hr/>
+            <PerformanceStats lifecycle={lifecycle} service={service}/>
             <hr/>
             <div className="header">
                 <HorizontalPeakMeter lifecycle={lifecycle} peaksInDb={peaksInDb} width="4em"/>
