@@ -17,7 +17,7 @@ type Construct = {
 }
 
 const WIDTH = 64
-const HEIGHT = 32
+const HEIGHT = 28
 
 export const PerformanceStats = ({lifecycle, service}: Construct) => {
     const maxValues = new Float32Array(WIDTH)
