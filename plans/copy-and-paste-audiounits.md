@@ -246,11 +246,6 @@ const pasteNewAudioUnit = (
     primaryBusUUID: UUID.Bytes,
     currentAudioUnit: Option<AudioUnitBoxAdapter>
 ): void => {
-    // Determine insert position: right after current audio unit
-    const insertIndex = currentAudioUnit
-        .map(adapter => adapter.indexField.getValue() + 1)
-        .unwrapOrElse(() => 0)
-
     const boxes = ClipboardUtils.deserializeBoxes(
         data,
         boxGraph,
@@ -270,28 +265,55 @@ const pasteNewAudioUnit = (
     const pastedAudioUnit = boxes.find(box => box.name === AudioUnitBox.ClassName) as AudioUnitBox
     if (!pastedAudioUnit) return
 
-    // Reorder: insert after current, then respect type ordering
-    reorderAudioUnitsAfterPaste(pastedAudioUnit, insertIndex, rootBox)
+    // Determine insert position:
+    // - If audio unit is in edit mode: insert right after it
+    // - If no audio unit in edit mode: insert at beginning (index 0)
+    const insertAfterIndex = currentAudioUnit
+        .map(adapter => adapter.indexField.getValue())
+        .unwrapOrElse(() => -1)  // -1 means "insert at beginning"
+
+    reorderAudioUnitsAfterPaste(pastedAudioUnit, insertAfterIndex, rootBox)
 }
 
 const reorderAudioUnitsAfterPaste = (
     pastedAudioUnit: AudioUnitBox,
-    desiredIndex: number,
+    insertAfterIndex: number,  // -1 = insert at beginning, otherwise insert after this index
     rootBox: RootBox
 ): void => {
     const allAudioUnits = IndexedBox.collectIndexedBoxes(rootBox.audioUnits, AudioUnitBox)
     const pastedType = pastedAudioUnit.type.getValue()
+    const pastedTypeOrder = AudioUnitOrdering[pastedType]
 
-    // Sort: respect type ordering, but within same type, place pasted unit at desired position
+    // Sort all audio units:
+    // 1. First by type ordering (Instruments → Buses → Output)
+    // 2. Within same type: pasted unit goes after insertAfterIndex (or at beginning if -1)
     allAudioUnits.toSorted((a, b) => {
         const orderA = AudioUnitOrdering[a.type.getValue()]
         const orderB = AudioUnitOrdering[b.type.getValue()]
         const orderDiff = orderA - orderB
         if (orderDiff !== 0) return orderDiff
 
-        // Same type: pasted unit goes to desired position
-        if (a === pastedAudioUnit) return desiredIndex - b.index.getValue()
-        if (b === pastedAudioUnit) return a.index.getValue() - desiredIndex
+        // Same type group
+        const aIsPasted = a === pastedAudioUnit
+        const bIsPasted = b === pastedAudioUnit
+
+        if (aIsPasted && !bIsPasted) {
+            // Pasted unit: goes after insertAfterIndex, or at beginning if -1
+            const bIndex = b.index.getValue()
+            if (insertAfterIndex === -1) {
+                return -1  // Pasted goes to beginning
+            }
+            return bIndex <= insertAfterIndex ? 1 : -1
+        }
+        if (bIsPasted && !aIsPasted) {
+            const aIndex = a.index.getValue()
+            if (insertAfterIndex === -1) {
+                return 1  // Pasted goes to beginning
+            }
+            return aIndex <= insertAfterIndex ? -1 : 1
+        }
+
+        // Neither is pasted: preserve original order
         return a.index.getValue() - b.index.getValue()
     }).forEach((box, index) => box.index.setValue(index))
 }
@@ -301,11 +323,12 @@ const reorderAudioUnitsAfterPaste = (
 
 ## Installation Point
 
-The clipboard handler should be installed on the audio unit timeline area where audio unit selection/focus occurs.
+Install in `packages/app/studio/src/ui/timeline/tracks/audio-unit/AudioUnitsTimeline.tsx`.
 
-### Option A: HeadersArea (Recommended)
-
-Install in `packages/app/studio/src/ui/timeline/tracks/audio-unit/headers/HeadersArea.tsx`:
+**Why AudioUnitsTimeline (not HeadersArea)?**
+- Target project might have no audio units yet (empty timeline)
+- Paste must work even when nothing is selected/edited
+- AudioUnitsTimeline is always present regardless of content
 
 ```typescript
 lifecycle.own(ClipboardManager.install(element, AudioUnitsClipboard.createHandler({
@@ -327,17 +350,18 @@ lifecycle.own(ClipboardManager.install(element, AudioUnitsClipboard.createHandle
 })))
 ```
 
-### Option B: AudioUnitsTimeline
-
-Install in `packages/app/studio/src/ui/timeline/tracks/audio-unit/AudioUnitsTimeline.tsx` if broader scope is needed.
-
 ---
 
 ## Edge Cases
 
-### No AudioUnit Focused
+### No AudioUnit in Edit Mode (Copy)
 - `canCopy()` returns false
 - Copy operation silently skipped
+
+### No AudioUnit in Edit Mode (Paste)
+- Paste still works (empty timeline scenario)
+- Pasted audio unit inserted at beginning (index 0)
+- Type ordering still respected
 
 ### Output AudioUnit
 - Can be copied (useful for backup/transfer scenarios)
@@ -443,7 +467,7 @@ packages/studio/core/src/ui/clipboard/types/AudioUnitsClipboardHandler.ts
 ### Modified Files
 ```
 packages/studio/core/src/ui/index.ts - export AudioUnitsClipboard
-packages/app/studio/src/ui/timeline/tracks/audio-unit/headers/HeadersArea.tsx - install handler
+packages/app/studio/src/ui/timeline/tracks/audio-unit/AudioUnitsTimeline.tsx - install handler
 packages/app/studio/src/ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts - add Cut/Copy/Paste menu items (optional)
 ```
 
@@ -451,17 +475,23 @@ packages/app/studio/src/ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts
 
 ## Notes
 
-### Reusing ProjectUtils
+### Using ClipboardUtils (not ProjectUtils)
 
-The `ProjectUtils.extractAudioUnits` function already handles the core logic of:
-- Dependency collection with `stopAtResources: true`
+This implementation uses `ClipboardUtils.serializeBoxes()` and `ClipboardUtils.deserializeBoxes()` directly, following the same pattern as other clipboard handlers (DevicesClipboard, RegionsClipboard, etc.).
+
+**Not using `ProjectUtils.extractAudioUnits`** - that function is designed for project import/merge scenarios, not clipboard operations. ClipboardUtils provides the standard clipboard infrastructure with:
+- Serialization with metadata
 - UUID remapping for external resources
-- Output pointer remapping
-- Audio unit reordering
-
-Consider refactoring to share code between `ProjectUtils` and `AudioUnitsClipboardHandler`, or have the clipboard handler delegate to `ProjectUtils`.
+- Pointer remapping via `mapPointer` callback
 
 ### Single AudioUnit Scope
 
 Only one audio unit can be in edit mode at a time (`UserEditingManager.audioUnit`), so multi-selection copy/paste is deferred to a future enhancement.
+
+### Empty Timeline Paste
+
+When pasting with no audio unit in edit mode:
+- Pasted audio unit is inserted at the beginning (unshift)
+- Type ordering is still respected (Instruments → Buses → Output)
+- This allows pasting into an empty project
 
