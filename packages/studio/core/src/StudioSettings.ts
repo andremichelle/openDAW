@@ -49,12 +49,14 @@ export const StudioSettingsSchema = z.object({
         "footer-show-fps-meter": z.boolean(),
         "footer-show-samples-memory": z.boolean(),
         "footer-show-build-infos": z.boolean(),
+        "show-cpu-stats": z.boolean(),
         "enable-beta-features": z.boolean(),
         "enable-debug-menu": z.boolean()
     }).default({
         "footer-show-fps-meter": false,
         "footer-show-samples-memory": false,
         "footer-show-build-infos": false,
+        "show-cpu-stats": false,
         "enable-beta-features": false,
         "enable-debug-menu": false
     }),

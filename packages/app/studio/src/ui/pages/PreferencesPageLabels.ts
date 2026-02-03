@@ -48,6 +48,7 @@ export namespace PreferencesPageLabels {
             label: "Debug",
             fields: {
                 "footer-show-fps-meter": "Show FPS meter",
+                "show-cpu-stats": "Show CPU stats",
                 "footer-show-samples-memory": "Show samples in memory",
                 "footer-show-build-infos": "Show Build Information",
                 "enable-beta-features": "Enable Experimental Features",
