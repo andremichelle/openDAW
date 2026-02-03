@@ -62,7 +62,7 @@ export const NeuralAmpDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudio
 │                                                                          │
 │  NeuralAmpModelBox (UUID from SHA256 of content)                        │
 │  ├── label: "Fender Twin"                                               │
-│  └── json: "{...NAM model JSON...}"                                     │
+│  └── model: "{...NAM model JSON...}"                                     │
 │           ▲                                                              │
 │           │ (pointer)                                                    │
 │  ┌────────┴────────┐                                                    │
@@ -121,7 +121,7 @@ export const NeuralAmpModelBox: BoxSchema<Pointers> = {
         name: "NeuralAmpModelBox",
         fields: {
             1: {type: "string", name: "label"},
-            2: {type: "string", name: "json"}  // Uncompressed NAM JSON
+            2: {type: "string", name: "model"}  // Uncompressed NAM JSON
         }
     },
     pointerRules: {accepts: [Pointers.NeuralAmpModel], mandatory: true},
@@ -167,19 +167,19 @@ export const NeuralAmpDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudio
         type: "float32", name: "mix", pointerRules: ParameterPointerRules,
         value: 1.0, constraints: {min: 0.0, max: 1.0, scaling: "linear"}, unit: "%"
     },
-    15: {
+    20: {
         type: "field", name: "model",
-        pointerRules: {accepts: [Pointers.NeuralAmpModel], mandatory: true}
+        pointerRules: {accepts: [Pointers.NeuralAmpModel], mandatory: false}
     }
 })
 ```
 
 **Migration strategy:**
 - Field 10 (`model-json`) is deprecated but still readable
-- Field 15 (`model`) is the new mandatory pointer
-- On project load, if field 10 has content but field 15 is empty:
+- Field 20 (`model`) is the new mandatory pointer
+- On project load, if field 10 has content but field 20 is empty:
   1. Create a `NeuralAmpModelBox` with the JSON from field 10
-  2. Point field 15 to the new model box
+  2. Point field 20 to the new model box
   3. Field 10 will not be written on save (deprecated)
 - The field name can change without breaking stored projects (only field ID matters)
 
@@ -206,10 +206,10 @@ export class NeuralAmpModelBoxAdapter implements BoxAdapter {
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get labelField(): Field {return this.#box.label}
-    get jsonField(): Field {return this.#box.json}
+    get modelField(): Field {return this.#box.model}
 
     getModelJson(): string {
-        return this.#box.json.getValue()
+        return this.#box.model.getValue()
     }
 
     terminate(): void {}
@@ -244,7 +244,7 @@ export class NeuralAmpModelService {
         const label = file.name.replace(/\.nam$/i, "")
         const box = NeuralAmpModelBox.create(this.#boxGraph, uuid)
         box.label.setValue(label)
-        box.json.setValue(jsonString)
+        box.model.setValue(jsonString)
         return box
     }
 
@@ -393,55 +393,43 @@ import {NeuralAmpModelBox} from "@opendaw/studio-boxes"
 this.#register(NeuralAmpModelBox, (context, box) => new NeuralAmpModelBoxAdapter(context, box))
 ```
 
-## Copy/Paste Behavior
-
-The `DevicesClipboardHandler` already handles resource collection correctly:
-
-```typescript
-// packages/studio/core/src/ui/clipboard/types/DevicesClipboardHandler.ts:104-108
-const dependencies = deviceBoxes.flatMap(box =>
-    Array.from(boxGraph.dependenciesOf(box, {
-        alwaysFollowMandatory: true,
-        excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
-    }).boxes).filter(dep => dep.resource === "external"))
-```
-
-Since `NeuralAmpModelBox` has `resource: "external"`:
-1. When copying a `NeuralAmpDeviceBox`, the pointed `NeuralAmpModelBox` is collected as a dependency
-2. The model box's UUID is preserved (content-addressable)
-3. On paste, if a model with the same UUID already exists, no duplicate is created
-4. The pointer is remapped to the existing model
-
 ## Migration Strategy
 
 The deprecated field 10 approach enables seamless migration:
 
 1. **On project load**: Field 10 (`model-json`, deprecated) is still read if present
 2. **Migration check**: After loading, check each `NeuralAmpDeviceBox`:
-   - If field 10 has content AND field 15 (model pointer) is empty → needs migration
+   - If field 10 has content AND field 20 (model pointer) is empty → needs migration
 3. **Migration action**:
    - Hash the JSON to get UUID
    - Find or create `NeuralAmpModelBox` with that UUID
-   - Set the model pointer (field 15) to point to the model box
-4. **On project save**: Field 10 is not written (deprecated), only field 15
+   - Set the model pointer (field 20) to point to the model box
+4. **On project save**: Field 10 is not written (deprecated), only field 20
 
 ```typescript
-// packages/studio/core/src/nam/NeuralAmpModelService.ts
-async migrateDevice(device: NeuralAmpDeviceBox): Promise<void> {
-    // Only migrate if old field has content but new pointer is empty
-    const oldJson = device.modelJson.getValue()  // Deprecated field 10
-    if (oldJson.length === 0) {return}
-    if (device.model.targetVertex.nonEmpty()) {return}  // Already migrated
-    const jsonBuffer = new TextEncoder().encode(oldJson)
-    const uuid = await UUID.sha256(jsonBuffer)
-    let modelBox = this.findByUuid(uuid)
-    if (modelBox.isEmpty()) {
-        const box = NeuralAmpModelBox.create(this.#boxGraph, uuid)
-        box.label.setValue("Imported Model")
-        box.json.setValue(oldJson)
-        modelBox = Option.wrap(box)
+// packages/studio/core/src/migration/ProjectMigration.ts
+async migrateNeuralAmpDevices(boxGraph: BoxGraph): Promise<void> {
+    for (const device of boxGraph.boxesOfType(NeuralAmpDeviceBox)) {
+        const oldJson = device.modelJson.getValue()  // Deprecated field 10
+        if (oldJson.length === 0) {continue}
+        if (device.model.targetVertex.nonEmpty()) {continue}  // Already migrated
+        const jsonBuffer = new TextEncoder().encode(oldJson)
+        const uuid = await UUID.sha256(jsonBuffer)
+        let model: Option<NeuralAmpModelBox> = Option.None
+        for (const box of boxGraph.boxesOfType(NeuralAmpModelBox)) {
+            if (UUID.equals(box.address.uuid, uuid)) {
+                model = Option.wrap(box)
+                break
+            }
+        }
+        if (model.isEmpty()) {
+            const box = NeuralAmpModelBox.create(boxGraph, uuid)
+            box.label.setValue("Imported Model")
+            box.model.setValue(oldJson)
+            model = Option.wrap(box)
+        }
+        device.model.refer(model.unwrap())
     }
-    device.model.refer(modelBox.unwrap())
 }
 ```
 
@@ -458,6 +446,7 @@ async migrateDevice(device: NeuralAmpDeviceBox): Promise<void> {
 | `packages/studio/adapters/src/devices/audio-effects/NeuralAmpDeviceBoxAdapter.ts` | Modify | Use model pointer |
 | `packages/studio/adapters/src/BoxAdapters.ts` | Modify | Register new adapter |
 | `packages/studio/core/src/nam/NeuralAmpModelService.ts` | Create | Import and manage models |
+| `packages/studio/core/src/migration/ProjectMigration.ts` | Modify | Add NAM device migration |
 | `packages/studio/core-processors/src/devices/audio-effects/NeuralAmpDeviceProcessor.ts` | Modify | Subscribe to model changes |
 | UI components | Modify | Update model loading UI |
 
@@ -483,7 +472,7 @@ The main benefit is **sharing** - multiple devices referencing the same model do
    - Copy device → model included in clipboard
    - Paste device → model created or reused
    - Load/save project with NAM models
-   - Migration: old project with modelJson field 10 → migrated to pointer field 15
+   - Migration: old project with modelJson field 10 → migrated to pointer field 20
 
 3. **Edge cases**:
    - Device with no model assigned
