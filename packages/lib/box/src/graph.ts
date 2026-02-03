@@ -297,14 +297,14 @@ export class BoxGraph<BoxMap = any> {
             // Don't apply excludeBox to the starting box - only to its dependencies
             if (boxes.has(box) || (!isStartingBox && excludeBox(box))) {return}
             boxes.add(box)
-            // Handle resource boxes specially when stopAtResources is enabled
+            // Handle resource boxes especially when stopAtResources is enabled
             if (stopAtResources && isDefined(box.resource)) {
                 // Resource boxes are endpoints, but we still need their "children"
                 // Children = boxes that point to FIELDS within this box (not the box itself)
                 box.incomingEdges()
                     .forEach(pointer => {
                         pointers.add(pointer)
-                        // Only follow if pointer targets a FIELD (child), not the BOX (user)
+                        // Only follow if a pointer targets a FIELD (child), not the BOX (user)
                         const targetsField = pointer.targetAddress.mapOr(address => !address.isBox(), false)
                         if (pointer.mandatory && targetsField) {
                             trace(pointer.box)
