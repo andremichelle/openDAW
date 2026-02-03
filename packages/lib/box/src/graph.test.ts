@@ -2,7 +2,7 @@ import {Maybe, safeExecute, UUID} from "@opendaw/lib-std"
 import {Field} from "./field"
 import {NoPointers, VertexVisitor} from "./vertex"
 import {Box, BoxConstruct, ResourceType} from "./box"
-import {PointerField, UnreferenceableType} from "./pointer"
+import {PointerField} from "./pointer"
 import {BoxGraph} from "./graph"
 import {describe, expect, it} from "vitest"
 
@@ -51,6 +51,7 @@ class NodeBox extends Box<PointerType.Node, NodeBoxFields> {
         return safeExecute(visitor.visitNodeBox, this)
     }
 
+    get tags(): Readonly<Record<string, string | number | boolean>> {return {}}
     get ref(): PointerField<PointerType.Node> {return this.getField(0)}
 }
 
@@ -95,6 +96,7 @@ class ParentBox extends Box<PointerType.Node, ParentBoxFields> {
         return safeExecute(visitor.visitParentBox, this)
     }
 
+    get tags(): Readonly<Record<string, string | number | boolean>> {return {}}
     get ref(): PointerField<PointerType.Node> {return this.getField(0)}
     get hook(): Field<PointerType.Hook> {return this.getField(1)}
 }
@@ -132,6 +134,7 @@ class ChildBox extends Box<PointerType.Node, ChildBoxFields> {
         return safeExecute(visitor.visitChildBox, this)
     }
 
+    get tags(): Readonly<Record<string, string | number | boolean>> {return {}}
     get owner(): PointerField<PointerType.Hook> {return this.getField(0)}
 }
 
@@ -177,6 +180,7 @@ class ResourceBox extends Box<PointerType.Node, ResourceBoxFields> {
         return safeExecute(visitor.visitResourceBox, this)
     }
 
+    get tags(): Readonly<Record<string, string | number | boolean>> {return {}}
     get ref(): PointerField<PointerType.Node> {return this.getField(0)}
     get children(): Field<PointerType.Hook> {return this.getField(1)}
 }
@@ -636,12 +640,12 @@ describe("dependenciesOf", () => {
 
 describe("dependenciesOf with stopAtResources", () => {
     it("includes resource boxes in dependencies", () => {
-        // A → ResourceBox (external)
+        // A → ResourceBox (preserved)
         // Resource should be in collected dependencies
         const graph = new BoxGraph()
         graph.beginTransaction()
         const A = NodeBox.create(graph, UUID.generate())
-        const resource = ResourceBox.create(graph, UUID.generate(), "external")
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
         A.ref.refer(resource)
         graph.endTransaction()
 
@@ -655,7 +659,7 @@ describe("dependenciesOf with stopAtResources", () => {
         const graph = new BoxGraph()
         graph.beginTransaction()
         const A = NodeBox.create(graph, UUID.generate())
-        const resource = ResourceBox.create(graph, UUID.generate(), "external")
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
         const child = ChildBox.create(graph, UUID.generate())
         A.ref.refer(resource)
         child.owner.refer(resource.children) // points to FIELD
@@ -672,7 +676,7 @@ describe("dependenciesOf with stopAtResources", () => {
         const graph = new BoxGraph()
         graph.beginTransaction()
         const A = NodeBox.create(graph, UUID.generate())
-        const resource = ResourceBox.create(graph, UUID.generate(), "external")
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
         const otherUser = NodeBox.create(graph, UUID.generate())
         A.ref.refer(resource)
         otherUser.ref.refer(resource) // points to BOX
@@ -691,7 +695,7 @@ describe("dependenciesOf with stopAtResources", () => {
         const graph = new BoxGraph()
         graph.beginTransaction()
         const A = NodeBox.create(graph, UUID.generate())
-        const resource = ResourceBox.create(graph, UUID.generate(), "external")
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
         const child = ChildBox.create(graph, UUID.generate())
         const otherUser = NodeBox.create(graph, UUID.generate())
         A.ref.refer(resource)
@@ -712,7 +716,7 @@ describe("dependenciesOf with stopAtResources", () => {
         const graph = new BoxGraph()
         graph.beginTransaction()
         const A = NodeBox.create(graph, UUID.generate())
-        const resource = ResourceBox.create(graph, UUID.generate(), "external")
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
         const downstream = ParentBox.create(graph, UUID.generate())
         A.ref.refer(resource)
         resource.ref.refer(downstream)
@@ -732,7 +736,7 @@ describe("dependenciesOf with stopAtResources", () => {
         const graph = new BoxGraph()
         graph.beginTransaction()
         const A = NodeBox.create(graph, UUID.generate())
-        const resource = ResourceBox.create(graph, UUID.generate(), "external")
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
         const child1 = ChildBox.create(graph, UUID.generate())
         const child2 = ChildBox.create(graph, UUID.generate())
         const child3 = ChildBox.create(graph, UUID.generate())
@@ -769,12 +773,12 @@ describe("dependenciesOf with stopAtResources", () => {
     it("resource property is accessible on box", () => {
         const graph = new BoxGraph()
         graph.beginTransaction()
-        const externalResource = ResourceBox.create(graph, UUID.generate(), "external")
+        const preservedResource = ResourceBox.create(graph, UUID.generate(), "preserved")
         const internalResource = ResourceBox.create(graph, UUID.generate(), "internal")
         const regularBox = NodeBox.create(graph, UUID.generate())
         graph.endTransaction()
 
-        expect(externalResource.resource).toBe("external")
+        expect(preservedResource.resource).toBe("preserved")
         expect(internalResource.resource).toBe("internal")
         expect(regularBox.resource).toBeUndefined()
     })
@@ -784,7 +788,7 @@ describe("dependenciesOf with stopAtResources", () => {
         const graph = new BoxGraph()
         graph.beginTransaction()
         const A = NodeBox.create(graph, UUID.generate())
-        const resource = ResourceBox.create(graph, UUID.generate(), "external")
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
         const downstream = ParentBox.create(graph, UUID.generate())
         A.ref.refer(resource)
         resource.ref.refer(downstream)
@@ -797,13 +801,13 @@ describe("dependenciesOf with stopAtResources", () => {
 
     it("models AudioRegion → AudioFileBox ← TransientMarker scenario", () => {
         // This is the real-world scenario:
-        // Region → AudioFileBox (external resource)
+        // Region → AudioFileBox (preserved resource)
         // TransientMarker → AudioFileBox.children (mandatory pointer to field)
         // OtherRegion → AudioFileBox (another user, should be excluded)
         const graph = new BoxGraph()
         graph.beginTransaction()
         const region = NodeBox.create(graph, UUID.generate())
-        const audioFile = ResourceBox.create(graph, UUID.generate(), "external")
+        const audioFile = ResourceBox.create(graph, UUID.generate(), "preserved")
         const transientMarker = ChildBox.create(graph, UUID.generate())
         const otherRegion = NodeBox.create(graph, UUID.generate())
         region.ref.refer(audioFile)
@@ -823,7 +827,7 @@ describe("dependenciesOf with stopAtResources", () => {
         const graph = new BoxGraph()
         graph.beginTransaction()
         const A = NodeBox.create(graph, UUID.generate())
-        const resource = ResourceBox.create(graph, UUID.generate(), "external")
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
         const child = ChildBox.create(graph, UUID.generate())
         A.ref.refer(resource)
         child.owner.refer(resource.children)

@@ -125,11 +125,11 @@ export const NeuralAmpModelBox: BoxSchema<Pointers> = {
         }
     },
     pointerRules: {accepts: [Pointers.NeuralAmpModel], mandatory: true},
-    resource: "external"  // Content-addressable, keeps UUID during copy
+    resource: "preserved"  // Content-addressable, keeps UUID during copy
 }
 ```
 
-**Why `resource: "external"`:**
+**Why `resource: "preserved"`:**
 - UUID is content-derived (SHA256), so same content = same UUID
 - During copy/paste, the box is included as a dependency
 - UUID is preserved (not remapped) since it represents the content identity

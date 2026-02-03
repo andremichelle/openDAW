@@ -16,5 +16,5 @@ export const AudioFileBox: BoxSchema<Pointers> = {
         }
     },
     pointerRules: {accepts: [Pointers.AudioFile, Pointers.FileUploadState, Pointers.MetaData], mandatory: true},
-    resource: "external"
+    resource: "preserved"
 }
