@@ -53,8 +53,16 @@ export namespace ClipboardManager {
             fallbackEntry = Option.wrap(entry)
             navigator.clipboard?.writeText(encode(entry)).catch(() => {})
         }
-        const performCopy = (): void => handler.copy().ifSome(writeEntry)
-        const performCut = (): void => handler.cut().ifSome(writeEntry)
+        const performCopy = (): boolean => {
+            const entry = handler.copy()
+            entry.ifSome(writeEntry)
+            return entry.nonEmpty()
+        }
+        const performCut = (): boolean => {
+            const entry = handler.cut()
+            entry.ifSome(writeEntry)
+            return entry.nonEmpty()
+        }
         const performPaste = async () => {
             try {
                 const rawText = await navigator.clipboard.readText()
@@ -73,6 +81,7 @@ export namespace ClipboardManager {
             Events.subscribe(element, "copy", (event: ClipboardEvent) => {
                 handler.copy().ifSome(entry => {
                     event.preventDefault()
+                    event.stopPropagation()
                     const encoded = encode(entry)
                     fallbackEntry = Option.wrap(entry)
                     event.clipboardData?.setData("text/plain", encoded)
@@ -81,6 +90,7 @@ export namespace ClipboardManager {
             Events.subscribe(element, "cut", (event: ClipboardEvent) => {
                 handler.cut().ifSome(entry => {
                     event.preventDefault()
+                    event.stopPropagation()
                     const encoded = encode(entry)
                     fallbackEntry = Option.wrap(entry)
                     event.clipboardData?.setData("text/plain", encoded)
@@ -105,11 +115,15 @@ export namespace ClipboardManager {
                 const isMod = event.metaKey || event.ctrlKey
                 if (!isMod || event.shiftKey || event.altKey) {return}
                 if (event.key === "c") {
-                    event.preventDefault()
-                    performCopy()
+                    if (performCopy()) {
+                        event.preventDefault()
+                        event.stopImmediatePropagation()
+                    }
                 } else if (event.key === "x") {
-                    event.preventDefault()
-                    performCut()
+                    if (performCut()) {
+                        event.preventDefault()
+                        event.stopImmediatePropagation()
+                    }
                 }
             }),
             ContextMenu.subscribe(element, async collector => {
