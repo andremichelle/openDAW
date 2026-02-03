@@ -1,7 +1,7 @@
 import {ByteArrayInput, ByteArrayOutput, Option, Provider} from "@opendaw/lib-std"
 import {Box, BoxEditing, BoxGraph, IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
-import {AudioUnitBox, AuxSendBox, MIDIControllerBox} from "@opendaw/studio-boxes"
+import {AudioBusBox, AudioUnitBox, AuxSendBox, CaptureAudioBox, CaptureMidiBox, MIDIControllerBox, RootBox} from "@opendaw/studio-boxes"
 import {AudioUnitBoxAdapter, AudioUnitOrdering, RootBoxAdapter, UserEditing} from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
 import {ClipboardUtils} from "../ClipboardUtils"
@@ -51,8 +51,12 @@ export namespace AudioUnitsClipboard {
                 stopAtResources: true,
                 excludeBox: (box: Box) => {
                     if (box.ephemeral) {return true}
+                    if (box.name === RootBox.ClassName) {return true}
+                    if (box.name === AudioBusBox.ClassName) {return true}
                     if (box.name === AuxSendBox.ClassName) {return true}
                     if (box.name === MIDIControllerBox.ClassName) {return true}
+                    if (box.name === CaptureAudioBox.ClassName) {return true}
+                    if (box.name === CaptureMidiBox.ClassName) {return true}
                     return false
                 }
             }).boxes)
@@ -90,21 +94,36 @@ export namespace AudioUnitsClipboard {
                 if (entry.type !== "audio-units" || !getEnabled()) {return}
                 const metadata = decodeMetadata(ClipboardUtils.extractMetadata(entry.data))
                 const isOutputPaste = metadata.type === AudioUnitType.Output
-                editing.modify(() => {
-                    if (isOutputPaste) {
-                        pasteOutputReplacement(entry.data, boxGraph, rootBoxAdapter)
-                    } else {
+                if (isOutputPaste) {
+                    // Split into two transactions to ensure deletion notifications fire
+                    // before new boxes are created (avoids "already has input" conflict)
+                    editing.modify(() => clearOutputContent(rootBoxAdapter))
+                    editing.modify(() => pasteOutputContent(entry.data, boxGraph, rootBoxAdapter))
+                } else {
+                    editing.modify(() => {
                         const pastedBox = pasteNewAudioUnit(entry.data, boxGraph, rootBoxAdapter, getEditedAudioUnit())
                         if (pastedBox) {
                             audioUnitEditing.edit(pastedBox.editing)
                         }
-                    }
-                })
+                    })
+                }
             }
         }
     }
 
-    const pasteOutputReplacement = (
+    const clearOutputContent = (rootBoxAdapter: RootBoxAdapter): void => {
+        const outputAdapter = rootBoxAdapter.audioUnits.adapters().find(adapter => adapter.isOutput)
+        if (!outputAdapter) {return}
+        outputAdapter.tracks.collection.adapters().forEach(track => track.box.delete())
+        const inputAdapter = outputAdapter.input.adapter()
+        if (inputAdapter.nonEmpty() && inputAdapter.unwrap().type === "instrument") {
+            inputAdapter.unwrap().box.delete()
+        }
+        outputAdapter.midiEffects.adapters().forEach(effect => effect.box.delete())
+        outputAdapter.audioEffects.adapters().forEach(effect => effect.box.delete())
+    }
+
+    const pasteOutputContent = (
         data: ArrayBufferLike,
         boxGraph: BoxGraph,
         rootBoxAdapter: RootBoxAdapter
@@ -112,15 +131,13 @@ export namespace AudioUnitsClipboard {
         const outputAdapter = rootBoxAdapter.audioUnits.adapters().find(adapter => adapter.isOutput)
         if (!outputAdapter) {return}
         const outputBox = outputAdapter.box
-        outputAdapter.tracks.collection.adapters().forEach(track => track.box.delete())
-        outputAdapter.input.adapter().ifSome(instrument => instrument.box.delete())
-        outputAdapter.midiEffects.adapters().forEach(effect => effect.box.delete())
-        outputAdapter.audioEffects.adapters().forEach(effect => effect.box.delete())
+        const primaryBusAddress = rootBoxAdapter.audioBusses.adapters().at(0)?.address
+        if (!primaryBusAddress) {return}
         ClipboardUtils.deserializeBoxes(
             data,
             boxGraph,
             {
-                mapPointer: pointer => {
+                mapPointer: (pointer, address) => {
                     if (pointer.pointerType === Pointers.TrackCollection) {
                         return Option.wrap(outputBox.tracks.address)
                     }
@@ -133,9 +150,12 @@ export namespace AudioUnitsClipboard {
                     if (pointer.pointerType === Pointers.AudioEffectHost) {
                         return Option.wrap(outputBox.audioEffects.address)
                     }
+                    if (pointer.pointerType === Pointers.AudioOutput) {
+                        return address.map(addr => addr.moveTo(primaryBusAddress.uuid))
+                    }
                     return Option.None
                 },
-                excludeBox: box => box.name === AudioUnitBox.ClassName
+                excludeBox: box => box.name === AudioUnitBox.ClassName || box.name === AudioBusBox.ClassName || box.name === RootBox.ClassName
             }
         )
     }

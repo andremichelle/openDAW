@@ -1,5 +1,5 @@
 import css from "./Mixer.sass?inline"
-import {clamp, Lifecycle, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {clamp, Lifecycle, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {AudioUnitBoxAdapter, Devices} from "@opendaw/studio-adapters"
@@ -12,6 +12,8 @@ import {AnyDragData} from "@/ui/AnyDragData"
 import {installAutoScroll} from "@/ui/AutoScroll"
 import {InsertMarker} from "@/ui/components/InsertMarker"
 import {deferNextFrame, Events, Html} from "@opendaw/lib-dom"
+import {AudioUnitsClipboard, ClipboardManager} from "@opendaw/studio-core"
+import {AudioUnitBox} from "@opendaw/studio-boxes"
 
 const className = Html.adoptStyleSheet(css, "mixer")
 
@@ -77,7 +79,21 @@ export const Mixer = ({lifecycle, service}: Construct) => {
         .forEach(({classList}) => classList.remove("editing"))
     const insertMarker: HTMLElement = <InsertMarker/>
     let scrollIntoViewEnabled: boolean = true
+    const {editing, boxGraph, rootBoxAdapter, userEditingManager, boxAdapters} = project
     lifecycle.ownAll(
+        ClipboardManager.install(element, AudioUnitsClipboard.createHandler({
+            getEnabled: () => true,
+            editing,
+            boxGraph,
+            rootBoxAdapter,
+            audioUnitEditing: userEditingManager.audioUnit,
+            getEditedAudioUnit: () => userEditingManager.audioUnit.get().flatMap(vertex => {
+                if (vertex.box.name === AudioUnitBox.ClassName) {
+                    return Option.wrap(boxAdapters.adapterFor(vertex.box as AudioUnitBox, AudioUnitBoxAdapter))
+                }
+                return Option.None
+            })
+        })),
         project.rootBoxAdapter.audioUnits.catchupAndSubscribe({
             onAdd: (adapter: AudioUnitBoxAdapter) => {
                 const terminator = lifecycle.spawn()
