@@ -9,8 +9,7 @@ import {FooterLabel} from "@/service/FooterLabel"
 import {ProjectMeta, StudioPreferences} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
 import {UserCounter} from "@/UserCounter"
-import {AudioData, RenderQuantum} from "@opendaw/lib-dsp"
-import {PERF_BUFFER_SIZE} from "@opendaw/studio-adapters"
+import {AudioData} from "@opendaw/lib-dsp"
 
 const className = Html.adoptStyleSheet(css, "footer")
 
@@ -66,26 +65,12 @@ export const Footer = ({lifecycle, service}: Construct) => {
             </article>
             <article title="CPU Load"
                      onInit={element => {
-                         const budgetMs = (RenderQuantum / service.audioContext.sampleRate) * 1000
-                         let lastReadIndex = 0
-                         let maxMs = 0
-                         lifecycle.own(Runtime.scheduleInterval(() => {
-                             const engine = service.engine
-                             const perfBuffer = engine.perfBuffer
-                             const perfIndex = engine.perfIndex
-                             let readIndex = lastReadIndex
-                             while (readIndex !== perfIndex) {
-                                 const ms = perfBuffer[readIndex]
-                                 if (ms > maxMs) {maxMs = ms}
-                                 readIndex = (readIndex + 1) % PERF_BUFFER_SIZE
-                             }
-                             lastReadIndex = readIndex
-                             const percent = Math.min(Math.round((maxMs / budgetMs) * 100), 100)
+                         lifecycle.own(service.engine.cpuLoad.catchupAndSubscribe(owner => {
+                             const percent = Math.min(owner.getValue(), 100)
                              element.textContent = `${percent}%`
                              element.style.color = percent >= 100 ? Colors.red.toString()
                                  : percent > 75 ? Colors.orange.toString() : ""
-                             maxMs = 0
-                         }, 1000))
+                         }))
                      }}>0%
             </article>
             <article title="FPS"

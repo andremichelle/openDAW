@@ -61,7 +61,7 @@ import {ppqn, TempoMap, TimeBase} from "@opendaw/lib-dsp"
 import {MidiData} from "@opendaw/lib-midi"
 import {StudioPreferences} from "../StudioPreferences"
 import {RegionOverlapResolver, TimelineFocus} from "../ui"
-import {SampleStorage} from "../samples/SampleStorage"
+import {SampleStorage} from "../samples"
 
 export type RestartWorklet = { unload: Func<unknown, Promise<unknown>>, load: Procedure<EngineWorklet> }
 
@@ -205,6 +205,15 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         worklet.connect(worklet.context.destination)
         this.engine.setWorklet(worklet)
         return worklet
+    }
+
+    handleCpuOverload(): void {
+        if (!StudioPreferences.settings.engine["stop-playback-when-overloading"]) {return}
+        this.engine.sleep()
+        RuntimeNotifier.info({
+            headline: "CPU overload detected",
+            message: "Playback has been stopped. Try removing heavy plugins or effects."
+        }).finally()
     }
 
     startRecording(countIn: boolean = true) {

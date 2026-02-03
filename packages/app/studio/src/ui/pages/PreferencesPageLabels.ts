@@ -26,7 +26,8 @@ export namespace PreferencesPageLabels {
             label: "Engine",
             fields: {
                 "note-audition-while-editing": "Note audition while editing",
-                "auto-create-output-compressor": "Automatically add compressor to main output"
+                "auto-create-output-compressor": "Automatically add compressor to main output",
+                "stop-playback-when-overloading": "Stop playback when overloading"
             }
         },
         "pointer": {

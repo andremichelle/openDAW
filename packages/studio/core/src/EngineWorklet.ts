@@ -13,9 +13,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {AudioData, bpm, ppqn} from "@opendaw/lib-dsp"
-import {SyncSource} from "@opendaw/lib-box"
-import {AnimationFrame} from "@opendaw/lib-dom"
+import {AudioData, bpm, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {
     ClipNotification,
@@ -29,9 +27,12 @@ import {
     EngineToClient,
     ExportStemsConfiguration,
     NoteSignal,
+    PERF_BUFFER_SIZE,
     PreferencesHost,
     ProcessorOptions
 } from "@opendaw/studio-adapters"
+import {SyncSource} from "@opendaw/lib-box"
+import {AnimationFrame} from "@opendaw/lib-dom"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {Engine} from "./Engine"
 import {Project} from "./project"
@@ -57,6 +58,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #preferences: PreferencesHost<EngineSettings>
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
+    readonly #cpuLoad: DefaultObservableValue<number> = new DefaultObservableValue(0)
     readonly #controlFlags: Int32Array<SharedArrayBuffer>
     readonly #notifyClipNotification: Notifier<ClipNotification>
     readonly #notifyNoteSignals: Notifier<NoteSignal>
@@ -72,6 +74,11 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 exportConfiguration?: ExportStemsConfiguration,
                 options?: ProcessorOptions) {
         const numberOfChannels = ExportStemsConfiguration.countStems(Option.wrap(exportConfiguration)) * 2
+        const budgetMs = (RenderQuantum / context.sampleRate) * 1000
+        let lastPerfReadIndex = 0
+        let consecutiveOverloadCount = 0
+        let lastCpuLoadUpdate = 0
+        let maxMsSinceLastUpdate = 0
         const reader = SyncStream.reader<EngineState>(EngineStateSchema(), state => {
             this.#isPlaying.setValue(state.isPlaying)
             this.#isRecording.setValue(state.isRecording)
@@ -81,6 +88,28 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             this.#bpm.setValue(state.bpm)
             this.#perfBuffer = state.perfBuffer
             this.#perfIndex = state.perfIndex
+            let readIndex = lastPerfReadIndex
+            while (readIndex !== this.#perfIndex) {
+                const ms = this.#perfBuffer[readIndex]
+                if (ms > maxMsSinceLastUpdate) {maxMsSinceLastUpdate = ms}
+                if (ms >= budgetMs) {
+                    consecutiveOverloadCount++
+                    if (consecutiveOverloadCount >= 30) {
+                        project.handleCpuOverload()
+                        consecutiveOverloadCount = 0
+                    }
+                } else {
+                    consecutiveOverloadCount = 0
+                }
+                readIndex = (readIndex + 1) % PERF_BUFFER_SIZE
+            }
+            lastPerfReadIndex = readIndex
+            const now = performance.now()
+            if (now - lastCpuLoadUpdate >= 1000) {
+                this.#cpuLoad.setValue(Math.round((maxMsSinceLastUpdate / budgetMs) * 100))
+                maxMsSinceLastUpdate = 0
+                lastCpuLoadUpdate = now
+            }
             this.#position.setValue(state.position) // This must be the last to handle the state values before
         })
 
@@ -211,20 +240,25 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         )
     }
 
-    play(): void {this.#commands.play()}
-    stop(reset: boolean = false): void {this.#commands.stop(reset)}
+    play(): void {
+        this.wake()
+        this.#commands.play()
+    }
+    stop(reset: boolean = false): void {
+        this.#isPlaying.setValue(false)
+        this.#commands.stop(reset)
+    }
     setPosition(position: ppqn): void {this.#commands.setPosition(position)}
     prepareRecordingState(countIn: boolean): void {this.#commands.prepareRecordingState(countIn)}
     stopRecording(): void {this.#commands.stopRecording()}
     panic(): void {this.#commands.panic()}
     sleep(): void {
         Atomics.store(this.#controlFlags, 0, 1)
+        this.#isPlaying.setValue(false)
         this.#commands.stop(true)
     }
     wake(): void {Atomics.store(this.#controlFlags, 0, 0)}
-    loadClickSound(index: 0 | 1, data: AudioData): void {
-        this.#commands.loadClickSound(index, data)
-    }
+    loadClickSound(index: 0 | 1, data: AudioData): void {this.#commands.loadClickSound(index, data)}
 
     get isPlaying(): ObservableValue<boolean> {return this.#isPlaying}
     get isRecording(): ObservableValue<boolean> {return this.#isRecording}
@@ -236,6 +270,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get project(): Project {return this.#project}
     get preferences(): PreferencesHost<EngineSettings> {return this.#preferences}
+    get cpuLoad(): ObservableValue<number> {return this.#cpuLoad}
     get perfBuffer(): Float32Array {return this.#perfBuffer}
     get perfIndex(): number {return this.#perfIndex}
 
