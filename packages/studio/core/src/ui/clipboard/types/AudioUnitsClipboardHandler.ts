@@ -1,7 +1,15 @@
 import {ByteArrayInput, ByteArrayOutput, Option, Provider} from "@opendaw/lib-std"
 import {Box, BoxEditing, BoxGraph, IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
-import {AudioBusBox, AudioUnitBox, AuxSendBox, CaptureAudioBox, CaptureMidiBox, MIDIControllerBox, RootBox} from "@opendaw/studio-boxes"
+import {
+    AudioBusBox,
+    AudioUnitBox,
+    AuxSendBox,
+    CaptureAudioBox,
+    CaptureMidiBox,
+    MIDIControllerBox,
+    RootBox
+} from "@opendaw/studio-boxes"
 import {AudioUnitBoxAdapter, AudioUnitOrdering, RootBoxAdapter, UserEditing} from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
 import {ClipboardUtils} from "../ClipboardUtils"
@@ -34,18 +42,19 @@ export namespace AudioUnitsClipboard {
     }
 
     export const createHandler = ({
-        getEnabled,
-        editing,
-        boxGraph,
-        rootBoxAdapter,
-        audioUnitEditing,
-        getEditedAudioUnit
-    }: Context): ClipboardHandler<ClipboardAudioUnits> => {
+                                      getEnabled,
+                                      editing,
+                                      boxGraph,
+                                      rootBoxAdapter,
+                                      audioUnitEditing,
+                                      getEditedAudioUnit
+                                  }: Context): ClipboardHandler<ClipboardAudioUnits> => {
         const copyAudioUnit = (): Option<ClipboardAudioUnits> => {
             const optAudioUnit = getEditedAudioUnit()
             if (optAudioUnit.isEmpty()) {return Option.None}
             const audioUnitAdapter = optAudioUnit.unwrap()
             const audioUnitBox = audioUnitAdapter.box
+            const isOutput = audioUnitAdapter.type === AudioUnitType.Output
             const dependencies = Array.from(audioUnitBox.graph.dependenciesOf(audioUnitBox, {
                 alwaysFollowMandatory: true,
                 stopAtResources: true,
@@ -55,8 +64,8 @@ export namespace AudioUnitsClipboard {
                     if (box.name === AudioBusBox.ClassName) {return true}
                     if (box.name === AuxSendBox.ClassName) {return true}
                     if (box.name === MIDIControllerBox.ClassName) {return true}
-                    if (box.name === CaptureAudioBox.ClassName) {return true}
-                    if (box.name === CaptureMidiBox.ClassName) {return true}
+                    if (isOutput && box.name === CaptureAudioBox.ClassName) {return true}
+                    if (isOutput && box.name === CaptureMidiBox.ClassName) {return true}
                     return false
                 }
             }).boxes)
