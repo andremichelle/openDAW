@@ -1,5 +1,9 @@
 # Copy and Paste Implementation Plan
 
+> **Status**: Core infrastructure IMPLEMENTED. See individual plans for specific clipboard handlers:
+> - `copy-and-paste-regions.md` - Region copy/paste (IMPLEMENTED)
+> - `copy-and-paste-audiounits.md` - AudioUnit copy/paste (PLANNED)
+
 ## Summary
 
 This plan introduces a new `resource?: "external" | "internal"` property to `BoxSchema` to enable clean copy/paste functionality for any items in the studio. Resource boxes act as endpoints/boundaries during dependency collection, preventing over-collection while still using `alwaysFollowMandatory: true`.
@@ -90,7 +94,7 @@ dependenciesOf(box: Box, options: {
 |-----|------|---------------|--------|
 | `AudioFileBox` | `std/AudioFileBox.ts` | `"external"` | References external audio file |
 | `SoundfontFileBox` | `std/SoundfontFileBox.ts` | `"external"` | References external soundfont file |
-| `GrooveBox` | `std/GrooveBoxes.ts` | `"internal"` | Project-level shared resource (prevents pulling in RootBox) |
+| `GrooveShuffleBox` | `GrooveShuffleBox.ts` | `"internal"` | Project-level shared resource (prevents pulling in RootBox) |
 
 ### Critical Issue: Resource Children (TransientMarkerBox)
 
