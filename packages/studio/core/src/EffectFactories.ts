@@ -365,6 +365,7 @@ export namespace EffectFactories {
         Crusher,
         Fold,
         Tidal,
+        NeuralAmp,
         Maximizer
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> =

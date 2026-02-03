@@ -211,7 +211,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         if (!StudioPreferences.settings.engine["stop-playback-when-overloading"]) {return}
         this.engine.sleep()
         RuntimeNotifier.info({
-            headline: "CPU overload detected",
+            headline: "CPU Overload Detected",
             message: "Playback has been stopped. Try removing heavy plugins or effects."
         }).finally()
     }
@@ -304,8 +304,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     }
 
     invalid(): boolean {
-        // TODO Optimise. Flag changes somewhere.
-        return this.boxGraph.boxes().some(box => box.accept<BoxVisitor<boolean>>({
+        const now = performance.now()
+        const result = this.boxGraph.boxes().some(box => box.accept<BoxVisitor<boolean>>({
             visitTrackBox: (box: TrackBox): boolean => {
                 for (const [current, next] of Arrays.iterateAdjacent(box.regions.pointerHub.incoming()
                     .map(({box}) => UnionBoxTypes.asRegionBox(box))
@@ -320,6 +320,10 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                 return false
             }
         }) ?? false)
+        if (performance.now() - now > 5) {
+            console.warn("Evaluation of invalid project takes more than 5ms")
+        }
+        return result
     }
 
     lastRegionAction(): ppqn {
