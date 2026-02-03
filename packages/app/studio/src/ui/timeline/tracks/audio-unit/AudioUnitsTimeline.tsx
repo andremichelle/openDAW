@@ -93,6 +93,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
             editing,
             boxGraph,
             rootBoxAdapter,
+            audioUnitEditing: userEditingManager.audioUnit,
             getEditedAudioUnit: () => userEditingManager.audioUnit.get().flatMap(vertex => {
                 if (vertex.box.name === AudioUnitBox.ClassName) {
                     return Option.wrap(boxAdapters.adapterFor(vertex.box as AudioUnitBox, AudioUnitBoxAdapter))

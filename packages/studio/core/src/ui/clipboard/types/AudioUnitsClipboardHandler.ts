@@ -2,7 +2,7 @@ import {ByteArrayInput, ByteArrayOutput, Option, Provider} from "@opendaw/lib-st
 import {Box, BoxEditing, BoxGraph, IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {AudioUnitBox, AuxSendBox, MIDIControllerBox} from "@opendaw/studio-boxes"
-import {AudioUnitBoxAdapter, AudioUnitOrdering, RootBoxAdapter} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, AudioUnitOrdering, RootBoxAdapter, UserEditing} from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
 import {ClipboardUtils} from "../ClipboardUtils"
 
@@ -18,6 +18,7 @@ export namespace AudioUnitsClipboard {
         readonly editing: BoxEditing
         readonly boxGraph: BoxGraph
         readonly rootBoxAdapter: RootBoxAdapter
+        readonly audioUnitEditing: UserEditing
         readonly getEditedAudioUnit: Provider<Option<AudioUnitBoxAdapter>>
     }
 
@@ -37,6 +38,7 @@ export namespace AudioUnitsClipboard {
         editing,
         boxGraph,
         rootBoxAdapter,
+        audioUnitEditing,
         getEditedAudioUnit
     }: Context): ClipboardHandler<ClipboardAudioUnits> => {
         const copyAudioUnit = (): Option<ClipboardAudioUnits> => {
@@ -92,7 +94,10 @@ export namespace AudioUnitsClipboard {
                     if (isOutputPaste) {
                         pasteOutputReplacement(entry.data, boxGraph, rootBoxAdapter)
                     } else {
-                        pasteNewAudioUnit(entry.data, boxGraph, rootBoxAdapter, getEditedAudioUnit())
+                        const pastedBox = pasteNewAudioUnit(entry.data, boxGraph, rootBoxAdapter, getEditedAudioUnit())
+                        if (pastedBox) {
+                            audioUnitEditing.edit(pastedBox.editing)
+                        }
                     }
                 })
             }
@@ -140,10 +145,10 @@ export namespace AudioUnitsClipboard {
         boxGraph: BoxGraph,
         rootBoxAdapter: RootBoxAdapter,
         currentAudioUnit: Option<AudioUnitBoxAdapter>
-    ): void => {
+    ): AudioUnitBox | undefined => {
         const rootBox = rootBoxAdapter.box
         const primaryBusAddress = rootBoxAdapter.audioBusses.adapters().at(0)?.address
-        if (!primaryBusAddress) {return}
+        if (!primaryBusAddress) {return undefined}
         const boxes = ClipboardUtils.deserializeBoxes(
             data,
             boxGraph,
@@ -160,11 +165,12 @@ export namespace AudioUnitsClipboard {
             }
         )
         const pastedAudioUnit = boxes.find(box => box.name === AudioUnitBox.ClassName) as AudioUnitBox | undefined
-        if (!pastedAudioUnit) {return}
+        if (!pastedAudioUnit) {return undefined}
         const insertAfterIndex = currentAudioUnit
             .map(adapter => adapter.indexField.getValue())
             .unwrapOrElse(() => -1)
         reorderAudioUnitsAfterPaste(pastedAudioUnit, insertAfterIndex, rootBoxAdapter)
+        return pastedAudioUnit
     }
 
     const reorderAudioUnitsAfterPaste = (
