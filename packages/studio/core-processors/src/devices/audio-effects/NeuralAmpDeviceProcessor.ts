@@ -81,7 +81,7 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
         this.ownAll(
             context.registerProcessor(this),
             context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing),
-            adapter.modelJsonField.catchupAndSubscribe(field => this.#onModelJsonChanged(field.getValue())),
+            adapter.modelField.catchupAndSubscribe(() => this.#onModelChanged()),
             adapter.monoField.catchupAndSubscribe(field => this.#onMonoChanged(field.getValue())),
             context.broadcaster.broadcastFloats(adapter.spectrum, this.#spectrum, (hasSubscribers) => {
                 this.#needsSpectrum = hasSubscribers
@@ -92,7 +92,7 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
         )
         this.#initInstance()
         this.readAllParameters()
-        const initialModelJson = adapter.modelJsonField.getValue()
+        const initialModelJson = adapter.getModelJson()
         if (initialModelJson.length > 0) {
             context.awaitResource(NeuralAmpDeviceProcessor.fetchWasm(context.engineToClient))
         }
@@ -262,6 +262,10 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
                 }
             }
         }
+    }
+
+    #onModelChanged(): void {
+        this.#onModelJsonChanged(this.#adapter.getModelJson())
     }
 
     #onModelJsonChanged(modelJson: string): void {

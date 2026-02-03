@@ -293,8 +293,9 @@ export class BoxGraph<BoxMap = any> {
         const stopAtResources = isDefined(options.stopAtResources) ? options.stopAtResources : false
         const boxes = new Set<Box>()
         const pointers = new Set<PointerField>()
-        const trace = (box: Box): void => {
-            if (boxes.has(box) || excludeBox(box)) {return}
+        const trace = (box: Box, isStartingBox: boolean = false): void => {
+            // Don't apply excludeBox to the starting box - only to its dependencies
+            if (boxes.has(box) || (!isStartingBox && excludeBox(box))) {return}
             boxes.add(box)
             // Handle resource boxes specially when stopAtResources is enabled
             if (stopAtResources && isDefined(box.resource)) {
@@ -335,7 +336,7 @@ export class BoxGraph<BoxMap = any> {
                     }
                 })
         }
-        trace(box)
+        trace(box, true)
         boxes.delete(box)
         return {boxes, pointers: Array.from(pointers).reverse()}
     }
