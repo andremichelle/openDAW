@@ -367,8 +367,11 @@ export namespace EffectFactories {
         Crusher,
         Fold,
         Tidal,
-        ...(isDev ? {NeuralAmp} : {}),
+        NeuralAmp,
         Maximizer
+    }
+    if (!isDev) {
+        delete (AudioNamed as { NeuralAmp?: typeof NeuralAmp }).NeuralAmp
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> =
         Object.values(MidiNamed)
