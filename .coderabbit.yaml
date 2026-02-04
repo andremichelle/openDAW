@@ -1,16 +1,12 @@
 # CodeRabbit Configuration for OpenDAW "Gold Master" Review
 # Strictness Level: High (Senior Developer Persona)
 
-version: "2"
+language: "en-US"
 
-options:
+reviews:
   # We want a thorough, assertive review style
   profile: "assertive"
-  
-  # Tone instructions
-  language: "en-US"
-  
-reviews:
+
   # Enable high-level summary
   high_level_summary: true
   
