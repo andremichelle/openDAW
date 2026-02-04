@@ -1,11 +1,11 @@
 import {ClipModifier} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifier.ts"
-import {BoxEditing} from "@opendaw/lib-box"
 import {Arrays, asDefined, clamp, int, isDefined, Option, panic, Selection, ValueAxis} from "@opendaw/lib-std"
 import {AnyClipBox, AnyClipBoxAdapter} from "@opendaw/studio-adapters"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {ClipModifyStrategy} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifyStrategy.ts"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Dragging} from "@opendaw/lib-dom"
+import {Project} from "@opendaw/studio-core"
 
 class UnselectedModifyStrategy implements ClipModifyStrategy {
     readonly #tool: ClipMoveModifier
@@ -30,6 +30,7 @@ class SelectedModifyStrategy implements ClipModifyStrategy {
 }
 
 export type Creation = {
+    project: Project
     manager: TracksManager
     selection: Selection<AnyClipBoxAdapter>
     xAxis: ValueAxis
@@ -43,6 +44,7 @@ export class ClipMoveModifier implements ClipModifier {
         return Option.wrap(new ClipMoveModifier(creation))
     }
 
+    readonly #project: Project
     readonly #manager: TracksManager
     readonly #selection: Selection<AnyClipBoxAdapter>
     readonly #xAxis: ValueAxis
@@ -58,7 +60,8 @@ export class ClipMoveModifier implements ClipModifier {
     #copy: boolean = false
     #mirroredCopy: boolean = false
 
-    private constructor({manager, selection, xAxis, yAxis, pointerClipIndex, pointerTrackIndex}: Creation) {
+    private constructor({project, manager, selection, xAxis, yAxis, pointerClipIndex, pointerTrackIndex}: Creation) {
+        this.#project = project
         this.#manager = manager
         this.#selection = selection
         this.#xAxis = xAxis
@@ -113,7 +116,7 @@ export class ClipMoveModifier implements ClipModifier {
         if (change) {this.#dispatchChange()}
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         if (this.#trackDelta === 0 && this.#clipDelta === 0) {return}
         const tracks = this.#manager.tracks()
         const maxTrackIndex = tracks.length - 1
@@ -154,9 +157,9 @@ export class ClipMoveModifier implements ClipModifier {
             }
         })
         console.debug("#copy", this.#copy, "#mirroredCopy", this.#mirroredCopy)
-        const userEditingManager = this.#manager.service.project.userEditingManager
+        const userEditingManager = this.#project.userEditingManager
         const editedAdapter = adapters.find(adapter => userEditingManager.timeline.isEditing(adapter.box))
-        editing.modify(() => {
+        this.#project.editing.modify(() => {
             if (this.#copy) {
                 adapters.forEach((adapter) => {
                     const track = adapter.trackBoxAdapter.unwrap()

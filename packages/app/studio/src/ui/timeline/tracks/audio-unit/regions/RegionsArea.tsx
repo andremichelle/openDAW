@@ -42,18 +42,20 @@ import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@open
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
-import {TimelineRange} from "@opendaw/studio-core"
+import {ClipboardManager, RegionsClipboard, TimelineRange} from "@opendaw/studio-core"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 
 const className = Html.adoptStyleSheet(css, "RegionsArea")
 
 const CursorMap = Object.freeze({
     "position": "auto",
-    "start": "w-resize",
-    "complete": "e-resize",
+    "start": Cursor.LoopStart,
+    "complete": Cursor.LoopEnd,
     "loop-duration": Cursor.ExpandWidth,
     "content-start": Cursor.ExpandWidth,
-    "content-complete": Cursor.ExpandWidth
+    "content-complete": Cursor.ExpandWidth,
+    "fading-in": "ew-resize",
+    "fading-out": "ew-resize"
 }) satisfies Record<string, CssUtils.Cursor | Cursor>
 
 type Construct = {
@@ -83,13 +85,27 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
     const capturing: ElementCapturing<RegionCaptureTarget> = RegionCapturing.create(element, manager, range)
     const regionLocator = createRegionLocator(manager, regionSelection)
     const dragAndDrop = new RegionDragAndDrop(service, capturing, timeline.snapping)
-    const shortcuts = ShortcutManager.get().createContext(() => element.contains(document.activeElement), "Regions")
+    const shortcuts = ShortcutManager.get().createContext(element, "Regions")
+    const {engine, boxGraph, overlapResolver, timelineFocus} = project
+    const clipboardHandler = RegionsClipboard.createHandler({
+        getEnabled: () => !engine.isPlaying.getValue(),
+        getPosition: () => engine.position.getValue(),
+        setPosition: position => engine.setPosition(position),
+        editing,
+        selection: regionSelection,
+        boxGraph,
+        boxAdapters,
+        getTracks: () => manager.tracks().map(track => track.trackBoxAdapter),
+        getFocusedTrack: () => timelineFocus.track,
+        overlapResolver
+    })
     lifecycle.ownAll(
         regionSelection.catchupAndSubscribe({
             onSelected: (selectable: AnyRegionBoxAdapter) => selectable.onSelected(),
             onDeselected: (selectable: AnyRegionBoxAdapter) => selectable.onDeselected()
         }),
         shortcuts,
+        ClipboardManager.install(element, clipboardHandler),
         shortcuts.register(RegionsShortcuts["select-all"].shortcut, () => {
             regionSelection.select(...manager.tracks()
                 .flatMap(({trackBoxAdapter: {regions}}) => regions.collection.asArray()))
@@ -108,6 +124,16 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             return true
         }),
         installRegionContextMenu({timelineBox, element, service, capturing, selection: regionSelection, range}),
+        Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
+            const target = capturing.captureEvent(event)
+            timelineFocus.clear()
+            if (target === null) {return}
+            if (target.type === "region") {
+                timelineFocus.focusRegion(target.region)
+            } else if (target.type === "track") {
+                timelineFocus.focusTrack(target.track.trackBoxAdapter)
+            }
+        }),
         Events.subscribeDblDwn(element, event => {
             const target = capturing.captureEvent(event)
             if (target === null) {return}
@@ -249,21 +275,71 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 switch (target.part) {
                     case "start":
                         return manager.startRegionModifier(RegionStartModifier.create(regionSelection.selected(),
-                            {element, snapping, pointerPulse, reference}))
+                            {project, element, snapping, pointerPulse, reference}))
                     case "complete":
                         return manager.startRegionModifier(RegionDurationModifier.create(regionSelection.selected(),
-                            {element, snapping, pointerPulse, bounds: [reference.position, reference.complete]}))
+                            {project, element, snapping, pointerPulse, bounds: [reference.position, reference.complete]}))
                     case "position":
                         const pointerIndex = manager.globalToIndex(event.clientY)
                         return manager.startRegionModifier(RegionMoveModifier.create(manager, regionSelection,
                             {element, snapping, pointerPulse, pointerIndex, reference}))
                     case "content-start":
                         return manager.startRegionModifier(RegionContentStartModifier.create(regionSelection.selected(),
-                            {element, snapping, pointerPulse, reference}))
+                            {project, element, snapping, pointerPulse, reference}))
                     case "loop-duration":
                     case "content-complete":
                         return manager.startRegionModifier(RegionLoopDurationModifier.create(regionSelection.selected(),
-                            {element, snapping, pointerPulse, reference, resize: target.part === "content-complete"}))
+                            {
+                                project, element, snapping, pointerPulse, reference,
+                                resize: target.part === "content-complete"
+                            }))
+                    case "fading-in":
+                    case "fading-out": {
+                        const audioRegion = target.region
+                        const isFadeIn = target.part === "fading-in"
+                        const {position, duration, complete, fading} = audioRegion
+                        if (event.shiftKey) {
+                            const slopeField = isFadeIn ? fading.inSlopeField : fading.outSlopeField
+                            const originalSlope = slopeField.getValue()
+                            const startY = event.clientY
+                            return Option.wrap({
+                                update: (dragEvent: Dragging.Event) => {
+                                    const deltaY = startY - dragEvent.clientY
+                                    const newSlope = clamp(originalSlope + deltaY * 0.01, 0.001, 0.999)
+                                    editing.modify(() => slopeField.setValue(newSlope), false)
+                                },
+                                approve: () => editing.mark(),
+                                cancel: () => editing.modify(() => slopeField.setValue(originalSlope))
+                            } satisfies Dragging.Process)
+                        }
+                        const originalFadeIn = fading.in
+                        const originalFadeOut = fading.out
+                        return Option.wrap({
+                            update: (dragEvent: Dragging.Event) => {
+                                const pointerPpqn = range.xToUnit(dragEvent.clientX - clientRect.left)
+                                editing.modify(() => {
+                                    if (isFadeIn) {
+                                        const newFadeIn = clamp(pointerPpqn - position, 0, duration)
+                                        fading.inField.setValue(newFadeIn)
+                                        if (newFadeIn + fading.out > duration) {
+                                            fading.outField.setValue(duration - newFadeIn)
+                                        }
+                                    } else {
+                                        const newFadeOut = clamp(complete - pointerPpqn, 0, duration)
+                                        fading.outField.setValue(newFadeOut)
+                                        if (fading.in + newFadeOut > duration) {
+                                            fading.inField.setValue(duration - newFadeOut)
+                                        }
+                                    }
+                                }, false)
+                            },
+                            approve: () => editing.mark(),
+                            cancel: () => editing.modify(() => {
+                                fading.inField.setValue(originalFadeIn)
+                                fading.outField.setValue(originalFadeOut)
+                            })
+                        } satisfies Dragging.Process)
+                    }
                     default: {
                         return Unhandled(target)
                     }

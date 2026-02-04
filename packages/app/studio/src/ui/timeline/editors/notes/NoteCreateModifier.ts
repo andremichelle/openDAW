@@ -10,6 +10,7 @@ import {UINoteEvent} from "@/ui/timeline/editors/notes/UINoteEvent.ts"
 import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
+    editing: BoxEditing
     element: Element
     snapping: Snapping
     selection: Selection<NoteEventBoxAdapter>
@@ -23,6 +24,7 @@ export class NoteCreateModifier implements NoteModifier {
         return new NoteCreateModifier(construct)
     }
 
+    readonly #editing: BoxEditing
     readonly #element: Element
     readonly #snapping: Snapping
     readonly #selection: Selection<NoteEventBoxAdapter>
@@ -34,7 +36,8 @@ export class NoteCreateModifier implements NoteModifier {
 
     #deltaLoopDuration: ppqn = 0.0
 
-    private constructor({element, snapping, selection, pointerPulse, pointerPitch, reference}: Construct) {
+    private constructor({editing, element, snapping, selection, pointerPulse, pointerPitch, reference}: Construct) {
+        this.#editing = editing
         this.#element = element
         this.#snapping = snapping
         this.#selection = selection
@@ -91,8 +94,8 @@ export class NoteCreateModifier implements NoteModifier {
         }
     }
 
-    approve(editing: BoxEditing): void {
-        editing.modify(() => {
+    approve(): void {
+        this.#editing.modify(() => {
             this.#selection.deselectAll()
             this.#selection.select(this.#reference.content.createEvent(this.#creation))
         })

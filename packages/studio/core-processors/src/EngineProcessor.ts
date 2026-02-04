@@ -37,6 +37,7 @@ import {
     EngineToClient,
     NoteSignal,
     ParameterFieldAdapters,
+    PERF_BUFFER_SIZE,
     PreferencesClient,
     ProjectSkeleton,
     RootBoxAdapter,
@@ -65,6 +66,7 @@ import {SoundfontManagerWorklet} from "./SoundfontManagerWorklet"
 import {MidiData} from "@opendaw/lib-midi"
 import {MIDITransportClock} from "./MIDITransportClock"
 import {MIDISender} from "./MIDISender"
+import {HRClock} from "./HRClock"
 
 const DEBUG = false
 
@@ -99,8 +101,11 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     readonly #renderer: BlockRenderer
     readonly #stateSender: SyncStream.Writer
     readonly #controlFlags: Int32Array<SharedArrayBuffer>
+    readonly #hrClock: HRClock
     readonly #stemExports: ReadonlyArray<AudioUnit>
     readonly #ignoredRegions: SortedSet<UUID.Bytes, UUID.Bytes>
+    readonly #pendingResources: Set<Promise<unknown>> = new Set()
+    readonly #perfBuffer: Float32Array = new Float32Array(PERF_BUFFER_SIZE)
 
     #processQueue: Option<ReadonlyArray<Processor>> = Option.None
     #primaryOutput: Option<AudioUnit> = Option.None
@@ -111,8 +116,9 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     #valid: boolean = true // to shut down the engine
     #recordingStartTime: ppqn = 0.0
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
+    #perfWriteIndex: number = 0
 
-    constructor({processorOptions: {syncStreamBuffer, controlFlagsBuffer, project, exportConfiguration}}: {
+    constructor({processorOptions: {syncStreamBuffer, controlFlagsBuffer, hrClockBuffer, project, exportConfiguration}}: {
         processorOptions: EngineProcessorAttachment
     } & AudioNodeOptions) {
         super()
@@ -125,6 +131,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#boxGraph = boxGraph
         this.#timeInfo = new TimeInfo()
         this.#controlFlags = new Int32Array<SharedArrayBuffer>(controlFlagsBuffer)
+        this.#hrClock = new HRClock(hrClockBuffer)
         this.#engineToClient = Communicator.sender<EngineToClient>(
             this.#messenger.channel("engine-to-client"),
             dispatcher => new class implements EngineToClient {
@@ -174,6 +181,8 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
             x.isPlaying = transporting
             x.isRecording = isRecording
             x.isCountingIn = isCountingIn
+            x.perfBuffer.set(this.#perfBuffer)
+            x.perfIndex = this.#perfWriteIndex
         })
         this.#liveStreamBroadcaster = this.#terminator.own(LiveStreamBroadcaster.create(this.#messenger, "engine-live-data"))
         this.#updateClock = new UpdateClock(this)
@@ -203,10 +212,11 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                 prepareRecordingState: (countIn: boolean): void => this.#prepareRecordingState(countIn),
                 stopRecording: (): void => this.#stopRecording(),
                 queryLoadingComplete: (): Promise<boolean> =>
-                    Promise.resolve(this.#boxGraph.boxes().every(box => box.accept<BoxVisitor<boolean>>({
-                        visitAudioFileBox: (box: AudioFileBox) =>
-                            this.#sampleManager.getOrCreate(box.address.uuid).data.nonEmpty() && box.pointerHub.nonEmpty()
-                    }) ?? true)),
+                    Promise.all(this.#pendingResources).then(() =>
+                        this.#boxGraph.boxes().every(box => box.accept<BoxVisitor<boolean>>({
+                            visitAudioFileBox: (box: AudioFileBox) =>
+                                this.#sampleManager.getOrCreate(box.address.uuid).data.nonEmpty() && box.pointerHub.nonEmpty()
+                        }) ?? true)),
                 panic: () => this.#panic = true,
                 loadClickSound: (index: 0 | 1, data: AudioData): void => this.#metronome.loadClickSound(index, data),
                 noteSignal: (signal: NoteSignal) => {
@@ -256,7 +266,11 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                     this.#context = Option.None
                     this.#valid = false
                     this.#ignoredRegions.clear()
+                    // First, disconnect all edges across all units before terminating any unit
+                    this.#audioUnits.forEach(unit => unit.invalidateWiring())
                     this.#terminator.terminate()
+                    this.#audioUnits.forEach(unit => unit.terminate())
+                    this.#audioUnits.clear()
                 }
             }),
             this.#rootBoxAdapter.audioUnits.catchupAndSubscribe({
@@ -325,6 +339,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     render(_inputs: Float32Array[][], [output]: Float32Array[][]): boolean {
         if (!this.#valid) {return false}
         if (this.#panic) {return panic("Manual Panic")}
+        const elapsed = this.#hrClock.start()
         const metronomeEnabled = this.#timeInfo.metronomeEnabled
         this.#notifier.notify(ProcessPhase.Before)
         if (this.#processQueue.isEmpty()) {
@@ -355,6 +370,9 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         }
         this.#notifier.notify(ProcessPhase.After)
         this.#clipSequencing.changes().ifSome(changes => this.#engineToClient.notifyClipSequenceChanges(changes))
+        this.#hrClock.end()
+        this.#perfBuffer[this.#perfWriteIndex] = elapsed
+        this.#perfWriteIndex = (this.#perfWriteIndex + 1) % PERF_BUFFER_SIZE
         this.#stateSender.tryWrite()
         this.#liveStreamBroadcaster.flush()
         return true
@@ -385,6 +403,11 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                 this.#processQueue = Option.None
             }
         }
+    }
+
+    awaitResource(promise: Promise<unknown>): void {
+        this.#pendingResources.add(promise)
+        promise.finally(() => this.#pendingResources.delete(promise))
     }
 
     get preferences(): PreferencesClient<EngineSettings> {return this.#preferences}

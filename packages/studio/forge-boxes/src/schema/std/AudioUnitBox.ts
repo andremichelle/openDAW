@@ -86,7 +86,7 @@ export const AudioBusBox: BoxSchema<Pointers> = {
             7: {type: "string", name: "color", value: "red"},
             8: {type: "boolean", name: "minimized"}
         }
-    }, pointerRules: {accepts: [Pointers.SideChain], mandatory: false}
+    }, pointerRules: {accepts: [Pointers.SideChain, Pointers.Selection], mandatory: false}
 }
 
 export const AuxSendBox: BoxSchema<Pointers> = {

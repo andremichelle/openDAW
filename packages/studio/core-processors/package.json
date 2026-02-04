@@ -1,30 +1,30 @@
 {
-    "name": "@opendaw/studio-core-processors",
-    "version": "0.0.82",
-    "license": "LGPL-3.0-or-later",
-    "private": true,
-    "exports": {
-        ".": "./src/index.ts"
-    },
-    "scripts": {
-        "lint": "eslint \"**/*.ts\"",
-        "typecheck": "tsc --noEmit",
-        "build": "tsc --noEmit && esbuild src/register.ts --bundle --format=esm --platform=browser --minify --sourcemap --outfile=../core/dist/processors.js",
-        "test": "vitest run"
-    },
-    "dependencies": {
-        "@opendaw/lib-box": "^0.0.69",
-        "@opendaw/lib-dsp": "^0.0.68",
-        "@opendaw/lib-runtime": "^0.0.66",
-        "@opendaw/lib-std": "^0.0.65",
-        "@opendaw/studio-adapters": "^0.0.79",
-        "@opendaw/studio-boxes": "^0.0.71",
-        "@opendaw/studio-enums": "^0.0.60",
-        "@types/audioworklet": "^0.0.77"
-    },
-    "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/typescript-config": "^0.0.28",
-        "vitest": "^1.6.0"
-    }
+  "name": "@opendaw/studio-core-processors",
+  "version": "0.0.83",
+  "license": "LGPL-3.0-or-later",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint \"**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && esbuild src/register.ts --bundle --format=esm --platform=browser --minify --sourcemap --outfile=../core/dist/processors.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@opendaw/lib-box": "^0.0.70",
+    "@opendaw/lib-dsp": "^0.0.69",
+    "@opendaw/lib-runtime": "^0.0.67",
+    "@opendaw/lib-std": "^0.0.66",
+    "@opendaw/studio-adapters": "^0.0.80",
+    "@opendaw/studio-boxes": "^0.0.72",
+    "@opendaw/studio-enums": "^0.0.61",
+    "@types/audioworklet": "^0.0.77"
+  },
+  "devDependencies": {
+    "@opendaw/eslint-config": "^0.0.27",
+    "@opendaw/typescript-config": "^0.0.28",
+    "vitest": "^1.6.0"
+  }
 }

@@ -13,16 +13,16 @@ import {
     ValueAxis
 } from "@opendaw/lib-std"
 import {BoxEditing} from "@opendaw/lib-box"
-import {ValueEventBoxAdapter} from "@opendaw/studio-adapters"
+import {SelectableValueEvent, ValueEventBoxAdapter} from "@opendaw/studio-adapters"
 import {Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
 import {ValueEventDraft} from "@/ui/timeline/editors/value/ValueEventDraft.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
 import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
+    editing: BoxEditing
     element: Element
     reader: ValueEventOwnerReader
     selection: Selection<ValueEventBoxAdapter>
@@ -35,6 +35,7 @@ type Stroke = { position: ppqn, value: unitValue }
 export class ValuePaintModifier implements ValueModifier {
     static create(construct: Construct): ValuePaintModifier {return new ValuePaintModifier(construct)}
 
+    readonly #editing: BoxEditing
     readonly #element: Element
     readonly #reader: ValueEventOwnerReader
     readonly #selection: Selection<ValueEventBoxAdapter>
@@ -48,7 +49,8 @@ export class ValuePaintModifier implements ValueModifier {
     #lastValue: unitValue = NaN
     #lastIndex: int = 0
 
-    private constructor({element, reader, selection, snapping, valueAxis}: Construct) {
+    private constructor({editing, element, reader, selection, snapping, valueAxis}: Construct) {
+        this.#editing = editing
         this.#element = element
         this.#reader = reader
         this.#selection = selection
@@ -68,7 +70,7 @@ export class ValuePaintModifier implements ValueModifier {
     isVisible(_event: ValueEvent): boolean {return true}
     readPosition(event: ValueEvent): ppqn {return event.position}
     readValue(event: ValueEvent): unitValue {return event.value}
-    readInterpolation(event: UIValueEvent): Interpolation {return event.interpolation}
+    readInterpolation(event: SelectableValueEvent): Interpolation {return event.interpolation}
     * iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<ValueEventDraft> {
         const offset = this.#reader.offset
         const min = Arrays.getFirst(this.#strokes, "Internal Error").position - offset
@@ -139,14 +141,14 @@ export class ValuePaintModifier implements ValueModifier {
         this.#dispatchChange()
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         this.#verifyStrokes()
         const offset = this.#reader.offset
         const min = Arrays.getFirst(this.#strokes, "Internal Error").position - offset
         const max = Arrays.getLast(this.#strokes, "Internal Error").position - offset
         const content = this.#reader.content
         const deletion = Array.from(content.events.iterateRange(min, max + 1))
-        editing.modify(() => {
+        this.#editing.modify(() => {
             deletion.forEach(event => event.box.delete())
             this.#selection.select(...this.#strokes.map(stroke => content.createEvent({
                 position: stroke.position - offset,

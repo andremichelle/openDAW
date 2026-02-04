@@ -2,6 +2,7 @@ import {z} from "zod"
 import {Browser} from "@opendaw/lib-dom"
 
 export const FpsOptions = [24, 25, 29.97, 30] as const
+export const OverlappingRegionsBehaviourOptions = ["clip", "push-existing", "keep-existing"] as const
 
 export const StudioSettingsSchema = z.object({
     "visibility": z.object({
@@ -23,10 +24,12 @@ export const StudioSettingsSchema = z.object({
     }).default({musical: true, absolute: false, details: false, fps: 25}),
     "engine": z.object({
         "note-audition-while-editing": z.boolean(),
-        "auto-create-output-compressor": z.boolean()
+        "auto-create-output-compressor": z.boolean(),
+        "stop-playback-when-overloading": z.boolean()
     }).default({
         "note-audition-while-editing": true,
-        "auto-create-output-compressor": true
+        "auto-create-output-compressor": true,
+        "stop-playback-when-overloading": true
     }),
     "pointer": z.object({
         "dragging-use-pointer-lock": z.boolean(),
@@ -37,18 +40,32 @@ export const StudioSettingsSchema = z.object({
         "modifying-controls-wheel": false,
         "normalize-mouse-wheel": true
     }),
+    "editing": z.object({
+        "overlapping-regions-behaviour": z.enum(OverlappingRegionsBehaviourOptions),
+        "show-clipboard-menu": z.boolean()
+    }).default({
+        "overlapping-regions-behaviour": "clip",
+        "show-clipboard-menu": false
+    }),
     "debug": z.object({
         "footer-show-fps-meter": z.boolean(),
         "footer-show-samples-memory": z.boolean(),
         "footer-show-build-infos": z.boolean(),
+        "show-cpu-stats": z.boolean(),
         "enable-beta-features": z.boolean(),
         "enable-debug-menu": z.boolean()
     }).default({
         "footer-show-fps-meter": false,
         "footer-show-samples-memory": false,
         "footer-show-build-infos": false,
+        "show-cpu-stats": false,
         "enable-beta-features": false,
         "enable-debug-menu": false
+    }),
+    "storage": z.object({
+        "auto-delete-orphaned-samples": z.boolean()
+    }).default({
+        "auto-delete-orphaned-samples": false
     })
 })
 

@@ -54,4 +54,5 @@ export enum Pointers {
     ValueInterpolation,
     VoltageConnection,
     WarpMarkers,
+    NeuralAmpModel,
 }

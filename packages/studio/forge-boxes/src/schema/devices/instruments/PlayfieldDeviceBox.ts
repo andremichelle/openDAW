@@ -1,9 +1,9 @@
-import {BoxSchema} from "@opendaw/lib-box-forge"
+import {BoxSchema, deprecated} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
 import {DeviceFactory} from "../../std/DeviceFactory"
 import {ParameterPointerRules, UnipolarConstraints} from "../../std/Defaults"
 
-export const PlayfieldDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("PlayfieldDeviceBox", {
+export const PlayfieldDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("PlayfieldDeviceBox", "notes", {
     10: {type: "field", name: "samples", pointerRules: {accepts: [Pointers.Sample], mandatory: false}}
 })
 
@@ -28,7 +28,7 @@ export const PlayfieldSampleBox: BoxSchema<Pointers> = {
                 type: "int32", name: "index",
                 value: 60, constraints: {min: 0, max: 127}, unit: ""
             },
-            20: {type: "string", name: "label"},
+            20: {type: "string", name: "label", deprecated},
             21: {type: "string", name: "icon"},
             22: {type: "boolean", name: "enabled", value: true},
             23: {type: "boolean", name: "minimized", value: false},
@@ -58,5 +58,7 @@ export const PlayfieldSampleBox: BoxSchema<Pointers> = {
                 value: 0.020, constraints: {min: 0.001, max: 5.0, scaling: "exponential"}, unit: "s"
             }
         }
-    }, pointerRules: {accepts: [Pointers.Editing, Pointers.SideChain], mandatory: false}
+    },
+    pointerRules: {accepts: [Pointers.Editing, Pointers.SideChain, Pointers.Selection], mandatory: false},
+    tags: {type: "device", "device-type": "instrument", content: "notes", copyable: false}
 }

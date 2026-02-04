@@ -93,6 +93,7 @@ export class SampleSelector {
                 .then(([file]) => file.arrayBuffer()
                     .then(arrayBuffer => this.#service.sampleService.importFile({name: file.name, arrayBuffer}))))
         if (status === "resolved") {
+            this.#service.project.trackUserCreatedSample(UUID.parse(sample.uuid))
             this.newSample(sample)
         }
     }
@@ -125,6 +126,7 @@ export class SampleSelector {
                         dialog.close()
                         return
                     }
+                    this.#service.project.trackUserCreatedSample(UUID.parse(value.uuid))
                     sample = value
                 } else {
                     dialog.close()

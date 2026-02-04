@@ -21,12 +21,13 @@ export class Subscribers<T> implements Terminable {
         }
         return {
             terminate: () => {
-                this.#subscribers.opt(address).ifSome(entry => {
-                    Arrays.remove(entry.listeners, listener)
-                    if (entry.listeners.length === 0) {
-                        this.#subscribers.removeByKey(address)
+                const entry = this.#subscribers.removeByKeyIfExist(address)
+                if (isDefined(entry)) {
+                    Arrays.removeOpt(entry.listeners, listener)
+                    if (entry.listeners.length > 0) {
+                        this.#subscribers.add(entry)
                     }
-                })
+                }
             }
         }
     }

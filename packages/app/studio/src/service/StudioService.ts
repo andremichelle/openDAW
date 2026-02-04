@@ -479,6 +479,7 @@ export class StudioService implements ProjectEnv {
                         this.switchScreen(screen)
                     }
                 }
+                this.engine.releaseWorklet()
                 this.engine.setWorklet(project.startAudioWorklet(restart, {}))
                 lifeTime.ownAll(
                     project,

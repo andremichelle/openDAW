@@ -32,7 +32,8 @@ export class TimeStretchSequencer {
             config: AudioTimeStretchBoxAdapter,
             waveformOffset: number,
             block: Block,
-            cycle: LoopableRegion.LoopCycle): void {
+            cycle: LoopableRegion.LoopCycle,
+            fadingGainBuffer: Float32Array): void {
         const {p0, p1, bpm, flags} = block
         const warpMarkers = config.warpMarkers
         const transientPlayMode = config.transientPlayMode
@@ -127,7 +128,7 @@ export class TimeStretchSequencer {
             }
         }
         for (const voice of this.#voices) {
-            voice.process(bufferStart, bufferCount)
+            voice.process(bufferStart, bufferCount, fadingGainBuffer)
         }
         for (let i = this.#voices.length - 1; i >= 0; i--) {
             if (this.#voices[i].done()) {this.#voices.splice(i, 1)}

@@ -19,6 +19,7 @@ import {ValueEventOwnerReader} from "../EventOwnerReader"
 import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
+    editing: BoxEditing
     element: Element
     valueAxis: ValueAxis
     reference: ValueEventBoxAdapter
@@ -28,6 +29,7 @@ type Construct = Readonly<{
 export class ValueSlopeModifier implements ValueModifier {
     static create(construct: Construct): ValueSlopeModifier {return new ValueSlopeModifier(construct)}
 
+    readonly #editing: BoxEditing
     readonly #element: Element
     readonly #reference: ValueEventBoxAdapter
     readonly #successor: ValueEventBoxAdapter
@@ -43,7 +45,8 @@ export class ValueSlopeModifier implements ValueModifier {
     #lastLocalY: number = NaN
     #accumulatedDeltaY: number = 0
 
-    private constructor({element, valueAxis, reference, collection}: Construct) {
+    private constructor({editing, element, valueAxis, reference, collection}: Construct) {
+        this.#editing = editing
         this.#element = element
         this.#reference = reference
         this.#successor = ValueEvent.nextEvent<ValueEventBoxAdapter>(collection.events, reference)
@@ -103,9 +106,9 @@ export class ValueSlopeModifier implements ValueModifier {
         }
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         const interpolation = this.#slope === 0.5 ? Interpolation.Linear : Interpolation.Curve(this.#slope)
-        editing.modify(() => this.#reference.interpolation = interpolation)
+        this.#editing.modify(() => this.#reference.interpolation = interpolation)
     }
 
     cancel(): void {

@@ -16,6 +16,7 @@ import {Dragging} from "@opendaw/lib-dom"
 import {TimelineRange} from "@opendaw/studio-core"
 
 type Construct = Readonly<{
+    editing: BoxEditing
     element: Element
     property: PropertyAccessor
     selection: Selection<NoteEventBoxAdapter>
@@ -30,6 +31,7 @@ export class PropertyLineModifier implements NoteModifier, NoteModifyStrategy {
         return new PropertyLineModifier(construct)
     }
 
+    readonly #editing: BoxEditing
     readonly #element: Element
     readonly #property: PropertyAccessor
     readonly #selection: Selection<NoteEventBoxAdapter>
@@ -41,7 +43,8 @@ export class PropertyLineModifier implements NoteModifier, NoteModifyStrategy {
 
     readonly #notifier: Notifier<void>
 
-    private constructor({element, property, selection, range, valueAxis, lineOrigin, reader}: Construct) {
+    private constructor({editing, element, property, selection, range, valueAxis, lineOrigin, reader}: Construct) {
+        this.#editing = editing
         this.#element = element
         this.#property = property
         this.#selection = selection
@@ -101,11 +104,11 @@ export class PropertyLineModifier implements NoteModifier, NoteModifyStrategy {
         this.#dispatchChange()
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         const result: ReadonlyArray<{ adapter: NoteEventBoxAdapter, value: number }> =
             this.#reader.content.events.asArray()
                 .map(adapter => ({adapter, value: this.#modifyProperty(this.#property, adapter)}))
-        editing.modify(() => result.forEach(({adapter: {box}, value}) =>
+        this.#editing.modify(() => result.forEach(({adapter: {box}, value}) =>
             this.#property.writeValue(box, value)))
     }
 

@@ -2,17 +2,21 @@ import { IconSymbol } from "@opendaw/studio-enums"
 import { EffectFactories } from "@opendaw/studio-core"
 import { InstrumentFactories } from "@opendaw/studio-adapters"
 
-export type Manual = ({
-    type: "page"
-    label: string
-    path: string
-    icon?: IconSymbol
-} | {
-    type: "folder"
-    label: string
-    icon?: IconSymbol
-    files: ReadonlyArray<Manual>
-}) & { separatorBefore?: boolean }
+export type Manual = (
+    | {
+        type: "page"
+        label: string
+        path: string
+        icon?: IconSymbol
+    }
+    | {
+        type: "folder"
+        label: string
+        icon?: IconSymbol
+        files: ReadonlyArray<Manual>
+    }) & { separatorBefore?: boolean }
+
+const isDev = location.hostname === "localhost" || location.hostname === "dev.opendaw.studio"
 
 export const Manuals: ReadonlyArray<Manual> = [
     {
@@ -31,9 +35,13 @@ export const Manuals: ReadonlyArray<Manual> = [
         ]
     },
     {
-        type: "folder", label: "Devices", files: [
+        type: "folder",
+        label: "Devices",
+        files: [
             {
-                type: "folder", label: "Audio FX", files: [
+                type: "folder",
+                label: "Audio FX",
+                files: [
                     {
                         type: "page",
                         label: "Cheap Reverb",
@@ -82,6 +90,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                         path: "/manuals/devices/audio/maximizer",
                         icon: EffectFactories.Maximizer.defaultIcon
                     },
+                    ...(isDev ? [{
+                        type: "page",
+                        label: "Neural Amp",
+                        path: "/manuals/devices/audio/neural-amp",
+                        icon: EffectFactories.AudioNamed.NeuralAmp.defaultIcon
+                    } satisfies Manual] : []),
                     {
                         type: "page",
                         label: "Revamp",
@@ -103,7 +117,9 @@ export const Manuals: ReadonlyArray<Manual> = [
                 ]
             },
             {
-                type: "folder", label: "Instruments", files: [
+                type: "folder",
+                label: "Instruments",
+                files: [
                     {
                         type: "page",
                         label: "MIDIOutput",
@@ -143,7 +159,9 @@ export const Manuals: ReadonlyArray<Manual> = [
                 ]
             },
             {
-                type: "folder", label: "MIDI FX", files: [
+                type: "folder",
+                label: "MIDI FX",
+                files: [
                     {
                         type: "page",
                         label: "Arpeggio",

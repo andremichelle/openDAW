@@ -18,17 +18,17 @@ import {
 } from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {BoxEditing} from "@opendaw/lib-box"
-import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
+import {SelectableValueEvent, ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 import {EventCollection, Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
 import {ValueEventDraft} from "./ValueEventDraft.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {Dragging} from "@opendaw/lib-dom"
-import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
 
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 
 type Construct = Readonly<{
+    editing: BoxEditing
     element: Element
     context: ValueContext
     selection: Selection<ValueEventBoxAdapter>
@@ -52,6 +52,7 @@ export const SnapValueThresholdInPixels = 8
 export class ValueMoveModifier implements ValueModifier {
     static create(construct: Construct): ValueMoveModifier {return new ValueMoveModifier(construct)}
 
+    readonly #editing: BoxEditing
     readonly #element: Element
     readonly #context: ValueContext
     readonly #selection: Selection<ValueEventBoxAdapter>
@@ -74,9 +75,10 @@ export class ValueMoveModifier implements ValueModifier {
     #snapValue: Option<number>
 
     private constructor({
-                            element, context, selection, valueAxis, eventMapping, snapping,
+                            editing, element, context, selection, valueAxis, eventMapping, snapping,
                             pointerPulse, pointerValue, reference, collection
                         }: Construct) {
+        this.#editing = editing
         this.#element = element
         this.#context = context
         this.#selection = selection
@@ -119,7 +121,7 @@ export class ValueMoveModifier implements ValueModifier {
     readValue(event: ValueEvent): number {
         return this.#context.quantize(this.#eventMapping.y(clampUnit(this.#eventMapping.x(event.value) + this.#deltaValue)))
     }
-    readInterpolation(event: UIValueEvent): Interpolation {return event.interpolation}
+    readInterpolation(event: SelectableValueEvent): Interpolation {return event.interpolation}
     iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<ValueEventDraft> {
         return new ValueEventDraft.Solver(this.#eventCollection(), this,
             searchMin - Math.max(0, this.#deltaPosition), searchMax).iterate()
@@ -175,7 +177,7 @@ export class ValueMoveModifier implements ValueModifier {
         if (change) {this.#dispatchChange()}
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         if (this.#deltaValue === 0 && this.#deltaPosition === 0) {
             if (this.#copy) {this.#dispatchChange()} // reset visuals
             return
@@ -200,6 +202,7 @@ export class ValueMoveModifier implements ValueModifier {
         const obsolete: Array<ValueEventDraft> = []
         let index: int = 0
         let prev: ValueEventDraft = asDefined(value)
+        prev.index = 0
         for (const next of iterable) {
             if (prev.position === next.position) {
                 if (index === 0) {prev.index = 0}
@@ -213,7 +216,7 @@ export class ValueMoveModifier implements ValueModifier {
         }
         obsolete.forEach(event => Arrays.remove(stream, event))
 
-        editing.modify(() => {
+        this.#editing.modify(() => {
             // Collect all (stock, target) pairs
             const pairs: Array<{ stock: Nullable<ValueEventBoxAdapter>, target: ValueEventDraft }> = []
             stream.forEach(target => pairs.push({stock: pull(), target}))

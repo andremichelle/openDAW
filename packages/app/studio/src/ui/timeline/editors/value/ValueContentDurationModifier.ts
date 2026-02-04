@@ -4,10 +4,11 @@ import {BoxEditing} from "@opendaw/lib-box"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {Interpolation, ppqn, PPQN, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
-import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
+import {SelectableValueEvent} from "@opendaw/studio-adapters"
 import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
+    editing: BoxEditing
     element: Element
     snapping: Snapping
     pointerPulse: ppqn
@@ -19,6 +20,7 @@ export class ValueContentDurationModifier implements ValueModifier {
         return new ValueContentDurationModifier(construct)
     }
 
+    readonly #editing: BoxEditing
     readonly #element: Element
     readonly #snapping: Snapping
     readonly #pointerPulse: ppqn
@@ -27,7 +29,8 @@ export class ValueContentDurationModifier implements ValueModifier {
 
     #deltaLoopDuration: ppqn
 
-    private constructor({element, snapping, pointerPulse, reference}: Construct) {
+    private constructor({editing, element, snapping, pointerPulse, reference}: Construct) {
+        this.#editing = editing
         this.#element = element
         this.#snapping = snapping
         this.#pointerPulse = pointerPulse
@@ -43,10 +46,10 @@ export class ValueContentDurationModifier implements ValueModifier {
     snapValue(): Option<unitValue> {return Option.None}
     readPosition(event: ValueEvent): ppqn {return event.position}
     readValue(event: ValueEvent): unitValue {return event.value}
-    readInterpolation(event: UIValueEvent): Interpolation {return event.interpolation}
+    readInterpolation(event: SelectableValueEvent): Interpolation {return event.interpolation}
     translateSearch(value: ppqn): ppqn {return value}
-    isVisible(_event: UIValueEvent): boolean {return true}
-    iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<UIValueEvent> {
+    isVisible(_event: SelectableValueEvent): boolean {return true}
+    iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<SelectableValueEvent> {
         return this.#reference.content.events.iterateRange(searchMin, searchMax)
     }
     readContentDuration(region: ValueEventOwnerReader): number {
@@ -64,9 +67,9 @@ export class ValueContentDurationModifier implements ValueModifier {
         }
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         if (this.#deltaLoopDuration === 0) {return}
-        editing.modify(() => this.#reference.contentDuration = this.readContentDuration(this.#reference))
+        this.#editing.modify(() => this.#reference.contentDuration = this.readContentDuration(this.#reference))
     }
 
     cancel(): void {

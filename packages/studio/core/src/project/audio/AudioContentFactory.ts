@@ -39,6 +39,20 @@ export namespace AudioContentFactory {
 
     export type NotStretchedProps = { /* Has no additional properties yet */ } & Props
 
+    /**
+     * Calculates the duration of an audio region based on sample properties.
+     * Returns duration in PPQN for stretched regions, or in seconds for non-stretched.
+     */
+    export const calculateDuration = (sample: Sample): ppqn => {
+        const {duration: durationInSeconds, bpm} = sample
+        if (bpm === 0) {
+            // Non-stretched: duration is in seconds
+            return durationInSeconds
+        }
+        // Stretched: duration is in PPQN
+        return quantizeCeil(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
+    }
+
     // --- Region Creation --- //
 
     export const createTimeStretchedRegion = (props: TimeStretchedProps & Region): AudioRegionBox => {

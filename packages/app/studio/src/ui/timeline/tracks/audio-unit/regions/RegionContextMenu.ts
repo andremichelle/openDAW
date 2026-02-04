@@ -1,5 +1,5 @@
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
-import {EmptyExec, Selection, Terminable} from "@opendaw/lib-std"
+import {EmptyExec, isInstanceOf, Selection, Terminable} from "@opendaw/lib-std"
 import {AudioContentModifier, ContextMenu, MenuItem, TimelineRange} from "@opendaw/studio-core"
 import {AnyRegionBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {RegionCaptureTarget} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
@@ -49,8 +49,11 @@ export const installRegionContextMenu =
                         .forEach(adapter => adapter.box.delete()))),
                 MenuItem.default({label: "Duplicate"})
                     .setTriggerProcedure(() => editing.modify(() => {
-                        selection.deselectAll()
-                        selection.select(project.api.duplicateRegion(region))
+                        project.api.duplicateRegion(region)
+                            .ifSome(duplicate => {
+                                selection.deselectAll()
+                                selection.select(duplicate)
+                            })
                     })),
                 MenuItem.default({
                     label: "Mute",
@@ -106,6 +109,14 @@ export const installRegionContextMenu =
                         const label = region.label
                         exportNotesToMidiFile(region.optCollection.unwrap(),
                             `${label.length === 0 ? "region" : label}.mid`).then(EmptyExec, EmptyExec)
+                    }
+                }),
+                MenuItem.default({
+                    label: "Reset Fades",
+                    hidden: region.type !== "audio-region"
+                }).setTriggerProcedure(() => {
+                    if (isInstanceOf(region, AudioRegionBoxAdapter)) {
+                        editing.modify(() => region.fading.reset())
                     }
                 }),
                 MenuItem.default({

@@ -1,6 +1,6 @@
 import css from "./NeuralAmpDeviceEditor.sass?inline"
 import {DeviceHost, NeuralAmpDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {isDefined, Lifecycle} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
@@ -16,6 +16,8 @@ import {createSpectrumRenderer} from "./NeuralAmp/SpectrumRenderer"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
 import {Button} from "@/ui/components/Button"
+import {EffectFactories} from "@opendaw/studio-core"
+import {NeuralAmpModelBox} from "@opendaw/studio-boxes"
 
 const className = Html.adoptStyleSheet(css, "NeuralAmpDeviceEditor")
 
@@ -28,12 +30,12 @@ type Construct = {
 
 export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
-    const {editing, midiLearning} = project
+    const {boxGraph, editing, midiLearning} = project
     const {inputGain, outputGain, mix} = adapter.namedParameter
     let modelNameEl: HTMLSpanElement
     let currentModel: NamModel | null = null
     const updateModelName = () => {
-        const modelJson = adapter.modelJsonField.getValue()
+        const modelJson = adapter.getModelJson()
         if (modelJson.length === 0) {
             modelNameEl.textContent = "No model loaded"
             modelNameEl.className = "name empty"
@@ -57,8 +59,18 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                 multiple: false
             })
             if (files.length > 0) {
-                const text = await files[0].text()
-                editing.modify(() => adapter.modelJsonField.setValue(text))
+                const file = files[0]
+                const text = await file.text()
+                const jsonBuffer = new TextEncoder().encode(text)
+                const uuid = await UUID.sha256(jsonBuffer.buffer as ArrayBuffer)
+                editing.modify(() => {
+                    const modelBox = boxGraph.findBox<NeuralAmpModelBox>(uuid).unwrapOrElse(() =>
+                        NeuralAmpModelBox.create(boxGraph, uuid, box => {
+                            box.label.setValue(file.name.replace(/\.nam$/i, ""))
+                            box.model.setValue(text)
+                        }))
+                    adapter.box.model.refer(modelBox)
+                })
             }
         } catch (error) {
             if (error instanceof DOMException && error.name === "AbortError") {return}
@@ -97,7 +109,7 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                             onInit={(element: HTMLSpanElement) => {
                                                 modelNameEl = element
                                                 updateModelName()
-                                                lifecycle.own(adapter.modelJsonField.subscribe(() => updateModelName()))
+                                                lifecycle.own(adapter.modelField.subscribe(() => updateModelName()))
                                             }}/>
                                   </Button>
                                   <Button lifecycle={lifecycle}
@@ -139,6 +151,6 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
                       )}
-                      icon={/*EffectFactories.AudioNamed.NeuralAmp.defaultIcon*/IconSymbol.NeuralAmp}/>
+                      icon={EffectFactories.AudioNamed.NeuralAmp.defaultIcon}/>
     )
 }

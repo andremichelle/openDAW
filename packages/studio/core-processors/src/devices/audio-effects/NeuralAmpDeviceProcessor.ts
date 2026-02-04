@@ -1,5 +1,5 @@
 import {EngineToClient, NeuralAmpDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {int, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {int, isDefined, Nullable, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioAnalyser, AudioBuffer, dbToGain, Event, RenderQuantum, StereoMatrix} from "@opendaw/lib-dsp"
 import {EngineContext} from "../../EngineContext"
 import {Block, Processor} from "../../processing"
@@ -14,8 +14,7 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
 
     // Singleton WASM module - shared across all instances
     static #wasmModule: Option<NamWasmModule> = Option.None
-    static #wasmLoading: Promise<NamWasmModule> | null = null
-    static #pendingCallbacks: Array<() => void> = []
+    static #wasmLoading: Nullable<Promise<NamWasmModule>> = null
 
     static async fetchWasm(engineToClient: EngineToClient): Promise<NamWasmModule> {
         if (this.#wasmModule.nonEmpty()) {
@@ -34,25 +33,9 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
             module.setSampleRate(sampleRate)
             this.#wasmModule = Option.wrap(module)
             this.#wasmLoading = null
-            for (const callback of this.#pendingCallbacks) {
-                callback()
-            }
-            this.#pendingCallbacks = []
             return module
         })()
         return this.#wasmLoading
-    }
-
-    static get wasmModule(): Option<NamWasmModule> {
-        return this.#wasmModule
-    }
-
-    static onWasmReady(callback: () => void): void {
-        if (this.#wasmModule.nonEmpty()) {
-            callback()
-        } else {
-            this.#pendingCallbacks.push(callback)
-        }
     }
 
     readonly #id: int = NeuralAmpDeviceProcessor.ID++
@@ -83,7 +66,6 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
 
     constructor(context: EngineContext, adapter: NeuralAmpDeviceBoxAdapter) {
         super(context)
-
         this.#context = context
         this.#adapter = adapter
         this.#output = new AudioBuffer()
@@ -92,16 +74,14 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
         this.#spectrum = new Float32Array(this.#audioAnalyser.numBins())
         this.#inputs = [new Float32Array(RenderQuantum), new Float32Array(RenderQuantum)]
         this.#outputs = [new Float32Array(RenderQuantum), new Float32Array(RenderQuantum)]
-
         const {namedParameter} = adapter
         this.parameterInputGain = this.own(this.bindParameter(namedParameter.inputGain))
         this.parameterOutputGain = this.own(this.bindParameter(namedParameter.outputGain))
         this.parameterMix = this.own(this.bindParameter(namedParameter.mix))
-
         this.ownAll(
             context.registerProcessor(this),
             context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing),
-            adapter.modelJsonField.catchupAndSubscribe(field => this.#onModelJsonChanged(field.getValue())),
+            adapter.modelField.catchupAndSubscribe(() => this.#onModelChanged()),
             adapter.monoField.catchupAndSubscribe(field => this.#onMonoChanged(field.getValue())),
             context.broadcaster.broadcastFloats(adapter.spectrum, this.#spectrum, (hasSubscribers) => {
                 this.#needsSpectrum = hasSubscribers
@@ -110,9 +90,12 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
                 this.#audioAnalyser.decay = true
             })
         )
-
         this.#initInstance()
         this.readAllParameters()
+        const initialModelJson = adapter.getModelJson()
+        if (initialModelJson.length > 0) {
+            context.awaitResource(NeuralAmpDeviceProcessor.fetchWasm(context.engineToClient))
+        }
     }
 
     get incoming(): Processor {return this}
@@ -281,21 +264,26 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
         }
     }
 
+    #onModelChanged(): void {
+        this.#onModelJsonChanged(this.#adapter.getModelJson())
+    }
+
     #onModelJsonChanged(modelJson: string): void {
         if (this.#terminated) {return}
         this.#pendingModelJson = modelJson
-
         const module = NeuralAmpDeviceProcessor.#wasmModule
-        if (module.isEmpty()) {
-            // WASM not loaded yet - trigger loading and register callback
-            NeuralAmpDeviceProcessor.fetchWasm(this.#context.engineToClient).catch(error => {
-                console.error("Failed to load NAM WASM:", error)
-            })
-            NeuralAmpDeviceProcessor.onWasmReady(() => this.#applyModel())
-            return
+        if (module.nonEmpty()) {
+            this.#initInstance()
+            this.#applyModel()
+        } else {
+            NeuralAmpDeviceProcessor.fetchWasm(this.#context.engineToClient)
+                .then(() => {
+                    if (this.#terminated) {return}
+                    this.#initInstance()
+                    this.#applyModel()
+                })
+                .catch(error => console.error("Failed to load NAM WASM:", error))
         }
-
-        this.#applyModel()
     }
 
     #applyModel(): void {
@@ -308,7 +296,6 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
         if (this.#instances[0] < 0) {
             this.#initInstance()
         }
-        // Check again after init - instance creation could fail
         if (this.#instances[0] < 0) {
             this.#modelLoaded = false
             return

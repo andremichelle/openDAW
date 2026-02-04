@@ -3,7 +3,7 @@ import {Pointers} from "@opendaw/studio-enums"
 import {ParameterPointerRules, UnipolarConstraints} from "../../std/Defaults"
 import {DeviceFactory} from "../../std/DeviceFactory"
 
-export const TapeDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("TapeDeviceBox", {
+export const TapeDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("TapeDeviceBox", "audio", {
     10: {type: "float32", name: "flutter", pointerRules: ParameterPointerRules, ...UnipolarConstraints},
     11: {type: "float32", name: "wow", pointerRules: ParameterPointerRules, ...UnipolarConstraints},
     12: {type: "float32", name: "noise", pointerRules: ParameterPointerRules, ...UnipolarConstraints},

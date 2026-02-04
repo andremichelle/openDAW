@@ -2,7 +2,7 @@ import {BoxSchema} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
 import {DeviceFactory} from "../../std/DeviceFactory"
 
-export const MIDIOutputDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("MIDIOutputDeviceBox", {
+export const MIDIOutputDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("MIDIOutputDeviceBox", "notes", {
     10: {
         // TODO deprecated. Use pointer (14) instead
         type: "object", name: "deprecated-device", deprecated: true, class: {

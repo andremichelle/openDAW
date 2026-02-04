@@ -2,9 +2,8 @@ import {Arrays, clamp, int, Option, Selection} from "@opendaw/lib-std"
 import {AnyLoopableRegionBoxAdapter, AnyRegionBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {ppqn, RegionCollection} from "@opendaw/lib-dsp"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {BoxEditing} from "@opendaw/lib-box"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-import {RegionClipResolver, RegionModifyStrategy} from "@opendaw/studio-core"
+import {Project, RegionModifyStrategy} from "@opendaw/studio-core"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {Dragging} from "@opendaw/lib-dom"
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier"
@@ -63,6 +62,7 @@ export class RegionMoveModifier implements RegionModifier {
     }
 
     readonly #manager: TracksManager
+    readonly #project: Project
     readonly #selection: Selection<AnyRegionBoxAdapter>
     readonly #element: Element
     readonly #snapping: Snapping
@@ -82,6 +82,7 @@ export class RegionMoveModifier implements RegionModifier {
                         selection: Selection<AnyRegionBoxAdapter>,
                         {element, snapping, pointerPulse, pointerIndex, reference}: Construct) {
         this.#manager = trackManager
+        this.#project = trackManager.service.project
         this.#selection = selection
         this.#element = element
         this.#snapping = snapping
@@ -140,7 +141,7 @@ export class RegionMoveModifier implements RegionModifier {
         if (change) {this.#dispatchChange()}
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         if (this.#deltaIndex === 0 && this.#deltaPosition === 0) {
             if (this.#copy) {this.#dispatchChange()} // reset visuals
             return
@@ -159,15 +160,16 @@ export class RegionMoveModifier implements RegionModifier {
         const modifiedTracks: ReadonlyArray<TrackBoxAdapter> = Arrays.removeDuplicates(adapters
             .map(adapter => adapter.trackBoxAdapter.unwrap().listIndex + this.#deltaIndex))
             .map(index => this.#manager.getByIndex(index).unwrap().trackBoxAdapter)
-        const solver = RegionClipResolver.fromSelection(modifiedTracks, adapters, this, this.#deltaIndex)
-        editing.modify(() => {
+        this.#project.overlapResolver.apply(modifiedTracks, adapters, this, this.#deltaIndex, (trackResolver) => {
             if (this.#copy) {
                 const copies: ReadonlyArray<AnyRegionBoxAdapter> = adapters.map(original => {
+                    const defaultTrack = this.#manager
+                        .getByIndex(original.trackBoxAdapter.unwrap().listIndex + this.#deltaIndex)
+                        .unwrap().trackBoxAdapter
+                    const targetTrack = trackResolver(original, defaultTrack)
                     return original.copyTo({
                         position: original.position + this.#deltaPosition,
-                        track: this.#deltaIndex === 0 ? undefined : this.#manager
-                            .getByIndex(original.trackBoxAdapter.unwrap().listIndex + this.#deltaIndex)
-                            .unwrap().trackBoxAdapter.box.regions,
+                        track: targetTrack.box.regions,
                         consolidate: original.isMirrowed === this.#mirroredCopy
                     })
                 })
@@ -175,16 +177,17 @@ export class RegionMoveModifier implements RegionModifier {
                 this.#selection.select(...copies)
             } else {
                 if (this.#deltaIndex !== 0) {
-                    adapters
-                        .forEach(adapter => adapter.box.regions
-                            .refer(this.#manager.getByIndex(adapter.trackBoxAdapter.unwrap().listIndex + this.#deltaIndex)
-                                .unwrap().trackBoxAdapter.box.regions))
+                    adapters.forEach(adapter => {
+                        const defaultTrack = this.#manager
+                            .getByIndex(adapter.trackBoxAdapter.unwrap().listIndex + this.#deltaIndex)
+                            .unwrap().trackBoxAdapter
+                        const targetTrack = trackResolver(adapter, defaultTrack)
+                        adapter.box.regions.refer(targetTrack.box.regions)
+                    })
                 }
                 adapters.forEach((adapter) => adapter.position += this.#deltaPosition)
             }
-            solver()
         })
-        RegionClipResolver.validateTracks(modifiedTracks)
     }
 
     cancel(): void {this.#dispatchChange()}

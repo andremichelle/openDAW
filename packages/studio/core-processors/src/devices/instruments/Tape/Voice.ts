@@ -46,6 +46,7 @@ export interface Voice {
      * Renders audio samples to the output buffer.
      * @param bufferStart Start position in the output buffer
      * @param bufferCount Number of samples to process
+     * @param fadingGainBuffer Pre-computed gain envelope for region fading
      */
-    process(bufferStart: int, bufferCount: int): void
+    process(bufferStart: int, bufferCount: int, fadingGainBuffer: Float32Array): void
 }

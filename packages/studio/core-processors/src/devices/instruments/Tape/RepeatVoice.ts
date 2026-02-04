@@ -147,16 +147,12 @@ export class RepeatVoice implements Voice {
         this.#fadeOutBlockOffset = blockOffset
     }
 
-    process(bufferStart: int, bufferCount: int): void {
-        if (this.#state === VoiceState.Done) {
-            return
-        }
-
+    process(bufferStart: int, bufferCount: int, fadingGainBuffer: Float32Array): void {
+        if (this.#state === VoiceState.Done) {return}
         const [outL, outR] = this.#output.channels()
         const {frames, numberOfFrames} = this.#data
         const framesL = frames[0]
         const framesR = frames.length === 1 ? frames[0] : frames[1]
-
         const loopStart = this.#loopStart
         const loopEnd = this.#loopEnd
         const loopCrossfadeStart = loopEnd - this.#loopFadeLengthSamples
@@ -166,26 +162,18 @@ export class RepeatVoice implements Voice {
         const loopFadeLengthInverse = this.#loopFadeLengthInverse
         const playbackRate = this.#playbackRate
         const fadeOutBlockOffset = this.#fadeOutBlockOffset
-
         let state = this.#state as VoiceState
         let fadeDirection = this.#fadeDirection
         let fadeProgress = this.#fadeProgress
         let readPosition = this.#readPosition
         let loopCrossfadeProgress = this.#loopCrossfadeProgress
         let loopCrossfadePosition = this.#loopCrossfadePosition
-
         for (let i = this.#blockOffset; i < bufferCount; i++) {
-            if (state === VoiceState.Done) {
-                break
-            }
-
+            if (state === VoiceState.Done) {break}
             const j = bufferStart + i
-
-            // Calculate voice amplitude based on state
             let amplitude: number
             if (state === VoiceState.Fading) {
                 if (fadeDirection > 0) {
-                    // Fading in
                     amplitude = fadeProgress * voiceFadeLengthInverse
                     fadeProgress += 1.0
                     if (fadeProgress >= voiceFadeLengthSamples) {
@@ -194,7 +182,6 @@ export class RepeatVoice implements Voice {
                         fadeDirection = 0.0
                     }
                 } else {
-                    // Fading out - wait for fadeOutBlockOffset
                     if (i < fadeOutBlockOffset) {
                         amplitude = 1.0
                     } else {
@@ -207,11 +194,8 @@ export class RepeatVoice implements Voice {
                     }
                 }
             } else {
-                // Active
                 amplitude = 1.0
             }
-
-            // Read primary sample with linear interpolation
             let sampleL = 0.0
             let sampleR = 0.0
             const readInt = readPosition | 0
@@ -222,14 +206,10 @@ export class RepeatVoice implements Voice {
                 sampleL = sL + alpha * (framesL[readInt + 1] - sL)
                 sampleR = sR + alpha * (framesR[readInt + 1] - sR)
             }
-
-            // Check if we need to start loop crossfade
             if (loopCrossfadeProgress === 0.0 && readPosition >= loopCrossfadeStart) {
                 loopCrossfadeProgress = 1.0
                 loopCrossfadePosition = loopStart
             }
-
-            // Apply loop crossfade if active
             if (loopCrossfadeProgress > 0.0) {
                 const loopReadInt = loopCrossfadePosition | 0
                 if (loopReadInt >= 0 && loopReadInt < numberOfFrames - 1) {
@@ -238,30 +218,22 @@ export class RepeatVoice implements Voice {
                     const sR = framesR[loopReadInt]
                     const loopSampleL = sL + alpha * (framesL[loopReadInt + 1] - sL)
                     const loopSampleR = sR + alpha * (framesR[loopReadInt + 1] - sR)
-
-                    // Linear crossfade
                     const crossfade = loopCrossfadeProgress * loopFadeLengthInverse
                     sampleL = sampleL * (1.0 - crossfade) + loopSampleL * crossfade
                     sampleR = sampleR * (1.0 - crossfade) + loopSampleR * crossfade
                 }
-
                 loopCrossfadePosition += playbackRate
                 loopCrossfadeProgress += 1.0
-
-                // When crossfade completes, snap to loop position
                 if (loopCrossfadeProgress >= loopFadeLengthSamples) {
                     readPosition = loopCrossfadePosition
                     loopCrossfadeProgress = 0.0
                 }
             }
-
-            // Write to output (additive)
-            outL[j] += sampleL * amplitude
-            outR[j] += sampleR * amplitude
-
+            const finalAmplitude = amplitude * fadingGainBuffer[i]
+            outL[j] += sampleL * finalAmplitude
+            outR[j] += sampleR * finalAmplitude
             readPosition += playbackRate
         }
-
         this.#state = state
         this.#fadeDirection = fadeDirection
         this.#fadeProgress = fadeProgress

@@ -11,8 +11,7 @@
 
 **openDAW** is a next-generation web-based Digital Audio Workstation (DAW) designed to **democratize** music production
 and to **resurface the process of making music** by making **high-quality** creation tools accessible to everyone, with
-a strong focus on **education** and data-privacy. Please consider supporting this project
-on [Patreon](https://www.patreon.com/join/openDAW) or [ko-fi](https://ko-fi.com/opendaw).
+a strong focus on **education** and data-privacy.
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/andremichelle/openDAW/main/assets/studio-teaser.png"/>
@@ -137,15 +136,13 @@ evolves.
 - [X] Preset API
 - [X] Full implementation of connecting several cloud services to store samples, projects, and presets
 - [X] Implement audio playback algorithms (pitch, stretch, absolute) including interpolation
-- [ ] ~~Sample editor~~
-- [ ] ~~Pushing event flow and painting routines into SDK~~
 
 #### 2026/Q1
 
-- [ ] Fade-in and out on audio-regions
+- [X] Fade-in and out on audio-regions
 - [X] Signature automation track
 - [X] Tempo automation track
-- [ ] Fine-tune recording including loops (takes)
+- [X] Fine-tune recording including loops (takes)
 
 #### 2026/Q2
 
@@ -240,8 +237,6 @@ participate, visit our [Contribute](https://opendaw.org/contribute) page.
 * [opendaw.org (website)](https://opendaw.org)
 * [openDAW on Discord](https://discord.opendaw.studio)
 * [openDAW SDK](https://www.npmjs.com/org/opendaw)
-* [openDAW on Patreon](https://www.patreon.com/join/openDAW)
-* [openDAW on ko-fi](https://ko-fi.com/opendaw)
 * [LinkedIn](https://www.linkedin.com/company/opendaw-org/)
 * [Instagram](https://www.instagram.com/opendaw.studio)
 

@@ -23,7 +23,18 @@ export const AudioRegionBox: BoxSchema<Pointers> = {
             14: {type: "boolean", name: "mute"},
             15: {type: "string", name: "label"},
             16: {type: "int32", name: "hue", ...HueConstraints},
-            17: {type: "float32", name: "gain", constraints: "decibel", unit: "db"}
+            17: {type: "float32", name: "gain", constraints: "decibel", unit: "db"},
+            18: {
+                type: "object", name: "fading", class: {
+                    name: "Fading",
+                    fields: {
+                        1: {type: "float32", name: "in", value: 0.0, constraints: "positive", unit: "ppqn"},
+                        2: {type: "float32", name: "out", value: 0.0, constraints: "positive", unit: "ppqn"},
+                        3: {type: "float32", name: "in-slope", value: 0.75, constraints: "unipolar", unit: "ratio"},
+                        4: {type: "float32", name: "out-slope", value: 0.25, constraints: "unipolar", unit: "ratio"}
+                    }
+                }
+            }
         }
     }, pointerRules: {accepts: [Pointers.Selection, Pointers.Editing, Pointers.MetaData], mandatory: false}
 }

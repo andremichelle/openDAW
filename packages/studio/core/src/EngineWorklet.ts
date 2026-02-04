@@ -13,9 +13,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {AudioData, bpm, ppqn} from "@opendaw/lib-dsp"
-import {SyncSource} from "@opendaw/lib-box"
-import {AnimationFrame} from "@opendaw/lib-dom"
+import {AudioData, bpm, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {
     ClipNotification,
@@ -29,13 +27,17 @@ import {
     EngineToClient,
     ExportStemsConfiguration,
     NoteSignal,
+    PERF_BUFFER_SIZE,
     PreferencesHost,
     ProcessorOptions
 } from "@opendaw/studio-adapters"
+import {SyncSource} from "@opendaw/lib-box"
+import {AnimationFrame} from "@opendaw/lib-dom"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {Engine} from "./Engine"
 import {Project} from "./project"
 import {MIDIReceiver} from "./midi"
+import {HRClockWorker} from "./HRClockWorker"
 import type {SoundFont2} from "soundfont2"
 
 export class EngineWorklet extends AudioWorkletNode implements Engine {
@@ -56,6 +58,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #preferences: PreferencesHost<EngineSettings>
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
+    readonly #cpuLoad: DefaultObservableValue<number> = new DefaultObservableValue(0)
     readonly #controlFlags: Int32Array<SharedArrayBuffer>
     readonly #notifyClipNotification: Notifier<ClipNotification>
     readonly #notifyNoteSignals: Notifier<NoteSignal>
@@ -63,11 +66,19 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #commands: EngineCommands
     readonly #isReady: Promise<void>
 
+    #perfBuffer: Float32Array = new Float32Array(0)
+    #perfIndex: int = 0
+    #lastPerfReadIndex: int = 0
+    #consecutiveOverloadCount: int = 0
+    #lastCpuLoadUpdate: number = 0
+    #maxMsSinceLastUpdate: number = 0
+
     constructor(context: BaseAudioContext,
                 project: Project,
                 exportConfiguration?: ExportStemsConfiguration,
                 options?: ProcessorOptions) {
         const numberOfChannels = ExportStemsConfiguration.countStems(Option.wrap(exportConfiguration)) * 2
+        const budgetMs = (RenderQuantum / context.sampleRate) * 1000
         const reader = SyncStream.reader<EngineState>(EngineStateSchema(), state => {
             this.#isPlaying.setValue(state.isPlaying)
             this.#isRecording.setValue(state.isRecording)
@@ -75,6 +86,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             this.#countInBeatsRemaining.setValue(state.countInBeatsRemaining)
             this.#playbackTimestamp.setValue(state.playbackTimestamp)
             this.#bpm.setValue(state.bpm)
+            this.#perfBuffer = state.perfBuffer
+            this.#perfIndex = state.perfIndex
+            this.#updateCpuLoad(budgetMs, project)
             this.#position.setValue(state.position) // This must be the last to handle the state values before
         })
 
@@ -87,6 +101,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 processorOptions: {
                     syncStreamBuffer: reader.buffer,
                     controlFlagsBuffer: controlFlagsSAB,
+                    hrClockBuffer: HRClockWorker.get().sab,
                     project: project.toArrayBuffer(),
                     exportConfiguration,
                     options
@@ -94,10 +109,10 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             }
         )
 
-        const {resolve, promise} = Promise.withResolvers<void>()
+        const {resolve, promise: isReady} = Promise.withResolvers<void>()
         const messenger = Messenger.for(this.port)
         this.#project = project
-        this.#isReady = promise
+        this.#isReady = isReady
         this.#notifyClipNotification = this.#terminator.own(new Notifier<ClipNotification>())
         this.#notifyNoteSignals = this.#terminator.own(new Notifier<NoteSignal>())
         this.#playingClips = []
@@ -204,20 +219,25 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         )
     }
 
-    play(): void {this.#commands.play()}
-    stop(reset: boolean = false): void {this.#commands.stop(reset)}
+    play(): void {
+        this.wake()
+        this.#commands.play()
+    }
+    stop(reset: boolean = false): void {
+        this.#isPlaying.setValue(false)
+        this.#commands.stop(reset)
+    }
     setPosition(position: ppqn): void {this.#commands.setPosition(position)}
     prepareRecordingState(countIn: boolean): void {this.#commands.prepareRecordingState(countIn)}
     stopRecording(): void {this.#commands.stopRecording()}
     panic(): void {this.#commands.panic()}
     sleep(): void {
         Atomics.store(this.#controlFlags, 0, 1)
+        this.#isPlaying.setValue(false)
         this.#commands.stop(true)
     }
     wake(): void {Atomics.store(this.#controlFlags, 0, 0)}
-    loadClickSound(index: 0 | 1, data: AudioData): void {
-        this.#commands.loadClickSound(index, data)
-    }
+    loadClickSound(index: 0 | 1, data: AudioData): void {this.#commands.loadClickSound(index, data)}
 
     get isPlaying(): ObservableValue<boolean> {return this.#isPlaying}
     get isRecording(): ObservableValue<boolean> {return this.#isRecording}
@@ -229,6 +249,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
     get project(): Project {return this.#project}
     get preferences(): PreferencesHost<EngineSettings> {return this.#preferences}
+    get cpuLoad(): ObservableValue<number> {return this.#cpuLoad}
+    get perfBuffer(): Float32Array {return this.#perfBuffer}
+    get perfIndex(): number {return this.#perfIndex}
 
     isReady(): Promise<void> {return this.#isReady}
     queryLoadingComplete(): Promise<boolean> {return this.#commands.queryLoadingComplete()}
@@ -248,6 +271,29 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             changes: {started: this.#playingClips, stopped: Arrays.empty(), obsolete: Arrays.empty()}
         })
         return this.#notifyClipNotification.subscribe(observer)
+    }
+
+    #updateCpuLoad(budgetMs: number, project: Project): void {
+        while (this.#lastPerfReadIndex !== this.#perfIndex) {
+            const ms = this.#perfBuffer[this.#lastPerfReadIndex]
+            if (ms > this.#maxMsSinceLastUpdate) {this.#maxMsSinceLastUpdate = ms}
+            if (ms >= budgetMs) {
+                this.#consecutiveOverloadCount++
+                if (this.#consecutiveOverloadCount >= 30) {
+                    project.handleCpuOverload()
+                    this.#consecutiveOverloadCount = 0
+                }
+            } else {
+                this.#consecutiveOverloadCount = 0
+            }
+            this.#lastPerfReadIndex = (this.#lastPerfReadIndex + 1) % PERF_BUFFER_SIZE
+        }
+        const now = performance.now()
+        if (now - this.#lastCpuLoadUpdate >= 1000) {
+            this.#cpuLoad.setValue(Math.round((this.#maxMsSinceLastUpdate / budgetMs) * 100))
+            this.#maxMsSinceLastUpdate = 0
+            this.#lastCpuLoadUpdate = now
+        }
     }
 
     terminate(): void {

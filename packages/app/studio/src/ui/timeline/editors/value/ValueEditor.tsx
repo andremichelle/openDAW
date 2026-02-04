@@ -37,7 +37,7 @@ import {ValueContentDurationModifier} from "./ValueContentDurationModifier"
 import {Dragging, Events, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {ValueTooltip} from "./ValueTooltip"
 import {ValueEventEditing} from "./ValueEventEditing"
-import {TimelineRange} from "@opendaw/studio-core"
+import {ClipboardManager, TimelineRange, ValuesClipboard} from "@opendaw/studio-core"
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 
@@ -55,7 +55,7 @@ type Construct = {
 
 export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, reader, context}: Construct) => {
     const {project} = service
-    const {editing} = project
+    const {editing, engine, boxGraph, boxAdapters} = project
     const eventsField = reader.content.box.events
     const selection: Selection<ValueEventBoxAdapter> = lifecycle.own(project.selection
         .createFilteredSelection(box => box instanceof ValueEventBox
@@ -75,7 +75,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
             (1.0 - eventMapping.x(value)) * (canvas.clientHeight - 2.0 * RangePadding - 1.0) + RangePadding + 0.5
     }
     const valueToPixel: Func<unitValue, number> = value => valueAxis.valueToAxis(value) * devicePixelRatio
-    const modifyContext = new ObservableModifyContext<ValueModifier>(service.project.editing)
+    const modifyContext = new ObservableModifyContext<ValueModifier>()
     const paintValues = createValuePainter({
         range,
         valueToPixel,
@@ -131,6 +131,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                                     selection.select(adapter)
                                     const clientRect = canvas.getBoundingClientRect()
                                     return modifyContext.startModifier(ValueMoveModifier.create({
+                                        editing,
                                         element: canvas,
                                         context,
                                         selection,
@@ -152,6 +153,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 if (target === null) {
                     if (altKey) {
                         return modifyContext.startModifier(ValuePaintModifier.create({
+                            editing,
                             element: canvas,
                             reader,
                             selection,
@@ -175,6 +177,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                         }, false).unwrapOrNull()
                         if (optCutEvent === null) {return Option.None}
                         return modifyContext.startModifier(ValueMoveModifier.create({
+                            editing,
                             element: canvas,
                             context,
                             selection,
@@ -196,6 +199,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
             if (target?.type !== "loop-duration") {return Option.None}
             const clientRect = canvas.getBoundingClientRect()
             return modifyContext.startModifier(ValueContentDurationModifier.create({
+                editing,
                 element: canvas,
                 pointerPulse: range.xToUnit(event.clientX - clientRect.left),
                 snapping,
@@ -211,7 +215,13 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             xAxis={range.valueAxis}
                             yAxis={valueAxis}/>
     )
-    const shortcuts = ShortcutManager.get().createContext(canvas, "ValueEditor")
+    const element: HTMLElement = (
+        <div className={className} tabIndex={-1} onConnect={(self: HTMLElement) => self.focus()}>
+            {canvas}
+            {selectionRectangle}
+        </div>
+    )
+    const shortcuts = ShortcutManager.get().createContext(element, "ValueEditor")
     lifecycle.ownAll(
         shortcuts,
         shortcuts.register(ContentEditorShortcuts["select-all"].shortcut, () =>
@@ -230,6 +240,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
             const clientRect = canvas.getBoundingClientRect()
             if (target.type === "event") {
                 return modifyContext.startModifier(ValueMoveModifier.create({
+                    editing,
                     element: canvas,
                     context,
                     selection,
@@ -243,6 +254,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 }))
             } else if (target.type === "midpoint") {
                 return modifyContext.startModifier(ValueSlopeModifier.create({
+                    editing,
                     element: canvas,
                     valueAxis,
                     reference: target.event,
@@ -291,12 +303,18 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 editing.modify(() => selection.selected().forEach(adapter => adapter.box.value.setValue(value)))
             }
         }),
-        installValueContextMenu({element: canvas, capturing, editing, selection})
+        installValueContextMenu({element: canvas, capturing, editing, selection}),
+        ClipboardManager.install(element, ValuesClipboard.createHandler({
+            getEnabled: () => !engine.isPlaying.getValue(),
+            getPosition: () => engine.position.getValue() - reader.offset,
+            setPosition: position => engine.setPosition(position + reader.offset),
+            editing,
+            selection,
+            collection: reader.content,
+            targetAddress: reader.content.box.events.address,
+            boxGraph,
+            boxAdapters
+        }))
     )
-    return (
-        <div className={className}>
-            {canvas}
-            {selectionRectangle}
-        </div>
-    )
+    return element
 }

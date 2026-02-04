@@ -31,6 +31,9 @@ export interface Engine extends Terminable {
     get playbackTimestamp(): ObservableValue<ppqn>
     get countInBeatsRemaining(): ObservableValue<number>
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>>
+    get cpuLoad(): ObservableValue<number>
     get project(): Project
     get preferences(): EnginePreferences
+    get perfBuffer(): Float32Array
+    get perfIndex(): number
 }

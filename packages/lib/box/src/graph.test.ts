@@ -1,8 +1,8 @@
 import {Maybe, safeExecute, UUID} from "@opendaw/lib-std"
 import {Field} from "./field"
 import {NoPointers, VertexVisitor} from "./vertex"
-import {Box, BoxConstruct} from "./box"
-import {PointerField, UnreferenceableType} from "./pointer"
+import {Box, BoxConstruct, ResourceType} from "./box"
+import {PointerField} from "./pointer"
 import {BoxGraph} from "./graph"
 import {describe, expect, it} from "vitest"
 
@@ -15,6 +15,7 @@ interface TestBoxVisitor<RETURN = void> extends VertexVisitor<RETURN> {
     visitNodeBox?(box: NodeBox): RETURN
     visitParentBox?(box: ParentBox): RETURN
     visitChildBox?(box: ChildBox): RETURN
+    visitResourceBox?(box: ResourceBox): RETURN
 }
 
 // Simple box with a pointer (non-mandatory box, non-mandatory pointer)
@@ -50,6 +51,7 @@ class NodeBox extends Box<PointerType.Node, NodeBoxFields> {
         return safeExecute(visitor.visitNodeBox, this)
     }
 
+    get tags(): Readonly<Record<string, string | number | boolean>> {return {}}
     get ref(): PointerField<PointerType.Node> {return this.getField(0)}
 }
 
@@ -94,6 +96,7 @@ class ParentBox extends Box<PointerType.Node, ParentBoxFields> {
         return safeExecute(visitor.visitParentBox, this)
     }
 
+    get tags(): Readonly<Record<string, string | number | boolean>> {return {}}
     get ref(): PointerField<PointerType.Node> {return this.getField(0)}
     get hook(): Field<PointerType.Hook> {return this.getField(1)}
 }
@@ -131,7 +134,55 @@ class ChildBox extends Box<PointerType.Node, ChildBoxFields> {
         return safeExecute(visitor.visitChildBox, this)
     }
 
+    get tags(): Readonly<Record<string, string | number | boolean>> {return {}}
     get owner(): PointerField<PointerType.Hook> {return this.getField(0)}
+}
+
+// Resource box with a hook field that accepts children (like AudioFileBox)
+type ResourceBoxFields = {
+    0: PointerField<PointerType.Node>
+    1: Field<PointerType.Hook>
+}
+
+class ResourceBox extends Box<PointerType.Node, ResourceBoxFields> {
+    static create(graph: BoxGraph, uuid: UUID.Bytes, resourceType: ResourceType): ResourceBox {
+        return graph.stageBox(new ResourceBox({
+            uuid,
+            graph,
+            name: "ResourceBox",
+            pointerRules: {accepts: [PointerType.Node], mandatory: true},
+            resource: resourceType
+        }))
+    }
+
+    private constructor(construct: BoxConstruct<PointerType.Node>) {super(construct)}
+
+    protected initializeFields(): ResourceBoxFields {
+        return {
+            0: PointerField.create({
+                parent: this,
+                fieldKey: 0,
+                fieldName: "ref",
+                pointerRules: NoPointers,
+                deprecated: false
+            }, PointerType.Node, false),
+            1: Field.hook({
+                parent: this,
+                fieldKey: 1,
+                fieldName: "children",
+                pointerRules: {accepts: [PointerType.Hook], mandatory: false},
+                deprecated: false
+            })
+        }
+    }
+
+    accept<R>(visitor: TestBoxVisitor<R>): Maybe<R> {
+        return safeExecute(visitor.visitResourceBox, this)
+    }
+
+    get tags(): Readonly<Record<string, string | number | boolean>> {return {}}
+    get ref(): PointerField<PointerType.Node> {return this.getField(0)}
+    get children(): Field<PointerType.Hook> {return this.getField(1)}
 }
 
 describe("findOrphans", () => {
@@ -584,5 +635,211 @@ describe("dependenciesOf", () => {
         const {boxes} = graph.dependenciesOf(A)
         expect([...boxes]).toContain(B)
         expect([...boxes]).toContain(C)
+    })
+})
+
+describe("dependenciesOf with stopAtResources", () => {
+    it("includes resource boxes in dependencies", () => {
+        // A → ResourceBox (preserved)
+        // Resource should be in collected dependencies
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const A = NodeBox.create(graph, UUID.generate())
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
+        A.ref.refer(resource)
+        graph.endTransaction()
+
+        const {boxes} = graph.dependenciesOf(A, {stopAtResources: true, alwaysFollowMandatory: true})
+        expect([...boxes]).toContain(resource)
+    })
+
+    it("includes children of resource boxes (field-level pointers)", () => {
+        // A → ResourceBox ← Child (points to field)
+        // Child should be in collected dependencies
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const A = NodeBox.create(graph, UUID.generate())
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
+        const child = ChildBox.create(graph, UUID.generate())
+        A.ref.refer(resource)
+        child.owner.refer(resource.children) // points to FIELD
+        graph.endTransaction()
+
+        const {boxes} = graph.dependenciesOf(A, {stopAtResources: true, alwaysFollowMandatory: true})
+        expect([...boxes]).toContain(resource)
+        expect([...boxes]).toContain(child)
+    })
+
+    it("excludes users of resource boxes (box-level pointers)", () => {
+        // A → ResourceBox ← OtherNode (points to box)
+        // OtherNode should NOT be in collected dependencies
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const A = NodeBox.create(graph, UUID.generate())
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
+        const otherUser = NodeBox.create(graph, UUID.generate())
+        A.ref.refer(resource)
+        otherUser.ref.refer(resource) // points to BOX
+        graph.endTransaction()
+
+        const {boxes} = graph.dependenciesOf(A, {stopAtResources: true, alwaysFollowMandatory: true})
+        expect([...boxes]).toContain(resource)
+        expect([...boxes]).not.toContain(otherUser)
+    })
+
+    it("differentiates children vs users by address.isBox()", () => {
+        // A → ResourceBox
+        //       ↑
+        // Child → ResourceBox.children (field pointer) - should be included
+        // OtherUser → ResourceBox (box pointer) - should be excluded
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const A = NodeBox.create(graph, UUID.generate())
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
+        const child = ChildBox.create(graph, UUID.generate())
+        const otherUser = NodeBox.create(graph, UUID.generate())
+        A.ref.refer(resource)
+        child.owner.refer(resource.children) // field pointer
+        otherUser.ref.refer(resource) // box pointer
+        graph.endTransaction()
+
+        const {boxes} = graph.dependenciesOf(A, {stopAtResources: true, alwaysFollowMandatory: true})
+        expect([...boxes]).toContain(resource)
+        expect([...boxes]).toContain(child)
+        expect([...boxes]).not.toContain(otherUser)
+        expect([...boxes].length).toBe(2) // resource + child
+    })
+
+    it("does not follow outgoing edges from resource boxes", () => {
+        // A → ResourceBox → SomeOtherBox
+        // SomeOtherBox should NOT be collected (resources are endpoints)
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const A = NodeBox.create(graph, UUID.generate())
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
+        const downstream = ParentBox.create(graph, UUID.generate())
+        A.ref.refer(resource)
+        resource.ref.refer(downstream)
+        graph.endTransaction()
+
+        const {boxes} = graph.dependenciesOf(A, {stopAtResources: true, alwaysFollowMandatory: true})
+        expect([...boxes]).toContain(resource)
+        expect([...boxes]).not.toContain(downstream)
+    })
+
+    it("handles multiple children of resource box", () => {
+        // A → ResourceBox
+        //       ↑
+        // Child1 → ResourceBox.children
+        // Child2 → ResourceBox.children
+        // Child3 → ResourceBox.children
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const A = NodeBox.create(graph, UUID.generate())
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
+        const child1 = ChildBox.create(graph, UUID.generate())
+        const child2 = ChildBox.create(graph, UUID.generate())
+        const child3 = ChildBox.create(graph, UUID.generate())
+        A.ref.refer(resource)
+        child1.owner.refer(resource.children)
+        child2.owner.refer(resource.children)
+        child3.owner.refer(resource.children)
+        graph.endTransaction()
+
+        const {boxes} = graph.dependenciesOf(A, {stopAtResources: true, alwaysFollowMandatory: true})
+        expect([...boxes]).toContain(resource)
+        expect([...boxes]).toContain(child1)
+        expect([...boxes]).toContain(child2)
+        expect([...boxes]).toContain(child3)
+        expect([...boxes].length).toBe(4)
+    })
+
+    it("works with internal resource type", () => {
+        // Internal resources should also stop traversal
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const A = NodeBox.create(graph, UUID.generate())
+        const resource = ResourceBox.create(graph, UUID.generate(), "internal")
+        const downstream = ParentBox.create(graph, UUID.generate())
+        A.ref.refer(resource)
+        resource.ref.refer(downstream)
+        graph.endTransaction()
+
+        const {boxes} = graph.dependenciesOf(A, {stopAtResources: true, alwaysFollowMandatory: true})
+        expect([...boxes]).toContain(resource)
+        expect([...boxes]).not.toContain(downstream)
+    })
+
+    it("resource property is accessible on box", () => {
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const preservedResource = ResourceBox.create(graph, UUID.generate(), "preserved")
+        const internalResource = ResourceBox.create(graph, UUID.generate(), "internal")
+        const regularBox = NodeBox.create(graph, UUID.generate())
+        graph.endTransaction()
+
+        expect(preservedResource.resource).toBe("preserved")
+        expect(internalResource.resource).toBe("internal")
+        expect(regularBox.resource).toBeUndefined()
+    })
+
+    it("stopAtResources false collects all boxes normally", () => {
+        // When stopAtResources is false, resource boxes are treated normally
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const A = NodeBox.create(graph, UUID.generate())
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
+        const downstream = ParentBox.create(graph, UUID.generate())
+        A.ref.refer(resource)
+        resource.ref.refer(downstream)
+        graph.endTransaction()
+
+        const {boxes} = graph.dependenciesOf(A, {stopAtResources: false, alwaysFollowMandatory: true})
+        expect([...boxes]).toContain(resource)
+        expect([...boxes]).toContain(downstream) // included when stopAtResources is false
+    })
+
+    it("models AudioRegion → AudioFileBox ← TransientMarker scenario", () => {
+        // This is the real-world scenario:
+        // Region → AudioFileBox (preserved resource)
+        // TransientMarker → AudioFileBox.children (mandatory pointer to field)
+        // OtherRegion → AudioFileBox (another user, should be excluded)
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const region = NodeBox.create(graph, UUID.generate())
+        const audioFile = ResourceBox.create(graph, UUID.generate(), "preserved")
+        const transientMarker = ChildBox.create(graph, UUID.generate())
+        const otherRegion = NodeBox.create(graph, UUID.generate())
+        region.ref.refer(audioFile)
+        transientMarker.owner.refer(audioFile.children)
+        otherRegion.ref.refer(audioFile)
+        graph.endTransaction()
+
+        const {boxes} = graph.dependenciesOf(region, {stopAtResources: true, alwaysFollowMandatory: true})
+        expect([...boxes]).toContain(audioFile)
+        expect([...boxes]).toContain(transientMarker)
+        expect([...boxes]).not.toContain(otherRegion)
+        expect([...boxes].length).toBe(2)
+    })
+
+    it("excludeBox still works with stopAtResources", () => {
+        // Combine excludeBox with stopAtResources
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const A = NodeBox.create(graph, UUID.generate())
+        const resource = ResourceBox.create(graph, UUID.generate(), "preserved")
+        const child = ChildBox.create(graph, UUID.generate())
+        A.ref.refer(resource)
+        child.owner.refer(resource.children)
+        graph.endTransaction()
+
+        // Exclude the child
+        const {boxes} = graph.dependenciesOf(A, {
+            stopAtResources: true,
+            alwaysFollowMandatory: true,
+            excludeBox: box => box === child
+        })
+        expect([...boxes]).toContain(resource)
+        expect([...boxes]).not.toContain(child)
     })
 })

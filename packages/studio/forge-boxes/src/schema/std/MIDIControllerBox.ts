@@ -3,6 +3,7 @@ import {Pointers} from "@opendaw/studio-enums"
 
 export const MIDIControllerBox: BoxSchema<Pointers> = {
     type: "box",
+    ephemeral: true,
     class: {
         name: "MIDIControllerBox",
         fields: {

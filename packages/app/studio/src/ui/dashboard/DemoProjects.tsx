@@ -35,7 +35,7 @@ const ids = [
     "65efa1e1f7f", // Shafted
     "b41528b9c53", // Dub Speak
     "b43d04558ec", // Sunset
-    "cab976763f0", // Vapor Run
+    "cab976763f0" // Vapor Run
 ]
 
 const listUrl = `https://api.opendaw.studio/music/list-by-ids.php?ids=${ids.join(",")}`
@@ -43,6 +43,7 @@ const listUrl = `https://api.opendaw.studio/music/list-by-ids.php?ids=${ids.join
 const NewProjectJson: DemoProjectJson = {
     id: "",
     hasCover: false,
+    bundleSize: 0,
     metadata: {
         name: "New Project",
         artist: "openDAW",
@@ -54,7 +55,19 @@ const NewProjectJson: DemoProjectJson = {
     }
 }
 
+const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) {return `${bytes} B`}
+    if (bytes < 1024 * 1024) {return `${(bytes / 1024).toFixed(1)} KB`}
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 const loadDemoProject = async (service: StudioService, json: DemoProjectJson) => {
+    const sizeInfo = `(${formatBytes(json.bundleSize)})`
+    const approved = await RuntimeNotifier.approve({
+        headline: "Install Demo Project",
+        message: `Do you want to download the project bundle file ${sizeInfo}?`
+    })
+    if (!approved) {return}
     const dialog = RuntimeNotifier.progress({headline: "Loading Demo Project"})
     const folder = json.id
     const {status, value: arrayBuffer, error} = await Promises.tryCatch(
@@ -64,18 +77,14 @@ const loadDemoProject = async (service: StudioService, json: DemoProjectJson) =>
     dialog.terminate()
     if (status === "rejected") {
         return RuntimeNotifier.info({headline: "Could not load bundle file", message: String(error)})
-    } else {
-        const {
-            status,
-            value: profile,
-            error
-        } = await Promises.tryCatch(ProjectBundle.decode(service, arrayBuffer))
-        if (status === "rejected") {
-            return RuntimeNotifier.info({headline: "Could not decode bundle file", message: String(error)})
-        }
-        service.projectProfileService.setValue(Option.wrap(profile))
-        service.switchScreen("default")
     }
+    const {status: decodeStatus, value: profile, error: decodeError} =
+        await Promises.tryCatch(ProjectBundle.decode(service, arrayBuffer))
+    if (decodeStatus === "rejected") {
+        return RuntimeNotifier.info({headline: "Could not decode bundle file", message: String(decodeError)})
+    }
+    await profile.saveAs(profile.meta)
+    service.projectProfileService.setValue(Option.wrap(profile))
 }
 
 export const DemoProjects = ({service}: Construct) => (

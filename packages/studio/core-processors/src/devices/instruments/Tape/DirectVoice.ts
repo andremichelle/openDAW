@@ -51,7 +51,7 @@ export class DirectVoice {
         }
     }
 
-    process(bufferStart: int, bufferCount: int): void {
+    process(bufferStart: int, bufferCount: int, fadingGainBuffer: Float32Array): void {
         const [outL, outR] = this.#output.channels()
         const {frames, numberOfFrames} = this.#data
         const framesL = frames[0]
@@ -90,8 +90,9 @@ export class DirectVoice {
                 amplitude = 1.0
             }
             if (readPosition >= 0 && readPosition < numberOfFrames) {
-                outL[j] += framesL[readPosition] * amplitude
-                outR[j] += framesR[readPosition] * amplitude
+                const finalAmplitude = amplitude * fadingGainBuffer[i]
+                outL[j] += framesL[readPosition] * finalAmplitude
+                outR[j] += framesR[readPosition] * finalAmplitude
             }
             readPosition++
             if (state === VoiceState.Active && readPosition >= fadeOutThreshold) {

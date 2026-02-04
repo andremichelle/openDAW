@@ -21,6 +21,7 @@ import { ShortcutTooltip } from "@/ui/shortcuts/ShortcutTooltip"
 import { UndoRedoButtons } from "@/ui/header/UndoRedoButtons"
 import { MetronomeControl } from "@/ui/header/MetronomeControl"
 import { OdieButton } from "@/ui/odie/components/OdieButton"
+import { PerformanceStats } from "@/ui/header/PerformanceStats"
 
 const className = Html.adoptStyleSheet(css, "Header")
 
@@ -148,6 +149,8 @@ export const Header = ({ lifecycle, service }: Construct) => {
                         }))}
                     appearance={{ framed: true, landscape: true }} />
             </div>
+            <hr />
+            <PerformanceStats lifecycle={lifecycle} service={service} />
         </header>
     )
 }

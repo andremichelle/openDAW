@@ -41,12 +41,14 @@ export namespace DeviceFactory {
         return {
             type: "box",
             class: {name, fields: mergeFields(MidiEffectDeviceAttributes, fields as DisjointFields)},
-            pointerRules: {accepts: DefaultPointers, mandatory: false}
+            pointerRules: {accepts: DefaultPointers, mandatory: false},
+            tags: {type: "device", "device-type": "midi-effect"}
         }
     }
 
     export const createInstrument = <FIELDS extends FieldRecord<Pointers>>(
         name: string,
+        content: "notes" | "audio",
         fields: Objects.Disjoint<typeof InstrumentDeviceAttributes, FIELDS> & FieldRecord<Pointers>,
         ...pointers: Array<Pointers>
     ): BoxSchema<Pointers> => {
@@ -54,7 +56,8 @@ export namespace DeviceFactory {
         return {
             type: "box",
             class: {name, fields: mergeFields(InstrumentDeviceAttributes, fields as DisjointFields)},
-            pointerRules: {accepts: DefaultAudioPointers.concat(pointers), mandatory: false}
+            pointerRules: {accepts: DefaultAudioPointers.concat(pointers), mandatory: false},
+            tags: {type: "device", "device-type": "instrument", content}
         }
     }
 
@@ -66,7 +69,8 @@ export namespace DeviceFactory {
         return {
             type: "box",
             class: {name, fields: mergeFields(AudioEffectDeviceAttributes, fields as DisjointFields)},
-            pointerRules: {accepts: DefaultAudioPointers, mandatory: false}
+            pointerRules: {accepts: DefaultAudioPointers, mandatory: false},
+            tags: {type: "device", "device-type": "audio-effect"}
         }
     }
 }

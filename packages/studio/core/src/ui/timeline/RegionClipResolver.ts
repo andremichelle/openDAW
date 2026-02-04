@@ -9,6 +9,7 @@ import {
     UnionAdapterTypes
 } from "@opendaw/studio-adapters"
 import {RegionModifyStrategies} from "./RegionModifyStrategies"
+import {TrackResolver} from "./TrackResolver"
 
 export type ClipTask = {
     type: "delete"
@@ -39,7 +40,7 @@ export class RegionClipResolver {
     static fromSelection(tracks: ReadonlyArray<TrackBoxAdapter>,
                          adapters: ReadonlyArray<AnyRegionBoxAdapter>,
                          strategy: RegionModifyStrategies,
-                         deltaIndex: int = 0): Exec {
+                         deltaIndex: int = 0): { postProcess: Exec, trackResolver: TrackResolver } {
         const clipResolvers: Map<int, RegionClipResolver> =
             new Map(tracks.map(track => ([track.listIndex, new RegionClipResolver(strategy, track)])))
         adapters.forEach(adapter => {
@@ -48,7 +49,10 @@ export class RegionClipResolver {
                 .addMask(adapter)
         })
         const tasks = Array.from(clipResolvers.values()).flatMap(resolver => resolver.#createSolver())
-        return () => tasks.forEach(task => task())
+        return {
+            postProcess: () => tasks.forEach(task => task()),
+            trackResolver: TrackResolver.Identity
+        }
     }
 
     static fromRange(track: TrackBoxAdapter, position: ppqn, complete: ppqn): Exec {
