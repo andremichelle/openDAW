@@ -83,6 +83,7 @@ export const PerformanceStats = ({lifecycle, service}: Construct) => {
              }}>
             <div className="label">CPU</div>
             <canvas style={{width: `${WIDTH}px`, height: `${HEIGHT}px`}}/>
+            <div className="end"/>
         </div>
     )
 }

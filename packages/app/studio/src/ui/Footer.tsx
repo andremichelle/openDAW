@@ -16,6 +16,7 @@ const className = Html.adoptStyleSheet(css, "footer")
 type Construct = { lifecycle: Lifecycle, service: StudioService }
 
 export const Footer = ({lifecycle, service}: Construct) => {
+    const {audioContext, buildInfo, engine, projectProfileService} = service
     return (
         <footer className={className}>
             <article title="Online" onInit={element => {
@@ -31,7 +32,7 @@ export const Footer = ({lifecycle, service}: Construct) => {
                          const profileLifecycle = lifecycle.own(new Terminator())
                          lifecycle.ownAll(
                              Events.subscribe(element, "dblclick", event => {
-                                 const optProfile = service.projectProfileService.getValue()
+                                 const optProfile = projectProfileService.getValue()
                                  if (optProfile.isEmpty()) {return}
                                  const profile = optProfile.unwrap()
                                  const name = profile.meta.name
@@ -40,7 +41,7 @@ export const Footer = ({lifecycle, service}: Construct) => {
                                          .then(name => profile.updateMetaData("name", name))
                                  }
                              }),
-                             service.projectProfileService.catchupAndSubscribe(optProfile => {
+                             projectProfileService.catchupAndSubscribe(optProfile => {
                                  profileLifecycle.terminate()
                                  if (optProfile.nonEmpty()) {
                                      const profile = optProfile.unwrap()
@@ -52,11 +53,11 @@ export const Footer = ({lifecycle, service}: Construct) => {
                                  }
                              }))
                      }}/>
-            <article title="SampleRate">{service.audioContext.sampleRate}</article>
+            <article title="SampleRate">{audioContext.sampleRate}</article>
             <article title="Latency"
                      onInit={element => {
                          lifecycle.own(Runtime.scheduleInterval(() => {
-                             const outputLatency = service.audioContext.outputLatency
+                             const outputLatency = audioContext.outputLatency
                              if (outputLatency > 0.0) {
                                  element.textContent = `${(outputLatency * 1000.0).toFixed(1)}ms`
                              }
@@ -65,7 +66,7 @@ export const Footer = ({lifecycle, service}: Construct) => {
             </article>
             <article title="CPU Load"
                      onInit={element => {
-                         lifecycle.own(service.engine.cpuLoad.catchupAndSubscribe(owner => {
+                         lifecycle.own(engine.cpuLoad.catchupAndSubscribe(owner => {
                              const percent = Math.min(owner.getValue(), 100)
                              element.textContent = `${percent}%`
                              element.style.color = percent >= 100 ? Colors.red.toString()
@@ -117,9 +118,9 @@ export const Footer = ({lifecycle, service}: Construct) => {
                          if (show) {
                              replaceChildren(element, (
                                  <Frag>
-                                     <article title="Build Version">{service.buildInfo.uuid}</article>
+                                     <article title="Build Version">{buildInfo.uuid}</article>
                                      <article title="Build Time" onInit={element => {
-                                         const buildDateMillis = new Date(service.buildInfo.date).getTime()
+                                         const buildDateMillis = new Date(buildInfo.date).getTime()
                                          const update = () => element.textContent =
                                              TimeSpan.millis(buildDateMillis - new Date().getTime()).toUnitString()
                                          lifeSpan.own(Runtime.scheduleInterval(update, 1000))

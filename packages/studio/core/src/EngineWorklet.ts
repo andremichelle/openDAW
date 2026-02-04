@@ -67,7 +67,11 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #isReady: Promise<void>
 
     #perfBuffer: Float32Array = new Float32Array(0)
-    #perfIndex: number = 0
+    #perfIndex: int = 0
+    #lastPerfReadIndex: int = 0
+    #consecutiveOverloadCount: int = 0
+    #lastCpuLoadUpdate: number = 0
+    #maxMsSinceLastUpdate: number = 0
 
     constructor(context: BaseAudioContext,
                 project: Project,
@@ -75,10 +79,6 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 options?: ProcessorOptions) {
         const numberOfChannels = ExportStemsConfiguration.countStems(Option.wrap(exportConfiguration)) * 2
         const budgetMs = (RenderQuantum / context.sampleRate) * 1000
-        let lastPerfReadIndex = 0
-        let consecutiveOverloadCount = 0
-        let lastCpuLoadUpdate = 0
-        let maxMsSinceLastUpdate = 0
         const reader = SyncStream.reader<EngineState>(EngineStateSchema(), state => {
             this.#isPlaying.setValue(state.isPlaying)
             this.#isRecording.setValue(state.isRecording)
@@ -88,28 +88,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             this.#bpm.setValue(state.bpm)
             this.#perfBuffer = state.perfBuffer
             this.#perfIndex = state.perfIndex
-            let readIndex = lastPerfReadIndex
-            while (readIndex !== this.#perfIndex) {
-                const ms = this.#perfBuffer[readIndex]
-                if (ms > maxMsSinceLastUpdate) {maxMsSinceLastUpdate = ms}
-                if (ms >= budgetMs) {
-                    consecutiveOverloadCount++
-                    if (consecutiveOverloadCount >= 30) {
-                        project.handleCpuOverload()
-                        consecutiveOverloadCount = 0
-                    }
-                } else {
-                    consecutiveOverloadCount = 0
-                }
-                readIndex = (readIndex + 1) % PERF_BUFFER_SIZE
-            }
-            lastPerfReadIndex = readIndex
-            const now = performance.now()
-            if (now - lastCpuLoadUpdate >= 1000) {
-                this.#cpuLoad.setValue(Math.round((maxMsSinceLastUpdate / budgetMs) * 100))
-                maxMsSinceLastUpdate = 0
-                lastCpuLoadUpdate = now
-            }
+            this.#updateCpuLoad(budgetMs, project)
             this.#position.setValue(state.position) // This must be the last to handle the state values before
         })
 
@@ -292,6 +271,29 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             changes: {started: this.#playingClips, stopped: Arrays.empty(), obsolete: Arrays.empty()}
         })
         return this.#notifyClipNotification.subscribe(observer)
+    }
+
+    #updateCpuLoad(budgetMs: number, project: Project): void {
+        while (this.#lastPerfReadIndex !== this.#perfIndex) {
+            const ms = this.#perfBuffer[this.#lastPerfReadIndex]
+            if (ms > this.#maxMsSinceLastUpdate) {this.#maxMsSinceLastUpdate = ms}
+            if (ms >= budgetMs) {
+                this.#consecutiveOverloadCount++
+                if (this.#consecutiveOverloadCount >= 30) {
+                    project.handleCpuOverload()
+                    this.#consecutiveOverloadCount = 0
+                }
+            } else {
+                this.#consecutiveOverloadCount = 0
+            }
+            this.#lastPerfReadIndex = (this.#lastPerfReadIndex + 1) % PERF_BUFFER_SIZE
+        }
+        const now = performance.now()
+        if (now - this.#lastCpuLoadUpdate >= 1000) {
+            this.#cpuLoad.setValue(Math.round((this.#maxMsSinceLastUpdate / budgetMs) * 100))
+            this.#maxMsSinceLastUpdate = 0
+            this.#lastCpuLoadUpdate = now
+        }
     }
 
     terminate(): void {

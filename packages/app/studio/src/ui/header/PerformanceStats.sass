@@ -2,23 +2,28 @@ component
   display: flex
   align-items: center
   column-gap: 1px
-  border-radius: 2px 4px 4px 2px
-  background-color: rgba(white, 0.02)
-  box-shadow: 0 0.5px 0.5px 0 rgba(white, 0.1), 0 0.5px 0.5px 0 rgba(black, 0.2) inset
+  border-radius: 2px
   position: relative
   overflow: hidden
+  background-color: color-mix(in srgb, var(--color-purple), transparent 99%)
 
-  > div.label
-    align-self: stretch
-    display: flex
-    justify-content: center
-    font-size: 10px
-    font-weight: bold
-    writing-mode: vertical-rl
-    transform: rotate(180deg)
+  > div
+    background-color: color-mix(in srgb, var(--color-purple), transparent 25%)
     user-select: none
-    color: rgba(black, 0.8)
-    background-color: var(--color-shadow)
-    border-radius: 1px
-    letter-spacing: 0.8px
-    box-shadow: -0.5px 0 0.5px 0 rgba(white, 0.1) inset
+    align-self: stretch
+
+    &.label
+      display: flex
+      justify-content: center
+      font-size: 9px
+      font-weight: bold
+      writing-mode: vertical-rl
+      transform: rotate(180deg)
+      color: black
+      letter-spacing: 0.8px
+
+    &.end
+      width: 2px
+
+  > canvas
+    background-color: color-mix(in srgb, var(--color-purple), transparent 98%)
