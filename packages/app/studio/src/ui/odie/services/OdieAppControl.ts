@@ -143,7 +143,6 @@ export class OdieAppControl {
         }
 
         try {
-            console.log(`[Odie] Creating Track "${name}"...`)
             this.studio.project.editing.modify(() => {
                 if (factory) {
                     this.studio.project.api.createInstrument(factory, { name })
@@ -157,7 +156,6 @@ export class OdieAppControl {
                 }
             })
 
-            // Verification: Fire event for the App Reporting System
             this.studio.odieEvents.notify({ type: "track-added", name, kind: t })
             return { success: true, message: `Added ${t} track '${name}'` }
         } catch (e: unknown) {
@@ -562,20 +560,17 @@ export class OdieAppControl {
     }
 
     async addMidiNotes(trackName: string, notes: MidiNoteDef[]): Promise<ToolResult> {
-        // 1. Find the Track
-        // 1. Find the Track
         const adapterMeta = this.findAudioUnitAdapter(trackName)
         if (adapterMeta.isEmpty()) return { success: false, reason: `Track "${trackName}" not found` }
         const adapter = adapterMeta.unwrap()
 
         const track = this.findFirstTrack(adapter)
-        if (!track) return { success: false, reason: `Track "${trackName}" has no note lanes (Robust Search Failed).` }
+        if (!track) return { success: false, reason: `Track "${trackName}" has no note lanes.` }
 
         try {
-            // 2. Determine target clip (Simplification: Use the first one found or fail for now)
             if (notes.length === 0) return { success: true }
 
-            // Time conversion: 1 Bar = 4.0 PPQN (assuming 4/4)
+            // 1 Bar = 4.0 PPQN
             const firstNoteTime = (notes[0].startTime - 1) * 4.0
 
             let region = track.regions.collection.asArray()
@@ -608,11 +603,9 @@ export class OdieAppControl {
             }
             if (!region) return { success: false, reason: `No MIDI region found at time ${notes[0].startTime} and failed to create one.` }
 
-            // --- STEP 3: Add Notes ---
             this.studio.project.editing.modify(() => {
                 const collection = region!.optCollection.unwrap()
                 const regionPos = region!.position
-                console.log(`[Odie] Adding ${notes.length} notes to region at ${regionPos}`)
 
                 this.studio.odieEvents.notify({ type: "region-created", track: trackName, time: regionPos })
 
@@ -648,21 +641,17 @@ export class OdieAppControl {
                 else return { success: false, reason: `Invalid automation param: ${param}` }
 
                 try {
-                    // --- STEP 1: Ensure Automation Lane ---
                     let lane = adapter.tracks.controls(field).unwrapOrUndefined()
                     if (!lane) {
                         this.studio.project.editing.modify(() => {
                             adapter.tracks.create(TrackType.Value, field)
                         })
 
-
-                        // Refresh View
+                        // Refresh
                         lane = adapter.tracks.controls(field).unwrapOrUndefined()
                     }
                     if (!lane) return { success: false, reason: "Automation lane missing after creation attempt." }
 
-                    // --- STEP 2: Ensure Region ---
-                    // Time is in Bars (1-based), convert to PPQN
                     const ppqnTime = (time - 1) * 4.0
 
                     let region = lane.regions.collection.asArray()
@@ -691,7 +680,6 @@ export class OdieAppControl {
                     }
                     if (!region) return { success: false, reason: "Region missing after creation attempt." }
 
-                    // --- STEP 3: Add Point ---
                     this.studio.project.editing.modify(() => {
                         const collection = region!.optCollection.unwrap()
                         const relTime = ppqnTime - region!.position

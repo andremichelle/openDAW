@@ -164,7 +164,7 @@ export class OdieService {
     }
 
     async sendMessage(text: string) {
-        // --- Command Interception (Slash Commands) ---
+        // Command Interception
         if (text.startsWith("/")) {
             const [cmd, ...args] = text.trim().split(" ")
             if (commandRegistry.has(cmd)) {
@@ -187,7 +187,7 @@ export class OdieService {
             }
         }
 
-        // --- Fast Path Interaction ---
+        // Fast Path Interaction
         const fastPathMap: Array<[RegExp, string, (match: RegExpMatchArray) => string[]]> = [
             [/^play$/i, "/play", () => []],
             [/^start$/i, "/play", () => []],
@@ -225,7 +225,7 @@ export class OdieService {
             }
         }
 
-        // --- Standard AI Interaction ---
+        // Standard AI Interaction
         const userMsg: Message = { id: crypto.randomUUID(), role: "user", content: text, timestamp: Date.now() }
         const startMsgs = this.messages.getValue()
         this.messages.setValue([...startMsgs, userMsg])
@@ -583,7 +583,7 @@ ${JSON.stringify({
     }
 
 
-    // --- HISTORY MANAGEMENT ---
+    // History Management
 
     private activeSessionId: string | null = null
 
