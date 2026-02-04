@@ -354,6 +354,8 @@ export namespace EffectFactories {
         Zeitgeist
     }
 
+    const isDev = location.hostname === "localhost" || location.hostname === "dev.opendaw.studio"
+
     export const AudioNamed = {
         StereoTool,
         Compressor,
@@ -365,6 +367,7 @@ export namespace EffectFactories {
         Crusher,
         Fold,
         Tidal,
+        ...(isDev ? {NeuralAmp} : {}),
         Maximizer
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> =

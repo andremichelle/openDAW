@@ -46,8 +46,9 @@ export namespace OpfsWorker {
                 await this.#acquireLock(path, async () => {
                     const segments = pathToSegments(path)
                     if (segments.length === 0) {return this.clear()}
-                    return this.#resolveFolder(segments.slice(0, -1))
-                        .then(folder => folder.removeEntry(asDefined(segments.at(-1)), {recursive: true}))
+                    const {status} = await Promises.tryCatch(this.#resolveFolder(segments.slice(0, -1))
+                        .then(folder => folder.removeEntry(asDefined(segments.at(-1)), {recursive: true})))
+                    if (status === "rejected") {return}
                 })
             }
 

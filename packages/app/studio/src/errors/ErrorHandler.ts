@@ -8,7 +8,10 @@ import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo"
 
 const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP"]
-const IgnoredErrors = ["ResizeObserver loop completed with undelivered notifications."]
+const IgnoredErrors = [
+    "ResizeObserver loop completed with undelivered notifications.",
+    "Request timeout appSettingsDistributor.getValue"
+]
 const MonacoPatterns = ["monaco-editor", "vs/base/common/errors"]
 const UrlPattern = /https?:\/\/[^\s)]+/g
 

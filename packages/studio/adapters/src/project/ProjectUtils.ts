@@ -137,7 +137,7 @@ export namespace ProjectUtils {
             ...dependencies
                 .map(box => ({
                     source: box.address.uuid,
-                    target: box.resource === "external" ? box.address.uuid : UUID.generate()
+                    target: box.resource === "preserved" ? box.address.uuid : UUID.generate()
                 }))
         ])
         return uuidMap
@@ -149,7 +149,7 @@ export namespace ProjectUtils {
                   dependencies: ReadonlyArray<Box>) => {
         const existingExternalResourceUUIDs = UUID.newSet<UUID.Bytes>(uuid => uuid)
         dependencies.forEach((source: Box) => {
-            if (source.resource === "external" && boxGraph.findBox(source.address.uuid).nonEmpty()) {
+            if (source.resource === "preserved" && boxGraph.findBox(source.address.uuid).nonEmpty()) {
                 existingExternalResourceUUIDs.add(source.address.uuid)
             }
         })

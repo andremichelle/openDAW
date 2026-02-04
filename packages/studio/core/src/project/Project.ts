@@ -61,7 +61,7 @@ import {ppqn, TempoMap, TimeBase} from "@opendaw/lib-dsp"
 import {MidiData} from "@opendaw/lib-midi"
 import {StudioPreferences} from "../StudioPreferences"
 import {RegionOverlapResolver, TimelineFocus} from "../ui"
-import {SampleStorage} from "../samples/SampleStorage"
+import {SampleStorage} from "../samples"
 
 export type RestartWorklet = { unload: Func<unknown, Promise<unknown>>, load: Procedure<EngineWorklet> }
 
@@ -207,6 +207,15 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         return worklet
     }
 
+    handleCpuOverload(): void {
+        if (!StudioPreferences.settings.engine["stop-playback-when-overloading"]) {return}
+        this.engine.sleep()
+        RuntimeNotifier.info({
+            headline: "CPU Overload Detected",
+            message: "Playback has been stopped. Try removing heavy plugins or effects."
+        }).finally()
+    }
+
     startRecording(countIn: boolean = true) {
         this.engine.assertWorklet()
         if (Recording.isRecording) {return}
@@ -295,8 +304,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     }
 
     invalid(): boolean {
-        // TODO Optimise. Flag changes somewhere.
-        return this.boxGraph.boxes().some(box => box.accept<BoxVisitor<boolean>>({
+        const now = performance.now()
+        const result = this.boxGraph.boxes().some(box => box.accept<BoxVisitor<boolean>>({
             visitTrackBox: (box: TrackBox): boolean => {
                 for (const [current, next] of Arrays.iterateAdjacent(box.regions.pointerHub.incoming()
                     .map(({box}) => UnionBoxTypes.asRegionBox(box))
@@ -311,6 +320,10 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                 return false
             }
         }) ?? false)
+        if (performance.now() - now > 5) {
+            console.warn("Evaluation of invalid project takes more than 5ms")
+        }
+        return result
     }
 
     lastRegionAction(): ppqn {

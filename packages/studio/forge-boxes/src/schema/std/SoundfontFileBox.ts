@@ -10,5 +10,5 @@ export const SoundfontFileBox: BoxSchema<Pointers> = {
         }
     },
     pointerRules: {accepts: [Pointers.SoundfontFile], mandatory: true},
-    resource: "external"
+    resource: "preserved"
 }

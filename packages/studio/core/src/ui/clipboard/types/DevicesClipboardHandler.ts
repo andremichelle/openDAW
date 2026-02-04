@@ -105,7 +105,7 @@ export namespace DevicesClipboard {
                 Array.from(boxGraph.dependenciesOf(box, {
                     alwaysFollowMandatory: true,
                     excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
-                }).boxes).filter(dep => dep.resource === "external"))
+                }).boxes).filter(dep => dep.resource === "preserved"))
             const allBoxes = [...deviceBoxes, ...dependencies]
             const instrumentContent = instrument !== null
                 ? (instrument.box.tags.content as Optional<InstrumentContent>) ?? ""

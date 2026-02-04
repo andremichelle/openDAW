@@ -26,7 +26,8 @@ export namespace PreferencesPageLabels {
             label: "Engine",
             fields: {
                 "note-audition-while-editing": "Note audition while editing",
-                "auto-create-output-compressor": "Automatically add compressor to main output"
+                "auto-create-output-compressor": "Automatically add compressor to main output",
+                "stop-playback-when-overloading": "Stop playback when overloading"
             }
         },
         "pointer": {
@@ -48,6 +49,7 @@ export namespace PreferencesPageLabels {
             label: "Debug",
             fields: {
                 "footer-show-fps-meter": "Show FPS meter",
+                "show-cpu-stats": "Show CPU stats",
                 "footer-show-samples-memory": "Show samples in memory",
                 "footer-show-build-infos": "Show Build Information",
                 "enable-beta-features": "Enable Experimental Features",

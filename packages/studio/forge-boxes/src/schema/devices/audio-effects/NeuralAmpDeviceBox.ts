@@ -1,10 +1,10 @@
-import {BoxSchema} from "@opendaw/lib-box-forge"
+import {BoxSchema, deprecated} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
 import {ParameterPointerRules} from "../../std/Defaults"
 import {DeviceFactory} from "../../std/DeviceFactory"
 
 export const NeuralAmpDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffect("NeuralAmpDeviceBox", {
-    10: {type: "string", name: "model-json"},
+    10: {type: "string", name: "model-json", deprecated},
     11: {
         type: "float32", name: "input-gain", pointerRules: ParameterPointerRules,
         value: 0.0, constraints: "decibel", unit: "dB"
@@ -17,5 +17,6 @@ export const NeuralAmpDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudio
     14: {
         type: "float32", name: "mix", pointerRules: ParameterPointerRules,
         value: 1.0, constraints: {min: 0.0, max: 1.0, scaling: "linear"}, unit: "%"
-    }
+    },
+    20: {type: "pointer", name: "model", pointerType: Pointers.NeuralAmpModel, mandatory: false}
 })

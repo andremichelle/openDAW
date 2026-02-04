@@ -35,6 +35,7 @@ export class EngineFacade implements Engine {
     readonly #isCountingIn: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
+    readonly #cpuLoad: DefaultObservableValue<number> = new DefaultObservableValue(0)
     readonly #preferencesFacade: PreferencesFacade<EngineSettings>
 
     #worklet: Option<EngineWorklet> = Option.None
@@ -55,7 +56,8 @@ export class EngineFacade implements Engine {
             worklet.isPlaying.catchupAndSubscribe(owner => this.#isPlaying.setValue(owner.getValue())),
             worklet.isRecording.catchupAndSubscribe(owner => this.#isRecording.setValue(owner.getValue())),
             worklet.isCountingIn.catchupAndSubscribe(owner => this.#isCountingIn.setValue(owner.getValue())),
-            worklet.markerState.catchupAndSubscribe(owner => this.#markerState.setValue(owner.getValue()))
+            worklet.markerState.catchupAndSubscribe(owner => this.#markerState.setValue(owner.getValue())),
+            worklet.cpuLoad.catchupAndSubscribe(owner => this.#cpuLoad.setValue(owner.getValue()))
         )
     }
 
@@ -68,7 +70,16 @@ export class EngineFacade implements Engine {
         this.#worklet = Option.None
     }
 
-    play(): void {this.#worklet.ifSome(worklet => worklet.play())}
+    play(): void {
+        this.#worklet.ifSome(worklet => {
+            const context = worklet.context as AudioContext
+            if (context.state === "suspended") {
+                context.resume().then(() => worklet.play())
+            } else {
+                worklet.play()
+            }
+        })
+    }
     stop(reset: boolean = false): void {this.#worklet.ifSome(worklet => worklet.stop(reset))}
     setPosition(position: ppqn): void {this.#worklet.ifSome(worklet => worklet.setPosition(position))}
     prepareRecordingState(countIn: boolean): void {this.#worklet.ifSome(worklet => worklet.prepareRecordingState(countIn))}
@@ -82,9 +93,12 @@ export class EngineFacade implements Engine {
     get playbackTimestamp(): ObservableValue<ppqn> {return this.#playbackTimestamp}
     get countInBeatsRemaining(): ObservableValue<int> {return this.#countInBeatsRemaining}
     get markerState(): DefaultObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}
+    get cpuLoad(): ObservableValue<number> {return this.#cpuLoad}
     get project(): Project {return this.#worklet.unwrap("No worklet to get project").project}
     get sampleRate(): number {return this.#worklet.isEmpty() ? 44_100 : this.#worklet.unwrap().context.sampleRate}
     get preferences(): EnginePreferences {return this.#preferencesFacade}
+    get perfBuffer(): Float32Array {return this.#worklet.mapOr(worklet => worklet.perfBuffer, new Float32Array(0))}
+    get perfIndex(): number {return this.#worklet.mapOr(worklet => worklet.perfIndex, 0)}
 
     isReady(): Promise<void> {return this.#worklet.mapOr(worklet => worklet.isReady(), Promise.resolve())}
     queryLoadingComplete(): Promise<boolean> {

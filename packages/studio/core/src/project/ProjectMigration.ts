@@ -7,6 +7,7 @@ import {
     DelayDeviceBox,
     GrooveShuffleBox,
     MIDIOutputDeviceBox,
+    NeuralAmpDeviceBox,
     RevampDeviceBox,
     TimelineBox,
     ValueEventBox,
@@ -25,6 +26,7 @@ import {
     migrateAudioUnitBox,
     migrateDelayDeviceBox,
     migrateMIDIOutputDeviceBox,
+    migrateNeuralAmpDeviceBox,
     migrateRevampDeviceBox,
     migrateTimelineBox,
     migrateValueEventBox,
@@ -77,7 +79,8 @@ export class ProjectMigration {
         // 1st pass (2nd pass might rely on those changes)
         for (const box of boxGraph.boxes()) {
             await box.accept<BoxVisitor<Promise<unknown>>>({
-                visitAudioFileBox: (box: AudioFileBox) => migrateAudioFileBox(boxGraph, box, loadAudioData)
+                visitAudioFileBox: (box: AudioFileBox) => migrateAudioFileBox(boxGraph, box, loadAudioData),
+                visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox) => migrateNeuralAmpDeviceBox(boxGraph, box)
             })
         }
         // 2nd pass. We need to run on a copy, because we might add more boxes during the migration

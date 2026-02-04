@@ -35,7 +35,10 @@ import {ArrayField} from "./array"
 import {ObjectField} from "./object"
 import {PrimitiveField} from "./primitive"
 
-export type ResourceType = "external" | "internal"
+// Resources act as leaves when collecting dependencies (their own dependencies are not followed).
+// "preserved": UUID is preserved during copy/paste (for content-addressable storage like audio files)
+// "internal": UUID is regenerated during copy/paste
+export type ResourceType = "preserved" | "internal"
 
 export type BoxConstruct<T extends PointerTypes> = {
     uuid: UUID.Bytes

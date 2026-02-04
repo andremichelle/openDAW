@@ -212,8 +212,9 @@ export class ProjectApi {
         })
     }
 
-    duplicateRegion<R extends AnyRegionBoxAdapter>(region: R): R {
-        const track = region.trackBoxAdapter.unwrap("Region is invalid")
+    duplicateRegion<R extends AnyRegionBoxAdapter>(region: R): Option<R> {
+        if (region.trackBoxAdapter.isEmpty()) {return Option.None}
+        const track = region.trackBoxAdapter.unwrap()
         const clearFrom = region.position + region.duration
         const clearTo = region.complete + region.duration
         // Resolve target track (for keep-existing mode)
@@ -228,7 +229,7 @@ export class ProjectApi {
         }) as R
         // Apply overlap resolution
         solver()
-        return duplicate
+        return Option.wrap(duplicate)
     }
 
     quantiseNotes(collection: NoteEventCollectionBox,
