@@ -14,8 +14,9 @@ export type Manual = (
     label: string
     icon?: IconSymbol
     files: ReadonlyArray<Manual>
-}
-    ) & { separatorBefore?: boolean }
+}) & { separatorBefore?: boolean }
+
+const isDev = location.hostname === "localhost" || location.hostname === "dev.opendaw.studio"
 
 export const Manuals: ReadonlyArray<Manual> = [
     {
@@ -111,12 +112,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                         path: "/manuals/devices/audio/maximizer",
                         icon: EffectFactories.Maximizer.defaultIcon
                     },
-                    {
+                    ...(isDev ? [{
                         type: "page",
                         label: "Neural Amp",
                         path: "/manuals/devices/audio/neural-amp",
                         icon: EffectFactories.AudioNamed.NeuralAmp.defaultIcon
-                    },
+                    } satisfies Manual] : []),
                     {
                         type: "page",
                         label: "Revamp",
