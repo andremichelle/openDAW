@@ -631,6 +631,7 @@ ${JSON.stringify({
         type: string
         name: string
         componentId: string
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Widget context is dynamic and varies by widget type
         context: Record<string, any>
     }) {
         /*
@@ -708,6 +709,7 @@ ${JSON.stringify({
                         toastEl.style.opacity = "1"
 
                         // Clear debounce
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamically attaching timeout reference to DOM element
                         const grid = gridEl as any
                         clearTimeout(grid._toastTimeout)
                         grid._toastTimeout = setTimeout(() => {
