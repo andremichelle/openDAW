@@ -56,12 +56,12 @@ Odie operates on a "Dual-Brain" architecture designed for safety and context-awa
 
 Odie's features adapt based on the connected provider:
 
-| Feature | Gemini 3 Flash | DeepSeek R1 | Local (Ollama) |
-| :--- | :---: | :---: | :---: |
-| **Chat & QA** | ✅ | ✅ | ✅ |
-| **Context Awareness** | ✅ | ✅ | ✅ |
-| **Studio Control** | ✅ | ✅ | ✅ |
-| **GenUI Widgets** | ✅ | ❌ | ❌ |
+| Feature | Gemini 3 Flash | Local (Ollama) |
+| :--- | :---: | :---: |
+| **Chat & QA** | ✅ | ✅ |
+| **Context Awareness** | ✅ | ✅ |
+| **Studio Control** | ✅ | ✅ |
+| **GenUI Widgets** | ✅ | ❌ |
 
 
 ### GenUI (Gemini 3 Exclusive)
