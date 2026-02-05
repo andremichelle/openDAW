@@ -1,5 +1,5 @@
 import { createElement } from "@opendaw/lib-jsx"
-import { Terminator } from "@opendaw/lib-std"
+import { Terminator, ObservableValue } from "@opendaw/lib-std"
 import { StudioService } from "@/service/StudioService"
 import { Html } from "@opendaw/lib-dom"
 import { OdieService } from "./OdieService"
@@ -53,7 +53,7 @@ const IconClose = () => (
     </svg>
 )
 
-const RailBtn = (props: { icon: any, label: string, variant: string, onclick?: () => void }) => {
+const RailBtn = (props: { icon: HTMLElement, label: string, variant: string, onclick?: () => void }) => {
     return <button className={`RailBtn ${props.variant}`}
         title={props.label}
         onclick={props.onclick}
@@ -63,7 +63,7 @@ const RailBtn = (props: { icon: any, label: string, variant: string, onclick?: (
     </button>
 }
 
-const HeaderAction = (props: { icon: any, title: string, onclick: () => void }) => <button
+const HeaderAction = (props: { icon: HTMLElement, title: string, onclick: () => void }) => <button
     className="HeaderAction"
     title={props.title} onclick={props.onclick}
 >
@@ -189,14 +189,14 @@ export const OdieSidebar = (props: { service: StudioService, lifecycle: Terminat
         })
 
         // Subscribe to WIDTH changes
-        lifecycle.own(odieService.width.subscribe((observer: any) => {
+        lifecycle.own(odieService.width.subscribe((observer: ObservableValue<number>) => {
             if (service.layout.odieVisible.getValue()) {
                 container.style.width = observer.getValue() + "px"
             }
         }))
 
         // Subscribe to History Toggle (Synchronous & Safe)
-        lifecycle.own(odieService.showHistory.subscribe((observer: any) => {
+        lifecycle.own(odieService.showHistory.subscribe((observer: ObservableValue<boolean>) => {
             const show = observer.getValue()
             if (show) {
                 chatView.style.display = "none"
@@ -208,7 +208,7 @@ export const OdieSidebar = (props: { service: StudioService, lifecycle: Terminat
         }))
 
         // Subscribe to View State (Settings / Chat)
-        lifecycle.own(odieService.viewState.subscribe((observer: any) => {
+        lifecycle.own(odieService.viewState.subscribe((observer: ObservableValue<string>) => {
             const state = observer.getValue()
             if (state === "settings") {
                 openSettingsModal()
@@ -270,7 +270,7 @@ export const OdieSidebar = (props: { service: StudioService, lifecycle: Terminat
         }
     }
 
-    lifecycle.own(service.layout.odieVisible.subscribe((observer: any) => updateVisibility(observer.getValue())))
+    lifecycle.own(service.layout.odieVisible.subscribe((observer: ObservableValue<boolean>) => updateVisibility(observer.getValue())))
 
     // Initial check
     if (service.layout.odieVisible.getValue()) {
