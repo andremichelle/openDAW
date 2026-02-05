@@ -1,7 +1,6 @@
-import { DefaultObservableValue } from "@opendaw/lib-std"
+import { DefaultObservableValue, isDefined, Nullable, Option } from "@opendaw/lib-std"
 import type { StudioService } from "../../../service/StudioService"
 import type { Project, ProjectProfile } from "@opendaw/studio-core"
-import { Option } from "@opendaw/lib-std"
 
 // -- INTERFACES --
 
@@ -53,7 +52,7 @@ export interface DAWContext {
 export class ContextService {
     // The "Brain" State
     public readonly state: DefaultObservableValue<DAWContext>
-    private studio?: StudioService // Weak reference to avoid circular imports during boot. Cast to StudioService when used.
+    private studio: Nullable<StudioService> = null // Weak reference to avoid circular imports during boot. Cast to StudioService when used.
 
     constructor() {
         // Initial / Mock State
@@ -84,15 +83,12 @@ export class ContextService {
         console.debug("ContextService: Connected to Studio.")
 
         // Listen for Project Load/Unload
-        if (this.studio && this.studio.projectProfileService) {
+        if (isDefined(this.studio) && isDefined(this.studio.projectProfileService)) {
             this.studio.projectProfileService.catchupAndSubscribe((optProfile: Option<ProjectProfile>) => {
-                // const optProfile = owner.getValue() // Removed, argument IS the value
                 if (optProfile.nonEmpty()) {
-                    // Project Loaded
                     const project = optProfile.unwrap().project
                     this.onProjectLoaded(project)
                 } else {
-                    // Project Closed
                     this.resetFocus()
                 }
             })
@@ -132,27 +128,25 @@ export class ContextService {
             // 1. Identify Name
             // Tracks usually have 'meta.name' or just 'name'
             let name = "Unknown Element"
-            if (primary.meta?.name) name = primary.meta.name.toString()
-            else if (primary.name) name = primary.name.toString()
-            else if (primary.address) name = primary.address.toString()
+            if (isDefined(primary.meta?.name)) name = primary.meta.name.toString()
+            else if (isDefined(primary.name)) name = primary.name.toString()
+            else if (isDefined(primary.address)) name = primary.address.toString()
 
             // 2. Identify Plugins
             // Tracks have 'audioUnits' (PointerHub)
             let plugins: string[] = []
 
             // Check for AudioUnits Hub
-            if (primary.audioUnits && primary.audioUnits.pointerHub) {
-                const units = primary.audioUnits.pointerHub.incoming()
+            if (isDefined(primary.audioUnits) && isDefined(primary.audioUnits.pointerHub)) {
+                const units = (primary.audioUnits.pointerHub as any).incoming()
                 plugins = units.map((u: any) => {
                     const box = u.box
-                    // Read plugin name from meta or type
                     return box.meta?.name?.toString() || box.cls?.name || "Unknown Plugin"
                 })
             }
             // Check if it's a plugin itself
-            else if (primary.constructor && primary.constructor.name.includes("AudioUnit")) {
+            else if (isDefined(primary.constructor) && primary.constructor.name.includes("AudioUnit")) {
                 plugins = [name]
-                // Try to find parent track? Too complex for now.
             }
 
             this.setFocus({
@@ -171,11 +165,9 @@ export class ContextService {
      * Snapshots the current DAW state.
      */
     public scan(modelId?: string, forceAgentMode?: boolean): DAWContext {
-        if (this.studio) {
-            // -- REAL DATA MODE --
+        if (isDefined(this.studio)) {
             const s = this.studio
 
-            // 1. Project Info
             const projectName = s.hasProfile
                 ? s.profile.meta.name
                 : "No Project Loaded"
@@ -187,21 +179,19 @@ export class ContextService {
 
             try {
                 // 2. Transport & Engine
-                if (s.engine && s.engine.isPlaying) {
+                if (isDefined(s.engine) && isDefined(s.engine.isPlaying)) {
                     isPlaying = s.engine.isPlaying.getValue()
                 }
 
                 // 3. Timeline / Global Specs
-                if (s.profile && s.profile.project && s.profile.project.timelineBox) {
+                if (isDefined(s.profile) && isDefined(s.profile.project) && isDefined(s.profile.project.timelineBox)) {
                     const tl = s.profile.project.timelineBox
 
-                    if (tl.bpm) bpm = tl.bpm.getValue()
-                    if (tl.signature) timeSignature = tl.signature.toString()
+                    if (isDefined(tl.bpm)) bpm = tl.bpm.getValue()
+                    if (isDefined(tl.signature)) timeSignature = tl.signature.toString()
 
-                    // Best guess for Key - if it exists on Timeline or Root
-                    // Note: If Key is missing, we stick to default
-                    if ((tl as any).key) key = (tl as any).key.getValue()
-                    else if ((s.profile.project as any).key) key = (s.profile.project as any).key.getValue()
+                    if (isDefined((tl as any).key)) key = (tl as any).key.getValue()
+                    else if (isDefined((s.profile.project as any).key)) key = (s.profile.project as any).key.getValue()
                 }
             } catch (e) {
                 console.warn("ContextService: Sensor Read Error", e)

@@ -1,9 +1,11 @@
-import { DefaultObservableValue, ObservableValue } from "@opendaw/lib-std"
-import { LLMProvider, Message, ProviderConfig } from "./llm/LLMProvider"
+import { DefaultObservableValue, isDefined, ObservableValue, Optional } from "@opendaw/lib-std"
+import { LLMProvider, Message, ProviderConfig, LLMTool } from "./llm/LLMProvider"
 import { Gemini3Provider } from "./llm/Gemini3Provider"
 import { OpenAICompatibleProvider } from "./llm/OpenAICompatibleProvider"
 import { ContextService } from "./ContextService"
 import { ODIE_MOLECULAR_KNOWLEDGE } from "../data/OdieKnowledgeBase"
+
+import type { StudioService } from "../../../service/StudioService"
 
 const STORAGE_KEY_CONFIGS = "odie_provider_configs"
 const STORAGE_KEY_ACTIVE = "odie_provider_active"
@@ -14,7 +16,7 @@ export class AIService {
     readonly wizardCompleted = new DefaultObservableValue<boolean>(false)
 
     readonly contextService = new ContextService()
-    private configMap = new Map<string, any>()
+    private configMap = new Map<string, ProviderConfig>()
 
     constructor() {
         // Register Providers
@@ -35,7 +37,7 @@ export class AIService {
         this.loadSettings()
     }
 
-    setStudio(studio: any) {
+    setStudio(studio: StudioService) {
         this.contextService.setStudio(studio)
     }
 
@@ -53,11 +55,11 @@ export class AIService {
         return this.providers
     }
 
-    getProvider(id: string): LLMProvider | undefined {
+    getProvider(id: string): Optional<LLMProvider> {
         return this.providers.find(p => p.id === id)
     }
 
-    getActiveProvider(): LLMProvider | undefined {
+    getActiveProvider(): Optional<LLMProvider> {
         return this.providers.find(p => p.id === this.activeProviderId.getValue())
     }
 
@@ -75,16 +77,16 @@ export class AIService {
     }
 
     setActiveProvider(id: string) {
-        if (this.providers.find(p => p.id === id)) {
+        if (isDefined(this.providers.find(p => p.id === id))) {
             this.activeProviderId.setValue(id)
             localStorage.setItem(STORAGE_KEY_ACTIVE, id)
         }
     }
 
-    streamChat(messages: Message[], context?: any, tools?: any[], onFinal?: (msg: Message) => void, onStatusChange?: (status: string, model?: string) => void): ObservableValue<{ content: string; thoughts?: string }> {
+    streamChat(messages: Message[], context?: unknown, tools?: LLMTool[], onFinal?: (msg: Message) => void, onStatusChange?: (status: string, model?: string) => void): ObservableValue<{ content: string; thoughts?: string }> {
         const provider = this.getActiveProvider()
 
-        if (!provider) {
+        if (!isDefined(provider)) {
             return new DefaultObservableValue({ content: "Error: No AI Provider selected." })
         }
 
@@ -141,12 +143,12 @@ ${ODIE_MOLECULAR_KNOWLEDGE}
             if (rawConfigs) {
                 const json = JSON.parse(rawConfigs)
                 Object.keys(json).forEach(key => {
-                    this.configMap.set(key, json[key])
+                    this.configMap.set(key, json[key] as ProviderConfig)
                 })
             }
 
             const active = localStorage.getItem(STORAGE_KEY_ACTIVE)
-            if (active && this.providers.find(p => p.id === active)) {
+            if (isDefined(active) && isDefined(this.providers.find(p => p.id === active))) {
                 this.activeProviderId.setValue(active)
             } else {
                 this.activeProviderId.setValue("gemini-3")
@@ -195,7 +197,7 @@ ${ODIE_MOLECULAR_KNOWLEDGE}
     }
 
     private saveSettings() {
-        const obj: any = {}
+        const obj: Record<string, ProviderConfig> = {}
         this.configMap.forEach((v, k) => obj[k] = v)
         localStorage.setItem(STORAGE_KEY_CONFIGS, JSON.stringify(obj))
     }
