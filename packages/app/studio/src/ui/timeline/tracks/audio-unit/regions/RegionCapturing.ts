@@ -5,7 +5,7 @@ import {
     UnionAdapterTypes
 } from "@opendaw/studio-adapters"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
-import {BinarySearch, Geom, isInstanceOf, Nullable, NumberComparator} from "@opendaw/lib-std"
+import {BinarySearch, Geom, isDefined, isInstanceOf, Nullable, NumberComparator} from "@opendaw/lib-std"
 import {PointerRadiusDistance} from "@/ui/timeline/constants.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
@@ -38,16 +38,13 @@ export namespace RegionCapturing {
                 if (trackIndex < 0 || trackIndex >= tracks.length) {return null}
                 const track = tracks[trackIndex]
                 const position = Math.floor(range.xToUnit(x))
-                const region = track.trackBoxAdapter.regions.collection.lowerEqual(position)
-                if (region === null || position >= region.complete) {
+                const threshold = range.unitsPerPixel * PointerRadiusDistance
+                const region = track.trackBoxAdapter.regions.collection.lowerEqual(position + threshold)
+                if (!isDefined(region) || position >= region.complete + threshold) {
                     return {type: "track", track}
                 }
                 const x0 = range.unitToX(region.position)
                 const x1 = range.unitToX(region.complete)
-                if (x1 - x0 <= PointerRadiusDistance * 2) {
-                    // too small to have other sensitive areas
-                    return {type: "region", part: "position", region}
-                }
                 if (isInstanceOf(region, AudioRegionBoxAdapter)) {
                     const {fading} = region
                     const handleRadius = 3
@@ -63,15 +60,15 @@ export namespace RegionCapturing {
                 }
                 if (UnionAdapterTypes.isLoopableRegion(region)) {
                     const bottomEdge = y > track.position + RegionLabel.labelHeight()
-                    if (x - x0 < PointerRadiusDistance * 2) {
-                        return bottomEdge
-                            ? {type: "region", part: "content-start", region}
-                            : {type: "region", part: "start", region}
-                    }
-                    if (x1 - x < PointerRadiusDistance * 2) {
+                    if (Math.abs(x - x1) < PointerRadiusDistance) {
                         return bottomEdge
                             ? {type: "region", part: "content-complete", region}
                             : {type: "region", part: "complete", region}
+                    }
+                    if (Math.abs(x - x0) < PointerRadiusDistance) {
+                        return bottomEdge
+                            ? {type: "region", part: "content-start", region}
+                            : {type: "region", part: "start", region}
                     }
                     if (bottomEdge
                         && Math.abs(x - range.unitToX(region.offset + region.loopDuration)) <= PointerRadiusDistance) {
