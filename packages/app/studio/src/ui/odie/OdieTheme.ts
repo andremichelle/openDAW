@@ -31,10 +31,10 @@ export const Palette = {
     },
     // Semantics
     background: "#09090b", // zinc-950
-    panel: "#18181b",      // zinc-900
+    panel: "#121214",      // Richer dark
     border: "#27272a",     // zinc-800
     text: {
-        primary: "#ffffff",
+        primary: "#fafafa", // Soft white
         secondary: "#a1a1aa", // zinc-400
         muted: "#52525b"      // zinc-600
     },
