@@ -44,9 +44,37 @@ class ChatHistoryService {
 
     private save() {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.sessions.getValue()))
-        } catch (e) {
-            console.error("History: Save failed", e)
+            const data = JSON.stringify(this.sessions.getValue())
+            localStorage.setItem(STORAGE_KEY, data)
+        } catch (e: any) {
+            // Handle Quota Exceeded
+            if (e.name === "QuotaExceededError" || e.name === "NS_ERROR_DOM_QUOTA_REACHED") {
+                console.warn("History: Quota exceeded. Attempting to trim old sessions...")
+                this.trimHistory()
+                try {
+                    // Retry save once
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.sessions.getValue()))
+                    console.log("History: Save successful after trim.")
+                } catch (retryErr) {
+                    console.error("History: Save failed even after trim.", retryErr)
+                }
+            } else {
+                console.error("History: Save failed", e)
+            }
+        }
+    }
+
+    private trimHistory() {
+        const sessions = this.sessions.getValue()
+        // Keep top 20 most recent sessions
+        if (sessions.length > 20) {
+            const trimmed = sessions.slice(0, 20)
+            this.sessions.setValue(trimmed)
+        } else {
+            // If already small but still failing, maybe one session is huge?
+            // Heavy-handed: Keep only top 5
+            const emergencyTrim = sessions.slice(0, 5)
+            this.sessions.setValue(emergencyTrim)
         }
     }
 

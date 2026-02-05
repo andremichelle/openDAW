@@ -1,5 +1,6 @@
 
 export type UIComponentType = "container" | "knob" | "switch" | "label" | "meter"
+export type UIValue = string | number | boolean | null
 
 export interface UIComponentBase {
     id: string
@@ -20,8 +21,8 @@ export interface UIKnob extends UIComponentBase {
 export interface UISwitch extends UIComponentBase {
     type: "switch"
     targetParam: string
-    onValue?: any
-    offValue?: any
+    onValue?: UIValue
+    offValue?: UIValue
 }
 
 export interface UILabel extends UIComponentBase {

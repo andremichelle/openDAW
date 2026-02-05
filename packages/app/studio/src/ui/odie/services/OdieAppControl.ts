@@ -1373,7 +1373,8 @@ export class OdieAppControl {
             some: async (adapter) => {
                 try {
                     // Helper to set value robustly inside a transaction
-                    const applyValue = (deviceAdapter: any, paramName: string, numericValue: number): ToolResult => {
+                    type WithNamedParams = { namedParameter: any }
+                    const applyValue = (deviceAdapter: Record<string, any>, paramName: string, numericValue: number): ToolResult => {
                         const param = deviceAdapter[paramName]
                         if (!param) {
                             const available = Object.keys(deviceAdapter || {}).join(", ")
@@ -1396,9 +1397,10 @@ export class OdieAppControl {
                                     setter!(numericValue)
                                 })
                                 return { success: true, reason: `${trackName} ${deviceType} ${paramPath} set to ${numericValue.toFixed(2)}` }
-                            } catch (err: any) {
+                            } catch (err: unknown) {
                                 console.error("Mutation failed", err)
-                                return { success: false, reason: `Mutation failed: ${err.message}` }
+                                const errorMsg = err instanceof Error ? err.message : String(err)
+                                return { success: false, reason: `Mutation failed: ${errorMsg}` }
                             }
                         }
 
@@ -1409,7 +1411,7 @@ export class OdieAppControl {
 
 
                     if (deviceType === "mixer") {
-                        const mixerParams = adapter.namedParameter as any
+                        const mixerParams = (adapter as unknown as WithNamedParams).namedParameter
                         return applyValue(mixerParams, paramPath, value)
                     }
 
@@ -1423,7 +1425,7 @@ export class OdieAppControl {
                         const effectAdapter = effects[deviceIndex]
 
                         // Strategy 1: Adapter Named Parameters (Standard)
-                        if (('namedParameter' in effectAdapter) && this.trySetParam((effectAdapter as any).namedParameter, paramPath, value)) {
+                        if (('namedParameter' in effectAdapter) && this.trySetParam((effectAdapter as unknown as WithNamedParams).namedParameter, paramPath, value)) {
                             return { success: true, message: `Set ${trackName}:effect[${deviceIndex}].${paramPath} = ${value}` }
                         }
 

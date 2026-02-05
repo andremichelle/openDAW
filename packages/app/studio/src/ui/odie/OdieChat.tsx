@@ -4,6 +4,7 @@ import { OdieInput } from "./OdieInput"
 import { OdieMessageList } from "./OdieMessageList"
 import { Message } from "./services/llm/LLMProvider"
 import { DefaultObservableValue } from "@opendaw/lib-std"
+import { TIMEOUTS } from "./OdieConstants"
 
 export const OdieChat = ({ service }: { service: OdieService }) => {
     // -- State --
@@ -33,7 +34,7 @@ export const OdieChat = ({ service }: { service: OdieService }) => {
         if (list) list.scrollTop = list.scrollHeight
     }
     messages.subscribe(owner => renderChat(owner.getValue()))
-    setTimeout(() => renderChat(messages.getValue()), 0) // Defer initial render to ensure DOM
+    setTimeout(() => renderChat(messages.getValue()), TIMEOUTS.IMMEDIATE) // Defer initial render to ensure DOM
 
     const container = <div style={{
         position: "relative",

@@ -5,7 +5,10 @@ import { KNOWLEDGE_MODULES } from "../data/OdieKnowledgeBase";
 
 import { userService } from "./UserService";
 
+export type OdieRole = keyof typeof ROLE_MINDSETS;
+
 export interface OdieContext {
+    [key: string]: unknown
     project?: {
         bpm: number;
         genre?: string;
@@ -153,7 +156,7 @@ class OdiePersonaService {
         return parts.join("\n");
     }
 
-    public mapFocusToRole(context: OdieContext, focus: FocusContext): keyof typeof ROLE_MINDSETS {
+    public mapFocusToRole(context: OdieContext, focus: FocusContext): OdieRole {
         const query = (context.userQuery || "").toLowerCase();
 
         if (query.includes("mix") || query.includes("balance") || query.includes("eq") || query.includes("compress")) return 'Mixer';
@@ -166,7 +169,7 @@ class OdiePersonaService {
         }
     }
 
-    getCognitiveProfile(role: keyof typeof ROLE_MINDSETS): { thinkingLevel: 'minimal' | 'low' | 'medium' | 'high' } {
+    getCognitiveProfile(role: OdieRole): { thinkingLevel: 'minimal' | 'low' | 'medium' | 'high' } {
         switch (role) {
             case 'Songwriter': return { thinkingLevel: 'minimal' };
             case 'Producer': return { thinkingLevel: 'low' };

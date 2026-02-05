@@ -11,6 +11,55 @@ import { OdieTools } from "./services/OdieToolDefinitions"
 import { commandRegistry } from "./services/OdieCommandRegistry"
 import { Dialogs } from "@/ui/components/dialogs"
 import { OdieToolExecutor, ExecutorContext } from "./services/OdieToolExecutor"
+import { safeUUID, TIMEOUTS } from "./OdieConstants"
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Widget Action Types
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type DeviceType = "mixer" | "effect" | "instrument" | "midiEffect"
+
+interface KnobAdjustContext {
+    param?: string
+    trackName?: string
+    value: number
+    previousValue?: number
+    deviceType?: DeviceType
+    deviceIndex?: number
+    paramPath?: string
+    _targetGridId?: string
+}
+
+interface StepSelectContext {
+    value: string | number
+}
+
+interface ErrorActionContext {
+    actionId: string
+}
+
+interface KnobAdjustAction {
+    type: "userAction"
+    name: "knob_adjust"
+    componentId: string
+    context: KnobAdjustContext
+}
+
+interface StepSelectAction {
+    type: "userAction"
+    name: "step_select"
+    componentId: string
+    context: StepSelectContext
+}
+
+interface ErrorAction {
+    type: "userAction"
+    name: "error_action"
+    componentId: string
+    context: ErrorActionContext
+}
+
+export type WidgetAction = KnobAdjustAction | StepSelectAction | ErrorAction
 
 
 export class OdieService {
@@ -220,11 +269,11 @@ export class OdieService {
         }
 
 
-        const userMsg: Message = { id: crypto.randomUUID(), role: "user", content: text, timestamp: Date.now() }
+        const userMsg: Message = { id: safeUUID(), role: "user", content: text, timestamp: Date.now() }
         const startMsgs = this.messages.getValue()
         this.messages.setValue([...startMsgs, userMsg])
 
-        const assistantMsg: Message = { id: crypto.randomUUID(), role: "model", content: "", timestamp: Date.now() }
+        const assistantMsg: Message = { id: safeUUID(), role: "model", content: "", timestamp: Date.now() }
         this.messages.setValue([...startMsgs, userMsg, assistantMsg])
 
 
@@ -393,7 +442,7 @@ export class OdieService {
                     // Feedback Loop
                     if (errors.length > 0) {
                         const feedbackMsg: Message = {
-                            id: crypto.randomUUID(),
+                            id: safeUUID(),
                             role: "system",
                             content: errors.join("\n"),
                             timestamp: Date.now()
@@ -432,7 +481,7 @@ export class OdieService {
                         })
                     } else if (analysisResults.length > 0) {
                         const functionResponseMsgs: Message[] = analysisResults.map(ar => ({
-                            id: crypto.randomUUID(),
+                            id: safeUUID(),
                             role: "function" as const,
                             name: ar.name,
                             content: ar.result,
@@ -539,8 +588,7 @@ ${JSON.stringify({
                 }
                 this.messages.setValue(newAll)
             })
-            // We should store disposer to clean up later, but for now just silence the lint
-            void disposer
+            this.#terminator.own(disposer)
 
         } catch (e) {
             console.error("Chat Error", e)
@@ -564,12 +612,14 @@ ${JSON.stringify({
                 }, null, 2) + "\n```"
             }
 
-            newAll[newAll.length - 1] = {
-                ...newAll[newAll.length - 1],
-                role: "model",
-                content: content
+            if (newAll.length > 0) {
+                newAll[newAll.length - 1] = {
+                    ...newAll[newAll.length - 1],
+                    role: "model",
+                    content: content
+                }
+                this.messages.setValue(newAll)
             }
-            this.messages.setValue(newAll)
 
             this.isGenerating.setValue(false)
         }
@@ -581,7 +631,7 @@ ${JSON.stringify({
     private activeSessionId: Nullable<string> = null
 
     public startNewChat() {
-        this.activeSessionId = crypto.randomUUID()
+        this.activeSessionId = safeUUID()
         this.messages.setValue([])
 
         // Initial Greeting
@@ -598,7 +648,7 @@ ${JSON.stringify({
 
     private saveCurrentSession() {
         if (!this.activeSessionId) {
-            this.activeSessionId = crypto.randomUUID()
+            this.activeSessionId = safeUUID()
         }
 
         const msgs = this.messages.getValue()
@@ -627,44 +677,15 @@ ${JSON.stringify({
     /**
      * Handle Interface Widget Action
      */
-    async handleWidgetAction(action: {
-        type: string
-        name: string
-        componentId: string
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Widget context is dynamic and varies by widget type
-        context: Record<string, any>
-    }) {
-        /*
-        action: {
-            type: string
-            name: string
-            componentId: string
-            context: {
-                param?: string
-                // [Universal Control]
-                deviceType?: "mixer" | "effect" | "instrument"
-                deviceIndex?: number
-                paramPath?: string
-                // ---
-                trackName?: string
-                value?: number | string
-                previousValue?: number
-                _targetGridId?: string // Check for our new hidden ID
-                actionId?: string
-            }
-        }
-        */
+    async handleWidgetAction(action: WidgetAction) {
         if (!this.appControl) {
             return
         }
-
-        const { param, trackName, value, _targetGridId, deviceType, deviceIndex, paramPath } = action.context
-
         try {
             let result: { success: boolean; reason?: string } | undefined
             let feedbackMessage = ""
-
-            if (action.name === "knob_adjust" && typeof value === 'number') {
+            if (action.name === "knob_adjust") {
+                const { param, trackName, value, _targetGridId, deviceType, deviceIndex, paramPath } = action.context
                 if (param === "volume" && trackName) {
                     result = await this.appControl.setVolume(trackName, value)
                     feedbackMessage = result?.success
@@ -714,20 +735,17 @@ ${JSON.stringify({
                         clearTimeout(grid._toastTimeout)
                         grid._toastTimeout = setTimeout(() => {
                             toastEl.style.opacity = "0"
-                        }, 2000)
+                        }, TIMEOUTS.TOAST_DURATION)
 
                         // RETURN EARLY - DO NOT ADD TO CHAT
                         return
                     }
                 }
             } else if (action.name === "step_select") {
-                // Handle List Selection -> Continue Conversation
-                const selection = action.context.value
-                console.log(`📋 [Gen UI] User selected step: ${selection}`)
-
-                // Add user message to chat to mimic them typing it
-                this.sendMessage(String(selection))
-            } else if (action.name === "error_action" && action.context.actionId) {
+                const { value } = action.context
+                console.log(`📋 [Gen UI] User selected step: ${value}`)
+                this.sendMessage(String(value))
+            } else if (action.name === "error_action") {
                 this.handleErrorAction(action.context.actionId)
             }
 
@@ -735,7 +753,7 @@ ${JSON.stringify({
             if (feedbackMessage) {
                 const msgs = [...this.messages.getValue()]
                 msgs.push({
-                    id: crypto.randomUUID(),
+                    id: safeUUID(),
                     role: "system",
                     content: feedbackMessage,
                     timestamp: Date.now()

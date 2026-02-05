@@ -83,7 +83,7 @@ export class AIService {
         }
     }
 
-    streamChat(messages: Message[], context?: unknown, tools?: LLMTool[], onFinal?: (msg: Message) => void, onStatusChange?: (status: string, model?: string) => void): ObservableValue<{ content: string; thoughts?: string }> {
+    streamChat(messages: Message[], context?: Record<string, unknown>, tools?: LLMTool[], onFinal?: (msg: Message) => void, onStatusChange?: (status: string, model?: string) => void): ObservableValue<{ content: string; thoughts?: string }> {
         const provider = this.getActiveProvider()
 
         if (!isDefined(provider)) {

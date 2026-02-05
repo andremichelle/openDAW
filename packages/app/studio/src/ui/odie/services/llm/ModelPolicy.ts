@@ -18,9 +18,7 @@ export interface ModelValidation {
 // import { ModelCapabilities } from "./OllamaCapabilityService"
 
 // checkModelTier signature updated to silence unused var lints
-export const checkModelTier = (
-    _modelId: string
-): ModelValidation => {
+export const checkModelTier = (): ModelValidation => {
     // OPERATION UNSHACKLE:
     // The user requested to remove all "random rules" and limitations.
     // We trust the user. If they selected a model, they want it to act as an Agent.

@@ -98,14 +98,23 @@ const MessageBubble = ({ message, onRetry, onWidgetAction }: { message: Message,
                                     return <div key={index} className="odie-markdown" innerHTML={html} />
                                 } else {
                                     // Render Widget with onAction callback for interactivity
-                                    return (
-                                        <div key={index} className="odie-widget-container" style={{ pointerEvents: "auto" }}>
-                                            {OdieRenderEngine.render(fragment, (action: any) => {
-                                                // Bridge widget actions to OdieService
-                                                if (onWidgetAction) onWidgetAction(action)
-                                            })}
-                                        </div>
-                                    )
+                                    try {
+                                        return (
+                                            <div key={index} className="odie-widget-container" style={{ pointerEvents: "auto" }}>
+                                                {OdieRenderEngine.render(fragment, (action: any) => {
+                                                    // Bridge widget actions to OdieService
+                                                    if (onWidgetAction) onWidgetAction(action)
+                                                })}
+                                            </div>
+                                        )
+                                    } catch (e) {
+                                        console.error("Widget Render Error:", e)
+                                        return (
+                                            <div key={index} className="odie-widget-error" style={{ padding: "8px", border: "1px solid red", color: "red", borderRadius: "4px" }}>
+                                                ⚠️ Widget failed to load.
+                                            </div>
+                                        )
+                                    }
                                 }
                             })
                         })()}

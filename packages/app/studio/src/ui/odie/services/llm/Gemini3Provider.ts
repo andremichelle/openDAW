@@ -1,5 +1,5 @@
 import { ObservableValue, DefaultObservableValue, Nullable, isAbsent, isDefined } from "@opendaw/lib-std"
-import { LLMProvider, Message, ProviderConfig, LLMTool } from "./LLMProvider"
+import { LLMProvider, Message, ProviderConfig, LLMTool, ToolCallArgs } from "./LLMProvider"
 
 type GeminiPart =
     | { text: string; thought?: boolean }
@@ -402,7 +402,7 @@ export class Gemini3Provider implements LLMProvider {
                 finalMsg.tool_calls = capturedTools.map(fc => ({
                     id: "call_" + crypto.randomUUID().substring(0, 8),
                     name: fc.name,
-                    arguments: fc.arguments
+                    arguments: fc.arguments as ToolCallArgs
                 }))
             }
             onFinal(finalMsg)

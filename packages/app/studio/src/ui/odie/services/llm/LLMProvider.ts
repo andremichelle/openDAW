@@ -1,83 +1,179 @@
-import { ObservableValue } from "@opendaw/lib-std"
+import { ObservableValue, Optional } from "@opendaw/lib-std"
 
-// Tooling Interfaces
+// ═══════════════════════════════════════════════════════════════════════════════
+// Tool Property Schema (JSON Schema subset for LLM tool definitions)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export type ToolPropertyType = "string" | "number" | "integer" | "boolean" | "array" | "object"
+
+export interface ToolPropertyBase {
+    type: ToolPropertyType
+    description?: string
+}
+
+export interface ToolPropertyString extends ToolPropertyBase {
+    type: "string"
+    enum?: string[]
+}
+
+export interface ToolPropertyNumber extends ToolPropertyBase {
+    type: "number" | "integer"
+    minimum?: number
+    maximum?: number
+}
+
+export interface ToolPropertyBoolean extends ToolPropertyBase {
+    type: "boolean"
+}
+
+export interface ToolPropertyArray extends ToolPropertyBase {
+    type: "array"
+    items?: ToolProperty
+}
+
+export interface ToolPropertyObject extends ToolPropertyBase {
+    type: "object"
+    properties?: Record<string, ToolProperty>
+    required?: string[]
+}
+
+export type ToolProperty =
+    | ToolPropertyString
+    | ToolPropertyNumber
+    | ToolPropertyBoolean
+    | ToolPropertyArray
+    | ToolPropertyObject
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Tool Call Arguments (runtime values from LLM)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export type JsonPrimitive = string | number | boolean | null
+export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue }
+export type ToolCallArgs = Record<string, JsonValue>
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LLM Tool Definition
+// ═══════════════════════════════════════════════════════════════════════════════
 
 export interface LLMTool {
     name: string
     description: string
     parameters: {
         type: "object"
-        properties: Record<string, any>
+        properties: Record<string, ToolProperty>
         required?: string[]
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Tool Call (from LLM response)
+// ═══════════════════════════════════════════════════════════════════════════════
+
 export interface ToolCall {
     id: string
     name: string
-    arguments: any // Parsed JSON
+    arguments: ToolCallArgs
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Message Custom Data (provider-specific metadata)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface MessageCustomData {
+    thoughtSignature?: string        // Gemini thought signature
+    modelVersion?: string            // Model version used
+    tokenCount?: number              // Token usage
+    finishReason?: string            // Why generation stopped
+    [key: string]: string | number | boolean | undefined  // Allow extension
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Chat Message
+// ═══════════════════════════════════════════════════════════════════════════════
 
 export interface Message {
     id: string
     role: "user" | "model" | "system" | "function"
     content: string
-    thoughts?: string // [Ollamas] Internal monologue/reasoning
-    tool_calls?: ToolCall[] // If the model decided to call a tool
-    name?: string // For function role
+    thoughts?: string                // Internal monologue/reasoning
+    tool_calls?: ToolCall[]          // If the model decided to call a tool
+    name?: string                    // For function role
     timestamp: number
-    audio?: string // Base64 encoded audio
-    customData?: Record<string, any> // Provider-specific data (e.g. Gemini Thought Signatures)
+    audio?: string                   // Base64 encoded audio
+    customData?: MessageCustomData   // Provider-specific data
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Streaming Context (passed to streamChat)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface StreamContext {
+    systemPrompt?: string
+    projectName?: Optional<string>
+    focusArea?: string
+    previousToolResults?: Array<{
+        name: string
+        result: string
+        success: boolean
+    }>
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Hardware Check Result
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface HardwareCheckResult {
+    ok: boolean
+    message: string
+    data?: {
+        gpuAvailable?: boolean
+        vramMB?: number
+        recommendedModels?: string[]
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Provider Configuration
+// ═══════════════════════════════════════════════════════════════════════════════
 
 export interface ProviderConfig {
     apiKey?: string
-    keyLibrary?: string[] // The Infinity Library
+    keyLibrary?: string[]            // The Infinity Library
     baseUrl?: string
     modelId?: string
-    forceAgentMode?: boolean // Manual Override
+    forceAgentMode?: boolean         // Manual Override
     // Gemini 3 Spec
     thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high'
     mediaResolution?: 'low' | 'medium' | 'high' | 'ultra_high'
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// LLM Provider Interface
+// ═══════════════════════════════════════════════════════════════════════════════
+
 export interface LLMProvider {
     readonly id: string
-    // White Glove Manifest
     readonly manifest: {
         name: string
         description: string
-        icon?: string // emoji or svg path
-        getKeyUrl?: string // Direct link to get key
+        icon?: string                // Emoji or svg path
+        getKeyUrl?: string           // Direct link to get key
         docsUrl?: string
     }
-
-    // Returns true if this provider needs an API Key
     requiresKey: boolean
-
-    // Returns true if this provider needs a Base URL (e.g. Local)
     requiresUrl: boolean
-    debugLog?: string // New field for diagnostic output
-
-    // Configure the provider with user secrets/settings
+    debugLog?: string                // Diagnostic output
     configure(config: ProviderConfig): void
-
-    // Stream the chat response
-    // Updated to support Tools (optional) and onFinal callback
     streamChat(
         messages: Message[],
-        context?: any,
+        context?: StreamContext,
         tools?: LLMTool[],
-        onFinal?: (msg: Message) => void, // Called when stream completes with full message
-        onStatusChange?: (status: string, model?: string) => void // Meta-Events
+        onFinal?: (msg: Message) => void,
+        onStatusChange?: (status: string, model?: string) => void
     ): ObservableValue<{ content: string, thoughts?: string }>
-
-    // Optional: Fetch list of available models (for Local AI / OpenRouter)
     fetchModels?(): Promise<string[]>
-
-    // Optional: Validate credentials/connection
     validate?(): Promise<{ ok: boolean, message: string }>
-
-    // Optional: Check hardware fit (e.g. CPU vs GPU for local models)
-    checkHardwareFit?(): Promise<{ ok: boolean, message: string, data?: any }>
+    checkHardwareFit?(): Promise<HardwareCheckResult>
 }
+

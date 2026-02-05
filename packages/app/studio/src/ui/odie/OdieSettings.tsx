@@ -4,7 +4,9 @@ import { OdieService } from "./OdieService"
 import { Html } from "@opendaw/lib-dom"
 import { Dialogs } from "@/ui/components/dialogs"
 import { Terminator } from "@opendaw/lib-std"
+import { Colors } from "@opendaw/studio-enums"
 import { LLMProvider, ProviderConfig } from "./services/llm/LLMProvider"
+import { TIMEOUTS } from "./OdieConstants"
 
 const className = Html.adoptStyleSheet(css, "OdieSettings")
 
@@ -51,9 +53,9 @@ const KeyRingEditor = ({ config, provider, save }: KeyRingEditorProps) => {
             isActive: i === 0
         }))
 
-    const removeKey = (idx: number, e: Event) => {
+    const removeKey = async (idx: number, e: Event) => {
         e.stopPropagation()
-        if (confirm("Remove this API key?")) {
+        if (await Dialogs.approve({ message: "Remove this API key?" })) {
             const newLib = [...keyLibrary]
             newLib.splice(idx, 1)
             config.keyLibrary = newLib
@@ -62,8 +64,8 @@ const KeyRingEditor = ({ config, provider, save }: KeyRingEditorProps) => {
         }
     }
 
-    const addNewKey = () => {
-        const newKey = prompt("Enter Gemini API Key:")
+    const addNewKey = async () => {
+        const newKey = await Dialogs.prompt({ message: "Enter Gemini API Key:" })
         if (newKey && newKey.trim().length > 10) {
             if (!config.keyLibrary) config.keyLibrary = []
             config.keyLibrary.push(newKey.trim())
@@ -173,7 +175,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
             }
         }
 
-        if (!isEmbedded && provider) setTimeout(() => runValidation(), 0)
+        if (!isEmbedded && provider) setTimeout(() => runValidation(), TIMEOUTS.IMMEDIATE)
         const isActive = service.ai.activeProviderId.getValue() === providerId
 
         return (
@@ -211,8 +213,8 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
                                 <label className="label">Active Key</label>
                                 <div className="active-key-display">
                                     <span className="api-key-display">••••{config.apiKey?.slice(-6) || "none"}</span>
-                                    <button className="btn-secondary" style={{ padding: "2px 8px" }} onclick={() => {
-                                        const key = prompt("Enter new API Key")
+                                    <button className="btn-secondary" style={{ padding: "2px 8px" }} onclick={async () => {
+                                        const key = await Dialogs.prompt({ message: "Enter new API Key" })
                                         if (key) { config.apiKey = key; saveConfig() }
                                     }}>Swap Key</button>
                                 </div>
@@ -300,7 +302,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
                 {!isEmbedded && (
                     <button
                         onclick={onBack}
-                        style={{ background: "none", border: "none", fontSize: "16px", cursor: "pointer", color: "var(--color-gray)" }}
+                        style={{ background: "none", border: "none", fontSize: "16px", cursor: "pointer", color: Colors.gray.toString() }}
                     >✕</button>
                 )}
             </div>
@@ -319,7 +321,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
                         service.ai.resetWizard();
                         location.reload()
                     }
-                }} style={{ color: "var(--color-red)", background: "transparent", border: "none", fontSize: "11px", cursor: "pointer", opacity: "0.7" }}>Reset Wizard</button>
+                }} style={{ color: Colors.red.toString(), background: "transparent", border: "none", fontSize: "11px", cursor: "pointer", opacity: "0.7" }}>Reset Wizard</button>
                 <button onclick={onBack} className="btn-primary">Done</button>
             </div>
         ) as HTMLElement
@@ -386,7 +388,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
                                         try {
                                             if (realProvider?.checkHardwareFit) {
                                                 const status = await realProvider.checkHardwareFit();
-                                                const color = status.ok ? "var(--color-green)" : (status.data?.cpu === 100 ? "var(--color-red)" : "var(--color-orange)");
+                                                const color = status.ok ? Colors.green.toString() : (status.data?.gpuAvailable === false ? Colors.red.toString() : Colors.orange.toString());
                                                 const display = document.getElementById('hardware-fit-msg');
                                                 if (display) {
                                                     display.innerText = status.message;

@@ -5,11 +5,94 @@ import { Svg } from "@opendaw/lib-dom"
 import { PI_HALF, TAU } from "@opendaw/lib-std"
 import "./OdieRenderEngine.sass"
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Widget Type Definitions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface ComparisonTableParams {
+    headers: string[]
+    rows: string[][]
+}
+
+interface SmartKnobParams {
+    label: string
+    param: string
+    trackName?: string
+    value: number
+    min: number
+    max: number
+    originalValue?: number
+    deviceType?: string
+    deviceIndex?: number
+    paramPath?: string
+}
+
+interface ControlGridParams {
+    trackName: string
+    title?: string
+    knobs: SmartKnobParams[]
+}
+
+interface StepListParams {
+    title?: string
+    options: string[]
+}
+
+interface MidiGridParams {
+    notes: Array<{
+        pitch: number
+        velocity?: number
+        time: number
+        duration: number
+    }>
+    bars?: number
+}
+
+interface ImageGalleryParams {
+    url: string
+    prompt: string
+}
+
+interface ErrorCardParams {
+    title: string
+    message: string
+    actions?: Array<{
+        label: string
+        actionId: string
+    }>
+}
+
+type WidgetComponentName =
+    | "comparison_table"
+    | "smart_knob"
+    | "control_grid"
+    | "step_list"
+    | "midi_grid"
+    | "image_gallery"
+    | "error_card"
+
+export interface OdieWidgetPayload {
+    type: "ui_component"
+    component: WidgetComponentName
+    params: unknown
+}
+
+export interface WidgetActionCallback {
+    (action: {
+        type: string
+        name: string
+        componentId: string
+        context: Record<string, string | number | boolean | undefined>
+    }): void
+}
+
 interface WidgetProps<T> {
     payload: T
 }
 
-// --- WIDGET IMPLEMENTATIONS ---
+// ═══════════════════════════════════════════════════════════════════════════════
+// Widget Implementations
+// ═══════════════════════════════════════════════════════════════════════════════
 
 const ComparisonTable = ({ payload }: WidgetProps<{ headers: string[], rows: string[][] }>) => {
     return (
@@ -32,18 +115,12 @@ const ComparisonTable = ({ payload }: WidgetProps<{ headers: string[], rows: str
     )
 }
 
-const SmartKnob = ({ payload, onAction, adapter }: WidgetProps<{
-    label: string,
-    param: string,
-    trackName?: string,
-    value: number,
-    min: number,
-    max: number,
-    originalValue?: number,
-    deviceType?: string,
-    deviceIndex?: number,
-    paramPath?: string
-}> & { onAction?: (action: any) => void, key?: any, adapter?: AutomatableParameterFieldAdapter<number> }) => {
+const SmartKnob = ({ payload, onAction, adapter, key: _key }: {
+    payload: SmartKnobParams
+    onAction?: WidgetActionCallback
+    adapter?: AutomatableParameterFieldAdapter<number>
+    key?: number | string
+}) => {
     const initialValue = (adapter && typeof adapter.getValue === 'function') ? adapter.getValue() : (payload.value !== undefined ? payload.value : 0.5)
     let localValue = initialValue
 
@@ -172,24 +249,28 @@ const SmartKnob = ({ payload, onAction, adapter }: WidgetProps<{
 }
 
 
-const StepList = ({ payload, onAction }: WidgetProps<{ title?: string, steps: string[] }> & { onAction?: (action: any) => void }) => {
+const StepList = ({ payload, onAction }: {
+    payload: StepListParams
+    onAction?: WidgetActionCallback
+}) => {
+    const steps = payload.options
     return (
         <div className="odie-widget-steps">
             {payload.title && <div className="step-title">{payload.title}</div>}
-            {payload.steps.map((step, i) => (
+            {steps.map((step, i) => (
                 <div
                     key={i}
                     className="step-item"
-                    onmousedown={(e: any) => {
-                        e.stopPropagation()
-                        e.preventDefault()
-
+                    onmousedown={(event: MouseEvent) => {
+                        event.stopPropagation()
+                        event.preventDefault()
                         if (onAction) {
                             onAction({
+                                type: "userAction",
                                 name: "step_select",
+                                componentId: "step_list",
                                 context: {
-                                    value: step,
-                                    index: i
+                                    value: step
                                 }
                             })
                         }
@@ -218,25 +299,26 @@ const MidiGrid = ({ payload }: WidgetProps<{ notes: { pitch: number, time: numbe
     )
 }
 
-const ControlGrid = ({ payload, onAction, resolver }: WidgetProps<{ title?: string, controls: any[] }> & { onAction?: (action: any) => void, resolver?: (target: string) => any }) => {
+const ControlGrid = ({ payload, onAction, resolver }: {
+    payload: ControlGridParams
+    onAction?: WidgetActionCallback
+    resolver?: (target: string) => AutomatableParameterFieldAdapter<number> | undefined
+}) => {
     const gridId = `control-grid-${crypto.randomUUID()}`
-
     return (
         <div id={gridId} className="odie-widget-grid">
             {payload.title && <div className="grid-title">{payload.title}</div>}
-
             <div className="grid-controls">
-                {payload.controls.map((ctrl, i) => {
+                {payload.knobs.map((knob, index) => {
                     let adapter: AutomatableParameterFieldAdapter<number> | undefined
-                    if (resolver && ctrl.param) {
-                        const found = resolver(ctrl.param)
-                        if (found) adapter = found
+                    if (resolver && knob.param) {
+                        adapter = resolver(knob.param)
                     }
                     return (
                         <SmartKnob
-                            key={i}
+                            key={index}
                             adapter={adapter}
-                            payload={ctrl}
+                            payload={knob}
                             onAction={(action) => {
                                 if (onAction) {
                                     onAction({
@@ -252,32 +334,40 @@ const ControlGrid = ({ payload, onAction, resolver }: WidgetProps<{ title?: stri
                     )
                 })}
             </div>
-
             <div className="grid-status-toast">
             </div>
         </div>
     )
 }
 
-const ErrorCard = ({ payload, onAction }: WidgetProps<{ title: string, message: string, actions: { label: string, id: string }[] }> & { onAction?: (action: any) => void }) => {
+const ErrorCard = ({ payload, onAction }: {
+    payload: ErrorCardParams
+    onAction?: WidgetActionCallback
+}) => {
+    const actions = payload.actions ?? []
     return (
         <div className="odie-widget-error">
             <div className="error-header">
                 <div className="error-icon">⚠️</div>
                 <div className="error-title">{payload.title}</div>
             </div>
-
             <div className="error-message">
                 {payload.message}
             </div>
-
             <div className="error-actions">
-                {payload.actions.map((action, i) => (
-                    <button key={i}
+                {actions.map((action, index) => (
+                    <button key={index}
                         onInit={(el: HTMLElement) => {
-                            el.onclick = (e) => {
-                                e.stopPropagation()
-                                if (onAction) onAction({ name: "error_action", context: { actionId: action.id } })
+                            el.onclick = (event) => {
+                                event.stopPropagation()
+                                if (onAction) {
+                                    onAction({
+                                        type: "userAction",
+                                        name: "error_action",
+                                        componentId: "error_card",
+                                        context: { actionId: action.actionId }
+                                    })
+                                }
                             }
                         }}
                     >
@@ -298,14 +388,6 @@ const ImageGallery = ({ payload }: WidgetProps<{ url: string, prompt: string }>)
             </div>
         </div>
     )
-}
-
-// --- RENDER ENGINE ---
-
-export interface OdieWidgetPayload {
-    type: "ui_component"
-    component: string
-    params: unknown
 }
 
 export const OdieRenderEngine = {
@@ -359,8 +441,7 @@ export const OdieRenderEngine = {
                         "knobs": "control_grid"
                     }
 
-                    const finalComponent = aliasMap[componentName] || componentName
-
+                    const finalComponent = (aliasMap[componentName] || componentName) as WidgetComponentName
                     fragments.push({
                         type: "ui_component",
                         component: finalComponent,
@@ -394,10 +475,10 @@ export const OdieRenderEngine = {
                     currentGrid = {
                         type: "ui_component",
                         component: "control_grid",
-                        params: { controls: [frag.params] }
+                        params: { trackName: "", knobs: [frag.params as SmartKnobParams] }
                     }
                 } else {
-                    (currentGrid.params as any).controls.push(frag.params)
+                    ((currentGrid.params as ControlGridParams).knobs).push(frag.params as SmartKnobParams)
                 }
             } else if (isWhitespace) {
                 const nextIndex = i + 1
@@ -435,25 +516,32 @@ export const OdieRenderEngine = {
         return (widget as OdieWidgetPayload) || null
     },
 
-    render(payload: OdieWidgetPayload, onAction?: (action: any) => void, resolver?: (target: string) => any) {
-        const params = payload.params as any
+    render(
+        payload: OdieWidgetPayload,
+        onAction?: WidgetActionCallback,
+        resolver?: (target: string) => AutomatableParameterFieldAdapter<number> | undefined
+    ) {
         switch (payload.component) {
-            case "comparison_table": return <ComparisonTable payload={params} />
-            case "smart_knob":
+            case "comparison_table":
+                return <ComparisonTable payload={payload.params as ComparisonTableParams} />
+            case "smart_knob": {
+                const params = payload.params as SmartKnobParams
                 let adapter: AutomatableParameterFieldAdapter<number> | undefined
                 if (resolver) {
-                    const found = resolver(params.param)
-                    if (found) adapter = found
+                    adapter = resolver(params.param)
                 }
                 return <SmartKnob payload={params} onAction={onAction} adapter={adapter} />
+            }
             case "control_grid":
-                return <ControlGrid payload={params} onAction={onAction} resolver={resolver} />
+                return <ControlGrid payload={payload.params as ControlGridParams} onAction={onAction} resolver={resolver} />
             case "step_list":
-                return <StepList payload={params} onAction={onAction} />
-            case "midi_grid": return <MidiGrid payload={params} />
-            case "image_gallery": return <ImageGallery payload={params} />
-            case "error_card": return <ErrorCard payload={params} onAction={onAction} />
-            default: return <div style={{ color: "red", fontSize: "0.8em" }}>Unknown Widget: {payload.component}</div>
+                return <StepList payload={payload.params as StepListParams} onAction={onAction} />
+            case "midi_grid":
+                return <MidiGrid payload={payload.params as MidiGridParams} />
+            case "image_gallery":
+                return <ImageGallery payload={payload.params as ImageGalleryParams} />
+            case "error_card":
+                return <ErrorCard payload={payload.params as ErrorCardParams} onAction={onAction} />
         }
     }
 }

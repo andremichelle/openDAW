@@ -2,6 +2,7 @@ import { createElement } from "@opendaw/lib-jsx"
 import { Terminator } from "@opendaw/lib-std"
 import { OdieService } from "./OdieService"
 import { Html } from "@opendaw/lib-dom"
+import { TIMEOUTS } from "./OdieConstants"
 
 // --- STYLES ---
 import css from "./OdieInput.sass?inline"
@@ -48,7 +49,7 @@ export const OdieInput = ({ service }: inputProps) => {
     }
 
     // Auto-focus on mount
-    setTimeout(() => { if (document.body.contains(textarea)) textarea.focus() }, 100)
+    setTimeout(() => { if (document.body.contains(textarea)) textarea.focus() }, TIMEOUTS.RENDER_DELAY)
 
 
     // --- Status Indicator ---
@@ -123,7 +124,7 @@ export const OdieInput = ({ service }: inputProps) => {
             void refreshStatus()
             setTimeout(() => {
                 if (document.body.contains(textarea)) textarea.focus()
-            }, 50)
+            }, TIMEOUTS.FOCUS_DELAY)
         }
     }))
 

@@ -186,7 +186,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     streamChat(
         messages: Message[],
-        _context?: any,
+        _context?: unknown,
         tools?: LLMTool[],
         onFinal?: (msg: Message) => void,
         _onStatusChange?: (status: string, model?: string) => void
@@ -204,6 +204,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
         const run = async (): Promise<void> => {
             this.debugLog = `[${new Date().toISOString()}] Starting Chat Stream...\n`
+            let activeTools = tools
             let targetUrl = ""
             let accumulatedThinking = ""
             let accumulatedText = ""
@@ -248,9 +249,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
                 // If it was intended to be kept, this would be a deviation from the provided diff.
 
                 // --- WHITELIST ENFORCEMENT ---
-                let activeTools = tools
                 if (activeTools && activeTools.length > 0) {
-                    const policy = checkModelTier(model || "unknown")
+                    const policy = checkModelTier()
                     if (!policy.allowTools && !this.config.forceAgentMode) {
                         this.debugLog += `[Policy] Tools disabled for Tier 3 model (${model}).\n`
                         activeTools = undefined

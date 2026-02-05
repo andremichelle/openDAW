@@ -2,8 +2,14 @@
 import { StudioService } from "@/service/StudioService"
 import { OdieAppControl } from "./OdieAppControl"
 import { AIService } from "./AIService"
-import { ToolCall } from "./llm/LLMProvider"
+import { ToolCall, JsonValue } from "./llm/LLMProvider"
 import { Message } from "./llm/LLMProvider"
+
+// Helper functions to safely extract typed values from JsonValue args
+const asString = (val: JsonValue | undefined): string => typeof val === "string" ? val : String(val ?? "")
+const asOptionalString = (val: JsonValue | undefined): string | undefined => typeof val === "string" ? val : undefined
+const asNumber = (val: JsonValue | undefined): number => typeof val === "number" ? val : parseFloat(String(val ?? 0)) || 0
+const asBoolean = (val: JsonValue | undefined): boolean => typeof val === "boolean" ? val : val === "true"
 
 export interface ExecutorContext {
     studio: StudioService
@@ -106,35 +112,41 @@ export class OdieToolExecutor {
                 // Tracks
                 case "track_add":
                 case "arrangement_add_track": {
-                    const res = await ctx.appControl.addTrack(args.type || "synth", args.name || "New Track")
+                    const trackType = asString(args.type) || "synth"
+                    const trackName = asString(args.name) || "New Track"
+                    const res = await ctx.appControl.addTrack(trackType, trackName)
                     return {
                         success: res.success,
-                        userMessage: res.success ? `Added ${args.type || "synth"} track: "${args.name || "New Track"}"` : `Failed: ${res.reason}`
+                        userMessage: res.success ? `Added ${trackType} track: "${trackName}"` : `Failed: ${res.reason}`
                     }
                 }
 
                 case "arrangement_add_bus": {
-                    const result = await ctx.appControl.addAuxTrack(args.name)
+                    const busName = asString(args.name)
+                    const result = await ctx.appControl.addAuxTrack(busName)
                     return {
                         success: result.success,
-                        userMessage: result.success ? `Added Bus: "${args.name}"` : `Failed to add bus: ${result.reason}`
+                        userMessage: result.success ? `Added Bus: "${busName}"` : `Failed to add bus: ${result.reason}`
                     }
                 }
 
                 case "arrangement_add_midi_effect": {
-                    const result = await ctx.appControl.addMidiEffect(args.trackName, args.effectType)
+                    const trackName = asString(args.trackName)
+                    const effectType = asString(args.effectType)
+                    const result = await ctx.appControl.addMidiEffect(trackName, effectType)
                     return {
                         success: result.success,
-                        userMessage: result.success ? `Added MIDI Effect: ${args.effectType} on ${args.trackName}` : `Failed to add MIDI effect: ${result.reason}`
+                        userMessage: result.success ? `Added MIDI Effect: ${effectType} on ${trackName}` : `Failed to add MIDI effect: ${result.reason}`
                     }
                 }
 
                 case "track_delete":
                 case "arrangement_delete_track": {
-                    const delSuccess = await ctx.appControl.deleteTrack(args.name)
+                    const trackName = asString(args.name)
+                    const delSuccess = await ctx.appControl.deleteTrack(trackName)
                     return {
                         success: delSuccess,
-                        userMessage: delSuccess ? `Deleted track: "${args.name}"` : `Failed to delete track: ${args.name}`
+                        userMessage: delSuccess ? `Deleted track: "${trackName}"` : `Failed to delete track: ${trackName}`
                     }
                 }
 
@@ -158,84 +170,100 @@ export class OdieToolExecutor {
 
                 case "notes_get":
                 case "arrangement_get_notes": {
-                    const result = await ctx.appControl.getMidiNotes(args.trackName)
-                    if (!result.notes || result.notes.length === 0) return { success: true, userMessage: `No notes found on "${args.trackName}"` }
+                    const trackName = asString(args.trackName)
+                    const result = await ctx.appControl.getMidiNotes(trackName)
+                    if (!result.notes || result.notes.length === 0) return { success: true, userMessage: `No notes found on "${trackName}"` }
                     return {
                         success: true,
-                        userMessage: `Found ${result.notes.length} notes on "${args.trackName}"`,
+                        userMessage: `Found ${result.notes.length} notes on "${trackName}"`,
                         analysisData: JSON.stringify(result.notes)
                     }
                 }
 
                 // Mixer
                 case "mixer_volume": {
-                    const result = await ctx.appControl.setVolume(args.trackName, parseFloat(String(args.db)))
+                    const trackName = asString(args.trackName)
+                    const db = asNumber(args.db)
+                    const result = await ctx.appControl.setVolume(trackName, db)
                     return {
                         success: result.success,
-                        userMessage: result.success ? `${args.trackName} → ${args.db}dB` : `Volume failed: ${result.reason || "Unknown error"}`
+                        userMessage: result.success ? `${trackName} → ${db}dB` : `Volume failed: ${result.reason || "Unknown error"}`
                     }
                 }
                 case "mixer_pan": {
-                    const result = await ctx.appControl.setPan(args.trackName, parseFloat(String(args.pan)))
+                    const trackName = asString(args.trackName)
+                    const pan = asNumber(args.pan)
+                    const result = await ctx.appControl.setPan(trackName, pan)
                     return {
                         success: result.success,
-                        userMessage: result.success ? `${args.trackName} pan → ${args.pan}` : `Pan failed: ${result.reason || "Unknown error"}`
+                        userMessage: result.success ? `${trackName} pan → ${pan}` : `Pan failed: ${result.reason || "Unknown error"}`
                     }
                 }
                 case "mixer_mute": {
-                    const result = await ctx.appControl.mute(args.trackName, Boolean(args.muted))
+                    const trackName = asString(args.trackName)
+                    const muted = asBoolean(args.muted)
+                    const result = await ctx.appControl.mute(trackName, muted)
                     return {
                         success: result.success,
-                        userMessage: result.success ? `${args.trackName} ${args.muted ? "muted" : "unmuted"}` : `Mute failed: ${result.reason || "Unknown error"}`
+                        userMessage: result.success ? `${trackName} ${muted ? "muted" : "unmuted"}` : `Mute failed: ${result.reason || "Unknown error"}`
                     }
                 }
                 case "mixer_solo": {
-                    const result = await ctx.appControl.solo(args.trackName, Boolean(args.soloed))
+                    const trackName = asString(args.trackName)
+                    const soloed = asBoolean(args.soloed)
+                    const result = await ctx.appControl.solo(trackName, soloed)
                     return {
                         success: result.success,
-                        userMessage: result.success ? `${args.trackName} ${args.soloed ? "soloed" : "unsoloed"}` : `Solo failed: ${result.reason || "Unknown error"}`
+                        userMessage: result.success ? `${trackName} ${soloed ? "soloed" : "unsoloed"}` : `Solo failed: ${result.reason || "Unknown error"}`
                     }
                 }
                 case "mixer_add_send": {
-                    const result = await ctx.appControl.addSend(args.trackName, args.auxName, args.db)
+                    const trackName = asString(args.trackName)
+                    const auxName = asString(args.auxName)
+                    const db = asNumber(args.db) || -6
+                    const result = await ctx.appControl.addSend(trackName, auxName, db)
                     return {
                         success: result.success,
-                        userMessage: result.success ? `Sent ${args.trackName} to ${args.auxName} @ ${args.db || -6}dB` : `Failed to add send: ${result.reason}`
+                        userMessage: result.success ? `Sent ${trackName} to ${auxName} @ ${db}dB` : `Failed to add send: ${result.reason}`
                     }
                 }
                 case "mixer_add_effect": {
-                    const result = await ctx.appControl.addEffect(args.trackName, args.effectType)
+                    const trackName = asString(args.trackName)
+                    const effectType = asString(args.effectType)
+                    const result = await ctx.appControl.addEffect(trackName, effectType)
                     return {
                         success: result.success,
-                        userMessage: result.success ? `Added ${args.effectType} to ${args.trackName}` : `Failed to add effect: ${result.reason}`
+                        userMessage: result.success ? `Added ${effectType} to ${trackName}` : `Failed to add effect: ${result.reason}`
                     }
                 }
                 case "mixer_set_routing": {
-                    const result = await ctx.appControl.setRouting(args.sourceName, args.targetBusName)
+                    const sourceName = asString(args.sourceName)
+                    const targetBusName = asString(args.targetBusName)
+                    const result = await ctx.appControl.setRouting(sourceName, targetBusName)
                     return {
                         success: result.success,
-                        userMessage: result.success ? `Routed ${args.sourceName} → ${args.targetBusName}` : `Failed to set routing: ${result.reason}`
+                        userMessage: result.success ? `Routed ${sourceName} → ${targetBusName}` : `Failed to set routing: ${result.reason}`
                     }
                 }
 
 
                 // Editing
                 case "region_split": {
-                    const result = await ctx.appControl.splitRegion(args.trackName, parseFloat(String(args.time || 0)))
+                    const result = await ctx.appControl.splitRegion(asString(args.trackName), asNumber(args.time))
                     return {
                         success: result.success,
                         userMessage: result.success ? "Region split" : `Split failed: ${result.reason || "Unknown error"}`
                     }
                 }
                 case "region_move": {
-                    const result = await ctx.appControl.moveRegion(args.trackName, parseFloat(String(args.time)), parseFloat(String(args.newTime)))
+                    const result = await ctx.appControl.moveRegion(asString(args.trackName), asNumber(args.time), asNumber(args.newTime))
                     return {
                         success: result.success,
                         userMessage: result.success ? "Region moved" : `Move failed: ${result.reason || "Unknown error"}`
                     }
                 }
                 case "region_copy": {
-                    const result = await ctx.appControl.copyRegion(args.trackName, parseFloat(String(args.time)), parseFloat(String(args.newTime)))
+                    const result = await ctx.appControl.copyRegion(asString(args.trackName), asNumber(args.time), asNumber(args.newTime))
                     return {
                         success: result.success,
                         userMessage: result.success ? "Region copied" : `Copy failed: ${result.reason || "Unknown error"}`
@@ -257,7 +285,7 @@ export class OdieToolExecutor {
                 case "render_interface":
                     ctx.setGenUiPayload(args)
                     ctx.setSidebarVisible(true)
-                    return { success: true, userMessage: "Generated Interface: " + args.title }
+                    return { success: true, userMessage: "Generated Interface: " + asString(args.title) }
 
 
                 // Analysis
@@ -286,7 +314,7 @@ export class OdieToolExecutor {
                 }
 
                 case "analyze_track": {
-                    let trackName = args.trackName
+                    let trackName = asOptionalString(args.trackName)
                     if (!trackName) {
                         trackName = ctx.contextState.focus?.selectedTrackName
                         if (!trackName) throw new Error("Missing 'trackName' argument")
@@ -336,12 +364,20 @@ export class OdieToolExecutor {
                 }
 
                 case "set_device_param": {
-                    const { trackName, deviceType, deviceIndex, paramPath, value } = args
-                    if (!trackName || !deviceType || !paramPath || value === undefined) {
+                    const trackName = asOptionalString(args.trackName)
+                    const deviceType = asOptionalString(args.deviceType)
+                    const deviceIndex = asNumber(args.deviceIndex)
+                    const paramPath = asOptionalString(args.paramPath)
+                    const rawValue = args.value
+                    if (!trackName || !deviceType || !paramPath || rawValue === undefined) {
                         throw new Error("Missing required arguments for set_device_param")
                     }
+                    const numericValue = typeof rawValue === "number" ? rawValue : Number(rawValue)
+                    if (isNaN(numericValue)) {
+                        throw new Error(`Invalid value for set_device_param: ${rawValue}`)
+                    }
                     const result = await ctx.appControl.setDeviceParam(
-                        trackName, deviceType, deviceIndex ?? 0, paramPath, value
+                        trackName, deviceType as "mixer" | "instrument" | "effect" | "midiEffect", deviceIndex, paramPath, numericValue
                     )
                     if (result.success) {
                         return { success: true, userMessage: result.reason }
@@ -351,10 +387,12 @@ export class OdieToolExecutor {
                 }
 
                 case "verify_action": {
-                    const result = await ctx.appControl.verifyAction(args.action, args.expectedChange)
+                    const action = asString(args.action)
+                    const expectedChange = asString(args.expectedChange)
+                    const result = await ctx.appControl.verifyAction(action, expectedChange)
                     return {
                         success: true,
-                        userMessage: `Verifying: ${args.action}`,
+                        userMessage: `Verifying: ${action}`,
                         analysisData: result
                     }
                 }
