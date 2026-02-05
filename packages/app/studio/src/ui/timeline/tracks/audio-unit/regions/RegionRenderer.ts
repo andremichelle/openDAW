@@ -41,7 +41,7 @@ export const renderRegions = (context: CanvasRenderingContext2D,
             signatureTrack,
             range,
             ({pulse}) => {
-                const x0 = Math.floor(range.unitToX(pulse) * dpr)
+                const x0 = Math.floor(range.unitToX(pulse)) * dpr
                 context.fillRect(x0, 0, dpr, height)
             },
             {minLength: 32}
@@ -61,8 +61,8 @@ export const renderRegions = (context: CanvasRenderingContext2D,
                 ? actualComplete
                 : // for no-stretched audio region
                 Math.min(actualComplete, next?.position ?? Number.POSITIVE_INFINITY)
-            const x0Int = Math.floor((range.unitToX(Math.max(position, unitMin)) + 1) * dpr)
-            const x1Int = Math.max((Math.floor(range.unitToX(Math.min(complete, unitMax))) * dpr), x0Int + dpr)
+            const x0Int = Math.floor(range.unitToX(Math.max(position, unitMin))) * dpr
+            const x1Int = Math.max(Math.floor(range.unitToX(Math.min(complete, unitMax))) * dpr, x0Int + dpr)
             const xnInt = x1Int - x0Int
             const {labelColor, labelBackground, contentColor, contentBackground, loopStrokeColor} =
                 RegionPaintBucket.create(region, region.isSelected && !filterSelected, trackDisabled)
