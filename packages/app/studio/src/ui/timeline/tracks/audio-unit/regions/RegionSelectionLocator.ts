@@ -2,8 +2,11 @@ import {TimelineCoordinates, TimelineSelectableLocator} from "@/ui/timeline/Time
 import {AnyRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {isDefined, Iterables, Selection} from "@opendaw/lib-std"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
+import {PointerRadiusDistance} from "@/ui/timeline/constants"
+import {TimelineRange} from "@opendaw/studio-core"
 
 export const createRegionLocator = (manager: TracksManager,
+                                    range: TimelineRange,
                                     regionSelection: Selection<AnyRegionBoxAdapter>)
     : TimelineSelectableLocator<AnyRegionBoxAdapter> => ({
     selectableAt: ({u, v}: TimelineCoordinates): Iterable<AnyRegionBoxAdapter> => {
@@ -11,8 +14,9 @@ export const createRegionLocator = (manager: TracksManager,
         const index = manager.localToIndex(v)
         if (index < 0 || index >= tracks.length) {return Iterables.empty()}
         const component = tracks[index]
-        const region = component.trackBoxAdapter.regions.collection.lowerEqual(u)
-        if (isDefined(region) && u < region.complete) {
+        const threshold = range.unitsPerPixel * PointerRadiusDistance
+        const region = component.trackBoxAdapter.regions.collection.lowerEqual(u + threshold)
+        if (isDefined(region) && u < region.complete + threshold) {
             return Iterables.one(region)
         }
         return Iterables.empty()

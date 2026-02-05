@@ -83,7 +83,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         </div>
     )
     const capturing: ElementCapturing<RegionCaptureTarget> = RegionCapturing.create(element, manager, range)
-    const regionLocator = createRegionLocator(manager, regionSelection)
+    const regionLocator = createRegionLocator(manager, range, regionSelection)
     const dragAndDrop = new RegionDragAndDrop(service, capturing, timeline.snapping)
     const shortcuts = ShortcutManager.get().createContext(element, "Regions")
     const {engine, boxGraph, overlapResolver, timelineFocus} = project
