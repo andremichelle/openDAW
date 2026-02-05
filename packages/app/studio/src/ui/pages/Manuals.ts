@@ -16,7 +16,7 @@ export type Manual = (
     files: ReadonlyArray<Manual>
 }) & { separatorBefore?: boolean }
 
-const isDev = location.hostname === "localhost" || location.hostname === "dev.opendaw.studio"
+const includeNeuralAmp = false
 
 export const Manuals: ReadonlyArray<Manual> = [
     {
@@ -112,7 +112,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                         path: "/manuals/devices/audio/maximizer",
                         icon: EffectFactories.Maximizer.defaultIcon
                     },
-                    ...(isDev ? [{
+                    ...(includeNeuralAmp ? [{
                         type: "page",
                         label: "Neural Amp",
                         path: "/manuals/devices/audio/neural-amp",
