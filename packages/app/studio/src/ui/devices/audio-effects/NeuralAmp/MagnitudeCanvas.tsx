@@ -1,26 +1,26 @@
-import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
-import {Colors} from "@opendaw/studio-enums"
-import {isNull, Lifecycle} from "@opendaw/lib-std"
+import { createElement } from "@opendaw/lib-jsx"
+import { Html } from "@opendaw/lib-dom"
+import { Colors } from "@opendaw/studio-enums"
+import { isNull, Lifecycle } from "@opendaw/lib-std"
 
 type Construct = {
     lifecycle: Lifecycle
     weights: number[]
 }
 
-export const MagnitudeCanvas = ({lifecycle, weights}: Construct) => {
-    const canvas: HTMLCanvasElement = <canvas/>
+export const MagnitudeCanvas = ({ lifecycle, weights }: Construct) => {
+    const canvas: HTMLCanvasElement = <canvas />
     lifecycle.own(Html.watchResize(canvas, () => {
-        if (!canvas.isConnected) {return}
+        if (!canvas.isConnected) { return }
         const width = canvas.clientWidth
-        if (width === 0) {return}
+        if (width === 0) { return }
         const dpr = window.devicePixelRatio
         const height = 32
         canvas.width = width * dpr
         canvas.height = height * dpr
         canvas.style.height = `${height}px`
         const ctx = canvas.getContext("2d")
-        if (isNull(ctx)) {return}
+        if (isNull(ctx)) { return }
         ctx.scale(dpr, dpr)
         const segmentCount = 40
         const segmentSize = Math.floor(weights.length / segmentCount)
@@ -36,9 +36,9 @@ export const MagnitudeCanvas = ({lifecycle, weights}: Construct) => {
         }
         const maxAvg = Math.max(...segments)
         const barW = width / segmentCount
-        const purple = Colors.purple.toString()
+        const cyan = Colors.cyan.toString()
         ctx.clearRect(0, 0, width, height)
-        ctx.fillStyle = purple
+        ctx.fillStyle = cyan
         for (let index = 0; index < segmentCount; index++) {
             const barHeight = (segments[index] / maxAvg) * height
             const x = index * barW

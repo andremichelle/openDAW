@@ -1,15 +1,21 @@
 <!doctype html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Video Overlay Preview</title>
+    <meta name="description" content="OpenDAW Video Overlay Preview Tool">
+    <meta property="og:title" content="Video Overlay Preview">
+    <meta property="og:description" content="OpenDAW Video Overlay Preview Tool">
     <script type="module">
-        import {Terminator} from "@opendaw/lib-std"
-        import {VideoOverlayPreview} from "/src/video/VideoOverlayPreview.tsx"
+        import { Terminator } from "@opendaw/lib-std"
+        import { VideoOverlayPreview } from "/src/video/VideoOverlayPreview.tsx"
         const lifecycle = new Terminator()
-        document.body.appendChild(VideoOverlayPreview({lifecycle}))
+        document.body.appendChild(VideoOverlayPreview({ lifecycle }))
     </script>
 </head>
+
 <body style="margin:0"></body>
+
 </html>

@@ -32,7 +32,6 @@ const md: any = new MarkdownIt({
 })
 
 // Open links in new tab
-// Open links in new tab
 const defaultLinkRenderer = md.renderer.rules.link_open || function (tokens: any, idx: any, options: any, _env: any, self: any) {
     return self.renderToken(tokens, idx, options);
 };
@@ -44,44 +43,11 @@ md.renderer.rules.link_open = function (tokens: any, idx: any, options: any, _en
     return defaultLinkRenderer(tokens, idx, options, _env, self);
 };
 
-// Custom Styling for Markdown Output (injected into a style tag or inline)
-// ideally this would be in a CSS file, but for self-contained component:
+// Custom Styling for Markdown Output
 import css from "./OdieMessageList.sass?inline"
 import { Html } from "@opendaw/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "OdieMessageList")
-
-// Add quick styles for thoughts if not in SASS yet (for speed)
-// Ideally move to SASS in next step
-const style = document.createElement("style")
-style.innerHTML = `
-.OdieThoughts {
-    margin: 4px 12px;
-    font-size: 0.85em;
-    color: var(--color-text-dim);
-    border-left: 2px solid var(--color-edge-soft);
-    padding-left: 8px;
-    opacity: 0.8;
-}
-.OdieThoughts summary {
-    cursor: pointer;
-    user-select: none;
-    font-weight: 500;
-    opacity: 0.6;
-    margin-bottom: 4px;
-}
-.OdieThoughts .ThoughtContent {
-    white-space: pre-wrap;
-    font-family: monospace;
-    background: rgba(0,0,0,0.2);
-    padding: 8px;
-    border-radius: 4px;
-    font-size: 0.8em;
-    max-height: 200px;
-    overflow-y: auto;
-}
-`
-document.head.appendChild(style)
 
 const MessageBubble = ({ message, onRetry, onWidgetAction }: { message: Message, onRetry?: (text: string) => void, onWidgetAction?: (action: any) => void }) => {
     const isUser = message.role === "user"

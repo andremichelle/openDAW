@@ -152,7 +152,7 @@ export const ProjectProfileInfo = ({ lifecycle, service }: Construct) => {
                                 const result = await Promises.tryCatch(profile.save())
                                 if (result.status === "rejected") {
                                     console.error("Publish failed", result.error)
-                                    return await RuntimeNotifier.error({ headline: "Publish failed", message: result.error instanceof Error ? result.error.message : String(result.error) })
+                                    return await RuntimeNotifier.info({ headline: "Publish failed", message: result.error instanceof Error ? result.error.message : String(result.error) })
                                 }
                                 return await RuntimeNotifier.info({ headline: "Publish complete", message: "" })
                             }}

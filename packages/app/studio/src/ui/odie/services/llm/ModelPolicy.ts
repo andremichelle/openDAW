@@ -19,7 +19,7 @@ export interface ModelValidation {
 
 // checkModelTier signature updated to silence unused var lints
 export const checkModelTier = (
-    modelId: string
+    _modelId: string
 ): ModelValidation => {
     // OPERATION UNSHACKLE:
     // The user requested to remove all "random rules" and limitations.
@@ -31,8 +31,8 @@ export const checkModelTier = (
     return {
         tier: "tier1",
         label: "🔓 Unrestricted Agent",
-        color: "#c084fc", // Premium color
-        bg: "#581c87",
+        color: "#4de4ff", // Cyan
+        bg: "#083344", // Deep Cyan
         allowTools: true
     }
 }

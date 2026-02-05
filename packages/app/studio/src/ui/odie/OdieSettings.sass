@@ -301,3 +301,73 @@ component
         border: 1px solid rgba(255,255,255,0.05)
         overflow: hidden
         margin-top: 8px
+
+        .key-ring-item
+            display: flex
+            align-items: center
+            padding: 6px 12px
+            border-bottom: 1px solid rgba(255,255,255,0.05)
+            background: transparent
+            
+            &.active
+                background: rgba(var(--color-accent-rgb), 0.1)
+
+            &.exhausted
+                opacity: 0.5
+
+            .key-dot
+                width: 6px
+                height: 6px
+                border-radius: 50%
+                margin-right: 10px
+                background: #666
+                
+                &.active
+                    background: var(--accent)
+                &.exhausted
+                    background: red
+
+            .key-text
+                flex: 1
+                font-family: monospace
+                font-size: 10px
+                letter-spacing: 1px
+                color: #eee
+
+                &.exhausted
+                    color: #888
+
+            .remove-key-btn
+                padding: 0 4px
+                border: none
+                background: none
+                font-size: 18px
+                color: #666
+                cursor: pointer
+                
+                &:hover
+                    color: var(--color-red)
+
+    .status-dot
+        min-width: 8px
+        height: 8px
+        border-radius: 50%
+        background: currentColor
+        opacity: 0.8
+
+    .active-key-display
+        display: flex
+        flex: 1
+        justify-content: space-between
+        align-items: center
+        background: rgba(0,0,0,0.3)
+        padding: 6px 12px
+        border-radius: 4px
+        border: 1px solid rgba(255,255,255,0.1)
+
+        span
+            font-size: 11px
+            border: none
+            background: none
+            padding: 0
+

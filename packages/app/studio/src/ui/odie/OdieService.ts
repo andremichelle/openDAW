@@ -14,25 +14,20 @@ import { OdieToolExecutor, ExecutorContext } from "./services/OdieToolExecutor"
 
 
 export class OdieService {
-    // State
     readonly messages = new DefaultObservableValue<Message[]>([])
     readonly open = new DefaultObservableValue<boolean>(false)
     readonly width = new DefaultObservableValue<number>(450)
     readonly visible = new DefaultObservableValue<boolean>(false)
 
-    // Activity State for UI
     readonly isGenerating = new DefaultObservableValue<boolean>(false)
     readonly activeModelName = new DefaultObservableValue<string>("Gemini")
     readonly activityStatus = new DefaultObservableValue<string>("Ready")
 
-    // Connection State for Status Indicator
     // Values: "unknown" | "connected" | "disconnected" | "checking"
     readonly connectionStatus = new DefaultObservableValue<"unknown" | "connected" | "disconnected" | "checking">("checking")
 
-    // Interface State
     readonly genUiPayload = new DefaultObservableValue<import("./genui/GenUISchema").GenUIPayload | null>(null)
 
-    // Diagnostic Info
     readonly lastDebugInfo = new DefaultObservableValue<{
         systemPrompt: string
         projectContext: any
@@ -42,10 +37,8 @@ export class OdieService {
 
 
 
-    // View State: "wizard" | "chat" | "settings"
     readonly viewState = new DefaultObservableValue<"wizard" | "chat" | "settings">("wizard")
 
-    // UI Toggles
     readonly showHistory = new DefaultObservableValue<boolean>(false)
 
     readonly ai = new AIService()
@@ -53,14 +46,12 @@ export class OdieService {
 
 
 
-    // Studio Control
     public appControl?: OdieAppControl
 
     public studio?: StudioService
 
     readonly #terminator = new Terminator()
     constructor() {
-        // Expose for debugging
         if (typeof window !== "undefined" && import.meta.env.DEV) {
             ; (window as any).odie = this;
         }
@@ -228,12 +219,11 @@ export class OdieService {
             }
         }
 
-        // Standard AI Interaction
+
         const userMsg: Message = { id: crypto.randomUUID(), role: "user", content: text, timestamp: Date.now() }
         const startMsgs = this.messages.getValue()
         this.messages.setValue([...startMsgs, userMsg])
 
-        // Placeholder for streaming response
         const assistantMsg: Message = { id: crypto.randomUUID(), role: "model", content: "", timestamp: Date.now() }
         this.messages.setValue([...startMsgs, userMsg, assistantMsg])
 
@@ -627,19 +617,11 @@ ${JSON.stringify({
     }
 
     private safeListTracks(): string[] {
-        try {
-            return this.appControl ? this.appControl.listTracks() : []
-        } catch (e) {
-            return []
-        }
+        return this.appControl?.listTracks() ?? []
     }
 
     private safeInspectSelection(): string {
-        try {
-            return this.appControl ? this.appControl.inspectSelection() : ""
-        } catch (e) {
-            return ""
-        }
+        return this.appControl?.inspectSelection() ?? ""
     }
 
     /**
