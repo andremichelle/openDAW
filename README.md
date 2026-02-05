@@ -38,28 +38,39 @@ The source code for openDAW is available under **AGPL v3 (or later)**
 - **No Paywalls**
 - **No Data Mining**
 
----
+## 🤖 Odie: The Native AI Sidecar
 
-## 🤖 Enter Odie: The AI Co-Pilot
+**This repository includes the Pre-Alpha Experimental Preview of Odie.**
 
-**This repository includes the Alpha release of Odie, a native AI Sidecar for OpenDAW.**
+Odie is a local-first, privacy-centric AI assistant deeply integrated into the Studio's architecture. Unlike "Agent" overlays, Odie runs inside the browser and interacts directly with the engine.
 
-Odie is not just a chatbot. It is a context-aware production assistant designed to keep you in the "Flow State". It lives inside the Studio, observing your session and helping you control the DAW, learn the tools, and generate ideas.
+### System Architecture
 
-### The Ecosystem
+Odie operates on a "Dual-Brain" architecture designed for safety and context-awareness:
 
-*   **🧠 Dual-Brain Architecture**: A safe, observer-based system that uses `KnowledgeService` to "see" your session (Tempo, Tracks, Selection) without risking the stability of the Audio Engine.
-*   **🎨 GenUI Engine**: Generative UI widgets (Smart Knobs, Comparison Tables) rendered directly in the chat stream.
-*   **🎓 Odie Arts Academy**: A native Learning Management System with "Click-to-Execute" lessons. Ask *"Teach me sidechaining"* and Odie will open the compressor for you.
-*   **🎭 Adaptive Personas**: Switch modes between **Songwriting**, **Production**, **Mixing**, **Mastering**, and **Theory**.
+1.  **Context Lens (`ContextService`)**: A passive observer that scans the Studio state (Selection, Mixer, Transport) to provide relevant answers without interfering with the Audio Engine.
+2.  **Privacy Core (`ChatHistoryService`)**: Chat history is persisted exclusively in `localStorage` (`odie_chat_history`). No chat data is sent to any "OpenDAW Server"—connections are direct from Browser to LLM.
+3.  **Command Sandbox (`CommandRegistry`)**: Odie can only execute pre-defined, safe commands (e.g., `/search`, `/add`, `/play`). It cannot execute arbitrary code or delete files on your OS.
 
-### Philosophy: Native & Private
-We deliberately rejected external "Agent" servers (MCP) to prioritize user privacy and stability.
-*   **Zero-Config**: No Python servers or terminal hacking required.
-*   **Strict Safety**: Odie uses a strictly typed bridge. It cannot delete files or break your OS.
-*   **Local-First**: Chat history is stored locally.
+### AI Capabilities
 
-> **Try it**: Click the 🤖 Robot Icon in the header to initialize Odie.
+Odie's features adapt based on the connected provider:
+
+| Feature | Gemini 3 Flash | DeepSeek R1 | Local (Ollama) |
+| :--- | :---: | :---: | :---: |
+| **Chat & QA** | ✅ | ✅ | ✅ |
+| **Context Awareness** | ✅ | ✅ | ✅ |
+| **Studio Control** | ✅ | ✅ | ✅ |
+| **GenUI Widgets** | ✅ | ❌ | ❌ |
+| **Visible Thought Stream** | ❌ | ✅ | ✅ |
+
+### GenUI (Gemini 3 Exclusive)
+For complex tasks, Odie renders native React components directly in the chat stream via the `render_widget` function:
+*   **Smart Knobs**: Touch-friendly parameter controls.
+*   **Comparison Tables**: Side-by-side plugin specifications.
+*   **Grid Containers**: Layouts for multi-parameter editing.
+
+> **Note**: GenUI requires the specific function-calling schemas of Gemini 3 and is disabled for local models to prevent hallucinated UI.
 
 ---
 
