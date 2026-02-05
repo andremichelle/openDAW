@@ -22,12 +22,16 @@ export const createPitchEventCapturing = (element: Element,
             const pitch = positioner.yToPitch(y)
             const localPosition = Math.floor(range.xToUnit(x)) - offset
             const event = reader.content.events.lowerEqual(localPosition, event => event.pitch === pitch)
-            return isDefined(event) && localPosition < event.complete
-                ? range.unitToX(event.complete + offset) - x < PointerRadiusDistance * 2
-                    ? {event, type: "note-end"}
-                    : {event, type: "note-position"}
-                : Math.abs(range.unitToX(reader.loopDuration + offset) - x) < PointerRadiusDistance
-                    ? {reader, type: "loop-duration"}
-                    : null
+            if (isDefined(event)) {
+                if (Math.abs(range.unitToX(event.complete + offset) - x) < PointerRadiusDistance) {
+                    return {event, type: "note-end"}
+                }
+                if (localPosition < event.complete) {
+                    return {event, type: "note-position"}
+                }
+            }
+            return Math.abs(range.unitToX(reader.loopDuration + offset) - x) < PointerRadiusDistance
+                ? {reader, type: "loop-duration"}
+                : null
         }
     })
