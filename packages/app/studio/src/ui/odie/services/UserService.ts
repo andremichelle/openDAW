@@ -54,7 +54,13 @@ export class UserService {
             if (raw) {
                 const parsed = JSON.parse(raw)
                 // Merge with default to ensure all fields exist (schema evolution)
-                this.dna.setValue({ ...DEFAULT_DNA, ...parsed })
+                this.dna.setValue({
+                    ...DEFAULT_DNA,
+                    ...parsed,
+                    identity: { ...DEFAULT_DNA.identity, ...parsed.identity },
+                    sonicFingerprint: { ...DEFAULT_DNA.sonicFingerprint, ...parsed.sonicFingerprint },
+                    techRider: { ...DEFAULT_DNA.techRider, ...parsed.techRider }
+                })
             }
         } catch (e) {
             console.error("UserService: Failed to load profile", e)
@@ -72,7 +78,13 @@ export class UserService {
 
     public update(partial: Partial<UserDNA>) {
         const current = this.dna.getValue()
-        this.save({ ...current, ...partial })
+        this.save({
+            ...current,
+            ...partial,
+            identity: { ...current.identity, ...partial.identity },
+            sonicFingerprint: { ...current.sonicFingerprint, ...partial.sonicFingerprint },
+            techRider: { ...current.techRider, ...partial.techRider }
+        })
     }
 
     public getPromptContext(): string {

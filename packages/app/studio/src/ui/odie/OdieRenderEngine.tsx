@@ -66,18 +66,17 @@ const SmartKnob = ({ payload, onAction, adapter }: WidgetProps<{
     let startY = 0
     let startValue = 0
 
-    const handleMouseDown = (e: MouseEvent) => {
+    const handlePointerDown = (e: PointerEvent) => {
         isDragging = true
         startY = e.clientY
         startValue = localValue
-        document.addEventListener('mousemove', handleMouseMove)
-        document.addEventListener('mouseup', handleMouseUp)
+        const target = e.currentTarget as HTMLElement
+        target.setPointerCapture(e.pointerId)
         e.preventDefault()
     }
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (e: PointerEvent) => {
         if (!isDragging) return
-
         const deltaY = startY - e.clientY
         const sensitivity = range / 200
 
@@ -87,8 +86,8 @@ const SmartKnob = ({ payload, onAction, adapter }: WidgetProps<{
             adapter.setValue(localValue)
         }
 
-        const knobContainer = (e.target as HTMLElement).closest('.odie-widget-knob')
-        if (!knobContainer) return
+        const knobContainer = (e.currentTarget as HTMLElement)
+        // With setPointerCapture, currentTarget is the captured element (the knob div)
 
         const valueDisplay = knobContainer.querySelector('.knob-value') as HTMLElement
         if (valueDisplay) {
@@ -118,11 +117,11 @@ const SmartKnob = ({ payload, onAction, adapter }: WidgetProps<{
         }
     }
 
-    const handleMouseUp = () => {
+    const handlePointerUp = (e: PointerEvent) => {
         if (!isDragging) return
         isDragging = false
-        document.removeEventListener('mousemove', handleMouseMove)
-        document.removeEventListener('mouseup', handleMouseUp)
+        const target = e.currentTarget as HTMLElement
+        target.releasePointerCapture(e.pointerId)
 
         if (onAction && localValue !== payload.value) {
             onAction({
@@ -147,7 +146,10 @@ const SmartKnob = ({ payload, onAction, adapter }: WidgetProps<{
     return (
         <div
             className="odie-widget-knob"
-            onmousedown={handleMouseDown}
+            onpointerdown={handlePointerDown}
+            onpointermove={handlePointerMove}
+            onpointerup={handlePointerUp}
+            onpointercancel={handlePointerUp}
         >
             <label className="knob-label">
                 {payload.label}

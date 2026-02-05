@@ -1,59 +1,51 @@
 ---
-title: Odie Introduction
-category: AI Co-Pilot
-tags: ["AI", "Odie", "Intro"]
-desc: Meet your new AI studio assistant.
+title: Welcome to Odie
+category: Getting Started
+tags: ["AI", "Co-Pilot", "Odie"]
+desc: Meet your new AI production partner.
 ---
 
-# 🤖 Introduction: Meet Your Co-Pilot
+# 🤖 Welcome to Odie (Alpha)
 
-> **Role**: Odie (OpenDAW Intelligent Engine)
-> **Goal**: To keep you in the "Flow State".
-
-**Odie** is not a chatbot. It is a subsystem integrated deep into the OpenDAW architecture, designed to act as a **transparent layer** between your creative intent and the technical execution.
+Odie is the first **Generative Engine** fully integrated into the OpenDAW nervous system. It is not just a chatbot; it is a **Reasoning Co-Pilot** that can see your project, understand your artistic intent, and manipulate the studio directly.
 
 ---
 
-## 📘 1. Concepts & Philosophy
+## 📘 The "Hands, Brain, Eyes" Model
 
-### The "Hands, Brain, Eyes" Model
-To understand Odie, think of it as a junior studio assistant sitting next to you.
+Odie operates on a three-tier model to assist your workflow:
 
-*   **The Brain (Reasoning)**: Powered by Google Gemini. It understands context, music theory, and complex instructions like "Make this sound more vintage."
-*   **The Eyes (Vision)**: It can see your plugins, analyzing settings to suggest improvements (e.g., "Your compressor attack is too fast for this snare").
-*   **The Hands (Control)**: It connects directly to the DAW engine. When you say "Add a reverb," it doesn't just tell you how—it *does it*.
-
-### Context Awareness
-Generic AI fails because it doesn't know where you are. Odie knows:
-*   **Selection**: "Quantize *this*" implies the selected region.
-*   **State**: "Why is it silent?" triggers a check of the Transport and Mute states.
-*   **History**: It remembers that you are working on a "Lofi Hip Hop" track from 20 minutes ago.
-
-### Your "Artist Passport"
-Odie customizes itself to *you*. Through the **Profile Settings**, you define:
-1.  **Identity**: "I am a beatmaker" vs "I am a mixing engineer".
-2.  **Genre**: "Techno" vs "Jazz".
-3.  **Taste**: "I like warm, vintage sounds".
-
-Odie reads this **Passport** before every single reply. If you ask for a "Drum Kit", the Techno producer gets a 909, while the Jazz drummer gets a Brush Kit. It's not random; it's personalized.
-
+1.  **EYES (Context Awareness)**: Odie monitors your session—track selection, plugin chains, and mixer states. It knows what you are working on.
+2.  **BRAIN (Reasoning Engine)**: Powered by **Gemini 3**, Odie understands music theory, genre conventions, and DAW technicalities.
+3.  **HANDS (Verified App Control)**: Odie can add tracks, load instruments, set BPM, and tweak mixer parameters via high-level commands.
 
 ---
 
-## 📖 2. Capability Matrix
+## 🎨 Molecular Knowledge
 
-| Feature | Description | Trigger |
+Unlike standard AI, Odie is grounded in **Molecular Knowledge**. It has been trained on the "OpenDAW Bible," ensuring it uses precise terminology and valid DAW operations. When you ask it to "Add a Sub-Bass," it knows exactly which plugin and settings provide the best foundation for your currently selected genre.
+
+---
+
+## 📊 Alpha Capability Matrix
+
+| Feature | Description | Status |
 | :--- | :--- | :--- |
-| **App Control** | Manipulate tracks, transport, and plugins. | "Add a track", "Play", "Split" |
-| **GenUI** | Visual widgets (Tables, Knobs) rendered in chat. | "Compare synths", "Set threshold" |
-| **Art** | Generative cover art and mood boards. | "Generate an image of..." |
+| **Track Management** | Create, Delete, and Rename tracks. | ✅ Stable |
+| **Mixer Control** | Adjust Volume, Pan, Mute, and Solo. | ✅ Stable |
+| **Plugin Loading** | Load Instruments and Effects by name. | ✅ Stable |
+| **Reasoning** | Multi-step planning for DAW workflows. | ✅ Stable |
+| **GenUI** | Interactive widgets (Knobs, Tables, Grids). | ✅ Stable |
 
 ---
 
-## 💪 3. Getting Started
+## 💪 Get Started
 
-Odie is designed to be **Zero-Config** for basic usage, but powerful for power users.
-*   **Privacy**: Your chat history is stored locally in your browser.
-*   **Security**: Odie cannot delete files or wreck your project without confirmation.
+Ready to create? 
 
-[Next: Quickstart Guide](./02-quickstart.md)
+1.  Open the **Odie Panel** (Robot icon in workspace header).
+2.  Complete the [Quickstart Guide](./quickstart.md) to connect your neural backend.
+3.  Ask your first question or issue a command.
+
+> [!TIP]
+> Try `/help` to see a full list of hardcoded Alpha power-commands.

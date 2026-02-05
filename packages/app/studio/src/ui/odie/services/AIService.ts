@@ -149,7 +149,7 @@ ${ODIE_MOLECULAR_KNOWLEDGE}
             if (active && this.providers.find(p => p.id === active)) {
                 this.activeProviderId.setValue(active)
             } else {
-                this.activeProviderId.setValue("gemini")
+                this.activeProviderId.setValue("gemini-3")
             }
 
             // Migration logic

@@ -300,21 +300,27 @@ export class OdieAppControl {
     }
 
     async setBpm(bpm: number): Promise<ToolResult> {
-        if (typeof bpm !== 'number' || isNaN(bpm) || bpm < 10 || bpm > 999) {
-            return { success: false, reason: "Invalid BPM. Must be between 10 and 999." }
+        if (typeof bpm !== 'number' || !Number.isFinite(bpm) || bpm < 20 || bpm > 999) {
+            return { success: false, reason: "Invalid BPM. Must be between 20 and 999." }
         }
         console.log(`[Odie] Setting BPM to ${bpm}...`)
-        this.transport.setBpm(bpm)
-        return { success: true, reason: `BPM set to ${bpm}` }
+        const success = this.transport.setBpm(bpm)
+        if (!success) {
+            return { success: false, reason: "Failed to set BPM (Transport rejected value)." }
+        }
+        return { success: true, message: `BPM set to ${bpm}` }
     }
 
     async setTimeSignature(numerator: number, denominator: number): Promise<ToolResult> {
-        if (typeof numerator !== 'number' || isNaN(numerator) || numerator < 1 || numerator > 32) {
-            return { success: false, reason: "Invalid numerator." }
+        if (typeof numerator !== 'number' || !Number.isFinite(numerator) || numerator < 1 || numerator > 32) {
+            return { success: false, reason: "Invalid time signature numerator." }
         }
         console.log(`[Odie] Setting Time Signature to ${numerator}/${denominator}...`)
-        this.transport.setTimeSignature(numerator, denominator)
-        return { success: true, reason: `Time signature set to ${numerator}/${denominator}` }
+        const success = this.transport.setTimeSignature(numerator, denominator)
+        if (!success) {
+            return { success: false, reason: "Failed to set time signature (Transport rejected values)." }
+        }
+        return { success: true, message: `Time signature set to ${numerator}/${denominator}` }
     }
 
     // --- Mixer ---
@@ -523,17 +529,17 @@ export class OdieAppControl {
                     logs.push(msg)
                 }
 
-                // Diagnostic: specific to Playfield/multitrack support
-                const tracks = adapter.tracks.values()
+
+                const tracks = Array.from(adapter.tracks.values())
                 log(`[Odie] getMidiNotes: Adapter "${trackName}" has ${tracks.length} tracks.`)
 
                 let allNotes: any[] = []
 
-                tracks.forEach((track, index) => {
+                tracks.forEach((track: any, index: number) => {
                     const regionCount = track.regions.collection.asArray().length
                     log(`[Odie] Track ${index}: ${regionCount} regions.`)
 
-                    track.regions.collection.asArray().forEach(r => {
+                    track.regions.collection.asArray().forEach((r: any) => {
                         const typeName = r.constructor.name
                         log(`[Odie] Track ${index} Region at ${r.position}: ${typeName}`)
                         if (r instanceof NoteRegionBoxAdapter) {
@@ -845,7 +851,7 @@ export class OdieAppControl {
 
             // 3. Create Audio Track
             const trackSuccess = await this.addTrack("audio", trackName)
-            if (!trackSuccess) return { success: false, reason: `Failed to create track '${trackName}'` }
+            if (!trackSuccess.success) return { success: false, reason: trackSuccess.reason ?? `Failed to create track '${trackName}'` }
 
             // 4. Create Boxes & Region
             const adapterMeta = this.findAudioUnitAdapter(trackName)
@@ -899,7 +905,7 @@ export class OdieAppControl {
     }
 
     private createSineWaveWav(duration: number, frequency: number, sampleRate: number): ArrayBuffer {
-        const numFrames = duration * sampleRate;
+        const numFrames = Math.floor(duration * sampleRate);
         const numChannels = 1;
         const bytesPerSample = 2; // 16-bit
         const blockAlign = numChannels * bytesPerSample;
@@ -1396,27 +1402,7 @@ export class OdieAppControl {
                     }
 
 
-                    // Hybrid Access Helper: Tries to find and set a param on a target object
-                    const trySetParam = (targetRoot: any, path: string, val: number): boolean => {
-                        if (!targetRoot) return false
-                        try {
-                            const parts = path.split('.')
-                            let current = targetRoot
-                            // Traverse
-                            for (let i = 0; i < parts.length; i++) {
-                                current = current[parts[i]]
-                                if (!current) return false
-                            }
-                            // Check if leaf is a Parameter (has setValue)
-                            if (current && typeof current.setValue === 'function') {
-                                current.setValue(val)
-                                return true
-                            }
-                            return false
-                        } catch (e) {
-                            return false
-                        }
-                    }
+
 
                     if (deviceType === "mixer") {
                         const mixerParams = adapter.namedParameter as any
@@ -1435,13 +1421,12 @@ export class OdieAppControl {
                         const effectAdapter = effects[deviceIndex]
 
                         // Strategy 1: Adapter Named Parameters (Standard)
-                        if (trySetParam((effectAdapter as any).namedParameter, paramPath, value)) {
+                        if (this.trySetParam((effectAdapter as any).namedParameter, paramPath, value)) {
                             return { success: true, message: `Set ${trackName}:effect[${deviceIndex}].${paramPath} = ${value}` }
                         }
 
                         // Strategy 2: Box Direct Access (Bypass - for Plugins/AudioUnits)
-                        // Many plugins expose params directly on the box, not mapped to adapter.namedParameter
-                        if (trySetParam(effectAdapter.box, paramPath, value)) {
+                        if (this.trySetParam(effectAdapter.box, paramPath, value)) {
                             return { success: true, message: `Set (Deep) ${trackName}:effect[${deviceIndex}].${paramPath} = ${value}` }
                         }
 
@@ -1451,14 +1436,17 @@ export class OdieAppControl {
                     if (deviceType === "midiEffect") {
                         const effects = adapter.midiEffects.adapters()
 
+                        if (deviceIndex < 0 || deviceIndex >= effects.length) {
+                            return { success: false, reason: `MIDI effect index ${deviceIndex} out of range (have ${effects.length})` }
+                        }
 
                         const effectAdapter = effects[deviceIndex]
 
                         // Hybrid Access
-                        if (trySetParam((effectAdapter as any).namedParameter, paramPath, value)) {
+                        if (this.trySetParam((effectAdapter as any).namedParameter, paramPath, value)) {
                             return { success: true, message: `Set MIDI ${trackName}:${deviceIndex}.${paramPath}` }
                         }
-                        if (trySetParam(effectAdapter.box, paramPath, value)) {
+                        if (this.trySetParam(effectAdapter.box, paramPath, value)) {
                             return { success: true, message: `Set (Deep) MIDI ${trackName}:${deviceIndex}.${paramPath}` }
                         }
 
@@ -1473,11 +1461,11 @@ export class OdieAppControl {
 
                         // Hybrid Access
                         // Instrument Adapter often has namedParameter
-                        if (trySetParam((instrument as any).namedParameter, paramPath, value)) {
+                        if (this.trySetParam((instrument as any).namedParameter, paramPath, value)) {
                             return { success: true, message: `Set Instrument ${trackName}.${paramPath}` }
                         }
                         // Fallback to Box (e.g. for simple synths or direct props)
-                        if (trySetParam(instrument.box, paramPath, value)) {
+                        if (this.trySetParam(instrument.box, paramPath, value)) {
                             return { success: true, message: `Set (Deep) Instrument ${trackName}.${paramPath}` }
                         }
 
@@ -1598,7 +1586,7 @@ export class OdieAppControl {
                         (box as any).modularSetup.refer(modularSetup.device)
                     }
                     box.label.setValue(effectType)
-                    // Deterministic Indexing
+
                     if (box.index) {
                         box.index.setValue(adapter.audioEffects.getMinFreeIndex())
                     }
@@ -1641,9 +1629,14 @@ export class OdieAppControl {
                 BoxClass.create(this.studio.project.boxGraph, UUID.generate(), (box: any) => {
                     if (box.host && adapter.box.midiEffects) {
                         box.host.refer(adapter.box.midiEffects)
-                        // Deterministic Indexing
+
+                        const index = adapter.midiEffects.getMinFreeIndex()
+                        if (index === -1) {
+                            throw new Error("No free MIDI effect slots available on this track.")
+                        }
+
                         if (box.index) {
-                            box.index.setValue(adapter.midiEffects.getMinFreeIndex())
+                            box.index.setValue(index)
                         }
                     } else {
                         console.error("MIDI Effect creation failed: missing host/field wiring")
@@ -1737,12 +1730,57 @@ export class OdieAppControl {
         if (!track) return { success: false, reason: "No track lane found." }
 
         const regions = track.regions.collection.asArray() as any[]
-        const region = regions.find(r => r.position.getValue() <= ppqnStart && (r.position.getValue() + r.duration.getValue()) >= ppqnStart)
+        let region = regions.find(r => {
+            const pos = typeof r.position === "number" ? r.position : r.position.getValue()
+            const dur = typeof r.duration === "number" ? r.duration : r.duration.getValue()
+            return pos <= ppqnStart && (pos + dur) >= ppqnStart
+        })
 
         if (!region) {
-            // Option: Create a clip if none exists?
-            // For now, fail as we expect a clip target.
-            return { success: false, reason: `No clip found at bar ${start} on track '${trackName}'. Create a clip first.` }
+            // Auto-Create Clip (MVP: 4 bar default)
+
+            // Ensure 1-based logic consistency with addNoteClip
+            // If start is 5, quantizeBar is 4. Let's start at the exact bar requested or quantized.
+            // Simplified: Start at requested bar for 4 bars.
+            const clipStart = start
+            const clipDur = 4
+
+            console.log(`[Odie] Auto-creating clip at bar ${clipStart} on ${trackName}`)
+
+            // Re-use our existing tool logic "addNoteClip" but simplified for internal use
+            // Or just inline the creation safely.
+            // Let's call addNoteClip if we can, but it expects specific notes. 
+            // Better to just inline the region creation similar to addNoteClip but empty.
+
+            try {
+                this.studio.project.editing.modify(() => {
+                    const eventCollection = NoteEventCollectionBox.create(this.studio.project.boxGraph, UUID.generate())
+
+                    // Create Region Box
+                    NoteRegionBox.create(this.studio.project.boxGraph, UUID.generate(), box => {
+                        box.position.setValue(PPQN.fromSignature(clipStart - 1, 1))
+                        box.duration.setValue(PPQN.fromSignature(clipDur, 1))
+                        box.label.setValue("Clip")
+                        box.events.refer(eventCollection.owners)
+                        if (track!.box.regions) {
+                            box.regions.refer(track!.box.regions)
+                        }
+                    })
+                })
+
+                // Re-fetch region after creation
+                const newRegions = track.regions.collection.asArray() as any[]
+                region = newRegions.find(r => {
+                    const pos = typeof r.position === "number" ? r.position : r.position.getValue()
+                    const dur = typeof r.duration === "number" ? r.duration : r.duration.getValue()
+                    return pos <= ppqnStart && (pos + dur) >= ppqnStart
+                })
+
+                if (!region) throw new Error("Failed to find created region")
+
+            } catch (e: any) {
+                return { success: false, reason: `No clip found and auto-creation failed: ${e.message}` }
+            }
         }
 
         if (!(region instanceof NoteRegionBoxAdapter)) {
@@ -1971,4 +2009,26 @@ export class OdieAppControl {
         })
     }
 
+    private trySetParam(targetRoot: any, path: string, val: number): boolean {
+        if (!targetRoot) return false
+        try {
+            const parts = path.split('.')
+            let current = targetRoot
+            // Traverse
+            for (let i = 0; i < parts.length; i++) {
+                current = current[parts[i]]
+                if (!current) return false
+            }
+            // Check if leaf is a Parameter (has setValue)
+            if (current && typeof current.setValue === 'function') {
+                this.studio.project.editing.modify(() => {
+                    current.setValue(val)
+                })
+                return true
+            }
+            return false
+        } catch (e) {
+            return false
+        }
+    }
 }

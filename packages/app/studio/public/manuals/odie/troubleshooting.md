@@ -5,70 +5,62 @@ tags: ["AI", "Help", "Debug"]
 desc: Common issues and how to fix them.
 ---
 
-# 🔧 Troubleshooting & Support
+# 🔧 Alpha Troubleshooting
 
-> **Goal**: Self-diagnose and fix common issues.
-> **Scope**: Connectivity, Voice, and Tool Execution.
+> **Status**: Alpha Readiness Audit
+> **Goal**: Self-diagnose and fix common issues in the Alpha environment.
 
-Odie includes built-in diagnostic tools to help you identify why it might be misbehaving.
+Odie includes built-in visual indicators and diagnostic commands to help you identify connectivity or logic issues.
 
 ---
 
-## 📘 1. Concepts: The Error Pipeline
+## 📘 1. Concepts: The Status Bar
 
-Odie allows errors to "Fail Gracefully".
-*   **System Errors (Red)**: Connectivity or API key issues. Odie stops working.
-*   **Setup Required (Orange)**: Missing API Key or Profile. Shows the **Error Card** with a direct "Open Settings" button.
-*   **Logic Errors (Yellow)**: The AI tried to do something impossible (e.g., delete a track that doesn't exist). Odie will reply with a helpful hint.
+Located at the bottom of the Odie panel, the status bar provides real-time health checks of your "Nervous System" (the connection between the UI, the LLM, and the Studio Engine).
+
+### Status Indicators
+| Color | Pulse | Meaning | Fix |
+| :--- | :--- | :--- | :--- |
+| **Gray** | Yes | `checking` | Initializing provider... wait 2-3s. |
+| **Green** | No | `ready` | System operational. |
+| **Red** | No | `disconnected` | API Key invalid or Network lost. |
+| **Purple** | Yes | `thinking` | LLM is generating a response. |
 
 ---
 
 ## 📖 2. Reference: Common Error Matrix
 
 ### Connectivity Issues
-
 | Symptom | Probable Cause | Fix |
 | :--- | :--- | :--- |
-| **"Odie is not responding"** | API Key Invalid | Check Settings > Provider. Generate a new Google Gemini Key. |
-| **"Setup Required" Card** | Missing Config | Click "Open Settings" and ensure both Name and API Key are set. |
-| **Spinning Wheel (Forever)** | Quota Limit Reached | You may have hit the Free Tier limit. Wait 60s and retry. |
-| **"Network Error"** | Offline | Check your Wi-Fi. Odie requires the internet. |
+| **"No API"** | Missing Key | Open Settings (Gear icon) and paste your Google Gemini key. |
+| **"Error" in Status** | Invalid Key | Re-validate your key in Settings. |
+| **Stuck on "Thinking"** | Quota Limit | Free tiers have strict rate limits. Wait 60s and retry. |
+| **"Nervous System Disconnected"** | Engine Sync Lost | Refresh the browser or use `/new` to reset state. |
 
-
-
-### Tool Execution Issues
-
+### Tool Execution (Alpha Context)
 | Symptom | Probable Cause | Fix |
 | :--- | :--- | :--- |
-| **"I cannot do that yet."** | Hallucination | The AI tried to invent a tool. Try rephrasing explicitly ("Add Audio Track"). |
-| **"Selection Required"** | Context Missing | Select the region/track first, *then* send the command. |
-| **Visuals don't appear** | GenUI Disabled | Ensure you are using a Provider Config that supports Vision. |
+| **"I cannot do that yet"** | Missing Tool | The Alpha may not support every DAW operation yet. Try simpler commands. |
+| **"Selection Required"** | Logic Guard | You must have a clip or track selected for this operation. |
+| **Widget won't update** | GenUI Lag | Use `/verify-ui` to force a redraw test. |
 
 ---
 
-## 💪 3. Task: Getting Help
-You don't need to leave the app to read the manual.
+## 💪 3. Task: Running Diagnostics
 
-1.  Click the **Book Icon** ("Help") in the header.
-2.  Use the **Knowledge Base** to search for commands or concepts.
+If Odie is behaving unexpectedly, run these three checks in order:
 
+### Step 1: Network & Keys
+1.  Type `/keys`.
+2.  Ensure you have at least one key marked with a green checkmark (`✓ READY`).
 
+### Step 2: System Health
+1.  Type `/debug`.
+2.  Open your browser's Developer Console (`F12` or `Cmd+Option+I`).
+3.  Inspect the "Odie Debug Dump" to see raw engine state.
 
-## 💪 4. Task: Running Diagnostics
-
-If you are stuck, perform a **System Self-Test**.
-
-### Step 1: Connectivity Check
-1.  Type: `Hello`
-2.  If no reply, your API connection is dead. Re-enter Key.
-
-### Step 2: The Verify Command
-1.  Type: `/verify`
-2.  Odie will run a script to check if it can "Touch" the Studio Engine.
-3.  **Result**: Look for "Write Latency". If it says "Timeout", the App Control Verified Bridge is broken.
-
-### Step 3: The Hard Reset
-1.  Open **Settings**.
-2.  Click **Clear History**.
-3.  Refresh the Browser (`Cmd+R`).
-4.  This wipes the short-term memory and re-syncs the context.
+### Step 3: Hard Reset
+1.  If all else fails, type `/purge`.
+2.  **Warning**: This will wipe your keys, name, and history. It is a factory reset for the Alpha.
+3.  Refresh your browser after the purge completes.

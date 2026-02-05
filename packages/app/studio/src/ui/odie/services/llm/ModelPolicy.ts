@@ -26,7 +26,7 @@ export const checkModelTier = (
     // We trust the user. If they selected a model, they want it to act as an Agent.
     // No more checking parameters. No more whitelists.
 
-    console.log("🔓 Operation Unshackle: Granting Tier 1 Access to", modelId)
+    // console.log("🔓 Operation Unshackle: Granting Tier 1 Access to", modelId)
 
     return {
         tier: "tier1",

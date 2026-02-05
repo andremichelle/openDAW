@@ -220,8 +220,9 @@ export class StudioService implements ProjectEnv {
                 })
             },
             setLoop: (enabled: boolean) => {
-                self.optProject.ifSome(p => {
-                    p.timelineBox.loopArea.enabled.setValue(enabled)
+                self.optProject.match({
+                    some: p => p.timelineBox.loopArea.enabled.setValue(enabled),
+                    none: () => self._fallbackLoop.setValue(enabled)
                 })
             }
         }
@@ -294,16 +295,24 @@ export class StudioService implements ProjectEnv {
     async exportMixdownWorker() {
         return this.#projectProfileService.getValue()
             .ifSome(async (profile) => {
-                await this.audioContext.suspend()
-                const audioData = await OfflineEngineRenderer.start(
-                    profile.project,
-                    Option.None,
-                    progress => console.debug("rendering mixdown", progress)
-                )
-                const file = WavFile.encodeFloats(audioData)
-                await RuntimeNotifier.info({ headline: "Save", message: "Exporting mixdown as wav file..." })
-                await Files.save(file, FilePickerAcceptTypes.WavFiles)
-                this.audioContext.resume().then()
+                try {
+                    await this.audioContext.suspend()
+                    const { status, error } = await Promises.tryCatch((async () => {
+                        const audioData = await OfflineEngineRenderer.start(
+                            profile.project,
+                            Option.None,
+                            progress => console.debug("rendering mixdown", progress)
+                        )
+                        const file = WavFile.encodeFloats(audioData)
+                        await RuntimeNotifier.info({ headline: "Save", message: "Exporting mixdown as wav file..." })
+                        await Files.save(file, FilePickerAcceptTypes.WavFiles)
+                    })())
+                    if (status === "rejected" && !Errors.isAbort(error)) {
+                        await RuntimeNotifier.info({ headline: "Export Failed", message: String(error) })
+                    }
+                } finally {
+                    this.audioContext.resume().then(EmptyExec, EmptyExec)
+                }
             })
     }
 

@@ -99,7 +99,13 @@ export class OdieTransport {
         }
 
         const n = Math.max(1, Math.min(numerator, 32))
-        const d = Math.max(1, Math.min(denominator, 32))
+        const allowed = [1, 2, 4, 8, 16, 32]
+        if (!allowed.includes(denominator)) {
+            console.warn(`[OdieTransport] Denominator ${denominator} is not supported.`)
+            return false
+        }
+
+        const d = denominator
 
         try {
             const signature = this.studio.project.timelineBox.signature

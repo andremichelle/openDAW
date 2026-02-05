@@ -14,7 +14,7 @@ import { Icon } from "@/ui/components/Icon"
 mermaid.initialize({
     startOnLoad: false,
     theme: 'dark',
-    securityLevel: 'loose',
+    securityLevel: 'strict',
 })
 
 // Initialize Markdown Parser
@@ -278,20 +278,23 @@ const showImageModal = (imageSrc: string) => {
     const closeBtn = document.createElement('button')
     closeBtn.className = 'odie-image-modal-btn'
     closeBtn.innerText = 'Close'
-    closeBtn.onclick = () => modal.remove()
+    const removeModal = () => {
+        modal.remove()
+        document.removeEventListener('keydown', handleEscape)
+    }
+    const handleEscape = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+            removeModal()
+        }
+    }
+    modal.onclick = (e) => { if (e.target === modal) removeModal() }
+    closeBtn.onclick = () => removeModal()
 
     actions.appendChild(downloadBtn)
     actions.appendChild(closeBtn)
     modal.appendChild(img)
     modal.appendChild(actions)
 
-    modal.onclick = (e) => { if (e.target === modal) modal.remove() }
-    const handleEscape = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-            modal.remove()
-            document.removeEventListener('keydown', handleEscape)
-        }
-    }
     document.addEventListener('keydown', handleEscape)
     document.body.appendChild(modal)
 }
@@ -383,5 +386,11 @@ export const OdieMessageList = ({ service }: ListProps) => {
     lifecycle.own(service.showHistory.subscribe(obs => syncHistory(obs.getValue())))
     syncHistory(service.showHistory.getValue())
 
-    return container
+    const res = container as HTMLElement & { cleanup?: () => void }
+    res.cleanup = () => {
+        lifecycle.terminate()
+        if (historyPanel && historyPanel.cleanup) historyPanel.cleanup()
+    }
+
+    return res
 }

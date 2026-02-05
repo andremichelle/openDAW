@@ -43,10 +43,14 @@ export const TextInput = ({ lifecycle, model, className, placeholder, maxChars }
         Events.subscribe(element, "paste", (event: ClipboardEvent) => {
             const data = event.clipboardData?.getData("application/json")
             if (isDefined(data)) {
-                const json = JSON.parse(data)
-                if (json.app === "openDAW" && json.content === "text") {
-                    event.preventDefault()
-                    model.setValue(json.value)
+                try {
+                    const json = JSON.parse(data)
+                    if (json && typeof json === 'object' && json.app === "openDAW" && json.content === "text") {
+                        event.preventDefault()
+                        model.setValue(json.value)
+                    }
+                } catch {
+                    // Ignore malformed JSON
                 }
             }
         }),

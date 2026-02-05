@@ -42,7 +42,7 @@ class OdieFeedbackService {
             timestamp: Date.now()
         }
         await db.put("feedback", fullEntry)
-        console.debug("Feedback Logged:", fullEntry)
+        console.debug("Feedback Logged")
     }
 
     /**

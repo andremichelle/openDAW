@@ -58,7 +58,10 @@ export const OdieModalFrame = (props: OdieModalProps) => {
         {frame}
     </div> as HTMLElement
 
+    let isClosing = false
     const close = () => {
+        if (isClosing) return
+        isClosing = true
         overlay.classList.remove("visible")
         setTimeout(() => {
             if (overlay.parentNode) overlay.parentNode.removeChild(overlay)

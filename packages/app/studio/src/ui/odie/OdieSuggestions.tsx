@@ -195,5 +195,7 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
 
     render()
 
+        ; (container as any).onDisconnect = () => lifecycle.terminate()
+
     return container
 }

@@ -54,7 +54,7 @@ class OdieMemoryService {
         };
 
         await db.put(STORE_NAME, fact);
-        console.log(`[OdieMemory] Saved fact: "${content}" [${tags.join(', ')}]`);
+        console.log(`[OdieMemory] Fact Saved`);
         return fact.id;
     }
 

@@ -40,7 +40,7 @@ class OdieFocusService {
         };
     }
 
-    private notifyListeners() {
+    private notifyListeners(): void {
         this.listeners.forEach(cb => cb(this.currentFocus));
     }
 }

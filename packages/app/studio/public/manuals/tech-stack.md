@@ -7,7 +7,7 @@ tags:
   - tech-stack
 desc: Documentation
 ---
-# Tech-Stack
+# Tech Stack
 
 ## Toolchain
 

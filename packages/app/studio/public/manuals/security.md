@@ -3,7 +3,7 @@
 **Last Updated:** 2026-01-07
 
 ## 1. Where are my keys stored?
-Odie stores your API keys (Google Gemini, OpenAI, etc.) in your browser's **Local Storage** (`localStorage`).
+Odie stores your API keys (Google Gemini, OpenAI, etc.) in your browser's `localStorage`.
 - **Path**: `odie_provider_configs`
 - **Encryption**: Keys are stored as plain text to ensure compatibility with client-side execution.
 
@@ -13,7 +13,7 @@ This is a "Client-Side Only" application. Your keys go directly from your browse
 
 **Review Risks:**
 - **Public Computers**: NEVER use Odie on a public library or cafe computer. If you forget to clear the cache, the next person can use your quota.
-- **Malicious Extensions**: If you have untrusted Chrome Extensions installed, they can theoretically read your Local Storage.
+- **Malicious Extensions**: If you have untrusted Chrome Extensions installed, they can theoretically read your `localStorage`.
 
 ## 3. Best Practices
 1.  **Use specific keys**: Generate a unique API Key just for OpenDAW. Do not reuse your "Production" or "Company" keys.

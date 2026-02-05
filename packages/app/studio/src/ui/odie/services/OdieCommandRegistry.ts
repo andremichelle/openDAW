@@ -349,7 +349,10 @@ Direct control over the Studio and Chat.
                         k.status === 'exhausted' ? '⌛' :
                             k.status === 'invalid' ? '✗' : '?'
                     const activeIcon = k.isActive ? ' •' : ''
-                    report += `| ${i + 1} | ${k.key} | ${statusIcon} ${k.status.toUpperCase()} | ${activeIcon} |\n`
+                    const maskedKey = k.key.length > 8
+                        ? `${k.key.slice(0, 4)}...${k.key.slice(-4)}`
+                        : "********"
+                    report += `| ${i + 1} | ${maskedKey} | ${statusIcon} ${k.status.toUpperCase()} | ${activeIcon} |\n`
                 }
 
                 const ready = statuses.filter((k) => k.status === 'ready' || k.status === 'unknown').length
@@ -357,6 +360,58 @@ Direct control over the Studio and Chat.
                 const invalid = statuses.filter((k) => k.status === 'invalid').length
 
                 report += `\n**Summary:** ${ready} Ready, ${exhausted} Exhausted, ${invalid} Invalid`
+                return report
+            }
+        })
+
+        this.register({
+            id: "/status",
+            description: "Show system status",
+            usage: "/status",
+            execute: async (s) => {
+                const provider = s.ai.getActiveProvider()
+                const config = provider ? s.ai.getConfig(provider.id) : null
+                const activeModel = config?.modelId || "Auto"
+                const models = (provider && typeof provider.fetchModels === 'function')
+                    ? await provider.fetchModels()
+                    : []
+
+                let report = "## Odie Alpha Status\n\n"
+                report += `- **Provider:** ${provider?.manifest.name || "None"}\n`
+                report += `- **Model:** ${activeModel || "None"}\n`
+                report += `- **Available Models:** ${models.length}\n`
+
+                if (provider && typeof (provider as any).validate === 'function') {
+                    const res = await (provider as any).validate()
+                    report += `- **Connection:** ${res.ok ? "✅ Ready" : "❌ Disconnected"}\n`
+                    if (!res.ok) report += `  - *Reason:* ${res.message}\n`
+                }
+
+                return report
+            }
+        })
+
+        this.register({
+            id: "/diagnose",
+            description: "Run connection sweep",
+            usage: "/diagnose",
+            execute: async (s) => {
+                const provider = s.ai.getActiveProvider()
+                if (!provider) return "Error: No active provider"
+
+                if (typeof (provider as any).validate !== "function") {
+                    return "Standard provider detected. Connection is managed by cloud."
+                }
+
+                const res = await (provider as any).validate()
+                let report = `## Connection Sweep\n\n`
+                report += `**Status:** ${res.ok ? "✅ SUCCESS" : "❌ FAILED"}\n`
+                report += `**Message:** ${res.message}\n\n`
+
+                if (!res.ok && (provider as any).debugLog) {
+                    report += "### Debug Logs\n```\n" + (provider as any).debugLog + "\n```"
+                }
+
                 return report
             }
         })

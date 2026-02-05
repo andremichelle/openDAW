@@ -18,38 +18,36 @@ Odie's sidebar is not just a text log—it is a live monitor of your session's c
 
 When you chat with Odie, you aren't just sending text. Odie "sees" a snapshot of your current focus. This is called a **Context Bubble**.
 
-*   **Active Selection**: If a Clip is selected, "Delete" means "Delete Clip", not "Delete Track".
-*   **Active Panel**: If the Mixer is open, "Make it brighter" implies EQ, not Arrangement.
+*   **Active Selection**: If a clip is selected, "Delete" means "Delete Clip", not "Delete Track".
+*   **Active Panel**: If the Mixer is open, "Make it brighter" implies EQ or Filter adjustments.
 *   **Transport State**: If playing, Odie knows the BPM and Time Signature.
 
-**Pro Tip**: Always select what you want to talk about *before* sending the message.
+**Pro Tip**: Always select what you want to talk about *before* sending your message.
 
 ---
 
 ## 📖 2. Reference: The Interface Anatomy
 
 ### A. The Header
-Top of the sidebar.
-*   **Gear ⚙️**: Settings (API Keys, History Clear).
+The top of the Odie panel contains system controls:
+*   **History Icon 🕒**: Opens the Chat History list where you can load previous sessions.
+*   **Gear Icon ⚙️**: Opens Settings (API Keys, Provider selection, and Memory clear).
 
 ### B. The Stream
- The conversation log.
-*   **Blue Bubbles**: Your commands.
-*   **Gray Bubbles**: Odie's replies.
-*   **Widgets**: Interactive elements (Knobs, Tables) appear here inline.
+The conversation log where interactions take place:
+*   **Blue Bubbles**: Your commands and questions.
+*   **Gray Bubbles**: Odie's replies and reasoning.
+*   **Widgets**: Interactive elements (Knobs, Tables, and GenUI) appear here inline.
 
-![Chat Stream](../assets/odie_chat_stream.png)
-*Fig: A rich response from Odie showing text and Context interaction.*
-
-### C. The Input Cockpit
-Top-tier control for your commands.
-
-![Input Cockpit](../assets/odie_input_cockpit.png)
-*Fig: The Input Cockpit featuring Voice Mode and Attachment controls.*
-
-*   **Text Area**: Multi-line input (Shift+Enter).
-*   **Send Button**: Executes the command.
+### C. The Input Area
+The bottom section where you compose your instructions:
+*   **Text Area**: Multi-line input (Shift+Enter for new lines).
+*   **Attach 📎**: Upload text files (.txt, .md, .json) to provide context.
+*   **Send ➤**: Executes the current command.
 
 ---
 
-
+## 💡 Quick Tips
+*   **Clear Chat**: Type `/clear` to wipe the current conversation stream (this keeps your settings intact).
+*   **Auto-Scroll**: The chat automatically follows new messages.
+*   **Esc Key**: Close the sidebar quickly using the Escape key if it is in focus.

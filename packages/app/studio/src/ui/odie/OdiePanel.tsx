@@ -18,15 +18,18 @@ export const OdiePanel = ({ service }: Construct) => {
     // .PanelPlaceholder.right (orientation)
 
     const closeButton = (
-        <div className="close-button"
-            style={{ cursor: "pointer", padding: "0 8px" }}>
+        <button className="close-button"
+            style={{ cursor: "pointer", padding: "0 8px", background: "none", border: "none" }}
+            aria-label="Close"
+            onclick={(e: MouseEvent) => {
+                e.preventDefault()
+                e.stopPropagation()
+                service.toggle()
+            }}>
             <Icon symbol={IconSymbol.Close} />
-        </div>
+        </button>
     )
-    closeButton.onclick = (e: MouseEvent) => {
-        e.stopPropagation()
-        service.toggle()
-    }
+    // closeButton.onclick handled inline above for type safety with HTMLButtonElement
 
     return (
         <div className={Html.buildClassList(className, "right")}

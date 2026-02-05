@@ -1,4 +1,4 @@
-# CodeRabbit Configuration for OpenDAW "Gold Master" Review
+# CodeRabbit Configuration for OpenDAW "Pre-Alpha" Review
 # Strictness Level: High (Senior Developer Persona)
 
 language: "en-US"
@@ -11,8 +11,7 @@ reviews:
   high_level_summary: true
   
   # Enable auto-review for all PRs
-  auto_review:
-    enabled: true
+  auto_review: true
 
   # Strict instructions per path
   path_instructions:

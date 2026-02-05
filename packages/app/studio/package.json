@@ -5,8 +5,8 @@
   "type": "module",
   "license": "LGPL-3.0-or-later",
   "scripts": {
-    "dev": "vite --clearScreen false --host",
-    "build": "tsc && vite build",
+    "dev": "node scripts/generate-version.js && vite --clearScreen false --host",
+    "build": "node scripts/generate-version.js && tsc && vite build",
     "preview": "vite preview --host",
     "lint": "eslint \"src/**/*.ts\""
   },

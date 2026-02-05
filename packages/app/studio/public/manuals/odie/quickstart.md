@@ -5,52 +5,47 @@ tags: ["AI", "Odie", "Setup"]
 desc: Get up and running with Odie in 5 minutes.
 ---
 
-# ⚡ Quickstart: Zero to Production
+# ⚡ Alpha Quickstart: Get Up and Running
 
+> **Status**: Alpha Readiness Audit
 > **Goal**: Issue your first verified command in under 60 seconds.
-> **Prerequisites**: OpenDAW Studio (v2.0+)
+> **Prerequisites**: OpenDAW Studio (Alpha)
 
 ---
 
 ## 📘 1. Concepts: The "Sidecar" UI
 
 Odie lives in a collapsable **Sidecar Panel** on the right side of the screen.
-This ensures it never blocks your timeline or mixer view. You can toggle it via the **Robot Icon** ![Robot Icon](/icons/odie-logo.png) in the main header.
+This ensures it never blocks your timeline or mixer view. You can toggle it via the **Robot Icon** in the workspace header.
 
 ---
 
 ## 💪 2. Task: Activation & Setup
 
 ### Step 1: Wake It Up
-1.  Click the **Robot Icon** in the top-left header.
+1.  Click the **Robot Icon** in the studio header.
 2.  The sidebar will slide out.
 
-### Step 2: Connect the Brain (First Run)
-Odie requires a neural backend to function. On your first run, you will see the **Setup Required** card.
+### Step 2: Connect the Brain (Initial Setup)
+Odie requires a connection to an AI model to function. In the Alpha, you must provide your own API key.
 
-1.  Click the **Open Settings** button on the error card.
-2.  **Profile**: Enter your name (Required).
-3.  **Provider**: Choose **Google Gemini** (Recommended) or **Custom**.
-4.  **API Key**: Paste your key (stored securely in `localStorage`).
+1.  Click the **Gear Icon** (Settings) in the Odie sidebar rail.
+2.  **Provider**: Choose **GEMINI API** (Recommended) or **LOCAL**.
+3.  **API Key**: Paste your key (Google Gemini keys are stored securely in your browser's `localStorage`).
+4.  **Verify**: Click **Test Connection**. Look for the **Green Status Dot** at the bottom of the panel.
 
-![System Configuration](../assets/odie_system_config.png)
-*Fig: The System Config modal where you manage your neural backend.*
+### Step 3: Define Your Identity
+Help Odie personalize its music production advice.
 
-### Step 3: Define Your Sound
-Before you start, tell Odie who you are.
-
-1.  Click your **Avatar/Profile Icon**.
-2.  Fill out the **Artist Passport** (Identity, Sonic Profile).
-3.  This helps Odie customize its personality (e.g. "Mentor" vs "Co-Pilot").
-
-![Artist Passport](../assets/odie_artist_passport.png)
-*Fig: The Artist Passport allows you to define your core identity and sonic preferences.*
+1.  Click the **Profile Icon** in the Odie sidebar rail.
+2.  Set your **Name** and a brief description of your musical style.
+3.  Odie uses this to tailor technical suggestions to your specific workflow.
 
 ### Step 4: The "Hello World"
-Let's verify the connection.
+Let's verify the reasoning engine.
 1.  Type: `Hello` and press **Enter**.
-2.  **Success**: Odie replies "I am ready to help."
-3.  **Failure**: If you see a spinner or red error, check your API Key.
+2.  **Success**: The status bar will pulse purple (`thinking`) and Odie will reply.
+3.  **Failure**: If the status dot turns red (`disconnected`), check your API Key in Settings.
 
 ---
 
@@ -58,23 +53,22 @@ Let's verify the connection.
 
 Let's do something real.
 
-1.  Ensure you are in the **Tracks View**.
+1.  Ensure the studio engine is running.
 2.  Type: `Add a vintage synth track`
-3.  **Watch closely**:
-    *   Odie will display: *"Processing..."*
-    *   A new track labeled "Vintage Synth" will appear in the sequencer.
-    *   An instrument plugin will load automatically.
-    *   Odie will reply: *"Created 'Vintage Synth' track."*
-
-Congratulations. You just performed a **Verified App Control** action.
+3.  **Watch the status bar**:
+    *   `thinking` -> Odie is reasoning about the command.
+    *   `ready` -> The command is sent to the Studio Engine.
+    *   **Result**: A new track appears in the sequencer and Odie confirms the action.
 
 ---
 
-## 📖 4. Reference: Interaction Modes
+## 📖 4. Reference: Navigation Rail
 
-| Mode | Icon | How to Use |
-| :--- | :--- | :--- |
-| **Text** | ⌨️ | Default. Type naturally. Shift+Enter for new lines. |
-| **Slash** | `/` | Power user commands (e.g., `/clear`, `/verify`). |
+| Icon | Function |
+| :--- | :--- |
+| **Profile** | Configure your artist identity. |
+| **Sparkles** | Clear context and start a **New Chat**. |
+| **History** | Browse and restore previous conversations. |
+| **Settings** | Manage API Keys and Provider settings. |
 
-[Next: The Chat Interface](./chat-interface.md)
+[Next: Command Reference](./command-reference.md)

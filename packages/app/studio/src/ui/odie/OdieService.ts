@@ -1,4 +1,4 @@
-import { DefaultObservableValue } from "@opendaw/lib-std"
+import { DefaultObservableValue, Terminator } from "@opendaw/lib-std"
 import type { StudioService } from "../../service/StudioService"
 import { AIService } from "./services/AIService"
 
@@ -58,21 +58,24 @@ export class OdieService {
 
     public studio?: StudioService
 
+    readonly #terminator = new Terminator()
     constructor() {
         // Expose for debugging
-        ; (window as any).odie = this;
+        if (typeof window !== "undefined" && import.meta.env.DEV) {
+            ; (window as any).odie = this;
+        }
 
         try {
             // Default to chat view
             this.viewState.setValue("chat")
 
             // Auto-Save History
-            this.messages.subscribe(() => {
+            this.#terminator.own(this.messages.subscribe(() => {
                 this.saveCurrentSession()
-            })
+            }))
 
             // Model Indicator Sync
-            this.ai.activeProviderId.subscribe(observer => {
+            this.#terminator.own(this.ai.activeProviderId.subscribe(observer => {
                 const id = observer.getValue()
                 let label = "Unknown"
                 if (!id || typeof id !== "string") {
@@ -89,7 +92,7 @@ export class OdieService {
                 this.activeModelName.setValue(label)
 
                 this.validateConnection()
-            })
+            }))
             // Initial Sync
             const currentId = this.ai.activeProviderId.getValue()
             if (currentId === "ollama") {
@@ -344,7 +347,7 @@ export class OdieService {
             const stream = await this.ai.streamChat(history, projectContext, OdieTools, async (finalMsg) => {
                 this.isGenerating.setValue(false)
                 this.activityStatus.setValue("Ready")
-                this.activeModelName.setValue("Gemini")
+                // this.activeModelName.setValue("Gemini")
 
                 if (finalMsg.tool_calls && finalMsg.tool_calls.length > 0) {
                     this.isGenerating.setValue(true)
@@ -643,11 +646,6 @@ ${JSON.stringify({
      * Handle Interface Widget Action
      */
     async handleWidgetAction(action: any) {
-        if (action.name === "error_action" && action.context?.actionId) {
-            this.handleErrorAction(action.context.actionId)
-            return
-        }
-
         /*
         action: {
             type: string

@@ -52,9 +52,10 @@ export const GenUIRenderer = (props: { lifecycle: Lifecycle, component: UICompon
             return <GenUIKnob lifecycle={lifecycle} component={component as UIKnob} resolver={resolver} />
         case "switch":
             return <GenUISwitch lifecycle={lifecycle} component={component as UISwitch} />
-        case "label":
+        case "label": {
             const label = component as any
             return <div style={{ ...label.style }} className={`genui-label-${label.variant || "body"}`}>{label.text}</div>
+        }
         case "meter":
             return <div style={{ width: "10px", height: "50px", background: "#333" }}></div>
         default:

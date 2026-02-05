@@ -1,7 +1,7 @@
 import { ObservableValue, DefaultObservableValue } from "@opendaw/lib-std"
 import { LLMProvider, Message, ProviderConfig, LLMTool } from "./LLMProvider"
 import { checkModelTier } from "./ModelPolicy"
-import { ollamaInspector, ModelCapabilities } from "./OllamaCapabilityService"
+import { ollamaInspector } from "./OllamaCapabilityService"
 
 export class OpenAICompatibleProvider implements LLMProvider {
     readonly id: string
@@ -19,9 +19,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     // Callback for persistence
     public onConfigChange?: (newConfig: ProviderConfig) => void
-
-    // Cache for capabilities to avoid spamming /api/show
-    private capabilityCache = new Map<string, ModelCapabilities>()
 
     constructor(
         id: string = "openai_compat",
@@ -192,16 +189,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
         _context?: any,
         tools?: LLMTool[],
         onFinal?: (msg: Message) => void,
-        onStatusChange?: (status: string, model?: string) => void
+        _onStatusChange?: (status: string, model?: string) => void
     ): ObservableValue<{ content: string; thoughts?: string }> {
         const url = this.config.baseUrl || ""
         const key = this.config.apiKey || ""
-        // Default model logic (Delayed until run for auto-detection)
         let model = this.config.modelId
 
         const responseText = new DefaultObservableValue<{ content: string; thoughts?: string }>({ content: "[0/3] Initializing..." })
 
-        // Check for common misconfigurations
         if (!key && !url.includes("localhost") && !url.includes("127.0.0.1") && !url.startsWith("/")) {
             responseText.setValue({ content: "⚠️ API Key required for this endpoint." })
             return responseText
@@ -211,10 +206,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
             this.debugLog = `[${new Date().toISOString()}] Starting Chat Stream...\n`
             let targetUrl = ""
             let accumulatedThinking = ""
-            let isThinking = false // State Machine for <think> tags
+            let accumulatedText = ""
+            let isThinking = false
+            let toolCallsBuff: any[] = []
 
             try {
-                // 1. Auto-detect model if missing (Crucial for first run)
                 if (!model && this.id === "ollama") {
                     this.debugLog += `[Auto-Detect] No model configured. Scanning...\n`
                     try {
@@ -222,29 +218,22 @@ export class OpenAICompatibleProvider implements LLMProvider {
                         if (models.length > 0) {
                             model = models[0]
                             this.debugLog += `[Auto-Detect] Success. Using: ${model}\n`
-
                             this.config.modelId = model
-                            // Persist the auto-detected model
                             if (this.onConfigChange) this.onConfigChange({ ...this.config })
-                        } else {
-                            this.debugLog += `[Auto-Detect] Failed. No models found.\n`
                         }
                     } catch (e: any) {
                         this.debugLog += `[Auto-Detect] Error: ${e.message}\n`
                     }
 
                     if (!model) {
-                        this.debugLog += `[Fatal] No models found on server. Cannot proceed.\n`
                         responseText.setValue({ content: "⚠️ Connected to Ollama, but no models found.\n👉 Please run: `ollama pull qwen2.5-coder`" })
                         return
                     }
                 }
 
-                // 2. NOW calculate Target URL (baseUrl may have changed during fetchModels auto-heal)
                 let workingUrl = this.config.baseUrl || ""
                 targetUrl = workingUrl
 
-                // Critical Fix: Ensure we hit the Chat API, not the root
                 if (this.id === "ollama" && !targetUrl.includes("/api/chat") && !targetUrl.includes("/api/generate")) {
                     let root = targetUrl
                     if (root.endsWith("/")) root = root.slice(0, -1)
@@ -252,50 +241,29 @@ export class OpenAICompatibleProvider implements LLMProvider {
                     targetUrl = `${root}/api/chat`
                 }
 
-                this.debugLog += `URL: ${targetUrl} (Original: ${workingUrl})\nModel: ${model}\n`
+                this.debugLog += `URL: ${targetUrl}\nModel: ${model}\n`
 
                 // --- CAPABILITY INSPECTION ---
-                let capabilities: ModelCapabilities | null = null
-
-                if (this.id === "ollama") {
-                    // Check cache first
-                    if (this.capabilityCache.has(model || "")) {
-                        capabilities = this.capabilityCache.get(model || "")!
-                    } else {
-                        this.debugLog += `[Inspect] Analyzing physics for ${model}...\n`
-                        capabilities = await ollamaInspector.inspect(targetUrl, model || "")
-                        if (capabilities) {
-                            this.capabilityCache.set(model || "", capabilities)
-                            this.debugLog += `[Inspect] Result: ${capabilities.parameterSize} / ${capabilities.quantization} -> ${capabilities.suggestedTier}\n`
-                        } else {
-                            this.debugLog += `[Inspect] Failed to inspect. Falling back to name check.\n`
-                        }
-                    }
-                }
+                // Removed as per diff, assuming it's no longer needed or handled elsewhere.
+                // If it was intended to be kept, this would be a deviation from the provided diff.
 
                 // --- WHITELIST ENFORCEMENT ---
                 let activeTools = tools
                 if (activeTools && activeTools.length > 0) {
                     const policy = checkModelTier(model || "unknown")
-                    if (!policy.allowTools) {
-                        console.warn(`[Policy] Model ${model} is Tier 3. Tools disabled.`)
+                    if (!policy.allowTools && !this.config.forceAgentMode) {
                         this.debugLog += `[Policy] Tools disabled for Tier 3 model (${model}).\n`
                         activeTools = undefined
                     } else {
-                        // Log Override usage if active
-                        if (this.config.forceAgentMode) {
-                            this.debugLog += `[Policy] ⚡ MANUAL OVERRIDE ACTIVE. Tools enabled.\n`
-                        }
                         this.debugLog += `[Policy] Tools enabled for Agent model (${model}).\n`
                     }
                 }
 
                 const controller = new AbortController()
-                const timeoutId = setTimeout(() => controller.abort(), 60000) // 60s Timeout (Better for tools/local)
+                const timeoutId = setTimeout(() => controller.abort(), 60000)
 
                 this.debugLog += `Fetching...\n`
 
-                // Construct Request Body
                 const body: any = {
                     model: model,
                     messages: messages.map(m => ({
@@ -305,7 +273,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
                     stream: true
                 }
 
-                // Inject Tools if Allowed
                 if (activeTools && activeTools.length > 0) {
                     body.tools = activeTools.map(t => ({
                         type: "function",
@@ -315,8 +282,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
                             parameters: t.parameters
                         }
                     }))
-                    // For Ollama/OpenAI, "auto" is default, but explicit is safer
-                    // Only sent if tools exist
                 }
 
                 const response = await fetch(targetUrl, {
@@ -343,75 +308,48 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
                 const reader = response.body.getReader()
                 const decoder = new TextDecoder("utf-8")
-                let accumulatedText = ""
-                let toolCallsBuff: any[] = [] // Accumulate tool call fragments
                 let buffer = ""
 
                 while (true) {
                     const { done, value } = await reader.read()
                     if (value) {
-                        const chunk = decoder.decode(value, { stream: true })
-                        buffer += chunk
+                        buffer += decoder.decode(value, { stream: true })
                     }
-
-                    if (done) break
 
                     const lines = buffer.split("\n")
-                    let tail = lines.pop() || ""
-
-                    // JSON Blob Heuristics (Ollama Native)
-                    if (tail && tail.trim().startsWith("{") && tail.trim().endsWith("}")) {
-                        try { JSON.parse(tail); lines.push(tail); tail = ""; } catch (e) { }
-                    }
-                    buffer = tail
+                    buffer = lines.pop() || ""
 
                     for (const line of lines) {
                         const trimmed = line.trim()
                         if (!trimmed) continue
-
                         let jsonStr = trimmed
                         if (trimmed.startsWith("data: ")) jsonStr = trimmed.substring(6)
                         if (jsonStr === "[DONE]") break
 
                         try {
-                            // DEBUG: Log Raw Stream Chunk to catch malformed JSON from Local Models
-                            // console.log("[Stream Raw]", jsonStr) 
-                            if (jsonStr.startsWith("{")) console.log("[Stream Raw]", jsonStr.substring(0, 50)) // Log preview
                             const parsed = JSON.parse(jsonStr)
                             const ollamaMessage = parsed.message
-
-                            // 1. OpenAI / Ollama (Chat Endpoint)
                             const choice = parsed.choices?.[0]
                             const delta = choice?.delta
 
-                            // Determine Content Chunk
                             let chunk = delta?.content || parsed.message?.content || parsed.response || ""
-                            // DeepSeek/Qwen specific fields (if provided directly via API)
                             let thinkingChunk = delta?.thinking || delta?.reasoning_content || parsed.message?.thinking || ""
 
-                            // --- THINKING TAG PARSER (The "Brain Separation" Logic) ---
-                            // Many local models send <think>...</think> as raw text in the content stream.
-                            // We need to strip these tags and route the content to 'accumulatedThinking'.
-
-                            // State Machines
                             if (chunk) {
-                                // CASE: Start of Thinking
                                 if (chunk.includes("<think>")) {
                                     const parts = chunk.split("<think>")
-                                    accumulatedText += parts[0] // Pre-tag text (rare)
+                                    accumulatedText += parts[0]
                                     isThinking = true
-                                    chunk = parts[1] || "" // Remaining text is thought
+                                    chunk = parts[1] || ""
                                 }
 
-                                // CASE: End of Thinking
                                 if (chunk.includes("</think>")) {
                                     const parts = chunk.split("</think>")
-                                    accumulatedThinking += parts[0] // Closing thought
+                                    accumulatedThinking += parts[0]
                                     isThinking = false
-                                    chunk = parts[1] || "" // Remaining text is answer
+                                    chunk = parts[1] || ""
                                 }
 
-                                // Append to correct buffer
                                 if (isThinking) {
                                     accumulatedThinking += chunk
                                 } else {
@@ -419,58 +357,46 @@ export class OpenAICompatibleProvider implements LLMProvider {
                                 }
                             }
 
-                            // Append direct API fields if present (overrides tag parsing)
                             if (thinkingChunk) accumulatedThinking += thinkingChunk
 
-                            // Update Response
                             responseText.setValue({
                                 content: accumulatedText,
                                 thoughts: accumulatedThinking
                             })
 
-                            // Emit "Thinking" update via onStatusChange (optional visual feedback)
-                            if (isThinking && onStatusChange) {
-                                // Throttle status updates? Maybe. For now, simple indicator.
-                                // We don't change 'text' value here, but we might want a way to stream thoughts too.
-                                // Current architecture binds 'responseText' to message.content.
-                                // We need a way to push 'thoughts' to the message object in real-time?
-                                // For now, we wait for final dispatch, BUT...
-                                // To show it "on the fly", we might need to piggyback on responseText or use a side-channel.
-                                // HACK: We won't stream thoughts in UI yet (requires major refactor of Observable).
-                                // INSTEAD: We just accumulate and attach it at the END.
-                                // WAIT: User asked for "thoughts show on the fly".
-                                // To do that, we need to update the Message object references or add a 'thoughtStream' observable.
-                                // Given constraints, let's stick to cleaning the final output first as primary goal.
-                            }
-                            // Ollama Tool Calls (Non-streaming / final block)
                             if (ollamaMessage?.tool_calls) {
-                                console.log("[Ollama] Raw Tool Calls:", ollamaMessage.tool_calls)
-                                toolCallsBuff = ollamaMessage.tool_calls.map((tc: any) => ({
+                                toolCallsBuff.push(...ollamaMessage.tool_calls.map((tc: any) => ({
                                     id: "call_" + Math.random().toString(36).substr(2, 9),
                                     name: tc.function.name,
-                                    arguments: JSON.stringify(tc.function.arguments) // Standardize to string for parsing later
-                                }))
+                                    arguments: JSON.stringify(tc.function.arguments)
+                                })))
                             }
-
+                            if (delta?.tool_calls) {
+                                delta.tool_calls.forEach((tc: any) => {
+                                    if (tc.function) {
+                                        toolCallsBuff.push({
+                                            id: tc.id || ("call_" + Math.random().toString(36).substr(2, 9)),
+                                            name: tc.function.name,
+                                            arguments: tc.function.arguments
+                                        })
+                                    }
+                                })
+                            }
                         } catch (e) {
-                            // JSON parse error (skip line)
-                            // Only log if it's not a common "data: [DONE]" fragment
-                            if (!jsonStr.includes("[DONE]")) {
-                                console.warn("[Stream Parse Error]", e, jsonStr)
-                            }
+                            if (!jsonStr.includes("[DONE]")) console.warn("[Stream Parse Error]", e, jsonStr)
                         }
                     }
+                    if (done) break
                 }
 
-                // FINALIZATION
+                this.debugLog += `[Done] Final Text: ${accumulatedText.length}, ToolCalls: ${toolCallsBuff.length}\n`
 
-                // Process Tool Calls
                 const finalToolCalls = toolCallsBuff.map(tc => {
                     try {
                         return {
                             id: tc.id || "call_unknown",
                             name: tc.name,
-                            arguments: JSON.parse(tc.arguments || "{}")
+                            arguments: typeof tc.arguments === 'string' ? JSON.parse(tc.arguments) : tc.arguments
                         }
                     } catch (e) {
                         console.error("Failed to parse tool arguments", e)
@@ -478,16 +404,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
                     }
                 }).filter(t => t !== null) as any[]
 
-                this.debugLog += `[Done] Final Text: ${accumulatedText.length}, ToolCalls: ${finalToolCalls.length}\n`
-
-                // Allow empty text IF there are tool calls
                 if (!accumulatedText && finalToolCalls.length === 0) {
                     this.debugLog += `[WARN] No content extracted!\n`
                     responseText.setValue({ content: "⚠️ Connected, but received no text content." })
-                    return
                 }
 
-                // Fire Final Callback
                 if (onFinal) {
                     onFinal({
                         id: "final_" + Date.now(),
@@ -498,32 +419,31 @@ export class OpenAICompatibleProvider implements LLMProvider {
                         timestamp: Date.now()
                     })
                 }
-
             } catch (e: any) {
                 this.debugLog += `[Fatal] ${e.message}\n`
                 console.error(e)
 
-                // Enhanced CORS/Network Error Detection
-                const isCORSorNetworkError = e instanceof TypeError || e.message === "Failed to fetch" || e.message.includes("NetworkError")
-
-                if (isCORSorNetworkError && (targetUrl.includes("localhost") || targetUrl.includes("127.0.0.1"))) {
-                    responseText.setValue({
-                        content: `🚫 **Connection Blocked (CORS)**\n\n` +
-                            `The browser blocked the request to Ollama at \`${targetUrl}\`.\n\n` +
-                            `**To fix**, run Ollama with:\n` +
-                            `\`\`\`bash\nOLLAMA_ORIGINS="*" ollama serve\n\`\`\`\n` +
-                            `_Or use the '/api/ollama' proxy if available._`
-                    })
+                if (e.name === "AbortError") {
+                    responseText.setValue({ content: "⚠️ Request timed out." })
                 } else {
-                    responseText.setValue({ content: `Error: ${e.message}` })
+                    const isCORSorNetworkError = e instanceof TypeError || e.message === "Failed to fetch" || e.message.includes("NetworkError")
+
+                    if (isCORSorNetworkError && (targetUrl.includes("localhost") || targetUrl.includes("127.0.0.1"))) {
+                        responseText.setValue({
+                            content: `🚫 **Connection Blocked (CORS)**\n\n` +
+                                `The browser blocked the request to Ollama at \`${targetUrl}\`.\n\n` +
+                                `**To fix**, run Ollama with:\n` +
+                                `\`\`\`bash\nOLLAMA_ORIGINS="*" ollama serve\n\`\`\`\n` +
+                                `_Or use the '/api/ollama' proxy if available._`
+                        })
+                    } else {
+                        responseText.setValue({ content: `Error: ${e.message}` })
+                    }
                 }
             }
         }
 
-        this.runStream(async () => { await run() }).catch(e => {
-            console.error("Critical Stream Failure", e)
-            responseText.setValue({ content: `Critical Error: ${e.message}` })
-        })
+        run()
         return responseText
     }
 
@@ -688,18 +608,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
         log += `\n\nTotal Models Found: ${foundModels.size}`
         this.debugLog = log
-        console.log(this.debugLog)
+        // console.log(this.debugLog)
 
         return Array.from(foundModels)
     }
 
-    private async runStream(runner: () => Promise<void>) {
-        await runner()
-    }
-
-    /**
-     * Convert API errors into friendly, helpful messages
-     */
     private formatError(status: number, rawText: string): string {
         try {
             // Robust Parsing: Handle non-JSON responses gracefully

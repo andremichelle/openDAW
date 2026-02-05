@@ -29,7 +29,7 @@ export const ProjectProfileInfo = ({ lifecycle, service }: Construct) => {
     const { meta, cover } = profile
     const inputName: HTMLInputElement = (
         <input type="text" className="default"
-            placeholder="Type in your's project name"
+            placeholder="Type in your project name"
             value={meta.name} />
     )
     const inputArtist: HTMLInputElement = (
@@ -39,12 +39,12 @@ export const ProjectProfileInfo = ({ lifecycle, service }: Construct) => {
     )
     const inputTags: HTMLInputElement = (
         <input type="text" className="default"
-            placeholder="Type in your's project tags"
+            placeholder="Type in your project tags"
             value={meta.tags.join(", ")} />
     )
     const inputDescription: HTMLTextAreaElement = (
         <textarea className="default"
-            placeholder="Type in your's project description"
+            placeholder="Type in your project description"
             value={meta.description} />
     )
     const coverModel = new MutableObservableOption<ArrayBuffer>(cover.unwrapOrUndefined())
@@ -66,9 +66,15 @@ export const ProjectProfileInfo = ({ lifecycle, service }: Construct) => {
                     })
                 }
                 unpublishButton.classList.toggle("hidden", true)
-                buttonPublishText.value = "Republish"
+                buttonPublishText.value = "Publish"
                 delete meta.radioToken
-                await Promises.tryCatch(profile.save())
+                const saveResult = await Promises.tryCatch(profile.save())
+                if (saveResult.status === "rejected") {
+                    return await RuntimeNotifier.info({
+                        headline: "Could not save profile",
+                        message: String(saveResult.error)
+                    })
+                }
                 return await RuntimeNotifier.info({
                     headline: "Project unpublished",
                     message: ""
@@ -95,7 +101,8 @@ export const ProjectProfileInfo = ({ lifecycle, service }: Construct) => {
                     <div>
                         Publish your music to <a href="https://music.opendaw.studio"
                             style={{ color: Colors.cyan.toString() }}
-                            target="music.opendaw.studio">our music
+                            target="music.opendaw.studio"
+                            rel="noopener noreferrer">our music
                             page</a>
                     </div>
                     <div style={{ display: "flex", columnGap: "1em" }}>
@@ -141,7 +148,12 @@ export const ProjectProfileInfo = ({ lifecycle, service }: Construct) => {
                                     })
                                 }
                                 unpublishButton.classList.toggle("hidden", isUndefined(meta.radioToken))
-                                buttonPublishText.value = isDefined(meta.radioToken) ? "Republish" : "Publish"
+                                buttonPublishText.value = "Publish"
+                                const result = await Promises.tryCatch(profile.save())
+                                if (result.status === "rejected") {
+                                    console.error("Publish failed", result.error)
+                                    return await RuntimeNotifier.error({ headline: "Publish failed", message: result.error instanceof Error ? result.error.message : String(result.error) })
+                                }
                                 return await RuntimeNotifier.info({ headline: "Publish complete", message: "" })
                             }}
                             appearance={{ framed: true, color: Colors.cyan }}>

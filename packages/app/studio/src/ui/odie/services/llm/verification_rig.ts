@@ -46,16 +46,14 @@ class TestProvider {
 
 
 
-        // ... (Strategy 1 omitted for brevity as bug was in Strategy 2) ...
+
 
         // Strategy 2: Ollama Standard (/api/tags)
-        // CODE UNDER TEST START
         const rootUrl = baseUrl
             .replace(/\/v1\/chat\/completions\/?$/, "")
             .replace(/\/api\/chat\/?$/, "")
             .replace(/\/v1\/?$/, "")
         const targetUrl2 = `${rootUrl}/api/tags`
-        // CODE UNDER TEST END
 
         try {
             const res = await fetch(targetUrl2)

@@ -7,28 +7,20 @@ import { Html } from "@opendaw/lib-dom"
 import css from "./OdieInput.sass?inline"
 const className = Html.adoptStyleSheet(css, "OdieInput")
 
+import { ActionButton } from "./components/ActionButton"
+import { StatusIndicator } from "./components/StatusIndicator"
+
 interface inputProps {
     service: OdieService
 }
 
-const ActionButton = ({ icon, label, onClick, pulse = false, id }: any) => {
-    return <button
-        className={`ActionButton ${pulse ? 'pulse' : ''}`}
-        id={id}
-        title={label}
-        onclick={(e: Event) => {
-            e.preventDefault()
-            e.stopPropagation()
-            onClick(e)
-        }}
-    >
-        {icon}
-    </button>
-}
 
 export const OdieInput = ({ service }: inputProps) => {
     const onSend = (text: string) => {
-        service.sendMessage(text)
+        service.sendMessage(text).catch(err => {
+            console.error("Failed to send message:", err)
+            setIndicator("disconnected", "Send Failed")
+        })
     }
 
     const textarea = <textarea
@@ -60,7 +52,7 @@ export const OdieInput = ({ service }: inputProps) => {
 
 
     // --- Status Indicator ---
-    const statusDot = <div className="status-dot"></div> as HTMLElement
+    const statusDot = <StatusIndicator status="idle" tooltip="Idle" /> as HTMLElement
     const providerLabel = <span className="provider-label">...</span> as HTMLElement
     const activityLabel = <span className="activity-label">...</span> as HTMLElement
 
@@ -116,19 +108,19 @@ export const OdieInput = ({ service }: inputProps) => {
             setIndicator("thinking", "Thinking...")
         } else {
             // After generation completes, re-check connection
-            refreshStatus()
+            void refreshStatus()
         }
     }))
 
     // 2. Provider change → re-validate
     lifecycle.own(service.ai.activeProviderId.subscribe(() => {
-        refreshStatus()
+        void refreshStatus()
     }))
 
     // 3. Panel open → initial check
     lifecycle.own(service.visible.subscribe(visible => {
         if (visible) {
-            refreshStatus()
+            void refreshStatus()
             setTimeout(() => {
                 if (document.body.contains(textarea)) textarea.focus()
             }, 50)
@@ -140,7 +132,7 @@ export const OdieInput = ({ service }: inputProps) => {
     setIndicator("checking", "...")
 
     // Trigger initial validation
-    refreshStatus()
+    void refreshStatus()
 
 
     // -- Container --
@@ -202,6 +194,7 @@ export const OdieInput = ({ service }: inputProps) => {
                 {/* Right: Send */}
                 <button
                     className="SendButton"
+                    aria-label="Send Message"
                     onclick={(e: Event) => {
                         e.preventDefault()
                         const text = textarea.value.trim()
@@ -214,6 +207,8 @@ export const OdieInput = ({ service }: inputProps) => {
             </div>
         </div>
     </div> as HTMLElement
+
+        ; (container as any).onDisconnect = () => lifecycle.terminate()
 
     return container
 }

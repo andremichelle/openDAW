@@ -5,68 +5,63 @@ tags: ["AI", "GenUI", "Widgets"]
 desc: Generative UI components available in Odie.
 ---
 
-# 🎨 Generative UI (GenUI) Features
+# 🎨 Alpha GenUI & Reasoning
 
-> **Goal**: Visualize data instantly.
-> **Tech**: React Widget Injection
+> **Status**: Alpha Readiness Audit
+> **Goal**: Documentation for generative components and the reasoning engine.
 
-Sometimes text isn't enough. When you ask about complex data, Odie renders **Native Widgets** directly in the chat stream. These aren't images—they are real, interactive application components.
-
----
-
-## 📘 1. Concepts: Dynamic Rendering
-
-Odie's Brain detects when a visual aid is superior to a text description.
-*   **Comparison**: If you compare two things, it renders a **Table**.
-*   **Parameter**: If you ask to set a value, it renders a **Knob**.
-*   **Music**: If you ask for a scale, it renders a **MIDI Grid**.
-
-### The "Magic" Behind the Knobs
-Odie does not send "pictures" of knobs. It sends **Code Specifications**.
-When you say "Compare Synths", Odie constructs a pure JSON Data Payload describing the table. The OpenDAW engine then builds the Native React Components instantly.
-
-**Why is this better?**
-*   **Zero Loading Time**: No images to download.
-*   **Interactive**: You can actually click and drag the knobs.
-*   **Pixel Perfect**: It always aligns with your current Theme.
-
+In this Alpha version, Odie transitions from a simple chat bot to a **Reasoning Co-Pilot**. It doesn't just process text; it "thinks" through DAW workflows and renders interactive visual components (GenUI).
 
 ---
 
-## 📖 2. Reference: The Widget Library
+## 🧠 1. Concepts: The Reasoning Engine
+
+Powered by **Gemini 3**, Odie now includes a "Thinking" phase before every response.
+
+### Thinking Levels
+| Level | Complexity | Use Case |
+| :--- | :--- | :--- |
+| **Minimal** | Fast, direct. | Simple transport commands (`/play`). |
+| **Medium** | Balanced reasoning. | Multi-step DAW operations (Adding tracks + Plugins). |
+| **High** | Deep analysis. | Technical troubleshooting or complex musical theory. |
+
+> [!NOTE]
+> **Molecular Knowledge**: Odie is grounded in the "OpenDAW Bible"—a molecular knowledge base of every instrument, effect, and internal system. This ensures the reasoning phase uses valid parameters and verified DAW nomenclatures.
+
+---
+
+## 🎛️ 2. Reference: GenUI Widgets
+
+When a visual tool is more efficient than text, Odie injects a **Native Widget** directly into the chat stream.
 
 ### 📊 Comparison Table
-**Trigger**: "Compare [A] vs [B]"
-**Use Case**: deciding between plugins, microphones, or techniques.
-**Feature**: Side-by-side specs with clear headers.
+**Trigger**: "Compare [Plugin A] vs [Plugin B]"
+**Usage**: Side-by-side technical specs for effects or instruments.
 
-### 🎛️ Smart Knob
-**Trigger**: "Set [Parameter] to [Value]"
-**Use Case**: Visualizing changes to gain, tempo, or plugin settings.
-**Feature**: Interactive Dial (Visual feedback only in current version).
+### 🎛️ Live Knob
+**Trigger**: "Show me the Gain setting" or "Set Tempo"
+**Usage**: Provides a touch-screen friendly dial for precise parameter control.
 
 ### 🎹 MIDI Grid
-**Trigger**: "Show me [Scale/Chord]"
-**Use Case**: Learning music theory visualization.
-**Feature**: Piano-roll style display of notes and duration.
-
-### 🖼️ Image Gallery
-**Trigger**: "Generate an image of..."
-**Use Case**: Creating Album Art or Mood Boards.
-**Feature**: Powered by Google Gemini Vision. Renders high-quality illustration.
+**Trigger**: "Show me the C-Major scale"
+**Usage**: Visualizes note patterns and rhythms before they are committed to the timeline.
 
 ---
 
-## 💪 3. Task: Generating Album Art
+## 🖼️ 3. Task: Vision & Visuals
 
-Odie can act as your personal graphic designer.
+Odie can generate technical schematics or educational diagrams to help you understand complex audio concepts.
 
-1.  Open the Chat.
-2.  Type: *"Generate a futuristic album cover with neon cyberpunk colors."*
-3.  **Wait**: Image generation takes 3-5 seconds.
-4.  **Result**: A high-res image appears in the chat.
-5.  **Action**: Right-click the image to **Save As**.
+1.  **Request**: *"Generate a schematic of how a Compressor works."*
+2.  **Thinking**: Odie first "Director Reasons" the visual structure.
+3.  **Generation**: The Gemini 3 Vision model renders the high-fidelity schematic.
+4.  **Action**: You can right-click any generated image to **Save As** or **Copy**.
 
-**Pro Tip**: You can refine the image.
-> *"Make it darker and add a robot."*
-Odie will use the previous context to regenerate the variant.
+---
+
+## 🛠️ 4. Alpha Verification (GenUI)
+
+If widgets aren't appearing or seem stuck:
+1.  Type `/verify-ui`.
+2.  This forces the engine to render a "System Diagnostics" test widget.
+3.  If the test widget appears, the GenUI bridge is healthy.

@@ -7,4 +7,6 @@ export type OdieEvent =
     | { type: "effect-added", track: string, effect: string }
     | { type: "param-changed", track: string, param: string, value: number }
     | { type: "error", message: string }
-    | { [key: string]: any }
+    | { type: "action-complete", command?: string, result?: any, content?: string }
+    | { type: "track-added", name: string, kind: string }
+    | { type: "analysis-complete", track: string, result: any }

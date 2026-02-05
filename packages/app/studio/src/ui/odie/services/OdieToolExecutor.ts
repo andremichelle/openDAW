@@ -40,17 +40,20 @@ export class OdieToolExecutor {
                     await ctx.appControl.createProject()
                     return { success: true, userMessage: "Created new project" }
 
-                case "project_load":
+                case "project_load": {
                     const pLoaded = await ctx.appControl.loadProject()
                     return { success: pLoaded, userMessage: pLoaded ? "Opened Project Browser" : undefined }
+                }
 
-                case "project_export_mix":
+                case "project_export_mix": {
                     const mExp = await ctx.appControl.exportMixdown()
                     return { success: mExp, userMessage: mExp ? "Export initiated" : undefined }
+                }
 
-                case "project_export_stems":
+                case "project_export_stems": {
                     const sExp = await ctx.appControl.exportStems()
                     return { success: sExp, userMessage: sExp ? "Export Stems initiated" : undefined }
+                }
 
                 // Transport
                 case "transport_play":
@@ -127,12 +130,13 @@ export class OdieToolExecutor {
                 }
 
                 case "track_delete":
-                case "arrangement_delete_track":
+                case "arrangement_delete_track": {
                     const delSuccess = await ctx.appControl.deleteTrack(args.name)
                     return {
                         success: delSuccess,
                         userMessage: delSuccess ? `Deleted track: "${args.name}"` : `Failed to delete track: ${args.name}`
                     }
+                }
 
                 case "track_list":
                 case "arrangement_list_tracks": {
@@ -240,9 +244,10 @@ export class OdieToolExecutor {
 
 
                 // View
-                case "view_switch":
+                case "view_switch": {
                     const vSwitch = await ctx.appControl.switchScreen(args.screen as any)
                     return { success: vSwitch, userMessage: vSwitch ? `Switched to ${args.screen} view` : undefined }
+                }
                 case "view_toggle_keyboard":
                     await ctx.appControl.toggleKeyboard()
                     return { success: true, userMessage: "Toggled keyboard" }
@@ -286,7 +291,7 @@ export class OdieToolExecutor {
                         trackName = ctx.contextState.focus?.selectedTrackName
                         if (!trackName) throw new Error("Missing 'trackName' argument")
                     }
-                    void ctx.appControl.analyzeTrack(trackName)
+                    await ctx.appControl.analyzeTrack(trackName)
                     return { success: true, userMessage: `Analyzed ${trackName}.` }
                 }
 

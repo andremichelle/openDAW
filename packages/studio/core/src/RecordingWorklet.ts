@@ -12,8 +12,8 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {AudioData, BPMTools} from "@opendaw/lib-dsp"
-import {Peaks, SamplePeaks} from "@opendaw/lib-fusion"
+import { AudioData, BPMTools } from "@opendaw/lib-dsp"
+import { Peaks, SamplePeaks } from "@opendaw/lib-fusion"
 import {
     mergeChunkPlanes,
     RingBuffer,
@@ -21,10 +21,10 @@ import {
     SampleLoaderState,
     SampleMetaData
 } from "@opendaw/studio-adapters"
-import {SampleStorage} from "./samples"
-import {RenderQuantum} from "./RenderQuantum"
-import {Workers} from "./Workers"
-import {PeaksWriter} from "./PeaksWriter"
+import { SampleStorage } from "./samples"
+import { RenderQuantum } from "./RenderQuantum"
+import { Workers } from "./Workers"
+import { PeaksWriter } from "./PeaksWriter"
 
 export class RecordingWorklet extends AudioWorkletNode implements Terminable, SampleLoader {
     readonly #terminator: Terminator = new Terminator()
@@ -39,8 +39,9 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
     #data: Option<AudioData> = Option.None
     #peaks: Option<Peaks> = Option.None
     #isRecording: boolean = true
+    #isFinalizing: boolean = false
     #limitSamples: int = Number.POSITIVE_INFINITY
-    #state: SampleLoaderState = {type: "record"}
+    #state: SampleLoaderState = { type: "record" }
     #onSaved: Option<Procedure<UUID.Bytes>> = Option.None
 
     constructor(context: BaseAudioContext, config: RingBuffer.Config) {
@@ -59,14 +60,14 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
             if (this.#isRecording) {
                 this.#output.push(array)
                 this.#peakWriter.append(array)
-                if (this.numberOfFrames >= this.#limitSamples) {
+                if (this.numberOfFrames >= this.#limitSamples && !this.#isFinalizing) {
                     this.#finalize().catch(error => console.warn(error))
                 }
             }
         })
     }
 
-    own<T extends Terminable>(terminable: T): T {return this.#terminator.own(terminable)}
+    own<T extends Terminable>(terminable: T): T { return this.#terminator.own(terminable) }
 
     limit(count: int): void {
         this.#limitSamples = count
@@ -75,16 +76,16 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
         }
     }
 
-    set onSaved(callback: Procedure<UUID.Bytes>) {this.#onSaved = Option.wrap(callback)}
+    set onSaved(callback: Procedure<UUID.Bytes>) { this.#onSaved = Option.wrap(callback) }
 
-    setFillLength(value: int): void {this.#peakWriter.numFrames = value}
+    setFillLength(value: int): void { this.#peakWriter.numFrames = value }
 
-    get numberOfFrames(): int {return this.#output.length * RenderQuantum}
-    get data(): Option<AudioData> {return this.#data}
-    get peaks(): Option<Peaks> {return this.#peaks.isEmpty() ? Option.wrap(this.#peakWriter) : this.#peaks}
-    get state(): SampleLoaderState {return this.#state}
+    get numberOfFrames(): int { return this.#output.length * RenderQuantum }
+    get data(): Option<AudioData> { return this.#data }
+    get peaks(): Option<Peaks> { return this.#peaks.isEmpty() ? Option.wrap(this.#peakWriter) : this.#peaks }
+    get state(): SampleLoaderState { return this.#state }
 
-    invalidate(): void {}
+    invalidate(): void { }
 
     subscribe(observer: Observer<SampleLoaderState>): Subscription {
         if (this.#state.type === "loaded") {
@@ -97,16 +98,19 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
     terminate(): void {
         this.#reader.stop()
         this.#isRecording = false
-        this.#data = Option.None
+        if (this.#state.type !== "loaded") {
+            this.#data = Option.None
+        }
         this.#terminator.terminate()
     }
 
-    toString(): string {return `{RecordingWorklet}`}
+    toString(): string { return `{RecordingWorklet}` }
 
     async #finalize(): Promise<SampleStorage.NewSample> {
+        this.#isFinalizing = true
         this.#isRecording = false
         this.#reader.stop()
-        if (this.#output.length === 0) {return panic("No recording data available")}
+        if (this.#output.length === 0) { return panic("No recording data available") }
         const totalSamples: int = this.#limitSamples
         const sample_rate = this.context.sampleRate
         const numberOfChannels = this.channelCount
@@ -121,7 +125,7 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
         this.#peaks = Option.wrap(SamplePeaks.from(new ByteArrayInput(peaks)))
         const bpm = BPMTools.detect(audioData.frames[0], sample_rate)
         const duration = totalSamples / sample_rate
-        const meta: SampleMetaData = {name: "Recording", bpm, sample_rate, duration, origin: "recording"}
+        const meta: SampleMetaData = { name: "Recording", bpm, sample_rate, duration, origin: "recording" }
         const sample: SampleStorage.NewSample = {
             uuid: this.uuid,
             audio: audioData,
@@ -130,7 +134,7 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
         }
         await SampleStorage.get().save(sample)
         this.#onSaved.ifSome(callback => callback(this.uuid))
-        this.#setState({type: "loaded"})
+        this.#setState({ type: "loaded" })
         this.terminate()
         return sample
     }

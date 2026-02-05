@@ -10,9 +10,9 @@ desc: High-level architecture of the Odie system.
 > **Package**: `@app/studio/ui/odie`
 > **Architecture Pattern**: Sidecar / Event-Driven Observer
 > **Primary Technology**: React + MobX + Vercel AI SDK
-> **Last Audit**: 2025-12-21
+> **Last Audit**: 2026-01-08
 
-The **Odie AI Subsystem** is an integrated coding and production assistant embedded within the OpenDAW Studio. It allows users to control the Digital Audio Workstation using natural language commands, vision capabilities, and autonomous agents.
+The **Odie AI Subsystem** is an integrated engine embedded within OpenDAW Studio. It allows users to control the Digital Audio Workstation using natural language commands, context-aware reasoning, and interactive GenUI widgets.
 
 ---
 
@@ -21,9 +21,9 @@ The **Odie AI Subsystem** is an integrated coding and production assistant embed
 ### The Sidecar Pattern
 Odie is architected as a **Sidecar Application**. It runs within the same browser tab as the DAW but maintains a strict boundary separation to ensure the stability of the Audio Engine.
 
-*   **Isolation**: Odie's state loop (`OdieService.ts`) is separate from the Studio's state loop (`StudioService.ts`).
-*   **Safety**: If Odie crashes or hallucinates, the music keeps playing.
-*   **Communication**: Odie talks to the host via a verified bridge (`OdieAppControl.ts`) and reads state via an observer (`KnowledgeService.ts`).
+*   **Isolation**: Odie's state loop (`OdieService.ts`) is separate from the Studio's core logic.
+*   **Safety**: If Odie crashes or handles a request incorrectly, the core Studio state remains protected.
+*   **Communication**: Odie talks to the host via a verified bridge (`OdieAppControl.ts`) and reads state via an observer (`ContextService.ts`).
 
 ### Architecture Diagram
 ```mermaid
@@ -35,86 +35,77 @@ graph TD
     end
 
     subgraph "Odie Sidecar (Guest)"
-        Brain[Gemini AI Provider]
-        OdieStore[Odie MobX Store]
+        Brain[AI Service / Provider]
+        OdieStore[Odie Service Store]
         ChatUI[Sidebar Interface]
         GenUI[Render Engine]
     end
 
     %% Read Path
-    StudioStore -->|Obeserves Changes| Knowledge[Knowledge Service]
-    Knowledge -->|Injects Context| Brain
+    StudioStore -->|Observes Changes| Context[Context Service]
+    Context -->|Injects Context| Brain
 
     %% Write Path (Verified)
     Brain -->|Tool Calls| Control[App Control Service]
-    Control -->|Executes| StudioStore
+    Control -->|Executes Actions| StudioStore
 
     %% Isolation
     ReactUI -.- ChatUI
 ```
 
 ### The State Loop
-1.  **Observe**: Every 500ms (or on signal), `KnowledgeService.ts` scans the Studio State (Track count, Tempo, Selection).
-2.  **Reason**: When the user sends a message, this "State Snapshot" is prepended to the System Prompt.
-3.  **Act**: The AI determines if a tool call is needed.
-4.  **Verify**: The tool executes and waits for the Studio State to change before confirming success.
+1.  **Observe**: `ContextService.ts` scans the Studio State (Track count, Tempo, Selection).
+2.  **Reason**: When the user sends a message, this "State Snapshot" is injected into the context provided to the AI.
+3.  **Act**: The AI determines if a tool call is needed using `OdieToolDefinitions.ts`.
+4.  **Verify**: The tool executes via `OdieAppControl.ts` and updates the Studio state.
 
 ---
 
-## 🛡️ 2. Philosophy: Why "No MCP"?
+## 🛡️ 2. Philosophy: Native Verified Bridge
 
-You might ask: *"Why build a custom Sidecar instead of using the industry-standard Model Context Protocol (MCP)?"*
+Instead of using generic model protocols, Odie uses a **Native Verified Bridge** for several critical reasons:
 
-We tried MCP. We rejected it. Here is why Odie uses a **Native Verified Bridge** instead:
+### 1. Safety First
+*   **Strict Typing**: Our bridge is strictly defined. Odie cannot perform arbitrary file operations or destructive actions outside of its defined toolset. It can only call safe, creative methods like `addTrack()` or `setVolume()`.
 
-### 1. Safety First (The "Rogue Agent" Problem)
-*   **MCP Risk**: MCP servers are generic "Toolboxes". If an AI gets confused, it can call `delete_file` or `execute_terminal` without understanding the blast radius.
-*   **Odie Solution**: Our bridge is **Strictly Typed**. Odie literally *cannot* delete your project files because that code does not exist in the bridge. It can only call safe, creative methods like `addTrack()` or `setVolume()`.
+### 2. Reliability
+*   **In-Memory Communication**: Odie runs inside the browser memory. Communication between the AI reasoning and the DAW execution is instantaneous, avoiding networking overhead or external server dependencies for app control.
 
-### 2. Reliability (The "Flaky Tool" Problem)
-*   **MCP Risk**: MCP connections often drop, lag, or timeout, causing the AI to say *"I'm sorry, I can't connect to the server."*
-*   **Odie Solution**: Odie runs **Inside the Browser Memory**. There is no network latency. Communication is instant (<1ms). It never "disconnects" because it *is* the app.
-
-### 3. Context Awareness
-*   **MCP Risk**: MCP tools are blind. They only know what you pass in the arguments.
-*   **Odie Solution**: Odie has **Eyes**. It reads the entire MobX State Store every 500ms. It knows you are in the "Mixer View" before you even ask "What am I looking at?".
-
-### 4. Zero-Config
-*   **MCP Risk**: Requires installing Python, Node.js, setting up servers, editing config files...
-*   **Odie Solution**: **It Just Works**. You open the URL, you have Odie. No terminal required.
+### 3. Deep Context Awareness
+*   **Real-time Eyes**: By residing within the same memory space, Odie can read the entire MobX state store efficiently, providing deep context about the current mixer view, project timeline, and plugin states.
 
 ---
 
-## 📖 2. Service Reference
+## 📖 3. Service Reference
 
-The system is composed of 5 singleton services.
+The system is composed of specialized singleton services.
 
 | Service | File | Role |
 | :--- | :--- | :--- |
-| **Kernel** | `OdieService.ts` | The startup bootstrapper and UI state manager (Visibility, Theme). |
-| **Brain** | `AIService.ts` | Manages LLM providers, history, and streaming. Uses `OdieCapabilityService` for prompt handling. |
-| **Hands** | `OdieAppControl.ts` | The only service allowed to mutate Studio State. |
-| **Eyes** | `KnowledgeService.ts` | Read-only observer that serializes the Studio into text for the LLM. |
-| **Canvas** | `OdieRenderEngine.tsx` | Generative UI renderer (React Component factory). |
+| **Kernel** | `OdieService.ts` | The startup bootstrapper and UI state manager (Visibility, Navigation). |
+| **Brain** | `AIService.ts` | Manages LLM providers (Gemini, Ollama), history, and streaming. |
+| **Hands** | `OdieAppControl.ts` | The bridge allowed to mutate Studio State based on AI tool calls. |
+| **Eyes** | `ContextService.ts` | Read-only observer that serializes the DAW state into context for the AI. |
+| **Canvas** | `OdieRenderEngine.tsx` | Generative UI renderer for rich interactive components. |
 
 ---
 
-## 💪 3. Task: Bootstrapping Odie
+## 💪 4. Task: Bootstrapping Odie
 
 ### Startup Sequence
-When OpenDAW launches, Odie initializes lazily to improve TTI (Time to Interactive).
+When OpenDAW launches, Odie initializes and connects its listeners.
 
-1.  **User Click**: User clicks the "Robot Icon" in the header.
+1.  **User Click**: User clicks the **Robot Icon** in the header.
 2.  **Mount**: `OdieSidebar.tsx` mounts the React tree.
-3.  **Service Init**: `OdieService.initialize()` is called.
-    *   Loads `localStorage` history.
-    *   Checks for API Keys.
-    *   Subscribes to `KnowledgeService` updates.
-4.  **Ready**: The "I am listening." prompt appears.
+3.  **Service Init**: `OdieService` ensures providers are ready and context is scanning.
+    *   Loads `localStorage` configuration and active provider.
+    *   Checks for API Keys in the KeyRing.
+    *   Subscribes to DAW state changes via `ContextService`.
+4.  **Ready**: The system is ready to receive the first prompt.
 
 ### Debugging the Startup
-If Odie fails to appear:
-1.  Open Chrome DevTools Console.
-2.  Type `odieService.debug()`.
-3.  Check `odieService.isInitialized`. If `false`, the bootstrapper failed (usually due to a corrupted History file).
-    *   **Fix**: Run `localStorage.removeItem("odie_chat_history")` and reload.
+If the Odie panel fails to respond correctly:
+1.  Open Bronze Browser DevTools Console.
+2.  Inspect the `window.odie` object (if exported) or check service logs.
+3.  Verify the connection status in the **Odie Settings** panel.
+    *   **Fix**: If history or settings are corrupted, use the **Clear History** button in settings or clear `odie_config` from `localStorage`.

@@ -75,7 +75,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
                                 save()
                             }
                         }}>+ Add Key</button>
-                        <a href="https://aistudio.google.com/app/apikey" target="_blank" className="odie-btn" style={{ flex: "0.5", fontSize: "9px", textDecoration: "none" }}>Get Key ↗</a>
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="odie-btn" style={{ flex: "0.5", fontSize: "9px", textDecoration: "none" }}>Get Key ↗</a>
                     </div>
                 </div>
                 <div style={{ fontSize: "9px", color: "var(--color-gray)", marginTop: "6px", opacity: "0.6" }}>Keys are used to avoid rate limits.</div>
@@ -386,7 +386,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
 
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "10px" }}>
                         <div style={{ color: "var(--color-gray)" }}>Standard: <strong style={{ color: "var(--color-bright)" }}>Qwen 2.5 Coder</strong></div>
-                        <a href="https://ollama.com/download" target="_blank" style={{ color: "var(--color-blue)", textDecoration: "none", fontWeight: "600" }}>Get Ollama ↗</a>
+                        <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-blue)", textDecoration: "none", fontWeight: "600" }}>Get Ollama ↗</a>
                     </div>
                 </div>
             </div> as HTMLElement

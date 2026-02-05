@@ -125,11 +125,8 @@ describe('Odie AI Comprehension', () => {
             ctx.contextState.focus = {}
             ctx.recentMessages = []
 
-            try {
-                await executor.execute({ id: "mock-id", name: "get_track_details", arguments: {} }, ctx)
-            } catch (e: any) {
-                expect(e.message).toContain("No track specified")
-            }
+            await expect(executor.execute({ id: "mock-id", name: "get_track_details", arguments: {} }, ctx))
+                .rejects.toThrow("No track specified")
         })
 
         it('should successfully infer track from recent messages if omitted', async () => {

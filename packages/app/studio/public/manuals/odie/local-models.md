@@ -8,47 +8,47 @@ desc: Running Odie with secure local models.
 # 🧪 Power User: Local Models (Offline AI)
 
 > **Goal**: Run Odie completely offline using your own hardware.
-> **Status**: **Beta / Experimental**
+> **Status**: **Alpha Readiness (Advanced)**
 > **Prerequisite**: A powerful GPU (M1/M2/M3 or RTX 3060+ recommended).
 
-Odie supports connecting to local inference engines like **Ollama** or **LM Studio**. This gives you 100% privacy and zero reliance on cloud services.
+Odie supports connecting to local inference engines like **Ollama**. This gives you 100% privacy and zero reliance on cloud services.
 
 ---
 
 ## ⚠️ The Trade-Offs (Read First)
 
-Running AI locally is a "Power User" feature. It behaves differently than the cloud version:
+Running AI locally is a power-user feature. It behaves differently than the cloud version:
 
-| Feature | Cloud (Gemini Pro) | Local (Qwen 3 Coder) |
+| Feature | Cloud (Gemini 3) | Local (Qwen 2.5 Coder) |
 | :--- | :--- | :--- |
-| **Speed** | ⚡️ Fast (<1s) | 🐢 Variable (Depends on Model Size) |
-| **Reasoning** | 🧠 Genius (Complex Logic) | ✅ Balanced (Qwen 3 Coder) |
-| **App Control** | ✅ Verified | ⚠️ Experimental (May fail complex tasks) |
-| **Images** | ✅ Yes | ❌ No (Coming Soon) |
-| **GenUI** | ✅ Yes | ❌ No (Text Only) |
+| **Speed** | ⚡️ Ultra-Fast (<0.5s) | 🐢 Variable (VRAM Dependent) |
+| **Reasoning** | 🧠 Advanced (Thinking Mode) | ✅ Balanced (7b/32b models) |
+| **App Control** | ✅ Native (High Precision) | ⚠️ Experimental (Basic Only) |
+| **Vision/Files** | ✅ Deep Integration | ❌ Limited (Text Only) |
+| **Molecular Knowledge** | ✅ Full Access | 🧪 Experimental |
 
 > [!IMPORTANT]
-> **Finding Your Fit**: Local AI performance is dictated by your GPU and RAM. 
-> - **CPU vs GPU**: Ollama automatically detects your hardware. If a model is too large for your Graphics Card (GPU), it spills over to your much slower System Memory (CPU).
-> - **Audio Stability**: For music production, **VRAM is the "Gold Standard"**. Running AI on your CPU consumes the same processing power used for your audio plugins and synth engines.
-> - **The Test**: Run `ollama ps` in your terminal. If it says **100% CPU**, your audio is at risk of glitches (pops/clicks). Aim for a smaller version that shows **100% GPU** to keep your CPU dedicated to your "Sound".
-> - **The Trade-off**: Running local is slower and less precise than the Cloud, but offers 100% privacy. This is a "Power User" feature not suitable for all machines.
+> **Finding Your Fit**: Performance is dictated by your GPU VRAM. 
+> - **CPU vs GPU**: Ollama automatically detects your hardware. If a model is too large for your Graphics Card VRAM (GPU), it spills over to your System Memory (CPU).
+> - **Audio Stability**: For music production, **VRAM is the critical benchmark**. Running AI on your CPU consumes the same processing power used for your audio plugins and synth engines.
+> - **The Test**: Use the **Hardware Fit** button in Settings. If it says **100% CPU**, your audio is at risk of glitches. Aim for a smaller model (e.g., `7b` or `q4_k_m` quantization) that fits entirely on your GPU.
 
 ---
 
 ## 💪 Task: Setting Up Ollama
 
 1.  **Download Ollama**: Get it at [ollama.com](https://ollama.com).
-2. **Pull a Model**: Run `ollama run qwen3-coder` in your terminal (or specify size, e.g., `qwen3-coder:32b`).
-3. **Configure Odie**:
+2.  **Pull a Model**: Run `ollama run qwen2.5-coder` in your terminal.
+3.  **Configure Odie**:
     *   Open **Settings** (Gear Icon).
-    *   Set Provider to **Custom / Local**.
-    *   Base URL: `http://localhost:11434/v1`
-    *   Model ID: `qwen3-coder` (or your chosen size)
+    *   Toggle the provider switch to **LOCAL**.
+    *   **Endpoint URL**: The default `/api/ollama` is recommended (it proxies to your local Ollama automatically).
+    *   **Model ID**: Ensure it matches what you pulled (e.g., `qwen2.5-coder`).
+    *   Click **Test Connection**.
 
 ---
 
 ## 🔮 Roadmap: The Future of Local
-We are actively working to bring parity to local models.
-*   **Next Update**: Better support for "Function Calling" (reliably adding tracks).
-*   **Future**: Local Stable Diffusion for image generation.
+We are working to bring full feature parity to local models.
+*   **Next Update**: Robust support for Tool Calling (reliable track/effect management).
+*   **Future**: Vision support and Molecular Knowledge local grounding.

@@ -5,76 +5,82 @@ tags: ["AI", "Commands", "Slash"]
 desc: Complete list of Odie slash commands.
 ---
 
-# ⌨️ Command Reference Matrix
+# ⌨️ Alpha Command Reference
 
-> **Goal**: A Dictionary of "Magic Words" that trigger verified actions.
+> **Status**: Alpha Readiness Audit
+> **Goal**: Dictionary of hardcoded commands that bypass AI reasoning for 100% execution accuracy.
 
-While Odie understands natural language, specific phrasing ensures 100% execution accuracy.
+While Odie understands natural language, slash commands (`/`) are direct system calls. Use them for instant utility or debugging.
 
 ---
 
-## 📘 1. Concepts: Slash vs. Natural
+## 📘 1. Concepts: Direct vs. Reasoning
 
 ### Slash Commands (`/`)
-These bypass the LLM reasoning entirely. They are **hardcoded** execution paths for system utilities. Use these for debugging or instant state checks.
+Hardcoded execution paths.
 *   *Speed*: Instant (<10ms).
 *   *Intelligence*: Zero.
+*   *Reliability*: 100%.
 
 ### Natural Language
-These are sent to the LLM. The AI reasons about your intent and calls the appropriate tool.
+Sent to the LLM (Gemini 3) for reasoning.
 *   *Speed*: Variable (500ms - 2s).
 *   *Intelligence*: High (Context Aware).
+*   *Reliability*: 95% (Probability based).
 
 ---
 
-## 📖 2. Reference: The Cheat Sheet
+## 📖 2. Reference: Utilities
 
-### A. Slash Utilities
-These are safe, verified utilities for managing your session.
-
-| Command | Function | Use Case |
+### A. Transport & Project
+| Command | Function | Example |
 | :--- | :--- | :--- |
-| `/clear` | Wipes Chat History | Start fresh if Odie gets confused. |
-| `/list` | List Tracks | See exactly what the AI sees in the track list. |
-| `/samples` | List Samples | Browse the indexed sample library. |
-| `/help` | User Manual | View the full command guide. |
+| `/play` | Start engine | `/play` |
+| `/stop` | Stop engine | `/stop` |
+| `/record` | Start recording | `/record` (Immediate) or `/record true` (Count-in) |
+| `/new` | New empty project | `/new` |
 
-> **Developer Note**: Advanced debugging tools (`/debug`, `/verify3ui`, `/keys`) are hidden under the `/dev` command.
-
-
-### B. App Control Triggers
-
-| Domain | Natural Trigger | Example |
+### B. Tracks & Assets
+| Command | Function | Example |
 | :--- | :--- | :--- |
-| **Workflow** | `Add [Type] Track` | "Add a Drums track", "Add a Return track" |
-| **Workflow** | `Delete [Target]` | "Delete this track", "Remove selected region" |
-| **Transport** | `Play` / `Stop` / `Record` | "Hit it", "Cut", "Start recording" |
-| **Transport** | `Set BPM to [Value]` | "Tempo 128", "Make it faster" |
-| **Editing** | `Split` | "Split selection here", "Cut the clip" |
-| **Editing** | `Quantize` | "Quantize to 1/16", "Fix the timing" |
-| **Plugins** | `Add [Effect]` | "Add Reverb", "Put a Compressor on this" |
+| `/add [type]` | Add specific track | `/add audio "Vocal"`, `/add drums` |
+| `/list` | Show current tracks | `/list` |
+| `/samples` | Browse indexed samples | `/samples` |
+| `/soundfonts` | Browse instruments | `/soundfonts` |
 
-### C. GenUI Triggers
+### C. Plugin Control
+Directly load effects without LLM delay.
+| Command | Function | Example |
+| :--- | :--- | :--- |
+| `/effect [track] [effect]` | Add Audio Effect | `/effect Bass Reverb` |
+| `/meff [track] [effect]` | Add MIDI Effect | `/meff Keys Arpeggiator` |
+| `/set-nano [track] [query]` | Load Sampler | `/set-nano Drums 808_Kick` |
+| `/set-sf [track] [query]` | Load Soundfont | `/set-sf Lead Piano` |
 
-| Widget | Trigger Phrasing |
+---
+
+## 🛠️ 3. Developer & Support
+
+Hidden or advanced tools for system maintenance.
+
+| Command | Function |
 | :--- | :--- |
-| **Table** | "Compare [A] vs [B]" |
-| **Knob** | "Set [Param] to [Value]" |
-| **Grid** | "Show me a [Scale/Chord]" |
-| **Image** | "Generate an image of [Subject]" |
+| `/help` | Display this guide in chat. |
+| `/clear` | Wipe current chat history for a fresh state. |
+| `/keys` | Check status and health of your API Key library. |
+| `/dev` | List all hidden developer tools. |
+| `/debug` | Dump system state to browser console for inspection. |
+| `/diagnose` | (WIP) Trigger a deep nervous system check. |
+| `/purge` | **Factory Reset**: Clear all keys, history, and settings (Deletes LocalStorage). |
 
 ---
 
-## 💪 3. Task: Chaining Commands
+## 💪 4. Best Practices: Chaining
 
-Odie's Brain (Gemini Pro) is capable of **Multi-Step Reasoning**. You can chain commands in a single sentence.
+Odie's Reasoning Engine (Gemini 3) can handle **Multi-Step Tasks**. You can chain commands in a single prompt.
 
-**The Prompt**:
-> *"Add a bass track, name it 'Sub', and load a compressor."*
+**Standard Command**:
+> *"Add a synth track called 'Pad', set the volume to -6dB, and load a Chorus."*
 
-**The Execution Flow**:
-1.  `addTrack("audio", "Sub")` -> **Wait** -> Track Created.
-2.  `insertPlugin("compressor")` -> **Wait** -> Plugin Loaded.
-3.  **Reply**: *"Created 'Sub' track with Compressor."*
+**Alpha Tip**: If a multi-step prompt fails, break it down or use specific slash commands (e.g., `/add synth Pad`) for the critical steps.
 
-**Pro Tip**: Keep chains to 3 steps max to minimize latency/timeout risks.
