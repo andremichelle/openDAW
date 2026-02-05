@@ -1,4 +1,4 @@
-import { DefaultObservableValue, Terminator } from "@opendaw/lib-std"
+import { DefaultObservableValue, Terminator, isAbsent, isDefined, Nullable, Optional } from "@opendaw/lib-std"
 import type { StudioService } from "../../service/StudioService"
 import { AIService } from "./services/AIService"
 
@@ -26,14 +26,14 @@ export class OdieService {
     // Values: "unknown" | "connected" | "disconnected" | "checking"
     readonly connectionStatus = new DefaultObservableValue<"unknown" | "connected" | "disconnected" | "checking">("checking")
 
-    readonly genUiPayload = new DefaultObservableValue<import("./genui/GenUISchema").GenUIPayload | null>(null)
+    readonly genUiPayload = new DefaultObservableValue<Nullable<import("./genui/GenUISchema").GenUIPayload>>(null)
 
-    readonly lastDebugInfo = new DefaultObservableValue<{
+    readonly lastDebugInfo = new DefaultObservableValue<Nullable<{
         systemPrompt: string
-        projectContext: any
+        projectContext: OdieContext
         userQuery: string
         timestamp: number
-    } | null>(null)
+    }>>(null)
 
 
 
@@ -46,9 +46,9 @@ export class OdieService {
 
 
 
-    public appControl?: OdieAppControl
+    public appControl: Optional<OdieAppControl>
 
-    public studio?: StudioService
+    public studio: Optional<StudioService>
 
     readonly #terminator = new Terminator()
     constructor() {
@@ -69,7 +69,7 @@ export class OdieService {
             this.#terminator.own(this.ai.activeProviderId.subscribe(observer => {
                 const id = observer.getValue()
                 let label = "Unknown"
-                if (!id || typeof id !== "string") {
+                if (isAbsent(id) || typeof id !== "string") {
                     label = "AI"
                 } else if (id === "gemini") label = "Gemini"
                 else if (id === "gemini-3") label = "Gemini 3"
@@ -98,10 +98,10 @@ export class OdieService {
             // History Sync
             this.activeSessionId = null
             chatHistory.sessions.subscribe(observer => {
-                if (this.activeSessionId) {
+                if (isDefined(this.activeSessionId)) {
                     const sessions = observer.getValue()
                     const exists = sessions.find((s: { id: string }) => s.id === this.activeSessionId)
-                    if (!exists) {
+                    if (isAbsent(exists)) {
                         this.startNewChat()
                     }
                 }
@@ -117,7 +117,7 @@ export class OdieService {
         this.connectionStatus.setValue("checking")
         const provider = this.ai.getActiveProvider()
 
-        if (!provider) {
+        if (isAbsent(provider)) {
             this.connectionStatus.setValue("disconnected")
             return
         }
@@ -209,7 +209,7 @@ export class OdieService {
                     const args = getArgs(match)
                     const result = await commandRegistry.execute(cmd, args, this)
 
-                    if (result) {
+                    if (isDefined(result)) {
                         const sysMsg: Message = { id: (Date.now() + 1).toString(), role: "model", content: result, timestamp: Date.now() }
                         const currentPostExec = this.messages.getValue()
                         this.messages.setValue([...currentPostExec, sysMsg])
@@ -231,8 +231,8 @@ export class OdieService {
 
         try {
             const provider = this.ai.getActiveProvider()
-            const config = provider ? this.ai.getConfig(provider.id) : {}
-            const needsSetup = !provider || (provider.id !== "ollama" && (!config.apiKey || config.apiKey.length < 5))
+            const config = isDefined(provider) ? this.ai.getConfig(provider.id) : {}
+            const needsSetup = isAbsent(provider) || (provider.id !== "ollama" && (isAbsent(config.apiKey) || config.apiKey.length < 5))
 
             if (needsSetup) {
                 const errorCard = {
@@ -264,18 +264,18 @@ export class OdieService {
             const trackList = this.safeListTracks()
 
             // Get currently selected track (if valid)
-            const selectedTrack = focusState.selectedTrackName && trackList.includes(focusState.selectedTrackName)
+            const selectedTrack = isDefined(focusState.selectedTrackName) && trackList.includes(focusState.selectedTrackName)
                 ? focusState.selectedTrackName
                 : null
 
             // Find recently discussed track from conversation history
             const recentMessages = this.messages.getValue().slice(-6) // Last 6 messages
-            let recentlyDiscussedTrack: string | null = null
+            let recentlyDiscussedTrack: Nullable<string> = null
             for (const msg of recentMessages.reverse()) {
-                if (!msg.content) continue
+                if (isAbsent(msg.content)) continue
                 const msgLower = msg.content.toLowerCase()
                 const foundTrack = trackList.find(t => msgLower.includes(t.toLowerCase()))
-                if (foundTrack) {
+                if (isDefined(foundTrack)) {
                     recentlyDiscussedTrack = foundTrack
                     break
                 }
@@ -578,7 +578,7 @@ ${JSON.stringify({
 
     // History Management
 
-    private activeSessionId: string | null = null
+    private activeSessionId: Nullable<string> = null
 
     public startNewChat() {
         this.activeSessionId = crypto.randomUUID()
@@ -627,7 +627,12 @@ ${JSON.stringify({
     /**
      * Handle Interface Widget Action
      */
-    async handleWidgetAction(action: any) {
+    async handleWidgetAction(action: {
+        type: string
+        name: string
+        componentId: string
+        context: Record<string, any>
+    }) {
         /*
         action: {
             type: string

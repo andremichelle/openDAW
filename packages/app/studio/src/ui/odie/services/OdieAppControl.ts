@@ -103,7 +103,7 @@ export class OdieAppControl {
     }
 
     listTracks(): string[] {
-        if (!this.studio.hasProfile) throw new Error("No active project loaded.")
+        if (!this.studio.hasProfile) return []
         // Return names of all tracks
         return this.studio.project.rootBoxAdapter.audioUnits.adapters()
             .filter(a => a.box.isAttached())
@@ -339,8 +339,9 @@ export class OdieAppControl {
                         box.volume.setValue(db)
                     })
                     return { success: true }
-                } catch (e: any) {
-                    return { success: false, reason: `setVolume failed: ${e.message}` }
+                } catch (e: unknown) {
+                    const msg = e instanceof Error ? e.message : String(e)
+                    return { success: false, reason: `setVolume failed: ${msg}` }
                 }
             },
             none: () => Promise.resolve({ success: false, reason: `Track "${trackName}" not found` })
@@ -520,7 +521,7 @@ export class OdieAppControl {
         })
     }
 
-    async getMidiNotes(trackName: string): Promise<{ notes: any[], logs: string[] }> {
+    async getMidiNotes(trackName: string): Promise<{ notes: MidiNoteDef[], logs: string[] }> {
         return this.findAudioUnitAdapter(trackName).match({
             some: async (adapter) => {
                 const logs: string[] = []
@@ -529,30 +530,32 @@ export class OdieAppControl {
                     logs.push(msg)
                 }
 
-
                 const tracks = Array.from(adapter.tracks.values())
                 log(`[Odie] getMidiNotes: Adapter "${trackName}" has ${tracks.length} tracks.`)
 
-                let allNotes: any[] = []
+                let allNotes: MidiNoteDef[] = []
 
-                tracks.forEach((track: any, index: number) => {
+                tracks.forEach((track, index) => {
                     const regionCount = track.regions.collection.asArray().length
                     log(`[Odie] Track ${index}: ${regionCount} regions.`)
 
-                    track.regions.collection.asArray().forEach((r: any) => {
+                    track.regions.collection.asArray().forEach((r) => {
                         const typeName = r.constructor.name
                         log(`[Odie] Track ${index} Region at ${r.position}: ${typeName}`)
                         if (r instanceof NoteRegionBoxAdapter) {
-                            const events = r.optCollection.unwrap().events.asArray()
-                            log(`[Odie] .. found ${events.length} notes.`)
-                            events.forEach(e => {
-                                allNotes.push({
-                                    pitch: e.pitch,
-                                    startTime: (r.position + e.position) / 4.0 + 1,
-                                    duration: e.duration / 4.0,
-                                    velocity: e.velocity
+                            const optCollection = r.optCollection
+                            if (optCollection.nonEmpty()) {
+                                const events = optCollection.unwrap().events.asArray()
+                                log(`[Odie] .. found ${events.length} notes.`)
+                                events.forEach(e => {
+                                    allNotes.push({
+                                        pitch: e.pitch,
+                                        startTime: (r.position + e.position) / 4.0 + 1,
+                                        duration: e.duration / 4.0,
+                                        velocity: e.velocity
+                                    })
                                 })
-                            })
+                            }
                         } else {
                             log(`[Odie] .. Ignored region type: ${typeName}`)
                         }
@@ -580,7 +583,7 @@ export class OdieAppControl {
             const firstNoteTime = (notes[0].startTime - 1) * 4.0
 
             let region = track.regions.collection.asArray()
-                .find((r: any) => r instanceof NoteRegionBoxAdapter && r.position <= firstNoteTime && r.complete > firstNoteTime) as NoteRegionBoxAdapter | undefined
+                .find((r: NoteRegionBoxAdapter) => r instanceof NoteRegionBoxAdapter && r.position <= firstNoteTime && r.complete > firstNoteTime) as NoteRegionBoxAdapter | undefined
 
             if (!region) {
                 // Try to Create a Clip (MVP: 4 bar clip at target)
@@ -631,8 +634,9 @@ export class OdieAppControl {
             })
 
             return { success: true, message: `Added ${notes.length} notes` }
-        } catch (e: any) {
-            return { success: false, reason: `addMidiNotes failed: ${e.message}` }
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e)
+            return { success: false, reason: `addMidiNotes failed: ${msg}` }
         }
     }
 
@@ -1413,15 +1417,13 @@ export class OdieAppControl {
                         const effects = adapter.audioEffects.adapters()
 
                         if (deviceIndex < 0 || deviceIndex >= effects.length) {
-                            // Optimistic Fallback: Ideally we would queue this, but for now we just fail fast as requested by user.
-                            // The user can verify themselves via odieEvents later.
                             return { success: false, reason: `Effect index ${deviceIndex} out of range (have ${effects.length})` }
                         }
 
                         const effectAdapter = effects[deviceIndex]
 
                         // Strategy 1: Adapter Named Parameters (Standard)
-                        if (this.trySetParam((effectAdapter as any).namedParameter, paramPath, value)) {
+                        if (('namedParameter' in effectAdapter) && this.trySetParam((effectAdapter as any).namedParameter, paramPath, value)) {
                             return { success: true, message: `Set ${trackName}:effect[${deviceIndex}].${paramPath} = ${value}` }
                         }
 
@@ -1443,7 +1445,7 @@ export class OdieAppControl {
                         const effectAdapter = effects[deviceIndex]
 
                         // Hybrid Access
-                        if (this.trySetParam((effectAdapter as any).namedParameter, paramPath, value)) {
+                        if (('namedParameter' in effectAdapter) && this.trySetParam((effectAdapter as any).namedParameter, paramPath, value)) {
                             return { success: true, message: `Set MIDI ${trackName}:${deviceIndex}.${paramPath}` }
                         }
                         if (this.trySetParam(effectAdapter.box, paramPath, value)) {
@@ -1461,7 +1463,7 @@ export class OdieAppControl {
 
                         // Hybrid Access
                         // Instrument Adapter often has namedParameter
-                        if (this.trySetParam((instrument as any).namedParameter, paramPath, value)) {
+                        if (('namedParameter' in instrument) && this.trySetParam((instrument as any).namedParameter, paramPath, value)) {
                             return { success: true, message: `Set Instrument ${trackName}.${paramPath}` }
                         }
                         // Fallback to Box (e.g. for simple synths or direct props)
@@ -1473,9 +1475,10 @@ export class OdieAppControl {
                     }
 
                     return { success: false, reason: `Unknown device type: ${deviceType}` }
-                } catch (e) {
+                } catch (e: unknown) {
+                    const msg = e instanceof Error ? e.message : String(e)
                     console.error("setDeviceParam failed", e)
-                    return { success: false, reason: String(e) }
+                    return { success: false, reason: msg }
                 }
             },
             none: () => Promise.resolve({ success: false, reason: "Track not found" })
@@ -1831,12 +1834,12 @@ export class OdieAppControl {
     async listSamples(): Promise<{ uuid: string, name: string }[]> {
         // cast to any to access protected collectAllFiles
         const assets = await (this.studio.sampleService as any).collectAllFiles()
-        return assets.map((a: any) => ({ uuid: a.uuid, name: a.name }))
+        return (assets as { uuid: string, name: string }[]).map(a => ({ uuid: a.uuid, name: a.name }))
     }
 
     async listSoundfonts(): Promise<{ uuid: string, name: string }[]> {
         const assets = await (this.studio.soundfontService as any).collectAllFiles()
-        return assets.map((a: any) => ({ uuid: a.uuid, name: a.name }))
+        return (assets as { uuid: string, name: string }[]).map(a => ({ uuid: a.uuid, name: a.name }))
     }
 
     /** Helper to robustly find the first track lane from an adapter */

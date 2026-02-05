@@ -135,7 +135,8 @@ class OdiePersonaService {
             }
         } else {
             parts.push(`\n### Status: No Project Loaded.`);
-            parts.push("Ask the user if they want to create a new project or load an existing one.");
+            parts.push("While no project is active, you can still chat freely about music theory, production tips, or answer general questions.");
+            parts.push("**DO NOT** create a new project or call `project_create` unless the user explicitly asks you to. Simply inform them that they can create or load a project when *they* are ready.");
         }
 
         // 4. Memory
