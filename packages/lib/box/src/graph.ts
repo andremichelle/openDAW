@@ -131,7 +131,7 @@ export class BoxGraph<BoxMap = any> {
             this.#constructingBox = false
         }
         const added = this.#boxes.add(box)
-        assert(added, `${box} already staged`)
+        assert(added, () => `${box.name} ${box.address.toString()} already staged`)
         const update = new NewUpdate(box.address.uuid, box.name, box.toArrayBuffer())
         this.#updateListeners.proxy.onUpdate(update)
         this.#immediateUpdateListeners.proxy.onUpdate(update)
