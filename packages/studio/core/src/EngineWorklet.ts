@@ -2,6 +2,7 @@ import {
     Arrays,
     DefaultObservableValue,
     int,
+    isDefined,
     MutableObservableValue,
     Notifier,
     Nullable,
@@ -26,6 +27,7 @@ import {
     EngineStateSchema,
     EngineToClient,
     ExportStemsConfiguration,
+    MonitoringMapEntry,
     NoteSignal,
     PERF_BUFFER_SIZE,
     PreferencesHost,
@@ -72,6 +74,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     #consecutiveOverloadCount: int = 0
     #lastCpuLoadUpdate: number = 0
     #maxMsSinceLastUpdate: number = 0
+    #channelMerger: Nullable<ChannelMergerNode> = null
+    #monitoringSources: Map<string, { node: AudioNode, numChannels: 1 | 2 }> = new Map()
 
     constructor(context: BaseAudioContext,
                 project: Project,
@@ -95,7 +99,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         const controlFlagsSAB = new SharedArrayBuffer(4) // 4 bytes minimum
 
         super(context, "engine-processor", {
-                numberOfInputs: 0,
+                numberOfInputs: 1,
                 numberOfOutputs: 1,
                 outputChannelCount: [numberOfChannels],
                 processorOptions: {
@@ -148,6 +152,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     }
                     setupMIDI(port: MessagePort, buffer: SharedArrayBuffer) {
                         dispatcher.dispatchAndForget(this.setupMIDI, port, buffer)
+                    }
+                    updateMonitoringMap(map: ReadonlyArray<MonitoringMapEntry>): void {
+                        dispatcher.dispatchAndForget(this.updateMonitoringMap, map)
                     }
                     terminate(): void {dispatcher.dispatchAndForget(this.terminate)}
                 }))
@@ -271,6 +278,53 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             changes: {started: this.#playingClips, stopped: Arrays.empty(), obsolete: Arrays.empty()}
         })
         return this.#notifyClipNotification.subscribe(observer)
+    }
+
+    registerMonitoringSource(uuid: UUID.Bytes, node: AudioNode, numChannels: 1 | 2): void {
+        this.#monitoringSources.set(UUID.toString(uuid), {node, numChannels})
+        this.#rebuildMonitoringMerger()
+    }
+
+    unregisterMonitoringSource(uuid: UUID.Bytes): void {
+        const key = UUID.toString(uuid)
+        const entry = this.#monitoringSources.get(key)
+        if (isDefined(entry)) {
+            entry.node.disconnect()
+            this.#monitoringSources.delete(key)
+        }
+        this.#rebuildMonitoringMerger()
+    }
+
+    #rebuildMonitoringMerger(): void {
+        if (isDefined(this.#channelMerger)) {
+            this.#channelMerger.disconnect()
+            this.#channelMerger = null
+        }
+        if (this.#monitoringSources.size === 0) {
+            this.#commands.updateMonitoringMap([])
+            return
+        }
+        let totalChannels = 0
+        for (const {numChannels} of this.#monitoringSources.values()) {
+            totalChannels += numChannels
+        }
+        this.#channelMerger = this.context.createChannelMerger(totalChannels)
+        this.#channelMerger.connect(this)
+        const map: Array<MonitoringMapEntry> = []
+        let channel = 0
+        for (const [uuidString, {node, numChannels}] of this.#monitoringSources) {
+            const uuid = UUID.parse(uuidString)
+            const splitter = this.context.createChannelSplitter(numChannels)
+            node.connect(splitter)
+            const channels: Array<int> = []
+            for (let i = 0; i < numChannels; i++) {
+                splitter.connect(this.#channelMerger, i, channel)
+                channels.push(channel)
+                channel++
+            }
+            map.push({uuid, channels})
+        }
+        this.#commands.updateMonitoringMap(map)
     }
 
     #updateCpuLoad(budgetMs: number, project: Project): void {

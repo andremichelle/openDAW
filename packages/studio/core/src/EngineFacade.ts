@@ -128,6 +128,12 @@ export class EngineFacade implements Engine {
     scheduleClipStop(trackIds: ReadonlyArray<UUID.Bytes>): void {
         this.#worklet.unwrap("No worklet to scheduleClipStop").scheduleClipStop(trackIds)
     }
+    registerMonitoringSource(uuid: UUID.Bytes, node: AudioNode, numChannels: 1 | 2): void {
+        this.#worklet.ifSome(worklet => worklet.registerMonitoringSource(uuid, node, numChannels))
+    }
+    unregisterMonitoringSource(uuid: UUID.Bytes): void {
+        this.#worklet.ifSome(worklet => worklet.unregisterMonitoringSource(uuid))
+    }
 
     terminate(): void {
         this.releaseWorklet()

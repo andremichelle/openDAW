@@ -18,13 +18,14 @@ import {RecordAudio} from "./RecordAudio"
 import {AudioDevices} from "../AudioDevices"
 import {RenderQuantum} from "../RenderQuantum"
 import {RecordingWorklet} from "../RecordingWorklet"
+import {MonitoringMode} from "./MonitoringMode"
 
 export class CaptureAudio extends Capture<CaptureAudioBox> {
     readonly #stream: MutableObservableOption<MediaStream>
 
     readonly #streamGenerator: Func<void, Promise<void>>
 
-    #isMonitoring: boolean = false
+    #monitoringMode: MonitoringMode = "off"
     #requestChannels: Option<1 | 2> = Option.None
     #gainDb: number = 0.0
     #audioChain: Nullable<{
@@ -45,6 +46,12 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
                 const channels = owner.getValue()
                 this.#requestChannels = channels === 1 || channels === 2 ? Option.wrap(channels) : Option.None
                 this.#stream.ifSome(stream => this.#rebuildAudioChain(stream))
+                // Re-register monitoring if in effects mode (channel count may have changed)
+                if (this.#monitoringMode === "effects" && isDefined(this.#audioChain)) {
+                    const engine = this.manager.project.engine
+                    engine.unregisterMonitoringSource(this.audioUnitBox.address.uuid)
+                    engine.registerMonitoringSource(this.audioUnitBox.address.uuid, this.#audioChain.gainNode, this.#audioChain.channelCount)
+                }
             }),
             captureAudioBox.gainDb.catchupAndSubscribe(owner => {
                 this.#gainDb = owner.getValue()
@@ -68,16 +75,16 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         )
     }
 
-    get isMonitoring(): boolean {return this.#isMonitoring}
-    set isMonitoring(value: boolean) {
-        if (this.#isMonitoring === value) {return}
-        this.#isMonitoring = value
-        if (this.#isMonitoring) {
+    get isMonitoring(): boolean {return this.#monitoringMode !== "off"}
+    get monitoringMode(): MonitoringMode {return this.#monitoringMode}
+    set monitoringMode(value: MonitoringMode) {
+        if (this.#monitoringMode === value) {return}
+        this.#disconnectMonitoring()
+        this.#monitoringMode = value
+        if (this.#monitoringMode !== "off") {
             this.armed.setValue(true)
-            this.#connectMonitoring()
-        } else {
-            this.#disconnectMonitoring()
         }
+        this.#connectMonitoring()
     }
     get gainDb(): number {return this.#gainDb}
     get requestChannels(): Option<1 | 2> {return this.#requestChannels}
@@ -183,7 +190,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     }
 
     #rebuildAudioChain(stream: MediaStream): void {
-        const wasMonitoring = this.#isMonitoring && isDefined(this.#audioChain)
+        const wasMonitoringMode = this.#monitoringMode !== "off" && isDefined(this.#audioChain) ? this.#monitoringMode : "off"
         this.#destroyAudioChain()
         const {audioContext} = this.manager.project.env
         const sourceNode = audioContext.createMediaStreamSource(stream)
@@ -195,7 +202,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         gainNode.channelCountMode = "explicit"
         sourceNode.connect(gainNode)
         this.#audioChain = {sourceNode, gainNode, channelCount}
-        if (wasMonitoring || this.#isMonitoring) {
+        if (wasMonitoringMode !== "off" || this.#monitoringMode !== "off") {
             this.#connectMonitoring()
         }
     }
@@ -210,16 +217,32 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     }
 
     #connectMonitoring(): void {
-        if (isDefined(this.#audioChain)) {
-            const {audioContext} = this.manager.project.env
-            this.#audioChain.gainNode.connect(audioContext.destination)
+        if (!isDefined(this.#audioChain)) {return}
+        switch (this.#monitoringMode) {
+            case "off":
+                break
+            case "direct":
+                this.#audioChain.gainNode.connect(this.manager.project.env.audioContext.destination)
+                break
+            case "effects":
+                const engine = this.manager.project.engine
+                engine.registerMonitoringSource(this.audioUnitBox.address.uuid, this.#audioChain.gainNode, this.#audioChain.channelCount)
+                break
         }
     }
 
     #disconnectMonitoring(): void {
-        if (isDefined(this.#audioChain)) {
-            const {audioContext} = this.manager.project.env
-            this.#audioChain.gainNode.disconnect(audioContext.destination)
+        if (!isDefined(this.#audioChain)) {return}
+        switch (this.#monitoringMode) {
+            case "off":
+                break
+            case "direct":
+                this.#audioChain.gainNode.disconnect(this.manager.project.env.audioContext.destination)
+                break
+            case "effects":
+                this.#audioChain.gainNode.disconnect()
+                this.manager.project.engine.unregisterMonitoringSource(this.audioUnitBox.address.uuid)
+                break
         }
     }
 }
