@@ -1,4 +1,4 @@
-import { ObservableValue, DefaultObservableValue } from "@opendaw/lib-std"
+import { ObservableValue, DefaultObservableValue, Nullable, isAbsent, isDefined } from "@opendaw/lib-std"
 import { LLMProvider, Message, ProviderConfig, LLMTool } from "./LLMProvider"
 
 type GeminiPart =
@@ -48,10 +48,10 @@ export class Gemini3Provider implements LLMProvider {
     private keyRing: string[] = []
     private keyStatus: KeyStatus[] = []
     private activeKeyIndex: number = 0
-    private config: ProviderConfig | undefined
+    private config: Nullable<ProviderConfig> = null
 
     // Reasoning state persistence
-    private lastThoughtSignature: string | null = null
+    private lastThoughtSignature: Nullable<string> = null
 
     private static readonly REASONING_MODEL = "gemini-3-flash-preview"
     private static readonly VISION_MODEL = "gemini-3-pro-image-preview"
@@ -68,11 +68,11 @@ export class Gemini3Provider implements LLMProvider {
         this.activeKeyIndex = 0
 
         // Restore state from storage
-        if (!this.lastThoughtSignature) {
+        if (isAbsent(this.lastThoughtSignature)) {
             try {
                 const stored = localStorage.getItem(Gemini3Provider.SIG_STORAGE_KEY)
-                if (stored) this.lastThoughtSignature = stored
-            } catch (e) { }
+                if (isDefined(stored)) this.lastThoughtSignature = stored
+            } catch (e: unknown) { }
         }
     }
 
@@ -140,8 +140,9 @@ export class Gemini3Provider implements LLMProvider {
             }
 
             return { ok: false, message: rawMsg, status: 'invalid' }
-        } catch (e) {
-            return { ok: false, message: (e instanceof Error) ? e.message : String(e), status: 'invalid' }
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e)
+            return { ok: false, message: msg, status: 'invalid' }
         }
     }
 
@@ -163,8 +164,8 @@ export class Gemini3Provider implements LLMProvider {
             try {
                 if (onStatusChange) onStatusChange("Thinking...", "Gemini API")
                 await this.executeRequest(messages, context, tools, responseText, onFinal, onStatusChange)
-            } catch (e: any) {
-                const err = e.message || String(e)
+            } catch (e: unknown) {
+                const err = e instanceof Error ? e.message : String(e)
                 if (err.includes("429") || err.includes("Quota")) {
                     if (this.rotateKey()) {
                         await run()
@@ -194,7 +195,7 @@ export class Gemini3Provider implements LLMProvider {
                 const parts: GeminiPart[] = []
                 let sig = (m.customData?.thoughtSignature || m.customData?.thought_signature) as string | undefined
 
-                if (!sig && m.role === 'model' && this.lastThoughtSignature) {
+                if (isAbsent(sig) && m.role === 'model' && isDefined(this.lastThoughtSignature)) {
                     sig = this.lastThoughtSignature
                 }
 
@@ -207,10 +208,10 @@ export class Gemini3Provider implements LLMProvider {
                                 response: response || {}
                             }
                         })
-                    } catch (e) {
+                    } catch (e: unknown) {
                         parts.push({ text: m.content })
                     }
-                } else if (m.content) {
+                } else if (isDefined(m.content)) {
                     parts.push({ text: m.content })
                 }
 
@@ -219,7 +220,7 @@ export class Gemini3Provider implements LLMProvider {
                         const part: GeminiPart = {
                             functionCall: { name: tc.name, args: tc.arguments }
                         }
-                        if (sig && idx === 0) (part as any).thoughtSignature = sig
+                        if (isDefined(sig) && idx === 0) (part as any).thoughtSignature = sig
                         parts.push(part)
                     })
                 }
@@ -303,8 +304,10 @@ export class Gemini3Provider implements LLMProvider {
         let buffer = ""
         let accumulatedText = ""
         let capturedSignature: string | null = null
-        const capturedTools: any[] = []
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Gemini API response structure is dynamic
+        const capturedTools: { name: string; arguments: Record<string, unknown> }[] = []
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API response chunk parsing requires flexible access
         const processChunk = (chunk: any) => {
             const candidate = chunk.candidates?.[0]
             const parts = candidate?.content?.parts || []
@@ -319,10 +322,10 @@ export class Gemini3Provider implements LLMProvider {
                     capturedSignature = part.thoughtSignature
                     this.lastThoughtSignature = capturedSignature
                     try {
-                        if (capturedSignature) {
+                        if (isDefined(capturedSignature)) {
                             localStorage.setItem(Gemini3Provider.SIG_STORAGE_KEY, capturedSignature)
                         }
-                    } catch (e) { }
+                    } catch (e: unknown) { }
                 }
 
                 if (part.inlineData?.mimeType.startsWith('image/')) {
@@ -380,7 +383,7 @@ export class Gemini3Provider implements LLMProvider {
                 const jsonStr = buffer.substring(objStart, objEnd)
                 try {
                     processChunk(JSON.parse(jsonStr))
-                } catch (e) { }
+                } catch (e: unknown) { }
                 searchStart = objEnd
             }
             if (searchStart > 0) buffer = buffer.substring(searchStart)

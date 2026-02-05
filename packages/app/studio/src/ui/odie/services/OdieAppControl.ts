@@ -363,8 +363,8 @@ export class OdieAppControl {
                         box.panning.setValue(pan)
                     })
                     return { success: true }
-                } catch (e: any) {
-                    return { success: false, reason: `setPan failed: ${e.message}` }
+                } catch (e: unknown) {
+                    return { success: false, reason: `setPan failed: ${e instanceof Error ? e.message : String(e)}` }
                 }
             },
             none: () => Promise.resolve({ success: false, reason: `Track "${trackName}" not found` })
@@ -379,8 +379,8 @@ export class OdieAppControl {
                         box.mute.setValue(muted)
                     })
                     return { success: true }
-                } catch (e: any) {
-                    return { success: false, reason: `mute failed: ${e.message}` }
+                } catch (e: unknown) {
+                    return { success: false, reason: `mute failed: ${e instanceof Error ? e.message : String(e)}` }
                 }
             },
             none: () => Promise.resolve({ success: false, reason: `Track "${trackName}" not found` })
@@ -395,8 +395,8 @@ export class OdieAppControl {
                         box.solo.setValue(soloed)
                     })
                     return { success: true }
-                } catch (e: any) {
-                    return { success: false, reason: `solo failed: ${e.message}` }
+                } catch (e: unknown) {
+                    return { success: false, reason: `solo failed: ${e instanceof Error ? e.message : String(e)}` }
                 }
             },
             none: () => Promise.resolve({ success: false, reason: `Track "${trackName}" not found` })
@@ -466,9 +466,9 @@ export class OdieAppControl {
                     // Verify split by checking for new region at split time?
                     // For now, rely on execution + settling. Ideally we count regions.
                     return { success: true, message: "Split region" }
-                } catch (e: any) {
+                } catch (e: unknown) {
                     console.error("Split failed", e)
-                    return { success: false, reason: `Split failed: ${e.message}` }
+                    return { success: false, reason: `Split failed: ${e instanceof Error ? e.message : String(e)}` }
                 }
             },
             none: () => Promise.resolve({ success: false, reason: `No region found at time ${splitTime} on track "${trackName}"` })
@@ -488,9 +488,9 @@ export class OdieAppControl {
                         (region.box as RegionBoxWithPosition).position.setValue(ppqnNewTime)
                     })
                     return { success: true }
-                } catch (e: any) {
+                } catch (e: unknown) {
                     console.error("Move failed", e)
-                    return { success: false, reason: `Move failed: ${e.message}` }
+                    return { success: false, reason: `Move failed: ${e instanceof Error ? e.message : String(e)}` }
                 }
             },
             none: () => Promise.resolve({ success: false, reason: `No region found at time ${time} on track "${trackName}"` })
@@ -512,9 +512,9 @@ export class OdieAppControl {
                         })
                     })
                     return { success: true }
-                } catch (e: any) {
+                } catch (e: unknown) {
                     console.error("Copy failed", e)
-                    return { success: false, reason: `Copy failed: ${e.message}` }
+                    return { success: false, reason: `Copy failed: ${e instanceof Error ? e.message : String(e)}` }
                 }
             },
             none: () => Promise.resolve({ success: false, reason: `No region found at time ${time} on track "${trackName}"` })
@@ -608,7 +608,7 @@ export class OdieAppControl {
                 // Verify creation
                 // Refetch to get adapter
                 region = track.regions.collection.asArray()
-                    .find((r: any) => r instanceof NoteRegionBoxAdapter && r.position === start) as NoteRegionBoxAdapter
+                    .find((r: AnyRegionBoxAdapter) => r instanceof NoteRegionBoxAdapter && r.position === start) as NoteRegionBoxAdapter
             }
             if (!region) return { success: false, reason: `No MIDI region found at time ${notes[0].startTime} and failed to create one.` }
 
@@ -645,7 +645,7 @@ export class OdieAppControl {
             some: async (adapter) => {
                 // 1. Resolve Parameter Field
                 const box = adapter.box
-                let field: any
+                let field: typeof box.volume | typeof box.panning | undefined
                 if (param === "volume") field = box.volume
                 else if (param === "pan") field = box.panning
                 else return { success: false, reason: `Invalid automation param: ${param}` }
@@ -706,9 +706,9 @@ export class OdieAppControl {
                     this.studio.odieEvents.notify({ type: "param-changed", track: trackName, param, value })
                     return { success: true }
 
-                } catch (e: any) {
+                } catch (e: unknown) {
                     console.error("Automation Logic Failed", e)
-                    return { success: false, reason: `Automation error: ${e.message}` }
+                    return { success: false, reason: `Automation error: ${e instanceof Error ? e.message : String(e)}` }
                 }
             },
             none: () => Promise.resolve({ success: false, reason: `Track "${trackName}" not found` })
@@ -832,9 +832,9 @@ export class OdieAppControl {
             console.log("💾 Odie: Triggering Project Save (Export Bundle)...")
             await this.studio.exportBundle()
             return { success: true, message: "Project save triggered successfully." }
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error("❌ Odie: Save Failed", e)
-            return { success: false, reason: e.message }
+            return { success: false, reason: e instanceof Error ? e.message : String(e) }
         }
     }
 
@@ -902,9 +902,9 @@ export class OdieAppControl {
 
             return { success: true, message: `Imported audio to track '${trackName}'` }
 
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error("❌ Odie: Import Failed", e)
-            return { success: false, reason: e.message }
+            return { success: false, reason: e instanceof Error ? e.message : String(e) }
         }
     }
 
@@ -1600,8 +1600,8 @@ export class OdieAppControl {
 
             return { success: true, message: `Added ${effectType}` }
 
-        } catch (e: any) {
-            return { success: false, reason: `addEffect error: ${e.message}` }
+        } catch (e: unknown) {
+            return { success: false, reason: `addEffect error: ${e instanceof Error ? e.message : String(e)}` }
         }
     }
 
@@ -1651,8 +1651,8 @@ export class OdieAppControl {
 
             return { success: true, message: `Added MIDI ${effectType}` }
 
-        } catch (e: any) {
-            return { success: false, reason: `addMidiEffect error: ${e.message}` }
+        } catch (e: unknown) {
+            return { success: false, reason: `addMidiEffect error: ${e instanceof Error ? e.message : String(e)}` }
         }
     }
 
@@ -1781,8 +1781,8 @@ export class OdieAppControl {
 
                 if (!region) throw new Error("Failed to find created region")
 
-            } catch (e: any) {
-                return { success: false, reason: `No clip found and auto-creation failed: ${e.message}` }
+            } catch (e: unknown) {
+                return { success: false, reason: `No clip found and auto-creation failed: ${e instanceof Error ? e.message : String(e)}` }
             }
         }
 
@@ -1812,9 +1812,9 @@ export class OdieAppControl {
             return { success: true, message: `Added note ${pitch} to '${trackName}' at bar ${start}` }
 
 
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error("addNote failed", e)
-            return { success: false, reason: `addNote error: ${e.message}` }
+            return { success: false, reason: `addNote error: ${e instanceof Error ? e.message : String(e)}` }
         }
     }
 
@@ -1824,8 +1824,8 @@ export class OdieAppControl {
         try {
             await this.studio.newProject()
             return { success: true, message: "Created New Project" }
-        } catch (e: any) {
-            return { success: false, reason: `Failed to create new project: ${e.message}` }
+        } catch (e: unknown) {
+            return { success: false, reason: `Failed to create new project: ${e instanceof Error ? e.message : String(e)}` }
         }
     }
 
