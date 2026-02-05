@@ -62,7 +62,7 @@ Odie's features adapt based on the connected provider:
 | **Context Awareness** | ✅ | ✅ | ✅ |
 | **Studio Control** | ✅ | ✅ | ✅ |
 | **GenUI Widgets** | ✅ | ❌ | ❌ |
-| **Visible Thought Stream** | ❌ | ✅ | ✅ |
+
 
 ### GenUI (Gemini 3 Exclusive)
 For complex tasks, Odie renders native React components directly in the chat stream via the `render_widget` function:
