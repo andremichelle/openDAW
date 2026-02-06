@@ -151,36 +151,47 @@ export const OdieInput = ({ service }: inputProps) => {
 
                 {/* Left: Tools */}
                 <div className="ToolsGroup">
-                    {/* Attach */}
-                    {(() => {
-                        const fileInput = <input
-                            type="file"
-                            accept=".txt,.md,.json,.csv"
-                            style={{ display: "none" }}
-                            onchange={(e: Event) => {
-                                const input = e.target as HTMLInputElement
-                                const file = input.files?.[0]
-                                if (file) {
-                                    const reader = new FileReader()
-                                    reader.onload = () => {
-                                        const content = reader.result as string
-                                        const preview = content.slice(0, 500) + (content.length > 500 ? '...' : '')
-                                        textarea.value = `[Attached: ${file.name}]\n\n${preview}\n\n---\nDescribe what you want to do with this file:`
-                                        adjustHeight()
-                                        textarea.focus()
-                                    }
-                                    reader.readAsText(file)
-                                }
-                                input.value = '' // Reset
-                            }}
-                        /> as HTMLInputElement
+                    {/* File Upload */}
+                    <input
+                        type="file"
+                        id="odie-file-upload"
+                        accept=".txt,.md,.json,.csv,.js,.ts,.py"
+                        style={{ display: "none" }}
+                        onchange={(e: Event) => {
+                            const input = e.target as HTMLInputElement
+                            const file = input.files?.[0]
+                            if (file) {
+                                const reader = new FileReader()
+                                reader.onload = () => {
+                                    const content = reader.result as string
+                                    // Smart preview limit (2000 chars)
+                                    const preview = content.slice(0, 2000) + (content.length > 2000 ? '\n... (truncated)' : '')
 
-                        return <ActionButton
-                            icon="📎"
-                            label="Attach File"
-                            onClick={() => fileInput.click()}
-                        />
-                    })()}
+                                    // Insert into textarea intelligently
+                                    const current = textarea.value
+                                    const prefix = current ? current + "\n\n" : ""
+                                    textarea.value = `${prefix}[File: ${file.name}]\n\`\`\`\n${preview}\n\`\`\`\n`
+
+                                    adjustHeight()
+                                    textarea.focus()
+                                }
+                                reader.readAsText(file)
+                            }
+                            input.value = '' // Reset
+                        }}
+                    />
+                    <ActionButton
+                        icon="plus"
+                        label="Add File"
+                        onClick={() => {
+                            document.getElementById("odie-file-upload")?.click()
+                        }}
+                    >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                    </ActionButton>
                 </div>
 
                 {/* Center: Status Bar */}
@@ -202,7 +213,10 @@ export const OdieInput = ({ service }: inputProps) => {
                         if (text) { onSend(text); textarea.value = ''; adjustHeight(); }
                     }}
                 >
-                    ➤
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
                 </button>
 
             </div>

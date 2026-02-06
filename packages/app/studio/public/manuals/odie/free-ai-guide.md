@@ -5,31 +5,45 @@ tags: ["AI", "Free", "Models"]
 desc: Using Odie with free LLM providers.
 ---
 
-# 🦅 The "Free AI" Guide: Using External Keys
+# 💸 The "Free AI" Guide: Infinite Intelligence
 
-> **Goal**: Run Odie using your own API keys for Alpha Readiness.
-> **Note**: Always respect the Terms of Service of your AI provider.
+> **Goal**: Run Odie 24/7 without paying a cent.
+> **Strategy**: The "Round Robin" Multi-Key System.
 
-Odie Alpha leverages **Gemini 3** for reasoning and Molecular Knowledge. By connecting your own API keys, you can power Odie with premium features for free (within provider limits).
+Odie is designed to be accessible to everyone. By leveraging the generous free tiers of modern AI providers, you can build a system that essentially never sleeps and never charges you.
 
 ---
 
-## 📘 1. Adding Your Key
+## 📘 1. The Strategy: "Round Robin" Pooling
 
-Most providers (like Google Gemini) offer a free tier.
+Most AI providers (like Google Gemini) offer a **Free Tier**.
+*   **The Catch**: They limit how many messages you can send per minute (Rate Limit).
+*   **The Hack**: Odie allows you to add **multiple API keys**.
 
-1.  **Generate Keys**: Go to [Google AI Studio](https://aistudio.google.com/) and create an API Key.
+### How It Works
+Imagine you have 5 keys.
+1.  You send a message -> **Key #1** works.
+2.  You send another -> **Key #2** works.
+3.  ...
+4.  By the time you get back to **Key #1**, its "cooldown timer" has reset.
+
+**Result**: You effectively multiply your free limit by 5x, 10x, or more.
+
+---
+
+## 💪 2. Task: Setting Up The Pool
+
+1.  **Generate Keys**: Go to [Google AI Studio](https://aistudio.google.com/) and create **multiple keys** (use different Google accounts if necessary).
 2.  **Open Settings**: Click the **Gear Icon** in Odie.
-3.  **Add Key**: Paste your key and click "Add".
-4.  **Verify**: Type `/status` in the chat to see your connection state.
+3.  **Add Keys**:
+    *   Paste Key #1 -> Click "Add".
+    *   Paste Key #2 -> Click "Add".
+    *   Repeat until you have at least 3 keys.
+4.  **Verify**: Type `/keys` in the chat to see your "Battery Health".
 
-## 🔑 2. The KeyRing (Alpha Feature)
+### The "Auto-Failover" Engine
+If a key hits a limit (Error 429), Odie **instantly** switches to the next healthy key in the millisecond before you even notice. You don't have to manually swap them. It just works.
 
-Odie supports **KeyRing**, allowing you to add multiple API keys for the same provider.
-
-*   **Rotation**: Odie automatically rotates through your keys for each request.
-*   **Rate Resilience**: This helps maintain Alpha uptime on free tiers by distributing usage.
-*   **Thinking Mode**: Ensure your key has access to reasoning models for the best Alpha experience.
 
 ---
 

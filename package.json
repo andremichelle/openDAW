@@ -10,6 +10,7 @@
     "cert": "bash ./scripts/cert.sh",
     "clean": "bash ./scripts/clean.sh",
     "build": "turbo build --output-logs=full",
+    "dev": "npm run dev:studio",
     "dev:studio": "turbo run dev --filter=@opendaw/app-studio",
     "dev:lab": "turbo run dev --filter=@opendaw/lab",
     "dev:nam-test": "turbo run dev --filter=@opendaw/nam-test",

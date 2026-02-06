@@ -263,6 +263,37 @@ component
             border-color: rgba(255,255,255,0.15)
             color: var(--color-bright)
 
+    .odie-btn
+        background: rgba(255,255,255,0.05)
+        border: 1px solid rgba(255,255,255,0.1)
+        color: var(--color-gray)
+        border-radius: 4px
+        cursor: pointer
+        transition: all 0.1s
+        display: flex
+        align-items: center
+        justify-content: center
+
+        &:hover
+            background: rgba(255,255,255,0.1)
+            color: var(--color-bright)
+
+    .odie-btn-primary
+        background: var(--color-blue)
+        border: 1px solid rgba(255,255,255,0.1)
+        color: white
+        border-radius: 4px
+        cursor: pointer
+        font-weight: 700
+        transition: all 0.1s
+        display: flex
+        align-items: center
+        justify-content: center
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.3)
+
+        &:hover
+            filter: brightness(1.1)
+
     // New Grid for Right Column
     .settings-grid
         display: flex

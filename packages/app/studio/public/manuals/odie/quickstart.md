@@ -32,6 +32,7 @@ Odie requires a connection to an AI model to function. In the Alpha, you must pr
 1.  Click the **Gear Icon** (Settings) in the Odie sidebar rail.
 2.  **Provider**: Choose **GEMINI API** (Recommended) or **LOCAL**.
 3.  **API Key**: Paste your key (Google Gemini keys are stored securely in your browser's `localStorage`).
+    *   **Pro-Tip**: You can add **multiple keys** here to multiply your rate limits. Odie will automatically rotate them for you.
 4.  **Verify**: Click **Test Connection**. Look for the **Green Status Dot** at the bottom of the panel.
 
 ### Step 3: Define Your Identity

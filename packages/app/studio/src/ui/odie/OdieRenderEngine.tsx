@@ -59,6 +59,7 @@ interface ErrorCardParams {
     actions?: Array<{
         label: string
         actionId: string
+        context?: Record<string, string | number | boolean | undefined>
     }>
 }
 
@@ -357,17 +358,19 @@ const ErrorCard = ({ payload, onAction }: {
             <div className="error-actions">
                 {actions.map((action, index) => (
                     <button key={index}
-                        onInit={(el: HTMLElement) => {
-                            el.onclick = (event) => {
-                                event.stopPropagation()
-                                if (onAction) {
-                                    onAction({
-                                        type: "userAction",
-                                        name: "error_action",
-                                        componentId: "error_card",
-                                        context: { actionId: action.actionId }
-                                    })
-                                }
+                        onclick={(event: MouseEvent) => {
+                            event.stopPropagation()
+                            console.log(`🔘 [ErrorCard] Action clicked: ${action.actionId}`, action.context)
+                            if (onAction) {
+                                onAction({
+                                    type: "userAction",
+                                    name: "error_action",
+                                    componentId: "error_card",
+                                    context: {
+                                        actionId: action.actionId,
+                                        ...action.context
+                                    }
+                                })
                             }
                         }}
                     >

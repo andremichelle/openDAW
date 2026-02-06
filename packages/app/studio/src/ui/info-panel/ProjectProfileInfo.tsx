@@ -29,21 +29,25 @@ export const ProjectProfileInfo = ({ lifecycle, service }: Construct) => {
     const { meta, cover } = profile
     const inputName: HTMLInputElement = (
         <input type="text" className="default"
+            aria-label="Project Name"
             placeholder="Type in your project name"
             value={meta.name} />
     )
     const inputArtist: HTMLInputElement = (
         <input type="text" className="default"
+            aria-label="Artist Name"
             placeholder="Type in your artist name"
             value={meta.artist} />
     )
     const inputTags: HTMLInputElement = (
         <input type="text" className="default"
+            aria-label="Project Tags"
             placeholder="Type in your project tags"
             value={meta.tags.join(", ")} />
     )
     const inputDescription: HTMLTextAreaElement = (
         <textarea className="default"
+            aria-label="Project Description"
             placeholder="Type in your project description"
             value={meta.description} />
     )

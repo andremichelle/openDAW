@@ -35,7 +35,7 @@ Located at the bottom of the Odie panel, the status bar provides real-time healt
 | :--- | :--- | :--- |
 | **"No API"** | Missing Key | Open Settings (Gear icon) and paste your Google Gemini key. |
 | **"Error" in Status** | Invalid Key | Re-validate your key in Settings. |
-| **Stuck on "Thinking"** | Quota Limit | Free tiers have strict rate limits. Wait 60s and retry. |
+| **Stuck on "Thinking"** | Quota Limit | Free tiers have strict rate limits. **Fix**: Add 2-3 extra keys in Settings. |
 | **"Nervous System Disconnected"** | Engine Sync Lost | Refresh the browser or use `/new` to reset state. |
 
 ### Tool Execution (Alpha Context)
@@ -54,6 +54,7 @@ If Odie is behaving unexpectedly, run these three checks in order:
 ### Step 1: Network & Keys
 1.  Type `/keys`.
 2.  Ensure you have at least one key marked with a green checkmark (`✓ READY`).
+    *   **Pro-Tip**: Having **3+ keys** in your KeyRing ensures a smooth, uninterrupted session.
 
 ### Step 2: System Health
 1.  Type `/debug`.

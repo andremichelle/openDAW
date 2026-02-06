@@ -6,8 +6,8 @@ component
     overflow-y: auto
     min-height: 0
     padding: 20px
-    background: rgba(9, 9, 11, 0.8)
-    backdrop-filter: blur(16px)
+    background: rgba(24, 24, 27, 0.4)
+    backdrop-filter: blur(24px)
     gap: 8px
     position: relative
     scroll-behavior: smooth
@@ -244,6 +244,82 @@ component
     &:hover
         background: rgba(255, 255, 255, 0.2)
         transform: translateY(-2px)
+
+// Feedback Modal
+.odie-feedback-modal
+    position: fixed
+    top: 0
+    left: 0
+    right: 0
+    bottom: 0
+    background: rgba(0, 0, 0, 0.8)
+    backdrop-filter: blur(4px)
+    display: flex
+    flex-direction: column
+    align-items: center
+    justify-content: center
+    z-index: 10000
+    padding: 20px
+
+    .feedback-content
+        background: #18181b
+        padding: 24px
+        border-radius: 12px
+        border: 1px solid rgba(255, 255, 255, 0.1)
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5)
+        width: 100%
+        max-width: 400px
+        display: flex
+        flex-direction: column
+        gap: 16px
+
+    h3
+        margin: 0
+        color: #f4f4f5
+        font-size: 18px
+
+    textarea
+        background: rgba(0, 0, 0, 0.3)
+        border: 1px solid rgba(255, 255, 255, 0.1)
+        border-radius: 8px
+        padding: 12px
+        color: #e4e4e7
+        font-family: inherit
+        font-size: 14px
+        resize: vertical
+        min-height: 100px
+        width: 100%
+        outline: none
+
+        &:focus
+            border-color: #3b82f6
+
+    .feedback-actions
+        display: flex
+        justify-content: flex-end
+        gap: 12px
+
+    button
+        padding: 8px 16px
+        border-radius: 6px
+        font-size: 14px
+        font-weight: 500
+        cursor: pointer
+        transition: all 0.2s
+        border: none
+
+        &.cancel
+            background: transparent
+            color: #a1a1aa
+            &:hover
+                color: #e4e4e7
+                background: rgba(255, 255, 255, 0.05)
+
+        &.submit
+            background: #3b82f6
+            color: white
+            &:hover
+                background: #2563eb
 
 // Thinking Animation
 @keyframes odie-think

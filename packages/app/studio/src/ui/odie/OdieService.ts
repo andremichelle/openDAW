@@ -36,6 +36,7 @@ interface StepSelectContext {
 
 interface ErrorActionContext {
     actionId: string
+    providerId?: string
 }
 
 interface KnobAdjustAction {
@@ -290,7 +291,11 @@ export class OdieService {
                         title: "Setup Required",
                         message: "Please connect an AI provider in settings.",
                         actions: [
-                            { label: "Settings", id: "open_settings" }
+                            {
+                                label: "Settings",
+                                actionId: "open_settings",
+                                context: { providerId: "gemini-3" }
+                            }
                         ]
                     }
                 }
@@ -605,8 +610,12 @@ ${JSON.stringify({
                         title: "Connection Failed",
                         message: "We couldn't connect to the AI service. Please check your settings and ensure the local server is running.",
                         actions: [
-                            { label: "⚙️ Open Settings", id: "open_settings" },
-                            { label: "↻ Retry", id: "retry_connection" }
+                            {
+                                label: "⚙️ Open Settings",
+                                actionId: "open_settings",
+                                context: { providerId: isDefined(this.ai.getActiveProvider()) ? this.ai.getActiveProvider()?.id : "ollama" }
+                            },
+                            { label: "↻ Retry", actionId: "retry_connection" }
                         ]
                     }
                 }, null, 2) + "\n```"
@@ -678,7 +687,9 @@ ${JSON.stringify({
      * Handle Interface Widget Action
      */
     async handleWidgetAction(action: WidgetAction) {
+        console.log(`⚡ [OdieService] handleWidgetAction: ${action.name}`, action)
         if (!this.appControl) {
+            console.warn("⚠️ [OdieService] handleWidgetAction failed: No appControl")
             return
         }
         try {
@@ -746,7 +757,7 @@ ${JSON.stringify({
                 console.log(`📋 [Gen UI] User selected step: ${value}`)
                 this.sendMessage(String(value))
             } else if (action.name === "error_action") {
-                this.handleErrorAction(action.context.actionId)
+                this.handleErrorAction(action.context.actionId, action.context.providerId)
             }
 
             // Fallback: Add feedback message to chat if not handled by toast
@@ -766,8 +777,11 @@ ${JSON.stringify({
         }
     }
 
-    private async handleErrorAction(actionId: string) {
+    private async handleErrorAction(actionId: string, providerId?: string) {
         if (actionId === "open_settings") {
+            if (isDefined(providerId)) {
+                this.ai.setActiveProvider(providerId)
+            }
             this.viewState.setValue("settings")
             // Visual feedback handled by view switch
         } else if (actionId === "retry_connection") {

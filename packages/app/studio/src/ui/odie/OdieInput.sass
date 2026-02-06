@@ -21,8 +21,8 @@ component
     flex-direction: column
     width: 100%
     max-width: 650px
-    background: rgba(9, 9, 11, 0.95)
-    backdrop-filter: blur(20px)
+    background: rgba(24, 24, 27, 0.7)
+    backdrop-filter: blur(24px)
     border: 1px solid rgba(255,255,255,0.08)
     border-radius: 16px
     padding: 12px 16px
@@ -62,7 +62,9 @@ component
 
 .ToolsGroup
     display: flex
-    gap: 8px
+    align-items: center
+    gap: 4px
+    flex-shrink: 0
 
 .StatusBar
     display: flex
@@ -124,45 +126,44 @@ component
             font-weight: 600
 
 // Buttons
-.CockpitButton
+.ActionButton
     background: transparent
     border: none
     cursor: pointer
     color: $color-slate-400
     font-size: 18px
     padding: 8px
-    border-radius: 50%
+    border-radius: 6px
     display: flex
     align-items: center
     justify-content: center
     transition: all 0.2s ease
-    position: relative
-    opacity: 0.8
+    opacity: 0.7
 
     &:hover
-        background: rgba(255,255,255,0.1)
-        transform: scale(1.1)
+        background: rgba(255,255,255,0.08)
         color: #fff
         opacity: 1
 
 .SendButton
-    background: $color-blue-500
+    background: transparent
     border: none
-    border-radius: 50%
+    border-radius: 6px
     width: 36px 
     height: 36px
     display: flex
     align-items: center
     justify-content: center
-    color: white
+    color: $color-blue-500
     cursor: pointer
-    box-shadow: 0 2px 10px rgba(59, 130, 246, 0.4)
-    transition: transform 0.2s
-    font-size: 14px
+    transition: all 0.2s
+    font-size: 16px
+    opacity: 0.9
 
     &:hover
-        transform: scale(1.1)
-        background: color.adjust($color-blue-500, $lightness: 5%)
+        background: rgba(59, 130, 246, 0.1)
+        transform: scale(1.05)
+        opacity: 1
 
 @keyframes pulse
     0% 
