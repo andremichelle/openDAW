@@ -22,6 +22,7 @@ export interface UserIdentity {
 export interface UserDNA {
     name: string
     avatar?: string
+    profileId?: string // Stable session ID for the user profile
     identity: UserIdentity
     level: UserLevel
     sonicFingerprint: SonicFingerprint
@@ -32,6 +33,7 @@ export interface UserDNA {
 
 const DEFAULT_DNA: UserDNA = {
     name: "",
+    profileId: undefined,
     identity: { role: "producer", location: "" },
     level: "intermediate",
     sonicFingerprint: { primaryGenre: "", secondaryGenres: [], vibeKeywords: [] },
@@ -85,6 +87,20 @@ export class UserService {
             sonicFingerprint: { ...current.sonicFingerprint, ...partial.sonicFingerprint },
             techRider: { ...current.techRider, ...partial.techRider }
         })
+    }
+
+    /**
+     * Get or generate a stable profile ID for the user.
+     * Generated once and persisted in localStorage.
+     */
+    public getProfileId(): string {
+        const current = this.dna.getValue()
+        if (current.profileId) {
+            return current.profileId
+        }
+        const newId = Math.random().toString(36).slice(2, 11).toUpperCase()
+        this.update({ profileId: newId })
+        return newId
     }
 
     public getPromptContext(): string {

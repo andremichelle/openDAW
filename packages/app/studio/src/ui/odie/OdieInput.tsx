@@ -11,12 +11,12 @@ const className = Html.adoptStyleSheet(css, "OdieInput")
 import { ActionButton } from "./components/ActionButton"
 import { StatusIndicator } from "./components/StatusIndicator"
 
-interface inputProps {
+interface InputProps {
     service: OdieService
 }
 
 
-export const OdieInput = ({ service }: inputProps) => {
+export const OdieInput = ({ service }: InputProps) => {
     const onSend = (text: string) => {
         service.sendMessage(text).catch(err => {
             console.error("Failed to send message:", err)
@@ -27,6 +27,7 @@ export const OdieInput = ({ service }: inputProps) => {
     const textarea = <textarea
         className="InputArea"
         placeholder="Ask anything..."
+        aria-label="Chat input"
     /> as HTMLTextAreaElement
 
     const adjustHeight = () => {

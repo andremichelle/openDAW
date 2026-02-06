@@ -1,5 +1,5 @@
 
-import { StudioService } from "@/service/StudioService"
+import { StudioService } from "../../../service/StudioService"
 import { OdieAppControl } from "./OdieAppControl"
 import { AIService } from "./AIService"
 import { ToolCall, JsonValue } from "./llm/LLMProvider"

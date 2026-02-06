@@ -9,9 +9,9 @@ import { odiePersona, OdieContext } from "./services/OdiePersonaService"
 import { chatHistory } from "./services/ChatHistoryService"
 import { OdieTools } from "./services/OdieToolDefinitions"
 import { commandRegistry } from "./services/OdieCommandRegistry"
-import { Dialogs } from "@/ui/components/dialogs"
+import { Dialogs } from "../components/dialogs"
 import { OdieToolExecutor, ExecutorContext } from "./services/OdieToolExecutor"
-import { safeUUID, TIMEOUTS } from "./OdieConstants"
+import { safeUUID } from "./OdieConstants"
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Widget Action Types
@@ -101,8 +101,10 @@ export class OdieService {
     public studio: Optional<StudioService>
 
     readonly #terminator = new Terminator()
+    readonly #chatTerminator = new Terminator()
+
     constructor() {
-        if (typeof window !== "undefined" && import.meta.env.DEV) {
+        if (typeof window !== "undefined" && (import.meta as any).env?.DEV) {
             ; (window as any).odie = this;
         }
 
@@ -208,13 +210,17 @@ export class OdieService {
     }
 
     async sendMessage(text: string) {
+        this.#chatTerminator.terminate()
+
         // Command Interception
         if (text.startsWith("/")) {
             const [cmd, ...args] = text.trim().split(" ")
             if (commandRegistry.has(cmd)) {
 
                 // Add User Msg IMMEDIATELY
-                const userMsg: Message = { id: Date.now().toString(), role: "user", content: text, timestamp: Date.now() }
+                const userMsg: Message = {
+                    id: Date.now().toString(), role: "user", content: text, timestamp: Date.now()
+                }
                 const currentStart = this.messages.getValue()
                 this.messages.setValue([...currentStart, userMsg])
 
@@ -223,7 +229,9 @@ export class OdieService {
 
                 if (result) {
                     // Add System Msg (Feedback)
-                    const sysMsg: Message = { id: (Date.now() + 1).toString(), role: "model", content: result, timestamp: Date.now() }
+                    const sysMsg: Message = {
+                        id: (Date.now() + 1).toString(), role: "model", content: result, timestamp: Date.now()
+                    }
                     const currentPostExec = this.messages.getValue()
                     this.messages.setValue([...currentPostExec, sysMsg])
                 }
@@ -251,7 +259,9 @@ export class OdieService {
             if (match) {
                 if (commandRegistry.has(cmd)) {
                     // UI Feedback: Show user message
-                    const userMsg: Message = { id: Date.now().toString(), role: "user", content: text, timestamp: Date.now() }
+                    const userMsg: Message = {
+                        id: Date.now().toString(), role: "user", content: text, timestamp: Date.now()
+                    }
                     const currentStart = this.messages.getValue()
                     this.messages.setValue([...currentStart, userMsg])
 
@@ -260,7 +270,9 @@ export class OdieService {
                     const result = await commandRegistry.execute(cmd, args, this)
 
                     if (isDefined(result)) {
-                        const sysMsg: Message = { id: (Date.now() + 1).toString(), role: "model", content: result, timestamp: Date.now() }
+                        const sysMsg: Message = {
+                            id: (Date.now() + 1).toString(), role: "model", content: result, timestamp: Date.now()
+                        }
                         const currentPostExec = this.messages.getValue()
                         this.messages.setValue([...currentPostExec, sysMsg])
                     }
@@ -270,11 +282,15 @@ export class OdieService {
         }
 
 
-        const userMsg: Message = { id: safeUUID(), role: "user", content: text, timestamp: Date.now() }
+        const userMsg: Message = {
+            id: safeUUID(), role: "user", content: text, timestamp: Date.now()
+        }
         const startMsgs = this.messages.getValue()
         this.messages.setValue([...startMsgs, userMsg])
 
-        const assistantMsg: Message = { id: safeUUID(), role: "model", content: "", timestamp: Date.now() }
+        const assistantMsg: Message = {
+            id: safeUUID(), role: "model", content: "", timestamp: Date.now()
+        }
         this.messages.setValue([...startMsgs, userMsg, assistantMsg])
 
 
@@ -369,7 +385,9 @@ export class OdieService {
                 projectContext.thinkingLevel = cognitiveProfile.thinkingLevel
             }
 
-            const systemMsg: Message = { id: "system-turn", role: "system", content: systemPrompt, timestamp: Date.now() }
+            const systemMsg: Message = {
+                id: "system-turn", role: "system", content: systemPrompt, timestamp: Date.now()
+            }
 
             const cleanHistory = [...startMsgs, userMsg].filter(m => m.role !== "system")
             const history = [systemMsg, ...cleanHistory]
@@ -391,7 +409,6 @@ export class OdieService {
             const stream = await this.ai.streamChat(history, projectContext, OdieTools, async (finalMsg) => {
                 this.isGenerating.setValue(false)
                 this.activityStatus.setValue("Ready")
-                // this.activeModelName.setValue("Gemini")
 
                 if (finalMsg.tool_calls && finalMsg.tool_calls.length > 0) {
                     this.isGenerating.setValue(true)
@@ -470,7 +487,7 @@ export class OdieService {
                             console.log("Agent turn complete")
                         })
 
-                        nextStream.subscribe(obs => {
+                        this.#chatTerminator.own(nextStream.subscribe(obs => {
                             const val = obs.getValue()
                             const newText = val.content
                             const all = this.messages.getValue()
@@ -483,7 +500,7 @@ export class OdieService {
                                 content: newText || "..."
                             }
                             this.messages.setValue(newAll)
-                        })
+                        }))
                     } else if (analysisResults.length > 0) {
                         const functionResponseMsgs: Message[] = analysisResults.map(ar => ({
                             id: safeUUID(),
@@ -497,7 +514,9 @@ export class OdieService {
                         const originalIdx = currentMessages.findIndex(m => m.id === assistantMsg.id)
                         if (originalIdx !== -1) {
                             const newMessages = [...currentMessages]
-                            newMessages[originalIdx] = { ...newMessages[originalIdx], content: successes.join("\n") }
+                            newMessages[originalIdx] = {
+                                ...newMessages[originalIdx], content: successes.join("\n")
+                            }
                             this.messages.setValue(newMessages)
                         }
 
@@ -508,15 +527,14 @@ export class OdieService {
                         const nextStream = this.ai.streamChat(nextHistory, undefined, renderOnlyTools, async (finalResponse) => {
                             if (!lastStreamContent && !finalResponse.content) {
                                 const trackList = this.safeListTracks().filter(t => t !== "Output")
-                                const genUIFallback = `Context needed. Which track would you like to update?\n\n\`\`\`json
-${JSON.stringify({
+                                const genUIFallback = `Context needed. Which track would you like to update?\n\n\`\`\`json\n${JSON.stringify({
                                     ui_component: "step_list",
                                     data: {
                                         title: "Select a track:",
                                         steps: trackList.map(t => `🎚️ ${t}`)
                                     }
-                                }, null, 2)}
-\`\`\`\n\n*Select a track above to continue.*`
+                                }, null, 2)
+                                    }\n\`\`\`\n\n*Select a track above to continue.*`
 
                                 const all = this.messages.getValue()
                                 const targetIdx = all.findIndex(m => m.id === assistantMsg.id)
@@ -531,7 +549,7 @@ ${JSON.stringify({
                             }
                         })
 
-                        nextStream.subscribe(obs => {
+                        this.#chatTerminator.own(nextStream.subscribe(obs => {
                             const val = obs.getValue()
                             const newText = val.content
                             lastStreamContent = newText || ""
@@ -545,7 +563,7 @@ ${JSON.stringify({
                                 content: newText || "Processing..."
                             }
                             this.messages.setValue(newAll)
-                        })
+                        }))
                     } else if (successes.length > 0 || failures.length > 0) {
                         const parts = [...successes, ...failures]
                         const brief = parts.join("\n")
@@ -593,7 +611,7 @@ ${JSON.stringify({
                 }
                 this.messages.setValue(newAll)
             })
-            this.#terminator.own(disposer)
+            this.#chatTerminator.own(disposer)
 
         } catch (e) {
             console.error("Chat Error", e)
@@ -613,9 +631,13 @@ ${JSON.stringify({
                             {
                                 label: "⚙️ Open Settings",
                                 actionId: "open_settings",
-                                context: { providerId: isDefined(this.ai.getActiveProvider()) ? this.ai.getActiveProvider()?.id : "ollama" }
+                                context: {
+                                    providerId: isDefined(this.ai.getActiveProvider()) ? this.ai.getActiveProvider()?.id : "ollama"
+                                }
                             },
-                            { label: "↻ Retry", actionId: "retry_connection" }
+                            {
+                                label: "↻ Retry", actionId: "retry_connection"
+                            }
                         ]
                     }
                 }, null, 2) + "\n```"
@@ -642,9 +664,6 @@ ${JSON.stringify({
     public startNewChat() {
         this.activeSessionId = safeUUID()
         this.messages.setValue([])
-
-        // Initial Greeting
-        // this.messages.setValue([{ id: "init", role: "model", content: "New session started.", timestamp: Date.now() }])
     }
 
     public loadSession(sessionId: string) {
@@ -724,72 +743,38 @@ ${JSON.stringify({
 
                     console.log(`🎛️ [Gen UI] Universal: ${trackName} ${deviceType}[${deviceIndex}] ${paramPath} -> ${value}`)
                 } else {
-                    // Fallback for legacy "param" without deviceType (should be handled by vol/pan checks above)
-                    // If we get here, it's a truly unknown parameter
+                    // Fallback for legacy "param" without deviceType
                     feedbackMessage = `? ${param || "param"} adjusted`
-                    console.warn(`🎛️ [Gen UI] Unhandled parameter: ${param} (No deviceType provided)`)
                 }
 
-                // [TRANSIENT FEEDBACK UPDATE]
-                // If we have a Grid Target, DO NOT SPAM CHAT. Show toast instead.
                 if (_targetGridId) {
                     const gridEl = document.getElementById(_targetGridId)
                     const toastEl = gridEl?.querySelector(".grid-status-toast") as HTMLElement
 
                     if (toastEl) {
-                        toastEl.textContent = feedbackMessage.replace("✓ ", "") // Make it cleaner
+                        toastEl.textContent = feedbackMessage.replace("✓ ", "")
                         toastEl.style.opacity = "1"
-
-                        // Clear debounce
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamically attaching timeout reference to DOM element
-                        const grid = gridEl as any
-                        clearTimeout(grid._toastTimeout)
-                        grid._toastTimeout = setTimeout(() => {
-                            toastEl.style.opacity = "0"
-                        }, TIMEOUTS.TOAST_DURATION)
-
-                        // RETURN EARLY - DO NOT ADD TO CHAT
-                        return
+                        setTimeout(() => {
+                            if (toastEl) toastEl.style.opacity = "0"
+                        }, 1500)
                     }
                 }
             } else if (action.name === "step_select") {
                 const { value } = action.context
-                console.log(`📋 [Gen UI] User selected step: ${value}`)
-                this.sendMessage(String(value))
+                await this.sendMessage(String(value))
             } else if (action.name === "error_action") {
-                this.handleErrorAction(action.context.actionId, action.context.providerId)
+                const { actionId, providerId } = action.context
+                if (actionId === "open_settings") {
+                    this.viewState.setValue("settings")
+                    if (providerId) {
+                        this.ai.activeProviderId.setValue(providerId)
+                    }
+                } else if (actionId === "retry_connection") {
+                    this.validateConnection()
+                }
             }
-
-            // Fallback: Add feedback message to chat if not handled by toast
-            if (feedbackMessage) {
-                const msgs = [...this.messages.getValue()]
-                msgs.push({
-                    id: safeUUID(),
-                    role: "system",
-                    content: feedbackMessage,
-                    timestamp: Date.now()
-                })
-                this.messages.setValue(msgs)
-            }
-
         } catch (e) {
-            console.error("🧠 [Gen UI] Widget action failed:", e)
+            console.error("Widget Action Error", e)
         }
     }
-
-    private async handleErrorAction(actionId: string, providerId?: string) {
-        if (actionId === "open_settings") {
-            if (isDefined(providerId)) {
-                this.ai.setActiveProvider(providerId)
-            }
-            this.viewState.setValue("settings")
-            // Visual feedback handled by view switch
-        } else if (actionId === "retry_connection") {
-            // Re-validate logic could go here
-            this.sendMessage("retry connection")
-        }
-    }
-
 }
-
-

@@ -13,7 +13,8 @@ export const ActionButton = ({ icon, label, onClick, pulse = false, id, children
         className={`ActionButton ${pulse ? 'pulse' : ''}`}
         id={id}
         onClick={onClick}
-        title={label}>
+        title={label}
+        aria-label={label}>
         {children || <i className={`icon-${icon}`} />}
     </button>
 }

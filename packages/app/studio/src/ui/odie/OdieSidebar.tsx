@@ -56,6 +56,7 @@ const IconClose = () => (
 const RailBtn = (props: { icon: HTMLElement, label: string, variant: string, onclick?: () => void }) => {
     return <button className={`RailBtn ${props.variant}`}
         title={props.label}
+        aria-label={props.label}
         onclick={props.onclick}
     >
         {props.icon}
@@ -65,7 +66,9 @@ const RailBtn = (props: { icon: HTMLElement, label: string, variant: string, onc
 
 const HeaderAction = (props: { icon: HTMLElement, title: string, onclick: () => void }) => <button
     className="HeaderAction"
-    title={props.title} onclick={props.onclick}
+    title={props.title}
+    aria-label={props.title}
+    onclick={props.onclick}
 >
     {props.icon}
 </button>

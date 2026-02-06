@@ -35,15 +35,18 @@ const COLORS = {
 
 export const OdieSuggestions = ({ service }: { service: OdieService }) => {
 
-    const container = <div className="odie-suggestions" style={{
-        display: "flex",
-        gap: "8px",
-        overflowX: "auto",
-        padding: "12px 16px",
-        whiteSpace: "nowrap",
-        borderBottom: "1px solid rgba(255,255,255,0.05)",
-        background: "rgba(15, 23, 42, 0.5)"
-    }}>
+    const container = <div className="odie-suggestions"
+        role="region"
+        aria-label="Suggestions"
+        style={{
+            display: "flex",
+            gap: "8px",
+            overflowX: "auto",
+            padding: "12px 16px",
+            whiteSpace: "nowrap",
+            borderBottom: "1px solid rgba(255,255,255,0.05)",
+            background: "rgba(15, 23, 42, 0.5)"
+        }}>
     </div> as HTMLElement
 
     const style = <style>{`

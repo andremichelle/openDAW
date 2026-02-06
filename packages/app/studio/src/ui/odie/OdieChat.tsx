@@ -2,13 +2,10 @@ import { createElement } from "@opendaw/lib-jsx"
 import { OdieService } from "./OdieService"
 import { OdieInput } from "./OdieInput"
 import { OdieMessageList } from "./OdieMessageList"
-import { Message } from "./services/llm/LLMProvider"
-import { DefaultObservableValue } from "@opendaw/lib-std"
+
 import { TIMEOUTS } from "./OdieConstants"
 
 export const OdieChat = ({ service }: { service: OdieService }) => {
-    // -- State --
-    const messages = new DefaultObservableValue<Message[]>([])
 
     // -- Components --
     const chatRoot = <div style={{
@@ -21,7 +18,7 @@ export const OdieChat = ({ service }: { service: OdieService }) => {
     </div> as HTMLElement
 
     // Render loop for Chat
-    const renderChat = (_msgs: Message[]) => {
+    const renderChat = () => {
         const contentContainer = chatRoot.querySelector("#chat-content") as HTMLElement
         if (!contentContainer) return
         while (contentContainer.firstChild) contentContainer.firstChild.remove()
@@ -33,8 +30,10 @@ export const OdieChat = ({ service }: { service: OdieService }) => {
         const list = contentContainer.firstElementChild as HTMLElement
         if (list) list.scrollTop = list.scrollHeight
     }
-    messages.subscribe(owner => renderChat(owner.getValue()))
-    setTimeout(() => renderChat(messages.getValue()), TIMEOUTS.IMMEDIATE) // Defer initial render to ensure DOM
+
+    // Subscribe to service messages for re-render
+    service.messages.subscribe(() => renderChat())
+    setTimeout(() => renderChat(), TIMEOUTS.IMMEDIATE) // Defer initial render to ensure DOM
 
     const container = <div style={{
         position: "relative",

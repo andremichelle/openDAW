@@ -54,9 +54,9 @@ const MessageBubble = ({ message, onRetry, onWidgetAction }: { message: Message,
     const isThinking = isModel && !message.content
 
     return (
-        <div className={`MessageEntry ${isUser ? "User" : "Odie"}`}>
+        <div className={`MessageEntry ${isUser ? "User" : "Odie"}`} role="article" aria-label={`${isUser ? "User" : "AI"} message`}>
             {/* Avatar Label (Optional) */}
-            <div className="AvatarLabel">
+            <div className="AvatarLabel" aria-hidden="true">
                 {isUser ? "You" : "Odie"}
             </div>
 

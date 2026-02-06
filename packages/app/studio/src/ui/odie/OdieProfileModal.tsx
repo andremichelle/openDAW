@@ -25,6 +25,9 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
     const activeTab$ = new DefaultObservableValue<string>("overview")
     const showAvatarMenu$ = new DefaultObservableValue<boolean>(false)
 
+    // Stable ID from UserService (persisted across sessions)
+    const profileId = userService.getProfileId()
+
     // Sync to UserService
     lifecycle.own(nameModel.subscribe((v: ObservableValue<string>) => userService.update({ name: v.getValue() })))
     lifecycle.own(locationModel.subscribe((v: ObservableValue<string>) => userService.update({ identity: { ...userService.dna.getValue().identity, location: v.getValue() } })))
@@ -59,6 +62,8 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
         const renderTabBtn = (id: string, label: string) => {
             const isActive = activeTab === id
             return <div
+                role="tab"
+                aria-selected={isActive}
                 onclick={() => activeTab$.setValue(id)}
                 className={`nav-item ${isActive ? 'active' : ''}`}
             >
@@ -78,7 +83,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
             tabContent = <div className="overview-tab">
                 <div className="profile-card" style={{ flex: "1", display: "flex", flexDirection: "column" }}>
                     <div className="profile-header">
-                        <div className="profile-id" style={{ opacity: "0.5" }}>PROFILE-ID: {Math.random().toString(36).substr(2, 9).toUpperCase()}</div>
+                        <div className="profile-id" style={{ opacity: "0.5" }}>PROFILE-ID: {profileId}</div>
                         <div className="profile-status">STATUS: ACTIVE</div>
                     </div>
                     <div className="profile-body" style={{ flex: "1" }}>
@@ -90,7 +95,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
                         <div className="profile-details">
                             <div className="detail-row main">
                                 <div className="detail-label">IDENTITY</div>
-                                <div className="detail-value highlight" style={{ fontSize: "24px" }}>{hasName ? profile.name : "ANONYMOUS PRODUCER"}</div>
+                                <div className="detail-value highlight" style={{ fontSize: "24px" }}>{hasName ? profile.name : "ANONYMOUS"}</div>
                             </div>
                             <div className="detail-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr", gap: "24px" }}>
                                 <div className="detail-row">
