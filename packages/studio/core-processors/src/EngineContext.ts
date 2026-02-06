@@ -1,4 +1,4 @@
-import {Observer, Subscription, Terminable, UUID} from "@opendaw/lib-std"
+import {int, Observer, Option, Subscription, Terminable, UUID} from "@opendaw/lib-std"
 import {Processor, ProcessPhase} from "./processing"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {UpdateClock} from "./UpdateClock"
@@ -24,4 +24,5 @@ export interface EngineContext extends BoxAdaptersContext, Terminable {
     awaitResource(promise: Promise<unknown>): void
     ignoresRegion(uuid: UUID.Bytes): boolean
     sendMIDIData(midiDeviceId: string, data: Uint8Array, relativeTimeInMs: number): void
+    getMonitoringChannel(channelIndex: int): Option<Float32Array>
 }

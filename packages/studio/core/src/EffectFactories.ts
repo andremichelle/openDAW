@@ -354,7 +354,7 @@ export namespace EffectFactories {
         Zeitgeist
     }
 
-    const isDev = location.hostname === "localhost" || location.hostname === "dev.opendaw.studio"
+    const includeNeuralAmp = false
 
     export const AudioNamed = {
         StereoTool,
@@ -370,7 +370,7 @@ export namespace EffectFactories {
         NeuralAmp,
         Maximizer
     }
-    if (!isDev) {
+    if (!includeNeuralAmp) {
         delete (AudioNamed as { NeuralAmp?: typeof NeuralAmp }).NeuralAmp
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> =

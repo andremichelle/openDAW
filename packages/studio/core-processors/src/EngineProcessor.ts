@@ -35,6 +35,7 @@ import {
     EngineSettingsSchema,
     EngineStateSchema,
     EngineToClient,
+    MonitoringMapEntry,
     NoteSignal,
     ParameterFieldAdapters,
     PERF_BUFFER_SIZE,
@@ -109,6 +110,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
 
     #processQueue: Option<ReadonlyArray<Processor>> = Option.None
     #primaryOutput: Option<AudioUnit> = Option.None
+    #currentInput: ReadonlyArray<Float32Array> = []
 
     #context: Option<EngineContext> = Option.None
     #midiSender: Option<MIDISender> = Option.None
@@ -160,7 +162,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#parameterFieldAdapters = new ParameterFieldAdapters()
         this.#boxAdapters = this.#terminator.own(new BoxAdapters(this))
         this.#timelineBoxAdapter = this.#boxAdapters.adapterFor(timelineBox, TimelineBoxAdapter)
-        this.#tempoMap = new VaryingTempoMap(this.timelineBoxAdapter)
+        this.#tempoMap = this.#terminator.own(new VaryingTempoMap(this.timelineBoxAdapter))
         this.#rootBoxAdapter = this.#boxAdapters.adapterFor(rootBox, RootBoxAdapter)
         this.#audioGraph = new Graph<Processor>()
         this.#audioGraphSorting = new TopologicalSort<Processor>(this.#audioGraph)
@@ -219,6 +221,12 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                         }) ?? true)),
                 panic: () => this.#panic = true,
                 loadClickSound: (index: 0 | 1, data: AudioData): void => this.#metronome.loadClickSound(index, data),
+                updateMonitoringMap: (map: ReadonlyArray<MonitoringMapEntry>): void => {
+                    this.#audioUnits.forEach(unit => unit.clearMonitoringChannels())
+                    for (const {uuid, channels} of map) {
+                        this.optAudioUnit(uuid).ifSome(unit => unit.setMonitoringChannels(channels))
+                    }
+                },
                 noteSignal: (signal: NoteSignal) => {
                     if (NoteSignal.isOn(signal)) {
                         const {uuid, pitch, velocity} = signal
@@ -336,9 +344,10 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         }
     }
 
-    render(_inputs: Float32Array[][], [output]: Float32Array[][]): boolean {
+    render(inputs: Float32Array[][], [output]: Float32Array[][]): boolean {
         if (!this.#valid) {return false}
         if (this.#panic) {return panic("Manual Panic")}
+        this.#currentInput = inputs[0] ?? []
         const elapsed = this.#hrClock.start()
         const metronomeEnabled = this.#timeInfo.metronomeEnabled
         this.#notifier.notify(ProcessPhase.Before)
@@ -433,6 +442,11 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
 
     sendMIDIData(midiDeviceId: string, data: Uint8Array, relativeTimeInMs: number): void {
         this.#midiSender.ifSome(sender => sender.send(midiDeviceId, data, relativeTimeInMs))
+    }
+
+    getMonitoringChannel(channelIndex: int): Option<Float32Array> {
+        if (channelIndex >= this.#currentInput.length) {return Option.None}
+        return Option.wrap(this.#currentInput[channelIndex])
     }
 
     terminate(): void {

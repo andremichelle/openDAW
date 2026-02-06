@@ -130,6 +130,9 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly timelineFocus: TimelineFocus
     readonly engine = new EngineFacade()
 
+    readonly #rootBoxAdapter: RootBoxAdapter
+    readonly #timelineBoxAdapter: TimelineBoxAdapter
+
     private constructor(env: ProjectEnv, boxGraph: BoxGraph, {
         rootBox,
         userInterfaceBoxes,
@@ -157,12 +160,14 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                 fy: vertex => this.boxAdapters.adapterFor(vertex.box, Devices.isAny)
             }
         ))
-        this.tempoMap = new VaryingTempoMap(this.timelineBoxAdapter)
+        this.#timelineBoxAdapter = this.boxAdapters.adapterFor(this.timelineBox, TimelineBoxAdapter)
+        this.tempoMap = this.#terminator.own(new VaryingTempoMap(this.#timelineBoxAdapter))
         this.userEditingManager = new UserEditingManager(this.editing)
         this.liveStreamReceiver = this.#terminator.own(new LiveStreamReceiver())
         this.midiLearning = this.#terminator.own(new MIDILearning(this))
         this.captureDevices = this.#terminator.own(new CaptureDevices(this))
-        this.mixer = new Mixer(this.rootBoxAdapter.audioUnits)
+        this.#rootBoxAdapter = this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)
+        this.mixer = new Mixer(this.#rootBoxAdapter.audioUnits)
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
         this.timelineFocus = this.#terminator.own(new TimelineFocus())
 
@@ -233,8 +238,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     spawn(): Terminator {return this.#terminator.spawn()}
 
     get env(): ProjectEnv {return this.#env}
-    get rootBoxAdapter(): RootBoxAdapter {return this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)}
-    get timelineBoxAdapter(): TimelineBoxAdapter {return this.boxAdapters.adapterFor(this.timelineBox, TimelineBoxAdapter)}
+    get rootBoxAdapter(): RootBoxAdapter {return this.#rootBoxAdapter}
+    get timelineBoxAdapter(): TimelineBoxAdapter {return this.#timelineBoxAdapter}
     get sampleManager(): SampleLoaderManager {return this.#env.sampleManager}
     get soundfontManager(): SoundfontLoaderManager {return this.#env.soundfontManager}
     get clipSequencing(): ClipSequencing {return panic("Only available in audio context")}

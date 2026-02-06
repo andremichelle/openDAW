@@ -4,6 +4,8 @@ import {ClipSequencingUpdates} from "./ClipNotifications"
 import {NoteSignal} from "./NoteSignal"
 import type {SoundFont2} from "soundfont2"
 
+export type MonitoringMapEntry = { uuid: UUID.Bytes, channels: ReadonlyArray<int> }
+
 export interface EngineCommands extends Terminable {
     play(): void
     stop(reset: boolean): void
@@ -22,6 +24,8 @@ export interface EngineCommands extends Terminable {
     setupMIDI(port: MessagePort, buffer: SharedArrayBuffer): void
     // metronome
     loadClickSound(index: 0 | 1, data: AudioData): void
+    // monitoring
+    updateMonitoringMap(map: ReadonlyArray<MonitoringMapEntry>): void
 }
 
 export interface EngineToClient {
