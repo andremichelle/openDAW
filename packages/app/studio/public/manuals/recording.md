@@ -29,6 +29,10 @@ grant browser permission. When you select a device, the track is automatically a
 Additional audio options in the track menu:
 
 - **Input monitoring** — Hear the input signal through your speakers before and during recording
+    - **Off** — No monitoring, input is only recorded
+    - **Direct** — Routes the raw input signal straight to your output with the lowest possible latency
+    - **Effects** — Routes the input through the track's full effect chain, so you hear yourself with all effects applied
+      while playing
 - **Force Mono** — Record in mono instead of stereo
 
 ### MIDI Input

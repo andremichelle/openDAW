@@ -23,8 +23,6 @@ export const Manuals: ReadonlyArray<Manual> = [
         type: "folder",
         label: "General",
         files: [
-            {type: "page", label: "Audio Bus", path: "/manuals/audio-bus"},
-            {type: "page", label: "Automation", path: "/manuals/automation"},
             {
                 type: "page",
                 label: "Browser Support",
@@ -32,28 +30,30 @@ export const Manuals: ReadonlyArray<Manual> = [
             },
             {
                 type: "page",
-                label: "Cloud Backup",
-                path: "/manuals/cloud-backup"
-            },
-            {
-                type: "page",
-                label: "Firefox MIDI",
-                path: "/manuals/firefox-midi"
-            },
-            {
-                type: "page",
                 label: "Keyboard Shortcuts",
                 path: "/manuals/keyboard-shortcuts"
             },
-            {type: "page", label: "Mixer", path: "/manuals/mixer"},
+            {type: "page", label: "Recording", path: "/manuals/recording"},
             {type: "page", label: "Permissions", path: "/manuals/permissions"},
+            {type: "page", label: "Automation", path: "/manuals/automation"},
+            {
+                type: "page",
+                label: "Cloud Backup",
+                path: "/manuals/cloud-backup"
+            },
+            {type: "page", label: "Mixer", path: "/manuals/mixer"},
+            {type: "page", label: "Audio Bus", path: "/manuals/audio-bus"},
+            {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"},
             {
                 type: "page",
                 label: "Private File System",
                 path: "/manuals/private-file-system"
             },
-            {type: "page", label: "Recording", path: "/manuals/recording"},
-            {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"}
+            {
+                type: "page",
+                label: "Firefox MIDI",
+                path: "/manuals/firefox-midi"
+            }
         ]
     },
     {
