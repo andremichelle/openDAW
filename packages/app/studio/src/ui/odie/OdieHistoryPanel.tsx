@@ -9,11 +9,18 @@ interface PanelProps {
 
 export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
 
+    // Trace local state for which session is confirming delete
+    // This serves as the single source of truth for the UI
+    let pendingDeleteId: string | null = null
+
     const redraw = () => {
-        const root = document.getElementById("odie-history-list")
-        if (root) {
-            root.innerHTML = ""
-            renderList(root)
+        // Use direct reference instead of ID lookup to prevent conflicts
+        if (listContainer) {
+            // console.log("🔄 [OdieHistoryPanel] Redrawing. Pending Delete ID:", pendingDeleteId)
+            listContainer.innerHTML = ""
+            renderList(listContainer as HTMLElement)
+        } else {
+            console.warn("⚠️ [OdieHistoryPanel] listContainer reference lost")
         }
     }
 
@@ -24,9 +31,15 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
         overflow: "hidden"
     }}>
         <style>{`
-            .history-item:hover { background: var(--bg-surface-2); }
+            .history-item {
+                border: 1px solid var(--border-dim, rgba(255,255,255,0.1));
+                margin-bottom: 6px;
+            }
+            .history-item:hover { 
+                background: var(--bg-surface-2); 
+                border-color: var(--text-tertiary, rgba(255,255,255,0.3));
+            }
             .delete-action-btn:hover { opacity: 0.8; }
-            .delete-action-btn:active { transform: translateY(1px); }
             .cancel-action-btn:hover { background: var(--bg-surface-3) !important; }
         `}</style>
     </div> as HTMLElement
@@ -64,18 +77,21 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
                 root.appendChild(groupHeader)
 
                 sessions.forEach(session => {
+                    const isConfirming = pendingDeleteId === session.id
+
                     const item = <div className="history-item" style={{
-                        padding: "10px 12px", borderRadius: "6px",
-                        cursor: "pointer", display: "flex", flexDirection: "column", gap: "2px",
-                        transition: "background 0.1s",
-                        margin: "0 0 2px 0",
+                        padding: "12px 14px", borderRadius: "8px",
+                        cursor: "pointer", display: "flex", flexDirection: "column", gap: "4px",
+                        transition: "all 0.1s",
                         color: "var(--text-primary)",
                         position: "relative",
                         overflow: "hidden"
                     }}
                         onclick={() => {
-                            service.loadSession(session.id)
-                            onClose()
+                            if (!isConfirming) {
+                                service.loadSession(session.id)
+                                onClose()
+                            }
                         }}>
                         <div style={{ fontSize: "13px", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {session.title || "Untitled Chat"}
@@ -85,24 +101,26 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
 
                             <span className="delete-trigger"
                                 style={{
-                                    opacity: "0", transition: "opacity 0.2s", fontSize: "14px", cursor: "pointer",
+                                    opacity: isConfirming ? "0" : "0",
+                                    transition: "opacity 0.2s", fontSize: "14px", cursor: "pointer",
                                     padding: "2px 6px", borderRadius: "4px"
                                 }}
                                 onclick={(e: MouseEvent) => {
                                     e.stopPropagation()
-                                    const overlay = item.querySelector(".confirm-overlay") as HTMLElement
-                                    if (overlay) overlay.style.display = "flex"
+                                    pendingDeleteId = session.id
+                                    redraw()
                                 }}
                             >🗑</span>
                         </div>
 
+                        {/* Confirmation Overlay - Rendered Conditionally based on State */}
                         <div className="confirm-overlay" style={{
-                            display: "none",
+                            display: isConfirming ? "flex" : "none",
                             position: "absolute", top: "0", left: "0", right: "0", bottom: "0",
                             background: "var(--bg-surface-2)",
                             alignItems: "center", justifyContent: "flex-end",
                             padding: "0 12px", gap: "8px",
-                            zIndex: "10"
+                            zIndex: "100"
                         }} onclick={(e: MouseEvent) => e.stopPropagation()}>
 
                             <button className="cancel-action-btn" style={{
@@ -111,8 +129,8 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
                                 transition: "all 0.1s"
                             }} onclick={(e: MouseEvent) => {
                                 e.stopPropagation()
-                                const overlay = item.querySelector(".confirm-overlay") as HTMLElement
-                                if (overlay) overlay.style.display = "none"
+                                pendingDeleteId = null
+                                redraw()
                             }}>Cancel</button>
 
                             <button className="delete-action-btn" style={{
@@ -121,7 +139,13 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
                                 transition: "all 0.1s"
                             }} onclick={(e: MouseEvent) => {
                                 e.stopPropagation()
-                                chatHistory.deleteSession(session.id)
+                                // Clear state first
+                                pendingDeleteId = null
+                                // The delete action triggers a store update which triggers redraw()
+                                // But we also explicitly clear local state just in case
+                                setTimeout(() => {
+                                    chatHistory.deleteSession(session.id)
+                                }, 0)
                             }}>Delete</button>
                         </div>
 
@@ -129,7 +153,8 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
 
                     item.onmouseenter = () => {
                         const trigger = item.querySelector(".delete-trigger") as HTMLElement
-                        if (trigger) trigger.style.opacity = "0.7"
+                        // Ensure trash icon is visible on hover UNLESS we are confirming delete
+                        if (trigger && pendingDeleteId !== session.id) trigger.style.opacity = "0.7"
                     }
                     item.onmouseleave = () => {
                         const trigger = item.querySelector(".delete-trigger") as HTMLElement
