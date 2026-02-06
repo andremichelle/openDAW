@@ -8,12 +8,12 @@ export interface ActionButtonProps {
     id?: string
 }
 
-export const ActionButton = ({ icon, label, onClick, pulse = false, id }: ActionButtonProps) => {
+export const ActionButton = ({ icon, label, onClick, pulse = false, id, children }: ActionButtonProps & { children?: any }) => {
     return <button
         className={`ActionButton ${pulse ? 'pulse' : ''}`}
         id={id}
         onClick={onClick}
         title={label}>
-        <i className={`icon-${icon}`} />
+        {children || <i className={`icon-${icon}`} />}
     </button>
 }

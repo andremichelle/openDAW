@@ -101,7 +101,7 @@ const KeyRingEditor = ({ config, provider, save }: KeyRingEditorProps) => {
                         <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="odie-btn" style={{ flex: "0.5", fontSize: "9px", textDecoration: "none" }}>Get Key ↗</a>
                     </div>
                 </div>
-                <div style={{ fontSize: "9px", color: "var(--color-gray)", marginTop: "6px", opacity: "0.6" }}>Keys are used to avoid rate limits.</div>
+                <div style={{ fontSize: "9px", color: "var(--color-gray)", marginTop: "6px", opacity: "0.6" }}><strong>Infinity Key Strategy:</strong> Add multiple keys to avoid rate limits.</div>
             </div>
         </div>
     )
@@ -194,6 +194,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
                             <label className="label">Endpoint URL</label>
                             <input
                                 type="text"
+                                aria-label="API Endpoint URL"
                                 value={config.baseUrl || ""}
                                 className="settings-input native"
                                 style={{ flex: "1", margin: "0" }}
@@ -299,12 +300,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
                         </div>
                     </div>
                 </div>
-                {!isEmbedded && (
-                    <button
-                        onclick={onBack}
-                        style={{ background: "none", border: "none", fontSize: "16px", cursor: "pointer", color: Colors.gray.toString() }}
-                    >✕</button>
-                )}
+
             </div>
         ) as HTMLElement
     }
@@ -322,6 +318,7 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
                         location.reload()
                     }
                 }} style={{ color: Colors.red.toString(), background: "transparent", border: "none", fontSize: "11px", cursor: "pointer", opacity: "0.7" }}>Reset Wizard</button>
+                <div style={{ flex: "1" }}></div>
                 <button onclick={onBack} className="btn-primary">Done</button>
             </div>
         ) as HTMLElement
@@ -343,6 +340,15 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
                                     <li style={{ marginBottom: "8px" }}><strong>Free Tier:</strong> Data is shared with Google to improve models and may be viewed by human reviewers.</li>
                                     <li><strong>Paid Tier:</strong> Data is strictly private and never used by Google for training.</li>
                                 </ul>
+                            </div>
+                            <div style={{ marginBottom: "16px" }}>
+                                <p style={{ margin: "0 0 4px 0", color: "var(--color-bright)" }}><strong>Project Context</strong></p>
+                                <p style={{ margin: "0 0 8px 0" }}>Odie transmits the raw project state required for generation. Avoid working with sensitive or confidential information on the Free Tier.</p>
+                                <p style={{ margin: "0", fontSize: "11px", fontStyle: "italic" }}>Note: Google disconnects this data from your Account, API Key, and Project before any human review occurs.</p>
+                            </div>
+                            <div>
+                                <p style={{ margin: "0 0 4px 0", color: "var(--color-bright)" }}><strong>Infinity Key Strategy</strong></p>
+                                <p style={{ margin: "0" }}>Rotate multiple free keys to multiply your total rate limits for an uninterrupted session.</p>
                             </div>
                         </div>
                     </div>

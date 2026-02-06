@@ -4,7 +4,6 @@ import { OdieService } from "./OdieService"
 import { Terminator } from "@opendaw/lib-std"
 import MarkdownIt from "markdown-it"
 import mermaid from "mermaid"
-import { odieFeedback } from "./services/OdieFeedbackService"
 
 import { OdieRenderEngine } from "./OdieRenderEngine"
 import { IconSymbol } from "@opendaw/studio-enums"
@@ -154,44 +153,6 @@ const MessageBubble = ({ message, onRetry, onWidgetAction }: { message: Message,
                                 triggerGlow(e.currentTarget)
                             }}
                         />
-                        <ActionButton
-                            symbol={IconSymbol.Connected}
-                            onClick={(e) => {
-                                odieFeedback.log({
-                                    userMessage: "Unknown (Contextual)",
-                                    odieResponse: message.content,
-                                    rating: 'positive'
-                                })
-                                triggerGlow(e.currentTarget, "#73edb0") // Green glow
-                            }}
-                        />
-                        <ActionButton
-                            symbol={IconSymbol.Disconnected}
-                            onClick={(e) => {
-                                odieFeedback.log({
-                                    userMessage: "Unknown (Contextual)",
-                                    odieResponse: message.content,
-                                    rating: 'negative'
-                                })
-                                triggerGlow(e.currentTarget, "#ff4d5e") // Red glow
-                            }}
-                        />
-                        <ActionButton
-                            symbol={IconSymbol.Help}
-                            label="Feedback"
-                            onClick={(e) => {
-                                const fb = prompt("How can we improve this response?")
-                                if (fb) {
-                                    odieFeedback.log({
-                                        userMessage: "Unknown (Contextual)",
-                                        odieResponse: message.content,
-                                        rating: 'negative', // Assume constructive criticism is usually corrective
-                                        comment: fb
-                                    })
-                                }
-                                triggerGlow(e.currentTarget, "#4de4ff") // Cyan glow
-                            }}
-                        />
                     </div>
                 )}
             </div>
@@ -220,9 +181,14 @@ const triggerGlow = (element: HTMLElement, color: string = "#3b82f6") => {
 const ActionButton = ({ symbol, label, onClick }: { symbol: IconSymbol, label?: string, onClick: (e: any) => void }) => {
     return (
         <button
+            type="button"
             className="ActionButton"
-            onclick={onClick}
-            title={label || IconSymbol.toName(symbol)}
+            onclick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onClick(e)
+            }}
+            title={label || (symbol !== undefined ? IconSymbol.toName(symbol) : "")}
         >
             <Icon symbol={symbol} /> {label && <span>{label}</span>}
         </button>
@@ -273,6 +239,8 @@ const showImageModal = (imageSrc: string) => {
     document.addEventListener('keydown', handleEscape)
     document.body.appendChild(modal)
 }
+
+
 
 interface ListProps {
     service: OdieService
