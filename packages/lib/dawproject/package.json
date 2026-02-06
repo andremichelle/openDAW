@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/lib-dawproject",
-  "version": "0.0.55",
+  "version": "0.0.56",
   "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -23,9 +23,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@opendaw/lib-dsp": "^0.0.69",
-    "@opendaw/lib-runtime": "^0.0.67",
-    "@opendaw/lib-xml": "^0.0.52",
+    "@opendaw/lib-dsp": "^0.0.70",
+    "@opendaw/lib-runtime": "^0.0.68",
+    "@opendaw/lib-xml": "^0.0.53",
     "jszip": "^3.10.1"
   },
   "devDependencies": {
