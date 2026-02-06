@@ -153,8 +153,6 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.selection = new VertexSelection(this.editing, this.boxGraph)
         this.parameterFieldAdapters = new ParameterFieldAdapters()
         this.boxAdapters = this.#terminator.own(new BoxAdapters(this))
-        this.#rootBoxAdapter = this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)
-        this.#timelineBoxAdapter = this.boxAdapters.adapterFor(this.timelineBox, TimelineBoxAdapter)
         this.deviceSelection = this.#terminator.own(this.selection.createFilteredSelection(
             isVertexOfBox(DeviceBoxUtils.isDeviceBox),
             {
@@ -162,11 +160,13 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                 fy: vertex => this.boxAdapters.adapterFor(vertex.box, Devices.isAny)
             }
         ))
+        this.#timelineBoxAdapter = this.boxAdapters.adapterFor(this.timelineBox, TimelineBoxAdapter)
         this.tempoMap = new VaryingTempoMap(this.#timelineBoxAdapter)
         this.userEditingManager = new UserEditingManager(this.editing)
         this.liveStreamReceiver = this.#terminator.own(new LiveStreamReceiver())
         this.midiLearning = this.#terminator.own(new MIDILearning(this))
         this.captureDevices = this.#terminator.own(new CaptureDevices(this))
+        this.#rootBoxAdapter = this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)
         this.mixer = new Mixer(this.#rootBoxAdapter.audioUnits)
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
         this.timelineFocus = this.#terminator.own(new TimelineFocus())
