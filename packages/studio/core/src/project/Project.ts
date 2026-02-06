@@ -161,7 +161,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
             }
         ))
         this.#timelineBoxAdapter = this.boxAdapters.adapterFor(this.timelineBox, TimelineBoxAdapter)
-        this.tempoMap = new VaryingTempoMap(this.#timelineBoxAdapter)
+        this.tempoMap = this.#terminator.own(new VaryingTempoMap(this.#timelineBoxAdapter))
         this.userEditingManager = new UserEditingManager(this.editing)
         this.liveStreamReceiver = this.#terminator.own(new LiveStreamReceiver())
         this.midiLearning = this.#terminator.own(new MIDILearning(this))

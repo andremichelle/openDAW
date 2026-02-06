@@ -162,7 +162,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#parameterFieldAdapters = new ParameterFieldAdapters()
         this.#boxAdapters = this.#terminator.own(new BoxAdapters(this))
         this.#timelineBoxAdapter = this.#boxAdapters.adapterFor(timelineBox, TimelineBoxAdapter)
-        this.#tempoMap = new VaryingTempoMap(this.timelineBoxAdapter)
+        this.#tempoMap = this.#terminator.own(new VaryingTempoMap(this.timelineBoxAdapter))
         this.#rootBoxAdapter = this.#boxAdapters.adapterFor(rootBox, RootBoxAdapter)
         this.#audioGraph = new Graph<Processor>()
         this.#audioGraphSorting = new TopologicalSort<Processor>(this.#audioGraph)
