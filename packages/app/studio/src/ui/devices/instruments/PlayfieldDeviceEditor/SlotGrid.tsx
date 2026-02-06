@@ -51,12 +51,14 @@ export const SlotGrid = ({lifecycle, service, adapter, octave}: Construct) => {
         let index = 0 | 0
         adapter.samples.adapters().forEach(({indexField}) => {
             const toIndex = indexField.getValue()
-            while (index < toIndex) {
+            while (index < toIndex && index < 128) {
                 slotStates[index].setValue(noteReceiver.isNoteOn(index) ? SlotState.Playing : SlotState.Idle)
                 index++
             }
-            slotStates[index].setValue(noteReceiver.isNoteOn(index) ? SlotState.Playing : SlotState.Busy)
-            index++
+            if (index === toIndex && index < 128) {
+                slotStates[index].setValue(noteReceiver.isNoteOn(index) ? SlotState.Playing : SlotState.Busy)
+                index++
+            }
         })
         while (index < 128) {
             slotStates[index].setValue(noteReceiver.isNoteOn(index) ? SlotState.Playing : SlotState.Idle)
