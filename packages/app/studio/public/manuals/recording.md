@@ -1,3 +1,12 @@
+---
+title: Recording
+category: Studio Manual
+tags:
+  - manual
+  - Studio Manual
+  - recording
+desc: Documentation
+---
 # Recording
 
 Your choice of monitoring device is critical for recording. Latency — the delay between playing a note and hearing it —

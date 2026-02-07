@@ -3,3 +3,10 @@
 component
   @include mixins.Input(left)
   width: 100%
+
+  [contenteditable=true]:empty:before
+    content: attr(data-placeholder)
+    pointer-events: none
+    display: block
+    color: var(--color-text-3)
+    opacity: 0.6

@@ -1,3 +1,12 @@
+---
+title: Browser Support Manuals
+category: Studio Manual
+tags:
+  - manual
+  - Studio Manual
+  - browser-support
+desc: Documentation
+---
 # Browser Support Manuals
 
 openDAW is tested on the latest version of all modern browsers, such as Chrome, Firefox, and Safari.

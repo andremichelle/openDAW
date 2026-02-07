@@ -1,0 +1,226 @@
+
+// Odie Render Engine Styles
+// Extracted from inline styles for Clean Code compliance
+
+.odie-widget-table
+  background: rgba(0,0,0,0.2)
+  padding: 8px
+  border-radius: 4px
+  margin: 8px 0
+  
+  table
+    width: 100%
+    font-size: 0.85em
+    border-collapse: collapse
+    
+    thead tr
+      border-bottom: 1px solid rgba(255,255,255,0.1)
+      
+    th
+      text-align: left
+      padding: 4px
+      color: #aaa
+      
+    tbody tr
+      border-bottom: 1px solid rgba(255,255,255,0.05)
+      
+    td
+      padding: 4px
+
+.odie-widget-knob
+  display: flex
+  flex-direction: column
+  align-items: center
+  justify-content: center
+  gap: 8px
+  padding: 16px 8px
+  background: rgba(255,255,255,0.02)
+  border-radius: 12px
+  margin-bottom: 4px
+  width: 90px
+  min-height: 140px
+  pointer-events: auto
+  position: relative
+  
+  .knob-label
+    font-size: 0.75rem
+    color: #aaacb0
+    text-transform: uppercase
+    letter-spacing: 0.5px
+    text-align: center
+    line-height: 1.1
+    height: 2.2em
+    overflow: hidden
+    user-select: none
+    z-index: 2
+    
+  .knob-container
+    width: 56px
+    height: 56px
+    cursor: ns-resize
+    flex-shrink: 0
+    transform: scale(1.5)
+    display: flex
+    align-items: center
+    justify-content: center
+    margin: 12px 0
+    
+  .knob-value
+    font-size: 1rem
+    font-weight: 600
+    color: #fff
+    font-family: monospace
+    user-select: none
+    z-index: 2
+
+.odie-widget-steps
+  display: flex
+  flex-direction: column
+  gap: 4px
+  pointer-events: auto
+  
+  .step-title
+    font-size: 0.8em
+    color: #888
+    margin-bottom: 4px
+    
+  .step-item
+    display: flex
+    gap: 8px
+    padding: 8px
+    background: rgba(255,255,255,0.05)
+    border-radius: 4px
+    cursor: pointer
+    pointer-events: auto
+    transition: background 0.2s
+    z-index: 10
+    position: relative
+    
+    &:hover
+      background: rgba(255,255,255,0.1)
+      
+    .step-index
+      color: var(--accent)
+      font-weight: bold
+      
+    .step-text
+      font-size: 0.9em
+
+.odie-widget-midi
+  height: 100px
+  background: #111
+  position: relative
+  border-radius: 4px
+  overflow: hidden
+  margin: 8px 0
+  border: 1px solid rgba(255,255,255,0.1)
+  
+  .midi-note
+    position: absolute
+    background: var(--accent, #4ade80)
+    border-radius: 2px
+    height: 6px
+    box-shadow: 0 0 4px var(--accent, #4ade80)
+    
+  .midi-label
+    position: absolute
+    bottom: 2px
+    right: 4px
+    font-size: 0.6em
+    color: #555
+
+.odie-widget-grid
+  display: flex
+  flex-direction: column
+  gap: 4px
+  margin: 8px 0
+  background: rgba(0,0,0,0.2)
+  padding: 8px
+  border-radius: 8px
+  
+  .grid-title
+    width: 100%
+    font-size: 0.8em
+    color: #aaa
+    margin-bottom: 4px
+    text-align: center
+    
+  .grid-controls
+    display: flex
+    flex-wrap: wrap
+    gap: 8px
+    justify-content: center
+    
+  .grid-status
+    height: 20px
+    text-align: center
+    font-size: 0.75em
+    color: #4fd1c5
+    opacity: 0
+    transition: opacity 0.3s ease
+    pointer-events: none
+
+.odie-widget-error
+  background: rgba(220, 38, 38, 0.15)
+  border: 1px solid rgba(220, 38, 38, 0.4)
+  border-radius: 8px
+  padding: 16px
+  margin: 12px 0
+  
+  .error-header
+    display: flex
+    align-items: center
+    gap: 8px
+    margin-bottom: 8px
+    
+    .error-icon
+      font-size: 1.2em
+      
+    .error-title
+      color: #fca5a5
+      font-weight: bold
+      font-size: 0.95em
+      
+  .error-message
+    font-size: 0.9em
+    color: #e5e7eb
+    margin-bottom: 16px
+    line-height: 1.4
+    
+  .error-actions
+    display: flex
+    gap: 8px
+    flex-wrap: wrap
+    
+    button
+      background: rgba(0,0,0,0.3)
+      border: 1px solid rgba(255,255,255,0.1)
+      border-radius: 4px
+      padding: 6px 12px
+      color: white
+      cursor: pointer
+      font-size: 0.85em
+      display: flex
+      align-items: center
+      gap: 6px
+      transition: all 0.2s
+      
+      &:hover
+        background: rgba(255,255,255,0.1)
+
+.odie-widget-image
+  margin: 8px 0
+  border-radius: 8px
+  overflow: hidden
+  border: 1px solid rgba(255,255,255,0.1)
+  
+  img
+    width: 100%
+    height: auto
+    display: block
+    
+  .image-caption
+    padding: 8px
+    background: #111
+    font-size: 0.8em
+    color: #888

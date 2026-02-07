@@ -1,3 +1,12 @@
+---
+title: File System
+category: Studio Manual
+tags:
+  - manual
+  - Studio Manual
+  - private-file-system
+desc: Documentation
+---
 # openDAW File System
 
 openDAW stores your projects and samples in the

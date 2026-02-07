@@ -1,3 +1,12 @@
+---
+title: Cloud Backup
+category: Studio Manual
+tags:
+  - manual
+  - Studio Manual
+  - cloud-backup
+desc: Documentation
+---
 # Cloud Backup
 
 openDAW supports privately synchronizing your projects in [Google Drive](action://backup-google-drive) and [Dropbox](action://backup-dropbox).  

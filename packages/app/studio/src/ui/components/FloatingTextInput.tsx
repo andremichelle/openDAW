@@ -1,7 +1,7 @@
 import css from "./FloatingTextInput.sass?inline"
-import {isDefined, Point} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import { isDefined, Point } from "@opendaw/lib-std"
+import { createElement } from "@opendaw/lib-jsx"
+import { Html } from "@opendaw/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "TextInput")
 
@@ -13,15 +13,15 @@ type Construct = {
     numeric?: boolean
 }
 
-export const FloatingTextInput = ({resolvers, position, value, unit, numeric}: Construct) => {
+export const FloatingTextInput = ({ resolvers, position, value, unit, numeric }: Construct) => {
     const focusElement = document.activeElement as HTMLElement
-    const inputField: HTMLInputElement = (<input type="text" value={isDefined(value) ? String(value) : ""}/>)
+    const inputField: HTMLInputElement = (<input type="text" aria-label="Text Input" value={isDefined(value) ? String(value) : ""} />)
     requestAnimationFrame(() => {
         inputField.select()
         inputField.focus()
     })
     if (isDefined(resolvers)) {
-        const {reject, resolve} = resolvers
+        const { reject, resolve } = resolvers
         const remove = () => {
             inputField.onblur = null
             inputField.onkeydown = null
@@ -42,10 +42,10 @@ export const FloatingTextInput = ({resolvers, position, value, unit, numeric}: C
     }
     const element: HTMLElement = (
         <div className={className} unit={unit}
-             style={isDefined(position) ? {
-                 position: "absolute",
-                 transform: `translate(${position.x}px, ${position.y}px)`
-             } : {}}>
+            style={isDefined(position) ? {
+                position: "absolute",
+                transform: `translate(${position.x}px, ${position.y}px)`
+            } : {}}>
             {inputField}
         </div>
     )

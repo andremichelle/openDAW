@@ -21,3 +21,8 @@ lerna-debug.log
 /packages/app/soundfont/public/soundfonts/
 /packages/studio/scripting/src/api.declaration.d.ts
 tsconfig.tsbuildinfo
+
+# AI & Reports
+.coderabbit.yaml
+rabbit_report*.txt
+build_log.txt

@@ -1,3 +1,12 @@
+---
+title: Shadertoy Visualizer
+category: Studio Manual
+tags:
+  - manual
+  - Studio Manual
+  - shadertoy
+desc: Documentation
+---
 # Shadertoy Visualizer
 
 Create real-time visuals for your music using GLSL shaders. The editor supports Shadertoy-compatible syntax, so you can

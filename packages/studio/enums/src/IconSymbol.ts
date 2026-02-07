@@ -143,6 +143,7 @@ export enum IconSymbol {
     VUMeter,
     Waveform,
     Zeitgeist,
+
 }
 
 export namespace IconSymbol {

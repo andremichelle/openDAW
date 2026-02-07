@@ -1,3 +1,12 @@
+---
+title: Automation
+category: Studio Manual
+tags:
+  - manual
+  - Studio Manual
+  - automation
+desc: Documentation
+---
 # Automation Editing
 
 The automation editor allows you to create and edit parameter automation curves. Each automation lane displays events

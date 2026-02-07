@@ -1,0 +1,104 @@
+@use "@/mixins"
+@use "@/colors"
+
+component
+    position: fixed
+    top: 0
+    left: 0
+    width: 100vw
+    height: 100vh
+    background: rgba(0, 0, 0, 0.6)
+    backdrop-filter: blur(8px)
+    z-index: 9999
+    display: flex
+    justify-content: center
+    align-items: center
+    opacity: 0
+    transition: opacity 0.3s ease-out
+    pointer-events: auto
+
+    &.dock-right
+        justify-content: flex-end
+        background: transparent
+        pointer-events: none
+
+    &.visible
+        opacity: 1
+
+    > .frame
+        @include mixins.floating(false)
+        position: relative
+        display: flex
+        flex-direction: column
+        overflow: hidden
+        width: 900px
+        height: 80vh
+        transform: scale(0.95) translateY(20px)
+        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1)
+        pointer-events: auto
+        @include colors.panel-background-dark
+        border: 1px solid rgba(255, 255, 255, 0.08)
+        border-radius: 24px
+        box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.8)
+
+    // Docked state for frame (when parent has .dock-right)
+    &.dock-right > .frame
+        height: 100vh
+        border-radius: 0
+        border-right: none
+        border-top: none
+        border-bottom: none
+        transform: translateX(100%)
+
+    &.visible > .frame
+        transform: scale(1) translateY(0)
+
+    &.visible.dock-right > .frame
+        transform: translateX(0)
+
+    .header
+        height: 72px
+        display: flex
+        align-items: center
+        justify-content: space-between
+        padding: 0 32px
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04)
+        background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%)
+
+    .title-group
+        display: flex
+        align-items: center
+        gap: 16px
+
+    .icon-box
+        width: 32px
+        height: 32px
+        border-radius: 10px
+        background: rgba(255, 255, 255, 0.1)
+        display: flex
+        justify-content: center
+        align-items: center
+        font-size: 18px
+
+    .title-text
+        font-size: 20px
+        font-weight: 700
+        letter-spacing: 0.5px
+        color: var(--color-bright)
+        font-family: 'Inter', sans-serif
+
+    .close-btn
+        background: transparent
+        border: none
+        color: rgba(255, 255, 255, 0.4)
+        font-size: 24px
+        cursor: pointer
+        transition: color 0.2s
+
+        &:hover
+            color: var(--color-bright)
+
+    .content
+        flex: 1
+        overflow-y: auto
+        padding: 0

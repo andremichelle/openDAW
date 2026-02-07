@@ -1,20 +1,20 @@
-import {IconSymbol} from "@opendaw/studio-enums"
-import {EffectFactories} from "@opendaw/studio-core"
-import {InstrumentFactories} from "@opendaw/studio-adapters"
+import { IconSymbol } from "@opendaw/studio-enums"
+import { EffectFactories } from "@opendaw/studio-core"
+import { InstrumentFactories } from "@opendaw/studio-adapters"
 
 export type Manual = (
     | {
-    type: "page"
-    label: string
-    path: string
-    icon?: IconSymbol
-}
+        type: "page"
+        label: string
+        path: string
+        icon?: IconSymbol
+    }
     | {
-    type: "folder"
-    label: string
-    icon?: IconSymbol
-    files: ReadonlyArray<Manual>
-}) & { separatorBefore?: boolean }
+        type: "folder"
+        label: string
+        icon?: IconSymbol
+        files: ReadonlyArray<Manual>
+    }) & { separatorBefore?: boolean }
 
 const includeNeuralAmp = false
 
@@ -33,17 +33,17 @@ export const Manuals: ReadonlyArray<Manual> = [
                 label: "Keyboard Shortcuts",
                 path: "/manuals/keyboard-shortcuts"
             },
-            {type: "page", label: "Recording", path: "/manuals/recording"},
-            {type: "page", label: "Permissions", path: "/manuals/permissions"},
-            {type: "page", label: "Automation", path: "/manuals/automation"},
+            { type: "page", label: "Recording", path: "/manuals/recording" },
+            { type: "page", label: "Permissions", path: "/manuals/permissions" },
+            { type: "page", label: "Automation", path: "/manuals/automation" },
             {
                 type: "page",
                 label: "Cloud Backup",
                 path: "/manuals/cloud-backup"
             },
-            {type: "page", label: "Mixer", path: "/manuals/mixer"},
-            {type: "page", label: "Audio Bus", path: "/manuals/audio-bus"},
-            {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"},
+            { type: "page", label: "Mixer", path: "/manuals/mixer" },
+            { type: "page", label: "Audio Bus", path: "/manuals/audio-bus" },
+            { type: "page", label: "Shadertoy", path: "/manuals/shadertoy" },
             {
                 type: "page",
                 label: "Private File System",
@@ -213,15 +213,30 @@ export const Manuals: ReadonlyArray<Manual> = [
         ]
     },
     {
-        type: "folder",
-        label: "Developer",
-        files: [
+        type: "folder", label: "AI Co-Pilot", files: [
+            { type: "page", label: "Introduction", path: "/manuals/odie/introduction" },
+            { type: "page", label: "Quickstart", path: "/manuals/odie/quickstart" },
+            { type: "page", label: "Chat Interface", path: "/manuals/odie/chat-interface" },
+            { type: "page", label: "Command Reference", path: "/manuals/odie/command-reference" },
+            { type: "page", label: "GenUI Features", path: "/manuals/odie/genui-features" },
+            { type: "page", label: "Troubleshooting", path: "/manuals/odie/troubleshooting" },
+            { type: "page", label: "Free AI Guide", path: "/manuals/odie/free-ai-guide" },
+            { type: "page", label: "Local Models", path: "/manuals/odie/local-models" }
+        ]
+    },
+    {
+        type: "folder", label: "Developer", files: [
+            { type: "page", label: "How to create a device in openDAW?", path: "/manuals/creating-a-device" },
+            { type: "page", label: "Tech Stack", path: "/manuals/tech-stack" },
             {
-                type: "page",
-                label: "How to create a device in openDAW?",
-                path: "/manuals/creating-a-device"
-            },
-            {type: "page", label: "Tech Stack", path: "/manuals/tech-stack"}
+                type: "folder", label: "Odie Architecture", files: [
+                    { type: "page", label: "System Overview", path: "/manuals/odie/developer/system-overview" },
+                    { type: "page", label: "Dual Brain", path: "/manuals/odie/developer/dual-brain" },
+                    { type: "page", label: "App Control Bridge", path: "/manuals/odie/developer/app-control" },
+                    { type: "page", label: "GenUI Engine", path: "/manuals/odie/developer/genui-engine" },
+                    { type: "page", label: "Testing & Benchmarks", path: "/manuals/odie/developer/testing" }
+                ]
+            }
         ]
     }
 ]

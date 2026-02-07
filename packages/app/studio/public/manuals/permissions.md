@@ -1,3 +1,12 @@
+---
+title: Permissions
+category: Studio Manual
+tags:
+  - manual
+  - Studio Manual
+  - permissions
+desc: Documentation
+---
 # Browser Permissions
 
 ## TLDR

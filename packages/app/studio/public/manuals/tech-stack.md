@@ -1,4 +1,13 @@
-# Tech-Stack
+---
+title: Tech Stack
+category: Developer Guide
+tags:
+  - manual
+  - Developer Guide
+  - tech-stack
+desc: Documentation
+---
+# Tech Stack
 
 ## Toolchain
 

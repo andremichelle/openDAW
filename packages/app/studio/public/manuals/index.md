@@ -1,3 +1,12 @@
+---
+title: openDAW Manuals
+category: Studio Manual
+tags:
+  - manual
+  - Studio Manual
+  - index
+desc: Documentation
+---
 # openDAW Manuals
 
 Please join our [discord community](https://discord.opendaw.studio) for updates and news!

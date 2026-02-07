@@ -1,3 +1,12 @@
+---
+title: Creating an Audio Device
+category: Developer Guide
+tags:
+  - manual
+  - Developer Guide
+  - creating-a-device
+desc: Documentation
+---
 # Creating an Audio Effect Device for openDAW
 
 ### Disclaimer

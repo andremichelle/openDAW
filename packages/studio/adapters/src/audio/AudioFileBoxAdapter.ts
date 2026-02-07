@@ -40,10 +40,10 @@ export class AudioFileBoxAdapter implements BoxAdapter {
             const loader = this.getOrCreateLoader()
             const subscription = loader.subscribe(state => {
                 if (state.type === "loaded") {
-                    queueMicrotask(() => subscription.terminate())
+                    subscription.terminate()
                     resolve(loader.data.unwrap("State mismatch"))
                 } else if (state.type === "error") {
-                    queueMicrotask(() => subscription.terminate())
+                    subscription.terminate()
                     reject(new Error(state.reason))
                 }
             })

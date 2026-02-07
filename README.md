@@ -38,9 +38,44 @@ The source code for openDAW is available under **AGPL v3 (or later)**
 - **No Paywalls**
 - **No Data Mining**
 
+## 🤖 Odie: The Native AI Sidecar
+
+**This repository includes the Pre-Alpha Experimental Preview of Odie.**
+
+Odie is a local-first, privacy-centric AI assistant deeply integrated into the Studio's architecture. Unlike "Agent" overlays, Odie runs inside the browser and interacts directly with the engine.
+
+### System Architecture
+
+Odie operates on a "Dual-Brain" architecture designed for safety and context-awareness:
+
+1.  **Context Lens (`ContextService`)**: A passive observer that scans the Studio state (Selection, Mixer, Transport) to provide relevant answers without interfering with the Audio Engine.
+2.  **Privacy Core (`ChatHistoryService`)**: Chat history is persisted exclusively in `localStorage` (`odie_chat_history`). No chat data is sent to any "OpenDAW Server"—connections are direct from Browser to LLM.
+3.  **Command Sandbox (`CommandRegistry`)**: Odie can only execute pre-defined, safe commands (e.g., `/search`, `/add`, `/play`). It cannot execute arbitrary code or delete files on your OS.
+
+### AI Capabilities
+
+Odie's features adapt based on the connected provider:
+
+| Feature | Gemini 3 Flash | Local (Ollama) |
+| :--- | :---: | :---: |
+| **Chat & QA** | ✅ | ✅ |
+| **Context Awareness** | ✅ | ✅ |
+| **Studio Control** | ✅ | ✅ |
+| **GenUI Widgets** | ✅ | ❌ |
+
+
+### GenUI (Gemini 3 Exclusive)
+For complex tasks, Odie renders native React components directly in the chat stream via the `render_widget` function:
+*   **Smart Knobs**: Touch-friendly parameter controls.
+*   **Comparison Tables**: Side-by-side plugin specifications.
+*   **Grid Containers**: Layouts for multi-parameter editing.
+
+> **Note**: GenUI requires the specific function-calling schemas of Gemini 3 and is disabled for local models to prevent hallucinated UI.
+
 ---
 
 ## Huge Shoutout To The Incredible openDAW Community!
+
 
 To everyone who has contributed feedback, reported bugs, suggested improvements, or helped spread the word — thank you!
 Your support is shaping openDAW into something truly powerful!
@@ -246,3 +281,5 @@ terms apply automatically.
 ## License
 
 [AGPL v3 (or later)](https://www.gnu.org/licenses/agpl-3.0.txt) © 2025 André Michelle
+
+<!-- Trigger Simulation -->

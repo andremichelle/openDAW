@@ -1,8 +1,8 @@
-import {PPQN} from "@opendaw/lib-dsp"
-import {Events} from "@opendaw/lib-dom"
-import {Lifecycle} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {VideoOverlay} from "./VideoOverlay"
+import { PPQN } from "@opendaw/lib-dsp"
+import { Events } from "@opendaw/lib-dom"
+import { Lifecycle } from "@opendaw/lib-std"
+import { createElement } from "@opendaw/lib-jsx"
+import { VideoOverlay } from "./VideoOverlay"
 
 const WIDTH = 1280
 const HEIGHT = 720
@@ -12,7 +12,7 @@ type Construct = {
     lifecycle: Lifecycle
 }
 
-export const VideoOverlayPreview = ({lifecycle}: Construct) => {
+export const VideoOverlayPreview = ({ lifecycle }: Construct) => {
     return (
         <div style={{
             margin: "0",
@@ -56,8 +56,8 @@ export const VideoOverlayPreview = ({lifecycle}: Construct) => {
                 const slider = canvas.parentElement!.querySelector("input[type=range]") as HTMLInputElement
                 lifecycle.own(Events.subscribe(slider, "input", () => render(parseFloat(slider.value))))
                 render(0)
-            }}/>
-            <input type="range" min="0" max="2" value="0" step="0.00001" style={{width: "400px"}}/>
+            }} />
+            <input type="range" min="0" max="2" value="0" step="0.00001" style={{ width: "400px" }} aria-label="Seek Video" />
         </div>
     )
 }

@@ -1,8 +1,9 @@
-import {Color} from "@opendaw/lib-std"
+import { Color } from "@opendaw/lib-std"
 
 export const Colors = {
     white: new Color(0, 0, 100),
-    blue: new Color(189, 100, 65),
+    cyan: new Color(189, 100, 65),
+    blue: new Color(200, 100, 65),
     green: new Color(150, 77, 69),
     yellow: new Color(60, 100, 84),
     cream: new Color(65, 20, 83),
