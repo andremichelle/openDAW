@@ -62,7 +62,7 @@ interface BoxVisitor<T> {
 
 ### Key Technical Constraints
 
-- **Single AudioWorklet**: All processors are classes inside one `EngineProcessor`. Device processor code must be available in the worklet context. Dynamic `import()` inside the worklet is the target mechanism.
+- **Single AudioWorklet**: All processors are classes inside one `EngineProcessor`. Device processor code must be available in the worklet context. `AudioWorkletGlobalScope` does **not** support `import()`, `fetch()`, or `importScripts()`. The only way to load code into the worklet is `audioContext.audioWorklet.addModule(url)` from the main thread. Modules loaded this way support static `import` statements.
 - **Custom JSX**: UI uses `@opendaw/lib-jsx`. `Html.adoptStyleSheet()` handles styles via constructable stylesheets.
 - **Box graph serialization**: Boxes are serialized/deserialized via the box-forge system. Unknown box types need graceful handling for backward compatibility.
 - **Cross-origin isolation**: The app uses COEP/COOP headers for `SharedArrayBuffer`. Device resources loaded from other origins need CORS.
@@ -333,12 +333,14 @@ export interface DeviceDescriptor {
   1. Fetches `devices.json` from a configured path
   2. For each enabled entry, fetches its `manifest.json`
   3. Uses `import()` to load the device's adapter and editor modules (main thread)
-  4. Sends processor module URLs to the worklet, which uses `import()` to load them
+  4. Calls `audioContext.audioWorklet.addModule(processorUrl)` for each device's processor module
   5. Registers each loaded device in the `DeviceRegistry`
 - The loader runs during app startup, before the project is opened
 - Error handling: if a device fails to load, log a warning and skip it
 
-**Worklet processor loading**: The `EngineProcessor` already runs in a module worklet (loaded via `addModule()`). Module worklets support `import()`. The main thread tells the worklet "load processor from this URL" via `MessagePort`, the worklet does `import(url)` and registers the processor factory. This is straightforward -- no eval, no blob URLs, no separate worklet instances.
+**Worklet processor loading**: `AudioWorkletGlobalScope` does **not** support dynamic `import()`, `fetch()`, or `importScripts()`. The only mechanism to load code into the worklet is `audioContext.audioWorklet.addModule(url)` called from the **main thread**. Each device's processor module is loaded this way. Modules loaded via `addModule()` can use static `import` statements to pull in shared dependencies (e.g., `import {AudioProcessor} from "@opendaw/device-sdk/dsp"`). The loaded module calls `registerProcessor()` (or a custom registration function) to make the processor class available to `EngineProcessor`. Multiple `addModule()` calls share the same `AudioWorkletGlobalScope`, so all processors end up in the same worklet context.
+
+**Loading order matters**: `addModule()` calls must complete before the engine attempts to instantiate the processor. The `DeviceLoader` awaits all `addModule()` promises before signaling that devices are ready.
 
 **Files to create**:
 - `packages/studio/core/src/DeviceLoader.ts`
@@ -424,8 +426,8 @@ Old projects contain specific box types (e.g., `DelayDeviceBox`). When devices m
 ### Medium Risk: Parameter Slot Limits
 Generic boxes use fixed parameter slots. Devices with many parameters (Revamp ~20+ EQ bands) need enough slots. Mitigation: allocate generously (64 float + 16 boolean).
 
-### Low Risk: Dynamic `import()` in Worklet
-Module worklets support `import()` in modern browsers. The app already requires modern browser features (SharedArrayBuffer, COEP/COOP). If a browser doesn't support worklet `import()`, the fallback is to pre-bundle processor code at build time.
+### Low Risk: Multiple `addModule()` Calls
+Each device processor requires an `addModule()` call from the main thread. Multiple `addModule()` calls are supported and share the same `AudioWorkletGlobalScope`. The calls are async and return promises that must be awaited before the engine starts. For many devices, parallel `Promise.all()` can keep startup fast. If a processor module fails to load, the device is skipped without affecting others.
 
 ### Low Risk: Performance
 Registry lookup adds negligible overhead. The hot path (audio processing) is unaffected once the processor is instantiated.

@@ -75,10 +75,13 @@ export class TracksManager implements Terminable {
     }
 
     startRegionModifier(option: Option<RegionModifier>): Option<Dragging.Process> {
+        if (this.#currentRegionModifier.nonEmpty()) {
+            console.warn(`${this.#currentRegionModifier.unwrap().toString()} is running. Ignore new modifier.`)
+            return Option.None
+        }
         const print = () => option.unwrapOrNull()?.toString() ?? "unknown"
         console.debug(`start(${print()})`)
         return option.map(modifier => {
-            assert(this.#currentRegionModifier.isEmpty(), "RegionModifier already in use.")
             this.service.regionModifierInProgress = true
             const lifeTime = this.#terminator.spawn()
             lifeTime.own({terminate: () => this.#currentRegionModifier = Option.None})
