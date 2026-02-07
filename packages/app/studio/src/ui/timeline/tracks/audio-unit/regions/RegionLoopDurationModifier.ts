@@ -17,7 +17,11 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
     constructor(tool: RegionLoopDurationModifier) {this.#tool = tool}
 
     readPosition(region: AnyRegionBoxAdapter): ppqn {return region.position}
-    readDuration(region: AnyLoopableRegionBoxAdapter): ppqn {return Math.max(region.duration, this.readLoopDuration(region) - region.loopOffset)}
+    readDuration(region: AnyLoopableRegionBoxAdapter): ppqn {
+        const newLoopDuration = this.readLoopDuration(region)
+        if (newLoopDuration <= region.loopDuration) {return region.duration}
+        return Math.max(region.duration, newLoopDuration - region.loopOffset)
+    }
     readComplete(region: AnyLoopableRegionBoxAdapter): ppqn {return region.position + this.readDuration(region)}
     readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.loopOffset}
     readLoopDuration(region: AnyLoopableRegionBoxAdapter): ppqn {
