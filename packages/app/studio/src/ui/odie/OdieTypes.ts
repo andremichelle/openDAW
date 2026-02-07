@@ -7,6 +7,19 @@ export type OdieEvent =
     | { type: "effect-added", track: string, effect: string }
     | { type: "param-changed", track: string, param: string, value: number }
     | { type: "error", message: string }
-    | { type: "action-complete", command?: string, result?: any, content?: string }
+    | { type: "action-complete", command?: string, result?: Record<string, unknown>, content?: string }
     | { type: "track-added", name: string, kind: string }
-    | { type: "analysis-complete", track: string, result: any }
+    | { type: "analysis-complete", track: string, result: AnalysisResult }
+
+export interface RegionAnalysis {
+    start: number
+    duration: number
+    name: string
+    kind: "midi" | "audio" | "unknown"
+    notes?: number
+}
+
+export interface AnalysisResult {
+    track: string
+    regions: RegionAnalysis[]
+}

@@ -1,5 +1,5 @@
 import type { StudioService } from "../../../service/StudioService"
-import { Color, Option } from "@opendaw/lib-std"
+import { Color, Option, Parameter, Primitive } from "@opendaw/lib-std"
 import { AudioBusFactory, InstrumentFactories, InstrumentFactory } from "@opendaw/studio-adapters"
 import { AudioUnitType, IconSymbol } from "@opendaw/studio-enums"
 import {
@@ -75,6 +75,101 @@ export interface ToolResult {
     success: boolean
     reason?: string
     message?: string // Added for consistency with success messages
+}
+
+import { AnalysisResult, RegionAnalysis } from "../OdieTypes"
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ODIE LOCAL TYPE DEFINITIONS
+// These types describe the shapes of upstream objects as accessed by Odie.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Information about a track adapter, including its type and associated box. */
+interface TrackAdapterInfo {
+    address: unknown
+    constructor: { name: string }
+}
+
+/** Represents a modular setup, including its input, output, and connections. */
+interface ModularSetup {
+    modules: any
+    connections: any
+    device: any
+}
+
+/** A device box that can be hosted within a track. */
+interface HostableDeviceBox {
+    host?: { refer(target: unknown): void }
+    label: { setValue(value: string): void }
+    index?: { setValue(value: number): void }
+}
+
+// Extended parameter type to support legacy min/max properties checking
+type OdieParameter<T extends Primitive = any> = Parameter<T> & {
+    minValue?: number
+    maxValue?: number
+    setValue?(value: T): void
+    field?: OdieParameter<T> // For wrapped parameters
+}
+
+// Alias for device adapter with params, used in casting
+type WithNamedParams = DeviceAdapterWithParams
+
+/** Parameter metadata extracted for AI response */
+interface ParameterInfo {
+    value: number | boolean | string
+    min?: number
+    max?: number
+}
+
+/** Recursive parameter tree (can have nested groups like osc1.wave) */
+interface ParameterTree {
+    [key: string]: ParameterInfo | ParameterTree
+}
+
+/** Effect/MIDI Effect details for getTrackDetails */
+interface EffectDetails {
+    index: number
+    type: string
+    label: string
+    enabled: boolean
+    parameters: ParameterTree
+}
+
+/** Instrument details for getTrackDetails */
+interface InstrumentDetails {
+    type: string
+    label: string
+    parameters: ParameterTree
+}
+
+/** Full track details returned by getTrackDetails */
+interface TrackDetails {
+    track: string
+    type: unknown
+    mixer: {
+        volume: number
+        panning: number
+        mute: boolean
+        solo: boolean
+    }
+    midiEffects: EffectDetails[]
+    audioEffects: EffectDetails[]
+    instrument: InstrumentDetails | null
+}
+
+/** Device adapter with namedParameter (effects, instruments) */
+interface DeviceAdapterWithParams {
+    namedParameter: Record<string, OdieParameter | Record<string, OdieParameter>>
+    constructor: { name: string }
+}
+
+/** Adapter with labelField for findAudioUnitAdapter */
+interface LabeledAdapter {
+    label?: string
+    labelField?: OdieParameter<string>
+    box: { isAttached(): boolean }
+    address?: unknown
 }
 
 /**
@@ -964,7 +1059,7 @@ export class OdieAppControl {
                     const track = adapter.tracks.values()[0] // Assume first track for now
                     if (!track) return "Track found but has no timeline lane."
 
-                    const regions = track.regions.collection.asArray().map(r => {
+                    const regions: RegionAnalysis[] = track.regions.collection.asArray().map(r => {
                         const base = {
                             start: r.position,
                             duration: r.duration,
@@ -980,15 +1075,16 @@ export class OdieAppControl {
                         return { ...base, kind: "unknown" }
                     })
 
-                    const result = JSON.stringify({
+                    const analysisData: AnalysisResult = {
                         track: trackName,
                         regions: regions
-                    })
+                    }
+                    const resultString = JSON.stringify(analysisData)
 
                     // Signal Dispatch
-                    this.studio.odieEvents.notify({ type: "analysis-complete", track: trackName, result: JSON.parse(result) })
+                    this.studio.odieEvents.notify({ type: "analysis-complete", track: trackName, result: analysisData })
 
-                    return result
+                    return resultString
 
                 } catch (e) {
                     console.error("Analyze failed", e)
@@ -1028,17 +1124,17 @@ export class OdieAppControl {
 
         if (category === "tracks" || category === "all") {
             summary += "--- TRACKS ---\n"
-            root.audioUnits.adapters().forEach((au: any) => {
-                let tracks: any[] = []
+            root.audioUnits.adapters().forEach((au) => {
+                let tracks: TrackAdapterInfo[] = []
                 try {
-                    if (au.tracks && typeof au.tracks.adapters === 'function') {
-                        tracks = au.tracks.adapters()
+                    if ((au as any).tracks && typeof (au as any).tracks.adapters === 'function') {
+                        tracks = (au as any).tracks.adapters() as TrackAdapterInfo[]
                     } else if (au.tracks && typeof au.tracks.values === 'function') {
-                        tracks = Array.from(au.tracks.values())
+                        tracks = Array.from(au.tracks.values()) as TrackAdapterInfo[]
                     }
-                } catch (e) { /* Ignore iter error */ }
+                } catch (_e) { /* Ignore iter error */ }
 
-                tracks.forEach((t: any) => {
+                tracks.forEach((t) => {
                     summary += `- ${t.constructor.name} (Address: ${t.address})\n`
                 })
             })
@@ -1077,8 +1173,8 @@ export class OdieAppControl {
             // Duck-typing for test compatibility and robustness
             if ('label' in a && typeof a.label === 'string') {
                 label = a.label
-            } else if ('labelField' in a && (a as any).labelField && typeof (a as any).labelField.getValue === 'function') {
-                label = (a as any).labelField.getValue() ?? ""
+            } else if ('labelField' in a && (a as any).labelField && typeof (a as any).labelField?.getValue === 'function') {
+                label = (a as any).labelField?.getValue() ?? ""
             }
             const labelTrim = label.trim()
             return a.box.isAttached() && (labelTrim === targetName || labelTrim.toLowerCase() === targetName.toLowerCase())
@@ -1089,8 +1185,8 @@ export class OdieAppControl {
             if (name !== "") {
                 const labels = allAdapters.map(a => {
                     if ('label' in a) return `[Unit] ${a.label}`
-                    if ('labelField' in a) return `[Bus] ${(a as any).labelField.getValue()}`
-                    return `[Unknown] ${(a as any).address ?? (a as any).box?.isAttached ? 'Attached' : 'Detached'}`
+                    if ('labelField' in a) return `[Bus] ${(a as any).labelField?.getValue()}`
+                    return `[Unknown] ${(a as LabeledAdapter).address ?? (a as LabeledAdapter).box?.isAttached() ? 'Attached' : 'Detached'}`
                 })
                 console.warn(`[Odie] findAudioUnitAdapter: No match for "${name}". Available:`, labels)
             }
@@ -1117,10 +1213,9 @@ export class OdieAppControl {
             const trackName = parts[0]
             const tail = parts.slice(1)
 
-            let trackAdapter: any = null
-            this.findAudioUnitAdapter(trackName).match({
-                some: (a) => { trackAdapter = a },
-                none: () => { }
+            const trackAdapter = this.findAudioUnitAdapter(trackName).match({
+                some: (a) => a,
+                none: () => null
             })
 
             if (!trackAdapter) return null
@@ -1129,15 +1224,16 @@ export class OdieAppControl {
             if (tail.length === 1) {
                 const paramName = tail[0].toLowerCase()
                 // 1. Standard Parameters (via namedParameter if available)
-                if (trackAdapter.namedParameter) {
-                    if (paramName === 'volume') return trackAdapter.namedParameter.volume
-                    if (paramName === 'pan' || paramName === 'panning') return trackAdapter.namedParameter.pan
-                    if (paramName === 'mute') return trackAdapter.namedParameter.mute
-                    if (paramName === 'solo') return trackAdapter.namedParameter.solo
+                if ('namedParameter' in trackAdapter) {
+                    const adapter = trackAdapter as unknown as DeviceAdapterWithParams
+                    if (paramName === 'volume') return adapter.namedParameter.volume as unknown as AutomatableParameterFieldAdapter<number>
+                    if (paramName === 'pan' || paramName === 'panning') return adapter.namedParameter.pan as unknown as AutomatableParameterFieldAdapter<number>
+                    if (paramName === 'mute') return adapter.namedParameter.mute as unknown as AutomatableParameterFieldAdapter<number>
+                    if (paramName === 'solo') return adapter.namedParameter.solo as unknown as AutomatableParameterFieldAdapter<number>
                 }
                 // 2. Direct Property fallback
-                if (trackAdapter[paramName] && typeof trackAdapter[paramName].setValue === 'function') {
-                    return trackAdapter[paramName]
+                if ((trackAdapter as any)[paramName] && typeof (trackAdapter as any)[paramName].setValue === 'function') {
+                    return (trackAdapter as any)[paramName]
                 }
                 return null
             }
@@ -1149,18 +1245,17 @@ export class OdieAppControl {
 
                 // Search Audio Effects
                 const effects = trackAdapter.audioEffects?.adapters() || []
-                const foundEffect = effects.find((eff: any) => {
-                    const label = eff.label?.getValue ? eff.label.getValue() : eff.label
-                    return (label && label.includes(deviceName)) || eff.name === deviceName
+                const foundEffect = effects.find((eff) => {
+                    const label = eff.labelField?.getValue() ?? ''
+                    return label.includes(deviceName)
                 })
 
-                if (foundEffect) {
-                    // Try direct property access on effect adapter
-                    if (foundEffect[paramName]) return foundEffect[paramName]
-
-                    // Try 'namedParameter' on effect?
-                    if (foundEffect.namedParameter && foundEffect.namedParameter[paramName]) {
-                        return foundEffect.namedParameter[paramName]
+                if (foundEffect && 'namedParameter' in foundEffect) {
+                    const effectWithParams = foundEffect as unknown as DeviceAdapterWithParams
+                    // Try direct property access on namedParameter
+                    const param = effectWithParams.namedParameter[paramName]
+                    if (param && 'getValue' in param) {
+                        return param as unknown as AutomatableParameterFieldAdapter<number>
                     }
                 }
             }
@@ -1197,26 +1292,26 @@ export class OdieAppControl {
         return this.findAudioUnitAdapter(trackName).match({
             some: (adapter) => {
                 try {
-                    const details: any = {
+                    const details: TrackDetails = {
                         track: trackName,
                         type: adapter.type,
                         mixer: {
-                            volume: adapter.namedParameter.volume.getValue(),
-                            panning: adapter.namedParameter.panning.getValue(),
-                            mute: adapter.namedParameter.mute.getValue(),
-                            solo: adapter.namedParameter.solo.getValue()
+                            volume: adapter.namedParameter.volume.getValue() as number,
+                            panning: adapter.namedParameter.panning.getValue() as number,
+                            mute: adapter.namedParameter.mute.getValue() as boolean,
+                            solo: adapter.namedParameter.solo.getValue() as boolean
                         },
-                        midiEffects: [] as any[],
-                        audioEffects: [] as any[],
-                        instrument: null as any
+                        midiEffects: [],
+                        audioEffects: [],
+                        instrument: null
                     }
 
                     // Extract audio effects
                     const audioEffects = adapter.audioEffects.adapters()
 
                     // Helper to extract param metadata recursively
-                    const extractParams = (obj: any, prefix = ""): Record<string, any> => {
-                        const result: Record<string, any> = {}
+                    const extractParams = (obj: Record<string, unknown>, prefix = ""): ParameterTree => {
+                        const result: ParameterTree = {}
                         if (!obj) return result
 
                         for (const [key, val] of Object.entries(obj)) {
@@ -1225,16 +1320,16 @@ export class OdieAppControl {
 
                             // Check if it's a ParameterAdapter (has getValue)
                             if (typeof val === 'object' && 'getValue' in val) {
-                                const p = val as any
+                                const p = val as OdieParameter
                                 result[key] = {
                                     value: p.getValue(),
-                                    min: p.minValue, // Now available thanks to our update
+                                    min: p.minValue,
                                     max: p.maxValue
                                 }
                             }
                             // Recurse for nested objects (like osc1.wave)
                             else if (typeof val === 'object' && val !== null) {
-                                const nested = extractParams(val, path)
+                                const nested = extractParams(val as Record<string, unknown>, path)
                                 // Merge or nest? For setDeviceParam we use dot notation.
                                 // Let's keep structure but leaf nodes are rich objects.
                                 if (Object.keys(nested).length > 0) {
@@ -1247,7 +1342,7 @@ export class OdieAppControl {
 
 
                     audioEffects.forEach((effect, index) => {
-                        const effectInfo: any = {
+                        const effectInfo: EffectDetails = {
                             index,
                             type: effect.constructor.name.replace('DeviceBoxAdapter', ''),
                             label: effect.labelField.getValue(),
@@ -1259,7 +1354,7 @@ export class OdieAppControl {
 
                         // Extract named parameters if available
                         if ('namedParameter' in effect && effect.namedParameter) {
-                            effectInfo.parameters = extractParams(effect.namedParameter)
+                            effectInfo.parameters = extractParams(effect.namedParameter as Record<string, unknown>)
                         }
 
                         details.audioEffects.push(effectInfo)
@@ -1268,7 +1363,7 @@ export class OdieAppControl {
                     // Extract MIDI effects
                     const midiEffects = adapter.midiEffects.adapters()
                     midiEffects.forEach((effect, index) => {
-                        const effectInfo: any = {
+                        const effectInfo: EffectDetails = {
                             index,
                             type: effect.constructor.name.replace('DeviceBoxAdapter', ''),
                             label: effect.labelField.getValue(),
@@ -1277,7 +1372,7 @@ export class OdieAppControl {
                         }
 
                         if ('namedParameter' in effect && effect.namedParameter) {
-                            effectInfo.parameters = extractParams(effect.namedParameter)
+                            effectInfo.parameters = extractParams(effect.namedParameter as Record<string, unknown>)
                         }
 
                         details.midiEffects.push(effectInfo)
@@ -1288,15 +1383,15 @@ export class OdieAppControl {
                     if (inputAdapter && inputAdapter.nonEmpty()) {
                         const instrument = inputAdapter.unwrap()
                         if ('namedParameter' in instrument) {
-                            const instrInfo: any = {
+                            const instrInfo: InstrumentDetails = {
                                 type: instrument.constructor.name.replace('DeviceBoxAdapter', ''),
                                 label: instrument.labelField?.getValue() || 'Unknown',
                                 parameters: {}
                             }
 
-                            const params = (instrument as any).namedParameter
+                            const params = (instrument as DeviceAdapterWithParams).namedParameter
                             if (params) {
-                                instrInfo.parameters = extractParams(params)
+                                instrInfo.parameters = extractParams(params as Record<string, unknown>)
                             }
 
                             details.instrument = instrInfo
@@ -1373,8 +1468,7 @@ export class OdieAppControl {
             some: async (adapter) => {
                 try {
                     // Helper to set value robustly inside a transaction
-                    type WithNamedParams = { namedParameter: any }
-                    const applyValue = (deviceAdapter: Record<string, any>, paramName: string, numericValue: number): ToolResult => {
+                    const applyValue = (deviceAdapter: Record<string, OdieParameter>, paramName: string, numericValue: number): ToolResult => {
                         const param = deviceAdapter[paramName]
                         if (!param) {
                             const available = Object.keys(deviceAdapter || {}).join(", ")
@@ -1385,9 +1479,10 @@ export class OdieAppControl {
                         let setter: ((v: number) => void) | undefined
 
                         if (typeof param.setValue === 'function') {
-                            setter = (v) => param.setValue(v)
+                            setter = (v) => param.setValue!(v)
                         } else if (param.field && typeof param.field.setValue === 'function') {
-                            setter = (v) => param.field.setValue(v)
+                            const wrappedParam = param.field
+                            setter = (v) => wrappedParam.setValue!(v)
                         }
 
                         if (setter) {
@@ -1412,7 +1507,7 @@ export class OdieAppControl {
 
                     if (deviceType === "mixer") {
                         const mixerParams = (adapter as unknown as WithNamedParams).namedParameter
-                        return applyValue(mixerParams, paramPath, value)
+                        return applyValue(mixerParams as Record<string, OdieParameter>, paramPath, value)
                     }
 
                     if (deviceType === "effect") {
@@ -1556,7 +1651,7 @@ export class OdieAppControl {
 
         try {
             this.studio.project.editing.modify(() => {
-                let modularSetup: any
+                let modularSetup: ModularSetup | undefined
                 if (effectType.toLowerCase() === 'modular') {
                     // Full Modular stack per EffectFactories.ts
                     modularSetup = ModularBox.create(this.studio.project.boxGraph, UUID.generate(), box => {
@@ -1564,31 +1659,37 @@ export class OdieAppControl {
                         box.label.setValue("Modular")
                     })
                     const modularInput = ModularAudioInputBox.create(this.studio.project.boxGraph, UUID.generate(), box => {
-                        box.attributes.collection.refer(modularSetup.modules)
+                        if (modularSetup) {
+                            box.attributes.collection.refer(modularSetup.modules)
+                        }
                         box.attributes.label.setValue("Modular Input")
                         box.attributes.x.setValue(-256)
                         box.attributes.y.setValue(32)
                     })
                     const modularOutput = ModularAudioOutputBox.create(this.studio.project.boxGraph, UUID.generate(), box => {
-                        box.attributes.collection.refer(modularSetup.modules)
+                        if (modularSetup) {
+                            box.attributes.collection.refer(modularSetup.modules)
+                        }
                         box.attributes.label.setValue("Modular Output")
                         box.attributes.x.setValue(256)
                         box.attributes.y.setValue(32)
                     })
                     ModuleConnectionBox.create(this.studio.project.boxGraph, UUID.generate(), box => {
-                        box.collection.refer(modularSetup.connections)
+                        if (modularSetup) {
+                            box.collection.refer(modularSetup.connections)
+                        }
                         box.source.refer(modularInput.output)
                         box.target.refer(modularOutput.input)
                     })
                 }
                 // Create and Link Effect
-                BoxClass.create(this.studio.project.boxGraph, UUID.generate(), (box: any) => {
+                BoxClass.create(this.studio.project.boxGraph, UUID.generate(), (box: HostableDeviceBox) => {
                     // Bi-directional link
                     if (box.host && adapter.box.audioEffects) {
                         box.host.refer(adapter.box.audioEffects)
                     }
-                    if (modularSetup && (box as any).modularSetup) {
-                        (box as any).modularSetup.refer(modularSetup.device)
+                    if (modularSetup && 'modularSetup' in box) {
+                        (box as ModularDeviceBox).modularSetup.refer(modularSetup.device)
                     }
                     box.label.setValue(effectType)
 
