@@ -4,7 +4,7 @@ import {createElement, Group, JsxValue} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {ClipboardManager, DevicesClipboard, MenuItem, Project} from "@opendaw/studio-core"
-import {DeviceBoxAdapter, DeviceHost, DeviceType, EffectDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {DeviceBoxAdapter, DeviceHost, Devices, DeviceType, EffectDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {Option} from "@opendaw/lib-std"
 import {DebugMenus} from "@/ui/menu/debug.ts"
 import {DragDevice} from "@/ui/AnyDragData"
@@ -105,7 +105,10 @@ export const DeviceEditor =
                             selection: project.deviceSelection,
                             boxGraph: project.boxGraph,
                             boxAdapters: project.boxAdapters,
-                            getHost: (): Option<DeviceHost> => Option.wrap(adapter.deviceHost())
+                            getHost: (): Option<DeviceHost> => {
+                                if (Devices.isHost(adapter)) {return Option.wrap(adapter)}
+                                return Option.wrap(adapter.deviceHost())
+                            }
                         }))
                     )
                     if (type === "midi-effect" || type === "audio-effect") {
