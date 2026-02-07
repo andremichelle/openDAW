@@ -162,6 +162,9 @@ export namespace AudioUnitsClipboard {
                     if (pointer.pointerType === Pointers.AudioOutput) {
                         return address.map(addr => addr.moveTo(primaryBusAddress.uuid))
                     }
+                    if (pointer.pointerType === Pointers.MIDIDevice) {
+                        return Option.wrap(rootBoxAdapter.box.outputMidiDevices.address)
+                    }
                     return Option.None
                 },
                 excludeBox: box => box.name === AudioUnitBox.ClassName || box.name === AudioBusBox.ClassName || box.name === RootBox.ClassName
@@ -188,6 +191,9 @@ export namespace AudioUnitsClipboard {
                     }
                     if (pointer.pointerType === Pointers.AudioOutput) {
                         return address.map(addr => addr.moveTo(primaryBusAddress.uuid))
+                    }
+                    if (pointer.pointerType === Pointers.MIDIDevice) {
+                        return Option.wrap(rootBox.outputMidiDevices.address)
                     }
                     return Option.None
                 }
