@@ -160,6 +160,10 @@ export namespace RegionsClipboard {
                                     return address.flatMap(addr => sourceTrackToTarget.opt(addr.uuid)
                                         .map(({target}) => target.box.regions.address))
                                 }
+                                if (pointer.pointerType === Pointers.ClipCollection) {
+                                    return address.flatMap(addr => sourceTrackToTarget.opt(addr.uuid)
+                                        .map(({target}) => target.box.clips.address))
+                                }
                                 return Option.None
                             },
                             modifyBox: (box: Box) => {
