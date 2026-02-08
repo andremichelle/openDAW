@@ -1,7 +1,6 @@
-import type { StudioService } from "../../../service/StudioService"
-import { Color, Option, Parameter, Primitive } from "@opendaw/lib-std"
-import { AudioBusFactory, InstrumentFactories, InstrumentFactory } from "@opendaw/studio-adapters"
-import { AudioUnitType, IconSymbol } from "@opendaw/studio-enums"
+import { Color, Option, Parameter, Primitive, isDefined, Nullable, UUID } from "@opendaw/lib-std"
+import { TimeBase, Interpolation, PPQN } from "@opendaw/lib-dsp"
+import { Field, PointerField, Box, Int32Field } from "@opendaw/lib-box"
 import {
     RegionEditing,
     AudioUnitBoxAdapter,
@@ -13,9 +12,14 @@ import {
     NanoDeviceBoxAdapter,
     PlayfieldDeviceBoxAdapter,
     SoundfontDeviceBoxAdapter,
-    AutomatableParameterFieldAdapter
+    AutomatableParameterFieldAdapter,
+    AudioBusBoxAdapter,
+    AudioBusFactory,
+    InstrumentFactories,
+    InstrumentFactory,
+    TrackBoxAdapter
 } from "@opendaw/studio-adapters"
-import { Interpolation, PPQN } from "@opendaw/lib-dsp"
+import { Workspace } from "@/ui/workspace/Workspace"
 import {
     AudioUnitBox,
     TrackBox,
@@ -35,19 +39,21 @@ import {
     ModularAudioOutputBox,
     ModuleConnectionBox,
     AuxSendBox,
-    PlayfieldSampleBox
+    PlayfieldSampleBox,
+    AudioFileBox,
+    SoundfontFileBox,
+    TidalDeviceBox,
+    RevampDeviceBox,
+    FoldDeviceBox,
+    ModularDeviceBox,
+    ArpeggioDeviceBox,
+    VelocityDeviceBox,
+    PitchDeviceBox,
+    DattorroReverbDeviceBox,
+    ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
-import { AudioFileBox, SoundfontFileBox } from "@opendaw/studio-boxes"
-import { TidalDeviceBox } from "@opendaw/studio-boxes"
-import { RevampDeviceBox } from "@opendaw/studio-boxes"
-import { FoldDeviceBox } from "@opendaw/studio-boxes"
-import { ModularDeviceBox } from "@opendaw/studio-boxes"
-import { ArpeggioDeviceBox } from "@opendaw/studio-boxes"
-import { VelocityDeviceBox } from "@opendaw/studio-boxes"
-import { PitchDeviceBox } from "@opendaw/studio-boxes"
-import { UUID } from "@opendaw/lib-std"
-import { DattorroReverbDeviceBox } from "@opendaw/studio-boxes"
-import { ZeitgeistDeviceBox } from "@opendaw/studio-boxes"
+import { AudioUnitType, IconSymbol, Pointers } from "@opendaw/studio-enums"
+import type { StudioService } from "../../../service/StudioService"
 
 // Local interface definition
 export interface MidiNoteDef {
@@ -92,9 +98,9 @@ interface TrackAdapterInfo {
 
 /** Represents a modular setup, including its input, output, and connections. */
 interface ModularSetup {
-    modules: any
-    connections: any
-    device: any
+    modules: Field<Pointers.ModuleCollection>
+    connections: Field<Pointers.ConnectionCollection>
+    device: Field<Pointers.ModularSetup>
 }
 
 /** A device box that can be hosted within a track. */
@@ -105,7 +111,7 @@ interface HostableDeviceBox {
 }
 
 // Extended parameter type to support legacy min/max properties checking
-type OdieParameter<T extends Primitive = any> = Parameter<T> & {
+type OdieParameter<T extends Primitive = Primitive> = Parameter<T> & {
     minValue?: number
     maxValue?: number
     setValue?(value: T): void
@@ -164,14 +170,6 @@ interface DeviceAdapterWithParams {
     constructor: { name: string }
 }
 
-/** Adapter with labelField for findAudioUnitAdapter */
-interface LabeledAdapter {
-    label?: string
-    labelField?: OdieParameter<string>
-    box: { isAttached(): boolean }
-    address?: unknown
-}
-
 /**
  * Odie Studio Control
  * Validated Bridge for AI-to-Studio interactions.
@@ -187,14 +185,8 @@ export class OdieAppControl {
     // --- Arrangement ---
 
     async createProject(): Promise<boolean> {
-        try {
-            await this.studio.newProject()
-            this.studio.odieEvents.notify({ type: "project-loaded", name: "New Project" })
-            return true
-        } catch (e) {
-            console.error(e)
-            return false
-        }
+        const result = await this.newProject()
+        return result.success
     }
 
     listTracks(): string[] {
@@ -352,22 +344,44 @@ export class OdieAppControl {
 
     // --- Transport ---
 
-    async play() {
-        this.transport.play()
+    async play(): Promise<boolean> {
+        try {
+            await this.transport.play()
+            return true
+        } catch (e) {
+            console.error("[Odie] Play failed", e)
+            return false
+        }
     }
 
-    async stop() {
-        this.transport.stop()
+    async stop(): Promise<boolean> {
+        try {
+            await this.transport.stop()
+            return true
+        } catch (e) {
+            console.error("[Odie] Stop failed", e)
+            return false
+        }
     }
 
     async record(countIn: boolean = true): Promise<boolean> {
-        this.transport.record(countIn)
-        return true
+        try {
+            this.transport.record(countIn)
+            return true
+        } catch (e) {
+            console.error("[Odie] Record failed", e)
+            return false
+        }
     }
 
     async stopRecording(): Promise<boolean> {
-        this.transport.stopRecording()
-        return true
+        try {
+            this.transport.stopRecording()
+            return true
+        } catch (e) {
+            console.error("[Odie] Stop Recording failed", e)
+            return false
+        }
     }
 
     async setCountIn(bars: number): Promise<boolean> {
@@ -376,7 +390,7 @@ export class OdieAppControl {
         if (bars > 4) bars = 4
 
         console.warn("[Odie] CountIn not supported by current Engine Transport Facade.")
-        return true
+        return false
     }
 
     async selectTrack(name: string): Promise<boolean> {
@@ -409,6 +423,9 @@ export class OdieAppControl {
     async setTimeSignature(numerator: number, denominator: number): Promise<ToolResult> {
         if (typeof numerator !== 'number' || !Number.isFinite(numerator) || numerator < 1 || numerator > 32) {
             return { success: false, reason: "Invalid time signature numerator." }
+        }
+        if (typeof denominator !== 'number' || ![1, 2, 4, 8, 16, 32].includes(denominator)) {
+            return { success: false, reason: "Invalid time signature denominator (must be power of 2)." }
         }
         console.log(`[Odie] Setting Time Signature to ${numerator}/${denominator}...`)
         const success = this.transport.setTimeSignature(numerator, denominator)
@@ -501,9 +518,10 @@ export class OdieAppControl {
     // --- View ---
 
     async switchScreen(screen: "arrangement" | "scene"): Promise<boolean> {
-        // ... (Keep existing if working, or blindly return true as UI state is hard to verify structurally)
         try {
-            this.studio.switchScreen(screen as any)
+            // Map Odie terms to Workspace screen keys
+            const key = screen === "arrangement" ? "default" : (screen as string)
+            this.studio.switchScreen(key as Nullable<Workspace.ScreenKeys>)
             // Allow UI to settle
             await new Promise(r => setTimeout(r, 50))
             return true
@@ -550,7 +568,8 @@ export class OdieAppControl {
 
     async splitRegion(trackName: string, time?: number): Promise<ToolResult> {
         // Default to current playhead if no time specified
-        const splitTime = time ?? this.transport.position
+        // FIX: Convert 1-based Bar to PPQN (0-based) using robust helper
+        const splitTime = isDefined(time) ? PPQN.fromSignature(time - 1, 1) : this.transport.position
 
         return this.findRegion(trackName, splitTime).match<Promise<ToolResult>>({
             some: async (region) => {
@@ -558,9 +577,7 @@ export class OdieAppControl {
                     this.studio.project.editing.modify(() => {
                         RegionEditing.cut(region, splitTime, false)
                     })
-                    // Verify split by checking for new region at split time?
-                    // For now, rely on execution + settling. Ideally we count regions.
-                    return { success: true, message: "Split region" }
+                    return { success: true, message: `Split region at ${splitTime.toFixed(2)} PPQN` }
                 } catch (e: unknown) {
                     console.error("Split failed", e)
                     return { success: false, reason: `Split failed: ${e instanceof Error ? e.message : String(e)}` }
@@ -670,65 +687,63 @@ export class OdieAppControl {
 
         const track = this.findFirstTrack(adapter)
         if (!track) return { success: false, reason: `Track "${trackName}" has no note lanes.` }
+        if (!isDefined(track.box) || !isDefined(track.box.regions)) return { success: false, reason: `Track "${trackName}" has no regions collection.` }
 
         try {
             if (notes.length === 0) return { success: true }
 
-            // 1 Bar = 4.0 PPQN
-            const firstNoteTime = (notes[0].startTime - 1) * 4.0
+            // Convert first note startTime (1-based Bar) to PPQN
+            const firstNoteTime = PPQN.fromSignature(notes[0].startTime - 1, 1)
 
-            let region = track.regions.collection.asArray()
-                .find((r: NoteRegionBoxAdapter) => r instanceof NoteRegionBoxAdapter && r.position <= firstNoteTime && r.complete > firstNoteTime) as NoteRegionBoxAdapter | undefined
+            let region = (track.regions.collection.asArray() as AnyRegionBoxAdapter[])
+                .find((r) => r instanceof NoteRegionBoxAdapter && r.position <= firstNoteTime && (r.position + r.duration) > firstNoteTime) as NoteRegionBoxAdapter | undefined
 
-            if (!region) {
-                // Try to Create a Clip (MVP: 4 bar clip at target)
-                const start = Math.floor(firstNoteTime / 4) * 4 // Quantize to bar
-                const duration = 16.0 // 4 bars
+            if (!isDefined(region)) {
+                // Auto-Create Clip (MVP: 4 bar clip quantized to bar)
+                const startPPQN = Math.floor(firstNoteTime / 4) * 4
+                const durationPPQN = 16.0 // 4 bars
 
-                // Create Clip Logic
                 this.studio.project.editing.modify(() => {
-                    // CRITICAL FIX: Must create Event Collection and link it to the Region Box
-                    // otherwise "box.events" pointer is dangling, causing Graph Crash.
                     const collection = NoteEventCollectionBox.create(this.studio.project.boxGraph, UUID.generate())
-
                     NoteRegionBox.create(this.studio.project.boxGraph, UUID.generate(), box => {
-                        box.position.setValue(start)
-                        box.duration.setValue(duration)
-                        box.loopDuration.setValue(duration)
+                        box.position.setValue(startPPQN)
+                        box.duration.setValue(durationPPQN)
+                        box.loopDuration.setValue(durationPPQN)
                         box.regions.refer(track.box.regions)
-                        box.events.refer(collection.owners) // Link to events!
+                        box.events.refer(collection.owners)
                     })
                 })
 
-                // Verify creation
                 // Refetch to get adapter
-                region = track.regions.collection.asArray()
-                    .find((r: AnyRegionBoxAdapter) => r instanceof NoteRegionBoxAdapter && r.position === start) as NoteRegionBoxAdapter
+                region = (track.regions.collection.asArray() as AnyRegionBoxAdapter[])
+                    .find((r) => r instanceof NoteRegionBoxAdapter && r.position === startPPQN) as NoteRegionBoxAdapter | undefined
             }
-            if (!region) return { success: false, reason: `No MIDI region found at time ${notes[0].startTime} and failed to create one.` }
 
+            if (!isDefined(region)) return { success: false, reason: `No MIDI region found and failed to create one.` }
+
+            const targetRegion = region!
             this.studio.project.editing.modify(() => {
-                const collection = region!.optCollection.unwrap()
-                const regionPos = region!.position
+                const collection = targetRegion.optCollection.unwrap()
+                const regionPos = targetRegion.position
 
                 this.studio.odieEvents.notify({ type: "region-created", track: trackName, time: regionPos })
 
                 notes.forEach(note => {
-                    const start = ((note.startTime - 1) * 4.0) - regionPos
-                    const duration = note.duration * 4.0
-                    collection.createEvent({
-                        position: start,
-                        duration: duration,
-                        pitch: note.pitch,
-                        velocity: note.velocity / 127.0,
-                        chance: 127,
-                        playCount: 0,
-                        cent: 0
+                    const noteStart = PPQN.fromSignature(note.startTime - 1, 1) - regionPos
+                    const noteDuration = PPQN.fromSignature(note.duration, 1)
+
+                    NoteEventBox.create(this.studio.project.boxGraph, UUID.generate(), box => {
+                        box.events.refer(collection.box.events)
+                        box.position.setValue(noteStart)
+                        box.duration.setValue(noteDuration)
+                        box.pitch.setValue(note.pitch)
+                        // Fix: Velocity is passed as raw value (0-127)
+                        box.velocity.setValue(note.velocity)
                     })
                 })
             })
 
-            return { success: true, message: `Added ${notes.length} notes` }
+            return { success: true, message: `Added ${notes.length} notes to '${trackName}'` }
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e)
             return { success: false, reason: `addMidiNotes failed: ${msg}` }
@@ -869,11 +884,9 @@ export class OdieAppControl {
 
                     // Identify Track
                     if (box instanceof TrackBox) {
-
                         // TrackBox has a 'target' pointer to the AudioUnit (or param)
-                        // We use Unsafe/Any cast or assume box.target exists matching ProjectApi usage
-                        const target = (box as any).target
-                        const targetBox = target?.targetVertex?.unwrap()?.box
+                        const target = (box as unknown as { target?: { targetVertex?: { unwrap?(): { box: { label: { getValue(): string } } } } } }).target
+                        const targetBox = target?.targetVertex?.unwrap?.()?.box
 
                         return { type: "track", name: targetBox?.label?.getValue() || "Untitled" }
                     }
@@ -949,8 +962,10 @@ export class OdieAppControl {
             const sampleUuid = UUID.parse(sample.uuid)
 
             // 3. Create Audio Track
-            const trackSuccess = await this.addTrack("audio", trackName)
-            if (!trackSuccess.success) return { success: false, reason: trackSuccess.reason ?? `Failed to create track '${trackName}'` }
+            const trackResult = await this.addTrack("audio", trackName)
+            if (!trackResult.success) {
+                return { success: false, reason: trackResult.reason || `Failed to create track '${trackName}'` }
+            }
 
             // 4. Create Boxes & Region
             const adapterMeta = this.findAudioUnitAdapter(trackName)
@@ -981,14 +996,18 @@ export class OdieAppControl {
                 AudioRegionBox.create(boxGraph, regionUuid, box => {
                     box.file.refer(audioFileBox)
                     box.duration.setValue(durationSeconds)
+                    box.loopDuration.setValue(durationSeconds)
                     box.position.setValue(0)
+                    // Explicitly set TimeBase to Seconds for Audio Regions
+                    box.timeBase.setValue(TimeBase.Seconds)
 
                     // Link Events Collection (Crucial Fix)
                     box.events.refer(valueEventCollectionBox.owners)
 
                     // D. Link to Track (Robust Graph Linking)
-                    if (trackBox.regions) {
-                        box.regions.refer(trackBox.regions)
+                    const trackAdapter = (track as unknown as { box: { regions: unknown } })
+                    if (trackAdapter.box.regions) {
+                        box.regions.refer(trackAdapter.box.regions as any)
                     } else {
                         console.warn("TrackBox has no regions collection to refer to")
                     }
@@ -1127,10 +1146,11 @@ export class OdieAppControl {
             root.audioUnits.adapters().forEach((au) => {
                 let tracks: TrackAdapterInfo[] = []
                 try {
-                    if ((au as any).tracks && typeof (au as any).tracks.adapters === 'function') {
-                        tracks = (au as any).tracks.adapters() as TrackAdapterInfo[]
-                    } else if (au.tracks && typeof au.tracks.values === 'function') {
-                        tracks = Array.from(au.tracks.values()) as TrackAdapterInfo[]
+                    const tracksField = (au as unknown as { tracks?: { adapters?: () => unknown[], values?: () => unknown[] } }).tracks
+                    if (tracksField && typeof tracksField.adapters === 'function') {
+                        tracks = tracksField.adapters() as TrackAdapterInfo[]
+                    } else if (tracksField && typeof tracksField.values === 'function') {
+                        tracks = Array.from(tracksField.values()) as TrackAdapterInfo[]
                     }
                 } catch (_e) { /* Ignore iter error */ }
 
@@ -1170,11 +1190,10 @@ export class OdieAppControl {
         const targetName = name.trim()
         const match = allAdapters.find(a => {
             let label = ""
-            // Duck-typing for test compatibility and robustness
-            if ('label' in a && typeof a.label === 'string') {
+            if (a instanceof AudioUnitBoxAdapter) {
                 label = a.label
-            } else if ('labelField' in a && (a as any).labelField && typeof (a as any).labelField?.getValue === 'function') {
-                label = (a as any).labelField?.getValue() ?? ""
+            } else if (a instanceof AudioBusBoxAdapter) {
+                label = a.labelField.getValue()
             }
             const labelTrim = label.trim()
             return a.box.isAttached() && (labelTrim === targetName || labelTrim.toLowerCase() === targetName.toLowerCase())
@@ -1184,9 +1203,9 @@ export class OdieAppControl {
             // Debug logging for failures
             if (name !== "") {
                 const labels = allAdapters.map(a => {
-                    if ('label' in a) return `[Unit] ${a.label}`
-                    if ('labelField' in a) return `[Bus] ${(a as any).labelField?.getValue()}`
-                    return `[Unknown] ${(a as LabeledAdapter).address ?? (a as LabeledAdapter).box?.isAttached() ? 'Attached' : 'Detached'}`
+                    if (a instanceof AudioUnitBoxAdapter) return `[Unit] ${a.label}`
+                    if (a instanceof AudioBusBoxAdapter) return `[Bus/Device] ${a.labelField.getValue()}`
+                    return `[Unknown] ${(a as { address?: { toString(): string } }).address?.toString() ?? "no address"}`
                 })
                 console.warn(`[Odie] findAudioUnitAdapter: No match for "${name}". Available:`, labels)
             }
@@ -1227,13 +1246,15 @@ export class OdieAppControl {
                 if ('namedParameter' in trackAdapter) {
                     const adapter = trackAdapter as unknown as DeviceAdapterWithParams
                     if (paramName === 'volume') return adapter.namedParameter.volume as unknown as AutomatableParameterFieldAdapter<number>
-                    if (paramName === 'pan' || paramName === 'panning') return adapter.namedParameter.pan as unknown as AutomatableParameterFieldAdapter<number>
+                    // Fix: Use .panning instead of .pan to match real AudioUnit adapters
+                    if (paramName === "pan" || paramName === "panning") return trackAdapter.box.panning as unknown as AutomatableParameterFieldAdapter<number>
                     if (paramName === 'mute') return adapter.namedParameter.mute as unknown as AutomatableParameterFieldAdapter<number>
                     if (paramName === 'solo') return adapter.namedParameter.solo as unknown as AutomatableParameterFieldAdapter<number>
                 }
                 // 2. Direct Property fallback
-                if ((trackAdapter as any)[paramName] && typeof (trackAdapter as any)[paramName].setValue === 'function') {
-                    return (trackAdapter as any)[paramName]
+                const param = (trackAdapter as unknown as Record<string, unknown>)[paramName]
+                if (param && typeof (param as { setValue?: unknown }).setValue === 'function') {
+                    return param as AutomatableParameterFieldAdapter<number>
                 }
                 return null
             }
@@ -1306,9 +1327,6 @@ export class OdieAppControl {
                         instrument: null
                     }
 
-                    // Extract audio effects
-                    const audioEffects = adapter.audioEffects.adapters()
-
                     // Helper to extract param metadata recursively
                     const extractParams = (obj: Record<string, unknown>, prefix = ""): ParameterTree => {
                         const result: ParameterTree = {}
@@ -1322,7 +1340,7 @@ export class OdieAppControl {
                             if (typeof val === 'object' && 'getValue' in val) {
                                 const p = val as OdieParameter
                                 result[key] = {
-                                    value: p.getValue(),
+                                    value: (p.getValue() ?? "") as string | number | boolean,
                                     min: p.minValue,
                                     max: p.maxValue
                                 }
@@ -1341,6 +1359,7 @@ export class OdieAppControl {
                     }
 
 
+                    const audioEffects = adapter.audioEffects.adapters()
                     audioEffects.forEach((effect, index) => {
                         const effectInfo: EffectDetails = {
                             index,
@@ -1384,7 +1403,8 @@ export class OdieAppControl {
                         const instrument = inputAdapter.unwrap()
                         if ('namedParameter' in instrument) {
                             const instrInfo: InstrumentDetails = {
-                                type: instrument.constructor.name.replace('DeviceBoxAdapter', ''),
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                type: instrument.constructor.name.replace('DeviceBoxAdapter', '') as any,
                                 label: instrument.labelField?.getValue() || 'Unknown',
                                 parameters: {}
                             }
@@ -1452,7 +1472,7 @@ export class OdieAppControl {
     /**
      * Set any device parameter by path.
      * @param trackName - Name of the track
-     * @param deviceType - "effect" | "instrument" | "mixer"
+     * @param deviceType - "effect" | "instrument" | "mixer" | "midiEffect"
      * @param deviceIndex - Index of effect (0-based), ignored for instrument/mixer
      * @param paramPath - Parameter name (e.g., "threshold", "cutoff", "volume")
      * @param value - New value (normalized 0-1 or native range depending on mapping)
@@ -1542,7 +1562,7 @@ export class OdieAppControl {
                         const effectAdapter = effects[deviceIndex]
 
                         // Hybrid Access
-                        if (('namedParameter' in effectAdapter) && this.trySetParam((effectAdapter as any).namedParameter, paramPath, value)) {
+                        if ('namedParameter' in effectAdapter && this.trySetParam((effectAdapter as unknown as WithNamedParams).namedParameter, paramPath, value)) {
                             return { success: true, message: `Set MIDI ${trackName}:${deviceIndex}.${paramPath}` }
                         }
                         if (this.trySetParam(effectAdapter.box, paramPath, value)) {
@@ -1560,11 +1580,13 @@ export class OdieAppControl {
 
                         // Hybrid Access
                         // Instrument Adapter often has namedParameter
-                        if (('namedParameter' in instrument) && this.trySetParam((instrument as any).namedParameter, paramPath, value)) {
+                        const namedParams = (instrument as unknown as WithNamedParams).namedParameter
+                        if (isDefined(namedParams) && this.trySetParam(namedParams, paramPath, value)) {
                             return { success: true, message: `Set Instrument ${trackName}.${paramPath}` }
                         }
                         // Fallback to Box (e.g. for simple synths or direct props)
-                        if (this.trySetParam(instrument.box, paramPath, value)) {
+                        const box = (instrument as { box: unknown }).box
+                        if (isDefined(box) && this.trySetParam(box, paramPath, value)) {
                             return { success: true, message: `Set (Deep) Instrument ${trackName}.${paramPath}` }
                         }
 
@@ -1582,36 +1604,24 @@ export class OdieAppControl {
         })
     }
 
-    /**
-     * Audit all parameters of a device.
-     */
     async getDeviceParameters(trackName: string, deviceType: "instrument" | "effect" | "midiEffect", deviceIndex: number = 0): Promise<string[]> {
         return this.findAudioUnitAdapter(trackName).match({
             some: (adapter) => {
-                let device: any
                 if (deviceType === "instrument") {
-                    device = adapter.inputAdapter.unwrap()
+                    const optInput = adapter.inputAdapter
+                    if (optInput.isEmpty()) return []
+                    const instrument = optInput.unwrap() as unknown as DeviceAdapterWithParams
+                    return this.extractParameters(instrument)
                 } else if (deviceType === "effect") {
-                    device = adapter.audioEffects.adapters()[deviceIndex]
+                    const effects = adapter.audioEffects.adapters()
+                    if (deviceIndex < 0 || deviceIndex >= effects.length) return []
+                    const effect = effects[deviceIndex] as unknown as DeviceAdapterWithParams
+                    return this.extractParameters(effect)
                 } else if (deviceType === "midiEffect") {
-                    device = adapter.midiEffects.adapters()[deviceIndex]
-                }
-
-                if (device && device.namedParameter) {
-                    const keys: string[] = []
-                    const walk = (obj: any, prefix: string = "") => {
-                        for (const key in obj) {
-                            const val = obj[key]
-                            const path = prefix ? `${prefix}.${key}` : key
-                            if (val && typeof val === "object" && !("getValue" in val)) {
-                                walk(val, path)
-                            } else {
-                                keys.push(path)
-                            }
-                        }
-                    }
-                    walk(device.namedParameter)
-                    return keys
+                    const effects = adapter.midiEffects.adapters()
+                    if (deviceIndex < 0 || deviceIndex >= effects.length) return []
+                    const effect = effects[deviceIndex] as unknown as DeviceAdapterWithParams
+                    return this.extractParameters(effect)
                 }
                 return []
             },
@@ -1683,18 +1693,17 @@ export class OdieAppControl {
                     })
                 }
                 // Create and Link Effect
-                BoxClass.create(this.studio.project.boxGraph, UUID.generate(), (box: HostableDeviceBox) => {
+                BoxClass.create(this.studio.project.boxGraph, UUID.generate(), (box: any) => {
+                    const hostBox = box as { host?: PointerField<any>, label: Field<string>, index?: Int32Field }
                     // Bi-directional link
-                    if (box.host && adapter.box.audioEffects) {
-                        box.host.refer(adapter.box.audioEffects)
+                    if (hostBox.host && adapter.box.audioEffects) {
+                        hostBox.host.refer(adapter.box.audioEffects)
                     }
                     if (modularSetup && 'modularSetup' in box) {
                         (box as ModularDeviceBox).modularSetup.refer(modularSetup.device)
                     }
-                    box.label.setValue(effectType)
-
-                    if (box.index) {
-                        box.index.setValue(adapter.audioEffects.getMinFreeIndex())
+                    if (hostBox.index) {
+                        hostBox.index.setValue(adapter.audioEffects.getMinFreeIndex())
                     }
                 })
             })
@@ -1721,6 +1730,8 @@ export class OdieAppControl {
         if (adapter.isBus) {
             return { success: false, reason: "MIDI effects can only be added to regular tracks, not Aux busses." }
         }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let BoxClass: any
         switch (effectType.toLowerCase()) {
             case 'arpeggio': BoxClass = ArpeggioDeviceBox; break;
@@ -1733,16 +1744,17 @@ export class OdieAppControl {
         try {
             this.studio.project.editing.modify(() => {
                 BoxClass.create(this.studio.project.boxGraph, UUID.generate(), (box: any) => {
-                    if (box.host && adapter.box.midiEffects) {
-                        box.host.refer(adapter.box.midiEffects)
+                    const hostBox = box as unknown as HostableDeviceBox
+                    if (hostBox.host && adapter.box.midiEffects) {
+                        hostBox.host.refer(adapter.box.midiEffects)
 
                         const index = adapter.midiEffects.getMinFreeIndex()
                         if (index === -1) {
                             throw new Error("No free MIDI effect slots available on this track.")
                         }
 
-                        if (box.index) {
-                            box.index.setValue(index)
+                        if (hostBox.index) {
+                            hostBox.index.setValue(index)
                         }
                     } else {
                         console.error("MIDI Effect creation failed: missing host/field wiring")
@@ -1774,6 +1786,7 @@ export class OdieAppControl {
         // track is likely TrackBoxAdapter, exposing .box
         const trackBox = track.box
         if (!trackBox) return { success: false, reason: "Track Adapter has no underlying Box" }
+        if (!trackBox.regions) return { success: false, reason: "Track Box has no regions collection" }
 
         const { editing, boxGraph } = this.studio.project
 
@@ -1793,7 +1806,8 @@ export class OdieAppControl {
             for (const n of notes) {
                 NoteEventBox.create(boxGraph, UUID.generate(), box => {
                     box.events.refer(eventCollection.events)
-                    box.position.setValue(PPQN.fromSignature(n.startTime - 1, 1))
+                    // FIX: Relative position
+                    box.position.setValue(PPQN.fromSignature(n.startTime - 1, 1) - PPQN.fromSignature(minNoteBar - 1, 1))
                     box.duration.setValue(PPQN.fromSignature(n.duration, 1))
                     box.pitch.setValue(n.pitch)
                     box.velocity.setValue(n.velocity)
@@ -1809,8 +1823,9 @@ export class OdieAppControl {
 
                 box.events.refer(eventCollection.owners)
 
-                if (trackBox.regions) {
-                    box.regions.refer(trackBox.regions)
+                const hostAdapter = (track as unknown as { box: { regions: unknown } })
+                if (hostAdapter.box.regions) {
+                    box.regions.refer(hostAdapter.box.regions as any)
                 }
             })
         })
@@ -1835,12 +1850,11 @@ export class OdieAppControl {
 
         if (!track) return { success: false, reason: "No track lane found." }
 
-        const regions = track.regions.collection.asArray() as any[]
+        const regions = track.regions.collection.asArray() as AnyRegionBoxAdapter[]
         let region = regions.find(r => {
-            const pos = typeof r.position === "number" ? r.position : r.position.getValue()
-            const dur = typeof r.duration === "number" ? r.duration : r.duration.getValue()
-            return pos <= ppqnStart && (pos + dur) >= ppqnStart
-        })
+            // Adapters expose getters for position/duration
+            return r.position <= ppqnStart && (r.position + r.duration) >= ppqnStart
+        }) as NoteRegionBoxAdapter | undefined
 
         if (!region) {
             // Auto-Create Clip (MVP: 4 bar default)
@@ -1867,20 +1881,23 @@ export class OdieAppControl {
                         box.position.setValue(PPQN.fromSignature(clipStart - 1, 1))
                         box.duration.setValue(PPQN.fromSignature(clipDur, 1))
                         box.label.setValue("Clip")
+                        // box.events.refer(eventCollection.owners)
                         box.events.refer(eventCollection.owners)
-                        if (track!.box.regions) {
-                            box.regions.refer(track!.box.regions)
+
+                        // Link to Track
+                        const trackBox = (track as unknown as { box: Box }).box
+                        if (isDefined(trackBox)) {
+                            box.regions.refer(trackBox)
                         }
                     })
                 })
 
                 // Re-fetch region after creation
-                const newRegions = track.regions.collection.asArray() as any[]
+                const trackAdapter = track as unknown as { regions: { collection: { asArray(): unknown[] } } }
+                const newRegions = trackAdapter.regions.collection.asArray() as AnyRegionBoxAdapter[]
                 region = newRegions.find(r => {
-                    const pos = typeof r.position === "number" ? r.position : r.position.getValue()
-                    const dur = typeof r.duration === "number" ? r.duration : r.duration.getValue()
-                    return pos <= ppqnStart && (pos + dur) >= ppqnStart
-                })
+                    return r.position <= ppqnStart && (r.position + r.duration) >= ppqnStart
+                }) as NoteRegionBoxAdapter | undefined
 
                 if (!region) throw new Error("Failed to find created region")
 
@@ -1896,9 +1913,9 @@ export class OdieAppControl {
         // 3. Inject Note
         try {
             this.studio.project.editing.modify(() => {
-                const eventCollection = region.optCollection.unwrap()
+                const eventCollection = region!.optCollection.unwrap()
                 // Local position within the region
-                const localPosition = ppqnStart - region.position
+                const localPosition = ppqnStart - region!.position
 
                 // Create Note Event
                 NoteEventBox.create(this.studio.project.boxGraph, UUID.generate(), box => {
@@ -1935,35 +1952,21 @@ export class OdieAppControl {
     // --- Assets ---
 
     async listSamples(): Promise<{ uuid: string, name: string }[]> {
-        // cast to any to access protected collectAllFiles
-        const assets = await (this.studio.sampleService as any).collectAllFiles()
-        return (assets as { uuid: string, name: string }[]).map(a => ({ uuid: a.uuid, name: a.name }))
+        // cast to unknown to access protected collectAllFiles if needed, or if it returns any
+        const assets = await this.studio.sampleService.collectAllFiles()
+        return (assets as unknown as { uuid: string, name: string }[]).map(a => ({ uuid: a.uuid, name: a.name }))
     }
 
     async listSoundfonts(): Promise<{ uuid: string, name: string }[]> {
-        const assets = await (this.studio.soundfontService as any).collectAllFiles()
-        return (assets as { uuid: string, name: string }[]).map(a => ({ uuid: a.uuid, name: a.name }))
+        const assets = await this.studio.soundfontService.collectAllFiles()
+        return (assets as unknown as { uuid: string, name: string }[]).map(a => ({ uuid: a.uuid, name: a.name }))
     }
 
     /** Helper to robustly find the first track lane from an adapter */
-    private findFirstTrack(adapter: any): any | undefined {
-        const tracksCollection = adapter.tracks
-        if (!tracksCollection) return undefined
-
-        if (Array.isArray(tracksCollection)) return tracksCollection[0]
-
-        if (typeof tracksCollection.adapters === 'function') {
-            const adapters = tracksCollection.adapters()
-            return Array.isArray(adapters) ? adapters[0] : undefined
-        }
-
-        if (typeof tracksCollection.values === 'function') {
-            const vals = tracksCollection.values()
-            if (Array.isArray(vals)) return vals[0]
-            if (vals && typeof vals.next === 'function') return vals.next().value
-            try { return Array.from(vals as any)[0] } catch (e) { }
-        }
-        return undefined
+    /** Helper to robustly find the first track lane from an adapter */
+    private findFirstTrack(adapter: AudioUnitBoxAdapter): TrackBoxAdapter | undefined {
+        const tracks = adapter.tracks.values()
+        return tracks.length > 0 ? tracks[0] : undefined
     }
 
     /** Find an asset in the library using fuzzy/keyword matching */
@@ -1998,8 +2001,8 @@ export class OdieAppControl {
 
         const nano = instrument as NanoDeviceBoxAdapter
         const { editing, boxGraph } = this.studio.project
-        const allSamples = await (this.studio.sampleService as any).collectAllFiles()
-        const fullAsset = allSamples.find((a: any) => a.uuid === asset.uuid)
+        const allSamples = await this.studio.sampleService.collectAllFiles()
+        const fullAsset = (allSamples as unknown as Array<{ uuid: string, duration: number }>).find((a) => a.uuid === asset.uuid)
 
         editing.modify(() => {
             const fileUUID = UUID.parse(asset.uuid)
@@ -2039,8 +2042,8 @@ export class OdieAppControl {
 
                 const playfield = instrument as PlayfieldDeviceBoxAdapter
                 const { editing, boxGraph } = this.studio.project
-                const allSamples = await (this.studio.sampleService as any).collectAllFiles()
-                const fullAsset = allSamples.find((a: any) => a.uuid === asset.uuid)
+                const allSamples = await this.studio.sampleService.collectAllFiles()
+                const fullAsset = (allSamples as unknown as Array<{ uuid: string, duration: number }>).find((a) => a.uuid === asset.uuid)
 
                 editing.modify(() => {
                     const fileUUID = UUID.parse(asset.uuid)
@@ -2115,20 +2118,20 @@ export class OdieAppControl {
         })
     }
 
-    private trySetParam(targetRoot: any, path: string, val: number): boolean {
+    private trySetParam(targetRoot: unknown, path: string, val: number): boolean {
         if (!targetRoot) return false
         try {
             const parts = path.split('.')
-            let current = targetRoot
+            let current = targetRoot as Record<string, unknown>
             // Traverse
             for (let i = 0; i < parts.length; i++) {
-                current = current[parts[i]]
+                current = current[parts[i]] as Record<string, unknown>
                 if (!current) return false
             }
             // Check if leaf is a Parameter (has setValue)
-            if (current && typeof current.setValue === 'function') {
+            if (current && typeof (current as { setValue?: unknown }).setValue === 'function') {
                 this.studio.project.editing.modify(() => {
-                    current.setValue(val)
+                    (current as { setValue(v: number): void }).setValue(val)
                 })
                 return true
             }
@@ -2136,5 +2139,37 @@ export class OdieAppControl {
         } catch (e) {
             return false
         }
+    }
+
+    /**
+     * Helper to extract parameters from a device adapter.
+     */
+    private extractParameters(device: DeviceAdapterWithParams): string[] {
+        const keys: string[] = []
+        if (!device || !device.namedParameter) return keys
+
+        const walk = (node: unknown, path: string = "") => {
+            if (!node) return
+            const n = node as Record<string, unknown>
+            // If it's a Parameter (has setValue)
+            if (typeof n.setValue === "function") {
+                keys.push(path)
+                return
+            }
+            // Recurse
+            for (const key of Object.keys(n)) {
+                // simple loop over keys
+                // Skip internal properties if needed, but namedParameter usually clean
+                const child = n[key]
+                const subPath = path ? `${path}.${key}` : key
+                // avoid cycling or huge trees
+                if (typeof child === "object" && child !== null) {
+                    walk(child, subPath)
+                }
+            }
+        }
+
+        walk(device.namedParameter)
+        return keys
     }
 }
