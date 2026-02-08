@@ -569,7 +569,7 @@ export class OdieAppControl {
     async splitRegion(trackName: string, time?: number): Promise<ToolResult> {
         // Default to current playhead if no time specified
         // FIX: Convert 1-based Bar to PPQN (0-based) using robust helper
-        const splitTime = isDefined(time) ? PPQN.fromSignature(time - 1, 1) : this.transport.position
+        const splitTime = isDefined(time) ? this.barToPPQN(time) : this.transport.position
 
         return this.findRegion(trackName, splitTime).match<Promise<ToolResult>>({
             some: async (region) => {
@@ -737,7 +737,7 @@ export class OdieAppControl {
                         box.position.setValue(noteStart)
                         box.duration.setValue(noteDuration)
                         box.pitch.setValue(note.pitch)
-                        // Fix: Velocity is passed as raw value (0-127)
+                        // Velocity is normalized (0.0-1.0)
                         box.velocity.setValue(note.velocity)
                     })
                 })
@@ -1806,9 +1806,10 @@ export class OdieAppControl {
             for (const n of notes) {
                 NoteEventBox.create(boxGraph, UUID.generate(), box => {
                     box.events.refer(eventCollection.events)
-                    // FIX: Relative position
-                    box.position.setValue(PPQN.fromSignature(n.startTime - 1, 1) - PPQN.fromSignature(minNoteBar - 1, 1))
-                    box.duration.setValue(PPQN.fromSignature(n.duration, 1))
+                    // FIX: Relative position using helper
+                    const relStart = this.barToPPQN(n.startTime) - this.barToPPQN(minNoteBar)
+                    box.position.setValue(relStart)
+                    box.duration.setValue(n.duration * 4.0)
                     box.pitch.setValue(n.pitch)
                     box.velocity.setValue(n.velocity)
                 })
@@ -1817,8 +1818,10 @@ export class OdieAppControl {
             // 4. Create Region Box
             const regionUuid = UUID.generate()
             NoteRegionBox.create(boxGraph, regionUuid, box => {
+                const duration = PPQN.fromSignature(maxNoteBarEnd - minNoteBar, 1)
                 box.position.setValue(PPQN.fromSignature(minNoteBar - 1, 1))
-                box.duration.setValue(PPQN.fromSignature(maxNoteBarEnd - minNoteBar, 1))
+                box.duration.setValue(duration)
+                box.loopDuration.setValue(duration) // Fix: Set loop duration
                 box.label.setValue(label)
 
                 box.events.refer(eventCollection.owners)
@@ -1833,6 +1836,10 @@ export class OdieAppControl {
         return { success: true, message: `Created Note Clip '${label}' on '${trackName}'` }
     }
 
+    private barToPPQN(bar: number): number {
+        return (bar - 1) * 4.0;
+    }
+
     async addNote(trackName: string, pitch: number, start: number, duration: number, velocity: number): Promise<ToolResult> {
         const adapterMeta = this.findAudioUnitAdapter(trackName)
         if (adapterMeta.isEmpty()) return { success: false, reason: `Track '${trackName}' not found` }
@@ -1840,8 +1847,8 @@ export class OdieAppControl {
 
         // 1. Convert 1-based Bars to PPQN
         // Assuming 4/4 signature for simplified logic, or use PPQN helper
-        const ppqnStart = (start - 1) * 4
-        const ppqnDuration = duration * 4
+        const ppqnStart = this.barToPPQN(start)
+        const ppqnDuration = duration * 4.0 // Duration is length, not position, so * 4 is correct (or barToPPQN(duration + 1))
 
         // 2. Find Target Region
         // We use our helper findRegion (which expects PPQN)
@@ -1962,7 +1969,6 @@ export class OdieAppControl {
         return (assets as unknown as { uuid: string, name: string }[]).map(a => ({ uuid: a.uuid, name: a.name }))
     }
 
-    /** Helper to robustly find the first track lane from an adapter */
     /** Helper to robustly find the first track lane from an adapter */
     private findFirstTrack(adapter: AudioUnitBoxAdapter): TrackBoxAdapter | undefined {
         const tracks = adapter.tracks.values()

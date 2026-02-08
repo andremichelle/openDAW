@@ -49,16 +49,19 @@ export namespace ClipboardManager {
     }
 
     export const install = <E extends AnyEntry>(element: HTMLElement, handler: ClipboardHandler<E>): Subscription => {
+        const noClient: Client = {clientX: 0, clientY: 0}
         const writeEntry = (entry: E): void => {
             fallbackEntry = Option.wrap(entry)
             navigator.clipboard?.writeText(encode(entry)).catch(() => {})
         }
         const performCopy = (): boolean => {
+            if (!handler.canCopy(noClient)) {return false}
             const entry = handler.copy()
             entry.ifSome(writeEntry)
             return entry.nonEmpty()
         }
         const performCut = (): boolean => {
+            if (!handler.canCut(noClient)) {return false}
             const entry = handler.cut()
             entry.ifSome(writeEntry)
             return entry.nonEmpty()
@@ -69,16 +72,24 @@ export namespace ClipboardManager {
                 const text = Option.wrap(rawText)
                 const entry = text.flatMap(decode)
                 if (entry.nonEmpty()) {
+                    if (!handler.canPaste(entry.unwrap(), noClient)) {return}
                     handler.paste(entry.unwrap())
                 } else {
-                    fallbackEntry.ifSome(entry => handler.paste(entry))
+                    fallbackEntry.ifSome(entry => {
+                        if (!handler.canPaste(entry, noClient)) {return}
+                        handler.paste(entry)
+                    })
                 }
             } catch (_error) {
-                fallbackEntry.ifSome(entry => handler.paste(entry))
+                fallbackEntry.ifSome(entry => {
+                    if (!handler.canPaste(entry, noClient)) {return}
+                    handler.paste(entry)
+                })
             }
         }
         return Terminable.many(
             Events.subscribe(element, "copy", (event: ClipboardEvent) => {
+                if (!handler.canCopy(noClient)) {return}
                 handler.copy().ifSome(entry => {
                     event.preventDefault()
                     event.stopPropagation()
@@ -88,6 +99,7 @@ export namespace ClipboardManager {
                 })
             }),
             Events.subscribe(element, "cut", (event: ClipboardEvent) => {
+                if (!handler.canCut(noClient)) {return}
                 handler.cut().ifSome(entry => {
                     event.preventDefault()
                     event.stopPropagation()
@@ -101,10 +113,12 @@ export namespace ClipboardManager {
                 const text = event.clipboardData?.getData("text/plain") ?? ""
                 const entry = decode(text)
                 if (entry.nonEmpty()) {
+                    if (!handler.canPaste(entry.unwrap(), noClient)) {return}
                     event.preventDefault()
                     handler.paste(entry.unwrap())
                 } else {
                     fallbackEntry.ifSome(entry => {
+                        if (!handler.canPaste(entry, noClient)) {return}
                         event.preventDefault()
                         handler.paste(entry)
                     })

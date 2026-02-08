@@ -3,8 +3,8 @@ import type { StudioService } from "../../service/StudioService"
 import { AIService } from "./services/AIService"
 
 
-import type { GenUIPayload } from "./genui/GenUISchema"
-import { JsonValue, Message } from "./services/llm/LLMProvider"
+
+import type { JsonValue, Message } from "./services/llm/LLMProvider"
 import { OdieAppControl } from "./services/OdieAppControl"
 import { odiePersona, OdieContext } from "./services/OdiePersonaService"
 import { chatHistory } from "./services/ChatHistoryService"
@@ -207,9 +207,7 @@ export class OdieService {
         this.studio = studio
         this.ai.setStudio(studio)
         try {
-            if (!OdieAppControl) {
-                throw new Error("OdieAppControl is undefined");
-            }
+            // OdieAppControl is imported class, check unnecessary
             this.appControl = new OdieAppControl(studio)
         } catch (e) {
             console.error("Failed to load OdieAppControl:", e);
@@ -226,7 +224,7 @@ export class OdieService {
 
                 // Add User Msg IMMEDIATELY
                 const userMsg: Message = {
-                    id: Date.now().toString(), role: "user", content: text, timestamp: Date.now()
+                    id: safeUUID(), role: "user", content: text, timestamp: Date.now()
                 }
                 const currentStart = this.messages.getValue()
                 this.messages.setValue([...currentStart, userMsg])
@@ -237,7 +235,7 @@ export class OdieService {
                 if (result) {
                     // Add System Msg (Feedback)
                     const sysMsg: Message = {
-                        id: (Date.now() + 1).toString(), role: "model", content: result, timestamp: Date.now()
+                        id: safeUUID(), role: "model", content: result, timestamp: Date.now()
                     }
                     const currentPostExec = this.messages.getValue()
                     this.messages.setValue([...currentPostExec, sysMsg])
@@ -267,7 +265,7 @@ export class OdieService {
                 if (commandRegistry.has(cmd)) {
                     // UI Feedback: Show user message
                     const userMsg: Message = {
-                        id: Date.now().toString(), role: "user", content: text, timestamp: Date.now()
+                        id: safeUUID(), role: "user", content: text, timestamp: Date.now()
                     }
                     const currentStart = this.messages.getValue()
                     this.messages.setValue([...currentStart, userMsg])
@@ -278,7 +276,7 @@ export class OdieService {
 
                     if (isDefined(result)) {
                         const sysMsg: Message = {
-                            id: (Date.now() + 1).toString(), role: "model", content: result, timestamp: Date.now()
+                            id: safeUUID(), role: "model", content: result, timestamp: Date.now()
                         }
                         const currentPostExec = this.messages.getValue()
                         this.messages.setValue([...currentPostExec, sysMsg])
@@ -426,14 +424,16 @@ export class OdieService {
                     if (this.appControl) {
                         for (const call of finalMsg.tool_calls) {
                             try {
+                                if (!this.studio) throw new Error("Studio not initialized")
+
                                 const executorContext: ExecutorContext = {
-                                    studio: this.studio!,
+                                    studio: this.studio,
                                     appControl: this.appControl,
-                                    setGenUiPayload: (payload: JsonValue) => this.genUiPayload.setValue(payload as unknown as GenUIPayload),
+                                    setGenUiPayload: (payload: any) => this.genUiPayload.setValue(payload),
                                     setSidebarVisible: (visible: boolean) => this.visible.setValue(visible),
                                     contextState: this.ai.contextService.state.getValue() as unknown as Record<string, JsonValue>,
-                                    recentMessages: (this.messages.getValue() as unknown) as Message[],
-                                    ai: (this.ai as unknown) as AIService
+                                    recentMessages: this.messages.getValue(),
+                                    ai: this.ai
                                 }
 
                                 const result = await this.#toolExecutor.execute(call, executorContext)

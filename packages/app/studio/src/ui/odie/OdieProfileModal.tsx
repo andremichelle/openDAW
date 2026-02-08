@@ -55,6 +55,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
                 render()
             }
             reader.readAsDataURL(file)
+            fileInput.value = "" // Fix: Reset input to allow re-selection
         }
     }
 
@@ -88,7 +89,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
 
         if (activeTab === "overview") {
             const hasName = profile.name.trim().length > 0
-            const displayRole = profile.identity.role.charAt(0).toUpperCase() + profile.identity.role.slice(1).replace("_", " ")
+            const displayRole = profile.identity.role.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
             const displayGenre = profile.sonicFingerprint.primaryGenre || "Unknown Genre"
             const influences = profile.influences.slice(0, 3).join(", ") || "None Listed"
 
@@ -136,7 +137,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
                         </div>
                     </div>
                     <div className="profile-footer">
-                        <div className="issued">CREATED: 2026.01.07</div>
+                        <div className="issued">CREATED: {new Date(profile.createdAt || Date.now()).toLocaleDateString().replace(/\//g, '.')}</div>
                     </div>
                 </div>
             </div>
@@ -149,7 +150,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
                 </div>
                 <div className="section">
                     <label className="label">Primary Role</label>
-                    <select className="native-input" onchange={(e: Event) => userService.update({ identity: { ...profile.identity, role: (e.target as HTMLSelectElement).value as UserIdentity["role"] } })}>
+                    <select className="native-input" onChange={(e: any) => userService.update({ identity: { ...profile.identity, role: (e.target as HTMLSelectElement).value as UserIdentity["role"] } })}>
                         {["producer", "songwriter", "mixer", "sound_designer", "artist"].map(r =>
                             <option value={r} selected={profile.identity.role === r}>{r.toUpperCase().replace("_", " ")}</option>
                         )}
@@ -192,7 +193,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
             tabContent = <div>
                 <div className="section">
                     <label className="label">Workflow Preference</label>
-                    <select className="native-input" onchange={(e: any) => userService.update({ techRider: { ...profile.techRider, workflow: e.target.value } })}>
+                    <select className="native-input" onChange={(e: any) => userService.update({ techRider: { ...profile.techRider, workflow: (e.target as HTMLSelectElement).value as any } })}>
                         <option value="in-the-box" selected={profile.techRider.workflow === "in-the-box"}>In-The-Box (Software Only)</option>
                         <option value="hybrid" selected={profile.techRider.workflow === "hybrid"}>Hybrid (Hardware + Software)</option>
                         <option value="outboard-heavy" selected={profile.techRider.workflow === "outboard-heavy"}>Outboard Heavy (Analog)</option>
@@ -206,7 +207,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
                     </div>
                     <textarea className="input-textarea"
                         placeholder="List your key gear..."
-                        onchange={(e: Event) => userService.update({ techRider: { ...profile.techRider, integrations: (e.target as HTMLTextAreaElement).value.split(",").map((s: string) => s.trim()) } })}
+                        onChange={(e: any) => userService.update({ techRider: { ...profile.techRider, integrations: (e.target as HTMLTextAreaElement).value.split(",").map((s: string) => s.trim()) } })}
                     >{profile.techRider.integrations.join(", ")}</textarea>
                 </div>
             </div>
@@ -217,14 +218,14 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
                     <label className="label">Current Goals</label>
                     <textarea className="input-textarea" style={{ height: "120px" }}
                         placeholder="What are you working towards? (e.g. Finish an EP, Learn Sound Design)"
-                        onchange={(e: Event) => userService.update({ goals: (e.target as HTMLTextAreaElement).value.split(",").map((s: string) => s.trim()) })}
+                        onChange={(e: any) => userService.update({ goals: (e.target as HTMLTextAreaElement).value.split(",").map((s: string) => s.trim()) })}
                     >{profile.goals.join(", ")}</textarea>
                 </div>
             </div>
         }
 
         // -- LAYOUT ASSEMBLY --
-        const showMenu = showAvatarMenu$.getValue()
+
         const avatarStyle = {
             backgroundImage: `url(${profile.avatar || DefaultAvatarImg})`,
             backgroundSize: 'cover',
@@ -234,13 +235,19 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
 
         const avatarSection = <div
             className="avatar-container"
-            onmouseenter={() => showAvatarMenu$.setValue(true)}
-            onmouseleave={() => showAvatarMenu$.setValue(false)}
+            onmouseenter={() => {
+                const menu = document.getElementById('odie-avatar-menu');
+                if (menu) menu.style.display = 'block';
+            }}
+            onmouseleave={() => {
+                const menu = document.getElementById('odie-avatar-menu');
+                if (menu) menu.style.display = 'none';
+            }}
         >
             <div className="avatar" style={avatarStyle}>
             </div>
 
-            {showMenu && <div className="avatar-menu">
+            <div id="odie-avatar-menu" className="avatar-menu" style={{ display: 'none' }}>
                 <div className="menu-item" onclick={() => fileInput.click()}>
                     <div className="label">Upload Photo</div>
                     <div className="sub">JPG/PNG (Max 2MB)</div>
@@ -251,7 +258,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
                 }}>
                     <div className="label">Remove</div>
                 </div>}
-            </div>}
+            </div>
         </div>
 
         const info = <div>

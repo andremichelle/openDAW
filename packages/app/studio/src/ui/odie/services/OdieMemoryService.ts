@@ -16,7 +16,7 @@ const DB_NAME = 'odie_brain_v1';
 const STORE_NAME = 'facts';
 
 class OdieMemoryService {
-    private dbPromise: Promise<IDBPDatabase> | null = null;
+    private dbPromise: Promise<IDBPDatabase | undefined> | null = null;
 
     constructor() {
         // Initialize DB only on client side
@@ -36,8 +36,7 @@ class OdieMemoryService {
             },
         }).catch((err) => {
             console.warn('[OdieMemory] IndexedDB unavailable, memory disabled:', err);
-            this.dbPromise = null;
-            return null as unknown as IDBPDatabase;
+            return undefined;
         });
     }
 
@@ -49,6 +48,7 @@ class OdieMemoryService {
 
         try {
             const db = await this.dbPromise;
+            if (!db) return "";
             const fact: OdieFact = {
                 id: generateId(),
                 content,
@@ -74,6 +74,7 @@ class OdieMemoryService {
     async queryFacts(contextTags: string[]): Promise<OdieFact[]> {
         if (!this.dbPromise) return [];
         const db = await this.dbPromise;
+        if (!db) return []; // Add null check for db
         const tx = db.transaction(STORE_NAME, 'readonly');
         const index = tx.store.index('tags');
 
@@ -86,7 +87,7 @@ class OdieMemoryService {
 
         await Promise.all(searchTags.map(async (tag) => {
             const matches = await index.getAll(IDBKeyRange.only(tag));
-            matches.forEach(fact => uniqueFacts.set(fact.id, fact));
+            for (const fact of matches) uniqueFacts.set(fact.id, fact);
         }));
 
         const results = Array.from(uniqueFacts.values())
@@ -101,6 +102,7 @@ class OdieMemoryService {
     async getAllFacts(): Promise<OdieFact[]> {
         if (!this.dbPromise) return [];
         const db = await this.dbPromise;
+        if (!db) return [];
         return await db.getAll(STORE_NAME);
     }
 
@@ -110,6 +112,7 @@ class OdieMemoryService {
     async wipeMemory(): Promise<void> {
         if (!this.dbPromise) return;
         const db = await this.dbPromise;
+        if (!db) return;
         await db.clear(STORE_NAME);
         console.log("[OdieMemory] Brain Wiped.");
     }
