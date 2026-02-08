@@ -62,7 +62,7 @@ export const renderRegions = (context: CanvasRenderingContext2D,
                 : // for no-stretched audio region
                 Math.min(actualComplete, next?.position ?? Number.POSITIVE_INFINITY)
             const x0Int = Math.floor(range.unitToX(Math.max(position, unitMin))) * dpr
-            const x1Int = Math.max(Math.floor(range.unitToX(Math.min(complete, unitMax))) * dpr, x0Int + dpr)
+            const x1Int = Math.max(Math.floor(range.unitToX(Math.min(complete, unitMax)) - 1) * dpr, x0Int + dpr)
             const xnInt = x1Int - x0Int
             const {labelColor, labelBackground, contentColor, contentBackground, loopStrokeColor} =
                 RegionPaintBucket.create(region, region.isSelected && !filterSelected, trackDisabled)
