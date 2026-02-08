@@ -2,7 +2,7 @@ import css from "./OdieProfile_v2.sass?inline"
 
 import { createElement } from "@opendaw/lib-jsx"
 import { OdieModalFrame } from "./components/OdieModalFrame"
-import { userService } from "./services/UserService"
+import { userService, UserLevel, UserIdentity } from "./services/UserService"
 import { DefaultObservableValue, ObservableValue, Terminator } from "@opendaw/lib-std"
 import { TextInput } from "@/ui/components/TextInput"
 import { Colors } from "@opendaw/studio-enums"
@@ -13,6 +13,8 @@ const className = Html.adoptStyleSheet(css, "OdieProfileModal")
 
 export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
     const lifecycle = new Terminator()
+    let renderLifecycle = new Terminator()
+    // lifecycle.own(renderLifecycle) // REMOVED: Prevent leak
 
     // Optimistic Models
     const nameModel = new DefaultObservableValue<string>(userService.dna.getValue().name)
@@ -39,9 +41,14 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
 
     // File Input for Avatar
     const fileInput = <input type="file" accept="image/png, image/jpeg" style={{ display: "none" }} /> as HTMLInputElement
-    fileInput.onchange = (e: any) => {
-        const file = e.target.files[0]
+    fileInput.onchange = (e: Event) => {
+        const target = e.target as HTMLInputElement
+        const file = target.files?.[0]
         if (file) {
+            if (file.size > 2 * 1024 * 1024) {
+                alert("File is too large. Please select an image under 2MB.")
+                return
+            }
             const reader = new FileReader()
             reader.onload = (evt) => {
                 userService.update({ avatar: evt.target?.result as string })
@@ -54,6 +61,11 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
     const getProfile = () => userService.dna.getValue()
 
     const render = () => {
+        // Fix: Terminate previous render subscriptions to prevent leaks
+        renderLifecycle.terminate()
+        renderLifecycle = new Terminator()
+        // lifecycle.own(renderLifecycle) // REMOVED: Prevent leak
+
         container.innerHTML = ""
         const profile = getProfile()
         const activeTab = activeTab$.getValue()
@@ -133,11 +145,11 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
             tabContent = <div>
                 <div className="section">
                     <label className="label">Artist Name / Alias</label>
-                    <TextInput lifecycle={lifecycle} model={nameModel} className="profile-input" placeholder="Artist Name" />
+                    <TextInput lifecycle={renderLifecycle} model={nameModel} className="profile-input" placeholder="Artist Name" />
                 </div>
                 <div className="section">
                     <label className="label">Primary Role</label>
-                    <select className="native-input" onchange={(e: any) => userService.update({ identity: { ...profile.identity, role: e.target.value } })}>
+                    <select className="native-input" onchange={(e: Event) => userService.update({ identity: { ...profile.identity, role: (e.target as HTMLSelectElement).value as UserIdentity["role"] } })}>
                         {["producer", "songwriter", "mixer", "sound_designer", "artist"].map(r =>
                             <option value={r} selected={profile.identity.role === r}>{r.toUpperCase().replace("_", " ")}</option>
                         )}
@@ -145,14 +157,14 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
                 </div>
                 <div className="section">
                     <label className="label">Location</label>
-                    <TextInput lifecycle={lifecycle} model={locationModel} className="profile-input" placeholder="Location" />
+                    <TextInput lifecycle={renderLifecycle} model={locationModel} className="profile-input" placeholder="Location" />
                 </div>
                 <div className="section">
                     <label className="label">Experience Level</label>
                     <div className="level-grid">
                         {["beginner", "intermediate", "advanced", "pro"].map(l => (
                             <div className={`level-btn ${profile.level === l ? 'active' : ''}`}
-                                onclick={() => { userService.update({ level: l as any }); render() }}>
+                                onclick={() => { userService.update({ level: l as UserLevel }); render() }}>
                                 {l.charAt(0).toUpperCase() + l.slice(1)}
                             </div>
                         ))}
@@ -164,15 +176,15 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
             tabContent = <div>
                 <div className="section">
                     <label className="label">Primary Genre</label>
-                    <TextInput lifecycle={lifecycle} model={genreModel} className="profile-input" placeholder="e.g. Synthpop" />
+                    <TextInput lifecycle={renderLifecycle} model={genreModel} className="profile-input" placeholder="e.g. Synthpop" />
                 </div>
                 <div className="section">
                     <label className="label">Vibe Keywords (Comma separated)</label>
-                    <TextInput lifecycle={lifecycle} model={vibesModel} className="profile-input" placeholder="e.g. Dark, Cinematic, Retro" />
+                    <TextInput lifecycle={renderLifecycle} model={vibesModel} className="profile-input" placeholder="e.g. Dark, Cinematic, Retro" />
                 </div>
                 <div className="section">
                     <label className="label">Key Influences</label>
-                    <TextInput lifecycle={lifecycle} model={influencesModel} className="profile-input" placeholder="e.g. Depeche Mode, Kraftwerk" />
+                    <TextInput lifecycle={renderLifecycle} model={influencesModel} className="profile-input" placeholder="e.g. Depeche Mode, Kraftwerk" />
                 </div>
             </div>
         }
@@ -194,7 +206,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
                     </div>
                     <textarea className="input-textarea"
                         placeholder="List your key gear..."
-                        onchange={(e: any) => userService.update({ techRider: { ...profile.techRider, integrations: e.target.value.split(",").map((s: string) => s.trim()) } })}
+                        onchange={(e: Event) => userService.update({ techRider: { ...profile.techRider, integrations: (e.target as HTMLTextAreaElement).value.split(",").map((s: string) => s.trim()) } })}
                     >{profile.techRider.integrations.join(", ")}</textarea>
                 </div>
             </div>
@@ -205,7 +217,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
                     <label className="label">Current Goals</label>
                     <textarea className="input-textarea" style={{ height: "120px" }}
                         placeholder="What are you working towards? (e.g. Finish an EP, Learn Sound Design)"
-                        onchange={(e: any) => userService.update({ goals: e.target.value.split(",").map((s: string) => s.trim()) })}
+                        onchange={(e: Event) => userService.update({ goals: (e.target as HTMLTextAreaElement).value.split(",").map((s: string) => s.trim()) })}
                     >{profile.goals.join(", ")}</textarea>
                 </div>
             </div>
@@ -287,6 +299,7 @@ export const OdieProfileModal = ({ onClose }: { onClose: () => void }) => {
         width: "850px",
         height: "600px",
         onClose: () => {
+            renderLifecycle.terminate()
             lifecycle.terminate()
             onClose()
         },

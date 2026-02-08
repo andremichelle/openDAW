@@ -1,9 +1,9 @@
 import { createElement } from "@opendaw/lib-jsx"
-import { Lifecycle } from "@opendaw/lib-std"
-import { UIComponent, UIContainer, UIKnob, UISwitch } from "./GenUISchema"
+import { Lifecycle, Nullable } from "@opendaw/lib-std"
+import { UIComponent, UIContainer, UIKnob, UISwitch, UILabel } from "./GenUISchema"
 import { ParameterLabel } from "@/ui/components/ParameterLabel"
 import { RelativeUnitValueDragging } from "@/ui/wrapper/RelativeUnitValueDragging"
-import { AutomatableParameterFieldAdapter } from "@opendaw/studio-adapters"
+import { AutomatableParameterFieldAdapter, DeviceBoxAdapter } from "@opendaw/studio-adapters"
 
 // --- STYLES ---
 const containerStyle = (layout: "row" | "column" | "grid", gap: number = 4) => ({
@@ -29,16 +29,16 @@ const getMockAdapter = (paramName: string): AutomatableParameterFieldAdapter<num
         value: 0.5,
         displayValue: "50%",
         normalizedValue: 0.5,
-        catchupAndSubscribeControlSources: (_cb: any) => ({ terminate: () => { } }),
-        catchupAndSubscribe: (_cb: any) => ({ terminate: () => { } }),
-        subscribe: (_cb: any) => ({ terminate: () => { } }),
-        stringMapping: { x: (_val: any) => ({ value: "50", unit: "%" }) },
-        valueMapping: { y: (val: any) => val },
+        catchupAndSubscribeControlSources: (_cb: unknown) => ({ terminate: () => { } }),
+        catchupAndSubscribe: (_cb: unknown) => ({ terminate: () => { } }),
+        subscribe: (_cb: unknown) => ({ terminate: () => { } }),
+        stringMapping: { x: (_val: unknown) => ({ value: "50", unit: "%" }) },
+        valueMapping: { y: (val: number) => val },
         getControlledUnitValue: () => 0.5,
-    } as any
+    } as unknown as AutomatableParameterFieldAdapter<number>
 }
 
-type ParamResolver = (target: string) => AutomatableParameterFieldAdapter<number> | null
+type ParamResolver = (target: string) => Nullable<AutomatableParameterFieldAdapter<number>>
 
 export const GenUIRenderer = (props: { lifecycle: Lifecycle, component: UIComponent, resolver?: ParamResolver, key?: string | number }) => {
     const { lifecycle, component, resolver } = props
@@ -53,13 +53,13 @@ export const GenUIRenderer = (props: { lifecycle: Lifecycle, component: UICompon
         case "switch":
             return <GenUISwitch lifecycle={lifecycle} component={component as UISwitch} />
         case "label": {
-            const label = component as any
-            return <div style={{ ...label.style }} className={`genui-label-${label.variant || "body"}`}>{label.text}</div>
+            const label = component as UILabel
+            return <div style={(label.style || {}) as any} className={`genui-label-${label.variant || "body"}`}>{label.text}</div>
         }
         case "meter":
             return <div style={{ width: "10px", height: "50px", background: "#333" }}></div>
         default:
-            return <div style={{ color: "red" }}>Unknown Component: {(component as any).type}</div>
+            return <div style={{ color: "red" }}>Unknown Component: {(component as unknown as { type: string }).type}</div>
     }
 }
 
@@ -74,13 +74,11 @@ const GenUIContainer = ({ lifecycle, component, resolver }: { lifecycle: Lifecyc
 }
 
 const GenUIKnob = ({ lifecycle, component, resolver }: { lifecycle: Lifecycle, component: UIKnob, resolver?: ParamResolver }) => {
-    let adapter: AutomatableParameterFieldAdapter<number> = null as any
+    let adapter: Nullable<AutomatableParameterFieldAdapter<number>> = null
 
     if (resolver) {
-        const found = resolver(component.targetParam)
-        if (found) {
-            adapter = found
-        } else {
+        adapter = resolver(component.targetParam)
+        if (!adapter) {
             console.warn(`[GenUI] Could not resolve parameter: ${component.targetParam}`)
         }
     }
@@ -93,13 +91,13 @@ const GenUIKnob = ({ lifecycle, component, resolver }: { lifecycle: Lifecycle, c
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
             <span style={{ fontSize: "10px", marginBottom: "2px", opacity: "0.7" }}>{component.label || component.targetParam}</span>
             <RelativeUnitValueDragging lifecycle={lifecycle}
-                parameter={adapter as any}
+                parameter={adapter}
                 editing={{} as any}
                 supressValueFlyout={false}>
                 <ParameterLabel
                     lifecycle={lifecycle}
-                    adapter={null as any}
-                    parameter={adapter as any}
+                    adapter={adapter as unknown as DeviceBoxAdapter}
+                    parameter={adapter}
                     midiLearning={{} as any}
                     editing={{} as any}
                     framed={true}

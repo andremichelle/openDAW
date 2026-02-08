@@ -1,5 +1,5 @@
 import { ObservableValue, DefaultObservableValue } from "@opendaw/lib-std"
-import { LLMProvider, Message, ProviderConfig, LLMTool } from "./LLMProvider"
+import { LLMProvider, Message, ProviderConfig, LLMTool, ToolCall } from "./LLMProvider"
 import { checkModelTier } from "./ModelPolicy"
 import { ollamaInspector } from "./OllamaCapabilityService"
 
@@ -266,10 +266,22 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
                 const body: any = {
                     model: model,
-                    messages: messages.map(m => ({
-                        role: m.role === "model" ? "assistant" : (m.role === "system" ? "system" : "user"),
-                        content: m.content
-                    })),
+                    messages: messages.map(m => {
+                        let role = "user"
+                        if (m.role === "model") role = "assistant"
+                        else if (m.role === "system") role = "system"
+                        else if (m.role === "function") role = "function"
+                        else if (m.role !== "user") {
+                            // Default fallback/warning for safety
+                            console.warn("Unknown role:", m.role)
+                            role = "user"
+                        }
+
+                        const msg: any = { role, content: m.content }
+                        if (m.name) msg.name = m.name
+                        if (m.tool_calls) msg.tool_calls = m.tool_calls
+                        return msg
+                    }),
                     stream: true
                 }
 
@@ -402,7 +414,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
                         console.error("Failed to parse tool arguments", e)
                         return null
                     }
-                }).filter(t => t !== null) as any[]
+                }).filter(t => t !== null) as ToolCall[]
 
                 if (!accumulatedText && finalToolCalls.length === 0) {
                     this.debugLog += `[WARN] No content extracted!\n`
@@ -443,7 +455,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
             }
         }
 
-        run()
+        run().catch(err => {
+            console.error("[OpenAICompatibleProvider] Stream Error:", err)
+            responseText.setValue({ content: "**System Error**: Failed to initialize stream." })
+        })
         return responseText
     }
 

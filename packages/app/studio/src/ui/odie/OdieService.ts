@@ -3,7 +3,8 @@ import type { StudioService } from "../../service/StudioService"
 import { AIService } from "./services/AIService"
 
 
-import { Message } from "./services/llm/LLMProvider"
+import type { GenUIPayload } from "./genui/GenUISchema"
+import { JsonValue, Message } from "./services/llm/LLMProvider"
 import { OdieAppControl } from "./services/OdieAppControl"
 import { odiePersona, OdieContext } from "./services/OdiePersonaService"
 import { chatHistory } from "./services/ChatHistoryService"
@@ -104,18 +105,24 @@ export class OdieService {
     readonly #chatTerminator = new Terminator()
 
     constructor() {
-        if (typeof window !== "undefined" && (import.meta as any).env?.DEV) {
-            ; (window as any).odie = this;
+        const dev = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV
+        if (typeof window !== "undefined" && dev) {
+            ; (window as unknown as { odie: OdieService }).odie = this;
         }
 
         try {
             // Default to chat view
             this.viewState.setValue("chat")
 
-            // Auto-Save History
+            // Auto-Save History (Debounced)
+            let saveTimeout: ReturnType<typeof setTimeout>
             this.#terminator.own(this.messages.subscribe(() => {
-                this.saveCurrentSession()
+                clearTimeout(saveTimeout)
+                saveTimeout = setTimeout(() => this.saveCurrentSession(), 5000)
             }))
+            this.#terminator.own({
+                terminate: () => clearTimeout(saveTimeout)
+            })
 
             // Model Indicator Sync
             this.#terminator.own(this.ai.activeProviderId.subscribe(observer => {
@@ -149,7 +156,7 @@ export class OdieService {
 
             // History Sync
             this.activeSessionId = null
-            chatHistory.sessions.subscribe(observer => {
+            this.#terminator.own(chatHistory.sessions.subscribe(observer => {
                 if (isDefined(this.activeSessionId)) {
                     const sessions = observer.getValue()
                     const exists = sessions.find((s: { id: string }) => s.id === this.activeSessionId)
@@ -157,7 +164,7 @@ export class OdieService {
                         this.startNewChat()
                     }
                 }
-            })
+            }))
 
         } catch (e) {
             console.error("🔥 OdieService Constructor CRASH:", e)
@@ -422,11 +429,11 @@ export class OdieService {
                                 const executorContext: ExecutorContext = {
                                     studio: this.studio!,
                                     appControl: this.appControl,
-                                    ai: this.ai,
-                                    setGenUiPayload: (payload: unknown) => this.genUiPayload.setValue(payload as any),
+                                    setGenUiPayload: (payload: JsonValue) => this.genUiPayload.setValue(payload as unknown as GenUIPayload),
                                     setSidebarVisible: (visible: boolean) => this.visible.setValue(visible),
-                                    contextState: this.ai.contextService.state.getValue(),
-                                    recentMessages: this.messages.getValue()
+                                    contextState: this.ai.contextService.state.getValue() as unknown as Record<string, JsonValue>,
+                                    recentMessages: (this.messages.getValue() as unknown) as Message[],
+                                    ai: (this.ai as unknown) as AIService
                                 }
 
                                 const result = await this.#toolExecutor.execute(call, executorContext)
@@ -447,7 +454,7 @@ export class OdieService {
                                 }
 
                                 if (result.analysisData) {
-                                    analysisResults.push({ name: call.name, result: result.analysisData })
+                                    analysisResults.push({ name: call.name, result: typeof result.analysisData === 'string' ? result.analysisData : JSON.stringify(result.analysisData) })
                                 }
                             } catch (e) {
                                 const errMsg = (e instanceof Error) ? e.message : String(e)
@@ -483,7 +490,7 @@ export class OdieService {
 
                         const nextHistory = [...history, finalMsg, feedbackMsg]
 
-                        const nextStream = this.ai.streamChat(nextHistory, undefined, OdieTools, async () => {
+                        const nextStream = await this.ai.streamChat(nextHistory, undefined, OdieTools, async () => {
                             console.log("Agent turn complete")
                         })
 
@@ -524,7 +531,7 @@ export class OdieService {
                         const nextHistory = [...history, finalMsg, ...functionResponseMsgs]
 
                         let lastStreamContent = ""
-                        const nextStream = this.ai.streamChat(nextHistory, undefined, renderOnlyTools, async (finalResponse) => {
+                        const nextStream = await this.ai.streamChat(nextHistory, undefined, renderOnlyTools, async (finalResponse) => {
                             if (!lastStreamContent && !finalResponse.content) {
                                 const trackList = this.safeListTracks().filter(t => t !== "Output")
                                 const genUIFallback = `Context needed. Which track would you like to update?\n\n\`\`\`json\n${JSON.stringify({
@@ -776,5 +783,10 @@ export class OdieService {
         } catch (e) {
             console.error("Widget Action Error", e)
         }
+    }
+
+    dispose() {
+        this.#terminator.terminate()
+        this.#chatTerminator.terminate()
     }
 }

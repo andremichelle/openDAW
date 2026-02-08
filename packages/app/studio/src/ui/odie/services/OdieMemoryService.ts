@@ -34,6 +34,10 @@ class OdieMemoryService {
                     store.createIndex('timestamp', 'timestamp');
                 }
             },
+        }).catch((err) => {
+            console.warn('[OdieMemory] IndexedDB unavailable, memory disabled:', err);
+            this.dbPromise = null;
+            return null as unknown as IDBPDatabase;
         });
     }
 
@@ -43,19 +47,24 @@ class OdieMemoryService {
     async saveFact(content: string, tags: string[], source: OdieFact['source'] = 'inference', confidence = 1.0): Promise<string> {
         if (!this.dbPromise) return "";
 
-        const db = await this.dbPromise;
-        const fact: OdieFact = {
-            id: generateId(),
-            content,
-            tags: tags.map(t => t.toLowerCase()),
-            confidence,
-            timestamp: Date.now(),
-            source
-        };
+        try {
+            const db = await this.dbPromise;
+            const fact: OdieFact = {
+                id: generateId(),
+                content,
+                tags: tags.map(t => t.toLowerCase()),
+                confidence,
+                timestamp: Date.now(),
+                source
+            };
 
-        await db.put(STORE_NAME, fact);
-        console.log(`[OdieMemory] Fact Saved`);
-        return fact.id;
+            await db.put(STORE_NAME, fact);
+            console.log(`[OdieMemory] Fact Saved`);
+            return fact.id;
+        } catch (err) {
+            console.warn('[OdieMemory] Failed to save fact:', err);
+            return "";
+        }
     }
 
     /**

@@ -158,7 +158,7 @@ const SmartKnob = ({ payload, onAction, adapter, key: _key }: {
         const deltaY = startY - e.clientY
         const sensitivity = range / 200
 
-        localValue = Math.max(payload.min, Math.min(payload.max, startValue + deltaY * sensitivity))
+        localValue = Math.max(min, Math.min(max, startValue + deltaY * sensitivity))
 
         if (adapter && typeof adapter.setValue === 'function') {
             adapter.setValue(localValue)
@@ -172,7 +172,7 @@ const SmartKnob = ({ payload, onAction, adapter, key: _key }: {
             valueDisplay.textContent = localValue.toFixed(2)
         }
 
-        const safeValue = (localValue - payload.min) / range
+        const safeValue = (localValue - min) / range
         const angleVal = angleMin + safeValue * angleRange
 
         const valueArc = knobContainer.querySelector('.knob-value-arc')

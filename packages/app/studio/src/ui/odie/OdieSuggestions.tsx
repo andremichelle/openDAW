@@ -74,11 +74,11 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
 
         if (service.studio) {
             try {
-                if (service.studio.engine?.isPlaying) {
+                if (service.studio?.engine?.isPlaying) {
                     isPlaying = service.studio.engine.isPlaying.getValue()
                 }
 
-                if (service.studio.hasProfile && service.studio.profile?.project?.rootBoxAdapter) {
+                if (service.studio?.hasProfile && service.studio.profile?.project?.rootBoxAdapter) {
                     hasProject = true
                     const adapters = service.studio.profile.project.rootBoxAdapter.audioUnits.adapters()
                     trackCount = adapters.length
@@ -118,7 +118,7 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
         if (messages.length === 0) {
             suggestions.push({ label: "Ideas", type: "chat", prompt: "Suggest some creative next steps for this song.", icon: "💡" })
         } else {
-            const content = lastMsg?.content.toLowerCase() || ""
+            const content = lastMsg?.content?.toLowerCase() || ""
 
             if (content.includes("track") || content.includes("channel")) {
                 if (trackCount > 0) suggestions.push({ label: "List Tracks", type: "action", prompt: "List all tracks", icon: "📋" })
@@ -159,15 +159,15 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
                 fontWeight: "500",
                 flexShrink: "0"
             }}
-                onmouseenter={(e: any) => {
-                    e.currentTarget.style.background = theme.hover
-                    e.currentTarget.style.transform = "translateY(-1px)"
+                onmouseenter={(e: MouseEvent) => {
+                    (e.currentTarget as HTMLElement).style.background = theme.hover;
+                    (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)";
                 }}
-                onmouseleave={(e: any) => {
-                    e.currentTarget.style.background = theme.bg
-                    e.currentTarget.style.transform = "translateY(0)"
+                onmouseleave={(e: MouseEvent) => {
+                    (e.currentTarget as HTMLElement).style.background = theme.bg;
+                    (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
                 }}
-                onclick={(e: any) => {
+                onclick={(e: MouseEvent) => {
                     const btn = e.currentTarget as HTMLElement
                     btn.style.transform = "scale(0.95)"
                     setTimeout(() => {
@@ -198,7 +198,7 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
 
     render()
 
-        ; (container as any).onDisconnect = () => lifecycle.terminate()
+        ; (container as unknown as { onDisconnect?: () => void }).onDisconnect = () => lifecycle.terminate()
 
     return container
 }
