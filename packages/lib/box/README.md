@@ -115,3 +115,84 @@ When creating a box inside a transaction (`TrackBox.create()`):
 - **Notifications are deferred**: `onAdded`/`onRemoved` fire at `endTransaction()`
 - **Order matters**: Notifications fire in the order changes were made
 - **Adapter creation timing**: Creating an adapter during a transaction means its subscriptions won't receive notifications for changes made earlier in the same transaction (those are caught up via `catchupAndSubscribe`)
+
+## Resource Boxes
+
+Boxes can be marked as resources using the `resource` property. Resources act as endpoints in dependency collection, useful for copy/paste operations.
+
+### Resource Types
+
+| Type | Description | UUID on Copy |
+|------|-------------|--------------|
+| `"external"` | References something outside the project (files, etc.) | Keep original |
+| `"internal"` | Project-level shared resource | Remap to target's existing |
+
+### Usage in BoxSchema
+
+```typescript
+export const AudioFileBox: BoxSchema<Pointers> = {
+    type: "box",
+    class: {...},
+    pointerRules: {...},
+    resource: "external"  // Marks as external resource
+}
+```
+
+### Accessing Resource Type
+
+```typescript
+const box = AudioFileBox.create(graph, uuid)
+console.log(box.resource)  // "external"
+console.log(AudioFileBox.Resource)  // "external" (static property)
+```
+
+## Dependency Collection
+
+The `dependenciesOf` method collects boxes that depend on a given box. This is used for operations like delete and copy.
+
+### Options
+
+```typescript
+dependenciesOf(box: Box, options: {
+    excludeBox?: Predicate<Box>      // Filter out specific boxes
+    alwaysFollowMandatory?: boolean  // Bypass incoming pointer check
+    stopAtResources?: boolean        // Stop traversal at resource boxes
+} = {}): Dependencies
+```
+
+### stopAtResources Behavior
+
+When `stopAtResources: true`:
+
+1. **Resource boxes ARE added** to the dependency set (they need to be copied)
+2. **Children are included**: Incoming edges to FIELDS (`!address.isBox()`) are followed
+3. **Users are excluded**: Incoming edges to the BOX itself (`address.isBox()`) are NOT followed
+4. **Outgoing edges are skipped**: Resources don't have dependencies we need to follow
+
+### Example: AudioRegion → AudioFileBox ← TransientMarker
+
+```typescript
+// Scenario:
+// Region → AudioFileBox (external resource)
+// TransientMarker → AudioFileBox.children (points to FIELD)
+// OtherRegion → AudioFileBox (points to BOX)
+
+const {boxes} = graph.dependenciesOf(region, {
+    stopAtResources: true,
+    alwaysFollowMandatory: true
+})
+
+// Result:
+// - AudioFileBox: included (resource endpoint)
+// - TransientMarker: included (child, points to field)
+// - OtherRegion: excluded (user, points to box)
+```
+
+### Differentiating Children vs Users
+
+The key distinction is the target address:
+
+- **Child** (include): `pointer.targetAddress.isBox() === false` - points to a field within the resource
+- **User** (exclude): `pointer.targetAddress.isBox() === true` - points to the resource box itself
+
+This allows resource boxes to have "owned" children that are always included when copying, while preventing other boxes that merely reference the resource from being pulled in.

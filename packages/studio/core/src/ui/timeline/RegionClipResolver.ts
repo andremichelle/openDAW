@@ -29,7 +29,7 @@ export type ClipTask = {
     position: ppqn
 }
 
-interface Mask extends Event {complete: ppqn}
+export interface Mask extends Event {complete: ppqn}
 
 // AudioRegions in absolute time-domain are allowed to overlap. Their duration changes when the tempo changes,
 // but we do not truncate them to keep the original durations.
@@ -89,21 +89,43 @@ export class RegionClipResolver {
         }
     }
 
+    static createTasksFromMasks(regionIterator: Iterable<AnyRegionBoxAdapter>,
+                                maxComplete: ppqn,
+                                masks: ReadonlyArray<Mask>,
+                                showOrigin: boolean): ReadonlyArray<ClipTask> {
+        const tasks: Array<ClipTask> = []
+        for (const region of regionIterator) {
+            if (region.position >= maxComplete) {break}
+            if (region.isSelected && !showOrigin) {continue}
+            if (region.duration <= 0) {return panic(`Invalid duration(${region.duration})`)}
+            const overlapping = masks.filter(mask => region.position < mask.complete && region.complete > mask.position)
+            if (overlapping.length === 0) {continue}
+            for (let i = overlapping.length - 1; i >= 0; i--) {
+                const {position, complete} = overlapping[i]
+                const positionIn: boolean = region.position >= position
+                const completeIn: boolean = region.complete <= complete
+                if (positionIn && completeIn) {
+                    tasks.push({type: "delete", region})
+                    break
+                } else if (!positionIn && !completeIn) {
+                    tasks.push({type: "separate", region, begin: position, end: complete})
+                } else if (completeIn) {
+                    tasks.push({type: "complete", region, position})
+                } else {
+                    tasks.push({type: "start", region, position: complete})
+                }
+            }
+        }
+        return tasks
+    }
+
     static sortAndJoinMasks(masks: ReadonlyArray<Mask>): ReadonlyArray<Mask> {
-        if (masks.length === 0) {
-            return panic("No clip-masks to solve")
-        }
-
-        if (masks.length === 1) {
-            return [masks[0]]
-        }
-
+        if (masks.length === 0) {return panic("No clip-masks to solve")}
+        if (masks.length === 1) {return [masks[0]]}
         // Sort by position (start time) - create a copy to avoid mutating input
         const sorted = [...masks].sort(EventCollection.DefaultComparator)
-
         const merged: Array<Mask> = []
         let current: Mask = sorted[0]
-
         for (let i = 1; i < sorted.length; i++) {
             const next = sorted[i]
             // Check if the next mask overlaps or is adjacent to the current
@@ -144,38 +166,13 @@ export class RegionClipResolver {
     }
 
     #createSolver(): Exec {
-        const tasks = this.#createTasksFromMasks(RegionClipResolver.sortAndJoinMasks(this.#masks))
+        const masks = RegionClipResolver.sortAndJoinMasks(this.#masks)
+        const maxComplete = masks.reduce((max, mask) => Math.max(max, mask.complete), 0)
+        const tasks = RegionClipResolver.createTasksFromMasks(
+            this.#ground.regions.collection.iterateRange(0, maxComplete),
+            maxComplete, masks, this.#strategy.showOrigin())
         this.#masks.length = 0
         return () => this.#executeTasks(tasks)
-    }
-
-    #createTasksFromMasks(masks: ReadonlyArray<Mask>): ReadonlyArray<ClipTask> {
-        const tasks: Array<ClipTask> = []
-        masks.forEach(({position, complete}) => {
-            // Iterate from 0 to find all regions that OVERLAP with [position, complete],
-            // not just regions that START within that range
-            for (const region of this.#ground.regions.collection.iterateRange(0, complete)) {
-                if (region.position >= complete) {break} // past the mask, done
-                if (region.complete <= position) {continue} // ends before mask, skip
-                if (region.isSelected && !this.#strategy.showOrigin()) {
-                    continue
-                } else if (region.duration <= 0) {
-                    return panic(`Invalid duration(${region.duration})`)
-                }
-                const positionIn: boolean = region.position >= position
-                const completeIn: boolean = region.complete <= complete
-                if (positionIn && completeIn) {
-                    tasks.push({type: "delete", region})
-                } else if (!positionIn && !completeIn) {
-                    tasks.push({type: "separate", region, begin: position, end: complete})
-                } else if (completeIn) {
-                    tasks.push({type: "complete", region, position})
-                } else {
-                    tasks.push({type: "start", region, position: complete})
-                }
-            }
-        })
-        return tasks
     }
 
     #executeTasks(tasks: ReadonlyArray<ClipTask>): void {

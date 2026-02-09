@@ -1,38 +1,38 @@
 {
-    "name": "@opendaw/lib-fusion",
-    "version": "0.0.74",
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "license": "LGPL-3.0-or-later",
-    "sideEffects": false,
-    "publishConfig": {
-        "access": "public"
-    },
-    "exports": {
-        ".": {
-            "types": "./dist/index.d.ts",
-            "default": "./dist/index.js"
-        }
-    },
-    "files": [
-        "dist/**/*"
-    ],
-    "scripts": {
-        "build": "tsc",
-        "lint": "eslint \"**/*.ts\"",
-        "test": "vitest run"
-    },
-    "dependencies": {
-        "@opendaw/lib-box": "^0.0.69",
-        "@opendaw/lib-dom": "^0.0.70",
-        "@opendaw/lib-runtime": "^0.0.66",
-        "@opendaw/lib-std": "^0.0.65"
-    },
-    "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/typescript-config": "^0.0.28",
-        "jsdom": "^25.0.1",
-        "vitest": "^2.1.8"
-    },
-    "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
+  "name": "@opendaw/lib-fusion",
+  "version": "0.0.76",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "license": "LGPL-3.0-or-later",
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint \"**/*.ts\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@opendaw/lib-box": "^0.0.71",
+    "@opendaw/lib-dom": "^0.0.72",
+    "@opendaw/lib-runtime": "^0.0.68",
+    "@opendaw/lib-std": "^0.0.67"
+  },
+  "devDependencies": {
+    "@opendaw/eslint-config": "^0.0.27",
+    "@opendaw/typescript-config": "^0.0.28",
+    "jsdom": "^25.0.1",
+    "vitest": "^2.1.8"
+  },
+  "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

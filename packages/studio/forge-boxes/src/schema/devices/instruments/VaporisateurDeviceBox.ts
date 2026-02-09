@@ -6,7 +6,7 @@ import {ClassicWaveform} from "@opendaw/lib-dsp"
 
 const NoiseEnv = {value: 0.001, constraints: {min: 0.001, max: 5.0, scaling: "exponential"}, unit: "s"} as const
 
-export const VaporisateurDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("VaporisateurDeviceBox", {
+export const VaporisateurDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("VaporisateurDeviceBox", "notes", {
     10: {
         type: "float32", name: "volume", deprecated, pointerRules: ParameterPointerRules,
         value: -6.0, constraints: "decibel", unit: "dB"

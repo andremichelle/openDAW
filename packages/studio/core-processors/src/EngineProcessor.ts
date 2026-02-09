@@ -35,8 +35,10 @@ import {
     EngineSettingsSchema,
     EngineStateSchema,
     EngineToClient,
+    MonitoringMapEntry,
     NoteSignal,
     ParameterFieldAdapters,
+    PERF_BUFFER_SIZE,
     PreferencesClient,
     ProjectSkeleton,
     RootBoxAdapter,
@@ -65,6 +67,7 @@ import {SoundfontManagerWorklet} from "./SoundfontManagerWorklet"
 import {MidiData} from "@opendaw/lib-midi"
 import {MIDITransportClock} from "./MIDITransportClock"
 import {MIDISender} from "./MIDISender"
+import {HRClock} from "./HRClock"
 
 const DEBUG = false
 
@@ -99,11 +102,15 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     readonly #renderer: BlockRenderer
     readonly #stateSender: SyncStream.Writer
     readonly #controlFlags: Int32Array<SharedArrayBuffer>
+    readonly #hrClock: HRClock
     readonly #stemExports: ReadonlyArray<AudioUnit>
     readonly #ignoredRegions: SortedSet<UUID.Bytes, UUID.Bytes>
+    readonly #pendingResources: Set<Promise<unknown>> = new Set()
+    readonly #perfBuffer: Float32Array = new Float32Array(PERF_BUFFER_SIZE)
 
     #processQueue: Option<ReadonlyArray<Processor>> = Option.None
     #primaryOutput: Option<AudioUnit> = Option.None
+    #currentInput: ReadonlyArray<Float32Array> = []
 
     #context: Option<EngineContext> = Option.None
     #midiSender: Option<MIDISender> = Option.None
@@ -111,8 +118,9 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     #valid: boolean = true // to shut down the engine
     #recordingStartTime: ppqn = 0.0
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
+    #perfWriteIndex: number = 0
 
-    constructor({processorOptions: {syncStreamBuffer, controlFlagsBuffer, project, exportConfiguration}}: {
+    constructor({processorOptions: {syncStreamBuffer, controlFlagsBuffer, hrClockBuffer, project, exportConfiguration}}: {
         processorOptions: EngineProcessorAttachment
     } & AudioNodeOptions) {
         super()
@@ -125,6 +133,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#boxGraph = boxGraph
         this.#timeInfo = new TimeInfo()
         this.#controlFlags = new Int32Array<SharedArrayBuffer>(controlFlagsBuffer)
+        this.#hrClock = new HRClock(hrClockBuffer)
         this.#engineToClient = Communicator.sender<EngineToClient>(
             this.#messenger.channel("engine-to-client"),
             dispatcher => new class implements EngineToClient {
@@ -153,7 +162,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         this.#parameterFieldAdapters = new ParameterFieldAdapters()
         this.#boxAdapters = this.#terminator.own(new BoxAdapters(this))
         this.#timelineBoxAdapter = this.#boxAdapters.adapterFor(timelineBox, TimelineBoxAdapter)
-        this.#tempoMap = new VaryingTempoMap(this.timelineBoxAdapter)
+        this.#tempoMap = this.#terminator.own(new VaryingTempoMap(this.timelineBoxAdapter))
         this.#rootBoxAdapter = this.#boxAdapters.adapterFor(rootBox, RootBoxAdapter)
         this.#audioGraph = new Graph<Processor>()
         this.#audioGraphSorting = new TopologicalSort<Processor>(this.#audioGraph)
@@ -174,6 +183,8 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
             x.isPlaying = transporting
             x.isRecording = isRecording
             x.isCountingIn = isCountingIn
+            x.perfBuffer.set(this.#perfBuffer)
+            x.perfIndex = this.#perfWriteIndex
         })
         this.#liveStreamBroadcaster = this.#terminator.own(LiveStreamBroadcaster.create(this.#messenger, "engine-live-data"))
         this.#updateClock = new UpdateClock(this)
@@ -203,12 +214,19 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                 prepareRecordingState: (countIn: boolean): void => this.#prepareRecordingState(countIn),
                 stopRecording: (): void => this.#stopRecording(),
                 queryLoadingComplete: (): Promise<boolean> =>
-                    Promise.resolve(this.#boxGraph.boxes().every(box => box.accept<BoxVisitor<boolean>>({
-                        visitAudioFileBox: (box: AudioFileBox) =>
-                            this.#sampleManager.getOrCreate(box.address.uuid).data.nonEmpty() && box.pointerHub.nonEmpty()
-                    }) ?? true)),
+                    Promise.all(this.#pendingResources).then(() =>
+                        this.#boxGraph.boxes().every(box => box.accept<BoxVisitor<boolean>>({
+                            visitAudioFileBox: (box: AudioFileBox) =>
+                                this.#sampleManager.getOrCreate(box.address.uuid).data.nonEmpty() && box.pointerHub.nonEmpty()
+                        }) ?? true)),
                 panic: () => this.#panic = true,
                 loadClickSound: (index: 0 | 1, data: AudioData): void => this.#metronome.loadClickSound(index, data),
+                updateMonitoringMap: (map: ReadonlyArray<MonitoringMapEntry>): void => {
+                    this.#audioUnits.forEach(unit => unit.clearMonitoringChannels())
+                    for (const {uuid, channels} of map) {
+                        this.optAudioUnit(uuid).ifSome(unit => unit.setMonitoringChannels(channels))
+                    }
+                },
                 noteSignal: (signal: NoteSignal) => {
                     if (NoteSignal.isOn(signal)) {
                         const {uuid, pitch, velocity} = signal
@@ -256,7 +274,11 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                     this.#context = Option.None
                     this.#valid = false
                     this.#ignoredRegions.clear()
+                    // First, disconnect all edges across all units before terminating any unit
+                    this.#audioUnits.forEach(unit => unit.invalidateWiring())
                     this.#terminator.terminate()
+                    this.#audioUnits.forEach(unit => unit.terminate())
+                    this.#audioUnits.clear()
                 }
             }),
             this.#rootBoxAdapter.audioUnits.catchupAndSubscribe({
@@ -322,9 +344,11 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         }
     }
 
-    render(_inputs: Float32Array[][], [output]: Float32Array[][]): boolean {
+    render(inputs: Float32Array[][], [output]: Float32Array[][]): boolean {
         if (!this.#valid) {return false}
         if (this.#panic) {return panic("Manual Panic")}
+        this.#currentInput = inputs[0] ?? []
+        const elapsed = this.#hrClock.start()
         const metronomeEnabled = this.#timeInfo.metronomeEnabled
         this.#notifier.notify(ProcessPhase.Before)
         if (this.#processQueue.isEmpty()) {
@@ -355,6 +379,9 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         }
         this.#notifier.notify(ProcessPhase.After)
         this.#clipSequencing.changes().ifSome(changes => this.#engineToClient.notifyClipSequenceChanges(changes))
+        this.#hrClock.end()
+        this.#perfBuffer[this.#perfWriteIndex] = elapsed
+        this.#perfWriteIndex = (this.#perfWriteIndex + 1) % PERF_BUFFER_SIZE
         this.#stateSender.tryWrite()
         this.#liveStreamBroadcaster.flush()
         return true
@@ -387,6 +414,11 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         }
     }
 
+    awaitResource(promise: Promise<unknown>): void {
+        this.#pendingResources.add(promise)
+        promise.finally(() => this.#pendingResources.delete(promise))
+    }
+
     get preferences(): PreferencesClient<EngineSettings> {return this.#preferences}
     get boxGraph(): BoxGraph<BoxIO.TypeMap> {return this.#boxGraph}
     get boxAdapters(): BoxAdapters {return this.#boxAdapters}
@@ -410,6 +442,11 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
 
     sendMIDIData(midiDeviceId: string, data: Uint8Array, relativeTimeInMs: number): void {
         this.#midiSender.ifSome(sender => sender.send(midiDeviceId, data, relativeTimeInMs))
+    }
+
+    getMonitoringChannel(channelIndex: int): Option<Float32Array> {
+        if (channelIndex >= this.#currentInput.length) {return Option.None}
+        return Option.wrap(this.#currentInput[channelIndex])
     }
 
     terminate(): void {

@@ -14,7 +14,7 @@ export const CaptureAudioBox: BoxSchema<Pointers> = {
         fields: mergeFields(CaptureAttributes, {
             10: {
                 type: "int32", name: "request-channels",
-                value: 1, constraints: "any", unit: ""
+                value: 2, constraints: "any", unit: ""
             },
             11: {
                 type: "float32", name: "gain-db",

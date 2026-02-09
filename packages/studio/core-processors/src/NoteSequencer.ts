@@ -114,7 +114,8 @@ export class NoteSequencer implements NoteEventSource, Terminable {
                 }
             } else {
                 for (const event of this.#auditionRetainer.releaseLinearCompleted(to)) {
-                    yield NoteLifecycleEvent.stop(event, event.position + event.duration)
+                    const position = clamp(event.position + event.duration, from, to)
+                    yield NoteLifecycleEvent.stop(event, position)
                 }
             }
         }

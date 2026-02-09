@@ -18,11 +18,12 @@ type Creation<T extends PrimitiveValues> = {
     anchor?: number
     color?: Color
     style?: Partial<CSSStyleDeclaration>
+    disableAutomation?: boolean
 }
 
 export namespace ControlBuilder {
     export const createKnob = <T extends PrimitiveValues, >
-    ({lifecycle, editing, midiLearning, adapter, parameter, options, anchor, color, style}: Creation<T>) => {
+    ({lifecycle, editing, midiLearning, adapter, parameter, options, anchor, color, style, disableAutomation}: Creation<T>) => {
         return (
             <Column ems={LKR} color={color ?? Colors.cream} style={style}>
                 <h5>{parameter.name}</h5>
@@ -32,7 +33,8 @@ export namespace ControlBuilder {
                                     adapter={adapter}
                                     parameter={parameter}
                                     options={options}
-                                    anchor={anchor}/>
+                                    anchor={anchor}
+                                    disableAutomation={disableAutomation}/>
             </Column>
         )
     }

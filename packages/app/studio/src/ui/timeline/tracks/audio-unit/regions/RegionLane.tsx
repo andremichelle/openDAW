@@ -35,11 +35,14 @@ export const RegionLane = ({lifecycle, trackManager, range, adapter}: Construct)
         updated = false
         painter.requestUpdate()
     }
+    const {timelineFocus} = trackManager.service.project
     lifecycle.ownAll(
         range.subscribe(requestUpdate),
         adapter.regions.subscribeChanges(requestUpdate),
         adapter.enabled.subscribe(requestUpdate),
         trackManager.service.project.timelineBoxAdapter.catchupAndSubscribeSignature(requestUpdate),
+        timelineFocus.track.catchupAndSubscribe(owner =>
+            element.classList.toggle("focused", owner.contains(adapter))),
         Html.watchIntersection(element, entries => entries
                 .forEach(({isIntersecting}) => {
                     visible = isIntersecting

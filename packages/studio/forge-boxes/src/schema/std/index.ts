@@ -9,6 +9,7 @@ import {ValueClipBox} from "./timeline/ValueClipBox"
 import {MarkerBox} from "./timeline/MarkerBox"
 import {AudioFileBox} from "./AudioFileBox"
 import {SoundfontFileBox} from "./SoundfontFileBox"
+import {NeuralAmpModelBox} from "./NeuralAmpModelBox"
 import {AudioBusBox, AudioUnitBox, AuxSendBox} from "./AudioUnitBox"
 import {CaptureAudioBox, CaptureMidiBox} from "./CaptureBox"
 import {GrooveShuffleBox} from "./GrooveBoxes"
@@ -39,7 +40,7 @@ export const Definitions = [
     ValueEventBox, ValueEventCollectionBox, ValueEventCurveBox, ValueRegionBox, ValueClipBox, SignatureEventBox,
     AudioRegionBox, AudioClipBox, AudioPitchStretchBox, AudioTimeStretchBox, TransientMarkerBox, WarpMarkerBox,
     MarkerBox,
-    AudioFileBox, SoundfontFileBox,
+    AudioFileBox, SoundfontFileBox, NeuralAmpModelBox,
     AudioUnitBox, CaptureAudioBox, CaptureMidiBox,
     AudioBusBox, AuxSendBox,
     GrooveShuffleBox

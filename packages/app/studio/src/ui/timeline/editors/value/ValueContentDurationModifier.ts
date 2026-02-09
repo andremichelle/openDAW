@@ -4,7 +4,7 @@ import {BoxEditing} from "@opendaw/lib-box"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {Interpolation, ppqn, PPQN, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
-import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
+import {SelectableValueEvent} from "@opendaw/studio-adapters"
 import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
@@ -46,10 +46,10 @@ export class ValueContentDurationModifier implements ValueModifier {
     snapValue(): Option<unitValue> {return Option.None}
     readPosition(event: ValueEvent): ppqn {return event.position}
     readValue(event: ValueEvent): unitValue {return event.value}
-    readInterpolation(event: UIValueEvent): Interpolation {return event.interpolation}
+    readInterpolation(event: SelectableValueEvent): Interpolation {return event.interpolation}
     translateSearch(value: ppqn): ppqn {return value}
-    isVisible(_event: UIValueEvent): boolean {return true}
-    iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<UIValueEvent> {
+    isVisible(_event: SelectableValueEvent): boolean {return true}
+    iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<SelectableValueEvent> {
         return this.#reference.content.events.iterateRange(searchMin, searchMax)
     }
     readContentDuration(region: ValueEventOwnerReader): number {

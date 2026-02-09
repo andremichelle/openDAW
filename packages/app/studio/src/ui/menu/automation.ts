@@ -7,16 +7,17 @@ export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: B
                                                                       midiDevices: MIDILearning,
                                                                       tracks: AudioUnitTracks,
                                                                       parameter: AutomatableParameterFieldAdapter<T>,
-                                                                      element: Element) =>
+                                                                      element: Element,
+                                                                      disableAutomation?: boolean) =>
     ContextMenu.subscribe(element, collector => {
         const field = parameter.field
         const automation = tracks.controls(field)
         collector.addItems(
             automation.isEmpty()
-                ? MenuItem.default({label: "Create Automation"})
+                ? MenuItem.default({label: "Create Automation", hidden: disableAutomation})
                     .setTriggerProcedure(() => editing.modify(() =>
                         tracks.create(TrackType.Value, field)))
-                : MenuItem.default({label: "Remove Automation"})
+                : MenuItem.default({label: "Remove Automation", hidden: disableAutomation})
                     .setTriggerProcedure(() => editing.modify(() =>
                         tracks.delete(automation.unwrap()))),
             MenuItem.default({

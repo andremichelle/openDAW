@@ -18,13 +18,12 @@ import {
 } from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {BoxEditing} from "@opendaw/lib-box"
-import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
+import {SelectableValueEvent, ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 import {EventCollection, Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
 import {ValueEventDraft} from "./ValueEventDraft.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {Dragging} from "@opendaw/lib-dom"
-import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
 
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 
@@ -122,7 +121,7 @@ export class ValueMoveModifier implements ValueModifier {
     readValue(event: ValueEvent): number {
         return this.#context.quantize(this.#eventMapping.y(clampUnit(this.#eventMapping.x(event.value) + this.#deltaValue)))
     }
-    readInterpolation(event: UIValueEvent): Interpolation {return event.interpolation}
+    readInterpolation(event: SelectableValueEvent): Interpolation {return event.interpolation}
     iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<ValueEventDraft> {
         return new ValueEventDraft.Solver(this.#eventCollection(), this,
             searchMin - Math.max(0, this.#deltaPosition), searchMax).iterate()
@@ -203,6 +202,7 @@ export class ValueMoveModifier implements ValueModifier {
         const obsolete: Array<ValueEventDraft> = []
         let index: int = 0
         let prev: ValueEventDraft = asDefined(value)
+        prev.index = 0
         for (const next of iterable) {
             if (prev.position === next.position) {
                 if (index === 0) {prev.index = 0}

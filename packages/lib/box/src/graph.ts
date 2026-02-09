@@ -62,6 +62,7 @@ export class BoxGraph<BoxMap = any> {
         index: int
     }>
     readonly #finalizeTransactionObservers: Array<Exec>
+    readonly #deletionListeners: SortedSet<UUID.Bytes, { uuid: UUID.Bytes, listeners: Set<Exec> }>
 
     #inTransaction: boolean = false
     #constructingBox: boolean = false
@@ -77,6 +78,7 @@ export class BoxGraph<BoxMap = any> {
         this.#edges = new GraphEdges()
         this.#pointerTransactionState = Address.newSet(({pointer}) => pointer.address)
         this.#finalizeTransactionObservers = []
+        this.#deletionListeners = UUID.newSet<{ uuid: UUID.Bytes, listeners: Set<Exec> }>(entry => entry.uuid)
     }
 
     beginTransaction(): void {
@@ -128,7 +130,7 @@ export class BoxGraph<BoxMap = any> {
             this.#constructingBox = false
         }
         const added = this.#boxes.add(box)
-        assert(added, `${box} already staged`)
+        assert(added, () => `${box.name} ${box.address.toString()} already staged`)
         const update = new NewUpdate(box.address.uuid, box.name, box.toArrayBuffer())
         this.#updateListeners.proxy.onUpdate(update)
         this.#immediateUpdateListeners.proxy.onUpdate(update)
@@ -153,12 +155,26 @@ export class BoxGraph<BoxMap = any> {
 
     subscribeEndTransaction(observer: Exec): void {this.#finalizeTransactionObservers.push(observer)}
 
+    subscribeDeletion(uuid: UUID.Bytes, listener: Exec): Subscription {
+        const entry = this.#deletionListeners.getOrCreate(uuid, () => ({uuid, listeners: new Set()}))
+        entry.listeners.add(listener)
+        return {
+            terminate: () => {
+                entry.listeners.delete(listener)
+                if (entry.listeners.size === 0) {
+                    this.#deletionListeners.removeByKeyIfExist(uuid)
+                }
+            }
+        }
+    }
+
     unstageBox(box: Box): void {
         this.#assertTransaction()
         const deleted = this.#boxes.removeByKey(box.address.uuid)
         assert(deleted === box, `${box} could not be found to unstage`)
         this.#edges.unwatchVerticesOf(box)
         const update = new DeleteUpdate(box.address.uuid, box.name, box.toArrayBuffer())
+        this.#deletionListeners.removeByKeyIfExist(box.address.uuid)?.listeners.forEach(listener => listener())
         this.#updateListeners.proxy.onUpdate(update)
         this.#immediateUpdateListeners.proxy.onUpdate(update)
     }
@@ -269,14 +285,34 @@ export class BoxGraph<BoxMap = any> {
     dependenciesOf(box: Box, options: {
         excludeBox?: Predicate<Box>
         alwaysFollowMandatory?: boolean
+        stopAtResources?: boolean
     } = {}): Dependencies {
         const excludeBox = isDefined(options.excludeBox) ? options.excludeBox : Predicates.alwaysFalse
         const alwaysFollowMandatory = isDefined(options.alwaysFollowMandatory) ? options.alwaysFollowMandatory : false
+        const stopAtResources = isDefined(options.stopAtResources) ? options.stopAtResources : false
         const boxes = new Set<Box>()
         const pointers = new Set<PointerField>()
-        const trace = (box: Box): void => {
-            if (boxes.has(box) || excludeBox(box)) {return}
+        const trace = (box: Box, isStartingBox: boolean = false): void => {
+            // Don't apply excludeBox to the starting box - only to its dependencies
+            if (boxes.has(box) || (!isStartingBox && excludeBox(box))) {return}
             boxes.add(box)
+            // Handle resource boxes especially when stopAtResources is enabled
+            if (stopAtResources && isDefined(box.resource)) {
+                // Resource boxes are endpoints, but we still need their "children"
+                // Children = boxes that point to FIELDS within this box (not the box itself)
+                box.incomingEdges()
+                    .forEach(pointer => {
+                        pointers.add(pointer)
+                        // Only follow if a pointer targets a FIELD (child), not the BOX (user)
+                        const targetsField = pointer.targetAddress.mapOr(address => !address.isBox(), false)
+                        if (pointer.mandatory && targetsField) {
+                            trace(pointer.box)
+                        }
+                    })
+                // Don't trace outgoing edges - resources are endpoints
+                return
+            }
+            // Normal box traversal
             box.outgoingEdges()
                 .filter(([pointer]) => !pointers.has(pointer))
                 .forEach(([source, targetAddress]: [PointerField, Address]) => {
@@ -299,7 +335,7 @@ export class BoxGraph<BoxMap = any> {
                     }
                 })
         }
-        trace(box)
+        trace(box, true)
         boxes.delete(box)
         return {boxes, pointers: Array.from(pointers).reverse()}
     }

@@ -49,8 +49,11 @@ export const installRegionContextMenu =
                         .forEach(adapter => adapter.box.delete()))),
                 MenuItem.default({label: "Duplicate"})
                     .setTriggerProcedure(() => editing.modify(() => {
-                        selection.deselectAll()
-                        selection.select(project.api.duplicateRegion(region))
+                        project.api.duplicateRegion(region)
+                            .ifSome(duplicate => {
+                                selection.deselectAll()
+                                selection.select(duplicate)
+                            })
                     })),
                 MenuItem.default({
                     label: "Mute",

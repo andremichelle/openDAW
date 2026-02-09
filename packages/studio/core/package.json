@@ -1,65 +1,66 @@
 {
-    "name": "@opendaw/studio-core",
-    "version": "0.0.99",
-    "license": "LGPL-3.0-or-later",
-    "publishConfig": {
-        "access": "public"
+  "name": "@opendaw/studio-core",
+  "version": "0.0.102",
+  "license": "LGPL-3.0-or-later",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-        ".": {
-            "types": "./dist/index.d.ts",
-            "default": "./dist/index.js"
-        },
-        "./FFmpegWorker": {
-            "types": "./dist/ffmpeg/FFmpegWorker.d.ts",
-            "default": "./dist/ffmpeg/FFmpegWorker.js"
-        },
-        "./workers-main.js": "./dist/workers-main.js",
-        "./processors.js": "./dist/processors.js",
-        "./offline-engine.js": "./dist/offline-engine.js"
+    "./FFmpegWorker": {
+      "types": "./dist/ffmpeg/FFmpegWorker.d.ts",
+      "default": "./dist/ffmpeg/FFmpegWorker.js"
     },
-    "files": [
-        "dist/**",
-        "dist/workers-main.js",
-        "dist/processors.js",
-        "dist/offline-engine.js",
-        "dist/ffmpeg/FFmpegWorker.js"
-    ],
-    "scripts": {
-        "build": "tsc",
-        "lint": "eslint \"**/*.ts\"",
-        "test": "vitest run --config vitest.config.ts"
-    },
-    "dependencies": {
-        "@opendaw/lib-box": "^0.0.69",
-        "@opendaw/lib-dawproject": "^0.0.54",
-        "@opendaw/lib-dom": "^0.0.70",
-        "@opendaw/lib-dsp": "^0.0.68",
-        "@opendaw/lib-fusion": "^0.0.74",
-        "@opendaw/lib-runtime": "^0.0.66",
-        "@opendaw/lib-std": "^0.0.65",
-        "@opendaw/studio-adapters": "^0.0.79",
-        "@opendaw/studio-boxes": "^0.0.71",
-        "@opendaw/studio-enums": "^0.0.60",
-        "dropbox": "^10.34.0",
-        "y-websocket": "^1.4.5",
-        "yjs": "^13.6.27",
-        "zod": "^4.1.12"
-    },
-    "peerDependencies": {
-        "@ffmpeg/ffmpeg": "^0.12.15",
-        "@ffmpeg/util": "^0.12.2"
-    },
-    "devDependencies": {
-        "@ffmpeg/ffmpeg": "^0.12.15",
-        "@ffmpeg/util": "^0.12.2",
-        "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/studio-core-processors": "^0.0.82",
-        "@opendaw/studio-core-workers": "^0.0.74",
-        "@opendaw/studio-forge-boxes": "^0.0.71",
-        "@opendaw/typescript-config": "^0.0.28"
-    },
-    "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
+    "./workers-main.js": "./dist/workers-main.js",
+    "./processors.js": "./dist/processors.js",
+    "./offline-engine.js": "./dist/offline-engine.js"
+  },
+  "files": [
+    "dist/**",
+    "dist/workers-main.js",
+    "dist/processors.js",
+    "dist/offline-engine.js",
+    "dist/ffmpeg/FFmpegWorker.js"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint \"**/*.ts\"",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@opendaw/lib-box": "^0.0.71",
+    "@opendaw/lib-dawproject": "^0.0.56",
+    "@opendaw/lib-dom": "^0.0.72",
+    "@opendaw/lib-dsp": "^0.0.70",
+    "@opendaw/lib-fusion": "^0.0.76",
+    "@opendaw/lib-runtime": "^0.0.68",
+    "@opendaw/lib-std": "^0.0.67",
+    "@opendaw/nam-wasm": "^1.0.3",
+    "@opendaw/studio-adapters": "^0.0.81",
+    "@opendaw/studio-boxes": "^0.0.73",
+    "@opendaw/studio-enums": "^0.0.62",
+    "dropbox": "^10.34.0",
+    "y-websocket": "^1.4.5",
+    "yjs": "^13.6.27",
+    "zod": "^4.1.12"
+  },
+  "peerDependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2"
+  },
+  "devDependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
+    "@opendaw/eslint-config": "^0.0.27",
+    "@opendaw/studio-core-processors": "^0.0.84",
+    "@opendaw/studio-core-workers": "^0.0.76",
+    "@opendaw/studio-forge-boxes": "^0.0.73",
+    "@opendaw/typescript-config": "^0.0.28"
+  },
+  "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

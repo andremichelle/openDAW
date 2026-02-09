@@ -1,21 +1,11 @@
 import css from "./NoteEditor.sass?inline"
 import {Html, ShortcutManager} from "@opendaw/lib-dom"
-import {
-    DefaultObservableValue,
-    int,
-    isInstanceOf,
-    isNotUndefined,
-    JSONValue,
-    Lifecycle,
-    Option,
-    Terminable,
-    UUID
-} from "@opendaw/lib-std"
+import {DefaultObservableValue, int, isInstanceOf, Lifecycle, Terminable, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {PitchEditor} from "@/ui/timeline/editors/notes/pitch/PitchEditor.tsx"
 import {PitchPositioner} from "@/ui/timeline/editors/notes/pitch/PitchPositioner.ts"
-import {CaptureMidi, ClipboardEntry, ClipboardHandler, ClipboardManager, TimelineRange} from "@opendaw/studio-core"
+import {CaptureMidi, ClipboardManager, NotesClipboard, TimelineRange} from "@opendaw/studio-core"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {NoteEventBox} from "@opendaw/studio-boxes"
 import {PianoRoll} from "@/ui/timeline/editors/notes/pitch/PianoRoll.tsx"
@@ -33,8 +23,6 @@ import {NotePropertyVelocity, PropertyAccessor} from "@/ui/timeline/editors/note
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {createPitchMenu} from "@/ui/timeline/editors/notes/pitch/PitchMenu.ts"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
-import {ppqn} from "@opendaw/lib-dsp"
-import {Address, PointerField} from "@opendaw/lib-box"
 
 const className = Html.adoptStyleSheet(css, "NoteEditor")
 
@@ -46,8 +34,6 @@ type Construct = {
     snapping: Snapping
     reader: NoteEventOwnerReader
 }
-
-type ClipboardNotes = ClipboardEntry<"notes", { notes: Array<JSONValue>, min: ppqn, max: ppqn }>
 
 const scale = new ScaleConfig()
 
@@ -130,7 +116,7 @@ export const NoteEditor =
                 }
             })()))
         const element: HTMLElement = (
-            <div className={className}>
+            <div className={className} tabIndex={-1} onConnect={(self: HTMLElement) => self.focus()}>
                 {pitchHeader}
                 {pitchBody}
                 <PropertyHeader lifecycle={lifecycle}
@@ -146,55 +132,16 @@ export const NoteEditor =
             </div>
         )
         const shortcuts = ShortcutManager.get().createContext(element, "NoteEditor (Main)")
-        const copyNotes = (): Option<ClipboardNotes> => {
-            const min = selection.selected().reduce((minDelta, {position}) =>
-                Math.min(minDelta, position), Number.POSITIVE_INFINITY)
-            const max = selection.selected().reduce((maxDelta, {complete}) =>
-                Math.max(maxDelta, complete), Number.NEGATIVE_INFINITY)
-            if (min === Number.POSITIVE_INFINITY || max === Number.NEGATIVE_INFINITY) {return Option.None}
-            const notes = selection.selected()
-                .map(adapter => adapter.box.toJSON())
-                .filter(json => isNotUndefined(json))
-            if (notes.length === 0) {return Option.None}
-            engine.setPosition(reader.offset + max)
-            return Option.wrap({
-                type: "notes",
-                data: {notes, min, max}
-            })
-        }
-        const CopyNotes: ClipboardHandler<ClipboardNotes> = {
-            canCopy: (): boolean => !engine.isPlaying.getValue() && selection.nonEmpty(),
-            canCut: (): boolean => !engine.isPlaying.getValue() && selection.nonEmpty(),
-            canPaste: (entry: ClipboardEntry): boolean =>
-                !engine.isPlaying.getValue() && entry.type === "notes",
-            copy: copyNotes,
-            cut: (): Option<ClipboardNotes> => {
-                const result = copyNotes()
-                result.ifSome(() => {
-                    editing.modify(() => selection.selected().forEach(adapter => adapter.box.delete()))
-                })
-                return result
-            },
-            paste: (entry: ClipboardEntry): void => {
-                if (entry.type !== "notes" || engine.isPlaying.getValue()) {return}
-                const {data: {notes, min, max}} = entry as ClipboardNotes
-                const position = engine.position.getValue()
-                const address = reader.content.box.events.address
-                editing.modify(() => {
-                    PointerField.decodeWith({
-                        map: (_pointer: PointerField, _newAddress: Option<Address>): Option<Address> => Option.wrap(address)
-                    }, () => {
-                        selection.deselectAll()
-                        const adapters = notes.map(note => boxAdapters.adapterFor(NoteEventBox.create(boxGraph, UUID.generate(), box => {
-                            box.fromJSON(note)
-                            box.position.setValue(box.position.getValue() - min + Math.max(0, position - reader.offset))
-                        }), NoteEventBoxAdapter))
-                        selection.select(...adapters)
-                    })
-                })
-                engine.setPosition(Math.max(0, position - reader.offset) + reader.offset + (max - min))
-            }
-        }
+        const clipboardHandler = NotesClipboard.createHandler({
+            getEnabled: () => !engine.isPlaying.getValue(),
+            getPosition: () => engine.position.getValue() - reader.offset,
+            setPosition: position => engine.setPosition(position + reader.offset),
+            editing,
+            selection,
+            targetAddress: reader.content.box.events.address,
+            boxGraph,
+            boxAdapters
+        })
         lifecycle.ownAll(
             shortcuts,
             shortcuts.register(NoteEditorShortcuts["toggle-step-recording"].shortcut,
@@ -225,7 +172,7 @@ export const NoteEditor =
                     }
                 }
             }),
-            ClipboardManager.install<ClipboardNotes>(element, CopyNotes)
+            ClipboardManager.install(element, clipboardHandler)
         )
         return element
     }

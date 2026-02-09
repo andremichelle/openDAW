@@ -1,6 +1,6 @@
 import css from "./ErrorEntry.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {Strings, TimeSpan} from "@opendaw/lib-std"
+import {RuntimeNotifier, Strings, TimeSpan} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Stack} from "@/ui/pages/errors/Stack"
@@ -64,7 +64,41 @@ export const ErrorEntry = ({entry}: Construct) => {
                  }}>
                 📂
             </div>
-            <div>{entry.fixed ? "Yes 👍" : "No 🙄"}</div>
+            <div style={{cursor: entry.fixed ? "default" : "pointer"}}
+                 onclick={() => {
+                     if (entry.fixed) {return}
+                     const errorData = {
+                         id: entry.id,
+                         date: entry.date,
+                         build_uuid: entry.build_uuid,
+                         build_env: entry.build_env,
+                         build_date: entry.build_date,
+                         error_name: entry.error_name,
+                         error_message: entry.error_message,
+                         error_stack: entry.error_stack,
+                         user_agent: entry.user_agent,
+                         script_tags: entry.script_tags,
+                         logs: entry.logs
+                     }
+                     const prompt = `Please help me fix this error in the openDAW codebase.
+
+Error Information:
+\`\`\`json
+${JSON.stringify(errorData, null, 2)}
+\`\`\`
+
+Before fixing it, tell me how to reproduce it!
+
+Please analyze the error stack trace and logs to identify the root cause and suggest a fix.`
+                     navigator.clipboard.writeText(prompt).then(() => {
+                         RuntimeNotifier.info({
+                             headline: "Prompt Copied",
+                             message: "The error information has been copied to clipboard. Paste it into Claude to get help fixing this error."
+                         })
+                     })
+                 }}>
+                {entry.fixed ? "Yes 👍" : "No 🙄"}
+            </div>
         </div>
     )
 }

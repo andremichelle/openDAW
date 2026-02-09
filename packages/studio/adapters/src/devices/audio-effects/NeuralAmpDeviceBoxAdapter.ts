@@ -1,4 +1,4 @@
-import {NeuralAmpDeviceBox} from "@opendaw/studio-boxes"
+import {NeuralAmpDeviceBox, NeuralAmpModelBox} from "@opendaw/studio-boxes"
 import {Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
@@ -8,6 +8,7 @@ import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
+import {NeuralAmpModelBoxAdapter} from "../../nam/NeuralAmpModelBoxAdapter"
 
 export class NeuralAmpDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly type = "audio-effect"
@@ -35,9 +36,23 @@ export class NeuralAmpDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     get enabledField(): BooleanField {return this.#box.enabled}
     get minimizedField(): BooleanField {return this.#box.minimized}
     get host(): PointerField<Pointers.AudioEffectHost> {return this.#box.host}
-    get modelJsonField(): StringField {return this.#box.modelJson}
+    get modelField(): PointerField<Pointers.NeuralAmpModel> {return this.#box.model}
     get monoField(): BooleanField {return this.#box.mono}
     get spectrum(): Address {return this.#box.address.append(0xFFF)}
+
+    getModelAdapter(): Option<NeuralAmpModelBoxAdapter> {
+        const target = this.#box.model.targetVertex
+        if (target.isEmpty()) {return Option.None}
+        return Option.wrap(this.#context.boxAdapters.adapterFor(target.unwrap().box, NeuralAmpModelBoxAdapter))
+    }
+
+    getModelJson(): string {
+        const modelAdapter = this.getModelAdapter()
+        if (modelAdapter.nonEmpty()) {
+            return modelAdapter.unwrap().getModelJson()
+        }
+        return this.#box.modelJson.getValue()
+    }
 
     deviceHost(): DeviceHost {
         return this.#context.boxAdapters

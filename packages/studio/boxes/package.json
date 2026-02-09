@@ -1,35 +1,35 @@
 {
-    "name": "@opendaw/studio-boxes",
-    "version": "0.0.71",
-    "license": "LGPL-3.0-or-later",
-    "publishConfig": {
-        "access": "public"
-    },
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-        ".": {
-            "types": "./dist/index.d.ts",
-            "default": "./dist/index.js"
-        }
-    },
-    "files": [
-        "dist/**/*"
-    ],
-    "scripts": {
-        "build": "tsc",
-        "lint": "eslint \"**/*.ts\"",
-        "test": "echo \"No tests to run\""
-    },
-    "dependencies": {
-        "@opendaw/lib-box": "^0.0.69",
-        "@opendaw/lib-std": "^0.0.65",
-        "@opendaw/studio-enums": "^0.0.60"
-    },
-    "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/studio-forge-boxes": "^0.0.71",
-        "@opendaw/typescript-config": "^0.0.28"
-    },
-    "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
+  "name": "@opendaw/studio-boxes",
+  "version": "0.0.73",
+  "license": "LGPL-3.0-or-later",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint \"**/*.ts\"",
+    "test": "echo \"No tests to run\""
+  },
+  "dependencies": {
+    "@opendaw/lib-box": "^0.0.71",
+    "@opendaw/lib-std": "^0.0.67",
+    "@opendaw/studio-enums": "^0.0.62"
+  },
+  "devDependencies": {
+    "@opendaw/eslint-config": "^0.0.27",
+    "@opendaw/studio-forge-boxes": "^0.0.73",
+    "@opendaw/typescript-config": "^0.0.28"
+  },
+  "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

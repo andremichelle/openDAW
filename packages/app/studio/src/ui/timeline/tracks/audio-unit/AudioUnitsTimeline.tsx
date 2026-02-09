@@ -1,5 +1,5 @@
 import css from "./AudioUnitsTimeline.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Lifecycle, Option} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Scroller} from "@/ui/components/Scroller.tsx"
@@ -15,8 +15,9 @@ import {HeadersArea} from "@/ui/timeline/tracks/audio-unit/headers/HeadersArea"
 import {Icon} from "@/ui/components/Icon"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {MenuItem} from "@opendaw/studio-core"
+import {AudioUnitsClipboard, ClipboardManager, MenuItem} from "@opendaw/studio-core"
 import {DefaultInstrumentFactory} from "@/ui/defaults/DefaultInstrumentFactory"
+import {AudioUnitBox} from "@opendaw/studio-boxes"
 
 const className = Html.adoptStyleSheet(css, "AudioUnitsTimeline")
 
@@ -27,6 +28,7 @@ type Construct = {
 
 export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
     const {range} = service.timeline
+    const {editing, boxGraph, rootBoxAdapter, userEditingManager, boxAdapters} = service.project
     const scrollModel = new ScrollModel()
     const scrollContainer: HTMLElement = (
         <div className="scrollable">
@@ -86,6 +88,19 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
         </div>
     )
     lifecycle.ownAll(
+        ClipboardManager.install(element, AudioUnitsClipboard.createHandler({
+            getEnabled: () => true,
+            editing,
+            boxGraph,
+            rootBoxAdapter,
+            audioUnitEditing: userEditingManager.audioUnit,
+            getEditedAudioUnit: () => userEditingManager.audioUnit.get().flatMap(vertex => {
+                if (vertex.box.name === AudioUnitBox.ClassName) {
+                    return Option.wrap(boxAdapters.adapterFor(vertex.box as AudioUnitBox, AudioUnitBoxAdapter))
+                }
+                return Option.None
+            })
+        })),
         AnimationFrame.add(() => {
             // The ResizeObserver only tracks the visible size changes, not off-screen content,
             // so we take a simple approach to catch all changes.

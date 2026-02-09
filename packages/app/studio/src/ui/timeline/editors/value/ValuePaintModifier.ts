@@ -13,13 +13,12 @@ import {
     ValueAxis
 } from "@opendaw/lib-std"
 import {BoxEditing} from "@opendaw/lib-box"
-import {ValueEventBoxAdapter} from "@opendaw/studio-adapters"
+import {SelectableValueEvent, ValueEventBoxAdapter} from "@opendaw/studio-adapters"
 import {Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
 import {ValueEventDraft} from "@/ui/timeline/editors/value/ValueEventDraft.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
 import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
@@ -71,7 +70,7 @@ export class ValuePaintModifier implements ValueModifier {
     isVisible(_event: ValueEvent): boolean {return true}
     readPosition(event: ValueEvent): ppqn {return event.position}
     readValue(event: ValueEvent): unitValue {return event.value}
-    readInterpolation(event: UIValueEvent): Interpolation {return event.interpolation}
+    readInterpolation(event: SelectableValueEvent): Interpolation {return event.interpolation}
     * iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<ValueEventDraft> {
         const offset = this.#reader.offset
         const min = Arrays.getFirst(this.#strokes, "Internal Error").position - offset

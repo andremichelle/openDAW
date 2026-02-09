@@ -42,7 +42,7 @@ import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@open
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
-import {TimelineRange} from "@opendaw/studio-core"
+import {ClipboardManager, RegionsClipboard, TimelineRange} from "@opendaw/studio-core"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 
 const className = Html.adoptStyleSheet(css, "RegionsArea")
@@ -83,15 +83,29 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         </div>
     )
     const capturing: ElementCapturing<RegionCaptureTarget> = RegionCapturing.create(element, manager, range)
-    const regionLocator = createRegionLocator(manager, regionSelection)
+    const regionLocator = createRegionLocator(manager, range, regionSelection)
     const dragAndDrop = new RegionDragAndDrop(service, capturing, timeline.snapping)
-    const shortcuts = ShortcutManager.get().createContext(() => element.contains(document.activeElement), "Regions")
+    const shortcuts = ShortcutManager.get().createContext(element, "Regions")
+    const {engine, boxGraph, overlapResolver, timelineFocus} = project
+    const clipboardHandler = RegionsClipboard.createHandler({
+        getEnabled: () => !engine.isPlaying.getValue(),
+        getPosition: () => engine.position.getValue(),
+        setPosition: position => engine.setPosition(position),
+        editing,
+        selection: regionSelection,
+        boxGraph,
+        boxAdapters,
+        getTracks: () => manager.tracks().map(track => track.trackBoxAdapter),
+        getFocusedTrack: () => timelineFocus.track,
+        overlapResolver
+    })
     lifecycle.ownAll(
         regionSelection.catchupAndSubscribe({
             onSelected: (selectable: AnyRegionBoxAdapter) => selectable.onSelected(),
             onDeselected: (selectable: AnyRegionBoxAdapter) => selectable.onDeselected()
         }),
         shortcuts,
+        ClipboardManager.install(element, clipboardHandler),
         shortcuts.register(RegionsShortcuts["select-all"].shortcut, () => {
             regionSelection.select(...manager.tracks()
                 .flatMap(({trackBoxAdapter: {regions}}) => regions.collection.asArray()))
@@ -110,6 +124,16 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             return true
         }),
         installRegionContextMenu({timelineBox, element, service, capturing, selection: regionSelection, range}),
+        Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
+            const target = capturing.captureEvent(event)
+            timelineFocus.clear()
+            if (target === null) {return}
+            if (target.type === "region") {
+                timelineFocus.focusRegion(target.region)
+            } else if (target.type === "track") {
+                timelineFocus.focusTrack(target.track.trackBoxAdapter)
+            }
+        }),
         Events.subscribeDblDwn(element, event => {
             const target = capturing.captureEvent(event)
             if (target === null) {return}

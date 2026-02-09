@@ -37,7 +37,7 @@ import {ValueContentDurationModifier} from "./ValueContentDurationModifier"
 import {Dragging, Events, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {ValueTooltip} from "./ValueTooltip"
 import {ValueEventEditing} from "./ValueEventEditing"
-import {TimelineRange} from "@opendaw/studio-core"
+import {ClipboardManager, TimelineRange, ValuesClipboard} from "@opendaw/studio-core"
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 
@@ -55,7 +55,7 @@ type Construct = {
 
 export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, reader, context}: Construct) => {
     const {project} = service
-    const {editing} = project
+    const {editing, engine, boxGraph, boxAdapters} = project
     const eventsField = reader.content.box.events
     const selection: Selection<ValueEventBoxAdapter> = lifecycle.own(project.selection
         .createFilteredSelection(box => box instanceof ValueEventBox
@@ -215,7 +215,13 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             xAxis={range.valueAxis}
                             yAxis={valueAxis}/>
     )
-    const shortcuts = ShortcutManager.get().createContext(canvas, "ValueEditor")
+    const element: HTMLElement = (
+        <div className={className} tabIndex={-1} onConnect={(self: HTMLElement) => self.focus()}>
+            {canvas}
+            {selectionRectangle}
+        </div>
+    )
+    const shortcuts = ShortcutManager.get().createContext(element, "ValueEditor")
     lifecycle.ownAll(
         shortcuts,
         shortcuts.register(ContentEditorShortcuts["select-all"].shortcut, () =>
@@ -297,12 +303,18 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 editing.modify(() => selection.selected().forEach(adapter => adapter.box.value.setValue(value)))
             }
         }),
-        installValueContextMenu({element: canvas, capturing, editing, selection})
+        installValueContextMenu({element: canvas, capturing, editing, selection}),
+        ClipboardManager.install(element, ValuesClipboard.createHandler({
+            getEnabled: () => !engine.isPlaying.getValue(),
+            getPosition: () => engine.position.getValue() - reader.offset,
+            setPosition: position => engine.setPosition(position + reader.offset),
+            editing,
+            selection,
+            collection: reader.content,
+            targetAddress: reader.content.box.events.address,
+            boxGraph,
+            boxAdapters
+        }))
     )
-    return (
-        <div className={className}>
-            {canvas}
-            {selectionRectangle}
-        </div>
-    )
+    return element
 }

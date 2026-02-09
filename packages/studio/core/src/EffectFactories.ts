@@ -21,7 +21,7 @@ import {
     StereoToolDeviceBox,
     TidalDeviceBox,
     VelocityDeviceBox,
-    ZeitgeistDeviceBox,
+    ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {DeviceManualUrls} from "@opendaw/studio-adapters"
@@ -41,7 +41,7 @@ export namespace EffectFactories {
                 box.label.setValue("Arpeggio")
                 box.index.setValue(index)
                 box.host.refer(hostField)
-            }),
+            })
     }
 
     export const Pitch: EffectFactory = {
@@ -56,7 +56,7 @@ export namespace EffectFactories {
                 box.label.setValue("Pitch")
                 box.index.setValue(index)
                 box.host.refer(hostField)
-            }),
+            })
     }
 
     export const Velocity: EffectFactory = {
@@ -71,7 +71,7 @@ export namespace EffectFactories {
                 box.label.setValue("Velocity")
                 box.index.setValue(index)
                 box.host.refer(hostField)
-            }),
+            })
     }
 
     export const Zeitgeist: EffectFactory = {
@@ -84,15 +84,15 @@ export namespace EffectFactories {
         create: (
             {boxGraph, rootBoxAdapter},
             hostField,
-            index,
+            index
         ): ZeitgeistDeviceBox => {
             const useGlobal = false // TODO First Zeitgeist should be true
             const shuffleBox = useGlobal
                 ? rootBoxAdapter.groove.box
                 : GrooveShuffleBox.create(boxGraph, UUID.generate(), (box) => {
-                      box.label.setValue("Shuffle")
-                      box.duration.setValue(480)
-                  })
+                    box.label.setValue("Shuffle")
+                    box.duration.setValue(480)
+                })
             return ZeitgeistDeviceBox.create(
                 boxGraph,
                 UUID.generate(),
@@ -101,9 +101,9 @@ export namespace EffectFactories {
                     box.groove.refer(shuffleBox)
                     box.index.setValue(index)
                     box.host.refer(hostField)
-                },
+                }
             )
-        },
+        }
     }
 
     export const StereoTool: EffectFactory = {
@@ -119,7 +119,7 @@ export namespace EffectFactories {
                 box.label.setValue("Stereo Tool")
                 box.index.setValue(index)
                 box.host.refer(hostField)
-            }),
+            })
     }
 
     export const Delay: EffectFactory = {
@@ -135,7 +135,7 @@ export namespace EffectFactories {
                 box.index.setValue(index)
                 box.host.refer(hostField)
                 box.version.setValue(1)
-            }),
+            })
     }
 
     export const DattorroReverb: EffectFactory = {
@@ -151,7 +151,7 @@ export namespace EffectFactories {
                 box.label.setValue("Dattorro Reverb")
                 box.index.setValue(index)
                 box.host.refer(hostField)
-            }),
+            })
     }
 
     export const Maximizer: EffectFactory = {
@@ -166,7 +166,7 @@ export namespace EffectFactories {
                 box.label.setValue("Maximizer")
                 box.index.setValue(index)
                 box.host.refer(hostField)
-            }),
+            })
     }
 
     export const Compressor: EffectFactory = {
@@ -182,7 +182,7 @@ export namespace EffectFactories {
                 box.label.setValue("Compressor")
                 box.index.setValue(index)
                 box.host.refer(hostField)
-            }),
+            })
     }
 
     export const Gate: EffectFactory = {
@@ -197,7 +197,7 @@ export namespace EffectFactories {
                 box.label.setValue("Gate")
                 box.index.setValue(index)
                 box.host.refer(hostField)
-            }),
+            })
     }
 
     export const Reverb: EffectFactory = {
@@ -213,7 +213,7 @@ export namespace EffectFactories {
                 box.preDelay.setInitValue(0.001)
                 box.index.setValue(index)
                 box.host.refer(hostField)
-            }),
+            })
     }
 
     export const Crusher: EffectFactory = {
@@ -228,7 +228,7 @@ export namespace EffectFactories {
                 box.label.setValue("Crusher")
                 box.index.setValue(index)
                 box.host.refer(hostField)
-            }),
+            })
     }
 
     export const Fold: EffectFactory = {
@@ -243,7 +243,7 @@ export namespace EffectFactories {
                 box.label.setValue("Fold")
                 box.index.setValue(index)
                 box.host.refer(hostField)
-            }),
+            })
     }
 
     export const Tidal: EffectFactory = {
@@ -259,7 +259,7 @@ export namespace EffectFactories {
                 box.index.setValue(index)
                 box.depth.setValue(0.75)
                 box.host.refer(hostField)
-            }),
+            })
     }
 
     export const Revamp: EffectFactory = {
@@ -274,7 +274,7 @@ export namespace EffectFactories {
                 EffectParameterDefaults.defaultRevampDeviceBox(box)
                 box.index.setValue(index)
                 box.host.refer(hostField)
-            }),
+            })
     }
 
     export const NeuralAmp: EffectFactory = {
@@ -289,7 +289,7 @@ export namespace EffectFactories {
                 box.label.setValue("Neural Amp")
                 box.index.setValue(index)
                 box.host.refer(hostField)
-            }),
+            })
     }
 
     export const Modular: EffectFactory = {
@@ -302,7 +302,7 @@ export namespace EffectFactories {
         create: (
             {boxGraph, rootBox, userEditingManager},
             hostField,
-            index,
+            index
         ): ModularDeviceBox => {
             const moduleSetupBox = ModularBox.create(
                 boxGraph,
@@ -310,7 +310,7 @@ export namespace EffectFactories {
                 (box) => {
                     box.collection.refer(rootBox.modularSetups)
                     box.label.setValue("Modular")
-                },
+                }
             )
             const modularInput = ModularAudioInputBox.create(
                 boxGraph,
@@ -320,7 +320,7 @@ export namespace EffectFactories {
                     box.attributes.label.setValue("Modular Input")
                     box.attributes.x.setValue(-256)
                     box.attributes.y.setValue(32)
-                },
+                }
             )
             const modularOutput = ModularAudioOutputBox.create(
                 boxGraph,
@@ -330,7 +330,7 @@ export namespace EffectFactories {
                     box.attributes.label.setValue("Modular Output")
                     box.attributes.x.setValue(256)
                     box.attributes.y.setValue(32)
-                },
+                }
             )
             ModuleConnectionBox.create(boxGraph, UUID.generate(), (box) => {
                 box.collection.refer(moduleSetupBox.connections)
@@ -344,10 +344,18 @@ export namespace EffectFactories {
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
-        },
+        }
     }
 
-    export const MidiNamed = {Arpeggio, Pitch, Velocity, Zeitgeist}
+    export const MidiNamed = {
+        Arpeggio,
+        Pitch,
+        Velocity,
+        Zeitgeist
+    }
+
+    const includeNeuralAmp = false
+
     export const AudioNamed = {
         StereoTool,
         Compressor,
@@ -359,8 +367,11 @@ export namespace EffectFactories {
         Crusher,
         Fold,
         Tidal,
-        Maximizer,
         NeuralAmp,
+        Maximizer
+    }
+    if (!includeNeuralAmp) {
+        delete (AudioNamed as { NeuralAmp?: typeof NeuralAmp }).NeuralAmp
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> =
         Object.values(MidiNamed)

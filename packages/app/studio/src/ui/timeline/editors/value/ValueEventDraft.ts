@@ -1,10 +1,9 @@
 import {EventCollection, ppqn, ValueEvent} from "@opendaw/lib-dsp"
 import {int, Nullable} from "@opendaw/lib-std"
 import {ValueModifyStrategy} from "@/ui/timeline/editors/value/ValueModifyStrategies.ts"
-import {ValueEventBoxAdapter} from "@opendaw/studio-adapters"
-import {UIValueEvent} from "./UIValueEvent"
+import {SelectableValueEvent, ValueEventBoxAdapter} from "@opendaw/studio-adapters"
 
-export interface ValueEventDraft extends UIValueEvent {
+export interface ValueEventDraft extends SelectableValueEvent {
     get direction(): int
     get isSelected(): boolean
     set index(value: int)
@@ -19,7 +18,7 @@ export namespace ValueEventDraft {
         return ({type: "value-event", position, index, value, interpolation, direction: 0, isSelected: false})
     }
 
-    export const wrapSelected = (event: UIValueEvent,
+    export const wrapSelected = (event: SelectableValueEvent,
                                  strategy: ValueModifyStrategy): Readonly<ValueEventDraft> => {
         const value = strategy.readValue(event)
         const position = strategy.readPosition(event)

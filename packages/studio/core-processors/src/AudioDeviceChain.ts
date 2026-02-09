@@ -1,9 +1,10 @@
-import {Arrays, assert, SortedSet, Subscription, Terminator, UUID} from "@opendaw/lib-std"
+import {Arrays, assert, int, Option, SortedSet, Subscription, Terminator, UUID} from "@opendaw/lib-std"
 import {AuxSendProcessor} from "./AuxSendProcessor"
 import {ChannelStripProcessor} from "./ChannelStripProcessor"
 import {AudioEffectDeviceAdapter, AuxSendBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioEffectDeviceProcessorFactory} from "./DeviceProcessorFactory"
-import {ProcessPhase} from "./processing"
+import {Processor, ProcessPhase} from "./processing"
+import {MonitoringMixProcessor} from "./MonitoringMixProcessor"
 import {AudioUnit} from "./AudioUnit"
 import {DeviceChain} from "./DeviceChain"
 import {AudioUnitOptions} from "./AudioUnitOptions"
@@ -28,6 +29,7 @@ export class AudioDeviceChain implements DeviceChain {
 
     #orderedEffects: Array<AudioEffectDeviceProcessor> = []
     #needsWiring = false
+    #monitoringMixer: Option<MonitoringMixProcessor> = Option.None
 
     constructor(audioUnit: AudioUnit, options: AudioUnitOptions) {
         this.#audioUnit = audioUnit
@@ -36,7 +38,7 @@ export class AudioDeviceChain implements DeviceChain {
         this.#auxSends = UUID.newSet(device => device.adapter.uuid)
         this.#channelStrip = this.#terminator.own(new ChannelStripProcessor(this.#audioUnit.context, this.#audioUnit.adapter))
         this.#effects = UUID.newSet(({device}) => device.uuid)
-        this.#disconnector = this.#terminator.own(new Terminator())
+        this.#disconnector = new Terminator()
 
         this.#terminator.ownAll(
             this.#audioUnit.adapter.audioEffects.catchupAndSubscribe({
@@ -78,7 +80,8 @@ export class AudioDeviceChain implements DeviceChain {
                     this.#wire()
                     this.#needsWiring = false
                 }
-            })
+            }),
+            this.#disconnector
         )
     }
 
@@ -89,7 +92,27 @@ export class AudioDeviceChain implements DeviceChain {
         this.#needsWiring = true
     }
 
+    setMonitoringChannels(channels: ReadonlyArray<int>): void {
+        const optInput = this.#audioUnit.input()
+        if (optInput.isEmpty()) {return}
+        if (this.#monitoringMixer.isEmpty()) {
+            const mixer = new MonitoringMixProcessor(this.#audioUnit.context)
+            this.#audioUnit.context.registerProcessor(mixer)
+            this.#monitoringMixer = Option.wrap(mixer)
+        }
+        this.#monitoringMixer.unwrap().setChannels(channels)
+        this.invalidateWiring()
+    }
+
+    clearMonitoringChannels(): void {
+        this.#monitoringMixer.ifSome(mixer => {
+            mixer.clearChannels()
+            this.invalidateWiring()
+        })
+    }
+
     terminate(): void {
+        this.#monitoringMixer.ifSome(mixer => mixer.terminate())
         this.#terminator.terminate()
         this.#effects.forEach(({device}) => device.terminate())
         this.#effects.clear()
@@ -106,14 +129,23 @@ export class AudioDeviceChain implements DeviceChain {
             context.getAudioUnit(adapter.deviceHost().uuid).inputAsAudioBus())
         if (optInput.isEmpty() || (optOutput.isEmpty() && !isOutputUnit)) {return}
         let source: AudioDeviceProcessor = optInput.unwrap()
+        let edgeSource: Processor = source.outgoing
+        // Insert monitoring mixer into edge chain if active
+        if (this.#monitoringMixer.nonEmpty() && this.#monitoringMixer.unwrap().isActive) {
+            const mixer = this.#monitoringMixer.unwrap()
+            this.#disconnector.own(mixer.setAudioSource(source.audioOutput))
+            this.#disconnector.own(context.registerEdge(source.outgoing, mixer))
+            edgeSource = mixer
+        }
         if (this.#options.includeAudioEffects) {
             Arrays.replace(this.#orderedEffects, this.#audioUnit.adapter.audioEffects
                 .adapters().map(({uuid}) => this.#effects.get(uuid).device))
             for (const target of this.#orderedEffects) {
                 if (target.adapter().enabledField.getValue()) {
                     this.#disconnector.own(target.setAudioSource(source.audioOutput))
-                    this.#disconnector.own(context.registerEdge(source.outgoing, target.incoming))
+                    this.#disconnector.own(context.registerEdge(edgeSource, target.incoming))
                     source = target
+                    edgeSource = target.outgoing
                 }
             }
         }
@@ -123,12 +155,12 @@ export class AudioDeviceChain implements DeviceChain {
                 const target = context.getAudioUnit(auxSend.adapter.targetBus.deviceHost().uuid)
                 this.#disconnector.own(auxSend.setAudioSource(source.audioOutput))
                 this.#disconnector.own(target.inputAsAudioBus().addAudioSource(auxSend.audioOutput))
-                this.#disconnector.own(context.registerEdge(source.outgoing, auxSend))
+                this.#disconnector.own(context.registerEdge(edgeSource, auxSend))
                 this.#disconnector.own(context.registerEdge(auxSend, target.inputAsAudioBus()))
             })
         }
         this.#disconnector.own(this.#channelStrip.setAudioSource(source.audioOutput))
-        this.#disconnector.own(context.registerEdge(source.outgoing, this.#channelStrip))
+        this.#disconnector.own(context.registerEdge(edgeSource, this.#channelStrip))
         if (optOutput.nonEmpty() && !isOutputUnit) {
             const audioBus = optOutput.unwrap()
             this.#disconnector.own(audioBus.addAudioSource(this.#channelStrip.audioOutput))

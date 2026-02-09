@@ -4,6 +4,7 @@ import {
     isDefined,
     panic,
     Procedure,
+    RuntimeNotifier,
     safeExecute,
     SortedSet,
     Terminable,
@@ -28,6 +29,11 @@ import {
     BoxAdapters,
     BoxAdaptersContext,
     ClipSequencing,
+    DeviceBoxAdapter,
+    DeviceBoxUtils,
+    Devices,
+    FilteredSelection,
+    isVertexOfBox,
     ParameterFieldAdapters,
     ProcessorOptions,
     ProjectMandatoryBoxes,
@@ -54,7 +60,8 @@ import {ProjectValidation} from "./ProjectValidation"
 import {ppqn, TempoMap, TimeBase} from "@opendaw/lib-dsp"
 import {MidiData} from "@opendaw/lib-midi"
 import {StudioPreferences} from "../StudioPreferences"
-import {RegionOverlapResolver} from "../ui"
+import {RegionOverlapResolver, TimelineFocus} from "../ui"
+import {SampleStorage} from "../samples"
 
 export type RestartWorklet = { unload: Func<unknown, Promise<unknown>>, load: Procedure<EngineWorklet> }
 
@@ -96,6 +103,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     readonly #terminator = new Terminator()
     readonly #sampleRegistrations: SortedSet<UUID.Bytes, { uuid: UUID.Bytes, terminable: Terminable }>
+    readonly #userCreatedSamples: SortedSet<UUID.Bytes, UUID.Bytes> = UUID.newSet(uuid => uuid)
 
     readonly #env: ProjectEnv
     readonly boxGraph: BoxGraph<BoxIO.TypeMap>
@@ -110,6 +118,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly captureDevices: CaptureDevices
     readonly editing: BoxEditing
     readonly selection: VertexSelection
+    readonly deviceSelection: FilteredSelection<DeviceBoxAdapter>
     readonly boxAdapters: BoxAdapters
     readonly userEditingManager: UserEditingManager
     readonly parameterFieldAdapters: ParameterFieldAdapters
@@ -118,7 +127,11 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly mixer: Mixer
     readonly tempoMap: TempoMap
     readonly overlapResolver: RegionOverlapResolver
+    readonly timelineFocus: TimelineFocus
     readonly engine = new EngineFacade()
+
+    readonly #rootBoxAdapter: RootBoxAdapter
+    readonly #timelineBoxAdapter: TimelineBoxAdapter
 
     private constructor(env: ProjectEnv, boxGraph: BoxGraph, {
         rootBox,
@@ -140,13 +153,23 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.selection = new VertexSelection(this.editing, this.boxGraph)
         this.parameterFieldAdapters = new ParameterFieldAdapters()
         this.boxAdapters = this.#terminator.own(new BoxAdapters(this))
-        this.tempoMap = new VaryingTempoMap(this.timelineBoxAdapter)
+        this.deviceSelection = this.#terminator.own(this.selection.createFilteredSelection(
+            isVertexOfBox(DeviceBoxUtils.isDeviceBox),
+            {
+                fx: (adapter: DeviceBoxAdapter) => adapter.box,
+                fy: vertex => this.boxAdapters.adapterFor(vertex.box, Devices.isAny)
+            }
+        ))
+        this.#timelineBoxAdapter = this.boxAdapters.adapterFor(this.timelineBox, TimelineBoxAdapter)
+        this.tempoMap = this.#terminator.own(new VaryingTempoMap(this.#timelineBoxAdapter))
         this.userEditingManager = new UserEditingManager(this.editing)
         this.liveStreamReceiver = this.#terminator.own(new LiveStreamReceiver())
         this.midiLearning = this.#terminator.own(new MIDILearning(this))
         this.captureDevices = this.#terminator.own(new CaptureDevices(this))
-        this.mixer = new Mixer(this.rootBoxAdapter.audioUnits)
+        this.#rootBoxAdapter = this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)
+        this.mixer = new Mixer(this.#rootBoxAdapter.audioUnits)
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
+        this.timelineFocus = this.#terminator.own(new TimelineFocus())
 
         console.debug(`Project was created on ${this.rootBoxAdapter.created.toString()}`)
 
@@ -163,6 +186,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                     this.#registerSample(update.uuid)
                 } else if (update instanceof DeleteUpdate && update.name === AudioFileBox.ClassName) {
                     this.#unregisterSample(update.uuid)
+                    this.#deleteUserCreatedSample(update.uuid)
                 }
             }
         }))
@@ -188,6 +212,15 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         return worklet
     }
 
+    handleCpuOverload(): void {
+        if (!StudioPreferences.settings.engine["stop-playback-when-overloading"]) {return}
+        this.engine.sleep()
+        RuntimeNotifier.info({
+            headline: "CPU Overload Detected",
+            message: "Playback has been stopped. Try removing heavy plugins or effects."
+        }).finally()
+    }
+
     startRecording(countIn: boolean = true) {
         this.engine.assertWorklet()
         if (Recording.isRecording) {return}
@@ -205,8 +238,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     spawn(): Terminator {return this.#terminator.spawn()}
 
     get env(): ProjectEnv {return this.#env}
-    get rootBoxAdapter(): RootBoxAdapter {return this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)}
-    get timelineBoxAdapter(): TimelineBoxAdapter {return this.boxAdapters.adapterFor(this.timelineBox, TimelineBoxAdapter)}
+    get rootBoxAdapter(): RootBoxAdapter {return this.#rootBoxAdapter}
+    get timelineBoxAdapter(): TimelineBoxAdapter {return this.#timelineBoxAdapter}
     get sampleManager(): SampleLoaderManager {return this.#env.sampleManager}
     get soundfontManager(): SoundfontLoaderManager {return this.#env.soundfontManager}
     get clipSequencing(): ClipSequencing {return panic("Only available in audio context")}
@@ -276,8 +309,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     }
 
     invalid(): boolean {
-        // TODO Optimise. Flag changes somewhere.
-        return this.boxGraph.boxes().some(box => box.accept<BoxVisitor<boolean>>({
+        const now = performance.now()
+        const result = this.boxGraph.boxes().some(box => box.accept<BoxVisitor<boolean>>({
             visitTrackBox: (box: TrackBox): boolean => {
                 for (const [current, next] of Arrays.iterateAdjacent(box.regions.pointerHub.incoming()
                     .map(({box}) => UnionBoxTypes.asRegionBox(box))
@@ -292,6 +325,10 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                 return false
             }
         }) ?? false)
+        if (performance.now() - now > 5) {
+            console.warn("Evaluation of invalid project takes more than 5ms")
+        }
+        return result
     }
 
     lastRegionAction(): ppqn {
@@ -299,6 +336,10 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
             .flatMap(audioUnitAdapter => audioUnitAdapter.tracks.values()
                 .map(trackAdapter => trackAdapter.regions.collection.asArray().at(-1)))
             .filter(isDefined).reduce((position, region) => Math.max(position, region.complete), 0)
+    }
+
+    trackUserCreatedSample(uuid: UUID.Bytes): void {
+        this.#userCreatedSamples.add(uuid)
     }
 
     terminate(): void {
@@ -314,5 +355,19 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     #unregisterSample(uuid: UUID.Bytes): void {
         this.#sampleRegistrations.removeByKey(uuid).terminable.terminate()
+    }
+
+    async #deleteUserCreatedSample(uuid: UUID.Bytes): Promise<void> {
+        if (!this.#userCreatedSamples.hasKey(uuid)) {return}
+        this.#userCreatedSamples.removeByKey(uuid)
+        const autoDelete = StudioPreferences.settings.storage["auto-delete-orphaned-samples"]
+        if (!autoDelete && !await RuntimeNotifier.approve({
+            headline: "Delete Sample?",
+            message: "The sample is no longer used. Delete it from storage? This cannot be undone!",
+            approveText: "Delete",
+            cancelText: "Keep"
+        })) {return}
+        SampleStorage.get().deleteItem(uuid).catch((reason: unknown) =>
+            console.warn("Failed to delete sample from storage", reason))
     }
 }

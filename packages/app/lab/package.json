@@ -1,34 +1,34 @@
 {
-    "name": "@opendaw/lab",
-    "private": true,
-    "version": "0.0.99",
-    "type": "module",
-    "license": "LGPL-3.0-or-later",
-    "scripts": {
-        "dev": "vite --clearScreen false",
-        "build": "tsc && vite build",
-        "preview": "vite preview",
-        "lint": "eslint \"src/**/*.ts\""
-    },
-    "dependencies": {
-        "@opendaw/lib-box": "^0.0.69",
-        "@opendaw/lib-dom": "^0.0.70",
-        "@opendaw/lib-dsp": "^0.0.68",
-        "@opendaw/lib-jsx": "^0.0.70",
-        "@opendaw/lib-runtime": "^0.0.66",
-        "@opendaw/lib-std": "^0.0.65",
-        "@opendaw/studio-adapters": "^0.0.79",
-        "@opendaw/studio-boxes": "^0.0.71",
-        "@opendaw/studio-core": "^0.0.99",
-        "@opendaw/studio-enums": "^0.0.60"
-    },
-    "devDependencies": {
-        "@opendaw/eslint-config": "^0.0.27",
-        "@opendaw/typescript-config": "^0.0.28",
-        "@types/node": "^22.15.18",
-        "eslint": "^8.57.0",
-        "sass": "^1.88.0",
-        "vite": "^7.0.2",
-        "vite-plugin-cross-origin-isolation": "^0.1.6"
-    }
+  "name": "@opendaw/lab",
+  "private": true,
+  "version": "0.0.102",
+  "type": "module",
+  "license": "LGPL-3.0-or-later",
+  "scripts": {
+    "dev": "vite --clearScreen false",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint \"src/**/*.ts\""
+  },
+  "dependencies": {
+    "@opendaw/lib-box": "^0.0.71",
+    "@opendaw/lib-dom": "^0.0.72",
+    "@opendaw/lib-dsp": "^0.0.70",
+    "@opendaw/lib-jsx": "^0.0.72",
+    "@opendaw/lib-runtime": "^0.0.68",
+    "@opendaw/lib-std": "^0.0.67",
+    "@opendaw/studio-adapters": "^0.0.81",
+    "@opendaw/studio-boxes": "^0.0.73",
+    "@opendaw/studio-core": "^0.0.102",
+    "@opendaw/studio-enums": "^0.0.62"
+  },
+  "devDependencies": {
+    "@opendaw/eslint-config": "^0.0.27",
+    "@opendaw/typescript-config": "^0.0.28",
+    "@types/node": "^22.15.18",
+    "eslint": "^8.57.0",
+    "sass": "^1.88.0",
+    "vite": "^7.0.2",
+    "vite-plugin-cross-origin-isolation": "^0.1.6"
+  }
 }

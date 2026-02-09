@@ -8,7 +8,11 @@ import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo"
 
 const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP"]
-const IgnoredErrors = ["ResizeObserver loop completed with undelivered notifications."]
+const IgnoredErrors = [
+    "ResizeObserver loop completed with undelivered notifications.",
+    "Request timeout appSettingsDistributor.getValue"
+]
+const BrowserInternalPatterns = ["feature named"]
 const MonacoPatterns = ["monaco-editor", "vs/base/common/errors"]
 const UrlPattern = /https?:\/\/[^\s)]+/g
 
@@ -92,6 +96,13 @@ export class ErrorHandler {
         // Handle Monaco editor worker errors (throws Event objects when workers fail to load)
         if (reason instanceof Event || (reason instanceof Error && this.#looksLikeMonacoError(reason.message, reason.stack))) {
             console.warn("Monaco editor error (web workers may be unavailable):", reason)
+            event.preventDefault()
+            return true
+        }
+        // Handle browser-internal errors (e.g., DuckDuckGo feature detection)
+        if (reason instanceof Error
+            && BrowserInternalPatterns.some(pattern => reason.message.includes(pattern))) {
+            console.debug(`Browser internal error: ${reason.message}`)
             event.preventDefault()
             return true
         }

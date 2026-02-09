@@ -21,7 +21,7 @@ import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {ValueModifier} from "./ValueModifier"
 import {ValueModifyStrategy} from "@/ui/timeline/editors/value/ValueModifyStrategies.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
+import {SelectableValueEvent} from "@opendaw/studio-adapters"
 import {TimelineRange} from "@opendaw/studio-core"
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 
@@ -87,7 +87,7 @@ export const createValuePainter =
         const end = range.unitMax
         const events = reader.content.events
 
-        const createIterator = modifier.match<Provider<IterableIterator<UIValueEvent>>>({
+        const createIterator = modifier.match<Provider<IterableIterator<SelectableValueEvent>>>({
             none: () => () => ValueEvent.iterateWindow(events, start - offset, end - offset),
             some: (strategy: ValueModifyStrategy) => {
                 const snapValue = strategy.snapValue()
@@ -117,7 +117,7 @@ export const createValuePainter =
                 resultStartValue: 0.0,
                 resultEndValue: 1.0
             })
-        let prevEvent: Nullable<UIValueEvent> = null
+        let prevEvent: Nullable<SelectableValueEvent> = null
         for (const event of createIterator()) {
             if (isNotNull(prevEvent) && prevEvent.interpolation.type !== "none") {
                 const slope = prevEvent.interpolation.type === "curve" ? prevEvent.interpolation.slope : 0.5
