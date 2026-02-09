@@ -39,6 +39,7 @@ class SelectedModifyStrategy implements NoteModifyStrategy {
 }
 
 type Construct = Readonly<{
+    editing: BoxEditing
     element: Element
     selection: Selection<NoteEventBoxAdapter>
     positioner: PitchPositioner
@@ -51,6 +52,7 @@ type Construct = Readonly<{
 export class NoteMoveModifier implements NoteModifier {
     static create(construct: Construct): NoteMoveModifier {return new NoteMoveModifier(construct)}
 
+    readonly #editing: BoxEditing
     readonly #element: Element
     readonly #selection: Selection<NoteEventBoxAdapter>
     readonly #positioner: PitchPositioner
@@ -68,7 +70,8 @@ export class NoteMoveModifier implements NoteModifier {
     #deltaPitch: int
     #deltaPosition: ppqn
 
-    private constructor({element, selection, positioner, snapping, pointerPulse, pointerPitch, reference}: Construct) {
+    private constructor({editing, element, selection, positioner, snapping, pointerPulse, pointerPitch, reference}: Construct) {
+        this.#editing = editing
         this.#element = element
         this.#selection = selection
         this.#positioner = positioner
@@ -125,7 +128,7 @@ export class NoteMoveModifier implements NoteModifier {
         this.#repeat = shiftKey
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         if (this.#deltaPitch === 0 && this.#deltaPosition === 0) {
             if (this.#copy) {this.#dispatchChange()} // reset visuals
             return
@@ -136,7 +139,7 @@ export class NoteMoveModifier implements NoteModifier {
                 pitch: this.#selectedModifyStrategy.readPitch(adapter),
                 position: this.#selectedModifyStrategy.readPosition(adapter)
             }))
-        editing.modify(() => {
+        this.#editing.modify(() => {
             if (this.#copy) {
                 this.#selection.deselectAll()
                 const events = this.#reference.collection.unwrap().box.events

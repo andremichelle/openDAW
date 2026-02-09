@@ -58,8 +58,10 @@ export interface DeviceHost extends BoxAdapter, LabeledAudioOutputsOwner {
     readonly class: "device-host"
 
     get midiEffects(): IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>
+    get midiEffectsField(): Field<Pointers.MIDIEffectHost>
     get inputAdapter(): Option<AudioUnitInputAdapter>
     get audioEffects(): IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost>
+    get audioEffectsField(): Field<Pointers.AudioEffectHost>
     get inputField(): Field<Pointers.InstrumentHost | Pointers.AudioOutput>
     get tracksField(): Field<Pointers.TrackCollection>
     get minimizedField(): BooleanField

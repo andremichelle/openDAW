@@ -43,6 +43,7 @@ class SelectedModifyStrategy implements NoteModifyStrategy {
 }
 
 type Construct = Readonly<{
+    editing: BoxEditing
     element: Element
     selection: Selection<NoteEventBoxAdapter>
     property: PropertyAccessor
@@ -55,6 +56,7 @@ export class PropertyNodeModifier implements NoteModifier {
         return new PropertyNodeModifier(construct)
     }
 
+    readonly #editing: BoxEditing
     readonly #element: Element
     readonly #selection: Selection<NoteEventBoxAdapter>
     readonly #property: PropertyAccessor
@@ -66,7 +68,8 @@ export class PropertyNodeModifier implements NoteModifier {
 
     #deltaProperty: number
 
-    private constructor({element, selection, property, valueAxis, pointerValue}: Construct) {
+    private constructor({editing, element, selection, property, valueAxis, pointerValue}: Construct) {
+        this.#editing = editing
         this.#element = element
         this.#selection = selection
         this.#property = property
@@ -100,11 +103,11 @@ export class PropertyNodeModifier implements NoteModifier {
         }
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         if (this.#deltaProperty === 0.0 || this.#selection.isEmpty()) {return}
         const result: ReadonlyArray<{ adapter: NoteEventBoxAdapter, value: number }> = this.#selection.selected()
             .map(adapter => ({adapter, value: this.#selectedModifyStrategy.modifyProperty(this.#property, adapter)}))
-        editing.modify(() => result.forEach(({adapter: {box}, value}) =>
+        this.#editing.modify(() => result.forEach(({adapter: {box}, value}) =>
             this.#property.writeValue(box, value)))
     }
 

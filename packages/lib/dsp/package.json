@@ -1,6 +1,6 @@
 {
     "name": "@moises-ai/lib-dsp",
-    "version": "0.0.68",
+    "version": "0.0.70",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",

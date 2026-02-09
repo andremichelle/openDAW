@@ -10,6 +10,7 @@ export abstract class Storage<ITEM extends { uuid: UUID.String } & META, META, N
 
     async deleteItem(uuid: UUID.Bytes): Promise<void> {
         const path = `${this.folder}/${UUID.toString(uuid)}`
+        console.debug(`deleteItem '${path}'`)
         const uuids = await this.loadTrashedIds()
         uuids.push(UUID.toString(uuid))
         await this.saveTrashedIds(uuids)

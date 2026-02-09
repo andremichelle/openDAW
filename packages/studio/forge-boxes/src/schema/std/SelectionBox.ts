@@ -3,6 +3,7 @@ import {Pointers} from "@moises-ai/studio-enums"
 
 export const SelectionBox: BoxSchema<Pointers> = {
     type: "box",
+    ephemeral: true,
     class: {
         name: "SelectionBox",
         fields: {

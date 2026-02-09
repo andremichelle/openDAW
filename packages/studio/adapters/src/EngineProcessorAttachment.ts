@@ -6,6 +6,7 @@ export type ProcessorOptions = {}
 export type EngineProcessorAttachment = {
     syncStreamBuffer: SharedArrayBuffer // SyncStream SharedArrayBuffer
     controlFlagsBuffer: SharedArrayBuffer // Control flags SharedArrayBuffer (e.g., for sleep)
+    hrClockBuffer: SharedArrayBuffer // High-res clock SharedArrayBuffer
     project: ArrayBufferLike
     exportConfiguration?: ExportStemsConfiguration
     options?: ProcessorOptions

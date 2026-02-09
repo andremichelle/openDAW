@@ -41,7 +41,8 @@ RewriteRule ^(.*)$ $1.br [QSA,L]
 
 # --------------------------------------------------
 
-# SPA fallback
+# SPA fallback - route all non-file requests to index.html
+# Note: We only skip files (!-f), not directories (!-d), because the SPA router
+# needs to handle directory paths like /manuals/ even though that folder exists
 RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.html [L]

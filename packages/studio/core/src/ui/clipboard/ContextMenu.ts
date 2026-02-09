@@ -1,6 +1,6 @@
 import {Client, Option, Subscription} from "@moises-ai/lib-std"
 import {Events} from "@moises-ai/lib-dom"
-import {MenuItem, MenuRootData} from "./MenuItems"
+import {MenuItem, MenuRootData} from "../menu/MenuItems"
 
 export namespace ContextMenu {
     export const CONTEXT_MENU_EVENT_TYPE = "--context-menu" as const

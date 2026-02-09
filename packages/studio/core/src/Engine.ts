@@ -22,6 +22,8 @@ export interface Engine extends Terminable {
     scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void
     scheduleClipStop(trackIds: ReadonlyArray<UUID.Bytes>): void
     subscribeClipNotification(observer: Observer<ClipNotification>): Subscription
+    registerMonitoringSource(uuid: UUID.Bytes, node: AudioNode, numChannels: 1 | 2): void
+    unregisterMonitoringSource(uuid: UUID.Bytes): void
 
     get position(): ObservableValue<ppqn>
     get bpm(): ObservableValue<bpm>
@@ -31,6 +33,9 @@ export interface Engine extends Terminable {
     get playbackTimestamp(): ObservableValue<ppqn>
     get countInBeatsRemaining(): ObservableValue<number>
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>>
+    get cpuLoad(): ObservableValue<number>
     get project(): Project
     get preferences(): EnginePreferences
+    get perfBuffer(): Float32Array
+    get perfIndex(): number
 }

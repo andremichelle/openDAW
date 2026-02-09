@@ -174,6 +174,7 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
             const target = capturing.captureEvent(event)
             if (target === null) {return Option.None}
             return manager.startClipModifier(ClipMoveModifier.start({
+                project,
                 manager,
                 selection: clipSelection,
                 xAxis,

@@ -24,6 +24,11 @@ export namespace Geom {
             {x: b.x + b.r * cs, y: b.y + b.r * sn}
         ]
     }
+    export const isInsideCircle = (x: number, y: number, cx: number, cy: number, radius: number): boolean => {
+        const dx = x - cx
+        const dy = y - cy
+        return dx * dx + dy * dy <= radius * radius
+    }
 }
 
 export namespace Point {

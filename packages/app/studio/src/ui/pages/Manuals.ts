@@ -2,38 +2,68 @@ import {IconSymbol} from "@moises-ai/studio-enums"
 import {EffectFactories} from "@moises-ai/studio-core"
 import {InstrumentFactories} from "@moises-ai/studio-adapters"
 
-export type Manual = ({
+export type Manual = (
+    | {
     type: "page"
     label: string
     path: string
     icon?: IconSymbol
-} | {
+}
+    | {
     type: "folder"
     label: string
     icon?: IconSymbol
     files: ReadonlyArray<Manual>
 }) & { separatorBefore?: boolean }
 
+const includeNeuralAmp = false
+
 export const Manuals: ReadonlyArray<Manual> = [
     {
-        type: "folder", label: "General", files: [
-            {type: "page", label: "Audio Bus", path: "/manuals/audio-bus"},
-            {type: "page", label: "Automation", path: "/manuals/automation"},
-            {type: "page", label: "Browser Support", path: "/manuals/browser-support"},
-            {type: "page", label: "Cloud Backup", path: "/manuals/cloud-backup"},
-            {type: "page", label: "Firefox MIDI", path: "/manuals/firefox-midi"},
-            {type: "page", label: "Keyboard Shortcuts", path: "/manuals/keyboard-shortcuts"},
-            {type: "page", label: "Mixer", path: "/manuals/mixer"},
-            {type: "page", label: "Permissions", path: "/manuals/permissions"},
-            {type: "page", label: "Private File System", path: "/manuals/private-file-system"},
+        type: "folder",
+        label: "General",
+        files: [
+            {
+                type: "page",
+                label: "Browser Support",
+                path: "/manuals/browser-support"
+            },
+            {
+                type: "page",
+                label: "Keyboard Shortcuts",
+                path: "/manuals/keyboard-shortcuts"
+            },
             {type: "page", label: "Recording", path: "/manuals/recording"},
-            {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"}
+            {type: "page", label: "Permissions", path: "/manuals/permissions"},
+            {type: "page", label: "Automation", path: "/manuals/automation"},
+            {
+                type: "page",
+                label: "Cloud Backup",
+                path: "/manuals/cloud-backup"
+            },
+            {type: "page", label: "Mixer", path: "/manuals/mixer"},
+            {type: "page", label: "Audio Bus", path: "/manuals/audio-bus"},
+            {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"},
+            {
+                type: "page",
+                label: "Private File System",
+                path: "/manuals/private-file-system"
+            },
+            {
+                type: "page",
+                label: "Firefox MIDI",
+                path: "/manuals/firefox-midi"
+            }
         ]
     },
     {
-        type: "folder", label: "Devices", files: [
+        type: "folder",
+        label: "Devices",
+        files: [
             {
-                type: "folder", label: "Audio FX", files: [
+                type: "folder",
+                label: "Audio FX",
+                files: [
                     {
                         type: "page",
                         label: "Cheap Reverb",
@@ -82,12 +112,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                         path: "/manuals/devices/audio/maximizer",
                         icon: EffectFactories.Maximizer.defaultIcon
                     },
-                    /*{
+                    ...(includeNeuralAmp ? [{
                         type: "page",
                         label: "Neural Amp",
                         path: "/manuals/devices/audio/neural-amp",
                         icon: EffectFactories.AudioNamed.NeuralAmp.defaultIcon
-                    },*/
+                    } satisfies Manual] : []),
                     {
                         type: "page",
                         label: "Revamp",
@@ -109,7 +139,9 @@ export const Manuals: ReadonlyArray<Manual> = [
                 ]
             },
             {
-                type: "folder", label: "Instruments", files: [
+                type: "folder",
+                label: "Instruments",
+                files: [
                     {
                         type: "page",
                         label: "MIDIOutput",
@@ -149,7 +181,9 @@ export const Manuals: ReadonlyArray<Manual> = [
                 ]
             },
             {
-                type: "folder", label: "MIDI FX", files: [
+                type: "folder",
+                label: "MIDI FX",
+                files: [
                     {
                         type: "page",
                         label: "Arpeggio",
@@ -179,8 +213,14 @@ export const Manuals: ReadonlyArray<Manual> = [
         ]
     },
     {
-        type: "folder", label: "Developer", files: [
-            {type: "page", label: "How to create a device in openDAW?", path: "/manuals/creating-a-device"},
+        type: "folder",
+        label: "Developer",
+        files: [
+            {
+                type: "page",
+                label: "How to create a device in openDAW?",
+                path: "/manuals/creating-a-device"
+            },
             {type: "page", label: "Tech Stack", path: "/manuals/tech-stack"}
         ]
     }

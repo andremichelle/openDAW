@@ -101,4 +101,69 @@ describe("editing", () => {
         scene.editing.redo()
         expect(scene.graph.findBox(barUuid).nonEmpty()).false
     })
+
+    it("should handle box created and deleted in same transaction", (scene: TestScene) => {
+        // In a single transaction: create a box, modify it, and delete it
+        scene.editing.modify(() => {
+            const tempBox = BarBox.create(scene.graph, UUID.generate())
+            tempBox.bool.setValue(true)
+            tempBox.delete()
+        })
+        // The modification should have no visible effect (box created and deleted)
+        expect(scene.graph.boxes().length).toBe(0)
+        // Undo should work without errors (the phantom box updates are filtered out)
+        // Since there's nothing effective to undo, canUndo should be false
+        expect(scene.editing.canUndo()).false
+    })
+
+    it("should handle multiple boxes created and some deleted in same transaction", (scene: TestScene) => {
+        let survivingBox: BarBox | null = null
+        let deletedUuid: UUID.Bytes | null = null
+        scene.editing.modify(() => {
+            // Create two boxes
+            const box1 = BarBox.create(scene.graph, UUID.generate())
+            const box2 = BarBox.create(scene.graph, UUID.generate())
+            box1.bool.setValue(true)
+            box2.bool.setValue(true)
+            // Delete only one
+            deletedUuid = box1.address.uuid
+            box1.delete()
+            survivingBox = box2
+        })
+        // The surviving box should exist
+        expect(scene.graph.findBox(survivingBox!.address.uuid).nonEmpty()).true
+        expect((scene.graph.findBox(survivingBox!.address.uuid).unwrap().box as BarBox).bool.getValue()).true
+        // The deleted box should not exist
+        expect(scene.graph.findBox(deletedUuid!).nonEmpty()).false
+        // Undo should work - removes the surviving box
+        expect(() => scene.editing.undo()).not.toThrow()
+        expect(scene.graph.findBox(survivingBox!.address.uuid).nonEmpty()).false
+        // Redo should restore the surviving box
+        expect(() => scene.editing.redo()).not.toThrow()
+        expect(scene.graph.findBox(survivingBox!.address.uuid).nonEmpty()).true
+    })
+
+    it("should handle box with pointer created and deleted in same transaction", (scene: TestScene) => {
+        // Create a target box first (this one persists)
+        const targetBox = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        const targetUuid = targetBox.address.uuid
+        // In a single transaction: create a box with a pointer to target, then delete the new box
+        scene.editing.modify(() => {
+            const tempBox = BarBox.create(scene.graph, UUID.generate())
+            // Set the pointer to reference the target box's pointer field (which accepts PointerType.A)
+            tempBox.pointer.targetAddress = Option.wrap(targetBox.pointer.address)
+            tempBox.delete()
+        })
+        // Target should still exist (only the temp box was created and deleted)
+        expect(scene.graph.findBox(targetUuid).nonEmpty()).true
+        // Only target box should exist
+        expect(scene.graph.boxes().length).toBe(1)
+        // Undo the phantom transaction should work without "Could not find PointerField" error
+        // Since the phantom transaction was optimized away, undo goes back to before target was created
+        scene.editing.undo()
+        expect(scene.graph.findBox(targetUuid).nonEmpty()).false
+        // Redo should restore target
+        scene.editing.redo()
+        expect(scene.graph.findBox(targetUuid).nonEmpty()).true
+    })
 })

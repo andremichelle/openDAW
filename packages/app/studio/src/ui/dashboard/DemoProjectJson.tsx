@@ -10,4 +10,5 @@ export type DemoProjectJson = {
     }
     hasCover: boolean
     id: string
+    bundleSize: number
 }

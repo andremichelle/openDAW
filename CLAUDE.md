@@ -2,6 +2,8 @@
 
 ## Coding Style
 
+- **Minimize comments.** Code should be self-explanatory. Only add comments when the logic is truly non-obvious.
+- **No blank lines inside methods.** Keep method bodies compact without empty line separators.
 - **Never use single-letter abbreviations in lambdas.** Use descriptive names like `entry`, `text`, `value`, `event`, etc.
 - **Use types and functions from `@opendaw/lib-std` instead of inline checks:**
   - Use `Optional<T>` instead of `T | undefined`

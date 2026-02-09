@@ -8,6 +8,7 @@ import {
     Class,
     DataInput,
     DataOutput,
+    Exec,
     Func,
     int,
     isDefined,
@@ -34,11 +35,18 @@ import {ArrayField} from "./array"
 import {ObjectField} from "./object"
 import {PrimitiveField} from "./primitive"
 
+// Resources act as leaves when collecting dependencies (their own dependencies are not followed).
+// "preserved": UUID is preserved during copy/paste (for content-addressable storage like audio files)
+// "internal": UUID is regenerated during copy/paste
+export type ResourceType = "preserved" | "internal"
+
 export type BoxConstruct<T extends PointerTypes> = {
     uuid: UUID.Bytes
     graph: BoxGraph
     name: string
     pointerRules: PointerRules<T>
+    resource?: ResourceType
+    ephemeral?: boolean
 }
 
 export abstract class Box<P extends PointerTypes = PointerTypes, F extends Fields = any> implements Vertex<P, F> {
@@ -50,15 +58,19 @@ export abstract class Box<P extends PointerTypes = PointerTypes, F extends Field
     readonly #graph: BoxGraph
     readonly #name: string
     readonly #pointerRules: PointerRules<P>
+    readonly #resource?: ResourceType
+    readonly #ephemeral: boolean
 
     readonly #fields: F
     readonly #creationIndex = Box.Index++
 
-    protected constructor({uuid, graph, name, pointerRules}: BoxConstruct<P>) {
+    protected constructor({uuid, graph, name, pointerRules, resource, ephemeral}: BoxConstruct<P>) {
         this.#address = Address.compose(uuid)
         this.#graph = graph
         this.#name = name
         this.#pointerRules = pointerRules
+        this.#resource = resource
+        this.#ephemeral = ephemeral === true
 
         this.#fields = this.initializeFields()
 
@@ -67,6 +79,7 @@ export abstract class Box<P extends PointerTypes = PointerTypes, F extends Field
 
     protected abstract initializeFields(): F
 
+    abstract get tags(): Readonly<Record<string, string | number | boolean>>
     abstract accept<VISITOR extends VertexVisitor<any>>(visitor: VISITOR): VISITOR extends VertexVisitor<infer R> ? Maybe<R> : void
 
     fields(): ReadonlyArray<Field> {return Object.values(this.#fields)}
@@ -79,6 +92,9 @@ export abstract class Box<P extends PointerTypes = PointerTypes, F extends Field
     subscribe(propagation: Propagation, procedure: Procedure<Update>): Subscription {
         return this.graph.subscribeVertexUpdates(propagation, this.address, procedure)
     }
+    subscribeDeletion(listener: Exec): Subscription {
+        return this.graph.subscribeDeletion(this.address.uuid, listener)
+    }
 
     get box(): Box {return this}
     get name(): string {return this.#name}
@@ -86,6 +102,8 @@ export abstract class Box<P extends PointerTypes = PointerTypes, F extends Field
     get parent(): Vertex {return this}
     get address(): Address {return this.#address}
     get pointerRules(): PointerRules<P> {return this.#pointerRules}
+    get resource(): ResourceType | undefined {return this.#resource}
+    get ephemeral(): boolean {return this.#ephemeral}
     get creationIndex(): number {return this.#creationIndex}
 
     @Lazy

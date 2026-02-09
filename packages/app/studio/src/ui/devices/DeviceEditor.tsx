@@ -3,15 +3,15 @@ import {Editing, Errors, Lifecycle, ObservableValue, panic, Procedure, Provider}
 import {createElement, Group, JsxValue} from "@moises-ai/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
-import {MenuItem} from "@moises-ai/studio-core"
-import {DeviceBoxAdapter, DeviceType, EffectDeviceBoxAdapter} from "@moises-ai/studio-adapters"
+import {ClipboardManager, DevicesClipboard, MenuItem, Project} from "@moises-ai/studio-core"
+import {DeviceBoxAdapter, DeviceHost, Devices, DeviceType, EffectDeviceBoxAdapter} from "@moises-ai/studio-adapters"
+import {Option} from "@moises-ai/lib-std"
 import {DebugMenus} from "@/ui/menu/debug.ts"
 import {DragDevice} from "@/ui/AnyDragData"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {Events, Html} from "@moises-ai/lib-dom"
 import {TextScroller} from "@/ui/TextScroller"
 import {StringField} from "@moises-ai/lib-box"
-import {Project} from "@moises-ai/studio-core"
 import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {Promises} from "@moises-ai/lib-runtime"
 import {Surface} from "@/ui/surface/Surface"
@@ -71,7 +71,6 @@ export const DeviceEditor =
         const color = getColorFor(type)
         return (
             <div className={Html.buildClassList(className, customClassName)}
-                 tabIndex={0}
                  onInit={element => {
                      lifecycle.ownAll(
                          enabledField.catchupAndSubscribe((owner: ObservableValue<boolean>) =>
@@ -80,7 +79,38 @@ export const DeviceEditor =
                              element.classList.toggle("minimized", owner.getValue()))
                      )
                  }} data-drag>
-                <header onInit={element => {
+                <header tabIndex={0} onpointerdown={event => {
+                    const {deviceSelection} = project
+                    if (event.shiftKey) {
+                        if (deviceSelection.isSelected(adapter)) {
+                            deviceSelection.deselect(adapter)
+                        } else {
+                            deviceSelection.select(adapter)
+                        }
+                    } else {
+                        deviceSelection.deselectAll()
+                        deviceSelection.select(adapter)
+                    }
+                }} onInit={element => {
+                    const updateSelected = () =>
+                        element.classList.toggle("selected", project.deviceSelection.isSelected(adapter))
+                    lifecycle.ownAll(
+                        project.deviceSelection.catchupAndSubscribe({
+                            onSelected: updateSelected,
+                            onDeselected: updateSelected
+                        }),
+                        ClipboardManager.install(element, DevicesClipboard.createHandler({
+                            getEnabled: () => true,
+                            editing: project.editing,
+                            selection: project.deviceSelection,
+                            boxGraph: project.boxGraph,
+                            boxAdapters: project.boxAdapters,
+                            getHost: (): Option<DeviceHost> => {
+                                if (Devices.isHost(adapter)) {return Option.wrap(adapter)}
+                                return Option.wrap(adapter.deviceHost())
+                            }
+                        }))
+                    )
                     if (type === "midi-effect" || type === "audio-effect") {
                         const effect = adapter as EffectDeviceBoxAdapter
                         lifecycle.own(DragAndDrop.installSource(element, () => ({
@@ -90,11 +120,15 @@ export const DeviceEditor =
                     }
                 }} style={{color: color.toString()}}>
                     <Icon symbol={icon} onInit={element =>
-                        lifecycle.own(Events.subscribe(element, "click", () =>
-                            editing.modify(() => minimizedField.toggle())))}/>
+                        lifecycle.ownAll(
+                            Events.subscribe(element, "pointerdown", event => event.stopPropagation()),
+                            Events.subscribe(element, "click", () => editing.modify(() => minimizedField.toggle()))
+                        )}/>
                     <Icon symbol={IconSymbol.Shutdown} onInit={element =>
-                        lifecycle.own(Events.subscribe(element, "click", () =>
-                            editing.modify(() => enabledField.toggle())))}/>
+                        lifecycle.ownAll(
+                            Events.subscribe(element, "pointerdown", event => event.stopPropagation()),
+                            Events.subscribe(element, "click", () => editing.modify(() => enabledField.toggle()))
+                        )}/>
                     {(createLabel ?? defaultLabelFactory(lifecycle, editing, labelField))()}
                 </header>
                 <MenuButton root={MenuItem.root()

@@ -88,7 +88,7 @@ export class RegionReader<REGION extends LoopableRegionBoxAdapter<CONTENT>, CONT
         })
     }
     mapPlaybackCursor(value: ppqn): ppqn {
-        if (value < this.position || value > this.complete) {
+        if (value < this.position || value >= this.complete) {
             return value
         }
         return mod(value - this.offset, this.loopDuration) + this.offset

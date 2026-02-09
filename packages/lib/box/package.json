@@ -1,6 +1,6 @@
 {
     "name": "@moises-ai/lib-box",
-    "version": "0.0.69",
+    "version": "0.0.71",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",

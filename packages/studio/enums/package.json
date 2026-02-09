@@ -1,6 +1,6 @@
 {
     "name": "@moises-ai/studio-enums",
-    "version": "0.0.60",
+    "version": "0.0.62",
     "license": "LGPL-3.0-or-later",
     "publishConfig": {
         "registry": "https://npm.pkg.github.com",

@@ -78,14 +78,15 @@ export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAd
     lifecycle.ownAll(
         Events.subscribeDblDwn(nameLabel, async event => {
             const {status, error, value} = await Promises.tryCatch(Surface.get(nameLabel)
-                .requestFloatingTextInput(event, trackBoxAdapter.targetDeviceName.unwrapOrElse("")))
+                .requestFloatingTextInput(event, trackBoxAdapter.targetName.unwrapOrElse("")))
             if (status === "rejected") {
                 if (!Errors.isAbort(error)) {return panic(error)}
             } else {
-                project.editing.modify(() => trackBoxAdapter.targetDeviceName = value)
+                project.editing.modify(() => trackBoxAdapter.targetName = value)
             }
         }),
         Events.subscribe(element, "pointerdown", () => {
+            project.timelineFocus.focusTrack(trackBoxAdapter)
             if (!audioUnitEditing.isEditing(audioUnitBoxAdapter.box.editing)) {
                 audioUnitEditing.edit(audioUnitBoxAdapter.box.editing)
             }

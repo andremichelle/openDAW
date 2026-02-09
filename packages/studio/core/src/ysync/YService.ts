@@ -3,11 +3,10 @@ import {BoxGraph} from "@moises-ai/lib-box"
 import {Promises} from "@moises-ai/lib-runtime"
 import {BoxIO, UserInterfaceBox} from "@moises-ai/studio-boxes"
 import {ProjectSkeleton} from "@moises-ai/studio-adapters"
+import {Project, ProjectEnv, ProjectMigration} from "../project"
 import {YSync} from "./YSync"
 import * as Y from "yjs"
 import {WebsocketProvider} from "y-websocket"
-import {Project, ProjectEnv} from "../project"
-import {ProjectMigration} from "../project/ProjectMigration"
 
 // https://inspector.yjs.dev/
 
