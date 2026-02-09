@@ -15,9 +15,14 @@ export const createRegionLocator = (manager: TracksManager,
         if (index < 0 || index >= tracks.length) {return Iterables.empty()}
         const component = tracks[index]
         const threshold = range.unitsPerPixel * PointerRadiusDistance
-        const region = component.trackBoxAdapter.regions.collection.lowerEqual(u + threshold)
-        if (isDefined(region) && u < region.complete + threshold) {
-            return Iterables.one(region)
+        const collection = component.trackBoxAdapter.regions.collection
+        const before = collection.lowerEqual(u)
+        if (isDefined(before) && u < before.complete + threshold) {
+            return Iterables.one(before)
+        }
+        const after = collection.greaterEqual(u)
+        if (isDefined(after) && after.position <= u + threshold) {
+            return Iterables.one(after)
         }
         return Iterables.empty()
     },
