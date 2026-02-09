@@ -1,3 +1,14 @@
+---
+title: Mixer
+category: Studio Manual
+tags:
+  - mixer
+  - volume
+  - pan
+  - effects
+  - sends
+desc: Mixing and signal flow.
+---
 # Mixer
 
 The mixer provides a comprehensive view of all audio-units in your project, allowing you to adjust levels, panning, routing, and monitor output signals.

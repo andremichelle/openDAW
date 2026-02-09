@@ -1,3 +1,12 @@
+---
+title: openDAW (Education/DE)
+category: Studio Manual
+tags:
+  - manual
+  - Studio Manual
+  - edu-de
+desc: Documentation
+---
 # openDAW
 
 openDAW ist eine browserbasierte Digital Audio Workstation, die mit klarem Fokus auf Bildung, Datenschutz und Offenheit

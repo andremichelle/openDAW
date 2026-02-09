@@ -1,3 +1,12 @@
+---
+title: Firefox MIDI
+category: Studio Manual
+tags:
+  - manual
+  - Studio Manual
+  - firefox-midi
+desc: Documentation
+---
 # Request Midi Access On Firefox Does Not Work
 
 This is a known issue with Firefox's MIDI implementation. Unlike Chrome, which allows requesting MIDI access even if no

@@ -1,7 +1,7 @@
-import {BlockFlag, ProcessInfo} from "./processing"
-import {AudioBuffer, AudioData, dbToGain, PPQN, RenderQuantum} from "@opendaw/lib-dsp"
-import {assert, Bits, int, isNotNull, Iterables, TAU} from "@opendaw/lib-std"
-import {EngineContext} from "./EngineContext"
+import { BlockFlag, ProcessInfo } from "./processing"
+import { AudioBuffer, AudioData, dbToGain, PPQN, RenderQuantum } from "@opendaw/lib-dsp"
+import { assert, Bits, int, isNotNull, Iterables, TAU } from "@opendaw/lib-std"
+import { EngineContext } from "./EngineContext"
 
 export class Metronome {
     static createDefaultClickSounds(): Array<AudioData> {
@@ -24,22 +24,22 @@ export class Metronome {
     readonly #clickSounds: Array<AudioData> = Metronome.createDefaultClickSounds()
     readonly #clicks: Click[] = []
 
-    constructor(context: EngineContext) {this.#context = context}
+    constructor(context: EngineContext) { this.#context = context }
 
-    loadClickSound(index: 0 | 1, data: AudioData): void {this.#clickSounds[index] = data}
+    loadClickSound(index: 0 | 1, data: AudioData): void { this.#clickSounds[index] = data }
 
-    process({blocks}: ProcessInfo): void {
+    process({ blocks }: ProcessInfo): void {
         const enabled = this.#context.timeInfo.metronomeEnabled
         const signatureTrack = this.#context.timelineBoxAdapter.signatureTrack
         const metronome = this.#context.preferences.settings.metronome
-        const {beatSubDivision, gain, monophonic} = metronome
-        blocks.forEach(({p0, p1, bpm, s0, s1, flags}) => {
+        const { beatSubDivision, gain, monophonic } = metronome
+        blocks.forEach(({ p0, p1, bpm, s0, s1, flags }) => {
             if (enabled && Bits.every(flags, BlockFlag.transporting)) {
                 for (const [curr, next] of Iterables.pairWise(signatureTrack.iterateAll())) {
                     const signatureStart = curr.accumulatedPpqn
                     const signatureEnd = isNotNull(next) ? next.accumulatedPpqn : Infinity
-                    if (signatureEnd <= p0) {continue}
-                    if (signatureStart >= p1 && curr.index !== -1) {break}
+                    if (signatureEnd <= p0) { continue }
+                    if (signatureStart >= p1 && curr.index !== -1) { break }
                     const regionStart = curr.index === -1 ? p0 : Math.max(p0, signatureStart)
                     const regionEnd = Math.min(p1, signatureEnd)
                     const denominator = curr.denominator * beatSubDivision
@@ -51,7 +51,7 @@ export class Metronome {
                         const distanceToEvent = Math.floor(PPQN.pulsesToSamples(position - p0, bpm, sampleRate))
                         const beatIndex = Math.round((position - signatureStart) / stepSize)
                         const clickIndex = beatIndex % curr.nominator === 0 ? 0 : 1
-                        if (monophonic) {this.#clicks.forEach(click => click.fadeOut())}
+                        if (monophonic) { this.#clicks.forEach(click => click.fadeOut()) }
                         this.#clicks.push(new Click(this.#clickSounds[clickIndex], s0 + distanceToEvent, gain))
                         position += stepSize
                     }
@@ -67,7 +67,7 @@ export class Metronome {
         })
     }
 
-    get output(): AudioBuffer {return this.#output}
+    get output(): AudioBuffer { return this.#output }
 }
 
 class Click {
@@ -87,12 +87,12 @@ class Click {
         this.#startIndex = startIndex
     }
 
-    fadeOut(): void {if (this.#fadeOutPosition < 0) {this.#fadeOutPosition = 0}}
+    fadeOut(): void { if (this.#fadeOutPosition < 0) { this.#fadeOutPosition = 0 } }
 
     processAdd(buffer: AudioBuffer, start: int, end: int): boolean {
         const [out0, out1] = buffer.channels()
         const gain = dbToGain(this.#gainInDb)
-        const {frames, numberOfChannels, numberOfFrames, sampleRate: dataSampleRate} = this.#audioData
+        const { frames, numberOfChannels, numberOfFrames, sampleRate: dataSampleRate } = this.#audioData
         const inp0 = frames[0]
         const inp1 = frames[numberOfChannels > 1 ? 1 : 0]
         const ratio = dataSampleRate / sampleRate
@@ -104,12 +104,12 @@ class Click {
             const pAlpha = pFloat - pInt
             if (isFadingOut) {
                 fadeGain = 1.0 - this.#fadeOutPosition / Click.FadeOutDuration
-                if (++this.#fadeOutPosition >= Click.FadeOutDuration) {return true}
+                if (++this.#fadeOutPosition >= Click.FadeOutDuration) { return true }
             }
             out0[index] += (inp0[pInt] + pAlpha * (inp0[pInt + 1] - inp0[pInt])) * gain * fadeGain
             out1[index] += (inp1[pInt] + pAlpha * (inp1[pInt + 1] - inp1[pInt])) * gain * fadeGain
             this.#position += ratio
-            if (this.#position >= numberOfFrames - 1) {return true}
+            if (this.#position >= numberOfFrames - 1) { return true }
         }
         this.#startIndex = 0
         return false

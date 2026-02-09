@@ -1,0 +1,404 @@
+@use "@/mixins"
+@use "@/colors"
+
+// Root component (replaces .container)
+component
+    display: flex
+    flex-direction: column
+    height: 100%
+    width: 100%
+    @include colors.panel-background-dark
+    color: var(--color-bright)
+    font-family: inherit
+
+    // If embedded, we might want transparency
+    &.embedded
+        background: transparent
+
+    .header
+        padding: 16px 24px
+        border-bottom: 1px solid rgba(255,255,255,0.04)
+        display: flex
+        align-items: center
+        justify-content: space-between
+        background: rgba(0,0,0,0.2)
+        height: 72px
+
+        .title-row
+            display: flex
+            align-items: center
+            gap: 24px
+
+        .provider-switch
+            display: flex
+            background: rgba(0,0,0,0.3)
+            border-radius: 6px
+            padding: 4px
+            border: 1px solid rgba(255,255,255,0.1)
+
+            .pill
+                padding: 6px 16px
+                border-radius: 4px
+                cursor: pointer
+                font-size: 11px
+                font-weight: 700
+                transition: all 0.1s
+                color: var(--color-gray)
+                text-transform: uppercase
+
+                &:hover
+                    color: var(--color-bright)
+
+                &.active
+                    background: var(--color-blue)
+                    color: white
+                    box-shadow: 0 1px 4px rgba(0,0,0,0.2)
+
+        .switch-info
+            font-size: 10px
+            color: var(--color-gray)
+            opacity: 0.8
+            letter-spacing: 0.3px
+            font-weight: 500
+            padding-left: 4px
+            max-width: 200px
+            line-height: 1.3
+
+    .main
+        flex: 1
+        padding: 24px
+        overflow-y: auto
+        position: relative
+
+    .footer
+        padding: 16px 24px
+        border-top: 1px solid rgba(255,255,255,0.04)
+        display: flex
+        justify-content: space-between
+        align-items: center
+        background: rgba(0,0,0,0.2)
+
+    .label
+        display: block
+        font-size: 11px
+        font-weight: 700
+        color: var(--color-gray)
+        margin-bottom: 6px
+        text-transform: uppercase
+        letter-spacing: 0.5px
+
+    // Standardized Settings Input (Matches Profile)
+    .settings-input
+        width: 100%
+        margin-bottom: 16px
+
+        // Apply if it's a native input or select
+        &.native
+            @include mixins.Input
+            padding: 10px 12px !important
+            font-family: inherit
+            background: rgba(0,0,0,0.3)
+            border: 1px solid rgba(255,255,255,0.1) !important
+            border-radius: 4px !important
+            color: var(--color-bright) !important
+            font-size: 13px !important
+            height: auto !important
+
+            &:focus
+                border-color: var(--color-blue) !important
+                background-color: rgba(0,0,0,0.5) !important
+
+        // Apply if it's the custom TextInput component wrapper
+        // Note: TextInput has inner .TextInput styles we need to override if we want consistency
+        // But for Settings, we might just use native inputs for simple text fields to ensure 100% match with the new 'native-input' class in Profile
+        
+    .api-key-display
+        font-family: monospace
+        color: var(--color-green)
+        background: rgba(0,0,0,0.2)
+        padding: 4px 8px
+        border-radius: 4px
+        font-size: 12px
+        border: 1px solid rgba(255,255,255,0.05)
+
+    // Specific components inside
+    .config-group
+        display: flex
+        flex-direction: column
+        gap: 20px
+        width: 1100px
+        margin: 0 auto
+
+    .config-card
+        background: rgba(255, 255, 255, 0.02)
+        padding: 16px 20px
+        border-radius: 8px
+        border: 1px solid rgba(255,255,255,0.05)
+
+        &.active-brain
+             border-color: rgba(59, 130, 246, 0.3)
+             background: rgba(59, 130, 246, 0.05)
+
+    .split-row
+        display: flex
+        gap: 48px
+        align-items: flex-start
+
+        .guide-col
+            flex: 1.4
+            min-width: 420px
+        
+        .config-col
+            flex: 1
+            min-width: 320px
+
+    .provider-header
+        display: flex
+        align-items: center
+        gap: 20px
+        padding-bottom: 20px
+        border-bottom: 1px solid rgba(255,255,255,0.05)
+        margin-bottom: 20px
+        
+        .icon-box
+            width: 48px
+            height: 48px
+            background: rgba(255,255,255,0.05)
+            border-radius: 8px
+            display: flex
+            align-items: center
+            justify-content: center
+            font-size: 24px
+            // No emoji? using icons logic later? for now just a box.
+
+        .info
+            flex: 1
+            
+            h3
+                font-size: 18px
+                font-weight: 700
+                margin: 0 0 4px 0
+                color: var(--color-bright)
+
+            .desc
+                font-size: 13px
+                color: var(--color-gray)
+
+    .connection-status
+        display: flex
+        align-items: center
+        gap: 12px
+        background: rgba(0,0,0,0.3)
+        padding: 12px 16px
+        border-radius: 6px
+        margin-top: 16px
+        border: 1px solid transparent
+        font-size: 13px
+        
+        &.checking
+            border-color: rgba(255,255,255,0.1)
+            color: var(--color-gray)
+        
+        &.success
+            border-color: rgba(16, 185, 129, 0.3)
+            color: var(--color-green)
+            background: rgba(16, 185, 129, 0.1)
+
+        &.error
+            border-color: rgba(239, 68, 68, 0.3)
+            color: var(--color-red)
+            background: rgba(239, 68, 68, 0.1)
+
+    // Range Slider styling to look native
+    input[type=range]
+        -webkit-appearance: none
+        width: 100%
+        background: transparent
+        margin-top: 8px
+
+        &::-webkit-slider-thumb
+            -webkit-appearance: none
+            height: 16px
+            width: 16px
+            border-radius: 50%
+            background: var(--color-bright)
+            cursor: pointer
+            margin-top: -6px
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3)
+
+        &::-webkit-slider-runnable-track
+            width: 100%
+            height: 4px
+            cursor: pointer
+            background: rgba(255,255,255,0.1)
+            border-radius: 2px
+
+    .btn-primary
+        background: var(--color-blue)
+        color: white
+        padding: 8px 16px
+        border-radius: 4px
+        border: none
+        cursor: pointer
+        font-weight: 600
+        font-size: 13px
+        transition: filter 0.2s
+
+        &:hover
+            filter: brightness(1.1)
+
+    .btn-secondary
+        background: rgba(255,255,255,0.04)
+        border: 1px solid rgba(255,255,255,0.08)
+        color: var(--color-gray)
+        padding: 6px 12px
+        border-radius: 4px
+        cursor: pointer
+        font-size: 10px
+        font-weight: 600
+        transition: all 0.1s
+
+        &:hover
+            background: rgba(255,255,255,0.08)
+            border-color: rgba(255,255,255,0.15)
+            color: var(--color-bright)
+
+    .odie-btn
+        background: rgba(255,255,255,0.05)
+        border: 1px solid rgba(255,255,255,0.1)
+        color: var(--color-gray)
+        border-radius: 4px
+        cursor: pointer
+        transition: all 0.1s
+        display: flex
+        align-items: center
+        justify-content: center
+
+        &:hover
+            background: rgba(255,255,255,0.1)
+            color: var(--color-bright)
+
+    .odie-btn-primary
+        background: var(--color-blue)
+        border: 1px solid rgba(255,255,255,0.1)
+        color: white
+        border-radius: 4px
+        cursor: pointer
+        font-weight: 700
+        transition: all 0.1s
+        display: flex
+        align-items: center
+        justify-content: center
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.3)
+
+        &:hover
+            filter: brightness(1.1)
+
+    // New Grid for Right Column
+    .settings-grid
+        display: flex
+        flex-direction: column
+        gap: 16px
+
+        .divider
+            height: 1px
+            background: rgba(255,255,255,0.05)
+            margin: 4px 0
+
+    .input-row
+        display: flex
+        align-items: center
+        gap: 16px
+
+        .label
+            width: 110px
+            margin-bottom: 0
+            white-space: nowrap
+            font-size: 9px
+            color: var(--color-gray)
+            flex-shrink: 0
+            text-transform: uppercase
+            letter-spacing: 0.5px
+            font-weight: 700
+        
+        .value
+            flex: 1
+            display: flex
+            gap: 4px
+
+    .key-ring-list
+        background: rgba(0,0,0,0.2)
+        border-radius: 6px
+        border: 1px solid rgba(255,255,255,0.05)
+        overflow: hidden
+        margin-top: 8px
+
+        .key-ring-item
+            display: flex
+            align-items: center
+            padding: 6px 12px
+            border-bottom: 1px solid rgba(255,255,255,0.05)
+            background: transparent
+            
+            &.active
+                background: rgba(var(--color-accent-rgb), 0.1)
+
+            &.exhausted
+                opacity: 0.5
+
+            .key-dot
+                width: 6px
+                height: 6px
+                border-radius: 50%
+                margin-right: 10px
+                background: #666
+                
+                &.active
+                    background: var(--accent)
+                &.exhausted
+                    background: red
+
+            .key-text
+                flex: 1
+                font-family: monospace
+                font-size: 10px
+                letter-spacing: 1px
+                color: #eee
+
+                &.exhausted
+                    color: #888
+
+            .remove-key-btn
+                padding: 0 4px
+                border: none
+                background: none
+                font-size: 18px
+                color: #666
+                cursor: pointer
+                
+                &:hover
+                    color: var(--color-red)
+
+    .status-dot
+        min-width: 8px
+        height: 8px
+        border-radius: 50%
+        background: currentColor
+        opacity: 0.8
+
+    .active-key-display
+        display: flex
+        flex: 1
+        justify-content: space-between
+        align-items: center
+        background: rgba(0,0,0,0.3)
+        padding: 6px 12px
+        border-radius: 4px
+        border: 1px solid rgba(255,255,255,0.1)
+
+        span
+            font-size: 11px
+            border: none
+            background: none
+            padding: 0
+

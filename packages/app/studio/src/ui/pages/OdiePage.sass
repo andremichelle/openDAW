@@ -1,0 +1,97 @@
+@use "@/colors"
+@use "@/mixins"
+
+component
+  flex: 1
+  padding: 1.5em 0 1.5em 1.5em
+  display: grid
+  grid-template-columns: auto 1fr
+  column-gap: 1em
+  overflow: hidden
+  line-height: 1em
+  color: var(--color-dark)
+  @include colors.panel-background
+
+  > aside
+    display: flex
+    flex-direction: column
+    row-gap: 0.75em
+    overflow: hidden auto
+    padding-right: 2em
+
+    > nav
+      display: flex
+      flex-direction: column
+      row-gap: 0.25em
+      font-size: 0.75rem
+      left: -1em
+      position: relative
+      padding-left: 1em
+
+      details
+        &.separator-before
+          margin-top: 1em
+
+        summary
+          list-style: none
+
+          &::before
+            content: "▸ "
+            display: inline-block
+            width: 1em
+
+        &[open] > summary::before
+          content: "▾ "
+
+        nav
+          padding: 0 1em
+
+      a
+        display: block
+        color: inherit
+
+        &:hover
+          color: var(--color-bright)
+
+        &.active
+          cursor: default
+          color: var(--color-orange)
+
+  hr
+    width: 100%
+    height: 1px
+    border: none
+    background-color: var(--color-black)
+
+  > div.manual
+    padding-left: 1.5em
+    display: flex
+    flex-direction: column
+    row-gap: 0.75em
+    overflow: hidden auto
+
+    p, ul, strong
+      font-size: 0.875rem
+      color: var(--color-dark)
+
+    strong
+      color: var(--color-cream)
+
+    div.markdown
+      padding: 1em 0 0 0
+      max-width: 50rem
+      font-size: 0.875rem
+
+      .icon
+        top: 0.3em
+        position: relative
+        color: var(--color-blue)
+        zoom: 1.625
+        padding: 0.2em
+        border-radius: 50%
+        background-color: color-mix(in srgb, var(--color-blue), black 80%)
+
+      img
+        zoom: 0.5
+        border-radius: 5px
+        box-shadow: 4px 20px 2px 1px rgba(black, 0.08), 4px 32px 32px 0 rgba(black, 0.25), -0.25px -1px 1px 0 rgba(white, 0.08)

@@ -1,11 +1,11 @@
 import "./style.sass"
-import {assert, DefaultParameter, StringMapping, Terminator, ValueMapping} from "@opendaw/lib-std"
-import {createElement, replaceChildren} from "@opendaw/lib-jsx"
-import {Communicator, Messenger} from "@opendaw/lib-runtime"
-import {Slider} from "./Slider"
-import {Protocol} from "./protocol"
-import {Waveform} from "./waveform"
-import {Oscilloscope} from "./Oscilloscope"
+import { assert, DefaultParameter, StringMapping, Terminator, ValueMapping } from "@opendaw/lib-std"
+import { createElement, replaceChildren } from "@opendaw/lib-jsx"
+import { Communicator, Messenger } from "@opendaw/lib-runtime"
+import { Slider } from "./Slider"
+import { Protocol } from "./protocol"
+import { Waveform } from "./waveform"
+import { Oscilloscope } from "./Oscilloscope"
 
 (async () => {
     assert(crossOriginIsolated, "window must be crossOriginIsolated")
@@ -26,8 +26,8 @@ import {Oscilloscope} from "./Oscilloscope"
     const lifeCycle = new Terminator()
 
     const commands = Communicator.sender<Protocol>(Messenger.for(oscillatorNode.port), dispatcher => ({
-        setWaveform(value: number) {dispatcher.dispatchAndForget(this.setWaveform, value)},
-        setFrequency(value: number) {dispatcher.dispatchAndForget(this.setFrequency, value)}
+        setWaveform(value: number) { dispatcher.dispatchAndForget(this.setWaveform, value) },
+        setFrequency(value: number) { dispatcher.dispatchAndForget(this.setFrequency, value) }
     }))
 
     const waveforms: ReadonlyArray<Waveform> = Object.values(Waveform).filter(v => typeof v === "number")
@@ -48,7 +48,7 @@ import {Oscilloscope} from "./Oscilloscope"
     replaceChildren(document.body, (
         <div>
             <span>Run</span>
-            <input type="checkbox" onInit={element => {
+            <input type="checkbox" aria-label="Run Audio Context" onInit={element => {
                 element.onchange = () => {
                     if (audioContext.state === "suspended") {
                         element.value = "true"
@@ -58,13 +58,13 @@ import {Oscilloscope} from "./Oscilloscope"
                         audioContext.suspend()
                     }
                 }
-            }}/>
+            }} />
             <span>Waveform</span>
-            <Slider lifecycle={lifeCycle} parameter={waveform}/>
+            <Slider lifecycle={lifeCycle} parameter={waveform} />
             <span>Frequency</span>
-            <Slider lifecycle={lifeCycle} parameter={frequency}/>
+            <Slider lifecycle={lifeCycle} parameter={frequency} />
             <div style="margin-top: 30px;">
-                <Oscilloscope analyser={analyser} lifecycle={lifeCycle}/>
+                <Oscilloscope analyser={analyser} lifecycle={lifeCycle} />
             </div>
         </div>
     ))

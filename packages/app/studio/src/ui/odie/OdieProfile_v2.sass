@@ -1,0 +1,360 @@
+@use "@/mixins"
+
+component
+    display: grid
+    grid-template-columns: 300px 1fr
+    height: 100%
+    background: #000
+
+    // -- SIDEBAR --
+    .sidebar
+        background: rgba(0,0,0,0.2)
+        border-right: 1px solid rgba(255,255,255,0.05)
+        padding: 32px
+        display: flex
+        flex-direction: column
+        align-items: center
+        text-align: center
+        position: relative
+
+    .avatar-container
+        position: relative
+        width: 120px
+        height: 120px
+        margin-bottom: 24px
+        
+        .avatar
+            width: 100%
+            height: 100%
+            border-radius: 50%
+            background: rgba(255, 255, 255, 0.05)
+            border: 1px solid rgba(255, 255, 255, 0.1)
+            display: flex
+            align-items: center
+            justify-content: center
+            font-size: 48px
+            color: var(--color-bright)
+            overflow: hidden
+            cursor: pointer
+            transition: all 0.2s
+            
+            &:hover
+                border-color: var(--color-blue)
+                box-shadow: 0 0 20px rgba(59, 130, 246, 0.3)
+
+        .avatar-menu
+            position: absolute
+            top: 100%
+            left: 50%
+            transform: translateX(-50%)
+            margin-top: 12px
+            background: #1a1a1a
+            border: 1px solid rgba(255,255,255,0.1)
+            border-radius: 8px
+            padding: 4px
+            width: 160px
+            z-index: 100
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5)
+
+            .menu-item
+                padding: 10px
+                border-radius: 6px
+                cursor: pointer
+                text-align: left
+                transition: background 0.2s
+
+                &:hover
+                    background: rgba(255,255,255,0.05)
+
+                &.delete
+                    color: var(--color-red)
+                    &:hover
+                        background: rgba(239, 68, 68, 0.1)
+
+                .label
+                    font-size: 13px
+                    font-weight: 500
+                    color: var(--color-bright)
+                
+                .sub
+                    font-size: 10px
+                    color: var(--color-gray)
+                    margin-top: 2px
+
+    .info-name
+        font-size: 16px
+        font-weight: 700
+        margin-bottom: 4px
+        color: var(--color-bright)
+
+    .info-level
+        font-size: 11px
+        color: var(--color-gray)
+        margin-bottom: 24px
+        letter-spacing: 1px
+
+    .nav-list
+        width: 100%
+        text-align: left
+        margin-top: auto
+        margin-bottom: auto
+
+    .nav-item
+        padding: 12px 16px
+        border-radius: 8px
+        background: transparent
+        color: var(--color-gray)
+        cursor: pointer
+        display: flex
+        align-items: center
+        gap: 12px
+        font-weight: 400
+        transition: all 0.2s
+        margin-bottom: 4px
+
+        &:hover
+            color: var(--color-bright)
+            background: rgba(255,255,255,0.05)
+
+        &.active
+            background: rgba(255,255,255,0.1)
+            color: var(--color-bright)
+            font-weight: 600
+
+    .action-area
+        width: 100%
+        margin-top: 24px
+
+    // -- MAIN CONTENT --
+    .main
+        padding: 40px
+        overflow-y: auto
+        display: flex
+        flex-direction: column
+
+        h2
+            font-size: 20px
+            font-weight: 700
+            margin-bottom: 32px
+            color: var(--color-bright)
+            border-bottom: 1px solid rgba(255,255,255,0.1)
+            padding-bottom: 16px
+            letter-spacing: -0.5px
+
+    .section
+        margin-bottom: 32px
+
+    .label
+        font-size: 11px
+        text-transform: uppercase
+        letter-spacing: 1px
+        font-weight: 700
+        color: var(--color-gray)
+        margin-bottom: 8px
+        display: block
+
+    // -- PROFILE CARD (Overview) --
+    .overview-tab
+        width: 100%
+        height: 100%
+        display: flex
+        flex-direction: column
+
+    .profile-card
+        background: linear-gradient(135deg, #1a1a1a 0%, #111 100%)
+        border: 1px solid rgba(255,255,255,0.1)
+        border-radius: 16px
+        padding: 24px
+        position: relative
+        overflow: hidden
+        box-shadow: 0 20px 40px rgba(0,0,0,0.3)
+
+        &::after
+            content: ""
+            position: absolute
+            top: 0
+            left: 0
+            right: 0
+            bottom: 0
+            background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.03) 35%, transparent 40%)
+            pointer-events: none
+
+    .profile-header
+        display: flex
+        justify-content: space-between
+        margin-bottom: 24px
+        border-bottom: 1px dashed rgba(255,255,255,0.1)
+        padding-bottom: 16px
+
+        .profile-id
+            font-family: monospace
+            color: var(--color-gray)
+            font-size: 12px
+            letter-spacing: 1px
+
+        .profile-status
+            font-size: 10px
+            font-weight: 700
+            color: #10b981
+            background: rgba(16, 185, 129, 0.1)
+            padding: 2px 8px
+            border-radius: 4px
+            border: 1px solid rgba(16, 185, 129, 0.2)
+
+    .profile-body
+        display: flex
+        gap: 24px
+
+    .profile-photo
+        width: 100px
+        flex-shrink: 0
+        
+        .photo-frame
+            width: 100px
+            height: 100px
+            border-radius: 50%
+            background: #000
+            background-size: cover
+            background-position: center
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5)
+            border: 2px solid rgba(255,255,255,0.1)
+
+    .profile-details
+        flex: 1
+
+    .detail-row
+        margin-bottom: 12px
+        
+        &.main
+            margin-bottom: 20px
+            padding-bottom: 16px
+            border-bottom: 1px solid rgba(255,255,255,0.05)
+
+        .detail-label
+            font-size: 9px
+            color: var(--color-gray)
+            text-transform: uppercase
+            letter-spacing: 1px
+            margin-bottom: 4px
+
+        .detail-value
+            color: var(--color-bright)
+            font-size: 13px
+            font-weight: 500
+            
+            &.highlight
+                font-size: 18px
+                font-weight: 700
+                color: #fff
+
+    .detail-grid
+        display: grid
+        grid-template-columns: 1fr 1fr
+        gap: 16px
+
+    .profile-footer
+        margin-top: 24px
+        padding-top: 16px
+        border-top: 1px dashed rgba(255,255,255,0.1)
+        display: flex
+        justify-content: space-between
+        align-items: center
+        
+        .barcode
+            font-family: monospace
+            font-size: 20px
+            color: rgba(255,255,255,0.2)
+            letter-spacing: -2px
+
+        .issued
+            font-size: 9px
+            color: var(--color-gray)
+            opacity: 0.5
+            text-transform: uppercase
+
+    // -- INPUTS --
+    // Force specific styling for profile inputs to be cleaner
+    .profile-input
+        width: 100%
+        margin-bottom: 16px
+        
+        > div[contenteditable]
+            color: var(--color-bright) !important
+            background-color: rgba(0,0,0,0.3) !important
+            padding: 12px 14px !important
+            font-size: 14px !important
+            height: auto !important
+            border-radius: 6px !important
+            text-align: left !important
+            box-shadow: none !important
+            border: 1px solid rgba(255,255,255,0.1) !important
+            line-height: 1.5 !important
+            min-height: 48px !important
+
+            // Placeholder styling
+            &[data-placeholder]:empty:before
+                color: rgba(255,255,255,0.5) !important
+                font-style: normal
+                font-weight: 400
+
+            &:focus
+                border-color: var(--color-blue) !important
+                background-color: rgba(0,0,0,0.5) !important
+
+    .native-input
+        @include mixins.Input
+        width: 100%
+        padding: 12px 14px !important
+        font-family: inherit
+        background: rgba(0,0,0,0.3)
+        margin-bottom: 16px
+        resize: none
+        height: auto !important
+        color: var(--color-bright) !important
+        border: 1px solid rgba(255,255,255,0.1) !important
+        border-radius: 6px !important
+        font-size: 14px !important
+        min-height: 48px !important
+
+        &:focus
+             border-color: var(--color-blue) !important
+             background-color: rgba(0,0,0,0.5) !important
+
+    .input-textarea
+        @extend .native-input
+        min-height: 100px !important
+
+    .input-hint
+        font-size: 12px
+        color: var(--color-gray)
+        margin-bottom: 8px
+        opacity: 0.7
+
+    // -- LEVEL GRID --
+    .level-grid
+        display: grid
+        grid-template-columns: repeat(4, 1fr)
+        gap: 8px
+        margin-bottom: 16px
+
+    .level-btn
+        background: rgba(255,255,255,0.05)
+        border: 1px solid transparent
+        border-radius: 8px
+        padding: 12px
+        text-align: center
+        cursor: pointer
+        color: var(--color-gray)
+        font-size: 12px
+        font-weight: 600
+        transition: all 0.2s
+        text-transform: uppercase
+
+        &:hover
+            background: rgba(255,255,255,0.1)
+
+        &.active
+            background: var(--color-blue)
+            color: white
+            border-color: rgba(255,255,255,0.2)
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3)

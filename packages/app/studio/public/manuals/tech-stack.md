@@ -1,4 +1,13 @@
-# Tech-Stack
+---
+title: Tech Stack
+category: Developer Guide
+tags:
+  - manual
+  - Developer Guide
+  - tech-stack
+desc: Documentation
+---
+# Tech Stack
 
 ## Toolchain
 
@@ -73,8 +82,8 @@ Each in-house library has a clear, focused purpose.
 | **studio-core-workers**    | std, runtime, box, dsp, adapters, boxes, enums  |
 | **studio-scripting**       | std, runtime, box, dsp, adapters, boxes, enums  |
 
-### External
-
+* [idb](https://www.npmjs.com/package/idb) (IndexedDB wrapper for Odie memory)
+* [mermaid](https://mermaid.js.org) (Markdown-based diagram rendering for History Panel)
 * [jszip](https://www.npmjs.com/package/jszip) (Pack & Unpack Zip-Files)
 * [markdown-it](https://www.npmjs.com/package/markdown-it) + markdown-it-table (Markdown parsing/rendering)
 * [monaco-editor](https://microsoft.github.io/monaco-editor/) (Code editor for scripting)

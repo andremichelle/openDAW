@@ -1,3 +1,12 @@
+---
+title: Audio Bus
+category: Studio Manual
+tags:
+  - manual
+  - Studio Manual
+  - audio-bus
+desc: Documentation
+---
 # Audio Bus
 
 An Audio Bus is a virtual channel that groups multiple audio sources for collective processing and routing.

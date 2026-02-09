@@ -1,34 +1,34 @@
 import css from "./ComponentsPage.sass?inline"
-import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
-import {StudioService} from "@/service/StudioService.ts"
-import {Checkbox} from "@/ui/components/Checkbox.tsx"
-import {DefaultObservableValue, Option, panic, UUID} from "@opendaw/lib-std"
-import {Icon} from "@/ui/components/Icon.tsx"
-import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
-import {Button} from "@/ui/components/Button.tsx"
-import {MenuItem} from "@opendaw/studio-core"
-import {MenuButton} from "@/ui/components/MenuButton.tsx"
-import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
-import {Dialog} from "@/ui/components/Dialog.tsx"
-import {Orientation, Scroller} from "@/ui/components/Scroller.tsx"
-import {ScrollModel} from "@/ui/components/ScrollModel.ts"
-import {TimeCodeInput} from "@/ui/components/TimeCodeInput.tsx"
-import {NumberInput} from "@/ui/components/NumberInput.tsx"
-import {VUMeterDesign} from "@/ui/meter/VUMeterDesign.tsx"
-import {IconSymbol} from "@opendaw/studio-enums"
-import {dbToGain} from "@opendaw/lib-dsp"
-import {RootBox, TimelineBox} from "@opendaw/studio-boxes"
-import {BoxGraph} from "@opendaw/lib-box"
-import {BoxDebugView} from "../components/BoxDebugView"
-import {ProgressBar} from "@/ui/components/ProgressBar.tsx"
-import {TextInput} from "../components/TextInput"
-import {SearchInput} from "../components/SearchInput"
-import {Html} from "@opendaw/lib-dom"
-import {Colors} from "@opendaw/studio-enums"
+import { createElement, PageContext, PageFactory } from "@opendaw/lib-jsx"
+import { StudioService } from "@/service/StudioService.ts"
+import { Checkbox } from "@/ui/components/Checkbox.tsx"
+import { DefaultObservableValue, Option, panic, UUID } from "@opendaw/lib-std"
+import { Icon } from "@/ui/components/Icon.tsx"
+import { RadioGroup } from "@/ui/components/RadioGroup.tsx"
+import { Button } from "@/ui/components/Button.tsx"
+import { MenuItem } from "@opendaw/studio-core"
+import { MenuButton } from "@/ui/components/MenuButton.tsx"
+import { FloatingTextInput } from "@/ui/components/FloatingTextInput.tsx"
+import { Dialog } from "@/ui/components/Dialog.tsx"
+import { Orientation, Scroller } from "@/ui/components/Scroller.tsx"
+import { ScrollModel } from "@/ui/components/ScrollModel.ts"
+import { TimeCodeInput } from "@/ui/components/TimeCodeInput.tsx"
+import { NumberInput } from "@/ui/components/NumberInput.tsx"
+import { VUMeterDesign } from "@/ui/meter/VUMeterDesign.tsx"
+import { IconSymbol } from "@opendaw/studio-enums"
+import { dbToGain } from "@opendaw/lib-dsp"
+import { RootBox, TimelineBox } from "@opendaw/studio-boxes"
+import { BoxGraph } from "@opendaw/lib-box"
+import { BoxDebugView } from "../components/BoxDebugView"
+import { ProgressBar } from "@/ui/components/ProgressBar.tsx"
+import { TextInput } from "../components/TextInput"
+import { SearchInput } from "../components/SearchInput"
+import { Html } from "@opendaw/lib-dom"
+import { Colors } from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "ComponentsPage")
 
-export const ComponentsPage: PageFactory<StudioService> = ({lifecycle}: PageContext<StudioService>) => {
+export const ComponentsPage: PageFactory<StudioService> = ({ lifecycle }: PageContext<StudioService>) => {
     const checkbox = new DefaultObservableValue(false)
     const radioGroup = new DefaultObservableValue(0)
 
@@ -45,71 +45,71 @@ export const ComponentsPage: PageFactory<StudioService> = ({lifecycle}: PageCont
                 <h1>Components</h1>
                 <div>
                     <label>Button</label>
-                    <Button lifecycle={lifecycle} onClick={() => {}}
-                            appearance={{activeColor: Colors.bright}}>
-                        <Icon symbol={IconSymbol.Play}/>
+                    <Button lifecycle={lifecycle} onClick={() => { }}
+                        appearance={{ activeColor: Colors.bright }}>
+                        <Icon symbol={IconSymbol.Play} />
                     </Button>
                     <label>Button (framed)</label>
-                    <Button lifecycle={lifecycle} onClick={() => {}}
-                            appearance={{activeColor: Colors.bright, framed: true}}>
-                        <Icon symbol={IconSymbol.Play}/>
+                    <Button lifecycle={lifecycle} onClick={() => { }}
+                        appearance={{ activeColor: Colors.bright, framed: true }}>
+                        <Icon symbol={IconSymbol.Play} />
                     </Button>
                     <label>ProgressBar</label>
-                    <ProgressBar lifecycle={lifecycle} progress={new DefaultObservableValue(0.5)}/>
+                    <ProgressBar lifecycle={lifecycle} progress={new DefaultObservableValue(0.5)} />
                     <label>Checkbox</label>
                     <Checkbox lifecycle={lifecycle}
-                              model={checkbox}
-                              appearance={{activeColor: Colors.green, framed: false}}>
-                        <Icon symbol={IconSymbol.Checkbox}/>
+                        model={checkbox}
+                        appearance={{ activeColor: Colors.green, framed: false }}>
+                        <Icon symbol={IconSymbol.Checkbox} />
                     </Checkbox>
                     <label>Checkbox (framed)</label>
                     <Checkbox lifecycle={lifecycle}
-                              model={checkbox}
-                              appearance={{activeColor: Colors.yellow, framed: true}}>
-                        <Icon symbol={IconSymbol.Checkbox}/>
+                        model={checkbox}
+                        appearance={{ activeColor: Colors.yellow, framed: true }}>
+                        <Icon symbol={IconSymbol.Checkbox} />
                     </Checkbox>
                     <label>RadioGroup</label>
                     <RadioGroup lifecycle={lifecycle}
-                                model={radioGroup}
-                                elements={
-                                    [
-                                        {value: 0, element: <Icon symbol={IconSymbol.Flask}/>},
-                                        {value: 1, element: <Icon symbol={IconSymbol.Waveform}/>},
-                                        {value: 2, element: <Icon symbol={IconSymbol.Dial}/>}
-                                    ]
-                                }/>
+                        model={radioGroup}
+                        elements={
+                            [
+                                { value: 0, element: <Icon symbol={IconSymbol.Flask} /> },
+                                { value: 1, element: <Icon symbol={IconSymbol.Waveform} /> },
+                                { value: 2, element: <Icon symbol={IconSymbol.Dial} /> }
+                            ]
+                        } />
                     <label>RadioGroup (framed)</label>
                     <RadioGroup lifecycle={lifecycle}
-                                model={radioGroup}
-                                elements={
-                                    [
-                                        {value: 0, element: <Icon symbol={IconSymbol.Flask}/>},
-                                        {value: 1, element: <Icon symbol={IconSymbol.Waveform}/>},
-                                        {value: 2, element: <Icon symbol={IconSymbol.Dial}/>}
-                                    ]
-                                }
-                                appearance={{activeColor: Colors.yellow, framed: true}}/>
+                        model={radioGroup}
+                        elements={
+                            [
+                                { value: 0, element: <Icon symbol={IconSymbol.Flask} /> },
+                                { value: 1, element: <Icon symbol={IconSymbol.Waveform} /> },
+                                { value: 2, element: <Icon symbol={IconSymbol.Dial} /> }
+                            ]
+                        }
+                        appearance={{ activeColor: Colors.yellow, framed: true }} />
                     <label>Time-Code Input (Zero-Based)</label>
-                    <TimeCodeInput lifecycle={lifecycle} model={new DefaultObservableValue(0)}/>
+                    <TimeCodeInput lifecycle={lifecycle} model={new DefaultObservableValue(0)} />
                     <label>Time-Code Input (One-Based)</label>
-                    <TimeCodeInput lifecycle={lifecycle} model={new DefaultObservableValue(0)} oneBased/>
+                    <TimeCodeInput lifecycle={lifecycle} model={new DefaultObservableValue(0)} oneBased />
                     <label>Time-Code Input (One-Based, 3/4)</label>
                     <TimeCodeInput lifecycle={lifecycle} signature={[3, 4]} model={new DefaultObservableValue(0)}
-                                   oneBased/>
+                        oneBased />
                     <label>Time-Code Input (One-Based, 3/4) disabled</label>
                     <TimeCodeInput lifecycle={lifecycle} signature={[3, 4]}
-                                   model={new DefaultObservableValue(0)}
-                                   className="disabled"
-                                   oneBased/>
+                        model={new DefaultObservableValue(0)}
+                        className="disabled"
+                        oneBased />
                     <label>IntegerInput Input</label>
-                    <NumberInput lifecycle={lifecycle} model={new DefaultObservableValue(0)}/>
+                    <NumberInput lifecycle={lifecycle} model={new DefaultObservableValue(0)} />
                     <label>IntegerInput Input (disabled)</label>
                     <NumberInput lifecycle={lifecycle} model={new DefaultObservableValue(0)}
-                                 className="disabled"/>
+                        className="disabled" />
                     <label>TextInput</label>
-                    <TextInput lifecycle={lifecycle} model={new DefaultObservableValue("Text")}/>
+                    <TextInput lifecycle={lifecycle} model={new DefaultObservableValue("Text")} />
                     <label>SearchField</label>
-                    <SearchInput lifecycle={lifecycle} model={new DefaultObservableValue("")}/>
+                    <SearchInput lifecycle={lifecycle} model={new DefaultObservableValue("")} />
                     <label>Scroller</label>
                     <div style={{
                         width: "128px",
@@ -123,90 +123,90 @@ export const ComponentsPage: PageFactory<StudioService> = ({lifecycle}: PageCont
                             model.contentSize = 128 * 2
                             model.trackSize = 128
                             return model
-                        })()} orientation={Orientation.vertical} floating/>
+                        })()} orientation={Orientation.vertical} floating />
                         <Scroller lifecycle={lifecycle} model={(() => {
                             const model = new ScrollModel()
                             model.visibleSize = 128
                             model.contentSize = 128 * 2
                             model.trackSize = 128
                             return model
-                        })()} orientation={Orientation.horizontal} floating/>
+                        })()} orientation={Orientation.horizontal} floating />
                     </div>
                     <label>Meters</label>
                     <div>
-                        <VUMeterDesign.Default model={new DefaultObservableValue(dbToGain(-6))}/>
-                        <VUMeterDesign.Modern model={new DefaultObservableValue(dbToGain(-6))}/>
+                        <VUMeterDesign.Default model={new DefaultObservableValue(dbToGain(-6))} />
+                        <VUMeterDesign.Modern model={new DefaultObservableValue(dbToGain(-6))} />
                     </div>
                 </div>
             </div>
             <div>
-                <h1>Debug</h1>
-                <div style={{display: "flex", flexDirection: "column"}}>
-                    <BoxDebugView box={timelineBox}/>
-                    <BoxDebugView box={rootBox}/>
+                <h2>Debug</h2>
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                    <BoxDebugView box={timelineBox} />
+                    <BoxDebugView box={rootBox} />
                 </div>
             </div>
             <div>
-                <h1>Menu / Dropdown</h1>
+                <h2>Menu / Dropdown</h2>
                 <div>
                     <label>MenuButton</label>
                     <MenuButton root={TestMenuItem}
-                                appearance={{
-                                    color: Colors.yellow,
-                                    activeColor: Colors.green,
-                                    tooltip: "Open Test-Menu",
-                                    framed: false
-                                }}>
-                        <Icon symbol={IconSymbol.Add}/>
+                        appearance={{
+                            color: Colors.yellow,
+                            activeColor: Colors.green,
+                            tooltip: "Open Test-Menu",
+                            framed: false
+                        }}>
+                        <Icon symbol={IconSymbol.Add} />
                     </MenuButton>
                     <label>MenuButton (framed)</label>
                     <MenuButton root={TestMenuItem}
-                                appearance={{
-                                    color: Colors.yellow,
-                                    activeColor: Colors.green,
-                                    tooltip: "Open Test-Menu",
-                                    framed: true
-                                }}><Icon symbol={IconSymbol.Add}/></MenuButton>
+                        appearance={{
+                            color: Colors.yellow,
+                            activeColor: Colors.green,
+                            tooltip: "Open Test-Menu",
+                            framed: true
+                        }}><Icon symbol={IconSymbol.Add} /></MenuButton>
                     <label>MenuButton (label)</label>
                     <MenuButton root={TestMenuItem}
-                                appearance={{
-                                    activeColor: Colors.bright,
-                                    tooltip: "Open Test-Menu"
-                                }}>
-                        <label>select<Icon symbol={IconSymbol.Dropdown}/></label>
+                        appearance={{
+                            activeColor: Colors.bright,
+                            tooltip: "Open Test-Menu"
+                        }}>
+                        <label>select<Icon symbol={IconSymbol.Dropdown} /></label>
                     </MenuButton>
                     <label>MenuButton (label, framed)</label>
                     <MenuButton root={TestMenuItem}
-                                appearance={{
-                                    activeColor: Colors.gray,
-                                    tooltip: "Open Test-Menu",
-                                    framed: true
-                                }}>
+                        appearance={{
+                            activeColor: Colors.gray,
+                            tooltip: "Open Test-Menu",
+                            framed: true
+                        }}>
                         <label>
                             <span>select</span>
-                            <Icon symbol={IconSymbol.Dropdown}/>
+                            <Icon symbol={IconSymbol.Dropdown} />
                         </label>
                     </MenuButton>
                     <label>MenuButton (tiny triangle)</label>
                     <MenuButton root={TestMenuItem}
-                                appearance={{
-                                    activeColor: Colors.gray,
-                                    tooltip: "Open Test-Menu",
-                                    tinyTriangle: true
-                                }}>
+                        appearance={{
+                            activeColor: Colors.gray,
+                            tooltip: "Open Test-Menu",
+                            tinyTriangle: true
+                        }}>
                         <label><span>select</span></label>
                     </MenuButton>
                 </div>
             </div>
             <div>
-                <h1>Flying</h1>
+                <h2>Flying</h2>
                 <div>
                     <label>TextInput</label>
-                    <FloatingTextInput/>
+                    <FloatingTextInput />
                     <label>TextInput (with unit)</label>
-                    <FloatingTextInput unit="db"/>
+                    <FloatingTextInput unit="db" />
                     <label>TextInput (with value & unit)</label>
-                    <FloatingTextInput value={50} unit="%"/>
+                    <FloatingTextInput value={50} unit="%" />
                     <label>Dialog (simple)</label>
                     <Button lifecycle={lifecycle} onClick={() => {
                         const dialog: HTMLDialogElement = (
@@ -221,12 +221,12 @@ export const ComponentsPage: PageFactory<StudioService> = ({lifecycle}: PageCont
                     <Button lifecycle={lifecycle} onClick={() => {
                         const dialog: HTMLDialogElement = (
                             <Dialog headline="Dialog Headline"
-                                    icon={IconSymbol.Effects}
-                                    cancelable={true}
-                                    buttons={[
-                                        {primary: false, onClick: handler => handler.close(), text: "Cancel"},
-                                        {primary: true, onClick: handler => handler.close(), text: "Ok"}
-                                    ]}>
+                                icon={IconSymbol.Effects}
+                                cancelable={true}
+                                buttons={[
+                                    { primary: false, onClick: handler => handler.close(), text: "Cancel" },
+                                    { primary: true, onClick: handler => handler.close(), text: "Ok" }
+                                ]}>
                                 <p>This is the message of the dialog</p>
                             </Dialog>
                         )
@@ -243,26 +243,26 @@ export const ComponentsPage: PageFactory<StudioService> = ({lifecycle}: PageCont
 
 const TestMenuItem = MenuItem.root()
     .addMenuItem(
-        MenuItem.default({label: "Menu Item 1"}),
-        MenuItem.default({label: "Menu Item 2"}),
-        MenuItem.default({label: "Menu Item 3"}),
-        MenuItem.default({label: "Menu Item 4"}),
-        MenuItem.default({label: "Menu Item 5"})
+        MenuItem.default({ label: "Menu Item 1" }),
+        MenuItem.default({ label: "Menu Item 2" }),
+        MenuItem.default({ label: "Menu Item 3" }),
+        MenuItem.default({ label: "Menu Item 4" }),
+        MenuItem.default({ label: "Menu Item 5" })
             .addMenuItem(
-                MenuItem.default({label: "Menu Item 1"}),
-                MenuItem.default({label: "Menu Item 2"}),
-                MenuItem.default({label: "Menu Item 3"}),
-                MenuItem.default({label: "Menu Item 4"}),
-                MenuItem.default({label: "Menu Item 5"})
+                MenuItem.default({ label: "Menu Item 1" }),
+                MenuItem.default({ label: "Menu Item 2" }),
+                MenuItem.default({ label: "Menu Item 3" }),
+                MenuItem.default({ label: "Menu Item 4" }),
+                MenuItem.default({ label: "Menu Item 5" })
                     .addMenuItem(
-                        MenuItem.default({label: "Menu Item 1"}),
-                        MenuItem.default({label: "Menu Item 2"}),
-                        MenuItem.default({label: "Menu Item 3"}),
-                        MenuItem.default({label: "Menu Item 4"}),
-                        MenuItem.default({label: "Menu Item 5"})
+                        MenuItem.default({ label: "Menu Item 1" }),
+                        MenuItem.default({ label: "Menu Item 2" }),
+                        MenuItem.default({ label: "Menu Item 3" }),
+                        MenuItem.default({ label: "Menu Item 4" }),
+                        MenuItem.default({ label: "Menu Item 5" })
                             .setRuntimeChildrenProcedure(parent => {
                                 for (let i = 0; i < 250; i++) {
-                                    parent.addMenuItem(MenuItem.default({label: `#${i + 1}`}))
+                                    parent.addMenuItem(MenuItem.default({ label: `#${i + 1}` }))
                                 }
                             })
                     )

@@ -5,8 +5,8 @@
   "type": "module",
   "license": "LGPL-3.0-or-later",
   "scripts": {
-    "dev": "vite --clearScreen false --host",
-    "build": "tsc && vite build",
+    "dev": "node scripts/generate-version.js && vite --clearScreen false --host",
+    "build": "node scripts/generate-version.js && tsc && vite build",
     "preview": "vite preview --host",
     "lint": "eslint \"src/**/*.ts\""
   },
@@ -27,10 +27,12 @@
     "d3-force": "^3.0.0",
     "dropbox": "^10.34.0",
     "force-graph": "^1.50.1",
+    "idb": "^8.0.3",
     "jszip": "^3.10.1",
     "markdown-it": "^14.1.0",
     "markdown-it-table": "^4.1.1",
     "mediabunny": "^1.0.3",
+    "mermaid": "^11.12.2",
     "monaco-editor": "^0.54.0"
   },
   "devDependencies": {
