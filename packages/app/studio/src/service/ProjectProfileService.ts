@@ -18,12 +18,15 @@ import {
     ProjectBundle,
     ProjectEnv,
     ProjectMeta,
+    ProjectMigration,
     ProjectProfile,
     ProjectStorage,
     SampleService,
     SoundfontService
 } from "@opendaw/studio-core"
-import {SampleLoaderManager, SoundfontLoaderManager} from "@opendaw/studio-adapters"
+import {ProjectSkeleton, SampleLoaderManager, SoundfontLoaderManager} from "@opendaw/studio-adapters"
+import {BoxGraph} from "@opendaw/lib-box"
+import {BoxIO} from "@opendaw/studio-boxes"
 
 export class ProjectProfileService {
     readonly #profile: MutableObservableOption<ProjectProfile>
@@ -147,9 +150,27 @@ export class ProjectProfileService {
 
     async loadFile() {
         try {
-            const [file] = await Files.open({types: [FilePickerAcceptTypes.ProjectFileType]})
-            const project = await Project.loadAnyVersion(this.#env, await file.arrayBuffer())
-            this.#setProfile(UUID.generate(), project, ProjectMeta.init(file.name), Option.None)
+            const [file] = await Files.open({
+                types: [
+                    FilePickerAcceptTypes.ProjectFileType, FilePickerAcceptTypes.JsonFileType
+                ]
+            })
+            if (file.name.endsWith(".json")) {
+                const jsonString = await file.text()
+                const json = JSON.parse(jsonString)
+                const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
+                boxGraph.fromJSON(json)
+                boxGraph.debugBoxes()
+                const mandatoryBoxes = ProjectSkeleton.findMandatoryBoxes(boxGraph)
+                const skeleton: ProjectSkeleton = {boxGraph, mandatoryBoxes}
+                await ProjectMigration.migrate(this.#env, skeleton)
+                boxGraph.verifyPointers()
+                const project = Project.fromSkeleton(this.#env, skeleton, false)
+                this.setProject(project, file.name)
+            } else {
+                const project = await Project.loadAnyVersion(this.#env, await file.arrayBuffer())
+                this.#setProfile(UUID.generate(), project, ProjectMeta.init(file.name), Option.None)
+            }
         } catch (error) {
             if (!Errors.isAbort(error)) {
                 Dialogs.info({headline: "Could not load project", message: String(error)}).finally()
