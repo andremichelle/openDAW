@@ -721,6 +721,8 @@ export class OdieAppControl {
             if (!isDefined(region)) return { success: false, reason: `No MIDI region found and failed to create one.` }
 
             const targetRegion = region!
+            if (targetRegion.optCollection.isEmpty()) return { success: false, reason: `Region collection not ready.` }
+
             this.studio.project.editing.modify(() => {
                 const collection = targetRegion.optCollection.unwrap()
                 const regionPos = targetRegion.position
@@ -1902,7 +1904,7 @@ export class OdieAppControl {
                 const trackAdapter = track as unknown as { regions: { collection: { asArray(): unknown[] } } }
                 const newRegions = trackAdapter.regions.collection.asArray() as AnyRegionBoxAdapter[]
                 region = newRegions.find(r => {
-                    return r.position <= ppqnStart && (r.position + r.duration) >= ppqnStart
+                    return r.position <= ppqnStart && (r.position + r.duration) > ppqnStart
                 }) as NoteRegionBoxAdapter | undefined
 
                 if (!region) throw new Error("Failed to find created region")

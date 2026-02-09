@@ -474,6 +474,7 @@ export class OdieService {
                         })
                         this.isGenerating.setValue(false)
                         this.visible.setValue(false)
+                        return
                     }
 
                     // Feedback Loop
@@ -658,14 +659,11 @@ export class OdieService {
                 }, null, 2) + "\n```"
             }
 
-            if (newAll.length > 0) {
-                newAll[newAll.length - 1] = {
-                    ...newAll[newAll.length - 1],
-                    role: "model",
-                    content: content
-                }
-                this.messages.setValue(newAll)
-            }
+            this.messages.setValue(newAll.map(m => m.id === assistantMsg.id ? {
+                ...m,
+                role: "model",
+                content: content
+            } : m))
 
             this.isGenerating.setValue(false)
         }
