@@ -39,43 +39,66 @@ export namespace RegionCapturing {
                 const track = tracks[trackIndex]
                 const position = Math.floor(range.xToUnit(x))
                 const threshold = range.unitsPerPixel * PointerRadiusDistance
-                const region = track.trackBoxAdapter.regions.collection.lowerEqual(position + threshold)
-                if (!isDefined(region) || position >= region.complete + threshold) {
-                    return {type: "track", track}
+                const collection = track.trackBoxAdapter.regions.collection
+                let edgeCapture: Nullable<RegionCaptureTarget> = null
+                let edgeDistance = Infinity
+                let edgeIsInside = false
+                let bodyRegion: Nullable<AnyRegionBoxAdapter> = null
+                for (const region of collection.iterateFrom(position - threshold)) {
+                    if (region.position > position + threshold) { break }
+                    if (position >= region.complete + threshold) { continue }
+                    const x0 = range.unitToX(region.position)
+                    const x1 = range.unitToX(region.complete)
+                    if (isInstanceOf(region, AudioRegionBoxAdapter)) {
+                        const {fading} = region
+                        const handleRadius = 3
+                        const handleY = track.position + RegionLabel.labelHeight()
+                        const fadeInX = range.unitToX(region.position + fading.in)
+                        const fadeOutX = range.unitToX(region.position + region.duration - fading.out)
+                        if (Geom.isInsideCircle(x, y, fadeInX, handleY, handleRadius)) {
+                            return {type: "region", part: "fading-in", region}
+                        }
+                        if (Geom.isInsideCircle(x, y, fadeOutX, handleY, handleRadius)) {
+                            return {type: "region", part: "fading-out", region}
+                        }
+                    }
+                    if (UnionAdapterTypes.isLoopableRegion(region)) {
+                        const bottomEdge = y > track.position + RegionLabel.labelHeight()
+                        const cursorInside = position >= region.position && position < region.complete
+                        const isBetter = (distance: number): boolean =>
+                            distance < PointerRadiusDistance
+                            && (cursorInside && !edgeIsInside
+                                || cursorInside === edgeIsInside && distance < edgeDistance)
+                        const completeDistance = Math.abs(x - x1)
+                        if (isBetter(completeDistance)) {
+                            edgeDistance = completeDistance
+                            edgeIsInside = cursorInside
+                            edgeCapture = bottomEdge
+                                ? {type: "region", part: "content-complete", region}
+                                : {type: "region", part: "complete", region}
+                        }
+                        const startDistance = Math.abs(x - x0)
+                        if (isBetter(startDistance)) {
+                            edgeDistance = startDistance
+                            edgeIsInside = cursorInside
+                            edgeCapture = bottomEdge
+                                ? {type: "region", part: "content-start", region}
+                                : {type: "region", part: "start", region}
+                        }
+                        if (bottomEdge) {
+                            const loopDistance = Math.abs(x - range.unitToX(region.offset + region.loopDuration))
+                            if (isBetter(loopDistance)) {
+                                edgeDistance = loopDistance
+                                edgeIsInside = cursorInside
+                                edgeCapture = {type: "region", part: "loop-duration", region}
+                            }
+                        }
+                    }
+                    bodyRegion = region
                 }
-                const x0 = range.unitToX(region.position)
-                const x1 = range.unitToX(region.complete)
-                if (isInstanceOf(region, AudioRegionBoxAdapter)) {
-                    const {fading} = region
-                    const handleRadius = 3
-                    const handleY = track.position + RegionLabel.labelHeight()
-                    const fadeInX = range.unitToX(region.position + fading.in)
-                    const fadeOutX = range.unitToX(region.position + region.duration - fading.out)
-                    if (Geom.isInsideCircle(x, y, fadeInX, handleY, handleRadius)) {
-                        return {type: "region", part: "fading-in", region}
-                    }
-                    if (Geom.isInsideCircle(x, y, fadeOutX, handleY, handleRadius)) {
-                        return {type: "region", part: "fading-out", region}
-                    }
-                }
-                if (UnionAdapterTypes.isLoopableRegion(region)) {
-                    const bottomEdge = y > track.position + RegionLabel.labelHeight()
-                    if (Math.abs(x - x1) < PointerRadiusDistance) {
-                        return bottomEdge
-                            ? {type: "region", part: "content-complete", region}
-                            : {type: "region", part: "complete", region}
-                    }
-                    if (Math.abs(x - x0) < PointerRadiusDistance) {
-                        return bottomEdge
-                            ? {type: "region", part: "content-start", region}
-                            : {type: "region", part: "start", region}
-                    }
-                    if (bottomEdge
-                        && Math.abs(x - range.unitToX(region.offset + region.loopDuration)) <= PointerRadiusDistance) {
-                        return {type: "region", part: "loop-duration", region}
-                    }
-                }
-                return {type: "region", part: "position", region}
+                if (isDefined(edgeCapture)) { return edgeCapture }
+                if (isDefined(bodyRegion)) { return {type: "region", part: "position", region: bodyRegion} }
+                return {type: "track", track}
             }
         })
 }

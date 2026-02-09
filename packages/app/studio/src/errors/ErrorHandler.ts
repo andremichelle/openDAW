@@ -59,7 +59,11 @@ export class ErrorHandler {
             return true
         }
         // Handle Monaco editor errors from error events
-        if (event instanceof ErrorEvent && this.#looksLikeMonacoError(event.message, event.error?.stack, event.filename)) {
+        // Monaco rethrows worker error Event objects through its error pipeline,
+        // arriving as ErrorEvent where event.error is a raw Event (not an Error).
+        if (event instanceof ErrorEvent
+            && (this.#looksLikeMonacoError(event.message, event.error?.stack, event.filename)
+                || event.error instanceof Event)) {
             console.warn("Monaco editor error:", event.message, event.filename)
             event.preventDefault()
             return true
