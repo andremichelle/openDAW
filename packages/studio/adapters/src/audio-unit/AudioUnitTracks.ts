@@ -1,12 +1,12 @@
-import {int, Notifier, Observer, Option, panic, SortedSet, Subscription, Terminable, UUID} from "@opendaw/lib-std"
-import {Pointers} from "@opendaw/studio-enums"
-import {TrackBox} from "@opendaw/studio-boxes"
-import {Vertex} from "@opendaw/lib-box"
-import {AudioUnitBoxAdapter} from "./AudioUnitBoxAdapter"
-import {IndexedAdapterCollectionListener, IndexedBoxAdapterCollection} from "../IndexedBoxAdapterCollection"
-import {TrackBoxAdapter} from "../timeline/TrackBoxAdapter"
-import {BoxAdapters} from "../BoxAdapters"
-import {TrackType} from "../timeline/TrackType"
+import { int, Notifier, Observer, Option, panic, SortedSet, Subscription, Terminable, UUID } from "@opendaw/lib-std"
+import { Pointers } from "@opendaw/studio-enums"
+import { TrackBox } from "@opendaw/studio-boxes"
+import { Vertex } from "@opendaw/lib-box"
+import { AudioUnitBoxAdapter } from "./AudioUnitBoxAdapter"
+import { IndexedAdapterCollectionListener, IndexedBoxAdapterCollection } from "../IndexedBoxAdapterCollection"
+import { TrackBoxAdapter } from "../timeline/TrackBoxAdapter"
+import { BoxAdapters } from "../BoxAdapters"
+import { TrackType } from "../timeline/TrackType"
 
 export class AudioUnitTracks implements Terminable {
     readonly #adapter: AudioUnitBoxAdapter
@@ -20,14 +20,14 @@ export class AudioUnitTracks implements Terminable {
         this.#adapter = adapter
         this.#collection = IndexedBoxAdapterCollection.create(adapter.box.tracks,
             box => boxAdapters.adapterFor(box, TrackBoxAdapter), Pointers.TrackCollection)
-        this.#subscriptions = UUID.newSet(({uuid}) => uuid)
+        this.#subscriptions = UUID.newSet(({ uuid }) => uuid)
         this.#subscription = this.#collection.catchupAndSubscribe({
             onAdd: (adapter: TrackBoxAdapter) => this.#subscriptions.add({
                 uuid: adapter.uuid,
                 subscription: adapter.regions.subscribeChanges(() => this.#regionNotifier.notify())
             }),
-            onRemove: ({uuid}: TrackBoxAdapter) => this.#subscriptions.removeByKey(uuid).subscription.terminate(),
-            onReorder: (_adapter: TrackBoxAdapter) => {}
+            onRemove: ({ uuid }: TrackBoxAdapter) => this.#subscriptions.removeByKey(uuid).subscription.terminate(),
+            onReorder: (_adapter: TrackBoxAdapter) => { }
         })
     }
 
@@ -47,30 +47,34 @@ export class AudioUnitTracks implements Terminable {
             .find(adapter => adapter.target.targetVertex.contains(target), false))
     }
 
+    adapters(): ReadonlyArray<TrackBoxAdapter> {
+        return this.#collection.adapters()
+    }
+
     delete(adapter: TrackBoxAdapter): void {
         const adapters = this.#collection.adapters()
         const deleteIndex = adapters.indexOf(adapter)
-        if (deleteIndex === -1) {return panic(`Cannot delete ${adapter}. Does not exist.`)}
+        if (deleteIndex === -1) { return panic(`Cannot delete ${adapter}. Does not exist.`) }
         for (let index = deleteIndex + 1; index < adapters.length; index++) {
             adapters[index].indexField.setValue(index - 1)
         }
         adapter.box.delete()
     }
 
-    get collection(): IndexedBoxAdapterCollection<TrackBoxAdapter, Pointers.TrackCollection> {return this.#collection}
+    get collection(): IndexedBoxAdapterCollection<TrackBoxAdapter, Pointers.TrackCollection> { return this.#collection }
 
-    values(): ReadonlyArray<TrackBoxAdapter> {return this.#collection.adapters()}
+    values(): ReadonlyArray<TrackBoxAdapter> { return this.#collection.adapters() }
 
     catchupAndSubscribe(listener: IndexedAdapterCollectionListener<TrackBoxAdapter>): Subscription {
         return this.#collection.catchupAndSubscribe(listener)
     }
 
-    subscribeAnyChange(observer: Observer<void>): Subscription {return this.#regionNotifier.subscribe(observer)}
+    subscribeAnyChange(observer: Observer<void>): Subscription { return this.#regionNotifier.subscribe(observer) }
 
     terminate(): void {
         this.#collection.terminate()
         this.#subscription.terminate()
-        this.#subscriptions.forEach(({subscription}) => subscription.terminate())
+        this.#subscriptions.forEach(({ subscription }) => subscription.terminate())
         this.#subscriptions.clear()
     }
 }

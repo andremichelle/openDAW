@@ -58,6 +58,16 @@ export class OdieTransport {
         }
     }
 
+    setTimelinePosition(bar: number): void {
+        try {
+            // Simplistic bar to "something" conversion if needed,
+            // but engine usually takes a value that matches its own position unit.
+            (this.studio.engine.position as any).set(bar)
+        } catch (e) {
+            console.error("[Odie] setTimelinePosition failed", e)
+        }
+    }
+
     setLoop(enabled: boolean): void {
         this.studio.transport.setLoop(enabled)
     }

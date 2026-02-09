@@ -72,15 +72,17 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
         let trackCount = 0
         let hasProject = false
 
-        if (service.studio) {
+        const studio = service.studio.isEmpty() ? null : service.studio.unwrap()
+
+        if (studio) {
             try {
-                if (service.studio?.engine?.isPlaying) {
-                    isPlaying = service.studio.engine.isPlaying.getValue()
+                if (studio.engine.isPlaying) {
+                    isPlaying = studio.engine.isPlaying.getValue()
                 }
 
-                if (service.studio?.hasProfile && service.studio.profile?.project?.rootBoxAdapter) {
+                if (studio.hasProfile && studio.profile?.project?.rootBoxAdapter) {
                     hasProject = true
-                    const adapters = service.studio.profile.project.rootBoxAdapter.audioUnits.adapters()
+                    const adapters = studio.profile.project.rootBoxAdapter.audioUnits.adapters()
                     trackCount = adapters.length
                 }
             } catch (e) {
@@ -93,10 +95,10 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
         // Transport
         if (hasProject) {
             if (isPlaying) {
-                suggestions.push({ label: "Stop", type: "action", action: () => service.studio?.engine.stop(), icon: "⏹️" })
+                suggestions.push({ label: "Stop", type: "action", action: () => studio?.engine.stop(), icon: "⏹️" })
                 suggestions.push({ label: "Add Marker", type: "action", prompt: "Add a marker here", icon: "📍" })
             } else {
-                suggestions.push({ label: "Play", type: "action", action: () => service.studio?.engine.play(), icon: "▶️" })
+                suggestions.push({ label: "Play", type: "action", action: () => studio?.engine.play(), icon: "▶️" })
             }
         }
 
@@ -110,8 +112,8 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
                 suggestions.push({ label: "Export Mixdown", type: "system", prompt: "Export a mixdown", icon: "💿" })
             }
         } else {
-            suggestions.push({ label: "New Project", type: "system", action: () => service.studio?.newProject(), icon: "✨" })
-            suggestions.push({ label: "Open Project", type: "system", action: () => service.studio?.browseLocalProjects(), icon: "📂" })
+            suggestions.push({ label: "New Project", type: "system", action: () => studio?.newProject(), icon: "✨" })
+            suggestions.push({ label: "Open Project", type: "system", action: () => studio?.browseLocalProjects(), icon: "📂" })
         }
 
         // Chat Context
@@ -191,9 +193,11 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
     lifecycle.own(service.messages.subscribe(() => render()))
 
     if (service.studio) {
-        if (service.studio.engine?.isPlaying) {
-            lifecycle.own(service.studio.engine.isPlaying.subscribe(() => render()))
-        }
+        service.studio.ifSome(studio => {
+            if (studio.engine.isPlaying) {
+                lifecycle.own(studio.engine.isPlaying.subscribe(() => render()))
+            }
+        })
     }
 
     render()

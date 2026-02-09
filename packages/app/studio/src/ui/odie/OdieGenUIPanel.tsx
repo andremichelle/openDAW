@@ -65,7 +65,10 @@ export const OdieGenUIPanel = (props: { lifecycle: Lifecycle, service: OdieServi
         }
 
         // Render new payload
-        const resolver = (path: string) => service.appControl?.resolveParameter(path) ?? null
+        const resolver = (path: string) => {
+            if (service.appControl.isEmpty()) return null
+            return service.appControl.unwrap().resolveParameter(path)
+        }
         content.appendChild(<GenUIRenderer lifecycle={lifecycle} component={payload.root} resolver={resolver} />)
     }))
 

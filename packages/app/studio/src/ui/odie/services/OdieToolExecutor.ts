@@ -1,5 +1,6 @@
 import { StudioService } from "../../../service/StudioService"
-import { OdieAppControl, MidiNoteDef } from "./OdieAppControl"
+import { OdieAppControl } from "./OdieAppControl"
+import { MidiNoteDef, ToolResult } from "../OdieTypes"
 import { JsonValue, Message, ToolCall } from "./llm/LLMProvider"
 import { AIService } from "./AIService"
 
@@ -19,19 +20,20 @@ export interface ExecutorContext {
     setSidebarVisible: (visible: boolean) => void
 
     // State for inference
-    contextState: Record<string, JsonValue> // Still using some dynamic context, but restricted to object
+    contextState: Record<string, JsonValue>
     recentMessages: Message[]
-}
-
-export interface ToolResult {
-    success: boolean
-    userMessage?: string
-    systemError?: string
-    analysisData?: JsonValue
 }
 
 export class OdieToolExecutor {
     constructor() { }
+
+    async executeToolCalls(calls: ToolCall[], ctx: ExecutorContext): Promise<ToolResult[]> {
+        const results: ToolResult[] = []
+        for (const call of calls) {
+            results.push(await this.execute(call, ctx))
+        }
+        return results
+    }
 
     async execute(call: ToolCall, ctx: ExecutorContext): Promise<ToolResult> {
         const name = call.name
@@ -141,10 +143,10 @@ export class OdieToolExecutor {
                 case "track_delete":
                 case "arrangement_delete_track": {
                     const trackName = asString(args.name)
-                    const delSuccess = await ctx.appControl.deleteTrack(trackName)
+                    const delResult = await ctx.appControl.deleteTrack(trackName)
                     return {
-                        success: delSuccess,
-                        userMessage: delSuccess ? `Deleted track: "${trackName}"` : `Failed to delete track: ${trackName}`
+                        success: delResult.success,
+                        userMessage: delResult.success ? `Deleted track: "${trackName}"` : `Failed to delete track: ${delResult.reason}`
                     }
                 }
 
@@ -298,27 +300,8 @@ export class OdieToolExecutor {
 
                 // Analysis
                 case "inspect_selection": {
-                    const analysis = ctx.appControl.inspectSelection()
-                    let summary = "Selection analyzed."
-                    try {
-                        const data = JSON.parse(analysis)
-                        const items = Array.isArray(data) ? data : [data]
-                        const itemList = items as Array<{ type: string }>
-                        const trackCount = itemList.filter(i => i.type === "track").length
-                        const regionCount = itemList.filter(i => i.type === "region").length
-                        const deviceCount = itemList.filter(i => i.type === "device" || i.type === "unknown").length
-
-                        if (items.length === 0) {
-                            summary = "Nothing selected."
-                        } else {
-                            const parts: string[] = []
-                            if (trackCount > 0) parts.push(`${trackCount} track${trackCount > 1 ? 's' : ''}`)
-                            if (regionCount > 0) parts.push(`${regionCount} region${regionCount > 1 ? 's' : ''}`)
-                            if (deviceCount > 0) parts.push(`${deviceCount} item${deviceCount > 1 ? 's' : ''}`)
-                            summary = "Selection: " + parts.join(", ")
-                        }
-                    } catch { /* ignore */ }
-
+                    const analysis = await ctx.appControl.inspectSelection()
+                    let summary = analysis.message || "Selection analyzed."
                     return { success: true, userMessage: summary }
                 }
 
@@ -357,11 +340,11 @@ export class OdieToolExecutor {
                         }
                     }
 
-                    const details = ctx.appControl.getTrackDetails(trackName)
+                    const toolResult = await ctx.appControl.getTrackDetails(trackName)
                     return {
-                        success: true,
-                        userMessage: `Analyzing "${trackName}" details...`,
-                        analysisData: details
+                        success: toolResult.success,
+                        userMessage: toolResult.success ? `Analyzing "${trackName}" details...` : `Failed to get track details: ${toolResult.reason}`,
+                        analysisData: toolResult.success ? JSON.stringify(toolResult.data) : undefined
                     }
                 }
 

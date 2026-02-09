@@ -338,6 +338,25 @@ export const OdieMessageList = ({ service }: ListProps) => {
         }, 50)
     }))
 
+    // -- Component Feedback (Decoupled DOM) --
+    const studioOpt = service.studio
+    if (studioOpt.nonEmpty()) {
+        lifecycle.own(studioOpt.unwrap().odieEvents.subscribe(event => {
+            if (event.type === "ui-feedback" && event.targetId) {
+                const gridEl = messageWrapper.querySelector(`#${event.targetId}`)
+                const toastEl = gridEl?.querySelector(".grid-status-toast") as HTMLElement
+
+                if (toastEl) {
+                    toastEl.textContent = event.message
+                    toastEl.style.opacity = "1"
+                    setTimeout(() => {
+                        if (toastEl) toastEl.style.opacity = "0"
+                    }, 1500)
+                }
+            }
+        }))
+    }
+
     interface HistoryPanelElement extends HTMLElement { cleanup?: () => void }
     let historyPanel: HistoryPanelElement | null = null
 

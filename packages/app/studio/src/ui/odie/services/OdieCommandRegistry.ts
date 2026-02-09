@@ -24,8 +24,8 @@ export class OdieCommandRegistry {
             description: "Start Transport",
             usage: "/play",
             execute: async (s) => {
-                if (!s.appControl) return "Error: Connection lost"
-                s.appControl.play()
+                if (s.appControl.isEmpty()) return "Error: Connection lost"
+                s.appControl.unwrap().play()
                 return "Playing"
             }
         })
@@ -35,8 +35,8 @@ export class OdieCommandRegistry {
             description: "Stop Transport",
             usage: "/stop",
             execute: async (s) => {
-                if (!s.appControl) return "Error: Connection lost"
-                s.appControl.stop()
+                if (s.appControl.isEmpty()) return "Error: Connection lost"
+                s.appControl.unwrap().stop()
                 return "Stopped"
             }
         })
@@ -46,9 +46,9 @@ export class OdieCommandRegistry {
             description: "Start Recording",
             usage: "/record [countIn? (true/false, default: true)]",
             execute: async (s, args) => {
-                if (!s.appControl) return "Error: Connection lost"
+                if (s.appControl.isEmpty()) return "Error: Connection lost"
                 const countIn = args[0] !== "false" && args[0] !== "no"
-                s.appControl.record(countIn)
+                s.appControl.unwrap().record(countIn)
                 return countIn ? "Recording (Count-In)" : "Recording (Immediate)"
             }
         })
@@ -61,9 +61,9 @@ export class OdieCommandRegistry {
                 const type = args[0] || "synth"
                 const name = args.slice(1).join(" ") || "New Track"
 
-                if (!s.appControl) return "Error: Connection lost"
+                if (s.appControl.isEmpty()) return "Error: Connection lost"
 
-                const result = await s.appControl.addTrack(type, name)
+                const result = await s.appControl.unwrap().addTrack(type, name)
                 return result.success ? result.message : `Error: ${result.reason}`
             }
         })
@@ -73,8 +73,8 @@ export class OdieCommandRegistry {
             description: "Start a new project",
             usage: "/new",
             execute: async (s) => {
-                if (!s.appControl) return "Error: Connection lost"
-                await s.appControl.newProject()
+                if (s.appControl.isEmpty()) return "Error: Connection lost"
+                await s.appControl.unwrap().newProject()
                 return "New Project Created"
             }
         })
@@ -84,8 +84,8 @@ export class OdieCommandRegistry {
             description: "List available samples",
             usage: "/samples",
             execute: async (s) => {
-                if (!s.appControl) return "Error: Connection lost"
-                const samples = await s.appControl.listSamples()
+                if (s.appControl.isEmpty()) return "Error: Connection lost"
+                const samples = await s.appControl.unwrap().listSamples()
                 if (samples.length === 0) return "No samples found."
                 let report = "## Available Samples\n\n"
                 report += samples.map(s => `- ${s.name}`).join("\n")
@@ -98,8 +98,8 @@ export class OdieCommandRegistry {
             description: "List available soundfonts",
             usage: "/soundfonts",
             execute: async (s) => {
-                if (!s.appControl) return "Error: Connection lost"
-                const sfs = await s.appControl.listSoundfonts()
+                if (s.appControl.isEmpty()) return "Error: Connection lost"
+                const sfs = await s.appControl.unwrap().listSoundfonts()
                 if (sfs.length === 0) return "No soundfonts found."
                 let report = "## Available Soundfonts\n\n"
                 report += sfs.map(s => `- ${s.name}`).join("\n")
@@ -115,8 +115,8 @@ export class OdieCommandRegistry {
                 const trackName = args[0]
                 const query = args.slice(1).join(" ")
                 if (!trackName || !query) return "Usage: /set-nano [trackName] [sampleQuery]"
-                if (!s.appControl) return "Error: Connection lost"
-                const res = await s.appControl.setNanoSample(trackName, query)
+                if (s.appControl.isEmpty()) return "Error: Connection lost"
+                const res = await s.appControl.unwrap().setNanoSample(trackName, query)
                 return res.success ? res.message : `Error: ${res.reason}`
             }
         })
@@ -130,8 +130,8 @@ export class OdieCommandRegistry {
                 const padIndex = parseInt(args[1], 10)
                 const query = args.slice(2).join(" ")
                 if (!trackName || isNaN(padIndex) || !query) return "Usage: /set-pad [trackName] [padIndex] [sampleQuery]"
-                if (!s.appControl) return "Error: Connection lost"
-                const res = await s.appControl.setPlayfieldPad(trackName, padIndex, query)
+                if (s.appControl.isEmpty()) return "Error: Connection lost"
+                const res = await s.appControl.unwrap().setPlayfieldPad(trackName, padIndex, query)
                 return res.success ? res.message : `Error: ${res.reason}`
             }
         })
@@ -144,8 +144,8 @@ export class OdieCommandRegistry {
                 const trackName = args[0]
                 const query = args.slice(1).join(" ")
                 if (!trackName || !query) return "Usage: /set-sf [trackName] [soundfontQuery]"
-                if (!s.appControl) return "Error: Connection lost"
-                const res = await s.appControl.setSoundfont(trackName, query)
+                if (s.appControl.isEmpty()) return "Error: Connection lost"
+                const res = await s.appControl.unwrap().setSoundfont(trackName, query)
                 return res.success ? res.message : `Error: ${res.reason}`
             }
         })
@@ -285,8 +285,8 @@ Direct control over the Studio and Chat.
                 const type = args[args.length - 1]
                 const track = args.slice(0, -1).join(" ")
 
-                if (!s.appControl) return "Error: Connection lost"
-                const res = await s.appControl.addEffect(track, type)
+                if (s.appControl.isEmpty()) return "Error: Connection lost"
+                const res = await s.appControl.unwrap().addEffect(track, type)
                 return res.success ? res.message : `Error: ${res.reason}`
             }
         })
@@ -300,8 +300,8 @@ Direct control over the Studio and Chat.
                 const type = args[args.length - 1]
                 const track = args.slice(0, -1).join(" ")
 
-                if (!s.appControl) return "Error: Connection lost"
-                const res = await s.appControl.addMidiEffect(track, type)
+                if (s.appControl.isEmpty()) return "Error: Connection lost"
+                const res = await s.appControl.unwrap().addMidiEffect(track, type)
                 return res.success ? res.message : `Error: ${res.reason}`
             }
         })
@@ -311,8 +311,8 @@ Direct control over the Studio and Chat.
             description: "List all tracks",
             usage: "/list",
             execute: async (s) => {
-                if (!s.appControl) return "Error: Connection lost"
-                const tracks = s.appControl.listTracks()
+                if (s.appControl.isEmpty()) return "Error: Connection lost"
+                const tracks = s.appControl.unwrap().listTracks()
                 if (tracks.length === 0) return "No tracks found."
                 return "## Track List\n" + tracks.map((t, i) => `${i + 1}. **${t}**`).join("\n")
             }
