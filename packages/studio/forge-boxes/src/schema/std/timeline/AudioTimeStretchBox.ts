@@ -1,4 +1,4 @@
-import {BoxSchema} from "@moises-ai/lib-box-forge"
+import {BoxSchema} from "@opendaw/lib-box-forge"
 import {Pointers, TransientPlayMode} from "@moises-ai/studio-enums"
 
 export const AudioTimeStretchBox: BoxSchema<Pointers> = {

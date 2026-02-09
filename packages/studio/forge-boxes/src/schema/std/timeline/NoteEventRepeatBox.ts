@@ -1,5 +1,5 @@
 // TODO Create, refer this and remove 'play-count' and 'play-curve' from NoteEventBox
-import {BoxSchema} from "@moises-ai/lib-box-forge"
+import {BoxSchema} from "@opendaw/lib-box-forge"
 import {Pointers} from "@moises-ai/studio-enums"
 import {BipolarConstraints, UnipolarConstraints} from "../Defaults"
 

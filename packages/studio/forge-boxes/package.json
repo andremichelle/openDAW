@@ -1,5 +1,5 @@
 {
-    "name": "@moises-ai/studio-forge-boxes",
+    "name": "@opendaw/studio-forge-boxes",
     "version": "0.0.71",
     "license": "LGPL-3.0-or-later",
     "private": true,
@@ -21,7 +21,7 @@
         "@moises-ai/studio-enums": "*"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "*",
-        "@moises-ai/typescript-config": "*"
+        "@opendaw/eslint-config": "*",
+        "@opendaw/typescript-config": "*"
     }
 }

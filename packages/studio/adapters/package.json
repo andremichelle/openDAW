@@ -34,8 +34,8 @@
         "soundfont2": "^0.5.0"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "*",
-        "@moises-ai/typescript-config": "*"
+        "@opendaw/eslint-config": "*",
+        "@opendaw/typescript-config": "*"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

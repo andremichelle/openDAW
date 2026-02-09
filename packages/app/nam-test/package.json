@@ -1,5 +1,5 @@
 {
-    "name": "@moises-ai/nam-test",
+    "name": "@opendaw/nam-test",
     "private": true,
     "version": "0.0.2",
     "type": "module",
@@ -19,8 +19,8 @@
         "@opendaw/nam-wasm": "^1.0.0"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "*",
-        "@moises-ai/typescript-config": "*",
+        "@opendaw/eslint-config": "*",
+        "@opendaw/typescript-config": "*",
         "@types/node": "^22.15.18",
         "eslint": "^8.57.0",
         "sass": "^1.88.0",

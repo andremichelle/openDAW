@@ -1,9 +1,7 @@
 {
-    "name": "@moises-ai/eslint-config",
+    "name": "@opendaw/eslint-config",
     "version": "0.0.27",
     "private": true,
     "main": "index.js",
-    "publishConfig": {
-        "access": "public"
-    }
+    "license": "LGPL-3.0-or-later"
 }

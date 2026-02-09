@@ -1,5 +1,5 @@
 import {PointerRules, UnreferenceableType} from "@moises-ai/lib-box"
-import {FieldName, FieldSchema, PointerFieldSchema, PrimitiveFieldSchema} from "@moises-ai/lib-box-forge"
+import {FieldName, FieldSchema, PointerFieldSchema, PrimitiveFieldSchema} from "@opendaw/lib-box-forge"
 import {Pointers} from "@moises-ai/studio-enums"
 
 export const UnipolarConstraints = {constraints: "unipolar", unit: "%"} as const

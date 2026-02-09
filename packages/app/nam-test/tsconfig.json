@@ -1,4 +1,4 @@
 {
-    "extends": "@moises-ai/typescript-config/vite.json",
+    "extends": "@opendaw/typescript-config/vite.json",
     "include": ["src"]
 }

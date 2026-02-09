@@ -6,7 +6,7 @@ This document describes how to publish the OpenDAW packages under the `@moises-a
 
 This fork of [andremichelle/openDAW](https://github.com/andremichelle/openDAW) publishes packages under the `@moises-ai` scope to GitHub Package Registry instead of npm.
 
-**Key design principle**: We use a transform script that can be re-run after upstream merges to minimize merge conflicts. The script transforms `@opendaw/*` package names to `@moises-ai/*`, converts internal dependency versions to wildcards for workspace resolution, and preserves external `@opendaw` packages (like `@opendaw/nam-wasm`) that should resolve from npmjs.org.
+**Key design principle**: We use a transform script that can be re-run after upstream merges to minimize merge conflicts. The script transforms only **publishable** `@opendaw/*` package names to `@moises-ai/*`, leaving non-publishable packages (apps, config, build artifacts) as `@opendaw` to match upstream and reduce merge conflicts. It also converts internal dependency versions to wildcards for workspace resolution, and preserves external `@opendaw` packages (like `@opendaw/nam-wasm`) that should resolve from npmjs.org.
 
 ## Package Structure
 
@@ -34,19 +34,19 @@ These packages are published to GitHub Package Registry when a release is create
 - `@moises-ai/lib-xml` - XML parsing
 - `@moises-ai/lib-dawproject` - DAWproject format support
 
-### Private Packages (not published)
+### Non-publishable Packages (keep `@opendaw` scope)
 
-These packages have `"private": true` and are not published:
+These packages have `"private": true` and are not published. They keep their upstream `@opendaw` scope to minimize diff from upstream and reduce merge conflicts during syncs:
 
-- `@moises-ai/app-studio` - Web application
-- `@moises-ai/lab` - Lab application
-- `@moises-ai/studio-core-workers` - Audio workers (built into core)
-- `@moises-ai/studio-core-processors` - Audio processors (built into core)
-- `@moises-ai/studio-forge-boxes` - Code generator
-- `@moises-ai/lib-box-forge` - Box forge infrastructure
-- `@moises-ai/nam-test` - Neural amp modeling test app
-- `@moises-ai/eslint-config` - ESLint configuration
-- `@moises-ai/typescript-config` - TypeScript configuration
+- `@opendaw/app-studio` - Web application
+- `@opendaw/lab` - Lab application
+- `@opendaw/studio-core-workers` - Audio workers (built into core)
+- `@opendaw/studio-core-processors` - Audio processors (built into core)
+- `@opendaw/studio-forge-boxes` - Code generator
+- `@opendaw/lib-box-forge` - Box forge infrastructure
+- `@opendaw/nam-test` - Neural amp modeling test app
+- `@opendaw/eslint-config` - ESLint configuration
+- `@opendaw/typescript-config` - TypeScript configuration
 - `yjs-server` - Collaboration server (no scope)
 
 ## Publishing Workflow
@@ -168,21 +168,27 @@ git push -u origin sync-upstream-YYYY-MM-DD
 
 ### `node scripts/transform-scope.js`
 
-Transforms the codebase from `@opendaw` to `@moises-ai` scope. This script:
-- Renames `@opendaw/*` packages to `@moises-ai/*` in all `package.json` files
-- **Only renames workspace-local packages** — external `@opendaw` dependencies (e.g. `@opendaw/nam-wasm`) are preserved so they resolve from npmjs.org
-- **Converts internal dependency versions to `"*"`** — ensures npm resolves workspace packages locally instead of checking the GitHub Package Registry (which may not have the latest upstream versions)
-- Updates `turbo.json` task references
+Transforms the codebase from `@opendaw` to `@moises-ai` scope for **publishable packages only**. This script:
+- Renames only the 16 publishable `@opendaw/*` packages to `@moises-ai/*` in `package.json` files
+- **Leaves non-publishable packages as `@opendaw`** — apps, config, build artifacts, and forge infrastructure keep their upstream scope
+- **Only renames workspace-local publishable packages** — external `@opendaw` dependencies (e.g. `@opendaw/nam-wasm`) are preserved so they resolve from npmjs.org
+- **Converts internal dependency versions to `"*"`** for all workspace packages (both scopes) — ensures npm resolves locally instead of checking the GitHub Package Registry
+- Updates `turbo.json` task references (publishable packages only)
 - Updates `lerna.json` registry configuration
-- Updates `tsconfig.json` extends references
-- Updates TypeScript/JavaScript source file imports (workspace packages only)
+- Updates TypeScript/JavaScript source file imports (publishable workspace packages only)
 - Sets `publishConfig` for publishable packages
+- Does **not** transform `tsconfig.json` files — they reference `@opendaw/typescript-config` which stays as-is
 
 This script is idempotent — you can run it multiple times safely.
 
 ### `node scripts/verify-scope.js`
 
-Verifies that all scope transformations have been applied correctly. Returns exit code 0 if everything is correct, 1 if there are issues.
+Verifies that scope transformations have been applied correctly. Checks that:
+- Publishable packages have `@moises-ai` scope
+- Non-publishable packages have `@opendaw` scope
+- `turbo.json` and root `package.json` scripts use the correct scope for each package
+
+Returns exit code 0 if everything is correct, 1 if there are issues.
 
 ## Installing Packages from GitHub Registry
 
@@ -237,10 +243,10 @@ npx lerna version 0.1.0 --yes
 
 ### "No matching version found" (ETARGET) during `npm install`
 
-This happens when npm checks the GitHub Package Registry for `@moises-ai` workspace packages and the registry doesn't have the latest upstream versions. The transform script prevents this by using wildcard (`"*"`) versions for internal deps. If you see this error:
+This happens when npm checks the GitHub Package Registry for `@moises-ai` workspace packages and the registry doesn't have the latest upstream versions. The transform script prevents this by using wildcard (`"*"`) versions for all internal workspace deps (both `@moises-ai` and `@opendaw` scopes). If you see this error:
 
 1. Ensure you ran `node scripts/transform-scope.js` after restoring `package.json` files from upstream
-2. Verify internal deps use `"*"` versions: `grep -r '"@moises-ai/' packages/*/package.json | grep -v '"*"'`
+2. Verify internal deps use `"*"` versions: `grep -r '"@moises-ai/\|"@opendaw/' packages/*/package.json | grep -v '"*"' | grep -v nam-wasm`
 3. Delete `package-lock.json` and re-run `npm install`
 
 ### Build fails after upstream sync

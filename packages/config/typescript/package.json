@@ -1,8 +1,6 @@
 {
-    "name": "@moises-ai/typescript-config",
+    "name": "@opendaw/typescript-config",
     "version": "0.0.28",
     "private": true,
-    "publishConfig": {
-        "access": "public"
-    }
+    "license": "LGPL-3.0-or-later"
 }

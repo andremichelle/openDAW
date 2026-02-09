@@ -1,5 +1,5 @@
 {
-    "name": "@moises-ai/lib-box-forge",
+    "name": "@opendaw/lib-box-forge",
     "version": "0.0.71",
     "private": true,
     "sideEffects": false,
@@ -24,7 +24,7 @@
         "tsx": "^4.20.3"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "*",
-        "@moises-ai/typescript-config": "*"
+        "@opendaw/eslint-config": "*",
+        "@opendaw/typescript-config": "*"
     }
 }

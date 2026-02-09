@@ -1,4 +1,4 @@
-import {BoxSchema, FieldName, FieldSchema} from "@moises-ai/lib-box-forge"
+import {BoxSchema, FieldName, FieldSchema} from "@opendaw/lib-box-forge"
 import {Pointers} from "@moises-ai/studio-enums"
 import {UnipolarConstraints} from "../Defaults"
 
