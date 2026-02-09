@@ -1,4 +1,4 @@
-import { DefaultObservableValue, isDefined, Nullable, Option } from "@opendaw/lib-std"
+import { DefaultObservableValue, isDefined, Nullable, Option, Terminator } from "@opendaw/lib-std"
 import type { StudioService } from "../../../service/StudioService"
 import type { Project, ProjectProfile } from "@opendaw/studio-core"
 
@@ -52,7 +52,8 @@ export interface DAWContext {
 export class ContextService {
     // The "Brain" State
     public readonly state: DefaultObservableValue<DAWContext>
-    private studio: Nullable<StudioService> = null // Weak reference to avoid circular imports during boot. Cast to StudioService when used.
+    private studio: Nullable<StudioService> = null
+    readonly #terminator = new Terminator()
 
     constructor() {
         // Initial / Mock State
@@ -78,30 +79,40 @@ export class ContextService {
         })
     }
 
+    private projectSubscription = new Terminator()
+
     public setStudio(studio: StudioService) {
+        if (this.studio === studio) return
         this.studio = studio
         console.debug("ContextService: Connected to Studio.")
 
+        // Cleanup previous
+        this.#terminator.terminate()
+        this.projectSubscription.terminate()
+
         // Listen for Project Load/Unload
-        if (isDefined(this.studio) && isDefined(this.studio.projectProfileService)) {
-            this.studio.projectProfileService.catchupAndSubscribe((optProfile: Option<ProjectProfile>) => {
+        if (isDefined(this.studio.projectProfileService)) {
+            this.#terminator.own(this.studio.projectProfileService.catchupAndSubscribe((optProfile: Option<ProjectProfile>) => {
                 if (optProfile.nonEmpty()) {
                     const project = optProfile.unwrap().project
                     this.onProjectLoaded(project)
                 } else {
                     this.resetFocus()
                 }
-            })
+            }))
         }
     }
 
     private onProjectLoaded(project: Project) {
+        // Cleanup previous project listeners
+        this.projectSubscription.terminate()
+
         // Subscribe to Selection
         if (project.selection) {
-            project.selection.subscribe({
-                onSelected: (_item: any) => this.scanSelection(project),
-                onDeselected: (_item: any) => this.scanSelection(project)
-            })
+            this.projectSubscription.own(project.selection.subscribe({
+                onSelected: () => this.scanSelection(project),
+                onDeselected: () => this.scanSelection(project)
+            }))
         }
         // Initial Scan
         this.scanSelection(project)
@@ -114,19 +125,24 @@ export class ContextService {
         })
     }
 
-    private scanSelection(project: any) {
+    private scanSelection(project: Project) {
         try {
-            const selection = project.selection.selected() as any[]
+            const selection = project.selection.selected() as unknown[]
             if (selection.length === 0) {
                 this.resetFocus()
                 return
             }
 
             // Heuristic: The first item is our focus
-            const primary = selection[0]
+            const primary = selection[0] as {
+                meta?: { name?: { toString(): string } }
+                name?: { toString(): string }
+                address?: { toString(): string }
+                audioUnits?: { pointerHub?: { incoming(): Array<{ box: { meta?: { name?: { toString(): string } }, cls?: { name: string } } }> } }
+                constructor?: { name: string }
+            }
 
             // 1. Identify Name
-            // Tracks usually have 'meta.name' or just 'name'
             let name = "Unknown Element"
             if (isDefined(primary.meta?.name)) name = primary.meta.name.toString()
             else if (isDefined(primary.name)) name = primary.name.toString()
@@ -136,10 +152,9 @@ export class ContextService {
             // Tracks have 'audioUnits' (PointerHub)
             let plugins: string[] = []
 
-            // Check for AudioUnits Hub
-            if (isDefined(primary.audioUnits) && isDefined(primary.audioUnits.pointerHub)) {
-                const units = (primary.audioUnits.pointerHub as any).incoming()
-                plugins = units.map((u: any) => {
+            if (isDefined(primary.audioUnits?.pointerHub)) {
+                const units = primary.audioUnits.pointerHub.incoming()
+                plugins = units.map((u) => {
                     const box = u.box
                     return box.meta?.name?.toString() || box.cls?.name || "Unknown Plugin"
                 })
@@ -184,14 +199,23 @@ export class ContextService {
                 }
 
                 // 3. Timeline / Global Specs
-                if (isDefined(s.profile) && isDefined(s.profile.project) && isDefined(s.profile.project.timelineBox)) {
-                    const tl = s.profile.project.timelineBox
+                const profile = s.profile as unknown as Nullable<{
+                    project: {
+                        timelineBox: {
+                            bpm: { getValue(): number }
+                            signature: { toString(): string }
+                            key: { getValue(): string }
+                        }
+                        key?: { getValue(): string }
+                    }
+                }>
 
-                    if (isDefined(tl.bpm)) bpm = tl.bpm.getValue()
-                    if (isDefined(tl.signature)) timeSignature = tl.signature.toString()
-
-                    if (isDefined((tl as any).key)) key = (tl as any).key.getValue()
-                    else if (isDefined((s.profile.project as any).key)) key = (s.profile.project as any).key.getValue()
+                if (isDefined(profile?.project?.timelineBox)) {
+                    const timeline = profile.project.timelineBox
+                    if (isDefined(timeline.bpm)) bpm = timeline.bpm.getValue()
+                    if (isDefined(timeline.signature)) timeSignature = timeline.signature.toString()
+                    if (isDefined(timeline.key)) key = timeline.key.getValue()
+                    else if (isDefined(profile.project.key)) key = profile.project.key.getValue()
                 }
             } catch (e) {
                 console.warn("ContextService: Sensor Read Error", e)

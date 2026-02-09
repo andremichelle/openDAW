@@ -95,6 +95,8 @@ export class OdieService {
     readonly ai = new AIService()
     readonly #toolExecutor = new OdieToolExecutor()
 
+    #saveTimeout: any = undefined
+
 
 
     public appControl: Optional<OdieAppControl>
@@ -115,14 +117,13 @@ export class OdieService {
             this.viewState.setValue("chat")
 
             // Auto-Save History (Debounced)
-            let saveTimeout: ReturnType<typeof setTimeout>
             this.#terminator.own(this.messages.subscribe(() => {
-                clearTimeout(saveTimeout)
-                saveTimeout = setTimeout(() => this.saveCurrentSession(), 5000)
+                clearTimeout(this.#saveTimeout)
+                this.#saveTimeout = setTimeout(() => {
+                    this.saveCurrentSession()
+                    this.#saveTimeout = undefined
+                }, 5000)
             }))
-            this.#terminator.own({
-                terminate: () => clearTimeout(saveTimeout)
-            })
 
             // Model Indicator Sync
             this.#terminator.own(this.ai.activeProviderId.subscribe(observer => {
@@ -321,15 +322,12 @@ export class OdieService {
                     }
                 }
 
-                // Return immediate "Model" response with card
-                const sysMsg: Message = {
-                    id: safeUUID(),
-                    role: "model",
-                    content: "```json\n" + JSON.stringify(errorCard, null, 2) + "\n```",
-                    timestamp: Date.now()
-                }
-                const currentPostExec = this.messages.getValue()
-                this.messages.setValue([...currentPostExec, sysMsg])
+                // Update assistant message in-place
+                const allMsgs = this.messages.getValue()
+                this.messages.setValue(allMsgs.map(m => m.id === assistantMsg.id ? {
+                    ...m,
+                    content: "```json\n" + JSON.stringify(errorCard, null, 2) + "\n```"
+                } : m))
                 return
             }
 
@@ -412,7 +410,7 @@ export class OdieService {
 
             this.isGenerating.setValue(true)
             const stream = await this.ai.streamChat(history, projectContext, OdieTools, async (finalMsg) => {
-                this.isGenerating.setValue(false)
+                let followUpStarted = false
                 this.activityStatus.setValue("Ready")
 
                 if (finalMsg.tool_calls && finalMsg.tool_calls.length > 0) {
@@ -501,7 +499,10 @@ export class OdieService {
 
                         const nextStream = await this.ai.streamChat(nextHistory, undefined, OdieTools, async () => {
                             console.log("Agent turn complete")
+                            this.isGenerating.setValue(false)
                         })
+
+                        followUpStarted = true
 
                         this.#chatTerminator.own(nextStream.subscribe(obs => {
                             const val = obs.getValue()
@@ -541,6 +542,7 @@ export class OdieService {
 
                         let lastStreamContent = ""
                         const nextStream = await this.ai.streamChat(nextHistory, undefined, renderOnlyTools, async (finalResponse) => {
+                            this.isGenerating.setValue(false)
                             if (!lastStreamContent && !finalResponse.content) {
                                 const trackList = this.safeListTracks().filter(t => t !== "Output")
                                 const genUIFallback = `Context needed. Which track would you like to update?\n\n\`\`\`json\n${JSON.stringify({
@@ -564,6 +566,8 @@ export class OdieService {
                                 }
                             }
                         })
+
+                        followUpStarted = true
 
                         this.#chatTerminator.own(nextStream.subscribe(obs => {
                             const val = obs.getValue()
@@ -596,7 +600,9 @@ export class OdieService {
                     }
                 }
 
-                this.isGenerating.setValue(false)
+                if (!followUpStarted) {
+                    this.isGenerating.setValue(false)
+                }
 
                 this.studio?.odieEvents.notify({
                     type: "action-complete",
@@ -697,7 +703,7 @@ export class OdieService {
 
         // Auto-Title based on first user message
         const firstUserMsg = msgs.find(m => m.role === "user")
-        const title = firstUserMsg ? firstUserMsg.content.slice(0, 30) + (firstUserMsg.content.length > 30 ? "..." : "") : "New Chat"
+        const title = (isDefined(firstUserMsg) && isDefined(firstUserMsg.content)) ? firstUserMsg.content.slice(0, 30) + (firstUserMsg.content.length > 30 ? "..." : "") : "New Chat"
 
         chatHistory.saveSession({
             id: this.activeSessionId,
@@ -792,6 +798,10 @@ export class OdieService {
     }
 
     dispose() {
+        if (this.#saveTimeout) {
+            clearTimeout(this.#saveTimeout)
+            this.saveCurrentSession()
+        }
         this.#terminator.terminate()
         this.#chatTerminator.terminate()
     }

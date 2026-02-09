@@ -152,7 +152,7 @@ export const ProjectProfileInfo = ({ lifecycle, service }: Construct) => {
                                     })
                                 }
                                 unpublishButton.classList.toggle("hidden", isUndefined(meta.radioToken))
-                                buttonPublishText.value = "Publish"
+                                buttonPublishText.value = "Republish"
                                 const result = await Promises.tryCatch(profile.save())
                                 if (result.status === "rejected") {
                                     console.error("Publish failed", result.error)
@@ -181,7 +181,7 @@ export const ProjectProfileInfo = ({ lifecycle, service }: Construct) => {
             () => profile.updateMetaData("description", inputDescription.value)),
         Events.subscribe(inputTags, "blur",
             () => profile.updateMetaData("tags", inputTags.value.split(",").map(x => x.trim()))),
-        Events.subscribe(inputName, "input", () => Html.limitChars(inputDescription, "value", 128)),
+        Events.subscribe(inputName, "input", () => Html.limitChars(inputName, "value", 128)),
         Events.subscribe(inputDescription, "input", () => Html.limitChars(inputDescription, "value", 512)),
         coverModel.subscribe(owner => profile.updateCover(owner))
     )

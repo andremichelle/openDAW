@@ -9,18 +9,10 @@ export interface CommandDef {
     execute: CommandHandler
 }
 
-interface KeyStatus {
-    key: string
-    status: 'ready' | 'exhausted' | 'invalid' | 'unknown'
-    isActive: boolean
-}
+import { ProviderWithKeyStatuses } from "./llm/LLMProvider"
 
-interface ProviderWithKeyStatuses {
-    getKeyStatuses(): KeyStatus[]
-}
-
-function isProviderWithKeyStatuses(p: any): p is ProviderWithKeyStatuses {
-    return p && typeof (p as any).getKeyStatuses === 'function'
+function isProviderWithKeyStatuses(p: unknown): p is ProviderWithKeyStatuses {
+    return !!p && typeof (p as ProviderWithKeyStatuses).getKeyStatuses === 'function'
 }
 
 export class OdieCommandRegistry {
@@ -247,9 +239,12 @@ Direct control over the Studio and Chat.
 
         this.register({
             id: "/purge",
-            description: "Factory Reset",
-            usage: "/purge",
-            execute: async (_s) => {
+            description: "Factory Reset (Requires valid confirmation)",
+            usage: "/purge strictly-confirm",
+            execute: async (_s, args) => {
+                if (args[0] !== "strictly-confirm") {
+                    return "Error: To factory reset, you must type '/purge strictly-confirm'. This action cannot be undone."
+                }
                 console.log("Purging Odie Data...")
                 localStorage.clear()
                 location.reload()
@@ -381,8 +376,8 @@ Direct control over the Studio and Chat.
                 report += `- **Model:** ${activeModel || "None"}\n`
                 report += `- **Available Models:** ${models.length}\n`
 
-                if (provider && typeof (provider as any).validate === 'function') {
-                    const res = await (provider as any).validate()
+                if (provider && provider.validate) {
+                    const res = await provider.validate()
                     report += `- **Connection:** ${res.ok ? "✅ Ready" : "❌ Disconnected"}\n`
                     if (!res.ok) report += `  - *Reason:* ${res.message}\n`
                 }
@@ -399,17 +394,17 @@ Direct control over the Studio and Chat.
                 const provider = s.ai.getActiveProvider()
                 if (!provider) return "Error: No active provider"
 
-                if (typeof (provider as any).validate !== "function") {
+                if (!provider.validate) {
                     return "Standard provider detected. Connection is managed by cloud."
                 }
 
-                const res = await (provider as any).validate()
+                const res = await provider.validate()
                 let report = `## Connection Sweep\n\n`
                 report += `**Status:** ${res.ok ? "✅ SUCCESS" : "❌ FAILED"}\n`
                 report += `**Message:** ${res.message}\n\n`
 
-                if (!res.ok && (provider as any).debugLog) {
-                    report += "### Debug Logs\n```\n" + (provider as any).debugLog + "\n```"
+                if (!res.ok && provider.debugLog) {
+                    report += "### Debug Logs\n```\n" + provider.debugLog + "\n```"
                 }
 
                 return report

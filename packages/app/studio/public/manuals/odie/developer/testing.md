@@ -50,13 +50,20 @@ Bypasses the LLM entirely. Injects hardcoded, complex JSON payloads into the `Od
 ### Scenario: You modified `OdieAppControl.ts`
 You changed how tracks are added. You need to verify you didn't break the AI.
 
-### Step 1: Live Verification
-1.  Launch OpenDAW.
-2.  Open Odie.
-3.  Type: `/verify`
-4.  **Expected Output**: "System Green. Write Latency: 12ms."
+### 1. GenUI Verification (`/verify3ui`)
+Injects a test payload to verify the Generative UI engine.
 
-### Step 2: Visual Simulation
-1.  Type: `/verify3ui`
-2.  **Expected Output**: A chat stream filled with diverse widgets (Table, Knob, List).
-3.  **Action**: Scroll through and visually verify nothing is broken or misaligned.
+**Command:**
+`/verify3ui`
+
+**Expected Output:**
+- A system message: `"[TEST] GenUI Test Payload Injected."`
+- Three interactive widgets appear in the chat stream:
+  1.  **Knob**: "CPU Load" (0-100)
+  2.  **Switch**: "Turbo Mode" (True/False)
+  3.  **Label**: "System is operational"
+
+**Verification Steps:**
+1.  Type `/verify3ui` in Odie chat.
+2.  Ensure the widgets render correctly.
+3.  Interact with the knob and switch to verify responsiveness.

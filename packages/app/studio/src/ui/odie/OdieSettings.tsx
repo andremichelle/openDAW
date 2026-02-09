@@ -263,12 +263,12 @@ export const OdieSettings = ({ service, lifecycle: _lifecycle, onBack, isEmbedde
                 <label className="label">Vision Fidelity</label>
                 <div className="value">
                     {resolutions.map(r => {
-                        const value = r === "ULTRA" ? "ULTRA_HIGH" : r
+                        const val = (r === "ULTRA" ? "ultra_high" : r.toLowerCase()) as ProviderConfig["mediaResolution"]
                         return (
                             <button
-                                className={current === value ? "odie-btn-primary" : "odie-btn"}
+                                className={current === val ? "odie-btn-primary" : "odie-btn"}
                                 style={{ flex: "1", fontSize: "9px", padding: "4px 2px" }}
-                                onclick={() => { service.ai.setConfig(providerId, { ...config, mediaResolution: value as any }); render() }}>
+                                onclick={() => { service.ai.setConfig(providerId, { ...config, mediaResolution: val }); render() }}>
                                 {r}
                             </button>
                         )

@@ -189,6 +189,9 @@ export const OdieSidebar = (props: { service: StudioService, lifecycle: Terminat
                 onClose: () => odieService?.showHistory.setValue(false)
             })
             historyView.appendChild(historyPanel)
+        }).catch(err => {
+            console.error("[OdieSidebar] Failed to load Odie components:", err)
+            messageListContainer.innerText = "Error loading Odie components. Please refresh."
         })
 
         // Subscribe to WIDTH changes
@@ -251,8 +254,8 @@ export const OdieSidebar = (props: { service: StudioService, lifecycle: Terminat
                 })
                 overlay.id = "odie-settings-overlay" // Marker for singleton check
                 document.body.appendChild(overlay)
-            })
-        })
+            }).catch(err => console.error("[OdieSidebar] Failed to load Settings:", err))
+        }).catch(err => console.error("[OdieSidebar] Failed to load ModalFrame:", err))
     }
 
     // Toggle Logic

@@ -248,8 +248,10 @@ interface ListProps {
 
 export const OdieMessageList = ({ service }: ListProps) => {
     const container = <div className={className}></div> as HTMLElement
-
+    const messageWrapper = <div className="MessageWrapper" style={{ display: "flex", flexDirection: "column", width: "100%" }}></div> as HTMLElement
     const bottomAnchor = <div style={{ height: "1px", width: "100%", flexShrink: "0" }}></div> as HTMLElement
+
+    container.appendChild(messageWrapper)
 
     const scrollToBottom = (instant = false) => {
         if (instant) {
@@ -267,39 +269,70 @@ export const OdieMessageList = ({ service }: ListProps) => {
         const newCount = messages.length
         const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100
 
-        container.innerHTML = ""
+        // Optimization: Differential Update
+        // 1. If messages cleared or reduced, full rebuild
+        if (newCount < lastMessageCount) {
+            messageWrapper.innerHTML = ""
+            lastMessageCount = 0
+        }
 
-        if (newCount === 0) {
-            container.appendChild(
+        // 2. If new empty state
+        if (newCount === 0 && messageWrapper.children.length === 0) {
+            messageWrapper.appendChild(
                 <div className="EmptyState">
                     <div className="Title">Odie</div>
                     <div className="Subtitle">Ask anything about your project...</div>
                 </div> as HTMLElement
             )
-        } else {
-            messages.forEach(msg => {
+        }
+        else if (newCount > 0) {
+            // Remove empty state if present
+            const emptyState = messageWrapper.querySelector(".EmptyState")
+            if (emptyState) emptyState.remove()
+
+            // 3. Update existing bubbles (if needed) or Append new ones
+            // Simple heuristic: If count same, update last bubble (streaming). If count increased, append.
+            const startIdx = newCount === lastMessageCount ? Math.max(0, newCount - 1) : lastMessageCount
+
+            // Remove anchor momentarily to append before it? No, anchor is in wrapper.
+            // Actually anchor needs to be at the very end.
+            if (bottomAnchor.parentNode === messageWrapper) bottomAnchor.remove()
+
+            for (let i = startIdx; i < newCount; i++) {
+                const msg = messages[i]
                 const bubble = <MessageBubble
                     message={msg}
                     onRetry={(text) => service.sendMessage(text)}
                     onWidgetAction={(action) => service.handleWidgetAction(action)}
                 /> as HTMLElement
-                container.appendChild(bubble)
-            })
+
+                // If updating last message (streaming), replace it
+                if (i < lastMessageCount && messageWrapper.children[i]) {
+                    messageWrapper.children[i].replaceWith(bubble)
+                } else {
+                    messageWrapper.appendChild(bubble)
+                }
+            }
         }
 
-        container.appendChild(bottomAnchor)
+        // Ensure anchor is last
+        messageWrapper.appendChild(bottomAnchor)
 
-        if (newCount > lastMessageCount || isNearBottom) {
-            requestAnimationFrame(() => scrollToBottom(newCount > lastMessageCount))
+        if (newCount > lastMessageCount || (newCount === lastMessageCount && isNearBottom)) {
+            // If streaming (same count), only scroll if we were near bottom
+            if (isNearBottom || newCount > lastMessageCount) {
+                requestAnimationFrame(() => scrollToBottom(newCount > lastMessageCount))
+            }
         }
         lastMessageCount = newCount
 
         setTimeout(() => {
-            mermaid.run({ nodes: container.querySelectorAll('.mermaid') }).catch(() => { })
-            container.querySelectorAll('.odie-markdown img').forEach(img => {
-                if (!(img as any)._odieModalBound) {
-                    img.addEventListener('click', () => showImageModal((img as HTMLImageElement).src))
-                        ; (img as any)._odieModalBound = true
+            mermaid.run({ nodes: messageWrapper.querySelectorAll('.mermaid') }).catch(() => { })
+            messageWrapper.querySelectorAll('.odie-markdown img').forEach(img => {
+                const element = img as HTMLImageElement
+                if (!element.dataset.odieModalBound) {
+                    element.addEventListener('click', () => showImageModal(element.src))
+                    element.dataset.odieModalBound = "true"
                 }
             })
         }, 50)

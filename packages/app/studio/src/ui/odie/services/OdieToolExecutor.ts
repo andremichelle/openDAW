@@ -1,9 +1,7 @@
-
 import { StudioService } from "../../../service/StudioService"
-import { OdieAppControl } from "./OdieAppControl"
+import { OdieAppControl, MidiNoteDef } from "./OdieAppControl"
+import { JsonValue, Message, ToolCall } from "./llm/LLMProvider"
 import { AIService } from "./AIService"
-import { ToolCall, JsonValue } from "./llm/LLMProvider"
-import { Message } from "./llm/LLMProvider"
 
 // Helper functions to safely extract typed values from JsonValue args
 const asString = (val: JsonValue | undefined): string => typeof val === "string" ? val : String(val ?? "")
@@ -17,11 +15,11 @@ export interface ExecutorContext {
     ai: AIService
 
     // Callbacks for OdieService state
-    setGenUiPayload: (payload: any) => void
+    setGenUiPayload: (payload: JsonValue) => void
     setSidebarVisible: (visible: boolean) => void
 
     // State for inference
-    contextState: any
+    contextState: Record<string, JsonValue> // Still using some dynamic context, but restricted to object
     recentMessages: Message[]
 }
 
@@ -29,7 +27,7 @@ export interface ToolResult {
     success: boolean
     userMessage?: string
     systemError?: string
-    analysisData?: any
+    analysisData?: JsonValue
 }
 
 export class OdieToolExecutor {
@@ -159,9 +157,18 @@ export class OdieToolExecutor {
                 }
 
                 case "notes_add": {
-                    const track = args.trackName as string
-                    const notes = args.notes as { pitch: number, startTime: number, duration: number, velocity: number }[]
-                    const result = await ctx.appControl.addMidiNotes(track, notes)
+                    const track = asString(args.trackName)
+                    const notes = Array.isArray(args.notes) ? args.notes : []
+                    const mappedNotes = notes.map(n => {
+                        const obj = n as Record<string, JsonValue>
+                        return {
+                            startTime: asNumber(obj.startTime),
+                            duration: asNumber(obj.duration),
+                            pitch: asNumber(obj.pitch),
+                            velocity: asNumber(obj.velocity)
+                        } as MidiNoteDef
+                    })
+                    const result = await ctx.appControl.addMidiNotes(track, mappedNotes)
                     return {
                         success: result.success,
                         userMessage: result.success ? `Added ${notes.length} MIDI notes to "${track}"` : `Failed to add notes to "${track}": ${result.reason}`
@@ -273,8 +280,9 @@ export class OdieToolExecutor {
 
                 // View
                 case "view_switch": {
-                    const vSwitch = await ctx.appControl.switchScreen(args.screen as any)
-                    return { success: vSwitch, userMessage: vSwitch ? `Switched to ${args.screen} view` : undefined }
+                    const screen = args.screen === "scene" ? "scene" : "arrangement"
+                    const vSwitch = await ctx.appControl.switchScreen(screen)
+                    return { success: vSwitch, userMessage: vSwitch ? `Switched to ${screen} view` : undefined }
                 }
                 case "view_toggle_keyboard":
                     await ctx.appControl.toggleKeyboard()
@@ -295,9 +303,10 @@ export class OdieToolExecutor {
                     try {
                         const data = JSON.parse(analysis)
                         const items = Array.isArray(data) ? data : [data]
-                        const trackCount = items.filter((i: any) => i.type === "track").length
-                        const regionCount = items.filter((i: any) => i.type === "region").length
-                        const deviceCount = items.filter((i: any) => i.type === "device" || i.type === "unknown").length
+                        const itemList = items as Array<{ type: string }>
+                        const trackCount = itemList.filter(i => i.type === "track").length
+                        const regionCount = itemList.filter(i => i.type === "region").length
+                        const deviceCount = itemList.filter(i => i.type === "device" || i.type === "unknown").length
 
                         if (items.length === 0) {
                             summary = "Nothing selected."
@@ -316,7 +325,8 @@ export class OdieToolExecutor {
                 case "analyze_track": {
                     let trackName = asOptionalString(args.trackName)
                     if (!trackName) {
-                        trackName = ctx.contextState.focus?.selectedTrackName
+                        const focus = ctx.contextState.focus as { [key: string]: JsonValue } | undefined
+                        trackName = focus?.selectedTrackName as string | undefined
                         if (!trackName) throw new Error("Missing 'trackName' argument")
                     }
                     await ctx.appControl.analyzeTrack(trackName)
@@ -327,7 +337,8 @@ export class OdieToolExecutor {
                     let trackName = args.trackName as string | undefined
                     if (!trackName) {
                         const trackList = await ctx.appControl.listTracks()
-                        const selected = ctx.contextState.focus?.selectedTrackName
+                        const focus = ctx.contextState.focus as { [key: string]: JsonValue } | undefined
+                        const selected = focus?.selectedTrackName as string | undefined
                         if (selected && trackList.includes(selected)) {
                             trackName = selected
                         }
@@ -362,7 +373,6 @@ export class OdieToolExecutor {
                         analysisData: overview
                     }
                 }
-
                 case "set_device_param": {
                     const trackName = asOptionalString(args.trackName)
                     const deviceType = asOptionalString(args.deviceType)
@@ -402,11 +412,11 @@ export class OdieToolExecutor {
                     console.warn(`Unknown Tool: ${name}`)
                     return { success: false, systemError: `Unknown Tool: ${name}` }
             }
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error(`Tool Execution Failed [${name}]`, e)
             return {
                 success: false,
-                systemError: `Error: ${name} - ${e.message}`,
+                systemError: `Error: ${name} - ${e instanceof Error ? e.message : String(e)}`,
             }
         }
     }

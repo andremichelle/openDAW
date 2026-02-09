@@ -42,8 +42,13 @@ export class OdieTransport {
 
     record(countIn: boolean = true): void {
         if (!this.isRecording) {
-            this.studio.engine.prepareRecordingState(countIn)
-            this.studio.engine.play()
+            if (this.studio.project && typeof this.studio.project.startRecording === 'function') {
+                this.studio.project.startRecording(countIn)
+            } else {
+                // Flashback: If project not ready or method missing, fallback
+                this.studio.engine.prepareRecordingState(countIn)
+                this.studio.engine.play()
+            }
         }
     }
 

@@ -149,6 +149,20 @@ export interface ProviderConfig {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Provider Status & Interaction
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface KeyStatus {
+    key: string
+    status: 'ready' | 'exhausted' | 'invalid' | 'unknown'
+    isActive: boolean
+}
+
+export interface ProviderWithKeyStatuses {
+    getKeyStatuses(): KeyStatus[]
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // LLM Provider Interface
 // ═══════════════════════════════════════════════════════════════════════════════
 

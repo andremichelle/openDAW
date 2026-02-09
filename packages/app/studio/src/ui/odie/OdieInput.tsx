@@ -59,6 +59,7 @@ export const OdieInput = ({ service }: InputProps) => {
     const activityLabel = <span className="activity-label">...</span> as HTMLElement
 
     const setIndicator = (state: "checking" | "connected" | "disconnected" | "thinking", label: string) => {
+        // Safe class update: preserve 'status-dot' and update state modifier
         statusDot.className = "status-dot " + state
         activityLabel.innerText = label
         activityLabel.classList.toggle("active", state !== "connected")
@@ -89,11 +90,15 @@ export const OdieInput = ({ service }: InputProps) => {
         if (typeof provider.validate === "function") {
             try {
                 const result = await provider.validate()
+                // Guard: Ensure provider hasn't changed while validating
+                if (service.ai.activeProviderId.getValue() !== providerId) return
+
                 setIndicator(
                     result.ok ? "connected" : "disconnected",
                     result.ok ? "Ready" : "No API"
                 )
             } catch (e) {
+                if (service.ai.activeProviderId.getValue() !== providerId) return
                 setIndicator("disconnected", "Error")
             }
         } else {
@@ -224,7 +229,7 @@ export const OdieInput = ({ service }: InputProps) => {
         </div>
     </div> as HTMLElement
 
-        ; (container as any).onDisconnect = () => lifecycle.terminate()
+        ; (container as unknown as { onDisconnect?: () => void }).onDisconnect = () => lifecycle.terminate()
 
     return container
 }

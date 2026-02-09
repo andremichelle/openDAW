@@ -285,13 +285,15 @@ const StepList = ({ payload, onAction }: {
     )
 }
 
-const MidiGrid = ({ payload }: WidgetProps<{ notes: { pitch: number, time: number, duration: number }[] }>) => {
+const MidiGrid = ({ payload }: WidgetProps<MidiGridParams>) => {
+    const bars = payload.bars ?? 4
+    const scale = 100 / bars
     return (
         <div className="odie-widget-midi">
             {payload.notes.map((n, i) => (
                 <div key={i} className="midi-note" style={{
-                    left: `${n.time * 25}%`,
-                    width: `${n.duration * 25}%`,
+                    left: `${n.time * scale}%`,
+                    width: `${n.duration * scale}%`,
                     bottom: `${(n.pitch % 12) * 8 + 4}px`,
                 }} />
             ))}
@@ -436,6 +438,8 @@ export const OdieRenderEngine = {
                     const aliasMap: Record<string, string> = {
                         "table": "comparison_table",
                         "knob": "smart_knob",
+                        "switch": "smart_switch",
+                        "smart_switch": "smart_knob", // Fallback to knob for now as switch renderer is missing
                         "steps": "step_list",
                         "list": "step_list",
                         "midi": "midi_grid",
@@ -545,6 +549,9 @@ export const OdieRenderEngine = {
                 return <ImageGallery payload={payload.params as ImageGalleryParams} />
             case "error_card":
                 return <ErrorCard payload={payload.params as ErrorCardParams} onAction={onAction} />
+            default:
+                console.warn(`[OdieRenderEngine] Unknown widget component: ${(payload as any).component}`)
+                return <ErrorCard payload={{ title: "Unknown Widget", message: `Unsupported component: ${(payload as any).component}` }} />
         }
     }
 }

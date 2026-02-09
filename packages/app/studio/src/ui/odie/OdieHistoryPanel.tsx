@@ -1,6 +1,7 @@
 import { createElement } from "@opendaw/lib-jsx"
 import { OdieService } from "./OdieService"
 import { chatHistory } from "./services/ChatHistoryService"
+import { Terminator } from "@opendaw/lib-std"
 
 interface PanelProps {
     service: OdieService
@@ -12,6 +13,7 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
     // Trace local state for which session is confirming delete
     // This serves as the single source of truth for the UI
     let pendingDeleteId: string | null = null
+    const terminator = new Terminator()
 
     const redraw = () => {
         if (listContainer) {
@@ -172,10 +174,10 @@ export const OdieHistoryPanel = ({ service, onClose }: PanelProps) => {
 
     renderList(listContainer as HTMLElement)
 
-    const binding = chatHistory.sessions.subscribe(() => redraw())
+    terminator.own(chatHistory.sessions.subscribe(() => redraw()))
 
     const cleanupContainer = container as HTMLElement & { cleanup?: () => void }
-    cleanupContainer.cleanup = () => binding.terminate()
+    cleanupContainer.cleanup = () => terminator.terminate()
 
     return container
 }

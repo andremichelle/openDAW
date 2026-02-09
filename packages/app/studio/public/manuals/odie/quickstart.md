@@ -23,13 +23,19 @@ This ensures it never blocks your timeline or mixer view. You can toggle it via 
 ## 💪 2. Task: Activation & Setup
 
 ### Step 1: Wake It Up
-1.  Click the **Robot Icon** in the studio header.
-2.  The sidebar will slide out.
+1.  Click the **Robot Icon** ![Odie System Config](./odie_system_config.png)
 
-### Step 2: Connect the Brain (Initial Setup)
-Odie requires a connection to an AI model to function. In the Alpha, you must provide your own API key.
+_Figure 1: The Odie configuration panel._
 
-1.  Click the **Gear Icon** (Settings) in the Odie sidebar rail.
+### 2. Permissions & API Keys
+Odie respects your privacy. By default, it runs in **Local Mode** (using Ollama). To unlock its full potential:
+
+1.  Open **Settings > AI**.
+2.  Enable **Cloud Processing** (optional).
+3.  Enter your **Gemini API Key**.
+4.  Click **Connect**.
+
+![Odie Artist Passport](./odie_artist_passport.png) in the Odie sidebar rail.
 2.  **Provider**: Choose **GEMINI API** (Recommended) or **LOCAL**.
 3.  **API Key**: Paste your key (Google Gemini keys are stored securely in your browser's `localStorage`).
     *   **Pro-Tip**: You can add **multiple keys** here to multiply your rate limits. Odie will automatically rotate them for you.

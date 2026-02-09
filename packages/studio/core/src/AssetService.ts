@@ -10,11 +10,11 @@ import {
     RuntimeNotifier,
     UUID
 } from "@opendaw/lib-std"
-import {Files} from "@opendaw/lib-dom"
-import {Promises} from "@opendaw/lib-runtime"
-import {BoxGraph} from "@opendaw/lib-box"
-import {Sample, Soundfont} from "@opendaw/studio-adapters"
-import {AudioFileBox, SoundfontFileBox} from "@opendaw/studio-boxes"
+import { Files } from "@opendaw/lib-dom"
+import { Promises } from "@opendaw/lib-runtime"
+import { BoxGraph } from "@opendaw/lib-box"
+import { Sample, Soundfont } from "@opendaw/studio-adapters"
+import { AudioFileBox, SoundfontFileBox } from "@opendaw/studio-boxes"
 
 export namespace AssetService {
     export type ImportArgs = {
@@ -31,7 +31,7 @@ export abstract class AssetService<T extends Sample | Soundfont> {
     protected abstract readonly boxType: Class<AudioFileBox | SoundfontFileBox>
     protected abstract readonly filePickerOptions: FilePickerOptions
 
-    protected constructor(protected readonly onUpdate: Procedure<T>) {}
+    protected constructor(protected readonly onUpdate: Procedure<T>) { }
 
     async browse(multiple: boolean): Promise<ReadonlyArray<T>> {
         return this.browseFiles(multiple, this.filePickerOptions)
@@ -42,26 +42,26 @@ export abstract class AssetService<T extends Sample | Soundfont> {
     async replaceMissingFiles(boxGraph: BoxGraph, manager: { invalidate: (uuid: UUID.Bytes) => void }): Promise<void> {
         const available = await this.collectAllFiles()
         const boxes = boxGraph.boxes().filter(box => isInstanceOf(box, this.boxType))
-        if (boxes.length === 0) {return}
+        if (boxes.length === 0) { return }
         for (const box of boxes) {
             const uuid = box.address.uuid
             const uuidAsString = UUID.toString(uuid)
-            if (isNotUndefined(available.find(({uuid}) => uuid === uuidAsString))) {continue}
+            if (isNotUndefined(available.find(({ uuid }) => uuid === uuidAsString))) { continue }
             const approved = await RuntimeNotifier.approve({
                 headline: "Missing Asset",
                 message: `Could not find ${this.nameSingular} '${box.fileName.getValue()}'`,
                 cancelText: "Ignore",
                 approveText: "Browse"
             })
-            if (!approved) {continue}
-            const {error, status, value: files} =
-                await Promises.tryCatch(Files.open({...this.filePickerOptions, multiple: false}))
+            if (!approved) { continue }
+            const { error, status, value: files } =
+                await Promises.tryCatch(Files.open({ ...this.filePickerOptions, multiple: false }))
             if (status === "rejected") {
-                if (Errors.isAbort(error) || Errors.isNotAllowed(error)) {return} else {return panic(String(error)) }
+                if (Errors.isAbort(error) || Errors.isNotAllowed(error)) { return } else { return panic(String(error)) }
             }
-            if (files.length === 0) {return}
+            if (files.length === 0) { return }
             const arrayBuffer = await files[0].arrayBuffer()
-            const asset = await this.importFile({uuid, arrayBuffer, progressHandler: Progress.Empty})
+            const asset = await this.importFile({ uuid, arrayBuffer, progressHandler: Progress.Empty })
             await RuntimeNotifier.info({
                 headline: "Replaced Asset",
                 message: `${asset.name} has been replaced`
@@ -71,10 +71,10 @@ export abstract class AssetService<T extends Sample | Soundfont> {
     }
 
     protected async browseFiles(multiple: boolean, filePickerSettings: FilePickerOptions): Promise<ReadonlyArray<T>> {
-        const {error, status, value: files} =
-            await Promises.tryCatch(Files.open({...filePickerSettings, multiple}))
+        const { error, status, value: files } =
+            await Promises.tryCatch(Files.open({ ...filePickerSettings, multiple }))
         if (status === "rejected") {
-            if (Errors.isAbort(error) || Errors.isNotAllowed(error)) {return []} else {return panic(String(error)) }
+            if (Errors.isAbort(error) || Errors.isNotAllowed(error)) { return [] } else { return panic(String(error)) }
         }
         const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({
@@ -85,12 +85,12 @@ export abstract class AssetService<T extends Sample | Soundfont> {
         const imported: Array<T> = []
         for (const [index, file] of files.entries()) {
             const arrayBuffer = await file.arrayBuffer()
-            const {status, value, error} = await Promises.tryCatch(this.importFile({
+            const { status, value, error } = await Promises.tryCatch(this.importFile({
                 name: file.name,
                 arrayBuffer: arrayBuffer,
                 progressHandler: progressHandler[index]
             }))
-            if (status === "rejected") {rejected.push(String(error))} else {imported.push(value)}
+            if (status === "rejected") { rejected.push(String(error)) } else { imported.push(value) }
         }
         dialog.terminate()
         if (rejected.length > 0) {
@@ -102,5 +102,5 @@ export abstract class AssetService<T extends Sample | Soundfont> {
         return imported
     }
 
-    protected abstract collectAllFiles(): Promise<ReadonlyArray<T>>
+    public abstract collectAllFiles(): Promise<ReadonlyArray<T>>
 }

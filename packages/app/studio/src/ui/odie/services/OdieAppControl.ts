@@ -442,6 +442,7 @@ export class OdieAppControl {
         }
         // Range Safety
         if (db > 6.0) db = 6.0
+        if (db < -100) db = -100
 
         return this.findAudioUnit(trackName).match<Promise<ToolResult>>({
             some: async (box) => {
@@ -1742,32 +1743,34 @@ export class OdieAppControl {
             default: return { success: false, reason: `Unknown MIDI effect type: ${effectType}` }
         }
 
+        const index = adapter.midiEffects.getMinFreeIndex()
+        if (index === -1) {
+            return { success: false, reason: "No free MIDI effect slots available on this track." }
+        }
+
+        const editing = this.studio.project.editing
+        const process = editing.beginModification()
+
         try {
-            this.studio.project.editing.modify(() => {
-                BoxClass.create(this.studio.project.boxGraph, UUID.generate(), (box: any) => {
-                    const hostBox = box as unknown as HostableDeviceBox
-                    if (hostBox.host && adapter.box.midiEffects) {
-                        hostBox.host.refer(adapter.box.midiEffects)
+            BoxClass.create(this.studio.project.boxGraph, UUID.generate(), (box: any) => {
+                const hostBox = box as unknown as HostableDeviceBox
+                if (hostBox.host && adapter.box.midiEffects) {
+                    hostBox.host.refer(adapter.box.midiEffects)
 
-                        const index = adapter.midiEffects.getMinFreeIndex()
-                        if (index === -1) {
-                            throw new Error("No free MIDI effect slots available on this track.")
-                        }
-
-                        if (hostBox.index) {
-                            hostBox.index.setValue(index)
-                        }
-                    } else {
-                        console.error("MIDI Effect creation failed: missing host/field wiring")
+                    if (hostBox.index) {
+                        hostBox.index.setValue(index)
                     }
-                })
+                } else {
+                    throw new Error("MIDI Effect creation failed: missing host/field wiring")
+                }
             })
 
+            process.approve()
             this.studio.odieEvents.notify({ type: "effect-added", track: trackName, effect: effectType })
-
             return { success: true, message: `Added MIDI ${effectType}` }
 
         } catch (e: unknown) {
+            process.revert()
             return { success: false, reason: `addMidiEffect error: ${e instanceof Error ? e.message : String(e)}` }
         }
     }
@@ -1921,7 +1924,9 @@ export class OdieAppControl {
         // 3. Inject Note
         try {
             this.studio.project.editing.modify(() => {
-                const eventCollection = region!.optCollection.unwrap()
+                const opt = region!.optCollection
+                if (opt.isEmpty()) return
+                const eventCollection = opt.unwrap()
                 // Local position within the region
                 const localPosition = ppqnStart - region!.position
 

@@ -71,7 +71,7 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
 
     limit(count: int): void {
         this.#limitSamples = count
-        if (this.numberOfFrames >= this.#limitSamples) {
+        if (this.numberOfFrames >= this.#limitSamples && !this.#isFinalizing) {
             this.#finalize().catch(error => console.warn(error))
         }
     }

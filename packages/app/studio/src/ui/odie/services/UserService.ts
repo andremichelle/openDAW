@@ -23,6 +23,7 @@ export interface UserDNA {
     name: string
     avatar?: string
     profileId?: string // Stable session ID for the user profile
+    createdAt: number // Timestamp of profile creation
     identity: UserIdentity
     level: UserLevel
     sonicFingerprint: SonicFingerprint
@@ -34,6 +35,7 @@ export interface UserDNA {
 const DEFAULT_DNA: UserDNA = {
     name: "",
     profileId: undefined,
+    createdAt: Date.now(),
     identity: { role: "producer", location: "" },
     level: "intermediate",
     sonicFingerprint: { primaryGenre: "", secondaryGenres: [], vibeKeywords: [] },

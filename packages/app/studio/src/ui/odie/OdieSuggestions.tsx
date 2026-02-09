@@ -198,6 +198,7 @@ export const OdieSuggestions = ({ service }: { service: OdieService }) => {
 
     render()
 
+        // Important: Parent components must call this to prevent subscription leaks
         ; (container as unknown as { onDisconnect?: () => void }).onDisconnect = () => lifecycle.terminate()
 
     return container

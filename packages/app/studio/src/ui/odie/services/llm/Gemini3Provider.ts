@@ -1,5 +1,5 @@
 import { ObservableValue, DefaultObservableValue, Nullable, isAbsent, isDefined } from "@opendaw/lib-std"
-import { LLMProvider, Message, ProviderConfig, LLMTool, ToolCallArgs } from "./LLMProvider"
+import { LLMProvider, Message, ProviderConfig, LLMTool } from "./LLMProvider"
 
 type GeminiPart =
     | { text: string; thought?: boolean }
@@ -57,7 +57,7 @@ export class Gemini3Provider implements LLMProvider {
     private static readonly VISION_MODEL = "gemini-3-pro-image-preview"
     private static readonly SIG_STORAGE_KEY = "odie_gemini3_thought_sig"
 
-    configure(config: ProviderConfig) {
+    configure(config: ProviderConfig): void {
         this.config = config
         this.keyRing = config.keyLibrary || []
         this.keyStatus = this.keyRing.map(() => 'unknown' as KeyStatus)
@@ -199,7 +199,7 @@ export class Gemini3Provider implements LLMProvider {
                     sig = this.lastThoughtSignature
                 }
 
-                if (m.role === 'function' || (m.role as any) === 'tool') {
+                if (m.role === 'function' || (m.role as string) === 'tool') {
                     try {
                         const response = typeof m.content === 'string' ? JSON.parse(m.content) : m.content
                         parts.push({
@@ -220,12 +220,14 @@ export class Gemini3Provider implements LLMProvider {
                         const part: GeminiPart = {
                             functionCall: { name: tc.name, args: tc.arguments }
                         }
-                        if (isDefined(sig) && idx === 0) (part as any).thoughtSignature = sig
+                        if (isDefined(sig) && idx === 0) {
+                            (part.functionCall as any).thoughtSignature = sig
+                        }
                         parts.push(part)
                     })
                 }
 
-                const role = m.role === 'model' || (m.role as any) === 'assistant' ? 'model' : 'user'
+                const role = m.role === 'model' || (m.role as string) === 'assistant' ? 'model' : 'user'
                 return { role, parts }
             }) as GeminiContent[]
 
@@ -277,7 +279,7 @@ export class Gemini3Provider implements LLMProvider {
             finalContents = [{
                 role: "user",
                 parts: [{ text: `[GENERATE_IMAGE] ${visualBlueprint}` }]
-            }] as any
+            }] as unknown as GeminiContent[]
         }
 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:streamGenerateContent?key=${this.currentKey}`
@@ -305,7 +307,7 @@ export class Gemini3Provider implements LLMProvider {
         let accumulatedText = ""
         let capturedSignature: string | null = null
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Gemini API response structure is dynamic
-        const capturedTools: { name: string; arguments: Record<string, unknown> }[] = []
+        const capturedTools: { name: string; arguments: any }[] = []
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API response chunk parsing requires flexible access
         const processChunk = (chunk: any) => {
@@ -399,10 +401,11 @@ export class Gemini3Provider implements LLMProvider {
             }
 
             if (capturedTools.length > 0) {
+                // Fix: Correctly map captured arguments to tool_calls
                 finalMsg.tool_calls = capturedTools.map(fc => ({
                     id: "call_" + crypto.randomUUID().substring(0, 8),
                     name: fc.name,
-                    arguments: fc.arguments as ToolCallArgs
+                    arguments: fc.arguments
                 }))
             }
             onFinal(finalMsg)

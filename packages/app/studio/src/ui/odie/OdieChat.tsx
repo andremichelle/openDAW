@@ -1,4 +1,5 @@
 import { createElement } from "@opendaw/lib-jsx"
+import { Terminator } from "@opendaw/lib-std"
 import { OdieService } from "./OdieService"
 import { OdieInput } from "./OdieInput"
 import { OdieMessageList } from "./OdieMessageList"
@@ -23,7 +24,23 @@ export const OdieChat = ({ service }: { service: OdieService }) => {
         if (!contentContainer) return
         while (contentContainer.firstChild) contentContainer.firstChild.remove()
 
-        contentContainer.appendChild(OdieMessageList({ service }))
+        const messageList = OdieMessageList({ service })
+        contentContainer.appendChild(messageList)
+
+        // Propagate disconnect if exists on children
+        const ml = messageList as unknown as {
+            appendChild(el: HTMLElement): void,
+            scrollTo(opt: { top: number, behavior: string }): void,
+            cleanup?: () => void,
+            onDisconnect?: () => void
+        }
+        if (ml.cleanup) {
+            terminator.own({ terminate: () => ml.cleanup!() })
+        } else if (ml.onDisconnect) {
+            // Fallback for legacy components
+            terminator.own({ terminate: () => ml.onDisconnect!() })
+        }
+
         contentContainer.appendChild(OdieInput({ service }))
 
         // Auto scroll
@@ -31,9 +48,10 @@ export const OdieChat = ({ service }: { service: OdieService }) => {
         if (list) list.scrollTop = list.scrollHeight
     }
 
-    // Subscribe to service messages for re-render
-    service.messages.subscribe(() => renderChat())
-    setTimeout(() => renderChat(), TIMEOUTS.IMMEDIATE) // Defer initial render to ensure DOM
+    const terminator = new Terminator()
+
+    // Initial Render Only (OdieMessageList handles its own updates)
+    setTimeout(() => renderChat(), TIMEOUTS.IMMEDIATE)
 
     const container = <div style={{
         position: "relative",
@@ -42,6 +60,9 @@ export const OdieChat = ({ service }: { service: OdieService }) => {
     }}>
         {chatRoot}
     </div> as HTMLElement
+
+        // Expose cleanup
+        ; (container as unknown as { onDisconnect?: () => void }).onDisconnect = () => terminator.terminate()
 
     return container
 }

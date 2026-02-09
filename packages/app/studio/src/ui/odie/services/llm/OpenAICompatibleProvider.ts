@@ -301,9 +301,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
                     signal: controller.signal,
                     headers: {
                         "Content-Type": "application/json",
-                        "Authorization": `Bearer ${key}`,
                         "HTTP-Referer": "https://opendaw.studio",
-                        "X-Title": "OpenDAW"
+                        "X-Title": "OpenDAW",
+                        ...(key ? { "Authorization": `Bearer ${key}` } : {})
                     },
                     body: JSON.stringify(body)
                 })
@@ -385,12 +385,43 @@ export class OpenAICompatibleProvider implements LLMProvider {
                             }
                             if (delta?.tool_calls) {
                                 delta.tool_calls.forEach((tc: any) => {
-                                    if (tc.function) {
-                                        toolCallsBuff.push({
-                                            id: tc.id || ("call_" + Math.random().toString(36).substr(2, 9)),
-                                            name: tc.function.name,
-                                            arguments: tc.function.arguments
-                                        })
+                                    // Use index if available (OpenAI standard), fallback to strict ID matching, fallback to last item
+                                    const index = tc.index;
+
+                                    // 1. Try to find existing call by index
+                                    if (typeof index === 'number') {
+                                        if (!toolCallsBuff[index]) {
+                                            toolCallsBuff[index] = {
+                                                id: tc.id || ("call_" + Math.random().toString(36).substr(2, 9)),
+                                                name: tc.function?.name || "",
+                                                arguments: tc.function?.arguments || ""
+                                            }
+                                        } else {
+                                            if (tc.function?.arguments) toolCallsBuff[index].arguments += tc.function.arguments;
+                                            if (tc.function?.name) toolCallsBuff[index].name += tc.function.name; // Rare but possible
+                                        }
+                                        return;
+                                    }
+
+                                    // 2. Fallback logic (for non-compliant servers): find by ID or append to last
+                                    let details = toolCallsBuff.find(t => t.id === tc.id);
+                                    if (!details && toolCallsBuff.length > 0) {
+                                        // Assume it belongs to the last one if no index/id provided (Ollama sometimes does this)
+                                        details = toolCallsBuff[toolCallsBuff.length - 1];
+                                    }
+
+                                    if (details && !tc.id && !tc.function?.name) {
+                                        // Just argument delta
+                                        if (tc.function?.arguments) details.arguments += tc.function.arguments;
+                                    } else {
+                                        // New call potentially
+                                        if (tc.function) {
+                                            toolCallsBuff.push({
+                                                id: tc.id || ("call_" + Math.random().toString(36).substr(2, 9)),
+                                                name: tc.function.name,
+                                                arguments: tc.function.arguments
+                                            })
+                                        }
                                     }
                                 })
                             }

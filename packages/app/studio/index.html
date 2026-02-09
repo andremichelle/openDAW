@@ -94,11 +94,9 @@
     </style>
     <script>
         window.addEventListener("error", (event) => {
-            alert("Global Error: " + event.message + "\n" + event.filename + ":" + event.lineno)
             console.error("Global Error", event)
         })
         window.addEventListener("unhandledrejection", (event) => {
-            alert("Unhandled Rejection: " + event.reason)
             console.error("Unhandled Rejection", event)
         })
     </script>
