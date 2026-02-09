@@ -1,8 +1,7 @@
-import {Dragging} from "@moises-ai/lib-dom"
-import {BoxEditing} from "@moises-ai/lib-box"
+import {Dragging} from "@opendaw/lib-dom"
 
 export interface Modifier {
     update(event: Dragging.Event): void
-    approve(editing: BoxEditing): void
+    approve(): void
     cancel(): void
 }

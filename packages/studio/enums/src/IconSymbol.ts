@@ -63,6 +63,8 @@ export enum IconSymbol {
     Invert,
     Info,
     Loop,
+    LoopEnd,
+    LoopStart,
     LowPass,
     LowShelf,
     Magnet,

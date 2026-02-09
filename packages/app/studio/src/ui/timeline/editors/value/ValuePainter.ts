@@ -10,19 +10,19 @@ import {
     TAU,
     unitValue,
     ValueMapping
-} from "@moises-ai/lib-std"
+} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {renderValueStream} from "@/ui/timeline/renderer/value.ts"
-import {ValueEvent} from "@moises-ai/lib-dsp"
+import {ValueEvent} from "@opendaw/lib-dsp"
 import {renderTimeGrid} from "@/ui/timeline/editors/TimeGridRenderer.ts"
 import {EventRadius, MidPointRadius} from "@/ui/timeline/editors/value/Constants.ts"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {ValueModifier} from "./ValueModifier"
 import {ValueModifyStrategy} from "@/ui/timeline/editors/value/ValueModifyStrategies.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {UIValueEvent} from "@/ui/timeline/editors/value/UIValueEvent.ts"
-import {TimelineRange} from "@moises-ai/studio-core"
+import {SelectableValueEvent} from "@opendaw/studio-adapters"
+import {TimelineRange} from "@opendaw/studio-core"
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 
 export type Construct = {
@@ -87,7 +87,7 @@ export const createValuePainter =
         const end = range.unitMax
         const events = reader.content.events
 
-        const createIterator = modifier.match<Provider<IterableIterator<UIValueEvent>>>({
+        const createIterator = modifier.match<Provider<IterableIterator<SelectableValueEvent>>>({
             none: () => () => ValueEvent.iterateWindow(events, start - offset, end - offset),
             some: (strategy: ValueModifyStrategy) => {
                 const snapValue = strategy.snapValue()
@@ -117,7 +117,7 @@ export const createValuePainter =
                 resultStartValue: 0.0,
                 resultEndValue: 1.0
             })
-        let prevEvent: Nullable<UIValueEvent> = null
+        let prevEvent: Nullable<SelectableValueEvent> = null
         for (const event of createIterator()) {
             if (isNotNull(prevEvent) && prevEvent.interpolation.type !== "none") {
                 const slope = prevEvent.interpolation.type === "curve" ? prevEvent.interpolation.slope : 0.5

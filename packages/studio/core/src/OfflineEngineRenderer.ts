@@ -1,15 +1,16 @@
-import {Errors, int, isDefined, Option, panic, Progress, Terminator, UUID} from "@moises-ai/lib-std"
-import {AudioData, ppqn} from "@moises-ai/lib-dsp"
-import {Communicator, Messenger} from "@moises-ai/lib-runtime"
+import {Errors, int, isDefined, Option, panic, Progress, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
+import {AudioData, ppqn} from "@opendaw/lib-dsp"
+import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
 import {
     EngineCommands,
     EngineToClient,
     ExportStemsConfiguration,
+    MonitoringMapEntry,
     NoteSignal,
     OfflineEngineInitializeConfig,
     OfflineEngineProtocol,
     OfflineEngineRenderConfig
-} from "@moises-ai/studio-adapters"
+} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 import {AudioWorklets} from "./AudioWorklets"
 import {MIDIReceiver} from "./midi"
@@ -109,6 +110,7 @@ export class OfflineEngineRenderer {
                 scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void { dispatcher.dispatchAndForget(this.scheduleClipPlay, clipIds) }
                 scheduleClipStop(trackIds: ReadonlyArray<UUID.Bytes>): void { dispatcher.dispatchAndForget(this.scheduleClipStop, trackIds) }
                 setupMIDI(port: MessagePort, buffer: SharedArrayBuffer): void { dispatcher.dispatchAndForget(this.setupMIDI, port, buffer) }
+                updateMonitoringMap(map: ReadonlyArray<MonitoringMapEntry>): void { dispatcher.dispatchAndForget(this.updateMonitoringMap, map) }
                 loadClickSound(index: 0 | 1, data: AudioData): void { dispatcher.dispatchAndForget(this.loadClickSound, index, data) }
                 terminate(): void { dispatcher.dispatchAndForget(this.terminate) }
             }
@@ -236,6 +238,9 @@ export class OfflineEngineRenderer {
         this.#progressPort.onmessage = (event: MessageEvent<{ frames: number }>) =>
             progress(event.data.frames / this.#sampleRate)
 
+        while (!await this.#engineCommands.queryLoadingComplete()) {
+            await Wait.timeSpan(TimeSpan.millis(100))
+        }
         this.play()
         this.#protocol.render(config).then(channels => {
             if (cancelled) {return}

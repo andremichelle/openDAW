@@ -428,6 +428,10 @@ export namespace DawProjectImport {
                 const loopDuration = clip.loopEnd ?? warpDistance
                 const durationInPulses = duration * PPQN.Quarter
                 const loopDurationInPulses = loopDuration * PPQN.Quarter
+                if (loopDurationInPulses < 1) {
+                    console.warn(`Skipping clip '${clip.name}': loop duration too small (${loopDurationInPulses} ppqn)`)
+                    return
+                }
                 const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
                 const pitchStretch = AudioPitchStretchBox.create(boxGraph, UUID.generate())
                 AudioContentHelpers.addDefaultWarpMarkers(

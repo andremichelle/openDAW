@@ -20,6 +20,7 @@ import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {ShortcutTooltip} from "@/ui/shortcuts/ShortcutTooltip"
 import {UndoRedoButtons} from "@/ui/header/UndoRedoButtons"
 import {MetronomeControl} from "@/ui/header/MetronomeControl"
+import {PerformanceStats} from "@/ui/header/PerformanceStats"
 
 const className = Html.adoptStyleSheet(css, "Header")
 
@@ -114,9 +115,7 @@ export const Header = ({lifecycle, service}: Construct) => {
                 && (<h5 style={{color: Colors.cream.toString()}}>DEV VERSION (UNSTABLE)</h5>)}
             <div style={{flex: "2 0 0"}}/>
             <hr/>
-            <div className="header">
-                <HorizontalPeakMeter lifecycle={lifecycle} peaksInDb={peaksInDb} width="4em"/>
-            </div>
+            <HorizontalPeakMeter lifecycle={lifecycle} peaksInDb={peaksInDb} width="4em"/>
             <hr/>
             <div className="panel-selector">
                 <RadioGroup lifecycle={lifecycle}
@@ -145,6 +144,8 @@ export const Header = ({lifecycle, service}: Construct) => {
                                 }))}
                             appearance={{framed: true, landscape: true}}/>
             </div>
+            <hr/>
+            <PerformanceStats lifecycle={lifecycle} service={service}/>
         </header>
     )
 }

@@ -13,7 +13,8 @@ const createGrooveBox = <FIELDS extends FieldRecord<Pointers>>(
     name: string, fields: Objects.Disjoint<typeof GrooveBoxAttributes, FIELDS>): BoxSchema<Pointers> => ({
     type: "box",
     class: {name, fields: mergeFields(GrooveBoxAttributes, fields)},
-    pointerRules: {mandatory: true, accepts: [Pointers.Groove]}
+    pointerRules: {mandatory: true, accepts: [Pointers.Groove]},
+    resource: "internal"
 })
 
 export const GrooveShuffleBox: BoxSchema<Pointers> = createGrooveBox("GrooveShuffleBox", {

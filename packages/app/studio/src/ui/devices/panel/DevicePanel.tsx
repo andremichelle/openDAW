@@ -1,6 +1,7 @@
 import css from "./DevicePanel.sass?inline"
 import {
     asDefined,
+    isAbsent,
     Lifecycle,
     MutableObservableOption,
     ObservableOption,
@@ -8,10 +9,10 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@moises-ai/lib-std"
-import {appendChildren, createElement} from "@moises-ai/lib-jsx"
+} from "@opendaw/lib-std"
+import {appendChildren, createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
-import {AudioUnitBox, BoxVisitor, PlayfieldSampleBox} from "@moises-ai/studio-boxes"
+import {AudioUnitBox, BoxVisitor, PlayfieldSampleBox} from "@opendaw/studio-boxes"
 import {
     AudioEffectDeviceAdapter,
     AudioUnitInputAdapter,
@@ -20,20 +21,20 @@ import {
     IndexedBoxAdapterCollection,
     MidiEffectDeviceAdapter,
     PlayfieldSampleBoxAdapter
-} from "@moises-ai/studio-adapters"
+} from "@opendaw/studio-adapters"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {Orientation, Scroller} from "@/ui/components/Scroller"
 import {DeviceMidiMeter} from "@/ui/devices/panel/DeviceMidiMeter.tsx"
 import {ChannelStrip} from "@/ui/mixer/ChannelStrip"
 import {installAutoScroll} from "@/ui/AutoScroll"
-import {deferNextFrame, Events, Html} from "@moises-ai/lib-dom"
+import {deferNextFrame, Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {DevicePanelDragAndDrop} from "@/ui/devices/DevicePanelDragAndDrop"
 import {NoAudioUnitSelectedPlaceholder} from "@/ui/devices/panel/NoAudioUnitSelectedPlaceholder"
 import {NoEffectPlaceholder} from "@/ui/devices/panel/NoEffectPlaceholder"
 import {DeviceMount} from "@/ui/devices/panel/DeviceMount"
-import {Box} from "@moises-ai/lib-box"
-import {Pointers} from "@moises-ai/studio-enums"
-import {Project, ProjectProfile} from "@moises-ai/studio-core"
+import {Box} from "@opendaw/lib-box"
+import {Pointers} from "@opendaw/studio-enums"
+import {Project, ProjectProfile} from "@opendaw/studio-core"
 import {ShadertoyPreview} from "@/ui/devices/panel/ShadertoyPreview"
 
 const className = Html.adoptStyleSheet(css, "DevicePanel")
@@ -222,12 +223,45 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         </div>
     )
     updateDom.request()
+    const getCurrentDeviceHost = (): Option<DeviceHost> => {
+        const profile = service.projectProfileService.getValue()
+        if (profile.isEmpty()) {return Option.None}
+        const {project} = profile.unwrap()
+        const optEditing = project.userEditingManager.audioUnit.get()
+        if (optEditing.isEmpty()) {return Option.None}
+        return Option.wrap(project.boxAdapters.adapterFor(optEditing.unwrap().box, Devices.isHost))
+    }
     lifecycle.ownAll(
         Html.watchResize(element, updateScroller),
         scrollModel.subscribe(() => devices.scrollLeft = scrollModel.position),
         Events.subscribe(element, "wheel", (event: WheelEvent) => scrollModel.moveBy(event.deltaX), {passive: true}),
         installAutoScroll(devices, (deltaX, _deltaY) => scrollModel.position += deltaX, {padding: [0, 32, 0, 0]}),
-        DevicePanelDragAndDrop.install(service.project, devices, midiEffectsContainer, instrumentContainer, audioEffectsContainer)
+        DevicePanelDragAndDrop.install(service.project, devices, midiEffectsContainer, instrumentContainer, audioEffectsContainer),
+        Events.subscribe(devices, "pointerdown", (event: PointerEvent) => {
+            const target = event.target
+            if (target instanceof Element && isAbsent(target.closest("[data-drag]"))) {
+                service.project.deviceSelection.deselectAll()
+            }
+        }),
+        Events.subscribe(element, "keydown", (event: KeyboardEvent) => {
+            if (Keyboard.isDelete(event)) {
+                const {deviceSelection, editing} = service.project
+                if (deviceSelection.isEmpty()) {return}
+                const optHost = getCurrentDeviceHost()
+                if (optHost.isEmpty()) {return}
+                const host = optHost.unwrap()
+                const selected = new Set(deviceSelection.selected().filter(adapter => adapter.type !== "instrument"))
+                if (selected.size === 0) {return}
+                event.preventDefault()
+                const remainingMidi = host.midiEffects.adapters().filter(adapter => !selected.has(adapter))
+                const remainingAudio = host.audioEffects.adapters().filter(adapter => !selected.has(adapter))
+                editing.modify(() => {
+                    selected.forEach(adapter => adapter.box.delete())
+                    remainingMidi.forEach((adapter, index) => adapter.indexField.setValue(index))
+                    remainingAudio.forEach((adapter, index) => adapter.indexField.setValue(index))
+                })
+            }
+        })
     )
     return element
 }

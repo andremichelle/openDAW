@@ -19,6 +19,7 @@ type Construct = {
     parameter: AutomatableParameterFieldAdapter
     options?: ValueGuide.Options
     anchor?: unitValue
+    disableAutomation?: boolean
 }
 
 export const ParameterLabelKnob = ({
@@ -28,7 +29,8 @@ export const ParameterLabelKnob = ({
                                        adapter,
                                        parameter,
                                        options,
-                                       anchor
+                                       anchor,
+                                       disableAutomation
                                    }: Construct) => {
     const element: HTMLElement = (
         <div className={className}>
@@ -48,6 +50,6 @@ export const ParameterLabelKnob = ({
     )
     lifecycle.own(
         attachParameterContextMenu(editing, midiLearning,
-            adapter.deviceHost().audioUnitBoxAdapter().tracks, parameter, element))
+            adapter.deviceHost().audioUnitBoxAdapter().tracks, parameter, element, disableAutomation))
     return element
 }

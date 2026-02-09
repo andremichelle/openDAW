@@ -4,6 +4,7 @@ import {
     AssertType,
     Class,
     isDefined,
+    Option,
     panic,
     SortedSet,
     Subscription,
@@ -22,16 +23,16 @@ import {
     AudioUnitBox,
     AuxSendBox,
     BoxVisitor,
-    MaximizerDeviceBox,
     CompressorDeviceBox,
     CrusherDeviceBox,
-    GateDeviceBox,
     DattorroReverbDeviceBox,
     DelayDeviceBox,
     DeviceInterfaceKnobBox,
     FoldDeviceBox,
+    GateDeviceBox,
     GrooveShuffleBox,
     MarkerBox,
+    MaximizerDeviceBox,
     MIDIOutputDeviceBox,
     ModularAudioInputBox,
     ModularAudioOutputBox,
@@ -43,6 +44,7 @@ import {
     ModuleMultiplierBox,
     NanoDeviceBox,
     NeuralAmpDeviceBox,
+    NeuralAmpModelBox,
     NoteClipBox,
     NoteEventBox,
     NoteEventCollectionBox,
@@ -129,6 +131,7 @@ import {VelocityDeviceBoxAdapter} from "./devices/midi-effects/VelocityDeviceBox
 import {TidalDeviceBoxAdapter} from "./devices/audio-effects/TidalDeviceBoxAdapter"
 import {DattorroReverbDeviceBoxAdapter} from "./devices/audio-effects/DattorroReverbDeviceBoxAdapter"
 import {NeuralAmpDeviceBoxAdapter} from "./devices/audio-effects/NeuralAmpDeviceBoxAdapter"
+import {NeuralAmpModelBoxAdapter} from "./nam/NeuralAmpModelBoxAdapter"
 import {AudioPitchStretchBoxAdapter} from "./audio/AudioPitchStretchBoxAdapter"
 import {TransientMarkerBoxAdapter} from "./audio/TransientMarkerBoxAdapter"
 import {WarpMarkerBoxAdapter} from "./audio/WarpMarkerBoxAdapter"
@@ -184,6 +187,8 @@ export class BoxAdapters implements Terminable {
         return panic("Unknown checkType method")
     }
 
+    optAdapter(box: Box): Option<BoxAdapter> {return this.#adapters.opt(box.address.uuid)}
+
     #create(unknownBox: Box): BoxAdapter {
         return asDefined(unknownBox.accept<BoxVisitor<BoxAdapter>>({
             visitArpeggioDeviceBox: (box: ArpeggioDeviceBox) => new ArpeggioDeviceBoxAdapter(this.#context, box),
@@ -220,6 +225,7 @@ export class BoxAdapters implements Terminable {
             visitModuleMultiplierBox: (box: ModuleMultiplierBox) => new ModuleMultiplierAdapter(this.#context, box),
             visitNanoDeviceBox: (box: NanoDeviceBox) => new NanoDeviceBoxAdapter(this.#context, box),
             visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox) => new NeuralAmpDeviceBoxAdapter(this.#context, box),
+            visitNeuralAmpModelBox: (box: NeuralAmpModelBox) => new NeuralAmpModelBoxAdapter(this.#context, box),
             visitNoteClipBox: (box: NoteClipBox) => new NoteClipBoxAdapter(this.#context, box),
             visitNoteEventBox: (box: NoteEventBox) => new NoteEventBoxAdapter(this.#context, box),
             visitNoteEventCollectionBox: (box: NoteEventCollectionBox): BoxAdapter => new NoteEventCollectionBoxAdapter(this.#context, box),

@@ -60,6 +60,7 @@ export const PropertyEditor =
             Dragging.attach(canvas, (event: PointerEvent) => {
                 if (Keyboard.isControlKey(event)) {
                     return modifyContext.startModifier(PropertyDrawModifier.create({
+                        editing,
                         element: canvas,
                         property: propertyOwner.getValue(),
                         selection,
@@ -70,6 +71,7 @@ export const PropertyEditor =
                 } else if (event.altKey) {
                     const clientRect = canvas.getBoundingClientRect()
                     return modifyContext.startModifier(PropertyLineModifier.create({
+                        editing,
                         element: canvas,
                         property: propertyOwner.getValue(),
                         selection,
@@ -125,6 +127,7 @@ export const PropertyEditor =
                 if (target === null || selection.isEmpty()) {return Option.None}
                 const clientRect = canvas.getBoundingClientRect()
                 return modifyContext.startModifier(PropertyNodeModifier.create({
+                    editing,
                     element: canvas,
                     selection,
                     property: propertyOwner.getValue(),

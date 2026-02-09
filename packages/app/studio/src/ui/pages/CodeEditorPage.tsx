@@ -1,27 +1,27 @@
 import css from "./CodeEditorPage.sass?inline"
-import {Events, Html} from "@moises-ai/lib-dom"
-import {Await, createElement, PageContext, PageFactory, RouteLocation} from "@moises-ai/lib-jsx"
+import {Events, Html} from "@opendaw/lib-dom"
+import {Await, createElement, PageContext, PageFactory, RouteLocation} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
-import {Colors, IconSymbol} from "@moises-ai/studio-enums"
-import {Option, panic, RuntimeNotifier} from "@moises-ai/lib-std"
-import {ScriptHost} from "@moises-ai/studio-scripting"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Option, panic, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {ScriptHost} from "@opendaw/studio-scripting"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {MenuItem} from "@moises-ai/studio-core"
-import scriptWorkerUrl from "@moises-ai/studio-scripting/ScriptWorker.js?worker&url"
+import {MenuItem} from "@opendaw/studio-core"
+import scriptWorkerUrl from "@opendaw/studio-scripting/ScriptWorker.js?worker&url"
 import ScriptSimple from "./code-editor/examples/simple.ts?raw"
 import ScriptRetro from "./code-editor/examples/retro.ts?raw"
 import ScriptAudioRegion from "./code-editor/examples/create-sample.ts?raw"
 import ScriptNanoWavetable from "./code-editor/examples/nano-wavetable.ts?raw"
 import ScriptStressTest from "./code-editor/examples/stress-test.ts?raw"
-import {Promises} from "@moises-ai/lib-runtime"
-import {ProjectSkeleton, Sample} from "@moises-ai/studio-adapters"
-import {BoxGraph} from "@moises-ai/lib-box"
-import {BoxIO} from "@moises-ai/studio-boxes"
-import {Project, WavFile} from "@moises-ai/studio-core"
-import {AudioData} from "@moises-ai/lib-dsp"
+import {Promises} from "@opendaw/lib-runtime"
+import {ProjectSkeleton, Sample} from "@opendaw/studio-adapters"
+import {BoxGraph} from "@opendaw/lib-box"
+import {BoxIO} from "@opendaw/studio-boxes"
+import {Project, WavFile} from "@opendaw/studio-core"
+import {AudioData} from "@opendaw/lib-dsp"
 
 const truncateImports = (script: string) => script.substring(script.indexOf("//"))
 const Examples = {
@@ -35,12 +35,15 @@ const Examples = {
 const className = Html.adoptStyleSheet(css, "CodeEditorPage")
 
 export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}: PageContext<StudioService>) => {
+    const pendingSamples = UUID.newSet<UUID.Bytes>(uuid => uuid)
     const host = new ScriptHost({
         openProject: (buffer: ArrayBufferLike, name?: string): void => {
             const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
             boxGraph.fromArrayBuffer(buffer)
             const mandatoryBoxes = ProjectSkeleton.findMandatoryBoxes(boxGraph)
             const project = Project.fromSkeleton(service, {boxGraph, mandatoryBoxes})
+            pendingSamples.forEach(uuid => project.trackUserCreatedSample(uuid))
+            pendingSamples.clear()
             service.projectProfileService.setProject(project, name ?? "Scripted Project")
             service.switchScreen("default")
         },
@@ -53,9 +56,17 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                 })
             })
         },
-        addSample: (data: AudioData, name: string): Promise<Sample> => service.sampleService.importFile({
-            name, arrayBuffer: WavFile.encodeFloats(data)
-        })
+        addSample: async (data: AudioData, name: string): Promise<Sample> => {
+            const sample = await service.sampleService.importFile({
+                name, arrayBuffer: WavFile.encodeFloats(data)
+            })
+            const uuid = UUID.parse(sample.uuid)
+            service.optProject.match({
+                none: () => {pendingSamples.add(uuid)},
+                some: project => {project.trackUserCreatedSample(uuid)}
+            })
+            return sample
+        }
     }, scriptWorkerUrl)
     return (
         <div className={className}>

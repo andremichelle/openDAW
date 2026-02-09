@@ -1,16 +1,13 @@
-import {Notifier, Observer, Option, Subscription, Terminator} from "@moises-ai/lib-std"
-import {BoxEditing} from "@moises-ai/lib-box"
+import {Notifier, Observer, Option, Subscription, Terminator} from "@opendaw/lib-std"
 import {ObservableModifier} from "@/ui/timeline/ObservableModifier.ts"
-import {Dragging} from "@moises-ai/lib-dom"
+import {Dragging} from "@opendaw/lib-dom"
 
 export class ObservableModifyContext<MODIFIER extends ObservableModifier> {
-    readonly #editing: BoxEditing
     readonly #notifier: Notifier<void>
 
     #modifier: Option<MODIFIER> = Option.None
 
-    constructor(editing: BoxEditing) {
-        this.#editing = editing
+    constructor() {
         this.#notifier = new Notifier<void>()
     }
 
@@ -28,7 +25,7 @@ export class ObservableModifyContext<MODIFIER extends ObservableModifier> {
         this.#modifier = Option.wrap(modifier)
         return Option.wrap({
             update: (event: Dragging.Event): void => modifier.update(event),
-            approve: (): void => modifier.approve(this.#editing),
+            approve: (): void => modifier.approve(),
             cancel: (): void => modifier.cancel(),
             finally: (): void => lifeTime.terminate()
         })

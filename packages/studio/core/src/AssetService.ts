@@ -57,7 +57,7 @@ export abstract class AssetService<T extends Sample | Soundfont> {
             const {error, status, value: files} =
                 await Promises.tryCatch(Files.open({...this.filePickerOptions, multiple: false}))
             if (status === "rejected") {
-                if (Errors.isAbort(error)) {return} else {return panic(String(error)) }
+                if (Errors.isAbort(error) || Errors.isNotAllowed(error)) {return} else {return panic(String(error)) }
             }
             if (files.length === 0) {return}
             const arrayBuffer = await files[0].arrayBuffer()
@@ -74,7 +74,7 @@ export abstract class AssetService<T extends Sample | Soundfont> {
         const {error, status, value: files} =
             await Promises.tryCatch(Files.open({...filePickerSettings, multiple}))
         if (status === "rejected") {
-            if (Errors.isAbort(error)) {return []} else {return panic(String(error)) }
+            if (Errors.isAbort(error) || Errors.isNotAllowed(error)) {return []} else {return panic(String(error)) }
         }
         const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({

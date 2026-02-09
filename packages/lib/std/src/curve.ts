@@ -1,4 +1,4 @@
-import {int, unitValue} from "./lang"
+import {int, Procedure, unitValue} from "./lang"
 import {clamp} from "./math"
 
 /**
@@ -48,6 +48,11 @@ export namespace Curve {
     export function* walk(slope: number, steps: int, y0: number, y1: number): IterableIterator<number> {
         const {m, q} = coefficients({slope, steps, y0, y1} satisfies Curve.Definition)
         for (let i = 0, v = y0; i < steps; i++) {yield v = m * v + q}
+    }
+
+    export const run = (slope: number, steps: int, y0: number, y1: number, runner: Procedure<number>): void => {
+        const {m, q} = coefficients({slope, steps, y0, y1} satisfies Curve.Definition)
+        for (let i = 0, v = y0; i < steps; i++) {runner(v = m * v + q)}
     }
 
     export function* walkNormalized(slope: number, steps: int): IterableIterator<unitValue> {

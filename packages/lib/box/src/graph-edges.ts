@@ -113,6 +113,7 @@ export class GraphEdges {
             // assert(target.isAttached(), `Target ${target.address.toString()} is not attached`)
             if (target.pointerHub.isEmpty()) {
                 if (target.pointerRules.mandatory) {
+                    console.warn(target)
                     console.warn(`[GraphEdges] Validation failed: Target ${target.toString()} requires an edge.`)
                     return panic(`Target ${target.toString()} requires an edge.`)
                 } else {

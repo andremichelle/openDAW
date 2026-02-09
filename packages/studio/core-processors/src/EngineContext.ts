@@ -1,11 +1,11 @@
-import {Observer, Subscription, Terminable, UUID} from "@moises-ai/lib-std"
+import {int, Observer, Option, Subscription, Terminable, UUID} from "@opendaw/lib-std"
 import {Processor, ProcessPhase} from "./processing"
-import {LiveStreamBroadcaster} from "@moises-ai/lib-fusion"
+import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {UpdateClock} from "./UpdateClock"
 import {TimeInfo} from "./TimeInfo"
 import {AudioUnit} from "./AudioUnit"
 import {Mixer} from "./Mixer"
-import {BoxAdaptersContext, EngineSettings, EngineToClient, PreferencesClient} from "@moises-ai/studio-adapters"
+import {BoxAdaptersContext, EngineSettings, EngineToClient, PreferencesClient} from "@opendaw/studio-adapters"
 import {AudioOutputBufferRegistry} from "./AudioOutputBufferRegistry"
 
 export interface EngineContext extends BoxAdaptersContext, Terminable {
@@ -21,6 +21,8 @@ export interface EngineContext extends BoxAdaptersContext, Terminable {
     registerProcessor(processor: Processor): Terminable
     registerEdge(source: Processor, target: Processor): Terminable
     subscribeProcessPhase(observer: Observer<ProcessPhase>): Subscription
+    awaitResource(promise: Promise<unknown>): void
     ignoresRegion(uuid: UUID.Bytes): boolean
     sendMIDIData(midiDeviceId: string, data: Uint8Array, relativeTimeInMs: number): void
+    getMonitoringChannel(channelIndex: int): Option<Float32Array>
 }

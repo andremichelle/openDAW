@@ -50,6 +50,9 @@ export class AudioUnit implements Terminable {
     get audioDeviceChain(): AudioDeviceChain {return this.#audioDeviceChain}
     get context(): EngineContext {return this.#context}
     get adapter(): AudioUnitBoxAdapter {return this.#adapter}
+    invalidateWiring(): void {this.#audioDeviceChain.invalidateWiring()}
+    setMonitoringChannels(channels: ReadonlyArray<int>): void {this.#audioDeviceChain.setMonitoringChannels(channels)}
+    clearMonitoringChannels(): void {this.#audioDeviceChain.clearMonitoringChannels()}
 
     terminate(): void {
         this.#terminator.terminate()

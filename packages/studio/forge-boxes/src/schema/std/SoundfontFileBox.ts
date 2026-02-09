@@ -8,5 +8,7 @@ export const SoundfontFileBox: BoxSchema<Pointers> = {
         fields: {
             1: {type: "string", name: "file-name"}
         }
-    }, pointerRules: {accepts: [Pointers.SoundfontFile], mandatory: true}
+    },
+    pointerRules: {accepts: [Pointers.SoundfontFile], mandatory: true},
+    resource: "preserved"
 }

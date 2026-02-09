@@ -2,8 +2,11 @@ import {TimelineCoordinates, TimelineSelectableLocator} from "@/ui/timeline/Time
 import {AnyRegionBoxAdapter} from "@moises-ai/studio-adapters"
 import {isDefined, Iterables, Selection} from "@moises-ai/lib-std"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
+import {PointerRadiusDistance} from "@/ui/timeline/constants"
+import {TimelineRange} from "@opendaw/studio-core"
 
 export const createRegionLocator = (manager: TracksManager,
+                                    range: TimelineRange,
                                     regionSelection: Selection<AnyRegionBoxAdapter>)
     : TimelineSelectableLocator<AnyRegionBoxAdapter> => ({
     selectableAt: ({u, v}: TimelineCoordinates): Iterable<AnyRegionBoxAdapter> => {
@@ -11,9 +14,15 @@ export const createRegionLocator = (manager: TracksManager,
         const index = manager.localToIndex(v)
         if (index < 0 || index >= tracks.length) {return Iterables.empty()}
         const component = tracks[index]
-        const region = component.trackBoxAdapter.regions.collection.lowerEqual(u)
-        if (isDefined(region) && u < region.complete) {
-            return Iterables.one(region)
+        const threshold = range.unitsPerPixel * PointerRadiusDistance
+        const collection = component.trackBoxAdapter.regions.collection
+        const before = collection.lowerEqual(u)
+        if (isDefined(before) && u < before.complete + threshold) {
+            return Iterables.one(before)
+        }
+        const after = collection.greaterEqual(u)
+        if (isDefined(after) && after.position <= u + threshold) {
+            return Iterables.one(after)
         }
         return Iterables.empty()
     },

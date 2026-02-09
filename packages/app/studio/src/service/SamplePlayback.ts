@@ -5,6 +5,7 @@ import {
     EmptyExec,
     Option,
     Procedure,
+    RuntimeNotifier,
     Subscription,
     unitValue,
     UUID
@@ -29,11 +30,21 @@ export class SamplePlayback {
     readonly #linearVolume: DefaultObservableValue<unitValue>
 
     #current: Option<string> = Option.None
+    #errorDialogOpen: boolean = false
 
     constructor() {
         this.#audio = new Audio()
         this.#audio.crossOrigin = "use-credentials"
         this.#audio.preload = "auto"
+        this.#audio.onerror = () => {
+            this.#current.ifSome(uuid => this.#notify(uuid, {type: "error", reason: "Unsupported format"}))
+            if (this.#errorDialogOpen) {return}
+            this.#errorDialogOpen = true
+            RuntimeNotifier.info({
+                headline: "Playback Error",
+                message: "Your browser does not support playing this audio format."
+            }).finally(() => this.#errorDialogOpen = false)
+        }
         this.#notifiers = new ArrayMultimap<string, Procedure<PlaybackEvent>>()
         this.#linearVolume = new DefaultObservableValue<number>(0.0, {
             guard: (value: number): number => clamp(value, -36, 0)
@@ -97,17 +108,12 @@ export class SamplePlayback {
         }
         this.#audio.onpause = () => this.#notify(uuidAsString, {type: "idle"})
         this.#audio.onstalled = () => this.#notify(uuidAsString, {type: "buffering"})
-        this.#audio.onerror = (event, _source, _lineno, _colno, error) => this.#notify(uuidAsString, {
-            type: "error",
-            reason: error?.message ?? event instanceof Event ? "Unknown" : event
-        })
     }
 
     #unwatchAudio(): void {
         this.#audio.onended = null
         this.#audio.onplay = null
         this.#audio.onpause = null
-        this.#audio.onerror = null
         this.#audio.onstalled = null
         this.#audio.ontimeupdate = null
     }

@@ -49,7 +49,7 @@ export const TimeAxis = ({lifecycle, service, snapping, range, mapper}: Construc
         const textY = height - 4 * devicePixelRatio
         TimeGrid.fragment(signatureTrack,
             range, ({bars, beats, isBar, isBeat, pulse}) => {
-                const x = Math.floor(range.unitToX(pulse) * devicePixelRatio)
+                const x = Math.floor(range.unitToX(pulse)) * devicePixelRatio
                 const textX = x + 5
                 if (isBar) {
                     context.fillRect(x, 0, devicePixelRatio, height)
@@ -63,9 +63,9 @@ export const TimeAxis = ({lifecycle, service, snapping, range, mapper}: Construc
                 }
             })
         const pulse = engine.playbackTimestamp.getValue()
-        const x = Math.floor(range.unitToX(pulse) * devicePixelRatio)
+        const x = Math.floor(range.unitToX(pulse)) * devicePixelRatio
         context.fillStyle = "rgba(255, 255, 255, 0.25)"
-        context.fillRect(x, 0, devicePixelRatio, height)
+        context.fillRect(x, 0, 1, height)
     }))
     const cursorElement: HTMLDivElement = <div className="cursor" data-component="cursor"/>
     const updateCursor = () => {

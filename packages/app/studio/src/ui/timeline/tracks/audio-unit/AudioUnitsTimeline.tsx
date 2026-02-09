@@ -1,6 +1,6 @@
 import css from "./AudioUnitsTimeline.sass?inline"
-import {Lifecycle} from "@moises-ai/lib-std"
-import {createElement} from "@moises-ai/lib-jsx"
+import {Lifecycle, Option} from "@opendaw/lib-std"
+import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Scroller} from "@/ui/components/Scroller.tsx"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
@@ -8,15 +8,16 @@ import {TrackFactory, TracksManager} from "@/ui/timeline/tracks/audio-unit/Track
 import {Track} from "./Track"
 import {RegionsArea} from "./regions/RegionsArea.tsx"
 import {ClipsArea} from "./clips/ClipsArea.tsx"
-import {AudioUnitBoxAdapter, InstrumentFactories, TrackBoxAdapter} from "@moises-ai/studio-adapters"
-import {AnimationFrame, Events, Html} from "@moises-ai/lib-dom"
+import {AudioUnitBoxAdapter, InstrumentFactories, TrackBoxAdapter} from "@opendaw/studio-adapters"
+import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
 import {ExtraSpace} from "./Constants.ts"
 import {HeadersArea} from "@/ui/timeline/tracks/audio-unit/headers/HeadersArea"
 import {Icon} from "@/ui/components/Icon"
-import {Colors, IconSymbol} from "@moises-ai/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {MenuItem} from "@moises-ai/studio-core"
+import {AudioUnitsClipboard, ClipboardManager, MenuItem} from "@opendaw/studio-core"
 import {DefaultInstrumentFactory} from "@/ui/defaults/DefaultInstrumentFactory"
+import {AudioUnitBox} from "@opendaw/studio-boxes"
 
 const className = Html.adoptStyleSheet(css, "AudioUnitsTimeline")
 
@@ -27,6 +28,7 @@ type Construct = {
 
 export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
     const {range} = service.timeline
+    const {editing, boxGraph, rootBoxAdapter, userEditingManager, boxAdapters} = service.project
     const scrollModel = new ScrollModel()
     const scrollContainer: HTMLElement = (
         <div className="scrollable">
@@ -86,6 +88,19 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
         </div>
     )
     lifecycle.ownAll(
+        ClipboardManager.install(element, AudioUnitsClipboard.createHandler({
+            getEnabled: () => true,
+            editing,
+            boxGraph,
+            rootBoxAdapter,
+            audioUnitEditing: userEditingManager.audioUnit,
+            getEditedAudioUnit: () => userEditingManager.audioUnit.get().flatMap(vertex => {
+                if (vertex.box.name === AudioUnitBox.ClassName) {
+                    return Option.wrap(boxAdapters.adapterFor(vertex.box as AudioUnitBox, AudioUnitBoxAdapter))
+                }
+                return Option.None
+            })
+        })),
         AnimationFrame.add(() => {
             // The ResizeObserver only tracks the visible size changes, not off-screen content,
             // so we take a simple approach to catch all changes.

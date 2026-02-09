@@ -114,6 +114,7 @@ export namespace RecordAudio {
             currentTake = Option.wrap(createTakeRegion(position, currentWaveformOffset, previousTrack))
         }
 
+        recordingWorklet.onSaved = uuid => project.trackUserCreatedSample(uuid)
         terminator.ownAll(
             Terminable.create(() => {
                 tryCatch(() => sourceNode.disconnect(recordingWorklet))

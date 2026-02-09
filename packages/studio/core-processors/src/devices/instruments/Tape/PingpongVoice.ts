@@ -149,26 +149,21 @@ export class PingpongVoice implements Voice {
         this.#fadeOutBlockOffset = blockOffset
     }
 
-    process(bufferStart: int, bufferCount: int): void {
-        if (this.#state === VoiceState.Done) {
-            return
-        }
-
+    process(bufferStart: int, bufferCount: int, fadingGainBuffer: Float32Array): void {
+        if (this.#state === VoiceState.Done) {return}
         const [outL, outR] = this.#output.channels()
         const {frames, numberOfFrames} = this.#data
         const framesL = frames[0]
         const framesR = frames.length === 1 ? frames[0] : frames[1]
-
         const loopStart = this.#loopStart
         const loopEnd = this.#loopEnd
-        const bounceStartForward = loopEnd - this.#bounceFadeLengthSamples  // Start bounce when going forward
-        const bounceStartBackward = loopStart + this.#bounceFadeLengthSamples  // Start bounce when going backward
+        const bounceStartForward = loopEnd - this.#bounceFadeLengthSamples
+        const bounceStartBackward = loopStart + this.#bounceFadeLengthSamples
         const voiceFadeLengthSamples = this.#voiceFadeLengthSamples
         const voiceFadeLengthInverse = this.#voiceFadeLengthInverse
         const bounceFadeLengthSamples = this.#bounceFadeLengthSamples
         const playbackRate = this.#playbackRate
         const fadeOutBlockOffset = this.#fadeOutBlockOffset
-
         let state = this.#state as VoiceState
         let fadeDirection = this.#fadeDirection
         let fadeProgress = this.#fadeProgress
@@ -176,19 +171,12 @@ export class PingpongVoice implements Voice {
         let direction = this.#direction
         let bounceProgress = this.#bounceProgress
         let bouncePosition = this.#bouncePosition
-
         for (let i = this.#blockOffset; i < bufferCount; i++) {
-            if (state === VoiceState.Done) {
-                break
-            }
-
+            if (state === VoiceState.Done) {break}
             const j = bufferStart + i
-
-            // Calculate voice amplitude based on state
             let amplitude: number
             if (state === VoiceState.Fading) {
                 if (fadeDirection > 0) {
-                    // Fading in
                     amplitude = fadeProgress * voiceFadeLengthInverse
                     fadeProgress += 1.0
                     if (fadeProgress >= voiceFadeLengthSamples) {
@@ -197,25 +185,20 @@ export class PingpongVoice implements Voice {
                         fadeDirection = 0.0
                     }
                 } else {
-                    // Fading out - wait for fadeOutBlockOffset
                     if (i < fadeOutBlockOffset) {
                         amplitude = 1.0
                     } else {
                         amplitude = 1.0 - fadeProgress * voiceFadeLengthInverse
                         fadeProgress += 1.0
                         if (fadeProgress >= voiceFadeLengthSamples) {
-                            // console.log(`[PingpongVoice] Fade-out complete, marking done`)
                             state = VoiceState.Done
                             break
                         }
                     }
                 }
             } else {
-                // Active
                 amplitude = 1.0
             }
-
-            // Read primary sample with linear interpolation
             let sampleL = 0.0
             let sampleR = 0.0
             const readInt = readPosition | 0
@@ -226,21 +209,15 @@ export class PingpongVoice implements Voice {
                 sampleL = sL + alpha * (framesL[readInt + 1] - sL)
                 sampleR = sR + alpha * (framesR[readInt + 1] - sR)
             }
-
-            // Check if we need to start bounce crossfade
             if (bounceProgress === 0.0) {
                 if (direction > 0.0 && readPosition >= bounceStartForward) {
-                    // Moving forward, approaching end - start bounce
                     bounceProgress = 1.0
                     bouncePosition = loopEnd
                 } else if (direction < 0.0 && readPosition <= bounceStartBackward) {
-                    // Moving backward, approaching start - start bounce
                     bounceProgress = 1.0
                     bouncePosition = loopStart
                 }
             }
-
-            // Apply bounce crossfade if active
             if (bounceProgress > 0.0) {
                 const bounceInt = bouncePosition | 0
                 if (bounceInt >= 0 && bounceInt < numberOfFrames - 1) {
@@ -249,34 +226,25 @@ export class PingpongVoice implements Voice {
                     const bR = framesR[bounceInt]
                     const bounceSampleL = bL + alpha * (framesL[bounceInt + 1] - bL)
                     const bounceSampleR = bR + alpha * (framesR[bounceInt + 1] - bR)
-
-                    // Equal-power crossfade (cos/sin) for smooth bounce
                     const t = bounceProgress / bounceFadeLengthSamples
                     const fadeOut = Math.cos(t * Math.PI * 0.5)
                     const fadeIn = Math.sin(t * Math.PI * 0.5)
                     sampleL = sampleL * fadeOut + bounceSampleL * fadeIn
                     sampleR = sampleR * fadeOut + bounceSampleR * fadeIn
                 }
-
-                // Bounce position moves in opposite direction
                 bouncePosition -= direction * playbackRate
                 bounceProgress += 1.0
-
-                // When crossfade completes, snap to bounce position and reverse direction
                 if (bounceProgress >= bounceFadeLengthSamples) {
                     readPosition = bouncePosition
                     direction = -direction
                     bounceProgress = 0.0
                 }
             }
-
-            // Write to output (additive)
-            outL[j] += sampleL * amplitude
-            outR[j] += sampleR * amplitude
-
+            const finalAmplitude = amplitude * fadingGainBuffer[i]
+            outL[j] += sampleL * finalAmplitude
+            outR[j] += sampleR * finalAmplitude
             readPosition += direction * playbackRate
         }
-
         this.#state = state
         this.#fadeDirection = fadeDirection
         this.#fadeProgress = fadeProgress

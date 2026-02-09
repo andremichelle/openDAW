@@ -1,20 +1,20 @@
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
-import {EmptyExec, Selection, Terminable} from "@moises-ai/lib-std"
-import {AudioContentModifier, ContextMenu, MenuItem, TimelineRange} from "@moises-ai/studio-core"
-import {AnyRegionBoxAdapter, AudioRegionBoxAdapter} from "@moises-ai/studio-adapters"
+import {EmptyExec, isInstanceOf, Selection, Terminable} from "@opendaw/lib-std"
+import {AudioContentModifier, ContextMenu, MenuItem, TimelineRange} from "@opendaw/studio-core"
+import {AnyRegionBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {RegionCaptureTarget} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
-import {TimelineBox} from "@moises-ai/studio-boxes"
+import {TimelineBox} from "@opendaw/studio-boxes"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {RegionTransformer} from "@/ui/timeline/tracks/audio-unit/regions/RegionTransformer.ts"
 import {NameValidator} from "@/ui/validator/name.ts"
 import {DebugMenus} from "@/ui/menu/debug"
 import {exportNotesToMidiFile} from "@/ui/timeline/editors/notes/NoteUtils"
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
-import {BPMTools} from "@moises-ai/lib-dsp"
-import {Browser} from "@moises-ai/lib-dom"
+import {BPMTools} from "@opendaw/lib-dsp"
+import {Browser} from "@opendaw/lib-dom"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {StudioService} from "@/service/StudioService"
-import {Promises} from "@moises-ai/lib-runtime"
+import {Promises} from "@opendaw/lib-runtime"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 
 type Construct = {
@@ -49,8 +49,11 @@ export const installRegionContextMenu =
                         .forEach(adapter => adapter.box.delete()))),
                 MenuItem.default({label: "Duplicate"})
                     .setTriggerProcedure(() => editing.modify(() => {
-                        selection.deselectAll()
-                        selection.select(project.api.duplicateRegion(region))
+                        project.api.duplicateRegion(region)
+                            .ifSome(duplicate => {
+                                selection.deselectAll()
+                                selection.select(duplicate)
+                            })
                     })),
                 MenuItem.default({
                     label: "Mute",
@@ -106,6 +109,14 @@ export const installRegionContextMenu =
                         const label = region.label
                         exportNotesToMidiFile(region.optCollection.unwrap(),
                             `${label.length === 0 ? "region" : label}.mid`).then(EmptyExec, EmptyExec)
+                    }
+                }),
+                MenuItem.default({
+                    label: "Reset Fades",
+                    hidden: region.type !== "audio-region"
+                }).setTriggerProcedure(() => {
+                    if (isInstanceOf(region, AudioRegionBoxAdapter)) {
+                        editing.modify(() => region.fading.reset())
                     }
                 }),
                 MenuItem.default({

@@ -1,9 +1,9 @@
-import {CaptureAudio, MenuItem, Project} from "@moises-ai/studio-core"
-import {isInstanceOf, Procedure, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
-import {AudioUnitBoxAdapter, DeviceAccepts, ProjectUtils, TrackBoxAdapter, TrackType} from "@moises-ai/studio-adapters"
+import {CaptureAudio, MenuItem, MonitoringMode, Project} from "@opendaw/studio-core"
+import {isInstanceOf, Procedure, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {AudioUnitBoxAdapter, DeviceAccepts, ProjectUtils, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {DebugMenus} from "@/ui/menu/debug"
 import {MidiImport} from "@/ui/timeline/MidiImport.ts"
-import {CaptureMidiBox, TrackBox} from "@moises-ai/studio-boxes"
+import {CaptureMidiBox, TrackBox} from "@opendaw/studio-boxes"
 import {StudioService} from "@/service/StudioService"
 import {MenuCapture} from "@/ui/timeline/tracks/audio-unit/menu/capture"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
@@ -35,17 +35,23 @@ export const installTrackHeaderMenu = (service: StudioService,
         MenuCapture.createItem(service, audioUnitBoxAdapter,
             trackBoxAdapter, editing, captureDevices.get(audioUnitBoxAdapter.uuid)),
         MenuItem.default({
-            label: "Input monitoring",
-            checked: captureDevices.get(audioUnitBoxAdapter.uuid)
-                .mapOr(capture => isInstanceOf(capture, CaptureAudio) ? capture.isMonitoring : false, false),
+            label: "Input Monitoring",
             hidden: captureDevices.get(audioUnitBoxAdapter.uuid)
                 .mapOr(capture => !isInstanceOf(capture, CaptureAudio), true)
-        }).setTriggerProcedure(() => captureDevices.get(audioUnitBoxAdapter.uuid)
-            .ifSome(capture => {
-                if (isInstanceOf(capture, CaptureAudio)) {
-                    capture.isMonitoring = !capture.isMonitoring
-                }
-            })),
+        }).setRuntimeChildrenProcedure(parent => {
+            const optCapture = captureDevices.get(audioUnitBoxAdapter.uuid)
+            if (optCapture.isEmpty()) {return parent}
+            const capture = optCapture.unwrap()
+            if (!isInstanceOf(capture, CaptureAudio)) {return parent}
+            const currentMode = capture.monitoringMode
+            const addModeItem = (mode: MonitoringMode, label: string) =>
+                parent.addMenuItem(MenuItem.default({label, checked: currentMode === mode})
+                    .setTriggerProcedure(() => capture.monitoringMode = mode))
+            addModeItem("off", "Off")
+            addModeItem("direct", "Direct")
+            addModeItem("effects", "With Effects")
+            return parent
+        }),
         MenuItem.default({
             label: "Force Mono",
             checked: captureDevices.get(audioUnitBoxAdapter.uuid)

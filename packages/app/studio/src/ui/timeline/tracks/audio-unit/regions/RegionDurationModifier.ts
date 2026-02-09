@@ -1,16 +1,15 @@
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
-import {BoxEditing} from "@moises-ai/lib-box"
-import {Arrays, int, isNotNull, Option} from "@moises-ai/lib-std"
-import {ppqn, RegionCollection} from "@moises-ai/lib-dsp"
+import {Arrays, int, isNotNull, Option} from "@opendaw/lib-std"
+import {ppqn, RegionCollection} from "@opendaw/lib-dsp"
 import {
     AnyLoopableRegionBoxAdapter,
     AnyRegionBoxAdapter,
     TrackBoxAdapter,
     UnionAdapterTypes
-} from "@moises-ai/studio-adapters"
+} from "@opendaw/studio-adapters"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {RegionClipResolver, RegionModifyStrategy} from "@moises-ai/studio-core"
-import {Dragging} from "@moises-ai/lib-dom"
+import {Project, RegionModifyStrategy} from "@opendaw/studio-core"
+import {Dragging} from "@opendaw/lib-dom"
 
 class SelectedModifyStrategy implements RegionModifyStrategy {
     readonly #tool: RegionDurationModifier
@@ -42,6 +41,7 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
 }
 
 type Construct = Readonly<{
+    project: Project
     element: Element
     snapping: Snapping
     pointerPulse: ppqn
@@ -54,6 +54,7 @@ export class RegionDurationModifier implements RegionModifier {
         return adapters.length === 0 ? Option.None : Option.wrap(new RegionDurationModifier(construct, adapters))
     }
 
+    readonly #project: Project
     readonly #element: Element
     readonly #snapping: Snapping
     readonly #pointerPulse: ppqn
@@ -64,8 +65,9 @@ export class RegionDurationModifier implements RegionModifier {
     #aligned: boolean
     #deltaDuration: int
 
-    private constructor({element, snapping, pointerPulse, bounds}: Construct,
+    private constructor({project, element, snapping, pointerPulse, bounds}: Construct,
                         adapter: ReadonlyArray<AnyLoopableRegionBoxAdapter>) {
+        this.#project = project
         this.#element = element
         this.#snapping = snapping
         this.#pointerPulse = pointerPulse
@@ -103,20 +105,17 @@ export class RegionDurationModifier implements RegionModifier {
         if (change) {this.#dispatchChange()}
     }
 
-    approve(editing: BoxEditing): void {
+    approve(): void {
         const modifiedTracks: ReadonlyArray<TrackBoxAdapter> =
             Arrays.removeDuplicates(this.#adapters
                 .map(adapter => adapter.trackBoxAdapter.unwrapOrNull())
                 .filter(isNotNull))
-        const solver = RegionClipResolver
-            .fromSelection(modifiedTracks, this.#adapters.filter(({box}) => box.isAttached()), this, 0)
+        const adapters = this.#adapters.filter(({box}) => box.isAttached())
         const result = this.#adapters.map<{ region: AnyLoopableRegionBoxAdapter, duration: ppqn }>(region =>
             ({region, duration: this.#selectedModifyStrategy.readDuration(region)}))
-        editing.modify(() => {
+        this.#project.overlapResolver.apply(modifiedTracks, adapters, this, 0, (_trackResolver) => {
             result.forEach(({region, duration}) => region.duration = duration)
-            solver()
         })
-        RegionClipResolver.validateTracks(modifiedTracks)
     }
 
     cancel(): void {

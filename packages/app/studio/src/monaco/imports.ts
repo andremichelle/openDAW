@@ -1,15 +1,24 @@
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker"
 import TsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker"
 
+const createWorker = (Worker: new () => Worker): Worker => {
+    const worker = new Worker()
+    worker.onerror = (event: ErrorEvent) => {
+        event.preventDefault()
+        console.warn("Monaco worker error (falling back to main thread):", event.message)
+    }
+    return worker
+}
+
 // noinspection JSUnusedGlobalSymbols
 self.MonacoEnvironment = {
     getWorker(_workerId: string, label: string) {
         switch (label) {
             case "typescript":
             case "javascript":
-                return new TsWorker()
+                return createWorker(TsWorker)
             default:
-                return new EditorWorker()
+                return createWorker(EditorWorker)
         }
     }
 }
