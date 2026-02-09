@@ -1,5 +1,5 @@
 import {PPQN} from "@moises-ai/lib-dsp"
-import {BoxSchema, deprecated} from "@moises-ai/lib-box-forge"
+import {BoxSchema, deprecated} from "@opendaw/lib-box-forge"
 import {Pointers} from "@moises-ai/studio-enums"
 import {IndexConstraints, PPQNDurationConstraints, PPQNPositionConstraints} from "../Defaults"
 

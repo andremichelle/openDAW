@@ -1,4 +1,4 @@
-import {BoxSchema, deprecated} from "@moises-ai/lib-box-forge"
+import {BoxSchema, deprecated} from "@opendaw/lib-box-forge"
 import {Pointers, VoicingMode} from "@moises-ai/studio-enums"
 import {BipolarConstraints, ParameterPointerRules, UnipolarConstraints} from "../../std/Defaults"
 import {DeviceFactory} from "../../std/DeviceFactory"

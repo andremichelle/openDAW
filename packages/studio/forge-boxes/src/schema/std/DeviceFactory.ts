@@ -1,4 +1,4 @@
-import {BoxSchema, FieldRecord, mergeFields, reserveMany} from "@moises-ai/lib-box-forge"
+import {BoxSchema, FieldRecord, mergeFields, reserveMany} from "@opendaw/lib-box-forge"
 import {Pointers} from "@moises-ai/studio-enums"
 import {Objects} from "@moises-ai/lib-std"
 

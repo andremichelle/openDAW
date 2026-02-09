@@ -1,5 +1,5 @@
 import {Mixing} from "@moises-ai/lib-dsp"
-import {BoxSchema} from "@moises-ai/lib-box-forge"
+import {BoxSchema} from "@opendaw/lib-box-forge"
 import {Pointers} from "@moises-ai/studio-enums"
 import {ParameterPointerRules} from "../../std/Defaults"
 import {DeviceFactory} from "../../std/DeviceFactory"

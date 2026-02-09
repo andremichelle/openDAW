@@ -1,6 +1,6 @@
 import {Pointers} from "@moises-ai/studio-enums"
 import {ParameterPointerRules, UnipolarConstraints} from "./Defaults"
-import {BoxSchema, FieldRecord, mergeFields, reserveMany} from "@moises-ai/lib-box-forge"
+import {BoxSchema, FieldRecord, mergeFields, reserveMany} from "@opendaw/lib-box-forge"
 import {PPQN} from "@moises-ai/lib-dsp"
 import {Objects} from "@moises-ai/lib-std"
 

@@ -1,4 +1,4 @@
-import {BoxSchema, ClassSchema, deprecated} from "@moises-ai/lib-box-forge"
+import {BoxSchema, ClassSchema, deprecated} from "@opendaw/lib-box-forge"
 import {Pointers} from "@moises-ai/studio-enums"
 import {ParameterPointerRules} from "../../std/Defaults"
 import {DeviceFactory} from "../../std/DeviceFactory"

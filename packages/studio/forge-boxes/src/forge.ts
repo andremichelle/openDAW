@@ -1,4 +1,4 @@
-import {BoxForge} from "@moises-ai/lib-box-forge"
+import {BoxForge} from "@opendaw/lib-box-forge"
 import {Pointers} from "@moises-ai/studio-enums"
 import {DeviceDefinitions} from "./schema/devices"
 import {ModuleDefinitions} from "./schema/std/modular"

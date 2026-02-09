@@ -57,11 +57,11 @@
     "devDependencies": {
         "@ffmpeg/ffmpeg": "^0.12.15",
         "@ffmpeg/util": "^0.12.2",
-        "@moises-ai/eslint-config": "*",
-        "@moises-ai/studio-core-processors": "*",
-        "@moises-ai/studio-core-workers": "*",
-        "@moises-ai/studio-forge-boxes": "*",
-        "@moises-ai/typescript-config": "*"
+        "@opendaw/eslint-config": "*",
+        "@opendaw/studio-core-processors": "*",
+        "@opendaw/studio-core-workers": "*",
+        "@opendaw/studio-forge-boxes": "*",
+        "@opendaw/typescript-config": "*"
     },
     "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

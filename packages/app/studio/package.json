@@ -1,5 +1,5 @@
 {
-    "name": "@moises-ai/app-studio",
+    "name": "@opendaw/app-studio",
     "private": true,
     "version": "0.0.100",
     "type": "module",
@@ -34,8 +34,8 @@
         "monaco-editor": "^0.54.0"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "*",
-        "@moises-ai/typescript-config": "*",
+        "@opendaw/eslint-config": "*",
+        "@opendaw/typescript-config": "*",
         "@types/markdown-it": "^14.1.2",
         "@types/node": "^22.15.18",
         "eslint": "^8.57.0",

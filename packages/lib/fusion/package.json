@@ -30,8 +30,8 @@
         "@moises-ai/lib-std": "*"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "*",
-        "@moises-ai/typescript-config": "*",
+        "@opendaw/eslint-config": "*",
+        "@opendaw/typescript-config": "*",
         "jsdom": "^25.0.1",
         "vitest": "^2.1.8"
     },

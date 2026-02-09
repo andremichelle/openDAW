@@ -1,5 +1,5 @@
 {
-    "name": "@moises-ai/studio-core-processors",
+    "name": "@opendaw/studio-core-processors",
     "version": "0.0.82",
     "license": "LGPL-3.0-or-later",
     "private": true,
@@ -23,8 +23,8 @@
         "@types/audioworklet": "^0.0.77"
     },
     "devDependencies": {
-        "@moises-ai/eslint-config": "*",
-        "@moises-ai/typescript-config": "*",
+        "@opendaw/eslint-config": "*",
+        "@opendaw/typescript-config": "*",
         "vitest": "^1.6.0"
     }
 }
