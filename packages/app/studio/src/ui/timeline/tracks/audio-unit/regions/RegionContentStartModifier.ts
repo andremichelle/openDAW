@@ -89,7 +89,7 @@ export class RegionContentStartModifier implements RegionModifier {
         const clientRect = this.#element.getBoundingClientRect()
         const newDelta = this.#snapping.computeDelta(
             this.#pointerPulse, clientX - clientRect.left, this.#reference.position)
-        const clampedDelta = Math.min(newDelta, this.#computeMaxDelta())
+        const clampedDelta = Math.max(this.#computeMinDelta(), Math.min(newDelta, this.#computeMaxDelta()))
         if (this.#delta !== clampedDelta) {
             this.#delta = clampedDelta
             this.#dispatchChange()
@@ -104,13 +104,18 @@ export class RegionContentStartModifier implements RegionModifier {
         }, Infinity)
     }
 
+    #computeMinDelta(): ppqn {
+        return this.#adapters.reduce((minDelta, adapter) => Math.max(minDelta, -adapter.position), -Infinity)
+    }
+
     approve(): void {
         if (this.#delta === 0) {return}
-        const modifiedTracks: ReadonlyArray<TrackBoxAdapter> = Arrays.removeDuplicates(this.#adapters
-            .map(adapter => adapter.trackBoxAdapter.unwrapOrNull()).filter(isNotNull))
         const adapters = this.#adapters.filter(({box}) => box.isAttached())
+        if (adapters.length === 0) {return}
+        const modifiedTracks: ReadonlyArray<TrackBoxAdapter> = Arrays.removeDuplicates(adapters
+            .map(adapter => adapter.trackBoxAdapter.unwrapOrNull()).filter(isNotNull))
         this.#project.overlapResolver.apply(modifiedTracks, adapters, this, 0, () => {
-            this.#adapters.forEach(region => region.moveContentStart(this.#delta))
+            adapters.forEach(region => region.moveContentStart(this.#delta))
         })
     }
 
