@@ -1,7 +1,7 @@
 import {Interpolation, ppqn} from "@moises-ai/lib-dsp"
 import {IterableIterators, Option, unitValue} from "@moises-ai/lib-std"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {SelectableValueEvent} from "@opendaw/studio-adapters"
+import {SelectableValueEvent} from "@moises-ai/studio-adapters"
 
 export interface ValueModifyStrategy {
     showOrigin(): boolean

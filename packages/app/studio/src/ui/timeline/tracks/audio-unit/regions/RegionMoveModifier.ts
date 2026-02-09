@@ -1,11 +1,11 @@
-import {Arrays, clamp, int, Option, Selection} from "@opendaw/lib-std"
-import {AnyLoopableRegionBoxAdapter, AnyRegionBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
-import {ppqn, RegionCollection} from "@opendaw/lib-dsp"
+import {Arrays, clamp, int, Option, Selection} from "@moises-ai/lib-std"
+import {AnyLoopableRegionBoxAdapter, AnyRegionBoxAdapter, TrackBoxAdapter} from "@moises-ai/studio-adapters"
+import {ppqn, RegionCollection} from "@moises-ai/lib-dsp"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-import {Project, RegionModifyStrategy} from "@opendaw/studio-core"
+import {Project, RegionModifyStrategy} from "@moises-ai/studio-core"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
-import {Dragging} from "@opendaw/lib-dom"
+import {Dragging} from "@moises-ai/lib-dom"
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier"
 
 class SelectedModifyStrategy implements RegionModifyStrategy {

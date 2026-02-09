@@ -1,6 +1,6 @@
-import {Fading} from "@opendaw/studio-boxes"
-import {FadingEnvelope, ppqn} from "@opendaw/lib-dsp"
-import {MutableObservableValue, unitValue} from "@opendaw/lib-std"
+import {Fading} from "@moises-ai/studio-boxes"
+import {FadingEnvelope, ppqn} from "@moises-ai/lib-dsp"
+import {MutableObservableValue, unitValue} from "@moises-ai/lib-std"
 
 export class FadingAdapter implements FadingEnvelope.Config {
     readonly #fading: Fading

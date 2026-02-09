@@ -1,6 +1,6 @@
-import {ByteArrayInput, ByteArrayOutput, Option, Predicate, Procedure, UUID} from "@opendaw/lib-std"
-import {Box, BoxGraph, PointerField, SpecialDecoder} from "@opendaw/lib-box"
-import {BoxIO} from "@opendaw/studio-boxes"
+import {ByteArrayInput, ByteArrayOutput, Option, Predicate, Procedure, UUID} from "@moises-ai/lib-std"
+import {Box, BoxGraph, PointerField, SpecialDecoder} from "@moises-ai/lib-box"
+import {BoxIO} from "@moises-ai/studio-boxes"
 
 type UUIDMapper = { source: UUID.Bytes, target: UUID.Bytes }
 

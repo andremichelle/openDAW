@@ -1,5 +1,5 @@
-import {MutableObservableOption, Terminable, Terminator} from "@opendaw/lib-std"
-import {AnyRegionBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
+import {MutableObservableOption, Terminable, Terminator} from "@moises-ai/lib-std"
+import {AnyRegionBoxAdapter, TrackBoxAdapter} from "@moises-ai/studio-adapters"
 
 export class TimelineFocus implements Terminable {
     readonly #terminator = new Terminator()

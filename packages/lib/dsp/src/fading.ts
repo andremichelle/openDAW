@@ -1,4 +1,4 @@
-import {Curve, int, unitValue} from "@opendaw/lib-std"
+import {Curve, int, unitValue} from "@moises-ai/lib-std"
 import {ppqn} from "./ppqn"
 
 export namespace FadingEnvelope {

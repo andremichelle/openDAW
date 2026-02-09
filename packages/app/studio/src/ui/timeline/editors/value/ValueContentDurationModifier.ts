@@ -1,11 +1,11 @@
-import {int, Notifier, Observer, Option, Terminable, unitValue} from "@opendaw/lib-std"
+import {int, Notifier, Observer, Option, Terminable, unitValue} from "@moises-ai/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {BoxEditing} from "@opendaw/lib-box"
+import {BoxEditing} from "@moises-ai/lib-box"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {Interpolation, ppqn, PPQN, ValueEvent} from "@opendaw/lib-dsp"
+import {Interpolation, ppqn, PPQN, ValueEvent} from "@moises-ai/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
-import {SelectableValueEvent} from "@opendaw/studio-adapters"
-import {Dragging} from "@opendaw/lib-dom"
+import {SelectableValueEvent} from "@moises-ai/studio-adapters"
+import {Dragging} from "@moises-ai/lib-dom"
 
 type Construct = Readonly<{
     editing: BoxEditing

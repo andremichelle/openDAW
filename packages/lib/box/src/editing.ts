@@ -11,7 +11,7 @@ import {
     Subscription,
     SyncProvider,
     UUID
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {DeleteUpdate, NewUpdate, PointerUpdate, PrimitiveUpdate, Update} from "./updates"
 
 // Removes updates for boxes that were created AND deleted in the same transaction.

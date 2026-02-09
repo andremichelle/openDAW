@@ -1,6 +1,6 @@
-import {Curve, TAU} from "@opendaw/lib-std"
-import {TimelineRange} from "@opendaw/studio-core"
-import {FadingEnvelope} from "@opendaw/lib-dsp"
+import {Curve, TAU} from "@moises-ai/lib-std"
+import {TimelineRange} from "@moises-ai/studio-core"
+import {FadingEnvelope} from "@moises-ai/lib-dsp"
 import {RegionBound} from "@/ui/timeline/renderer/env"
 
 export const renderFading = (context: CanvasRenderingContext2D,

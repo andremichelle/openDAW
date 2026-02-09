@@ -1,6 +1,6 @@
-import {BoxGraph} from "@opendaw/lib-box"
-import {UUID} from "@opendaw/lib-std"
-import {BoxIO, NeuralAmpDeviceBox, NeuralAmpModelBox} from "@opendaw/studio-boxes"
+import {BoxGraph} from "@moises-ai/lib-box"
+import {UUID} from "@moises-ai/lib-std"
+import {BoxIO, NeuralAmpDeviceBox, NeuralAmpModelBox} from "@moises-ai/studio-boxes"
 
 export const migrateNeuralAmpDeviceBox = async (boxGraph: BoxGraph<BoxIO.TypeMap>, box: NeuralAmpDeviceBox): Promise<void> => {
     const oldJson = box.modelJson.getValue()

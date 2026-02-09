@@ -1,4 +1,4 @@
-import {int} from "@opendaw/lib-std"
+import {int} from "@moises-ai/lib-std"
 
 /**
  * High-resolution clock for AudioWorklet using a Worker-based timestamp provider.

@@ -1,5 +1,5 @@
 // Singleton - one clock worker shared across engine instances
-import {Lazy} from "@opendaw/lib-std"
+import {Lazy} from "@moises-ai/lib-std"
 
 let instance: HRClockWorker | undefined
 

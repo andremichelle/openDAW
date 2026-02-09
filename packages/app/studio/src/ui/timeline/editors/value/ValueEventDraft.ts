@@ -1,7 +1,7 @@
-import {EventCollection, ppqn, ValueEvent} from "@opendaw/lib-dsp"
-import {int, Nullable} from "@opendaw/lib-std"
+import {EventCollection, ppqn, ValueEvent} from "@moises-ai/lib-dsp"
+import {int, Nullable} from "@moises-ai/lib-std"
 import {ValueModifyStrategy} from "@/ui/timeline/editors/value/ValueModifyStrategies.ts"
-import {SelectableValueEvent, ValueEventBoxAdapter} from "@opendaw/studio-adapters"
+import {SelectableValueEvent, ValueEventBoxAdapter} from "@moises-ai/studio-adapters"
 
 export interface ValueEventDraft extends SelectableValueEvent {
     get direction(): int

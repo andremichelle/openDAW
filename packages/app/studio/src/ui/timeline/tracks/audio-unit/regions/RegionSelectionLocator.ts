@@ -3,7 +3,7 @@ import {AnyRegionBoxAdapter} from "@moises-ai/studio-adapters"
 import {isDefined, Iterables, Selection} from "@moises-ai/lib-std"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {PointerRadiusDistance} from "@/ui/timeline/constants"
-import {TimelineRange} from "@opendaw/studio-core"
+import {TimelineRange} from "@moises-ai/studio-core"
 
 export const createRegionLocator = (manager: TracksManager,
                                     range: TimelineRange,

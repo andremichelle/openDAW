@@ -1,5 +1,5 @@
 import {BoxSchema, deprecated} from "@opendaw/lib-box-forge"
-import {Pointers} from "@opendaw/studio-enums"
+import {Pointers} from "@moises-ai/studio-enums"
 import {DeviceFactory} from "../../std/DeviceFactory"
 import {ParameterPointerRules, UnipolarConstraints} from "../../std/Defaults"
 

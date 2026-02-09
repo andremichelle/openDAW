@@ -1,6 +1,6 @@
-import {Notifier, Observer, Option, Subscription, Terminator} from "@opendaw/lib-std"
+import {Notifier, Observer, Option, Subscription, Terminator} from "@moises-ai/lib-std"
 import {ObservableModifier} from "@/ui/timeline/ObservableModifier.ts"
-import {Dragging} from "@opendaw/lib-dom"
+import {Dragging} from "@moises-ai/lib-dom"
 
 export class ObservableModifyContext<MODIFIER extends ObservableModifier> {
     readonly #notifier: Notifier<void>

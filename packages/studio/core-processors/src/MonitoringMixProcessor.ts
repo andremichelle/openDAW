@@ -1,5 +1,5 @@
-import {int, Option, Terminable} from "@opendaw/lib-std"
-import {AudioBuffer, RenderQuantum} from "@opendaw/lib-dsp"
+import {int, Option, Terminable} from "@moises-ai/lib-std"
+import {AudioBuffer, RenderQuantum} from "@moises-ai/lib-dsp"
 import {AbstractProcessor} from "./AbstractProcessor"
 import {EngineContext} from "./EngineContext"
 import {AudioInput, ProcessInfo, Processor} from "./processing"

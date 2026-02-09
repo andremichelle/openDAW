@@ -1,6 +1,6 @@
-import {NeuralAmpModelBox} from "@opendaw/studio-boxes"
-import {UUID} from "@opendaw/lib-std"
-import {Address, StringField} from "@opendaw/lib-box"
+import {NeuralAmpModelBox} from "@moises-ai/studio-boxes"
+import {UUID} from "@moises-ai/lib-std"
+import {Address, StringField} from "@moises-ai/lib-box"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {BoxAdapter} from "../BoxAdapter"
 

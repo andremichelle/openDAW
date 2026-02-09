@@ -1,4 +1,4 @@
-import {AnyRegionBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
+import {AnyRegionBoxAdapter, TrackBoxAdapter} from "@moises-ai/studio-adapters"
 
 /**
  * Function to resolve the target track for a region.

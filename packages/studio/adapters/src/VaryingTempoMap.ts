@@ -1,4 +1,4 @@
-import {bpm, ppqn, PPQN, seconds, TempoChangeGrid, TempoMap} from "@opendaw/lib-dsp"
+import {bpm, ppqn, PPQN, seconds, TempoChangeGrid, TempoMap} from "@moises-ai/lib-dsp"
 import {
     BinarySearch,
     NumberComparator,
@@ -7,7 +7,7 @@ import {
     Subscription,
     Terminable,
     Terminator
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {TimelineBoxAdapter} from "./timeline/TimelineBoxAdapter"
 
 type CacheEntry = { ppqn: ppqn, seconds: seconds, bpm: bpm }

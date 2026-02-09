@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest"
 import {ClipTask, RegionClipResolver} from "./RegionClipResolver"
-import {AnyRegionBoxAdapter} from "@opendaw/studio-adapters"
+import {AnyRegionBoxAdapter} from "@moises-ai/studio-adapters"
 
 interface Mask {
     type: string
