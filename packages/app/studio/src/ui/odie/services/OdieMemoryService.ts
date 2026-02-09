@@ -1,7 +1,7 @@
 import { openDB, IDBPDatabase } from 'idb';
 
 // Simple ID generator
-const generateId = () => Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+const generateId = () => crypto.randomUUID();
 
 export interface OdieFact {
     id: string;
@@ -18,14 +18,10 @@ const STORE_NAME = 'facts';
 class OdieMemoryService {
     private dbPromise: Promise<IDBPDatabase | undefined> | null = null;
 
-    constructor() {
-        // Initialize DB only on client side
-        if (typeof window !== 'undefined') {
-            this.initDB();
-        }
-    }
+    private getDB() {
+        if (this.dbPromise) return this.dbPromise;
+        if (typeof window === 'undefined') return Promise.resolve(undefined);
 
-    private initDB() {
         this.dbPromise = openDB(DB_NAME, 1, {
             upgrade(db) {
                 if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -38,16 +34,15 @@ class OdieMemoryService {
             console.warn('[OdieMemory] IndexedDB unavailable, memory disabled:', err);
             return undefined;
         });
+        return this.dbPromise;
     }
 
     /**
      * Store a new Fact in the Long Term Memory
      */
     async saveFact(content: string, tags: string[], source: OdieFact['source'] = 'inference', confidence = 1.0): Promise<string> {
-        if (!this.dbPromise) return "";
-
         try {
-            const db = await this.dbPromise;
+            const db = await this.getDB();
             if (!db) return "";
             const fact: OdieFact = {
                 id: generateId(),
@@ -72,8 +67,7 @@ class OdieMemoryService {
      * Returns facts that have at least one matching tag.
      */
     async queryFacts(contextTags: string[]): Promise<OdieFact[]> {
-        if (!this.dbPromise) return [];
-        const db = await this.dbPromise;
+        const db = await this.getDB();
         if (!db) return []; // Add null check for db
         const tx = db.transaction(STORE_NAME, 'readonly');
         const index = tx.store.index('tags');
@@ -100,8 +94,7 @@ class OdieMemoryService {
      * Get all memories (for Debugging / Profile View)
      */
     async getAllFacts(): Promise<OdieFact[]> {
-        if (!this.dbPromise) return [];
-        const db = await this.dbPromise;
+        const db = await this.getDB();
         if (!db) return [];
         return await db.getAll(STORE_NAME);
     }
@@ -110,8 +103,7 @@ class OdieMemoryService {
      * Clear all memories (Reset Brain)
      */
     async wipeMemory(): Promise<void> {
-        if (!this.dbPromise) return;
-        const db = await this.dbPromise;
+        const db = await this.getDB();
         if (!db) return;
         await db.clear(STORE_NAME);
         console.log("[OdieMemory] Brain Wiped.");

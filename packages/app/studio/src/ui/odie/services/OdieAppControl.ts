@@ -54,6 +54,7 @@ import {
 } from "@opendaw/studio-boxes"
 import { AudioUnitType, IconSymbol, Pointers } from "@opendaw/studio-enums"
 import type { StudioService } from "../../../service/StudioService"
+import { AnalysisResult, RegionAnalysis } from "../OdieTypes"
 
 // Local interface definition
 export interface MidiNoteDef {
@@ -82,8 +83,6 @@ export interface ToolResult {
     reason?: string
     message?: string // Added for consistency with success messages
 }
-
-import { AnalysisResult, RegionAnalysis } from "../OdieTypes"
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ODIE LOCAL TYPE DEFINITIONS
@@ -1860,7 +1859,7 @@ export class OdieAppControl {
         const regions = track.regions.collection.asArray() as AnyRegionBoxAdapter[]
         let region = regions.find(r => {
             // Adapters expose getters for position/duration
-            return r.position <= ppqnStart && (r.position + r.duration) >= ppqnStart
+            return r.position <= ppqnStart && (r.position + r.duration) > ppqnStart
         }) as NoteRegionBoxAdapter | undefined
 
         if (!region) {
@@ -2154,8 +2153,8 @@ export class OdieAppControl {
         const keys: string[] = []
         if (!device || !device.namedParameter) return keys
 
-        const walk = (node: unknown, path: string = "") => {
-            if (!node) return
+        const walk = (node: unknown, path: string = "", depth: number = 0) => {
+            if (!node || depth > 10) return
             const n = node as Record<string, unknown>
             // If it's a Parameter (has setValue)
             if (typeof n.setValue === "function") {
@@ -2170,7 +2169,7 @@ export class OdieAppControl {
                 const subPath = path ? `${path}.${key}` : key
                 // avoid cycling or huge trees
                 if (typeof child === "object" && child !== null) {
-                    walk(child, subPath)
+                    walk(child, subPath, depth + 1)
                 }
             }
         }

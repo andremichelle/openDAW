@@ -300,8 +300,8 @@ export class OdieService {
 
 
 
+        const provider = this.ai.getActiveProvider()
         try {
-            const provider = this.ai.getActiveProvider()
             const config = isDefined(provider) ? this.ai.getConfig(provider.id) : {}
             const needsSetup = isAbsent(provider) || (provider.id !== "ollama" && (isAbsent(config.apiKey) || config.apiKey.length < 5))
 
@@ -323,7 +323,7 @@ export class OdieService {
 
                 // Return immediate "Model" response with card
                 const sysMsg: Message = {
-                    id: (Date.now() + 1).toString(),
+                    id: safeUUID(),
                     role: "model",
                     content: "```json\n" + JSON.stringify(errorCard, null, 2) + "\n```",
                     timestamp: Date.now()
@@ -466,6 +466,14 @@ export class OdieService {
                                 })
                             }
                         }
+                    } else {
+                        errors.push(`Tool execution unavailable: AppControl is missing.`)
+                        Dialogs.info({
+                            headline: "Tools Unavailable",
+                            message: "Odie cannot execute tools at this time. Please check your connection or restart the application."
+                        })
+                        this.isGenerating.setValue(false)
+                        this.visible.setValue(false)
                     }
 
                     // Feedback Loop
@@ -639,7 +647,7 @@ export class OdieService {
                                 label: "⚙️ Open Settings",
                                 actionId: "open_settings",
                                 context: {
-                                    providerId: isDefined(this.ai.getActiveProvider()) ? this.ai.getActiveProvider()?.id : "ollama"
+                                    providerId: isDefined(provider) ? provider.id : "ollama"
                                 }
                             },
                             {
