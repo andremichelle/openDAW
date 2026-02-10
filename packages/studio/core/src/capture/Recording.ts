@@ -4,6 +4,7 @@ import {AudioUnitType} from "@opendaw/studio-enums"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories} from "@opendaw/studio-adapters"
 import {Project} from "../project"
+import {ppqn} from "@opendaw/lib-dsp"
 
 export class Recording {
     static get isRecording(): boolean {return this.#isRecording}
@@ -42,7 +43,7 @@ export class Recording {
             engine.isCountingIn.subscribe(stop),
             Terminable.create(() => Recording.#instance = Option.None)
         )
-        this.#instance = Option.wrap(new Recording(countIn))
+        this.#instance = Option.wrap(new Recording(countIn, engine.position.getValue()))
         return terminator
     }
 
@@ -71,6 +72,7 @@ export class Recording {
     static #instance: Option<Recording> = Option.None
 
     static wasCountingIn(): boolean {return this.#instance.mapOr(recording => recording.countIn, () => false)}
+    static wasStartingAt(): ppqn {return this.#instance.mapOr(recording => recording.startPosition, () => 0.0)}
 
-    private constructor(readonly countIn: boolean) {}
+    private constructor(readonly countIn: boolean, readonly startPosition: ppqn) {}
 }

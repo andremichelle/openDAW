@@ -291,6 +291,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                     capture.clearRecordedRegions()
                 }), false)
             this.engine.stop(true)
+            this.engine.setPosition(Recording.wasStartingAt())
             const subscription = this.engine.isRecording.catchupAndSubscribe(owner => {
                 if (!owner.getValue()) {
                     queueMicrotask(() => subscription.terminate())
