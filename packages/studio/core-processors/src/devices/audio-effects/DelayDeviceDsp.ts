@@ -153,10 +153,10 @@ export class DelayDeviceDsp {
                 readDelayL /= this.#envelope
                 readDelayR /= this.#envelope
             }
-            const processedL = biquadL.processFrame(biquadCoeff, (readDelayL * pass + readDelayR * cross) * 0.96) * feedback + 1.0e-18 - 1.0e-18
-            const processedR = biquadR.processFrame(biquadCoeff, (readDelayR * pass + readDelayL * cross) * 0.96) * feedback + 1.0e-18 - 1.0e-18
-            delayBufL[this.#delayLinePosition] = preDelayBufL[i] + processedL
-            delayBufR[this.#delayLinePosition] = preDelayBufR[i] + processedR
+            const processedL = biquadL.processFrame(biquadCoeff, (readDelayL * pass + readDelayR * cross) * 0.96)
+            const processedR = biquadR.processFrame(biquadCoeff, (readDelayR * pass + readDelayL * cross) * 0.96)
+            delayBufL[this.#delayLinePosition] = preDelayBufL[i] + processedL * feedback + 1.0e-18 - 1.0e-18
+            delayBufR[this.#delayLinePosition] = preDelayBufR[i] + processedR * feedback + 1.0e-18 - 1.0e-18
             oL[i] = iL[i] * pDryLevel + processedL * pWetLevel
             oR[i] = iR[i] * pDryLevel + processedR * pWetLevel
             this.#delayLinePosition = (this.#delayLinePosition + 1) & delayMask
