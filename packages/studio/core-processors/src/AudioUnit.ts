@@ -24,9 +24,12 @@ export class AudioUnit implements Terminable {
 
     #input: Option<InstrumentDeviceProcessor | AudioBusProcessor> = Option.None
 
+    readonly #useInstrumentOutput: boolean
+
     constructor(context: EngineContext, adapter: AudioUnitBoxAdapter, options: AudioUnitOptions) {
         this.#context = context
         this.#adapter = adapter
+        this.#useInstrumentOutput = options.useInstrumentOutput
 
         this.#midiDeviceChain = this.#terminator.own(new MidiDeviceChain(this))
         this.#audioDeviceChain = this.#terminator.own(new AudioDeviceChain(this, options))
@@ -44,7 +47,11 @@ export class AudioUnit implements Terminable {
 
     input(): Option<InstrumentDeviceProcessor | AudioBusProcessor> {return this.#input}
     inputAsAudioBus(): AudioBusProcessor {return asInstanceOf(this.#input.unwrap("No input available"), AudioBusProcessor)}
-    audioOutput(): AudioBuffer {return this.#audioDeviceChain.channelStrip.audioOutput}
+    audioOutput(): AudioBuffer {
+        return this.#useInstrumentOutput
+            ? this.#input.unwrap().audioOutput
+            : this.#audioDeviceChain.channelStrip.audioOutput
+    }
 
     get midiDeviceChain(): MidiDeviceChain {return this.#midiDeviceChain}
     get audioDeviceChain(): AudioDeviceChain {return this.#audioDeviceChain}

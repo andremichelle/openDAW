@@ -361,11 +361,11 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         if (!this.#userCreatedSamples.hasKey(uuid)) {return}
         this.#userCreatedSamples.removeByKey(uuid)
         const autoDelete = StudioPreferences.settings.storage["auto-delete-orphaned-samples"]
-        if (!autoDelete && !await RuntimeNotifier.approve({
-            headline: "Delete Sample?",
-            message: "The sample is no longer used. Delete it from storage? This cannot be undone!",
-            approveText: "Delete",
-            cancelText: "Keep"
+        if (!autoDelete && await RuntimeNotifier.approve({
+            headline: "Keep Sample?",
+            message: "The sample is no longer used. Do you want to keep it in storage? Deletion of samples cannot be undone!",
+            approveText: "Keep",
+            cancelText: "Delete"
         })) {return}
         SampleStorage.get().deleteItem(uuid).catch((reason: unknown) =>
             console.warn("Failed to delete sample from storage", reason))

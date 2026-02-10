@@ -1,4 +1,5 @@
 import {
+    Arrays,
     asEnumValue,
     int,
     isInstanceOf,
@@ -261,10 +262,12 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
         return adapter
     }
 
-    consolidate(): void {
-        // TODO This needs to done by creating a new audio file
+    consolidate(): void {}
+    canFlatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>): boolean {
+        return regions.length > 0
+            && Arrays.satisfy(regions, (a, b) => a.trackBoxAdapter.contains(b.trackBoxAdapter.unwrap()))
+            && regions.every(region => region.isSelected && region instanceof AudioRegionBoxAdapter)
     }
-    canFlatten(_regions: ReadonlyArray<RegionBoxAdapter<unknown>>): boolean {return false}
     flatten(_regions: ReadonlyArray<RegionBoxAdapter<unknown>>): Option<AudioRegionBox> {
         // TODO This needs to done by creating a new audio file
         return Option.None

@@ -16,6 +16,7 @@ import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {StudioService} from "@/service/StudioService"
 import {Promises} from "@opendaw/lib-runtime"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
+import {AudioConsolidation} from "@/service/AudioConsolidation"
 
 type Construct = {
     element: Element
@@ -66,12 +67,11 @@ export const installRegionContextMenu =
                 ColorMenu.createItem(hue => editing.modify(() =>
                     selection.selected().slice().forEach(adapter => adapter.box.hue.setValue(hue)))),
                 MenuItem.default({label: "Rename"})
-                    .setTriggerProcedure(() => Surface.get(element).requestFloatingTextInput(client, region.label).then(value => {
-                        NameValidator.validate(value, {
+                    .setTriggerProcedure(() => Surface.get(element).requestFloatingTextInput(client, region.label)
+                        .then(value => NameValidator.validate(value, {
                             success: name => editing.modify(() => selection.selected()
                                 .forEach(adapter => adapter.box.label.setValue(name)))
-                        })
-                    }, EmptyExec)),
+                        }), EmptyExec)),
                 MenuItem.default({label: "Loop Selection"})
                     .setTriggerProcedure(() => {
                         const [min, max] = computeSelectionRange()
@@ -92,8 +92,18 @@ export const installRegionContextMenu =
                 }).setTriggerProcedure(() => editing.modify(() => selection.selected().slice()
                     .forEach(adapter => adapter.consolidate()))),
                 MenuItem.default({label: "Flatten", selectable: region.canFlatten(selection.selected())})
-                    .setTriggerProcedure(() => editing.modify(() =>
-                        region.flatten(selection.selected()).ifSome(box => project.selection.select(box)))),
+                    .setTriggerProcedure(() => {
+                        if (region instanceof AudioRegionBoxAdapter) {
+                            const audioRegions = selection.selected()
+                                .filter((adapter): adapter is AudioRegionBoxAdapter =>
+                                    isInstanceOf(adapter, AudioRegionBoxAdapter))
+                            AudioConsolidation.flatten(project, service.sampleService, audioRegions)
+                                .then(EmptyExec, console.warn)
+                        } else {
+                            editing.modify(() =>
+                                region.flatten(selection.selected()).ifSome(box => project.selection.select(box)))
+                        }
+                    }),
                 MenuItem.default({label: "Convert to Clip"})
                     .setTriggerProcedure(() => editing.modify(() => {
                         service.timeline.clips.visible.setValue(true)

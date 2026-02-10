@@ -97,6 +97,7 @@ export namespace ProjectDialogs {
                         include: !unit.isOutput,
                         includeAudioEffects: true,
                         includeSends: true,
+                        useInstrumentOutput: false,
                         fileName: ExportStemsConfiguration.sanitizeFileName(unit.input.label.unwrap())
                     }
                 ])))

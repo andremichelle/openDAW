@@ -15,6 +15,7 @@ export type EngineProcessorAttachment = {
 export type ExportStemConfiguration = {
     includeAudioEffects: boolean
     includeSends: boolean
+    useInstrumentOutput: boolean
     fileName: string
 }
 

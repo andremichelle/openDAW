@@ -3,6 +3,7 @@ import {AudioData, ppqn} from "@opendaw/lib-dsp"
 import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
 import {
     EngineCommands,
+    EngineStateSchema,
     EngineToClient,
     ExportStemsConfiguration,
     MonitoringMapEntry,
@@ -54,7 +55,7 @@ export class OfflineEngineRenderer {
         )
         const channel = new MessageChannel()
         const progressChannel = new MessageChannel()
-        const syncStreamBuffer = new SharedArrayBuffer(1024)
+        const syncStreamBuffer = new SharedArrayBuffer(EngineStateSchema().bytesTotal + 1)
         const controlFlagsBuffer = new SharedArrayBuffer(4)
         const terminator = new Terminator()
         const engineMessenger = Messenger.for(channel.port2)
@@ -205,6 +206,16 @@ export class OfflineEngineRenderer {
     stop(): void {
         this.#engineCommands.stop(true)
         this.#protocol.stop()
+    }
+
+    setPosition(position: ppqn): void {
+        this.#engineCommands.setPosition(position)
+    }
+
+    async waitForLoading(): Promise<void> {
+        while (!await this.#engineCommands.queryLoadingComplete()) {
+            await Wait.timeSpan(TimeSpan.millis(100))
+        }
     }
 
     terminate(): void {
