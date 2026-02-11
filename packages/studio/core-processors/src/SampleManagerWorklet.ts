@@ -10,7 +10,7 @@ class SampleLoaderWorklet implements SampleLoader, Terminable {
     #data: Option<AudioData> = Option.None
 
     constructor(readonly uuid: UUID.Bytes, readonly engineToClient: EngineToClient) {
-        engineToClient.fetchAudio(uuid).then((data) => this.#data = Option.wrap(data))
+        engineToClient.fetchAudio(uuid).then(data => this.#data = Option.wrap(data), console.warn)
     }
 
     get data(): Option<AudioData> {return this.#data}
