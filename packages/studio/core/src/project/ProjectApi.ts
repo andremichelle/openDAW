@@ -212,24 +212,31 @@ export class ProjectApi {
         })
     }
 
-    duplicateRegion<R extends AnyRegionBoxAdapter>(region: R): Option<R> {
+    duplicateRegion<R extends AnyRegionBoxAdapter>(region: R, options?: { findFreeSpace?: boolean }): Option<R> {
         if (region.trackBoxAdapter.isEmpty()) {return Option.None}
         const track = region.trackBoxAdapter.unwrap()
-        const clearFrom = region.position + region.duration
-        const clearTo = region.complete + region.duration
-        // Resolve target track (for keep-existing mode)
-        const targetTrack = this.#project.overlapResolver.resolveTargetTrack(track, clearFrom, clearTo)
-        // Capture overlap state before creating (for clip/push-existing modes)
-        const solver = this.#project.overlapResolver.fromRange(targetTrack, clearFrom, clearTo)
-        // Create the duplicate on target track
-        const duplicate = region.copyTo({
-            position: region.complete,
-            consolidate: true,
-            track: targetTrack !== track ? targetTrack.box.regions : undefined
-        }) as R
-        // Apply overlap resolution
-        solver()
-        return Option.wrap(duplicate)
+        if (options?.findFreeSpace === true) {
+            let insert = region.complete
+            for (const next of track.regions.collection.iterateFrom(region.complete)) {
+                if (insert + region.duration <= next.position) {break}
+                insert = next.complete
+            }
+            return Option.wrap(region.copyTo({
+                position: insert,
+                consolidate: true
+            }) as R)
+        } else {
+            const clearFrom = region.complete
+            const clearTo = region.complete + region.duration
+            const targetTrack = this.#project.overlapResolver.resolveTargetTrack(track, clearFrom, clearTo)
+            const solver = this.#project.overlapResolver.fromRange(targetTrack, clearFrom, clearTo)
+            const duplicate = region.copyTo({
+                position: region.complete,
+                consolidate: true
+            }) as R
+            solver()
+            return Option.wrap(duplicate)
+        }
     }
 
     quantiseNotes(collection: NoteEventCollectionBox,
