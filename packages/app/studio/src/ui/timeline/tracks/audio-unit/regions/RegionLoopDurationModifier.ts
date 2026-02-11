@@ -18,11 +18,20 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
 
     readPosition(region: AnyRegionBoxAdapter): ppqn {return region.position}
     readDuration(region: AnyLoopableRegionBoxAdapter): ppqn {
-        const newLoopDuration = this.readLoopDuration(region)
-        if (newLoopDuration <= region.loopDuration) {return region.duration}
-        return Math.max(region.duration, newLoopDuration - region.loopOffset)
+        return this.readComplete(region) - this.readPosition(region)
     }
-    readComplete(region: AnyLoopableRegionBoxAdapter): ppqn {return region.position + this.readDuration(region)}
+    readComplete(region: AnyLoopableRegionBoxAdapter): ppqn {
+        const newLoopDuration = this.readLoopDuration(region)
+        const duration = newLoopDuration <= region.loopDuration
+            ? region.duration
+            : Math.max(region.duration, newLoopDuration - region.loopOffset)
+        const complete = region.position + duration
+        return region.trackBoxAdapter.map(trackAdapter => trackAdapter.regions.collection
+            .greaterEqual(region.complete, region => region.isSelected)).match({
+            none: () => complete,
+            some: region => complete > region.position ? region.position : complete
+        })
+    }
     readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.loopOffset}
     readLoopDuration(region: AnyLoopableRegionBoxAdapter): ppqn {
         if (!region.canResize) {return region.loopDuration}
