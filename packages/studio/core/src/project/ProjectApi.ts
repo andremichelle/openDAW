@@ -217,9 +217,9 @@ export class ProjectApi {
         const track = region.trackBoxAdapter.unwrap()
         if (options?.findFreeSpace === true) {
             let insert = region.complete
-            for (const next of track.regions.collection.iterateFrom(region.complete)) {
-                if (insert + region.duration <= next.position) {break}
-                insert = next.complete
+            for (const {position, complete} of track.regions.collection.iterateFrom(region.complete)) {
+                if (insert + region.duration <= position) {break}
+                insert = complete
             }
             return Option.wrap(region.copyTo({
                 position: insert,
