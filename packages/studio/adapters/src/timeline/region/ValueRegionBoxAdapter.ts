@@ -2,6 +2,7 @@ import {EventCollection, LoopableRegion, ppqn, PPQN, RegionCollection} from "@op
 import {
     Arrays,
     int,
+    isDefined,
     Maybe,
     Notifier,
     Observer,
@@ -91,7 +92,13 @@ export class ValueRegionBoxAdapter
         return content.isEmpty() ? fallback : content.unwrap().valueAt(LoopableRegion.globalToLocal(this, position), fallback)
     }
 
-    incomingValue(fallback: unitValue): unitValue {return this.valueAt(this.position, fallback)}
+    incomingValue(fallback: unitValue): unitValue {
+        const content = this.optCollection
+        if (content.isEmpty()) {return fallback}
+        const zeroEvent = content.unwrap().events.greaterEqual(0)
+        if (isDefined(zeroEvent) && zeroEvent.position === 0) {return zeroEvent.value}
+        return this.valueAt(this.position, fallback)
+    }
 
     outgoingValue(fallback: unitValue): unitValue {
         const optContent = this.optCollection
