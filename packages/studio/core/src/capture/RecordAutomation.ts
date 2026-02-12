@@ -1,157 +1,253 @@
-import {Option, Terminable, unitValue, UUID} from "@opendaw/lib-std"
-import {ppqn} from "@opendaw/lib-dsp"
+import {Option, quantizeCeil, quantizeFloor, SortedSet, Terminable, unitValue, UUID} from "@opendaw/lib-std"
+import {Interpolation, ppqn, PPQN} from "@opendaw/lib-dsp"
+import {Address} from "@opendaw/lib-box"
 import {TrackBox, ValueEventBox, ValueEventCollectionBox, ValueRegionBox} from "@opendaw/studio-boxes"
 import {
     AutomatableParameterFieldAdapter,
     ColorCodes,
     Devices,
+    InterpolationFieldAdapter,
+    ParameterWriteEvent,
     TrackBoxAdapter,
-    TrackType,
-    ValueRegionBoxAdapter
+    TrackType
 } from "@opendaw/studio-adapters"
 import {Project} from "../project"
-import {RegionClipResolver, RegionModifyStrategies} from "../ui"
+import {RegionClipResolver} from "../ui"
 
 export namespace RecordAutomation {
     type RecordingState = {
         adapter: AutomatableParameterFieldAdapter
-        trackBox: TrackBox
         trackBoxAdapter: TrackBoxAdapter
         regionBox: ValueRegionBox
         collectionBox: ValueEventCollectionBox
         startPosition: ppqn
+        floating: boolean
         lastValue: unitValue
-        lastEventPosition: ppqn
         lastRelativePosition: ppqn
         lastEventBox: ValueEventBox
     }
 
     export const start = (project: Project): Terminable => {
-        const {editing, engine, boxAdapters, parameterFieldAdapters, boxGraph} = project
-        const activeRecordings = new Map<string, RecordingState>()
-        return Terminable.many(
-            parameterFieldAdapters.subscribeWrites(adapter => {
-                if (!engine.isRecording.getValue()) {return}
-                const key = adapter.address.toString()
-                const position = engine.position.getValue()
-                const value = adapter.getUnitValue()
-                let state = activeRecordings.get(key)
-                if (state === undefined) {
-                    editing.modify(() => {
-                        const deviceBox = adapter.field.box
-                        const deviceAdapterOpt = Option.tryCatch(() => boxAdapters.adapterFor(deviceBox, Devices.isAny))
-                        if (deviceAdapterOpt.isEmpty()) {
-                            console.warn(`Cannot record automation: could not find device adapter for ${deviceBox.name}`)
-                            return
-                        }
-                        const deviceAdapter = deviceAdapterOpt.unwrap()
-                        const audioUnitAdapter = deviceAdapter.audioUnitBoxAdapter()
-                        const tracks = audioUnitAdapter.tracks
+        const {editing, engine, boxAdapters, parameterFieldAdapters, boxGraph, timelineBox} = project
+        const activeRecordings: SortedSet<Address, RecordingState> =
+            Address.newSet<RecordingState>(state => state.adapter.address)
+        let lastPosition: ppqn = engine.position.getValue()
 
-                        let trackBox: TrackBox
-                        let trackBoxAdapter: TrackBoxAdapter
-                        const existing = tracks.controls(adapter.field)
-                        if (existing.nonEmpty()) {
-                            trackBoxAdapter = existing.unwrap()
-                            trackBox = trackBoxAdapter.box
-                        } else {
-                            trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
-                                box.index.setValue(tracks.collection.getMinFreeIndex())
-                                box.type.setValue(TrackType.Value)
-                                box.tracks.refer(audioUnitAdapter.box.tracks)
-                                box.target.refer(adapter.field)
-                            })
-                            trackBoxAdapter = boxAdapters.adapterFor(trackBox, TrackBoxAdapter)
-                        }
-                        const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
-                        const regionBox = ValueRegionBox.create(boxGraph, UUID.generate(), box => {
-                            box.position.setValue(position)
-                            box.duration.setValue(0)
-                            box.loopDuration.setValue(0)
-                            box.hue.setValue(ColorCodes.forTrackType(TrackType.Value))
-                            box.label.setValue(adapter.name)
-                            box.events.refer(collectionBox.owners)
-                            box.regions.refer(trackBox.regions)
-                        })
-                        const lastEventBox = ValueEventBox.create(boxGraph, UUID.generate(), box => {
-                            box.position.setValue(0)
-                            box.value.setValue(value)
-                            box.events.refer(collectionBox.events)
-                        })
-                        state = {
-                            adapter, trackBox, trackBoxAdapter, regionBox, collectionBox,
-                            startPosition: position, lastValue: value, lastEventPosition: position,
-                            lastRelativePosition: 0, lastEventBox
-                        }
-                        activeRecordings.set(key, state)
-                    })
+        const createRegion = (
+            trackBoxAdapter: TrackBoxAdapter,
+            adapter: AutomatableParameterFieldAdapter,
+            startPos: ppqn,
+            previousUnitValue: unitValue,
+            value: unitValue,
+            floating: boolean
+        ): RecordingState => {
+            const trackBox = trackBoxAdapter.box
+            project.selection.deselect(
+                ...trackBoxAdapter.regions.collection.asArray()
+                    .filter(region => region.isSelected)
+                    .map(region => region.box))
+            RegionClipResolver.fromRange(trackBoxAdapter, startPos, startPos + PPQN.SemiQuaver)()
+            const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+            const regionBox = ValueRegionBox.create(boxGraph, UUID.generate(), box => {
+                box.position.setValue(startPos)
+                box.duration.setValue(PPQN.SemiQuaver)
+                box.loopDuration.setValue(PPQN.SemiQuaver)
+                box.hue.setValue(ColorCodes.forTrackType(TrackType.Value))
+                box.label.setValue(adapter.name)
+                box.events.refer(collectionBox.owners)
+                box.regions.refer(trackBox.regions)
+            })
+            project.selection.select(regionBox)
+            const interpolation = floating ? Interpolation.Linear : Interpolation.None
+            let lastEventBox: ValueEventBox
+            if (previousUnitValue !== value) {
+                ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                    box.position.setValue(0)
+                    box.value.setValue(previousUnitValue)
+                    box.events.refer(collectionBox.events)
+                })
+                lastEventBox = ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                    box.position.setValue(0)
+                    box.index.setValue(1)
+                    box.value.setValue(value)
+                    box.events.refer(collectionBox.events)
+                })
+                InterpolationFieldAdapter.write(lastEventBox.interpolation, interpolation)
+            } else {
+                lastEventBox = ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                    box.position.setValue(0)
+                    box.value.setValue(value)
+                    box.events.refer(collectionBox.events)
+                })
+                InterpolationFieldAdapter.write(lastEventBox.interpolation, interpolation)
+            }
+            return {
+                adapter, trackBoxAdapter, regionBox, collectionBox,
+                startPosition: startPos, floating, lastValue: value,
+                lastRelativePosition: 0, lastEventBox
+            }
+        }
+
+        const findOrCreateTrack = (adapter: AutomatableParameterFieldAdapter): Option<TrackBoxAdapter> => {
+            const deviceBox = adapter.field.box
+            const deviceAdapterOpt = Option.tryCatch(() => boxAdapters.adapterFor(deviceBox, Devices.isAny))
+            if (deviceAdapterOpt.isEmpty()) {
+                console.warn(`Cannot record automation: could not find device adapter for ${deviceBox.name}`)
+                return Option.None
+            }
+            const deviceAdapter = deviceAdapterOpt.unwrap()
+            const audioUnitAdapter = deviceAdapter.audioUnitBoxAdapter()
+            const tracks = audioUnitAdapter.tracks
+            const existing = tracks.controls(adapter.field)
+            if (existing.nonEmpty()) {return Option.wrap(existing.unwrap())}
+            const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
+                box.index.setValue(tracks.collection.getMinFreeIndex())
+                box.type.setValue(TrackType.Value)
+                box.tracks.refer(audioUnitAdapter.box.tracks)
+                box.target.refer(adapter.field)
+            })
+            return Option.wrap(boxAdapters.adapterFor(trackBox, TrackBoxAdapter))
+        }
+
+        const handleWrite = ({adapter, previousUnitValue}: ParameterWriteEvent): void => {
+            if (!engine.isRecording.getValue()) {return}
+            const position = engine.position.getValue()
+            const value = adapter.getUnitValue()
+            const existingState = activeRecordings.opt(adapter.address)
+            if (existingState.isEmpty()) {
+                editing.modify(() => {
+                    const trackOpt = findOrCreateTrack(adapter)
+                    if (trackOpt.isEmpty()) {return}
+                    const trackBoxAdapter = trackOpt.unwrap()
+                    const startPos = quantizeFloor(position, PPQN.SemiQuaver)
+                    const floating = adapter.valueMapping.floating()
+                    const state = createRegion(
+                        trackBoxAdapter, adapter, startPos, previousUnitValue, value, floating)
+                    activeRecordings.add(state)
+                })
+            } else {
+                const state = existingState.unwrap()
+                const relativePosition = Math.max(0, position - state.startPosition)
+                if (relativePosition === state.lastRelativePosition) {
+                    editing.modify(() => {
+                        state.lastEventBox.value.setValue(value)
+                        state.lastValue = value
+                    }, false)
                 } else {
-                    const currentState = state
-                    const relativePosition = Math.max(0, position - currentState.startPosition)
-                    if (relativePosition === currentState.lastRelativePosition) {
-                        editing.modify(() => {
-                            currentState.lastEventBox.value.setValue(value)
-                            currentState.lastValue = value
-                        }, false)
-                    } else {
-                        editing.modify(() => {
-                            currentState.lastEventBox = ValueEventBox.create(boxGraph, UUID.generate(), box => {
-                                box.position.setValue(relativePosition)
-                                box.value.setValue(value)
-                                box.events.refer(currentState.collectionBox.events)
-                            })
-                            currentState.lastValue = value
-                            currentState.lastEventPosition = position
-                            currentState.lastRelativePosition = relativePosition
-                        }, false)
-                    }
+                    editing.modify(() => {
+                        const interpolation = state.floating ? Interpolation.Linear : Interpolation.None
+                        state.lastEventBox = ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                            box.position.setValue(relativePosition)
+                            box.value.setValue(value)
+                            box.events.refer(state.collectionBox.events)
+                        })
+                        InterpolationFieldAdapter.write(state.lastEventBox.interpolation, interpolation)
+                        state.lastValue = value
+                        state.lastRelativePosition = relativePosition
+                    }, false)
                 }
-            }),
-            engine.position.subscribe(owner => {
-                if (!engine.isRecording.getValue()) {return}
-                if (activeRecordings.size === 0) {return}
-                const position = owner.getValue()
+            }
+        }
+
+        const handlePosition = (): void => {
+            if (!engine.isRecording.getValue()) {return}
+            if (activeRecordings.size() === 0) {return}
+            const currentPosition = engine.position.getValue()
+            const loopEnabled = timelineBox.loopArea.enabled.getValue()
+            const loopFrom = timelineBox.loopArea.from.getValue()
+            const loopTo = timelineBox.loopArea.to.getValue()
+            if (loopEnabled && currentPosition < lastPosition) {
                 editing.modify(() => {
-                    for (const state of activeRecordings.values()) {
-                        if (state.regionBox.isAttached()) {
-                            const duration = Math.max(0, position - state.startPosition)
-                            state.regionBox.duration.setValue(duration)
-                            state.regionBox.loopDuration.setValue(duration)
-                        }
-                    }
-                }, false)
-            }),
-            Terminable.create(() => {
-                if (activeRecordings.size === 0) {return}
-                const finalPosition = engine.position.getValue()
-                editing.modify(() => {
-                    for (const state of activeRecordings.values()) {
+                    const snapshot = [...activeRecordings.values()]
+                    for (const state of snapshot) {
                         if (!state.regionBox.isAttached()) {continue}
-                        const duration = Math.max(0, finalPosition - state.startPosition)
-                        if (duration <= 0) {
-                            state.regionBox.delete()
-                            continue
+                        const finalDuration = Math.max(PPQN.SemiQuaver,
+                            quantizeCeil(loopTo - state.startPosition, PPQN.SemiQuaver))
+                        const oldDuration = state.regionBox.duration.getValue()
+                        if (finalDuration > oldDuration) {
+                            RegionClipResolver.fromRange(
+                                state.trackBoxAdapter,
+                                state.startPosition + oldDuration,
+                                state.startPosition + finalDuration)()
                         }
-                        const regionAdapter = boxAdapters.adapterFor(state.regionBox, ValueRegionBoxAdapter)
-                        regionAdapter.onSelected()
-                        RegionClipResolver.fromRange(
-                            state.trackBoxAdapter,
-                            state.startPosition,
-                            state.startPosition + duration,
-                            RegionModifyStrategies.Identity
-                        )()
-                        regionAdapter.onDeselected()
-                        if (duration !== state.lastRelativePosition) {
+                        if (finalDuration !== state.lastRelativePosition) {
                             ValueEventBox.create(boxGraph, UUID.generate(), box => {
-                                box.position.setValue(duration)
+                                box.position.setValue(finalDuration)
                                 box.value.setValue(state.lastValue)
                                 box.events.refer(state.collectionBox.events)
                             })
                         }
-                        state.regionBox.duration.setValue(duration)
-                        state.regionBox.loopDuration.setValue(duration)
+                        state.regionBox.duration.setValue(finalDuration)
+                        state.regionBox.loopDuration.setValue(finalDuration)
+                        project.selection.deselect(state.regionBox)
+                        const newStartPos = quantizeFloor(loopFrom, PPQN.SemiQuaver)
+                        const newState = createRegion(
+                            state.trackBoxAdapter, state.adapter, newStartPos,
+                            state.lastValue, state.lastValue, state.floating)
+                        activeRecordings.removeByKey(state.adapter.address)
+                        activeRecordings.add(newState)
                     }
-                })
-            }))
+                }, false)
+            }
+            lastPosition = currentPosition
+            editing.modify(() => {
+                for (const state of activeRecordings.values()) {
+                    if (!state.regionBox.isAttached()) {continue}
+                    const oldDuration = state.regionBox.duration.getValue()
+                    const maxDuration = loopEnabled
+                        ? loopTo - state.startPosition
+                        : Infinity
+                    const newDuration = Math.max(PPQN.SemiQuaver,
+                        quantizeCeil(
+                            Math.min(maxDuration, currentPosition - state.startPosition),
+                            PPQN.SemiQuaver))
+                    if (newDuration > oldDuration) {
+                        RegionClipResolver.fromRange(
+                            state.trackBoxAdapter,
+                            state.startPosition + oldDuration,
+                            state.startPosition + newDuration)()
+                    }
+                    state.regionBox.duration.setValue(newDuration)
+                    state.regionBox.loopDuration.setValue(newDuration)
+                }
+            }, false)
+        }
+
+        const handleTermination = (): void => {
+            if (activeRecordings.size() === 0) {return}
+            const finalPosition = engine.position.getValue()
+            editing.modify(() => {
+                for (const state of activeRecordings.values()) {
+                    if (!state.regionBox.isAttached()) {continue}
+                    const finalDuration = Math.max(0,
+                        quantizeCeil(finalPosition - state.startPosition, PPQN.SemiQuaver))
+                    if (finalDuration <= 0) {
+                        state.regionBox.delete()
+                        continue
+                    }
+                    const oldDuration = state.regionBox.duration.getValue()
+                    if (finalDuration > oldDuration) {
+                        RegionClipResolver.fromRange(
+                            state.trackBoxAdapter,
+                            state.startPosition + oldDuration,
+                            state.startPosition + finalDuration)()
+                    }
+                    if (finalDuration !== state.lastRelativePosition) {
+                        ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                            box.position.setValue(finalDuration)
+                            box.value.setValue(state.lastValue)
+                            box.events.refer(state.collectionBox.events)
+                        })
+                    }
+                    state.regionBox.duration.setValue(finalDuration)
+                    state.regionBox.loopDuration.setValue(finalDuration)
+                }
+            })
+        }
+
+        return Terminable.many(
+            parameterFieldAdapters.subscribeWrites(handleWrite),
+            engine.position.subscribe(handlePosition),
+            Terminable.create(handleTermination))
     }
 }

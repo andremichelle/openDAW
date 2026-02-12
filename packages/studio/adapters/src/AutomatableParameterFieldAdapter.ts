@@ -159,8 +159,9 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     }
     getValue(): T {return this.#field.getValue()}
     setValue(value: T) {
+        const previousUnitValue = this.getUnitValue()
         this.#field.setValue(value)
-        this.#context.parameterFieldAdapters.notifyWrite(this)
+        this.#context.parameterFieldAdapters.notifyWrite(this, previousUnitValue)
     }
     setUnitValue(value: unitValue): void {this.setValue(this.#valueMapping.y(value))}
     getUnitValue(): unitValue {return this.#valueMapping.x(this.getValue())}
