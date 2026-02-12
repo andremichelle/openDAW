@@ -227,6 +227,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         Recording.start(this, countIn).finally()
     }
 
+    stopRecording(): void {this.engine.stopRecording()}
+
     follow(box: UserInterfaceBox): void {
         this.userEditingManager.follow(box)
         this.midiLearning.followUser(box.midiControllers)
