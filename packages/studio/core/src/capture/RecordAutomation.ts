@@ -138,7 +138,7 @@ export namespace RecordAutomation {
                             state.trackBoxAdapter,
                             state.startPosition,
                             state.startPosition + duration,
-                            RegionModifyStrategies.Identity
+                            /*RegionModifyStrategies.Identity*/
                         )()
                         regionAdapter.onDeselected()
                         if (duration !== state.lastRelativePosition) {
