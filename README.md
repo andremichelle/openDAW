@@ -124,7 +124,7 @@ evolves.
 
 - [ ] Fine-tune timeline clips (recording, switch times)
 - [ ] Fine-tune MIDI effects
-- [ ] Implement missing region actions like flatten
+- [X] Implement missing region actions like flatten
 - [ ] Polish UI
 
 #### 2026/Q3
