@@ -1,10 +1,16 @@
-import {Arrays, asDefined, isDefined} from "@opendaw/lib-std"
+import {Arrays, asDefined, isDefined, RuntimeNotifier} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 
 export namespace Files {
     export const save = async (arrayBuffer: ArrayBuffer, options?: SaveFilePickerOptions): Promise<string> => {
         if (isDefined(window.showSaveFilePicker)) {
-            const handle = await window.showSaveFilePicker(options)
+            const {status, error, value: handle} = await Promises.tryCatch(window.showSaveFilePicker(options))
+            if (status === "rejected") {
+                return RuntimeNotifier.info({
+                    headline: "Could not show file picker",
+                    message: String(error)
+                }).then(() => Promise.reject(error))
+            }
             const writable = await handle.createWritable()
             await writable.truncate(0)
             await writable.write(arrayBuffer)
