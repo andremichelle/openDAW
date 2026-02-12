@@ -83,6 +83,7 @@ export const createValuePainter =
         context.setLineDash(Arrays.empty())
         context.lineWidth = devicePixelRatio
         const contentColor = `hsl(${reader.hue}, ${reader.mute ? 0 : 60}%, 45%)`
+        if (!reader.hasContent) {return}
         const start = range.unitMin - range.unitPadding
         const end = range.unitMax
         const events = reader.content.events
