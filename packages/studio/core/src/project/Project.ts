@@ -228,7 +228,10 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         Recording.start(this, countIn).finally()
     }
 
-    stopRecording(): void {this.engine.stopRecording()}
+    stopRecording(): void {
+        this.engine.stopRecording()
+        this.editing.mark()
+    }
 
     isRecording(): boolean {return Recording.isRecording}
 

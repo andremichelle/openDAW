@@ -31,12 +31,14 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                     tooltip: ShortcutTooltip.create("Start Recording", GlobalShortcuts["start-recording"].shortcut)
                 }}
                 onClick={event => {
-                    if (service.engine.isRecording.getValue()) {
-                        service.engine.stopRecording()
-                    } else {
-                        service.runIfProject(project => project.startRecording(!event.shiftKey))
-                        document.querySelector<HTMLElement>("[data-scope=\"regions\"]")?.focus()
-                    }
+                    service.runIfProject(project => {
+                        if (project.isRecording()) {
+                            project.stopRecording()
+                        } else {
+                            project.startRecording(!event.shiftKey)
+                            document.querySelector<HTMLElement>("[data-scope=\"regions\"]")?.focus()
+                        }
+                    })
                 }}><Icon symbol={IconSymbol.Record}/></Button>)
     const playButton: HTMLElement = (
         <Button lifecycle={lifecycle}

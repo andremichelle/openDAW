@@ -113,7 +113,7 @@ export namespace StudioShortcutManager {
                 if (isCountingIn.getValue()) {
                     engine.stop()
                 } else if (isRecording.getValue()) {
-                    service.engine.stopRecording()
+                    service.runIfProject(project => project.stopRecording())
                 } else {
                     service.runIfProject(project => project.startRecording(true))
                     document.querySelector<HTMLElement>("[data-scope=\"regions\"]")?.focus()
@@ -124,7 +124,7 @@ export namespace StudioShortcutManager {
                 if (isCountingIn.getValue()) {
                     engine.stop()
                 } else if (isRecording.getValue()) {
-                    service.engine.stopRecording()
+                    service.runIfProject(project => project.stopRecording())
                 } else {
                     service.runIfProject(project => project.startRecording(false))
                     document.querySelector<HTMLElement>("[data-scope=\"regions\"]")?.focus()

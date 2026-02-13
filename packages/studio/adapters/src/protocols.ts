@@ -10,21 +10,22 @@ export interface EngineCommands extends Terminable {
     play(): void
     stop(reset: boolean): void
     setPosition(position: ppqn): void
+    /** @internal */
     prepareRecordingState(countIn: boolean): void
+    /** @internal */
     stopRecording(): void
     queryLoadingComplete(): Promise<boolean>
     // throws a test error while processing audio
     panic(): void
-    // feeds a note request into an audio-unit identified by uuid
     noteSignal(signal: NoteSignal): void
+    /** @internal */
     ignoreNoteRegion(uuid: UUID.Bytes): void
-    // timeline clip playback management
     scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void
     scheduleClipStop(trackIds: ReadonlyArray<UUID.Bytes>): void
+    /** @internal */
     setupMIDI(port: MessagePort, buffer: SharedArrayBuffer): void
-    // metronome
     loadClickSound(index: 0 | 1, data: AudioData): void
-    // monitoring
+    /** @internal */
     updateMonitoringMap(map: ReadonlyArray<MonitoringMapEntry>): void
 }
 

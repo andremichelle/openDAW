@@ -18,7 +18,8 @@
     "noEmit": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noImplicitReturns": true
+    "noImplicitReturns": true,
+    "stripInternal": true
   },
   "exclude": [
     "node_modules"
