@@ -132,7 +132,7 @@ export namespace RecordAutomation {
                 const state = existingState.unwrap()
                 if (position < state.startPosition) {return}
                 const relativePosition = position - state.startPosition
-                if (relativePosition === state.lastRelativePosition) {
+                if (relativePosition <= state.lastRelativePosition) {
                     editing.modify(() => {
                         state.lastEventBox.value.setValue(value)
                         state.lastValue = value
