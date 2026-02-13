@@ -306,6 +306,13 @@ export class BoxGraph<BoxMap = any> {
                         // Only follow if a pointer targets a FIELD (child), not the BOX (user)
                         const targetsField = pointer.targetAddress.mapOr(address => !address.isBox(), false)
                         if (pointer.mandatory && targetsField) {
+                            // For shared resources, skip pointers to mandatory (ownership) fields
+                            if (box.resource === "shared") {
+                                const isOwnershipField = pointer.targetAddress
+                                    .flatMap(address => this.findVertex(address))
+                                    .mapOr(vertex => vertex.pointerRules.mandatory, false)
+                                if (isOwnershipField) {return}
+                            }
                             trace(pointer.box)
                         }
                     })

@@ -185,6 +185,60 @@ class ResourceBox extends Box<PointerType.Node, ResourceBoxFields> {
     get children(): Field<PointerType.Hook> {return this.getField(1)}
 }
 
+// Shared resource box with data field (mandatory: false) and owners field (mandatory: true)
+// Models NoteEventCollectionBox: events (data, non-mandatory) + owners (ownership, mandatory)
+type SharedResourceBoxFields = {
+    0: PointerField<PointerType.Node>
+    1: Field<PointerType.Hook>
+    2: Field<PointerType.Hook>
+}
+
+class SharedResourceBox extends Box<PointerType.Node, SharedResourceBoxFields> {
+    static create(graph: BoxGraph, uuid: UUID.Bytes): SharedResourceBox {
+        return graph.stageBox(new SharedResourceBox({
+            uuid,
+            graph,
+            name: "SharedResourceBox",
+            pointerRules: {accepts: [PointerType.Node], mandatory: false},
+            resource: "shared"
+        }))
+    }
+
+    private constructor(construct: BoxConstruct<PointerType.Node>) {super(construct)}
+
+    protected initializeFields(): SharedResourceBoxFields {
+        return {
+            0: PointerField.create({
+                parent: this,
+                fieldKey: 0,
+                fieldName: "ref",
+                pointerRules: NoPointers,
+                deprecated: false
+            }, PointerType.Node, false),
+            1: Field.hook({
+                parent: this,
+                fieldKey: 1,
+                fieldName: "data",
+                pointerRules: {accepts: [PointerType.Hook], mandatory: false},
+                deprecated: false
+            }),
+            2: Field.hook({
+                parent: this,
+                fieldKey: 2,
+                fieldName: "owners",
+                pointerRules: {accepts: [PointerType.Hook], mandatory: true},
+                deprecated: false
+            })
+        }
+    }
+
+    accept<R>(visitor: TestBoxVisitor<R>): Maybe<R> {return undefined}
+    get tags(): Readonly<Record<string, string | number | boolean>> {return {}}
+    get ref(): PointerField<PointerType.Node> {return this.getField(0)}
+    get data(): Field<PointerType.Hook> {return this.getField(1)}
+    get owners(): Field<PointerType.Hook> {return this.getField(2)}
+}
+
 describe("findOrphans", () => {
     it("finds no orphans when all boxes are connected", () => {
         const graph = new BoxGraph()
@@ -820,6 +874,28 @@ describe("dependenciesOf with stopAtResources", () => {
         expect([...boxes]).toContain(transientMarker)
         expect([...boxes]).not.toContain(otherRegion)
         expect([...boxes].length).toBe(2)
+    })
+
+    it("shared resource includes data children but excludes ownership siblings", () => {
+        // Models: NoteRegionBox → NoteEventCollectionBox ← NoteEventBox (data) + NoteClipBox (owner)
+        // region → SharedResource.owners (mandatory field) ← ownerSibling (clip on other track)
+        //                         .data (non-mandatory field) ← dataChild (note events)
+        // dataChild should be included, ownerSibling should NOT
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const region = ChildBox.create(graph, UUID.generate())
+        const shared = SharedResourceBox.create(graph, UUID.generate())
+        const dataChild = ChildBox.create(graph, UUID.generate())
+        const ownerSibling = ChildBox.create(graph, UUID.generate())
+        region.owner.refer(shared.owners)
+        dataChild.owner.refer(shared.data)
+        ownerSibling.owner.refer(shared.owners)
+        graph.endTransaction()
+
+        const {boxes} = graph.dependenciesOf(region, {stopAtResources: true, alwaysFollowMandatory: true})
+        expect([...boxes]).toContain(shared)
+        expect([...boxes]).toContain(dataChild)
+        expect([...boxes]).not.toContain(ownerSibling)
     })
 
     it("excludeBox still works with stopAtResources", () => {
