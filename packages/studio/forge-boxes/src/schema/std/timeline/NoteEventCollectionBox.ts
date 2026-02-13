@@ -9,5 +9,6 @@ export const NoteEventCollectionBox: BoxSchema<Pointers> = {
             1: {type: "field", name: "events", pointerRules: {accepts: [Pointers.NoteEvents], mandatory: false}},
             2: {type: "field", name: "owners", pointerRules: {accepts: [Pointers.NoteEventCollection], mandatory: true}}
         }
-    }, pointerRules: {accepts: [Pointers.Selection], mandatory: false}
+    }, pointerRules: {accepts: [Pointers.Selection], mandatory: false},
+    resource: "shared"
 }

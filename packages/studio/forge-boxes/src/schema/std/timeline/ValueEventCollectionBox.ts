@@ -13,5 +13,6 @@ export const ValueEventCollectionBox: BoxSchema<Pointers> = {
                 pointerRules: {accepts: [Pointers.ValueEventCollection], mandatory: true}
             }
         }
-    }, pointerRules: {accepts: [Pointers.Selection], mandatory: false}
+    }, pointerRules: {accepts: [Pointers.Selection], mandatory: false},
+    resource: "shared"
 }
