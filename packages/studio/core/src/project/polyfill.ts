@@ -1,3 +1,5 @@
+// Polyfill for vitetest
+//
 if (typeof globalThis.localStorage === "undefined") {
     const store = new Map<string, string>()
     Object.defineProperty(globalThis, "localStorage", {
