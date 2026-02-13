@@ -362,7 +362,7 @@ export class ProjectApi {
             region.position.setValue(insertPosition)
         } else {
             const adapter: AnyRegionBoxAdapter = this.#project.boxAdapters.adapterFor(region, UnionAdapterTypes.isRegion)
-            adapter.copyTo({target: targetTrackBox.regions, position: insertPosition})
+            adapter.copyTo({target: targetTrackBox.regions, position: insertPosition, consolidate: true})
         }
     }
 
