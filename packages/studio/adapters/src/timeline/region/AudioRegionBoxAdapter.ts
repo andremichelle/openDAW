@@ -35,7 +35,7 @@ import {WarpMarkerBoxAdapter} from "../../audio/WarpMarkerBoxAdapter"
 import {FadingAdapter} from "./FadingAdapter"
 
 type CopyToParams = {
-    track?: Field<Pointers.RegionCollection>
+    target?: Field<Pointers.RegionCollection>
     position?: ppqn
     duration?: ppqn
     loopOffset?: ppqn
@@ -245,7 +245,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
             AudioRegionBox.create(this.#context.boxGraph, UUID.generate(), box => {
                 box.timeBase.setValue(this.#box.timeBase.getValue())
                 box.position.setValue(params?.position ?? this.#box.position.getValue())
-                box.regions.refer(params?.track ?? this.#box.regions.targetVertex.unwrap())
+                box.regions.refer(params?.target ?? this.#box.regions.targetVertex.unwrap())
                 box.file.refer(this.#box.file.targetVertex.unwrap())
                 box.events.refer(eventTarget)
                 box.mute.setValue(this.mute)

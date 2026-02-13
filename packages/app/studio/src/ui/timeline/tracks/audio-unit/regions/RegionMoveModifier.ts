@@ -169,7 +169,7 @@ export class RegionMoveModifier implements RegionModifier {
                     const targetTrack = trackResolver(original, defaultTrack)
                     return original.copyTo({
                         position: original.position + this.#deltaPosition,
-                        track: targetTrack.box.regions,
+                        target: targetTrack.box.regions,
                         consolidate: original.isMirrowed === this.#mirroredCopy
                     })
                 })

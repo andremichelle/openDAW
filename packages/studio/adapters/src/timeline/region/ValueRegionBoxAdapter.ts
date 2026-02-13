@@ -1,7 +1,8 @@
-import {EventCollection, LoopableRegion, ppqn, PPQN, RegionCollection} from "@opendaw/lib-dsp"
+import {EventCollection, Interpolation, LoopableRegion, ppqn, PPQN, RegionCollection} from "@opendaw/lib-dsp"
 import {
     Arrays,
     int,
+    Integer,
     isDefined,
     Maybe,
     Notifier,
@@ -20,12 +21,13 @@ import {TrackBoxAdapter} from "../TrackBoxAdapter"
 import {LoopableRegionBoxAdapter, RegionBoxAdapter, RegionBoxAdapterVisitor} from "../RegionBoxAdapter"
 import {ValueEventCollectionBoxAdapter} from "../collection/ValueEventCollectionBoxAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
-import {ValueEventCollectionBox, ValueRegionBox} from "@opendaw/studio-boxes"
+import {ValueEventBox, ValueEventCollectionBox, ValueRegionBox} from "@opendaw/studio-boxes"
+import {InterpolationFieldAdapter} from "../event/InterpolationFieldAdapter"
 import {ValueEventBoxAdapter} from "../event/ValueEventBoxAdapter"
 import {MutableRegion} from "./MutableRegion"
 
 type CopyToParams = {
-    track?: Field<Pointers.RegionCollection>
+    target?: Field<Pointers.RegionCollection>
     position?: ppqn
     duration?: ppqn
     loopOffset?: ppqn
@@ -196,7 +198,7 @@ export class ValueRegionBoxAdapter
             box.label.setValue(this.label)
             box.mute.setValue(this.mute)
             box.events.refer(eventTarget)
-            box.regions.refer(params?.track ?? this.#box.regions.targetVertex.unwrap())
+            box.regions.refer(params?.target ?? this.#box.regions.targetVertex.unwrap())
         }), ValueRegionBoxAdapter)
     }
 
@@ -210,10 +212,10 @@ export class ValueRegionBoxAdapter
         })
     }
 
-    canFlatten(_regions: ReadonlyArray<RegionBoxAdapter<unknown>>): boolean {
-        return false
-        /*return regions.length > 0 && Arrays.satisfy(regions, (a, b) => a.trackAdapter.contains(b.trackAdapter.unwrap()))
-                && regions.every(region => region.isSelected && region instanceof ValueRegionBoxAdapter)*/
+    canFlatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>): boolean {
+        return regions.length > 0
+            && Arrays.satisfy(regions, (a, b) => a.trackBoxAdapter.contains(b.trackBoxAdapter.unwrap()))
+            && regions.every(region => region.isSelected && region instanceof ValueRegionBoxAdapter)
     }
 
     flatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>): Option<ValueRegionBox> {
@@ -225,25 +227,99 @@ export class ValueRegionBoxAdapter
         const rangeMin = first.position
         const rangeMax = last.position + last.duration
         const trackBoxAdapter = first.trackBoxAdapter.unwrap()
-        const collectionBox = ValueEventCollectionBox.create(graph, UUID.generate())
         const overlapping = Array.from(trackBoxAdapter.regions.collection.iterateRange(rangeMin, rangeMax))
+        type Entry = { position: ppqn, value: unitValue, interpolation: Interpolation }
+        const entries: Array<Entry> = []
         overlapping
             .filter(region => region.isSelected)
             .forEach(anyRegion => {
-                    const region = anyRegion as ValueRegionBoxAdapter // we made that sure in canFlatten
-                    for (const {
-                        resultStart,
-                        resultEnd,
-                        rawStart
-                    } of LoopableRegion.locateLoops(region, region.position, region.complete)) {
-                        const searchStart = Math.floor(resultStart - rawStart)
-                        const searchEnd = Math.floor(resultEnd - rawStart)
-                        for (const _event of region.events.unwrap().iterateRange(searchStart, searchEnd)) {
-                            // TODO Flatten
+                const region = anyRegion as ValueRegionBoxAdapter
+                const collection = region.optCollection.unwrap()
+                const events = collection.events
+                for (const {rawStart, regionStart, regionEnd} of LoopableRegion.locateLoops(region, region.position, region.complete)) {
+                    const searchMin = regionStart - rawStart
+                    const searchMax = regionEnd - rawStart
+                    const firstContent = events.greaterEqual(searchMin)
+                    if (!isDefined(firstContent) || firstContent.position !== searchMin) {
+                        const lowerEvent = events.lowerEqual(searchMin)
+                        if (isDefined(lowerEvent)) {
+                            entries.push({
+                                position: regionStart - rangeMin,
+                                value: collection.valueAt(searchMin, 0),
+                                interpolation: lowerEvent.interpolation
+                            })
                         }
                     }
+                    let addedBoundary = false
+                    for (const event of events.iterateRange(searchMin, Integer.MAX_VALUE)) {
+                        const globalPos = event.position + rawStart
+                        if (globalPos < regionEnd) {
+                            entries.push({
+                                position: globalPos - rangeMin,
+                                value: event.value,
+                                interpolation: event.interpolation
+                            })
+                        } else if (globalPos === regionEnd) {
+                            entries.push({
+                                position: globalPos - rangeMin,
+                                value: event.value,
+                                interpolation: Interpolation.None
+                            })
+                            addedBoundary = true
+                            break
+                        } else {
+                            entries.push({
+                                position: regionEnd - rangeMin,
+                                value: collection.valueAt(searchMax, 0),
+                                interpolation: Interpolation.None
+                            })
+                            addedBoundary = true
+                            break
+                        }
+                    }
+                    if (!addedBoundary) {
+                        entries.push({
+                            position: regionEnd - rangeMin,
+                            value: collection.valueAt(searchMax, 0),
+                            interpolation: Interpolation.None
+                        })
+                    }
                 }
-            )
+            })
+        const cleaned: Array<Entry> = []
+        for (const entry of entries) {
+            const prev = cleaned.length > 0 ? cleaned[cleaned.length - 1] : undefined
+            if (isDefined(prev) && prev.position === entry.position && prev.value === entry.value) {
+                cleaned[cleaned.length - 1] = entry
+            } else {
+                cleaned.push(entry)
+            }
+        }
+        const collectionBox = ValueEventCollectionBox.create(graph, UUID.generate())
+        let idx = 0
+        while (idx < cleaned.length) {
+            let end = idx + 1
+            while (end < cleaned.length && cleaned[end].position === cleaned[idx].position) {end++}
+            const firstEntry = cleaned[idx]
+            const lastEntry = cleaned[end - 1]
+            const eventBox = ValueEventBox.create(graph, UUID.generate(), box => {
+                box.position.setValue(firstEntry.position)
+                box.index.setValue(0)
+                box.value.setValue(firstEntry.value)
+                box.events.refer(collectionBox.events)
+            })
+            InterpolationFieldAdapter.write(eventBox.interpolation, end - idx > 1 ? Interpolation.None : firstEntry.interpolation)
+            if (end - idx > 1) {
+                const lastBox = ValueEventBox.create(graph, UUID.generate(), box => {
+                    box.position.setValue(lastEntry.position)
+                    box.index.setValue(1)
+                    box.value.setValue(lastEntry.value)
+                    box.events.refer(collectionBox.events)
+                })
+                InterpolationFieldAdapter.write(lastBox.interpolation, lastEntry.interpolation)
+            }
+            idx = end
+        }
         overlapping.forEach(({box}) => box.delete())
         return Option.wrap(ValueRegionBox.create(graph, UUID.generate(), box => {
             box.position.setValue(rangeMin)

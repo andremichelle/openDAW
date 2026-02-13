@@ -9,7 +9,8 @@ import {
     InterpolationFieldAdapter,
     ParameterWriteEvent,
     TrackBoxAdapter,
-    TrackType
+    TrackType,
+    ValueEventCollectionBoxAdapter
 } from "@opendaw/studio-adapters"
 import {Project} from "../project"
 import {RegionClipResolver} from "../ui"
@@ -26,6 +27,8 @@ export namespace RecordAutomation {
         lastRelativePosition: ppqn
         lastEventBox: ValueEventBox
     }
+
+    const Eplison = 0.01
 
     export const start = (project: Project): Terminable => {
         const {editing, engine, boxAdapters, parameterFieldAdapters, boxGraph, timelineBox} = project
@@ -180,6 +183,7 @@ export namespace RecordAutomation {
                         }
                         state.regionBox.duration.setValue(finalDuration)
                         state.regionBox.loopDuration.setValue(finalDuration)
+                        simplifyRecordedEvents(state)
                         project.selection.deselect(state.regionBox)
                         const newStartPos = quantizeFloor(loopFrom, PPQN.SemiQuaver)
                         const newState = createRegion(
@@ -214,6 +218,27 @@ export namespace RecordAutomation {
             }, false)
         }
 
+        const simplifyRecordedEvents = (state: RecordingState): void => {
+            if (!state.floating) {return}
+            const adapter = boxAdapters.adapterFor(state.collectionBox, ValueEventCollectionBoxAdapter)
+            const events = [...adapter.events.asArray()]
+            const keep: typeof events = []
+            for (const event of events) {
+                while (keep.length >= 2) {
+                    const a = keep[keep.length - 2]
+                    const b = keep[keep.length - 1]
+                    if (a.position === b.position || b.position === event.position) {break}
+                    if (a.interpolation.type !== "linear" || b.interpolation.type !== "linear") {break}
+                    const t = (b.position - a.position) / (event.position - a.position)
+                    const expected = a.value + t * (event.value - a.value)
+                    if (Math.abs(b.value - expected) > Eplison) {break}
+                    keep.pop()
+                    b.box.delete()
+                }
+                keep.push(event)
+            }
+        }
+
         const handleTermination = (): void => {
             if (activeRecordings.size() === 0) {return}
             const finalPosition = engine.position.getValue()
@@ -242,6 +267,7 @@ export namespace RecordAutomation {
                     }
                     state.regionBox.duration.setValue(finalDuration)
                     state.regionBox.loopDuration.setValue(finalDuration)
+                    simplifyRecordedEvents(state)
                 }
             })
         }

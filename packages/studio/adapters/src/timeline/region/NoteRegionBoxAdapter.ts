@@ -22,7 +22,7 @@ import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {MutableRegion} from "./MutableRegion"
 
 type CopyToParams = {
-    track?: Field<Pointers.RegionCollection>
+    target?: Field<Pointers.RegionCollection>
     position?: ppqn
     duration?: ppqn
     loopOffset?: ppqn
@@ -173,7 +173,7 @@ export class NoteRegionBoxAdapter
             box.label.setValue(this.label)
             box.mute.setValue(this.mute)
             box.events.refer(eventTarget)
-            box.regions.refer(params?.track ?? this.#box.regions.targetVertex.unwrap())
+            box.regions.refer(params?.target ?? this.#box.regions.targetVertex.unwrap())
         }), NoteRegionBoxAdapter)
     }
 
