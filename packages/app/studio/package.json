@@ -1,7 +1,7 @@
 {
   "name": "@opendaw/app-studio",
   "private": true,
-  "version": "0.0.103",
+  "version": "0.0.104",
   "type": "module",
   "license": "LGPL-3.0-or-later",
   "scripts": {
@@ -18,11 +18,11 @@
     "@opendaw/lib-midi": "^0.0.53",
     "@opendaw/lib-runtime": "^0.0.69",
     "@opendaw/lib-std": "^0.0.68",
-    "@opendaw/studio-adapters": "^0.0.82",
+    "@opendaw/studio-adapters": "^0.0.83",
     "@opendaw/studio-boxes": "^0.0.74",
-    "@opendaw/studio-core": "^0.0.103",
+    "@opendaw/studio-core": "^0.0.104",
     "@opendaw/studio-enums": "^0.0.63",
-    "@opendaw/studio-scripting": "^0.0.35",
+    "@opendaw/studio-scripting": "^0.0.36",
     "@types/d3-force": "^3.0.10",
     "d3-force": "^3.0.0",
     "dropbox": "^10.34.0",
