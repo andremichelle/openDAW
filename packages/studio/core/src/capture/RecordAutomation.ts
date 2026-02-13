@@ -132,7 +132,8 @@ export namespace RecordAutomation {
                 const state = existingState.unwrap()
                 if (position < state.startPosition) {return}
                 const relativePosition = position - state.startPosition
-                if (relativePosition <= state.lastRelativePosition) {
+                if (relativePosition < state.lastRelativePosition) {return}
+                if (relativePosition === state.lastRelativePosition) {
                     editing.modify(() => {
                         state.lastEventBox.value.setValue(value)
                         state.lastValue = value
@@ -174,7 +175,7 @@ export namespace RecordAutomation {
                                 state.startPosition + oldDuration,
                                 state.startPosition + finalDuration)()
                         }
-                        if (finalDuration !== state.lastRelativePosition) {
+                        if (finalDuration > state.lastRelativePosition) {
                             ValueEventBox.create(boxGraph, UUID.generate(), box => {
                                 box.position.setValue(finalDuration)
                                 box.value.setValue(state.lastValue)
@@ -258,7 +259,7 @@ export namespace RecordAutomation {
                             state.startPosition + oldDuration,
                             state.startPosition + finalDuration)()
                     }
-                    if (finalDuration !== state.lastRelativePosition) {
+                    if (finalDuration > state.lastRelativePosition) {
                         ValueEventBox.create(boxGraph, UUID.generate(), box => {
                             box.position.setValue(finalDuration)
                             box.value.setValue(state.lastValue)
