@@ -99,6 +99,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         getFocusedTrack: () => timelineFocus.track,
         overlapResolver
     })
+
     lifecycle.ownAll(
         regionSelection.catchupAndSubscribe({
             onSelected: (selectable: AnyRegionBoxAdapter) => selectable.onSelected(),

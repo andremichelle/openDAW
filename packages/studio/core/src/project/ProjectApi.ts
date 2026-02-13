@@ -49,8 +49,7 @@ import {
     InstrumentOptions,
     InstrumentProduct,
     ProjectQueries,
-    TrackType,
-    UnionAdapterTypes
+    TrackType
 } from "@opendaw/studio-adapters"
 import {Project} from "./Project"
 import {EffectFactory} from "../EffectFactory"
@@ -356,13 +355,15 @@ export class ProjectApi {
         audioUnitBox.delete()
     }
 
+    // TODO
     copyRegionTo(region: AnyRegionBox, targetTrackBox: TrackBox, insertPosition: ppqn): void {
         if (region.graph === targetTrackBox.graph) {
-            region.regions.refer(targetTrackBox.regions)
-            region.position.setValue(insertPosition)
+            // region.regions.refer(targetTrackBox.regions)
+            // region.position.setValue(insertPosition)
         } else {
-            const adapter: AnyRegionBoxAdapter = this.#project.boxAdapters.adapterFor(region, UnionAdapterTypes.isRegion)
-            adapter.copyTo({target: targetTrackBox.regions, position: insertPosition, consolidate: true})
+            // FIXME
+            //  const adapter: AnyRegionBoxAdapter = this.#project.boxAdapters.adapterFor(region, UnionAdapterTypes.isRegion)
+            //  adapter.copyTo({target: targetTrackBox.regions, position: insertPosition, consolidate: true})
         }
     }
 

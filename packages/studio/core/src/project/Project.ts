@@ -26,6 +26,7 @@ import {
     UserInterfaceBox
 } from "@opendaw/studio-boxes"
 import {
+    AudioUnitBoxAdapter,
     BoxAdapters,
     BoxAdaptersContext,
     ClipSequencing,
@@ -229,6 +230,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     stopRecording(): void {this.engine.stopRecording()}
 
+    isRecording(): boolean {return Recording.isRecording}
+
     follow(box: UserInterfaceBox): void {
         this.userEditingManager.follow(box)
         this.midiLearning.followUser(box.midiControllers)
@@ -247,6 +250,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     get clipSequencing(): ClipSequencing {return panic("Only available in audio context")}
     get isAudioContext(): boolean {return false}
     get isMainThread(): boolean {return true}
+    get masterAudioUnitAdapter(): AudioUnitBoxAdapter {return this.boxAdapters.adapterFor(this.masterAudioUnit, AudioUnitBoxAdapter)}
     get liveStreamBroadcaster(): LiveStreamBroadcaster {return panic("Only available in audio context")}
 
     get skeleton(): ProjectSkeleton {
