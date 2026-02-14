@@ -36,7 +36,7 @@
   "scripts": {
     "sync-version": "node scripts/sync-version.js",
     "build": "npm run sync-version && tsc",
-    "prepublishOnly": "npm run sync-version"
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "@opendaw/typescript-config": "^0.0.28"
