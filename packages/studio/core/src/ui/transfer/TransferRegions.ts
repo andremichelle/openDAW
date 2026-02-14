@@ -14,7 +14,7 @@ export namespace TransferRegions {
     export const transfer = (region: AnyRegionBox,
                              targetTrack: TrackBox,
                              insertPosition: ppqn,
-                             deleteSource: boolean = true): Nullable<AnyRegionBox> => {
+                             deleteSource: boolean = true): AnyRegionBox => {
         const targetGraph = targetTrack.graph
         const uniqueBoxes = UUID.newSet<Box>(box => box.address.uuid)
         uniqueBoxes.add(region)
@@ -74,6 +74,6 @@ export namespace TransferRegions {
             })
         }))
         if (deleteSource) {region.delete()}
-        return asDefined(result, "Failed to create region copy")
+        return asDefined<AnyRegionBox>(result, "Failed to create region copy")
     }
 }
