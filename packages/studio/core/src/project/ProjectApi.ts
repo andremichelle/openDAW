@@ -36,7 +36,6 @@ import {
     ValueRegionBox
 } from "@opendaw/studio-boxes"
 import {
-    AnyRegionBox,
     AnyRegionBoxAdapter,
     AudioUnitBoxAdapter,
     AudioUnitFactory,
@@ -353,18 +352,6 @@ export class ProjectApi {
         const {rootBox} = this.#project
         IndexedBox.removeOrder(rootBox.audioUnits, audioUnitBox.index.getValue())
         audioUnitBox.delete()
-    }
-
-    // TODO
-    copyRegionTo(region: AnyRegionBox, targetTrackBox: TrackBox, insertPosition: ppqn): void {
-        if (region.graph === targetTrackBox.graph) {
-            // region.regions.refer(targetTrackBox.regions)
-            // region.position.setValue(insertPosition)
-        } else {
-            // FIXME
-            //  const adapter: AnyRegionBoxAdapter = this.#project.boxAdapters.adapterFor(region, UnionAdapterTypes.isRegion)
-            //  adapter.copyTo({target: targetTrackBox.regions, position: insertPosition, consolidate: true})
-        }
     }
 
     #createTrack({field, target, trackType, insertIndex}: {
