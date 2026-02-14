@@ -1,4 +1,4 @@
-import {ByteArrayInput, ByteArrayOutput, Option, Provider} from "@opendaw/lib-std"
+import {ByteArrayInput, ByteArrayOutput, int, Option, Optional, Provider} from "@opendaw/lib-std"
 import {Box, BoxEditing, BoxGraph, IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
@@ -106,7 +106,7 @@ export namespace AudioUnitsClipboard {
                 if (isOutputPaste) {
                     // Split into two transactions to ensure deletion notifications fire
                     // before new boxes are created (avoids "already has input" conflict)
-                    editing.modify(() => clearOutputContent(rootBoxAdapter))
+                    editing.modify(() => clearOutputContent(rootBoxAdapter), false)
                     editing.modify(() => pasteOutputContent(entry.data, boxGraph, rootBoxAdapter))
                 } else {
                     editing.modify(() => {
@@ -132,11 +132,9 @@ export namespace AudioUnitsClipboard {
         outputAdapter.audioEffects.adapters().forEach(effect => effect.box.delete())
     }
 
-    const pasteOutputContent = (
-        data: ArrayBufferLike,
-        boxGraph: BoxGraph,
-        rootBoxAdapter: RootBoxAdapter
-    ): void => {
+    const pasteOutputContent = (data: ArrayBufferLike,
+                                boxGraph: BoxGraph,
+                                rootBoxAdapter: RootBoxAdapter): void => {
         const outputAdapter = rootBoxAdapter.audioUnits.adapters().find(adapter => adapter.isOutput)
         if (!outputAdapter) {return}
         const outputBox = outputAdapter.box
@@ -172,12 +170,10 @@ export namespace AudioUnitsClipboard {
         )
     }
 
-    const pasteNewAudioUnit = (
-        data: ArrayBufferLike,
-        boxGraph: BoxGraph,
-        rootBoxAdapter: RootBoxAdapter,
-        currentAudioUnit: Option<AudioUnitBoxAdapter>
-    ): AudioUnitBox | undefined => {
+    const pasteNewAudioUnit = (data: ArrayBufferLike,
+                               boxGraph: BoxGraph,
+                               rootBoxAdapter: RootBoxAdapter,
+                               currentAudioUnit: Option<AudioUnitBoxAdapter>): Optional<AudioUnitBox> => {
         const rootBox = rootBoxAdapter.box
         const primaryBusAddress = rootBoxAdapter.audioBusses.adapters().at(0)?.address
         if (!primaryBusAddress) {return undefined}
@@ -208,11 +204,9 @@ export namespace AudioUnitsClipboard {
         return pastedAudioUnit
     }
 
-    const reorderAudioUnitsAfterPaste = (
-        pastedAudioUnit: AudioUnitBox,
-        insertAfterIndex: number,
-        rootBoxAdapter: RootBoxAdapter
-    ): void => {
+    const reorderAudioUnitsAfterPaste = (pastedAudioUnit: AudioUnitBox,
+                                         insertAfterIndex: int,
+                                         rootBoxAdapter: RootBoxAdapter): void => {
         const rootBox = rootBoxAdapter.box
         const allAudioUnits = IndexedBox.collectIndexedBoxes(rootBox.audioUnits, AudioUnitBox)
         allAudioUnits.toSorted((a, b) => {
