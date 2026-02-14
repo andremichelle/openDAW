@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-scripting",
-  "version": "0.0.36",
+  "version": "0.0.37",
   "license": "LGPL-3.0-or-later",
   "type": "module",
   "publishConfig": {
@@ -30,17 +30,17 @@
     "test": "echo \"No tests to run\""
   },
   "dependencies": {
-    "@opendaw/lib-box": "^0.0.72",
-    "@opendaw/lib-dsp": "^0.0.71",
-    "@opendaw/lib-runtime": "^0.0.69",
-    "@opendaw/lib-std": "^0.0.68",
-    "@opendaw/studio-adapters": "^0.0.83",
-    "@opendaw/studio-boxes": "^0.0.74",
-    "@opendaw/studio-enums": "^0.0.63"
+    "@opendaw/lib-box": "^0.0.73",
+    "@opendaw/lib-dsp": "^0.0.72",
+    "@opendaw/lib-runtime": "^0.0.70",
+    "@opendaw/lib-std": "^0.0.69",
+    "@opendaw/studio-adapters": "^0.0.84",
+    "@opendaw/studio-boxes": "^0.0.75",
+    "@opendaw/studio-enums": "^0.0.64"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.27",
-    "@opendaw/typescript-config": "^0.0.28"
+    "@opendaw/typescript-config": "^0.0.29"
   },
   "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.29](https://github.com/andremichelle/openDAW/compare/@opendaw/typescript-config@0.0.28...@opendaw/typescript-config@0.0.29) (2026-02-14)
+
+**Note:** Version bump only for package @opendaw/typescript-config
+
 ## [0.0.28](https://github.com/andremichelle/openDAW/compare/@opendaw/typescript-config@0.0.27...@opendaw/typescript-config@0.0.28) (2025-12-28)
 
 **Note:** Version bump only for package @opendaw/typescript-config
