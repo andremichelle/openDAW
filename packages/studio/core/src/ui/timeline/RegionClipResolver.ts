@@ -48,6 +48,11 @@ export class RegionClipResolver {
             asDefined(clipResolvers.get(index), `Cannot find clip resolver for index(${index})`)
                 .addMask(adapter)
         })
+        console.debug("[ClipResolver.fromSelection]", {
+            tracks: tracks.map(track => track.listIndex),
+            adapters: adapters.map(adapter => ({p: adapter.position, d: adapter.duration, c: adapter.complete})),
+            deltaIndex
+        })
         const tasks = Array.from(clipResolvers.values()).flatMap(resolver => resolver.#createSolver())
         return {
             postProcess: () => tasks.forEach(task => task()),
@@ -81,9 +86,15 @@ export class RegionClipResolver {
                 prev = next
             }
         } catch (error: any) {
-            console.error(JSON.stringify({
+            console.error("[validateTrack] OVERLAP", JSON.stringify({
                 track: TrackType[track.type],
-                regions: array.map(x => ({p: x.position, d: x.duration}))
+                regions: array.map(region => ({
+                    p: region.position,
+                    d: region.duration,
+                    c: region.complete,
+                    sel: region.isSelected,
+                    type: region.constructor.name
+                }))
             }))
             throw error
         }
@@ -168,51 +179,76 @@ export class RegionClipResolver {
     #createSolver(): Exec {
         const masks = RegionClipResolver.sortAndJoinMasks(this.#masks)
         const maxComplete = masks.reduce((max, mask) => Math.max(max, mask.complete), 0)
+        const allRegions = this.#ground.regions.collection.asArray()
         const tasks = RegionClipResolver.createTasksFromMasks(
             this.#ground.regions.collection.iterateRange(0, maxComplete),
             maxComplete, masks, this.#strategy.showOrigin())
+        console.debug("[ClipResolver.#createSolver]", {
+            trackIndex: this.#ground.listIndex,
+            masks: masks.map(mask => ({p: mask.position, c: mask.complete})),
+            maxComplete,
+            showOrigin: this.#strategy.showOrigin(),
+            allRegions: allRegions.map(region => ({
+                p: region.position, d: region.duration, c: region.complete, sel: region.isSelected
+            })),
+            tasks: tasks.map(task => {
+                const base = {type: task.type, regionP: task.region.position, regionC: task.region.complete}
+                if (task.type === "separate") {return {...base, begin: task.begin, end: task.end}}
+                if (task.type === "start" || task.type === "complete") {return {...base, position: task.position}}
+                return base
+            })
+        })
         this.#masks.length = 0
         return () => this.#executeTasks(tasks)
     }
 
     #executeTasks(tasks: ReadonlyArray<ClipTask>): void {
-        tasks
-            .toSorted(({type: a}, {type: b}) => {
-                if (a === "delete" && b !== "delete") {return 1}
-                if (b === "delete" && a !== "delete") {return -1}
-                return 0
-            })
-            .forEach(task => {
-                const {type, region} = task
-                switch (type) {
-                    case "delete":
-                        region.box.delete()
-                        break
-                    case "start":
-                        if (UnionAdapterTypes.isLoopableRegion(region)) {
-                            const delta = task.position - region.position
-                            // Capture old values BEFORE changing position (they depend on position for TimeBase.Seconds)
-                            const oldDuration = region.duration
-                            const oldLoopOffset = region.loopOffset
-                            const oldLoopDuration = region.loopDuration
-                            region.position = region.position + delta
-                            region.duration = oldDuration - delta
-                            region.loopOffset = mod(oldLoopOffset + delta, oldLoopDuration)
-                        } else {
-                            return panic("Not yet implemented")
-                        }
-                        break
-                    case "complete":
-                        if (UnionAdapterTypes.isLoopableRegion(region)) {
-                            region.duration = task.position - task.region.position
-                        } else {
-                            return panic("Not yet implemented")
-                        }
-                        break
-                    case "separate":
-                        RegionEditing.clip(region, task.begin, task.end)
-                        break
-                }
-            })
+        const sorted = tasks.toSorted(({type: a}, {type: b}) => {
+            if (a === "delete" && b !== "delete") {return 1}
+            if (b === "delete" && a !== "delete") {return -1}
+            return 0
+        })
+        sorted.forEach(task => {
+            const {type, region} = task
+            const before = {p: region.position, d: region.duration, c: region.complete}
+            switch (type) {
+                case "delete":
+                    region.box.delete()
+                    console.debug("[ClipResolver.exec] delete", before)
+                    break
+                case "start":
+                    if (UnionAdapterTypes.isLoopableRegion(region)) {
+                        const delta = task.position - region.position
+                        const oldDuration = region.duration
+                        const oldLoopOffset = region.loopOffset
+                        const oldLoopDuration = region.loopDuration
+                        region.position = region.position + delta
+                        region.duration = oldDuration - delta
+                        region.loopOffset = mod(oldLoopOffset + delta, oldLoopDuration)
+                        console.debug("[ClipResolver.exec] start", {before, after: {p: region.position, d: region.duration, c: region.complete}})
+                    } else {
+                        return panic("Not yet implemented")
+                    }
+                    break
+                case "complete":
+                    if (UnionAdapterTypes.isLoopableRegion(region)) {
+                        region.duration = task.position - task.region.position
+                        console.debug("[ClipResolver.exec] complete", {before, after: {p: region.position, d: region.duration, c: region.complete}})
+                    } else {
+                        return panic("Not yet implemented")
+                    }
+                    break
+                case "separate":
+                    console.debug("[ClipResolver.exec] separate", {before, begin: task.begin, end: task.end})
+                    RegionEditing.clip(region, task.begin, task.end)
+                    break
+            }
+        })
+        console.debug("[ClipResolver.exec] done", {
+            trackIndex: this.#ground.listIndex,
+            result: this.#ground.regions.collection.asArray().map(region => ({
+                p: region.position, d: region.duration, c: region.complete, sel: region.isSelected
+            }))
+        })
     }
 }

@@ -119,12 +119,29 @@ export class RegionContentStartModifier implements RegionModifier {
         if (adapters.length === 0) {return}
         const modifiedTracks: ReadonlyArray<TrackBoxAdapter> = Arrays.removeDuplicates(adapters
             .map(adapter => adapter.trackBoxAdapter.unwrapOrNull()).filter(isNotNull))
-        const result = adapters.map(region => ({
-            region,
-            delta: this.#selectedModifyStrategy.readPosition(region) - region.position
+        const regionSnapshot = (region: AnyRegionBoxAdapter) =>
+            ({p: region.position, d: region.duration, s: region.isSelected})
+        const trackSnapshots = modifiedTracks.map(track => ({
+            trackIndex: track.listIndex,
+            before: track.regions.collection.asArray().map(regionSnapshot)
         }))
+        const result = adapters.map(region => {
+            const readPos = this.#selectedModifyStrategy.readPosition(region)
+            return {region, delta: readPos - region.position, readPos, readComplete: region.complete}
+        })
+        console.debug("[ContentStartModifier.approve]", {
+            toolDelta: this.#delta,
+            masks: result.map(entry => ({readPos: entry.readPos, readComplete: entry.readComplete, delta: entry.delta})),
+            trackSnapshots
+        })
         this.#project.overlapResolver.apply(modifiedTracks, adapters, this, 0, () => {
             result.forEach(({region, delta}) => region.moveContentStart(delta))
+        })
+        console.debug("[ContentStartModifier.approve] after", {
+            tracks: modifiedTracks.map(track => ({
+                trackIndex: track.listIndex,
+                regions: track.regions.collection.asArray().map(regionSnapshot)
+            }))
         })
     }
 
