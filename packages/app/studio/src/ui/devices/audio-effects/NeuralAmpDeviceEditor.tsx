@@ -16,7 +16,6 @@ import {createSpectrumRenderer} from "./NeuralAmp/SpectrumRenderer"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
 import {Button} from "@/ui/components/Button"
-import {EffectFactories} from "@opendaw/studio-core"
 import {NeuralAmpModelBox} from "@opendaw/studio-boxes"
 
 const className = Html.adoptStyleSheet(css, "NeuralAmpDeviceEditor")
@@ -151,6 +150,6 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
                       )}
-                      icon={EffectFactories.AudioNamed.NeuralAmp.defaultIcon}/>
+                      icon={IconSymbol.NeuralAmp}/>
     )
 }
