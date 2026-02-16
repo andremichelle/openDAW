@@ -1,6 +1,17 @@
-import {Box} from "@opendaw/lib-box"
+import {Box, PointerField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {isNotUndefined, JSONValue, Nullable, panic, tryCatch, UUID} from "@opendaw/lib-std"
+import {
+    isNotUndefined,
+    JSONValue,
+    Nullable,
+    Observer,
+    Option,
+    panic,
+    Subscription,
+    Terminable,
+    tryCatch,
+    UUID
+} from "@opendaw/lib-std"
 import {MetaDataBox} from "@opendaw/studio-boxes"
 
 export namespace MetaData {
@@ -62,5 +73,49 @@ export namespace MetaData {
             .map(({box}) => box)
             .filter((box: Box): box is MetaDataBox => box instanceof MetaDataBox && box.origin.getValue() === origin)
             .forEach(box => box.delete())
+    }
+
+    /**
+     * Subscribes to meta-data changes on the target box for the given origin.
+     * Catches up with existing meta-data and subscribes to future additions/removals.
+     * The observer receives the parsed JSONValue or null when cleared.
+     * @param target The box to observe meta-data on.
+     * @param origin The origin of the meta-data. Must be unique to the app.
+     * @param observer Called with the current value whenever it changes, or null when removed.
+     */
+    export const catchupAndSubscribeMessage = (target: Box<Pointers.MetaData>,
+                                               origin: string,
+                                               observer: Observer<Option<JSONValue>>): Terminable => {
+        if (origin === "") {return panic("MetaData.catchupAndSubscribeMessage: origin must be unique to your app.")}
+        const subscriptions = UUID.newSet<{ uuid: UUID.Bytes, subscription: Subscription }>(entry => entry.uuid)
+        const notifyValue = (metaDataBox: MetaDataBox): void => {
+            const {status, value, error} = tryCatch(() => JSON.parse(metaDataBox.value.getValue()))
+            if (status === "success") {
+                observer(Option.wrap(value))
+            } else {
+                console.warn(error)
+                observer(Option.None)
+            }
+        }
+        const pointerHubSubscription = target.pointerHub.catchupAndSubscribe({
+            onAdded: ({box}: PointerField) => {
+                if (!(box instanceof MetaDataBox) || box.origin.getValue() !== origin) {return}
+                const subscription = box.value.catchupAndSubscribe(() => notifyValue(box))
+                subscriptions.add({uuid: box.address.uuid, subscription})
+            },
+            onRemoved: ({box}: PointerField) => {
+                if (!(box instanceof MetaDataBox) || box.origin.getValue() !== origin) {return}
+                const entry = subscriptions.removeByKey(box.address.uuid)
+                entry.subscription.terminate()
+                observer(Option.None)
+            }
+        }, Pointers.MetaData)
+        return {
+            terminate: () => {
+                pointerHubSubscription.terminate()
+                subscriptions.forEach(({subscription}) => subscription.terminate())
+                subscriptions.clear()
+            }
+        }
     }
 }
