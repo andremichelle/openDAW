@@ -1,7 +1,7 @@
 {
   "name": "@opendaw/app-studio",
   "private": true,
-  "version": "0.0.106",
+  "version": "0.0.107",
   "type": "module",
   "license": "LGPL-3.0-or-later",
   "scripts": {
@@ -11,18 +11,18 @@
     "lint": "eslint \"src/**/*.ts\""
   },
   "dependencies": {
-    "@opendaw/lib-box": "^0.0.73",
+    "@opendaw/lib-box": "^0.0.74",
     "@opendaw/lib-dom": "^0.0.74",
     "@opendaw/lib-dsp": "^0.0.72",
     "@opendaw/lib-jsx": "^0.0.74",
     "@opendaw/lib-midi": "^0.0.54",
     "@opendaw/lib-runtime": "^0.0.70",
     "@opendaw/lib-std": "^0.0.69",
-    "@opendaw/studio-adapters": "^0.0.84",
-    "@opendaw/studio-boxes": "^0.0.75",
-    "@opendaw/studio-core": "^0.0.106",
+    "@opendaw/studio-adapters": "^0.0.85",
+    "@opendaw/studio-boxes": "^0.0.76",
+    "@opendaw/studio-core": "^0.0.107",
     "@opendaw/studio-enums": "^0.0.64",
-    "@opendaw/studio-scripting": "^0.0.37",
+    "@opendaw/studio-scripting": "^0.0.38",
     "@types/d3-force": "^3.0.10",
     "d3-force": "^3.0.0",
     "dropbox": "^10.34.0",
