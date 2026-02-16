@@ -8,14 +8,14 @@ import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {TrackType} from "../timeline/TrackType"
 
 export namespace AudioUnitFactory {
-    export const create = ({boxGraph, mandatoryBoxes: {rootBox, primaryAudioBus}}: ProjectSkeleton,
+    export const create = ({boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}}: ProjectSkeleton,
                            type: AudioUnitType,
                            capture: Option<CaptureBox>, index?: int): AudioUnitBox => {
         const insertIndex = index ?? AudioUnitFactory.orderAndGetIndex(rootBox, type)
         console.debug(`createAudioUnit type: ${type}, insertIndex: ${insertIndex}`)
         return AudioUnitBox.create(boxGraph, UUID.generate(), box => {
             box.collection.refer(rootBox.audioUnits)
-            box.output.refer(primaryAudioBus.input)
+            box.output.refer(primaryAudioBusBox.input)
             box.index.setValue(insertIndex)
             box.type.setValue(type)
             capture.ifSome(capture => box.capture.refer(capture))

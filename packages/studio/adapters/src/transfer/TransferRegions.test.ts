@@ -15,12 +15,12 @@ const createTrackWithRegion = (skeleton: ProjectSkeleton, position: number = 100
     regionBox: ValueRegionBox,
     collectionBox: ValueEventCollectionBox
 } => {
-    const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBus}} = skeleton
+    const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}} = skeleton
     const captureBox = CaptureAudioBox.create(boxGraph, UUID.generate())
     const audioUnitBox = AudioUnitBox.create(boxGraph, UUID.generate(), box => {
         box.type.setValue(AudioUnitType.Instrument)
         box.collection.refer(rootBox.audioUnits)
-        box.output.refer(primaryAudioBus.input)
+        box.output.refer(primaryAudioBusBox.input)
         box.capture.refer(captureBox)
         box.index.setValue(1)
     })

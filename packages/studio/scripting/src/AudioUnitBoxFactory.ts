@@ -11,17 +11,14 @@ import {ValueTrackWriter} from "./ValueTrackWriter"
 import {AnyDevice, AudioUnit, Nano, Vaporisateur} from "./Api"
 import {AudioTrackWriter} from "./AudioTrackWriter"
 import {AudioFileBoxfactory} from "./AudioFileBoxfactory"
-import {InstrumentImpl} from "./impl/InstrumentImpl"
 
 export namespace AudioUnitBoxFactory {
     export const create = (skeleton: ProjectSkeleton, project: ProjectImpl): void => {
-        const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBus, primaryAudioOutputUnit}} = skeleton
-
+        const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox, primaryAudioUnitBox}} = skeleton
         let audioUnitIndex: int = 0
-
         const devices: Map<AnyDevice, Box> = new Map()
-        const busMap: Map<AudioUnit, AudioBusBox> = new Map([[project.output, primaryAudioBus]])
-        const audioUnitMap: Map<AudioUnit, AudioUnitBox> = new Map([[project.output, primaryAudioOutputUnit]])
+        const busMap: Map<AudioUnit, AudioBusBox> = new Map([[project.output, primaryAudioBusBox]])
+        const audioUnitMap: Map<AudioUnit, AudioUnitBox> = new Map([[project.output, primaryAudioUnitBox]])
         const awaitedSends: Array<[SendImpl, AuxSendBox]> = []
         const noteTrackWriter = new NoteTrackWriter()
         const valueTrackWriter = new ValueTrackWriter()
@@ -119,11 +116,11 @@ export namespace AudioUnitBoxFactory {
             box.targetBus.refer(asDefined(busMap.get(send.target), "Could not find AudioBus").input))
 
         const {output: {mute, solo, volume, panning}} = project
-        primaryAudioOutputUnit.mute.setValue(mute)
-        primaryAudioOutputUnit.solo.setValue(solo)
-        primaryAudioOutputUnit.volume.setValue(volume)
-        primaryAudioOutputUnit.panning.setValue(panning)
-        primaryAudioOutputUnit.index.setValue(audioUnitIndex)
+        primaryAudioUnitBox.mute.setValue(mute)
+        primaryAudioUnitBox.solo.setValue(solo)
+        primaryAudioUnitBox.volume.setValue(volume)
+        primaryAudioUnitBox.panning.setValue(panning)
+        primaryAudioUnitBox.index.setValue(audioUnitIndex)
 
         // connect
         const audioUnits: ReadonlyArray<AudioUnit> = [
@@ -136,7 +133,7 @@ export namespace AudioUnitBoxFactory {
             // undefined means we connect this to the primary output
             // null means this is intended to be unplugged
             const audioBusBox = output === undefined
-                ? primaryAudioBus : output === null
+                ? primaryAudioBusBox : output === null
                     ? null : asDefined(busMap.get(output), "Could not find AudioBus")
             if (isNotNull(audioBusBox)) {
                 const audioUnitBox = asDefined(audioUnitMap.get(audioUnit), "audio unit not found in map")

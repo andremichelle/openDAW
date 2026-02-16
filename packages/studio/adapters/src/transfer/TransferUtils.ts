@@ -113,7 +113,7 @@ export namespace TransferUtils {
             }).forEach((box, index) => box.index.setValue(index)))
 
     export const extractRegions = (regionBoxes: ReadonlyArray<AnyRegionBox>,
-                                   {boxGraph, mandatoryBoxes: {primaryAudioBus, rootBox}}: ProjectSkeleton,
+                                   {boxGraph, mandatoryBoxes: {primaryAudioBusBox, rootBox}}: ProjectSkeleton,
                                    insertPosition: ppqn = 0.0): void => {
         assert(Arrays.satisfy(regionBoxes, isSameGraph),
             "Region smust be from the same BoxGraph")
@@ -139,7 +139,7 @@ export namespace TransferUtils {
             excludeBox
         }).boxes)
         const uuidMap = generateMap(
-            audioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBus.address.uuid)
+            audioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBusBox.address.uuid)
         copyBoxes(uuidMap, boxGraph, audioUnitBoxes, dependencies)
         reorderAudioUnits(uuidMap, audioUnitBoxes, rootBox)
         audioUnitBoxSet.forEach((_, trackBoxes) => [...trackBoxes]

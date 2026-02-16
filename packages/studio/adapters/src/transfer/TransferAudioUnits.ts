@@ -11,7 +11,7 @@ export namespace TransferAudioUnits {
      * @returns the newly created audio unit boxes in the target graph
      */
     export const transfer = (audioUnitBoxes: ReadonlyArray<AudioUnitBox>,
-                             {boxGraph: targetBoxGraph, mandatoryBoxes: {primaryAudioBus, rootBox}}: ProjectSkeleton,
+                             {boxGraph: targetBoxGraph, mandatoryBoxes: {primaryAudioBusBox, rootBox}}: ProjectSkeleton,
                              options: {
                                  includeAux?: boolean,
                                  includeBus?: boolean,
@@ -26,7 +26,7 @@ export namespace TransferAudioUnits {
             excludeBox
         }).boxes)
         const uuidMap = TransferUtils.generateMap(
-            audioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBus.address.uuid)
+            audioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBusBox.address.uuid)
         TransferUtils.copyBoxes(uuidMap, targetBoxGraph, audioUnitBoxes, dependencies)
         TransferUtils.reorderAudioUnits(uuidMap, audioUnitBoxes, rootBox)
         return audioUnitBoxes.map(source => asInstanceOf(rootBox.graph

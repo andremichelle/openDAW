@@ -1,27 +1,12 @@
 import css from "./RegionsArea.sass?inline"
-import {
-    clamp,
-    DefaultObservableValue,
-    EmptyExec,
-    Lifecycle,
-    Nullable,
-    Option,
-    Selection,
-    Unhandled
-} from "@opendaw/lib-std"
+import {clamp, DefaultObservableValue, EmptyExec, Lifecycle, Nullable, Option, Unhandled} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {CutCursor} from "@/ui/timeline/CutCursor.tsx"
 import {PPQN, ppqn} from "@opendaw/lib-dsp"
 import {installAutoScroll} from "@/ui/AutoScroll.ts"
 import {Config} from "@/ui/timeline/Config.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-import {
-    AnyRegionBoxAdapter,
-    isVertexOfBox,
-    RegionAdapters,
-    RegionEditing,
-    UnionBoxTypes
-} from "@opendaw/studio-adapters"
+import {AnyRegionBoxAdapter, RegionEditing} from "@opendaw/studio-adapters"
 import {createRegionLocator} from "@/ui/timeline/tracks/audio-unit/regions/RegionSelectionLocator.ts"
 import {installRegionContextMenu} from "@/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts"
 import {ElementCapturing} from "@/ui/canvas/capturing.ts"
@@ -70,13 +55,8 @@ type Construct = {
 export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollContainer, range}: Construct) => {
     const {project, timeline} = service
     const {snapping} = timeline
-    const {selection, editing, boxAdapters, timelineBox, userEditingManager} = project
+    const {selection, regionSelection, editing, boxAdapters, timelineBox, userEditingManager} = project
     const markerPosition = lifecycle.own(new DefaultObservableValue<Nullable<ppqn>>(null))
-    const regionSelection: Selection<AnyRegionBoxAdapter> = lifecycle.own(selection
-        .createFilteredSelection(isVertexOfBox(UnionBoxTypes.isRegionBox), {
-            fx: (adapter: AnyRegionBoxAdapter) => adapter.box,
-            fy: vertex => RegionAdapters.for(boxAdapters, vertex.box)
-        }))
     const element: HTMLElement = (
         <div className={className} tabIndex={-1} data-scope="regions">
             <CutCursor lifecycle={lifecycle} position={markerPosition} range={range}/>

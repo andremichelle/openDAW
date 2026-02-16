@@ -86,8 +86,8 @@ export namespace ProjectSkeleton {
             boxGraph,
             mandatoryBoxes: {
                 rootBox,
-                primaryAudioBus,
-                primaryAudioOutputUnit,
+                primaryAudioBusBox: primaryAudioBus,
+                primaryAudioUnitBox: primaryAudioOutputUnit,
                 timelineBox,
                 userInterfaceBoxes
             }
@@ -128,8 +128,8 @@ export namespace ProjectSkeleton {
             const userInterfaceBoxes = rootBox.users.pointerHub.incoming().map(({box}) => asInstanceOf(box, UserInterfaceBox))
             return {
                 rootBox,
-                primaryAudioBus,
-                primaryAudioOutputUnit,
+                primaryAudioBusBox: primaryAudioBus,
+                primaryAudioUnitBox: primaryAudioOutputUnit,
                 timelineBox,
                 userInterfaceBoxes
             }

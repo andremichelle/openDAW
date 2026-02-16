@@ -67,7 +67,7 @@ export const ChannelOutputSelector = ({lifecycle, project, adapter}: Construct) 
                                 }).setTriggerProcedure(() =>
                                     showNewAudioBusOrAuxDialog("Bus", ({name, icon}) =>
                                         project.editing.modify(() => {
-                                            assert(project.masterBusBox.isAttached(), "master not attached")
+                                            assert(project.primaryAudioBusBox.isAttached(), "primaryAudioBusBox not attached")
                                             const audioBusBox = AudioBusFactory.create(project.skeleton,
                                                 name, icon, AudioUnitType.Bus, Colors.orange)
                                             adapter.box.output.refer(audioBusBox.input)

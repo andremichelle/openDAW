@@ -29,7 +29,7 @@ describe("TransferAudioUnits.transfer", () => {
         instrumentBox: TapeDeviceBox,
         captureBox: CaptureAudioBox
     } => {
-        const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBus}} = target
+        const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}} = target
         let audioUnitBox!: AudioUnitBox
         let instrumentBox!: TapeDeviceBox
         let captureBox!: CaptureAudioBox
@@ -37,7 +37,7 @@ describe("TransferAudioUnits.transfer", () => {
         audioUnitBox = AudioUnitBox.create(boxGraph, UUID.generate(), box => {
             box.type.setValue(AudioUnitType.Instrument)
             box.collection.refer(rootBox.audioUnits)
-            box.output.refer(primaryAudioBus.input)
+            box.output.refer(primaryAudioBusBox.input)
             box.index.setValue(1)
         })
         captureBox = CaptureAudioBox.create(boxGraph, UUID.generate())

@@ -1,4 +1,4 @@
-import {assert, Errors, Option, Terminable, Terminator} from "@opendaw/lib-std"
+import {assert, Errors, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {Project} from "../project"
 import {ppqn} from "@opendaw/lib-dsp"
@@ -27,6 +27,11 @@ export class Recording {
             terminator.ownAll(...captures.map(capture => capture.startRecording()))
         }
         terminator.own(RecordAutomation.start(project))
+        const armedUUIDs = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        captures.forEach(capture => armedUUIDs.add(capture.audioUnitBox.address.uuid))
+        project.regionSelection.deselect(...project.regionSelection.selected()
+            .filter(region => region.trackBoxAdapter
+                .mapOr(track => armedUUIDs.hasKey(track.audioUnit.address.uuid), () => false)))
         engine.prepareRecordingState(countIn)
         const {isRecording, isCountingIn} = engine
         const stop = (): void => {

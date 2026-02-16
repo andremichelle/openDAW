@@ -561,8 +561,8 @@ export namespace DawProjectImport {
                 mandatoryBoxes: {
                     rootBox,
                     timelineBox,
-                    primaryAudioBus,
-                    primaryAudioOutputUnit,
+                    primaryAudioBusBox: primaryAudioBus,
+                    primaryAudioUnitBox: primaryAudioOutputUnit,
                     userInterfaceBoxes: [userInterfaceBox]
                 }
             }

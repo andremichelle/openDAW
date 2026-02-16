@@ -11,7 +11,7 @@ export namespace PresetEncoder {
         header.writeInt(PresetHeader.MAGIC_HEADER_OPEN)
         header.writeInt(PresetHeader.FORMAT_VERSION)
         const preset = ProjectSkeleton.empty({createOutputCompressor: false, createDefaultUser: false})
-        const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBus}} = preset
+        const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}} = preset
         const audioUnitBoxes = [audioUnitBox]
         const excludeBox = (box: Box): boolean =>
             TransferUtils.shouldExclude(box) || TransferUtils.excludeTimelinePredicate(box)
@@ -22,7 +22,7 @@ export namespace PresetEncoder {
             excludeBox
         }).boxes)
         const uuidMap = TransferUtils.generateMap(
-            audioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBus.address.uuid)
+            audioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBusBox.address.uuid)
         TransferUtils.copyBoxes(uuidMap, boxGraph, audioUnitBoxes, dependencies)
         TransferUtils.reorderAudioUnits(uuidMap, audioUnitBoxes, rootBox)
         boxGraph.endTransaction()

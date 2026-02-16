@@ -65,9 +65,9 @@ export namespace PresetDecoder {
             stopAtResources: true,
             excludeBox
         }).boxes)
-        const {mandatoryBoxes: {rootBox, primaryAudioBus}} = target
+        const {mandatoryBoxes: {rootBox, primaryAudioBusBox}} = target
         const uuidMap = TransferUtils.generateMap(
-            sourceAudioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBus.address.uuid)
+            sourceAudioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBusBox.address.uuid)
         TransferUtils.copyBoxes(uuidMap, target.boxGraph, sourceAudioUnitBoxes, dependencies)
         TransferUtils.reorderAudioUnits(uuidMap, sourceAudioUnitBoxes, rootBox)
         sourceAudioUnitBoxes
