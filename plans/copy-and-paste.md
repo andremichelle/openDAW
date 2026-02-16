@@ -679,7 +679,7 @@ describe("CopyBuffer", () => {
 | `lib/box/src/graph.ts` | Modify | Add `stopAtResources` option to `dependenciesOf` |
 | `forge-boxes/src/schema/std/AudioFileBox.ts` | Modify | Add `resource: "external"` |
 | `forge-boxes/src/schema/std/SoundfontFileBox.ts` | Modify | Add `resource: "external"` |
-| `adapters/src/project/ProjectUtils.ts` | Modify | Refactor to use `stopAtResources` |
+| `adapters/src/project/TransferUtils.ts` | Modify | Refactor to use `stopAtResources` |
 | `adapters/src/project/CopyBuffer.ts` | Create | CopyBuffer type + serialize/deserialize + clipboard read/write |
 | `lib/box/src/graph.test.ts` | Modify | Add tests for `stopAtResources` |
 | `adapters/src/project/ProjectUtils.test.ts` | Modify | Refactor tests to use new resource handling |
@@ -713,7 +713,7 @@ Phase 3: Dependency Collection
             │
             ▼
 Phase 4: Refactor ProjectUtils
-    └── ProjectUtils.ts
+    └── TransferUtils.ts
             │
             ▼
 Phase 5: Copy/Paste API

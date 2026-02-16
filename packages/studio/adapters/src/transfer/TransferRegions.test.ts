@@ -1,46 +1,26 @@
-import "../../polyfill"
-import {afterEach, beforeEach, describe, expect, it} from "vitest"
-import {Terminable, UUID} from "@opendaw/lib-std"
+import {describe, expect, it, beforeEach} from "vitest"
+import {UUID} from "@opendaw/lib-std"
 import {AudioUnitBox, CaptureAudioBox, TrackBox, ValueEventCollectionBox, ValueRegionBox} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
-import {ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
-import {Project, ProjectEnv} from "../../project"
+import {ProjectSkeleton} from "../project/ProjectSkeleton"
+import {TrackType} from "../timeline/TrackType"
 import {TransferRegions} from "./TransferRegions"
 
-const createEnv = (): ProjectEnv => ({
-    audioContext: {} as AudioContext,
-    audioWorklets: {} as ProjectEnv["audioWorklets"],
-    sampleManager: {
-        getOrCreate: () => ({}) as any,
-        record: () => {},
-        remove: () => {},
-        invalidate: () => {},
-        register: () => Terminable.Empty
-    },
-    soundfontManager: {
-        getOrCreate: () => ({}) as any,
-        remove: () => {},
-        invalidate: () => {}
-    }
-})
+const createSkeleton = (): ProjectSkeleton =>
+    ProjectSkeleton.empty({createDefaultUser: true, createOutputCompressor: false})
 
-const createProject = (): Project => {
-    const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputCompressor: false})
-    return Project.fromSkeleton(createEnv(), skeleton, false)
-}
-
-const createTrackWithRegion = (project: Project, position: number = 100, duration: number = 200): {
+const createTrackWithRegion = (skeleton: ProjectSkeleton, position: number = 100, duration: number = 200): {
     audioUnitBox: AudioUnitBox,
     trackBox: TrackBox,
     regionBox: ValueRegionBox,
     collectionBox: ValueEventCollectionBox
 } => {
-    const {boxGraph} = project
+    const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBus}} = skeleton
     const captureBox = CaptureAudioBox.create(boxGraph, UUID.generate())
     const audioUnitBox = AudioUnitBox.create(boxGraph, UUID.generate(), box => {
         box.type.setValue(AudioUnitType.Instrument)
-        box.collection.refer(project.rootBox.audioUnits)
-        box.output.refer(project.masterBusBox.input)
+        box.collection.refer(rootBox.audioUnits)
+        box.output.refer(primaryAudioBus.input)
         box.capture.refer(captureBox)
         box.index.setValue(1)
     })
@@ -63,16 +43,15 @@ const createTrackWithRegion = (project: Project, position: number = 100, duratio
 }
 
 describe("TransferRegions.transfer", () => {
-    let project: Project
+    let skeleton: ProjectSkeleton
 
-    beforeEach(() => {project = createProject()})
-    afterEach(() => project.terminate())
+    beforeEach(() => {skeleton = createSkeleton()})
 
     describe("same graph", () => {
         it("copies region to same track at new position", () => {
-            const {boxGraph} = project
+            const {boxGraph} = skeleton
             boxGraph.beginTransaction()
-            const {trackBox, regionBox} = createTrackWithRegion(project)
+            const {trackBox, regionBox} = createTrackWithRegion(skeleton)
             boxGraph.endTransaction()
             boxGraph.beginTransaction()
             const copied = TransferRegions.transfer(regionBox, trackBox, 500, false)
@@ -84,9 +63,9 @@ describe("TransferRegions.transfer", () => {
         })
 
         it("copies region to different track", () => {
-            const {boxGraph} = project
+            const {boxGraph} = skeleton
             boxGraph.beginTransaction()
-            const {trackBox: trackA, regionBox, audioUnitBox} = createTrackWithRegion(project)
+            const {trackBox: trackA, regionBox, audioUnitBox} = createTrackWithRegion(skeleton)
             const trackB = TrackBox.create(boxGraph, UUID.generate(), box => {
                 box.type.setValue(TrackType.Value)
                 box.tracks.refer(audioUnitBox.tracks)
@@ -106,9 +85,9 @@ describe("TransferRegions.transfer", () => {
         })
 
         it("creates new UUID for copied region", () => {
-            const {boxGraph} = project
+            const {boxGraph} = skeleton
             boxGraph.beginTransaction()
-            const {trackBox, regionBox} = createTrackWithRegion(project)
+            const {trackBox, regionBox} = createTrackWithRegion(skeleton)
             boxGraph.endTransaction()
             boxGraph.beginTransaction()
             const copied = TransferRegions.transfer(regionBox, trackBox, 500, false)
@@ -117,9 +96,9 @@ describe("TransferRegions.transfer", () => {
         })
 
         it("preserves region properties", () => {
-            const {boxGraph} = project
+            const {boxGraph} = skeleton
             boxGraph.beginTransaction()
-            const {trackBox, regionBox} = createTrackWithRegion(project)
+            const {trackBox, regionBox} = createTrackWithRegion(skeleton)
             boxGraph.endTransaction()
             boxGraph.beginTransaction()
             const copied = TransferRegions.transfer(regionBox, trackBox, 500, false)
@@ -130,9 +109,9 @@ describe("TransferRegions.transfer", () => {
         })
 
         it("deletes source when deleteSource is true", () => {
-            const {boxGraph} = project
+            const {boxGraph} = skeleton
             boxGraph.beginTransaction()
-            const {trackBox, regionBox} = createTrackWithRegion(project)
+            const {trackBox, regionBox} = createTrackWithRegion(skeleton)
             boxGraph.endTransaction()
             boxGraph.beginTransaction()
             TransferRegions.transfer(regionBox, trackBox, 500)
@@ -143,9 +122,9 @@ describe("TransferRegions.transfer", () => {
         })
 
         it("keeps source when deleteSource is false", () => {
-            const {boxGraph} = project
+            const {boxGraph} = skeleton
             boxGraph.beginTransaction()
-            const {trackBox, regionBox} = createTrackWithRegion(project)
+            const {trackBox, regionBox} = createTrackWithRegion(skeleton)
             boxGraph.endTransaction()
             boxGraph.beginTransaction()
             TransferRegions.transfer(regionBox, trackBox, 500, false)
@@ -155,9 +134,9 @@ describe("TransferRegions.transfer", () => {
         })
 
         it("copies event collection dependency with new UUID", () => {
-            const {boxGraph} = project
+            const {boxGraph} = skeleton
             boxGraph.beginTransaction()
-            const {trackBox, regionBox, collectionBox} = createTrackWithRegion(project)
+            const {trackBox, regionBox, collectionBox} = createTrackWithRegion(skeleton)
             boxGraph.endTransaction()
             boxGraph.beginTransaction()
             const copied = TransferRegions.transfer(regionBox, trackBox, 500, false)
@@ -170,19 +149,18 @@ describe("TransferRegions.transfer", () => {
     })
 
     describe("cross graph", () => {
-        let sourceProject: Project
+        let sourceSkeleton: ProjectSkeleton
 
-        beforeEach(() => {sourceProject = createProject()})
-        afterEach(() => sourceProject.terminate())
+        beforeEach(() => {sourceSkeleton = createSkeleton()})
 
         it("copies region to target graph at given position", () => {
-            const sourceGraph = sourceProject.boxGraph
+            const sourceGraph = sourceSkeleton.boxGraph
             sourceGraph.beginTransaction()
-            const {regionBox: sourceRegion} = createTrackWithRegion(sourceProject)
+            const {regionBox: sourceRegion} = createTrackWithRegion(sourceSkeleton)
             sourceGraph.endTransaction()
-            const {boxGraph} = project
+            const {boxGraph} = skeleton
             boxGraph.beginTransaction()
-            const {trackBox: targetTrack} = createTrackWithRegion(project)
+            const {trackBox: targetTrack} = createTrackWithRegion(skeleton)
             boxGraph.endTransaction()
             const regionsBefore = targetTrack.regions.pointerHub.incoming().length
             boxGraph.beginTransaction()
@@ -197,13 +175,13 @@ describe("TransferRegions.transfer", () => {
         })
 
         it("creates new UUID for copied region", () => {
-            const sourceGraph = sourceProject.boxGraph
+            const sourceGraph = sourceSkeleton.boxGraph
             sourceGraph.beginTransaction()
-            const {regionBox: sourceRegion} = createTrackWithRegion(sourceProject)
+            const {regionBox: sourceRegion} = createTrackWithRegion(sourceSkeleton)
             sourceGraph.endTransaction()
-            const {boxGraph} = project
+            const {boxGraph} = skeleton
             boxGraph.beginTransaction()
-            const {trackBox: targetTrack} = createTrackWithRegion(project)
+            const {trackBox: targetTrack} = createTrackWithRegion(skeleton)
             boxGraph.endTransaction()
             boxGraph.beginTransaction()
             const copied = TransferRegions.transfer(sourceRegion, targetTrack, 500, false)
@@ -212,13 +190,13 @@ describe("TransferRegions.transfer", () => {
         })
 
         it("preserves region properties", () => {
-            const sourceGraph = sourceProject.boxGraph
+            const sourceGraph = sourceSkeleton.boxGraph
             sourceGraph.beginTransaction()
-            const {regionBox: sourceRegion} = createTrackWithRegion(sourceProject, 100, 300)
+            const {regionBox: sourceRegion} = createTrackWithRegion(sourceSkeleton, 100, 300)
             sourceGraph.endTransaction()
-            const {boxGraph} = project
+            const {boxGraph} = skeleton
             boxGraph.beginTransaction()
-            const {trackBox: targetTrack} = createTrackWithRegion(project)
+            const {trackBox: targetTrack} = createTrackWithRegion(skeleton)
             boxGraph.endTransaction()
             boxGraph.beginTransaction()
             const copied = TransferRegions.transfer(sourceRegion, targetTrack, 500, false)
@@ -229,13 +207,13 @@ describe("TransferRegions.transfer", () => {
         })
 
         it("keeps source in source graph when deleteSource is false", () => {
-            const sourceGraph = sourceProject.boxGraph
+            const sourceGraph = sourceSkeleton.boxGraph
             sourceGraph.beginTransaction()
-            const {regionBox: sourceRegion} = createTrackWithRegion(sourceProject)
+            const {regionBox: sourceRegion} = createTrackWithRegion(sourceSkeleton)
             sourceGraph.endTransaction()
-            const {boxGraph} = project
+            const {boxGraph} = skeleton
             boxGraph.beginTransaction()
-            const {trackBox: targetTrack} = createTrackWithRegion(project)
+            const {trackBox: targetTrack} = createTrackWithRegion(skeleton)
             boxGraph.endTransaction()
             boxGraph.beginTransaction()
             TransferRegions.transfer(sourceRegion, targetTrack, 500, false)
@@ -245,13 +223,13 @@ describe("TransferRegions.transfer", () => {
         })
 
         it("deletes source when deleteSource is true", () => {
-            const sourceGraph = sourceProject.boxGraph
+            const sourceGraph = sourceSkeleton.boxGraph
             sourceGraph.beginTransaction()
-            const {regionBox: sourceRegion} = createTrackWithRegion(sourceProject)
+            const {regionBox: sourceRegion} = createTrackWithRegion(sourceSkeleton)
             sourceGraph.endTransaction()
-            const {boxGraph} = project
+            const {boxGraph} = skeleton
             boxGraph.beginTransaction()
-            const {trackBox: targetTrack} = createTrackWithRegion(project)
+            const {trackBox: targetTrack} = createTrackWithRegion(skeleton)
             boxGraph.endTransaction()
             sourceGraph.beginTransaction()
             boxGraph.beginTransaction()

@@ -3,7 +3,7 @@ import {Box, PointerField} from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
 import {Pointers} from "@opendaw/studio-enums"
 import {BoxIO, TrackBox} from "@opendaw/studio-boxes"
-import {AnyRegionBox, UnionBoxTypes} from "@opendaw/studio-adapters"
+import {AnyRegionBox, UnionBoxTypes} from "../unions"
 
 export namespace TransferRegions {
     /**

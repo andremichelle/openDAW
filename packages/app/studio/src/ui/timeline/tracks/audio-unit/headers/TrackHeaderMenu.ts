@@ -1,6 +1,6 @@
 import {CaptureAudio, MenuItem, MonitoringMode, Project} from "@opendaw/studio-core"
 import {isInstanceOf, Procedure, RuntimeNotifier, UUID} from "@opendaw/lib-std"
-import {AudioUnitBoxAdapter, DeviceAccepts, ProjectUtils, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, DeviceAccepts, TrackBoxAdapter, TrackType, TransferAudioUnits} from "@opendaw/studio-adapters"
 import {DebugMenus} from "@/ui/menu/debug"
 import {MidiImport} from "@/ui/timeline/MidiImport.ts"
 import {CaptureMidiBox, TrackBox} from "@opendaw/studio-boxes"
@@ -72,8 +72,8 @@ export const installTrackHeaderMenu = (service: StudioService,
             shortcut: GlobalShortcuts["copy-device"].shortcut.format(),
             separatorBefore: true
         }).setTriggerProcedure(() => {
-            const copies = editing.modify(() => ProjectUtils
-                .extractAudioUnits([trackBoxAdapter.audioUnit], project.skeleton), false).unwrap()
+            const copies = editing.modify(() => TransferAudioUnits
+                .transfer([trackBoxAdapter.audioUnit], project.skeleton), false).unwrap()
             userEditingManager.audioUnit.edit(copies[0].editing)
         }),
         MenuItem.default({
@@ -90,7 +90,7 @@ export const installTrackHeaderMenu = (service: StudioService,
             editing.modify(() => {
                 const {boxGraph, skeleton} = newProject
                 boxGraph.beginTransaction()
-                ProjectUtils.extractAudioUnits([trackBoxAdapter.audioUnit], skeleton)
+                TransferAudioUnits.transfer([trackBoxAdapter.audioUnit], skeleton)
                 boxGraph.endTransaction()
             })
             service.projectProfileService.setProject(newProject, "NEW")

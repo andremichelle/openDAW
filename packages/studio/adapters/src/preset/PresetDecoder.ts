@@ -24,9 +24,9 @@ import {
     TrackBox
 } from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
-import {ProjectUtils} from "../project/ProjectUtils"
-import {TrackType} from "../timeline/TrackType"
+import {TransferUtils} from "../transfer"
 import {PresetHeader} from "./PresetHeader"
+import {TrackType} from "../timeline/TrackType"
 
 export namespace PresetDecoder {
     export const decode = (bytes: ArrayBufferLike, target: ProjectSkeleton) => {
@@ -58,7 +58,22 @@ export namespace PresetDecoder {
         const sourceAudioUnitBoxes = sourceBoxGraph.boxes()
             .filter(box => isInstanceOf(box, AudioUnitBox))
             .filter(box => box.type.getValue() !== AudioUnitType.Output)
-        ProjectUtils.extractAudioUnits(sourceAudioUnitBoxes, target, {excludeTimeline: true})
+        const excludeBox = (box: Box): boolean =>
+            TransferUtils.shouldExclude(box) || TransferUtils.excludeTimelinePredicate(box)
+        const dependencies = Array.from(sourceBoxGraph.dependenciesOf(sourceAudioUnitBoxes, {
+            alwaysFollowMandatory: true,
+            stopAtResources: true,
+            excludeBox
+        }).boxes)
+        const {mandatoryBoxes: {rootBox, primaryAudioBus}} = target
+        const uuidMap = TransferUtils.generateMap(
+            sourceAudioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBus.address.uuid)
+        TransferUtils.copyBoxes(uuidMap, target.boxGraph, sourceAudioUnitBoxes, dependencies)
+        TransferUtils.reorderAudioUnits(uuidMap, sourceAudioUnitBoxes, rootBox)
+        sourceAudioUnitBoxes
+            .map(source => asInstanceOf(rootBox.graph
+                .findBox(uuidMap.get(source.address.uuid).target)
+                .unwrap("Target AudioUnit has not been copied"), AudioUnitBox))
             .filter(box => box.type.getValue() !== AudioUnitType.Output)
             .forEach((audioUnitBox) => {
                 const inputBox = audioUnitBox.input.pointerHub.incoming().at(0)?.box

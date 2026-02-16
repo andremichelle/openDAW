@@ -15,7 +15,7 @@ import {StudioService} from "@/service/StudioService"
 import {DefaultWorkspace} from "@/ui/workspace/Default"
 import {PanelType} from "@/ui/workspace/PanelType"
 import {Workspace} from "@/ui/workspace/Workspace"
-import {DeviceHost, Devices, ProjectUtils} from "@opendaw/studio-adapters"
+import {DeviceHost, Devices, TransferAudioUnits} from "@opendaw/studio-adapters"
 import {ContentEditorShortcuts, ContentEditorShortcutsFactory} from "@/ui/shortcuts/ContentEditorShortcuts"
 import {PianoPanelShortcuts, PianoPanelShortcutsFactory} from "@/ui/shortcuts/PianoPanelShortcuts"
 import {RegionsShortcuts, RegionsShortcutsFactory} from "@/ui/shortcuts/RegionsShortcuts"
@@ -147,8 +147,8 @@ export namespace StudioShortcutManager {
                 ({editing, boxAdapters, userEditingManager, skeleton}) => userEditingManager.audioUnit.get()
                     .ifSome(({box}) => {
                         const deviceHost: DeviceHost = boxAdapters.adapterFor(box, Devices.isHost)
-                        const copies = editing.modify(() => ProjectUtils
-                            .extractAudioUnits([deviceHost.audioUnitBoxAdapter().box], skeleton), false).unwrap()
+                        const copies = editing.modify(() => TransferAudioUnits
+                            .transfer([deviceHost.audioUnitBoxAdapter().box], skeleton), false).unwrap()
                         userEditingManager.audioUnit.edit(copies[0].editing)
                     }))),
             gc.register(gs["workspace-next-screen"].shortcut, () => {
