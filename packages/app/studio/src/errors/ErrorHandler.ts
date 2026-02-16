@@ -103,6 +103,12 @@ export class ErrorHandler {
             event.preventDefault()
             return true
         }
+        // Handle Monaco CancellationError (name "Canceled" survives minification unlike stack traces)
+        if (reason instanceof Error && reason.name === "Canceled") {
+            console.debug(`Monaco CancellationError: ${reason.message}`)
+            event.preventDefault()
+            return true
+        }
         // Handle browser-internal errors (e.g., DuckDuckGo feature detection)
         if (reason instanceof Error
             && BrowserInternalPatterns.some(pattern => reason.message.includes(pattern))) {
