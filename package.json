@@ -29,7 +29,7 @@
     "prettier": "^3.6.2",
     "ssh2-sftp-client": "^12.0.1",
     "ts-node": "^10.1.0",
-    "turbo": "^2.5.5",
+    "turbo": "^2.8.9",
     "typescript": "^5.9.2",
     "vitest": "^3.1.3"
   },
