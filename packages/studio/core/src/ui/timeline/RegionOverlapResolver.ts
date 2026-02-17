@@ -82,7 +82,11 @@ export class RegionOverlapResolver {
     fromRange(track: TrackBoxAdapter, position: ppqn, complete: ppqn): Exec {
         const behaviour = StudioPreferences.settings.editing["overlapping-regions-behaviour"]
         if (behaviour === "clip") {
-            return RegionClipResolver.fromRange(track, position, complete)
+            const solver = RegionClipResolver.fromRange(track, position, complete)
+            return () => {
+                solver()
+                RegionClipResolver.validateTrack(track)
+            }
         } else if (behaviour === "push-existing") {
             return RegionPushExistingResolver.fromRange(track, position, complete, this.#projectApi, this.#boxAdapters)
         } else {

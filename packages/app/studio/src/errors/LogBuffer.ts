@@ -49,13 +49,10 @@ export namespace LogBuffer {
                     if (typeof result === "string") return result
                 }
 
-                // Safe shallow preview of key-values
                 if (typeof value === "object") {
-                    const flat: Record<string, any> = {}
-                    for (const [k, v] of Object.entries(value)) {
-                        flat[k] = typeof v === "object" ? "[object]" : v
-                    }
-                    return JSON.stringify(flat)
+                    const maxLength = 4000
+                    const json = JSON.stringify(value)
+                    return json.length > maxLength ? json.slice(0, maxLength) + "…" : json
                 }
 
                 // Last resort fallback
