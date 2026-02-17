@@ -131,7 +131,7 @@ export namespace RecordAutomation {
             } else {
                 const state = existingState.unwrap()
                 if (position < state.startPosition) {return}
-                const relativePosition = position - state.startPosition
+                const relativePosition = Math.trunc(position - state.startPosition)
                 if (relativePosition < state.lastRelativePosition) {return}
                 if (relativePosition === state.lastRelativePosition) {
                     editing.modify(() => {
