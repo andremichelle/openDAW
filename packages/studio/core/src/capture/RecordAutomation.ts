@@ -234,6 +234,7 @@ export namespace RecordAutomation {
                     const expected = a.value + t * (event.value - a.value)
                     if (Math.abs(b.value - expected) > Eplison) {break}
                     keep.pop()
+                    adapter.events.remove(b)
                     b.box.delete()
                 }
                 keep.push(event)
