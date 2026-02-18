@@ -83,10 +83,10 @@ export namespace MetaData {
      * @param origin The origin of the meta-data. Must be unique to the app.
      * @param observer Called with the current value whenever it changes, or null when removed.
      */
-    export const catchupAndSubscribeMessage = (target: Box<Pointers.MetaData>,
-                                               origin: string,
-                                               observer: Observer<Option<JSONValue>>): Terminable => {
-        if (origin === "") {return panic("MetaData.catchupAndSubscribeMessage: origin must be unique to your app.")}
+    export const catchupAndSubscribe = (target: Box<Pointers.MetaData>,
+                                        origin: string,
+                                        observer: Observer<Option<JSONValue>>): Terminable => {
+        if (origin === "") {return panic("MetaData.catchupAndSubscribe: origin must be unique to your app.")}
         const subscriptions = UUID.newSet<{ uuid: UUID.Bytes, subscription: Subscription }>(entry => entry.uuid)
         const notifyValue = (metaDataBox: MetaDataBox): void => {
             const {status, value, error} = tryCatch(() => JSON.parse(metaDataBox.value.getValue()))
