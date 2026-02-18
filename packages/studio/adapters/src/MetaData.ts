@@ -46,7 +46,7 @@ export namespace MetaData {
      * @param target The box to read the meta-data from.
      * @param origin The origin of the meta-data. Must be unique to the app.
      */
-    export const read = (target: Box<Pointers.MetaData>, origin: string): Nullable<JSONValue> => {
+    export const read = (target: Box<Pointers.MetaData | Pointers>, origin: string): Nullable<JSONValue> => {
         if (origin === "") {return panic("MetaData.read: origin must be unique to your app.")}
         const existingBox = target.pointerHub
             .filter(Pointers.MetaData)
@@ -66,7 +66,7 @@ export namespace MetaData {
      * @param target The box to delete the meta-data from.
      * @param origin The origin of the meta-data. Must be unique to the app.
      */
-    export const clear = (target: Box<Pointers.MetaData>, origin: string): void => {
+    export const clear = (target: Box<Pointers.MetaData | Pointers>, origin: string): void => {
         if (origin === "") {return panic("MetaData.clear: origin must be unique to your app.")}
         target.pointerHub
             .filter(Pointers.MetaData)
@@ -83,7 +83,7 @@ export namespace MetaData {
      * @param origin The origin of the meta-data. Must be unique to the app.
      * @param observer Called with the current value whenever it changes, or null when removed.
      */
-    export const catchupAndSubscribe = (target: Box<Pointers.MetaData>,
+    export const catchupAndSubscribe = (target: Box<Pointers.MetaData | Pointers>,
                                         origin: string,
                                         observer: Observer<Option<JSONValue>>): Terminable => {
         if (origin === "") {return panic("MetaData.catchupAndSubscribe: origin must be unique to your app.")}
