@@ -1,7 +1,7 @@
 {
   "name": "@opendaw/lab",
   "private": true,
-  "version": "0.0.108",
+  "version": "0.0.109",
   "type": "module",
   "license": "LGPL-3.0-or-later",
   "scripts": {
@@ -17,9 +17,9 @@
     "@opendaw/lib-jsx": "^0.0.74",
     "@opendaw/lib-runtime": "^0.0.70",
     "@opendaw/lib-std": "^0.0.69",
-    "@opendaw/studio-adapters": "^0.0.86",
+    "@opendaw/studio-adapters": "^0.0.87",
     "@opendaw/studio-boxes": "^0.0.76",
-    "@opendaw/studio-core": "^0.0.108",
+    "@opendaw/studio-core": "^0.0.109",
     "@opendaw/studio-enums": "^0.0.64"
   },
   "devDependencies": {
