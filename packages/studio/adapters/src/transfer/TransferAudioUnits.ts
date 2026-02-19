@@ -13,10 +13,8 @@ export namespace TransferAudioUnits {
     export const transfer = (audioUnitBoxes: ReadonlyArray<AudioUnitBox>,
                              {boxGraph: targetBoxGraph, mandatoryBoxes: {primaryAudioBusBox, rootBox}}: ProjectSkeleton,
                              options: {
-                                 // TODO
                                  insertIndex?: int,
                                  deleteSource?: boolean,
-                                 // TODO
                                  includeAux?: boolean,
                                  includeBus?: boolean,
                                  excludeTimeline?: boolean,
