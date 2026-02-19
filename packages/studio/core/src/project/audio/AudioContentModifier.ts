@@ -1,4 +1,4 @@
-import {EmptyExec, Exec, isDefined, isInstanceOf, UUID} from "@opendaw/lib-std"
+import {EmptyExec, Exec, isDefined, isInstanceOf, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {TimeBase} from "@opendaw/lib-dsp"
 import {
     AudioPitchStretchBox,
@@ -61,6 +61,7 @@ export namespace AudioContentModifier {
     export const toTimeStretch = async (adapters: ReadonlyArray<AudioContentBoxAdapter>): Promise<Exec> => {
         const audioAdapters = adapters.filter(adapter => adapter.asPlayModeTimeStretch.isEmpty())
         if (audioAdapters.length === 0) {return EmptyExec}
+        const handler = RuntimeNotifier.progress({headline: "Detecting Transients..."})
         const tasks = await Promise.all(audioAdapters.map(async adapter => {
             if (adapter.file.transients.length() === 0) {
                 return {
@@ -70,6 +71,7 @@ export namespace AudioContentModifier {
             }
             return {adapter}
         }))
+        handler.terminate()
         return () => tasks.forEach(({adapter, transients}) => {
             const optPitchStretch = adapter.asPlayModePitchStretch
             const boxGraph = adapter.box.graph
@@ -93,7 +95,7 @@ export namespace AudioContentModifier {
             } else {
                 AudioContentHelpers.addDefaultWarpMarkers(boxGraph, timeStretch, adapter.duration, adapter.file.endInSeconds)
             }
-            if (isDefined(transients)) {
+            if (isDefined(transients) && adapter.file.transients.length() === 0) {
                 const markersField = adapter.file.box.transientMarkers
                 transients.forEach(position => TransientMarkerBox.create(boxGraph, UUID.generate(), box => {
                     box.owner.refer(markersField)

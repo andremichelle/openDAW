@@ -1,5 +1,5 @@
 import {AudioFileBox, TransientMarkerBox} from "@opendaw/studio-boxes"
-import {Option, Provider, UUID} from "@opendaw/lib-std"
+import {Option, Provider, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {AudioData, TransientProtocol} from "@opendaw/lib-dsp"
 import {BoxGraph} from "@opendaw/lib-box"
 
@@ -19,9 +19,13 @@ export namespace AudioFileBoxFactory {
         if (optAudioFileBox.nonEmpty()) {
             const audioFileBox = optAudioFileBox.unwrap()
             if (audioFileBox.transientMarkers.pointerHub.isEmpty()) {
+                const handler = RuntimeNotifier.progress({headline: "Detecting Transients..."})
                 const transients = await transientProtocol.detect(audioData)
+                handler.terminate()
                 return () => {
-                    applyTransients(audioFileBox, transients)
+                    if (audioFileBox.transientMarkers.pointerHub.isEmpty()) {
+                        applyTransients(audioFileBox, transients)
+                    }
                     return audioFileBox
                 }
             }
@@ -33,7 +37,11 @@ export namespace AudioFileBoxFactory {
                 // Re-check in case another drop created it between createModifier and now
                 const existingBox = boxGraph.findBox<AudioFileBox>(uuid)
                 if (existingBox.nonEmpty()) {
-                    return existingBox.unwrap()
+                    const box = existingBox.unwrap()
+                    if (box.transientMarkers.pointerHub.isEmpty()) {
+                        applyTransients(box, transients)
+                    }
+                    return box
                 }
                 const audioFileBox = AudioFileBox.create(boxGraph, uuid, box => {
                     box.fileName.setValue(name)

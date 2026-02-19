@@ -88,10 +88,9 @@ export namespace AudioConsolidation {
         }
         const sample = importResult.value
         const sampleUuid = UUID.parse(sample.uuid)
-        dialog.message = "Creating region..."
+        dialog.terminate()
         const audioFileBoxModifier = await AudioFileBoxFactory.createModifier(
             Workers.Transients, project.boxGraph, audioData, sampleUuid, sample.name)
-        dialog.terminate()
         project.editing.modify(() => {
             const audioFileBox = audioFileBoxModifier()
             allRegionsInRange.forEach(region => region.box.delete())
