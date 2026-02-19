@@ -1,6 +1,6 @@
 import {asInstanceOf, int} from "@opendaw/lib-std"
-import {Box} from "@opendaw/lib-box"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {Box, IndexedBox} from "@opendaw/lib-box"
+import {AudioUnitBox, RootBox} from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {TransferUtils} from "./TransferUtils"
 
@@ -30,9 +30,17 @@ export namespace TransferAudioUnits {
         const uuidMap = TransferUtils.generateMap(
             audioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBusBox.address.uuid)
         TransferUtils.copyBoxes(uuidMap, targetBoxGraph, audioUnitBoxes, dependencies)
-        TransferUtils.reorderAudioUnits(uuidMap, audioUnitBoxes, rootBox)
-        return audioUnitBoxes.map(source => asInstanceOf(rootBox.graph
+        TransferUtils.reorderAudioUnits(uuidMap, audioUnitBoxes, rootBox, options.insertIndex)
+        const result = audioUnitBoxes.map(source => asInstanceOf(rootBox.graph
             .findBox(uuidMap.get(source.address.uuid).target)
             .unwrap("Target AudioUnit has not been copied"), AudioUnitBox))
+        if (options.deleteSource === true) {
+            const sourceRootBox = asInstanceOf(
+                audioUnitBoxes[0].collection.targetVertex.unwrap().box, RootBox)
+            audioUnitBoxes.forEach(box => box.delete())
+            IndexedBox.collectIndexedBoxes(sourceRootBox.audioUnits, AudioUnitBox)
+                .forEach((box, index) => box.index.setValue(index))
+        }
+        return result
     }
 }

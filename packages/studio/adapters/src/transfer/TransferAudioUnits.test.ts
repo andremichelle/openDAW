@@ -1,5 +1,6 @@
 import {describe, expect, it, beforeEach} from "vitest"
 import {UUID} from "@opendaw/lib-std"
+import {IndexedBox} from "@opendaw/lib-box"
 import {
     AudioFileBox,
     AudioRegionBox,
@@ -205,5 +206,193 @@ describe("TransferAudioUnits.transfer", () => {
         skeleton.boxGraph.endTransaction()
         expect(copiedAudioUnit.graph).toBe(skeleton.boxGraph)
         expect(copiedAudioUnit.graph).not.toBe(source.boxGraph)
+    })
+
+    const verifyContiguousIndices = (target: ProjectSkeleton): void => {
+        const audioUnits = IndexedBox.collectIndexedBoxes(
+            target.mandatoryBoxes.rootBox.audioUnits, AudioUnitBox)
+        audioUnits.forEach((box, index) => {
+            expect(box.index.getValue()).toBe(index)
+        })
+    }
+
+    const createPopulatedSource = (unitCount: number): {
+        source: ProjectSkeleton, units: AudioUnitBox[]
+    } => {
+        const source = ProjectSkeleton.empty({createDefaultUser: false, createOutputCompressor: false})
+        const units: AudioUnitBox[] = []
+        for (let idx = 0; idx < unitCount; idx++) {
+            units.push(createAudioUnitWithInstrument(source).audioUnitBox)
+        }
+        source.boxGraph.beginTransaction()
+        units.forEach((unit, idx) => unit.index.setValue(idx + 1))
+        source.boxGraph.endTransaction()
+        return {source, units}
+    }
+
+    const populateTarget = (count: number): AudioUnitBox[] => {
+        const units: AudioUnitBox[] = []
+        for (let idx = 0; idx < count; idx++) {
+            units.push(createAudioUnitWithInstrument(skeleton).audioUnitBox)
+        }
+        skeleton.boxGraph.beginTransaction()
+        units.forEach((unit, idx) => unit.index.setValue(idx + 1))
+        skeleton.boxGraph.endTransaction()
+        return units
+    }
+
+    describe("insertIndex", () => {
+        it("appends copies at end when no insertIndex provided", () => {
+            const {source, units: [unitA]} = createPopulatedSource(1)
+            const [existingX, existingY] = populateTarget(2)
+            skeleton.boxGraph.beginTransaction()
+            const [copyA] = TransferAudioUnits.transfer([unitA], skeleton)
+            skeleton.boxGraph.endTransaction()
+            expect(copyA.index.getValue()).toBe(3)
+            expect(existingX.index.getValue()).toBe(1)
+            expect(existingY.index.getValue()).toBe(2)
+            verifyContiguousIndices(skeleton)
+        })
+
+        it("places copies before all existing when insertIndex is 0", () => {
+            const {source, units: [unitA]} = createPopulatedSource(1)
+            const [existingX, existingY] = populateTarget(2)
+            skeleton.boxGraph.beginTransaction()
+            const [copyA] = TransferAudioUnits.transfer([unitA], skeleton, {insertIndex: 0})
+            skeleton.boxGraph.endTransaction()
+            expect(copyA.index.getValue()).toBe(0)
+            verifyContiguousIndices(skeleton)
+        })
+
+        it("places copies at specified middle position", () => {
+            const {source, units: [unitA]} = createPopulatedSource(1)
+            const [existingX, existingY] = populateTarget(2)
+            skeleton.boxGraph.beginTransaction()
+            const [copyA] = TransferAudioUnits.transfer([unitA], skeleton, {insertIndex: 2})
+            skeleton.boxGraph.endTransaction()
+            expect(copyA.index.getValue()).toBe(2)
+            expect(existingY.index.getValue()).toBe(3)
+            verifyContiguousIndices(skeleton)
+        })
+    })
+
+    describe("deleteSource", () => {
+        it("deletes source and maintains contiguous indices in both graphs", () => {
+            const {source, units: [unitA, unitB]} = createPopulatedSource(2)
+            const [existingX] = populateTarget(1)
+            source.boxGraph.beginTransaction()
+            skeleton.boxGraph.beginTransaction()
+            const [copyA] = TransferAudioUnits.transfer([unitA], skeleton, {deleteSource: true})
+            skeleton.boxGraph.endTransaction()
+            source.boxGraph.endTransaction()
+            expect(unitA.isAttached()).toBe(false)
+            expect(copyA.isAttached()).toBe(true)
+            expect(unitB.index.getValue()).toBe(1)
+            verifyContiguousIndices(source)
+            verifyContiguousIndices(skeleton)
+        })
+
+        it("combines insertIndex and deleteSource correctly", () => {
+            const {source, units: [unitA, unitB]} = createPopulatedSource(2)
+            const [existingX, existingY] = populateTarget(2)
+            source.boxGraph.beginTransaction()
+            skeleton.boxGraph.beginTransaction()
+            const [copyA] = TransferAudioUnits.transfer([unitA], skeleton, {insertIndex: 1, deleteSource: true})
+            skeleton.boxGraph.endTransaction()
+            source.boxGraph.endTransaction()
+            expect(unitA.isAttached()).toBe(false)
+            expect(copyA.index.getValue()).toBe(1)
+            expect(existingX.index.getValue()).toBe(2)
+            expect(existingY.index.getValue()).toBe(3)
+            verifyContiguousIndices(skeleton)
+            verifyContiguousIndices(source)
+        })
+    })
+
+    describe("multiple audio units", () => {
+        it("transfers multiple adjacent audio units appended at end", () => {
+            const {source, units: [unitA, unitB]} = createPopulatedSource(2)
+            const [existingX, existingY] = populateTarget(2)
+            skeleton.boxGraph.beginTransaction()
+            const [copyA, copyB] = TransferAudioUnits.transfer([unitA, unitB], skeleton)
+            skeleton.boxGraph.endTransaction()
+            expect(copyA.index.getValue()).toBe(3)
+            expect(copyB.index.getValue()).toBe(4)
+            expect(existingX.index.getValue()).toBe(1)
+            expect(existingY.index.getValue()).toBe(2)
+            verifyContiguousIndices(skeleton)
+        })
+
+        it("transfers multiple non-adjacent audio units preserving relative order", () => {
+            const {source, units: [unitA, unitB, unitC, unitD]} = createPopulatedSource(4)
+            const [existingX] = populateTarget(1)
+            skeleton.boxGraph.beginTransaction()
+            const [copyA, copyC] = TransferAudioUnits.transfer([unitA, unitC], skeleton)
+            skeleton.boxGraph.endTransaction()
+            expect(copyA.index.getValue()).toBeLessThan(copyC.index.getValue())
+            expect(copyA.index.getValue()).toBe(2)
+            expect(copyC.index.getValue()).toBe(3)
+            verifyContiguousIndices(skeleton)
+        })
+
+        it("inserts multiple non-adjacent audio units at specified position", () => {
+            const {source, units: [unitA, unitB, unitC, unitD]} = createPopulatedSource(4)
+            const [existingX, existingY] = populateTarget(2)
+            skeleton.boxGraph.beginTransaction()
+            const [copyA, copyC] = TransferAudioUnits.transfer([unitA, unitC], skeleton, {insertIndex: 1})
+            skeleton.boxGraph.endTransaction()
+            expect(copyA.index.getValue()).toBe(1)
+            expect(copyC.index.getValue()).toBe(2)
+            expect(existingX.index.getValue()).toBe(3)
+            expect(existingY.index.getValue()).toBe(4)
+            verifyContiguousIndices(skeleton)
+        })
+
+        it("deletes multiple non-adjacent sources", () => {
+            const {source, units: [unitA, unitB, unitC, unitD]} = createPopulatedSource(4)
+            const [existingX] = populateTarget(1)
+            source.boxGraph.beginTransaction()
+            skeleton.boxGraph.beginTransaction()
+            const [copyA, copyC] = TransferAudioUnits.transfer(
+                [unitA, unitC], skeleton, {deleteSource: true})
+            skeleton.boxGraph.endTransaction()
+            source.boxGraph.endTransaction()
+            expect(unitA.isAttached()).toBe(false)
+            expect(unitC.isAttached()).toBe(false)
+            expect(unitB.isAttached()).toBe(true)
+            expect(unitD.isAttached()).toBe(true)
+            expect(copyA.isAttached()).toBe(true)
+            expect(copyC.isAttached()).toBe(true)
+            const sourceAudioUnits = IndexedBox.collectIndexedBoxes(
+                source.mandatoryBoxes.rootBox.audioUnits, AudioUnitBox)
+            expect(sourceAudioUnits.length).toBe(3)
+            verifyContiguousIndices(source)
+            const targetAudioUnits = IndexedBox.collectIndexedBoxes(
+                skeleton.mandatoryBoxes.rootBox.audioUnits, AudioUnitBox)
+            expect(targetAudioUnits.length).toBe(4)
+            verifyContiguousIndices(skeleton)
+        })
+
+        it("inserts and deletes multiple non-adjacent sources at specified position", () => {
+            const {source, units: [unitA, unitB, unitC, unitD]} = createPopulatedSource(4)
+            const [existingX, existingY] = populateTarget(2)
+            source.boxGraph.beginTransaction()
+            skeleton.boxGraph.beginTransaction()
+            const [copyA, copyC] = TransferAudioUnits.transfer(
+                [unitA, unitC], skeleton, {insertIndex: 1, deleteSource: true})
+            skeleton.boxGraph.endTransaction()
+            source.boxGraph.endTransaction()
+            expect(unitA.isAttached()).toBe(false)
+            expect(unitC.isAttached()).toBe(false)
+            expect(copyA.index.getValue()).toBe(1)
+            expect(copyC.index.getValue()).toBe(2)
+            expect(existingX.index.getValue()).toBe(3)
+            expect(existingY.index.getValue()).toBe(4)
+            verifyContiguousIndices(skeleton)
+            verifyContiguousIndices(source)
+            const targetAudioUnits = IndexedBox.collectIndexedBoxes(
+                skeleton.mandatoryBoxes.rootBox.audioUnits, AudioUnitBox)
+            expect(targetAudioUnits.length).toBe(5)
+        })
     })
 })

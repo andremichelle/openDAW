@@ -4,6 +4,9 @@ import {
     asInstanceOf,
     assert,
     ByteArrayInput,
+    clamp,
+    int,
+    isDefined,
     isInstanceOf,
     Option,
     Predicate,
@@ -15,7 +18,6 @@ import {AudioUnitBox, AuxSendBox, BoxIO, BoxVisitor, RootBox, TrackBox} from "@o
 import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {AnyRegionBox, UnionBoxTypes} from "../unions"
-import {AudioUnitOrdering} from "../factories/AudioUnitOrdering"
 
 export namespace TransferUtils {
     export type UUIDMapper = { source: UUID.Bytes, target: UUID.Bytes }
@@ -99,18 +101,20 @@ export namespace TransferUtils {
 
     export const reorderAudioUnits = (uuidMap: SortedSet<UUID.Bytes, UUIDMapper>,
                                       audioUnitBoxes: ReadonlyArray<AudioUnitBox>,
-                                      rootBox: RootBox): void => audioUnitBoxes
-        .toSorted(compareIndex)
-        .map(source => asInstanceOf(rootBox.graph
-            .findBox(uuidMap.get(source.address.uuid).target)
-            .unwrap("Target AudioUnit has not been copied"), AudioUnitBox))
-        .forEach((target) =>
-            IndexedBox.collectIndexedBoxes(rootBox.audioUnits, AudioUnitBox).toSorted((a, b) => {
-                const orderA = AudioUnitOrdering[a.type.getValue()]
-                const orderB = AudioUnitOrdering[b.type.getValue()]
-                const orderDifference = orderA - orderB
-                return orderDifference === 0 ? b === target ? -1 : 1 : orderDifference
-            }).forEach((box, index) => box.index.setValue(index)))
+                                      rootBox: RootBox,
+                                      insertIndex?: int): void => {
+        const targets = audioUnitBoxes
+            .toSorted(compareIndex)
+            .map(source => asInstanceOf(rootBox.graph
+                .findBox(uuidMap.get(source.address.uuid).target)
+                .unwrap("Target AudioUnit has not been copied"), AudioUnitBox))
+        const targetSet = new Set<AudioUnitBox>(targets)
+        const allAudioUnits = IndexedBox.collectIndexedBoxes(rootBox.audioUnits, AudioUnitBox)
+        const existing = allAudioUnits.filter(box => !targetSet.has(box))
+        const position = isDefined(insertIndex) ? clamp(insertIndex, 0, existing.length) : existing.length
+        const ordered = [...existing.slice(0, position), ...targets, ...existing.slice(position)]
+        ordered.forEach((box, index) => box.index.setValue(index))
+    }
 
     export const extractRegions = (regionBoxes: ReadonlyArray<AnyRegionBox>,
                                    {boxGraph, mandatoryBoxes: {primaryAudioBusBox, rootBox}}: ProjectSkeleton,
