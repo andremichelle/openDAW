@@ -1,4 +1,4 @@
-import {asInstanceOf} from "@opendaw/lib-std"
+import {asInstanceOf, int} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
@@ -13,6 +13,10 @@ export namespace TransferAudioUnits {
     export const transfer = (audioUnitBoxes: ReadonlyArray<AudioUnitBox>,
                              {boxGraph: targetBoxGraph, mandatoryBoxes: {primaryAudioBusBox, rootBox}}: ProjectSkeleton,
                              options: {
+                                 // TODO
+                                 insertIndex?: int,
+                                 deleteSource?: boolean,
+                                 // TODO
                                  includeAux?: boolean,
                                  includeBus?: boolean,
                                  excludeTimeline?: boolean,
