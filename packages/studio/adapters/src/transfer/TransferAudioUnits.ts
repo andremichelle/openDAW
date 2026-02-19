@@ -5,6 +5,13 @@ import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {TransferUtils} from "./TransferUtils"
 
 export namespace TransferAudioUnits {
+    export type TransferOptions = {
+        insertIndex?: int,
+        deleteSource?: boolean,
+        includeAux?: boolean,
+        includeBus?: boolean,
+        excludeTimeline?: boolean,
+    }
     /**
      * Copies audio units and their dependencies to a target project.
      * Preserved resources already present in the target graph are shared, not duplicated.
@@ -12,13 +19,7 @@ export namespace TransferAudioUnits {
      */
     export const transfer = (audioUnitBoxes: ReadonlyArray<AudioUnitBox>,
                              {boxGraph: targetBoxGraph, mandatoryBoxes: {primaryAudioBusBox, rootBox}}: ProjectSkeleton,
-                             options: {
-                                 insertIndex?: int,
-                                 deleteSource?: boolean,
-                                 includeAux?: boolean,
-                                 includeBus?: boolean,
-                                 excludeTimeline?: boolean,
-                             } = {}): ReadonlyArray<AudioUnitBox> => {
+                             options: TransferOptions = {}): ReadonlyArray<AudioUnitBox> => {
         const excludeBox = (box: Box): boolean =>
             TransferUtils.shouldExclude(box)
             || (options?.excludeTimeline === true && TransferUtils.excludeTimelinePredicate(box))
