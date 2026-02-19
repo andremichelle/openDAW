@@ -113,8 +113,25 @@ export class RegionDurationModifier implements RegionModifier {
         const adapters = this.#adapters.filter(({box}) => box.isAttached())
         const result = this.#adapters.map<{ region: AnyLoopableRegionBoxAdapter, duration: ppqn }>(region =>
             ({region, duration: this.#selectedModifyStrategy.readDuration(region)}))
+        const regionSnapshot = (region: AnyRegionBoxAdapter) =>
+            ({p: region.position, d: region.duration, c: region.complete, s: region.isSelected})
+        const trackSnapshots = modifiedTracks.map(track => ({
+            trackIndex: track.listIndex,
+            before: track.regions.collection.asArray().map(regionSnapshot)
+        }))
+        console.debug("[RegionDurationModifier.approve]", {
+            deltaDuration: this.#deltaDuration, aligned: this.#aligned,
+            changes: result.map(entry => ({p: entry.region.position, oldD: entry.region.duration, newD: entry.duration})),
+            trackSnapshots
+        })
         this.#project.overlapResolver.apply(modifiedTracks, adapters, this, 0, (_trackResolver) => {
             result.forEach(({region, duration}) => region.duration = duration)
+        })
+        console.debug("[RegionDurationModifier.approve] after", {
+            tracks: modifiedTracks.map(track => ({
+                trackIndex: track.listIndex,
+                regions: track.regions.collection.asArray().map(regionSnapshot)
+            }))
         })
     }
 

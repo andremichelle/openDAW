@@ -160,6 +160,16 @@ export class RegionMoveModifier implements RegionModifier {
         const modifiedTracks: ReadonlyArray<TrackBoxAdapter> = Arrays.removeDuplicates(adapters
             .map(adapter => adapter.trackBoxAdapter.unwrap().listIndex + this.#deltaIndex))
             .map(index => this.#manager.getByIndex(index).unwrap().trackBoxAdapter)
+        const regionSnapshot = (region: AnyRegionBoxAdapter) =>
+            ({p: region.position, d: region.duration, c: region.complete, s: region.isSelected})
+        const trackSnapshots = modifiedTracks.map(track => ({
+            trackIndex: track.listIndex,
+            before: track.regions.collection.asArray().map(regionSnapshot)
+        }))
+        console.debug("[RegionMoveModifier.approve]", {
+            deltaIndex: this.#deltaIndex, deltaPosition: this.#deltaPosition, copy: this.#copy,
+            adapters: adapters.map(regionSnapshot), trackSnapshots
+        })
         this.#project.overlapResolver.apply(modifiedTracks, adapters, this, this.#deltaIndex, (trackResolver) => {
             if (this.#copy) {
                 const copies: ReadonlyArray<AnyRegionBoxAdapter> = adapters.map(original => {
@@ -187,6 +197,12 @@ export class RegionMoveModifier implements RegionModifier {
                 }
                 adapters.forEach((adapter) => adapter.position += this.#deltaPosition)
             }
+        })
+        console.debug("[RegionMoveModifier.approve] after", {
+            tracks: modifiedTracks.map(track => ({
+                trackIndex: track.listIndex,
+                regions: track.regions.collection.asArray().map(regionSnapshot)
+            }))
         })
     }
 

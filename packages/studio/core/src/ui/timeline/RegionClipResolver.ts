@@ -93,7 +93,7 @@ export class RegionClipResolver {
                     d: region.duration,
                     c: region.complete,
                     sel: region.isSelected,
-                    type: region.constructor.name
+                    type: region.toString()
                 }))
             }))
             throw error

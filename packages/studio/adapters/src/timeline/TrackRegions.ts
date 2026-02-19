@@ -35,6 +35,17 @@ export class TrackRegions {
                     const added = this.#adapters.add(adapter)
                     assert(added, `Cannot add ${box}`)
                     this.#collection.add(adapter)
+                    for (const existing of this.#collection.iterateRange(adapter.position, adapter.complete)) {
+                        if (existing !== adapter && existing.position < adapter.complete && existing.complete > adapter.position) {
+                            console.warn("[TrackRegions] Overlapping region added", {
+                                track: this.#trackBoxAdapter.listIndex,
+                                added: {p: adapter.position, d: adapter.duration, c: adapter.complete},
+                                existing: {p: existing.position, d: existing.duration, c: existing.complete},
+                                stack: new Error().stack
+                            })
+                            break
+                        }
+                    }
                     this.#regionsListeners.forEach(listener => listener.onAdded(adapter))
                     this.dispatchChange()
                 },
