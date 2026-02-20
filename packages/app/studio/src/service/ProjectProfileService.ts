@@ -79,7 +79,12 @@ export class ProjectProfileService {
     }
 
     async load(uuid: UUID.Bytes, meta: ProjectMeta) {
-        const project: Project = await ProjectStorage.loadProject(uuid).then(buffer => Project.loadAnyVersion(this.#env, buffer))
+        const {status, value: project, error} = await Promises.tryCatch(
+            ProjectStorage.loadProject(uuid).then(buffer => Project.loadAnyVersion(this.#env, buffer)))
+        if (status === "rejected") {
+            await RuntimeNotifier.info({headline: "Could not load project", message: String(error)})
+            return
+        }
         await this.#sampleService.replaceMissingFiles(project.boxGraph, this.#sampleManager)
         await this.#soundfontService.replaceMissingFiles(project.boxGraph, this.#soundfontManager)
         const cover = await ProjectStorage.loadCover(uuid)
