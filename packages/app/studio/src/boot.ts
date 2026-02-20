@@ -8,7 +8,17 @@ import {installCursors} from "@/ui/Cursors.ts"
 import {BuildInfo} from "./BuildInfo"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {replaceChildren} from "@opendaw/lib-jsx"
-import {ContextMenu} from "@opendaw/studio-core"
+import {
+    AudioWorklets,
+    CloudAuthManager,
+    ContextMenu,
+    DefaultSoundfontLoaderManager,
+    GlobalSampleLoaderManager,
+    OfflineEngineRenderer,
+    OpenSampleAPI,
+    OpenSoundfontAPI,
+    Workers
+} from "@opendaw/studio-core"
 import {testFeatures} from "@/features.ts"
 import {MissingFeature} from "@/ui/MissingFeature.tsx"
 import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
@@ -18,16 +28,6 @@ import {AnimationFrame, Browser, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
-import {
-    AudioWorklets,
-    CloudAuthManager,
-    DefaultSoundfontLoaderManager,
-    GlobalSampleLoaderManager,
-    OfflineEngineRenderer,
-    OpenSampleAPI,
-    OpenSoundfontAPI,
-    Workers
-} from "@opendaw/studio-core"
 import {AudioData} from "@opendaw/lib-dsp"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Menu} from "@/ui/components/Menu"
@@ -46,7 +46,7 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
         alert("Error loading build info. Please reload the page.")
         return
     }
-    console.debug("buildInfo", buildInfo)
+    console.debug("buildInfo", JSON.stringify(buildInfo, null, 2))
     await FontLoader.load()
     await Workers.install(workersUrl)
     AudioWorklets.install(workletsUrl)

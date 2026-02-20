@@ -1,4 +1,4 @@
-import {Arrays, Class, isUndefined, Procedure, Progress, UUID} from "@opendaw/lib-std"
+import {Arrays, Class, isUndefined, Procedure, Progress, tryCatch, UUID} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
 import {AudioData, estimateBpm} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
@@ -7,6 +7,7 @@ import {AudioFileBox} from "@opendaw/studio-boxes"
 import {Sample, SampleMetaData} from "@opendaw/studio-adapters"
 import {AssetService} from "../AssetService"
 import {FilePickerAcceptTypes} from "../FilePickerAcceptTypes"
+import {WavFile} from "../WavFile"
 import {Workers} from "../Workers"
 import {SampleStorage} from "./SampleStorage"
 import {OpenSampleAPI} from "./OpenSampleAPI"
@@ -24,19 +25,9 @@ export class SampleService extends AssetService<Sample> {
     async importFile({uuid, name, arrayBuffer, progressHandler = Progress.Empty}
                      : AssetService.ImportArgs): Promise<Sample> {
         console.debug(`importSample '${name}' (${arrayBuffer.byteLength >> 10}kb)`)
-        console.time("UUID.sha256")
-        uuid ??= await UUID.sha256(arrayBuffer) // Must run before decodeAudioData laster, because it will detach the ArrayBuffer
-        console.timeEnd("UUID.sha256")
-        console.time("decodeAudioData")
-        const audioResult = await Promises.tryCatch(this.audioContext.decodeAudioData(arrayBuffer))
-        console.timeEnd("decodeAudioData")
-        if (audioResult.status === "rejected") {return Promise.reject(name)}
-        const {value: audioBuffer} = audioResult
-        console.debug(`Imported ${audioBuffer.duration.toFixed(1)} seconds`)
-        const audioData = AudioData.create(audioBuffer.sampleRate, audioBuffer.length, audioBuffer.numberOfChannels)
-        for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
-            audioData.frames[i].set(audioBuffer.getChannelData(i))
-        }
+        uuid ??= await UUID.sha256(arrayBuffer)
+        const audioData = await this.#decodeAudio(arrayBuffer)
+        const duration = audioData.numberOfFrames / audioData.sampleRate
         const shifts = SamplePeaks.findBestFit(audioData.numberOfFrames)
         const peaks = await Workers.Peak.generateAsync(
             progressHandler,
@@ -45,10 +36,10 @@ export class SampleService extends AssetService<Sample> {
             audioData.numberOfFrames,
             audioData.numberOfChannels) as ArrayBuffer
         const meta: SampleMetaData = {
-            bpm: estimateBpm(audioBuffer.duration),
+            bpm: estimateBpm(duration),
             name: isUndefined(name) ? "Unnnamed" : name,
-            duration: audioBuffer.duration,
-            sample_rate: audioBuffer.sampleRate,
+            duration,
+            sample_rate: audioData.sampleRate,
             origin: "import"
         }
         await SampleStorage.get().save({uuid, audio: audioData, peaks, meta})
@@ -61,5 +52,18 @@ export class SampleService extends AssetService<Sample> {
         const stock = await OpenSampleAPI.get().all()
         const local = await SampleStorage.get().list()
         return Arrays.merge(stock, local, (sample, {uuid}) => sample.uuid === uuid)
+    }
+
+    async #decodeAudio(arrayBuffer: ArrayBuffer): Promise<AudioData> {
+        const wavResult = tryCatch(() => WavFile.decodeFloats(arrayBuffer))
+        if (wavResult.status === "success") {return wavResult.value}
+        console.debug("decoding with web-api-api (fallback)")
+        const {status, value: audioBuffer} = await Promises.tryCatch(this.audioContext.decodeAudioData(arrayBuffer))
+        if (status === "rejected") {return Promise.reject()}
+        const audioData = AudioData.create(audioBuffer.sampleRate, audioBuffer.length, audioBuffer.numberOfChannels)
+        for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+            audioData.frames[channel].set(audioBuffer.getChannelData(channel))
+        }
+        return audioData
     }
 }
