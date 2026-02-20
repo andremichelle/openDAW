@@ -1,10 +1,9 @@
 import {Exec, Subscription} from "@opendaw/lib-std"
 
 export namespace Runtime {
-    // Debounce execution by delaying the call until after the timeout has passed without new invocations.
-    export const debounce = (() => {
+    export const debounce = (() => (exec: Exec, timeout: number = 1000) => {
         let id: any = undefined
-        return (exec: Exec, timeout: number = 1000) => {
+        return () => {
             clearTimeout(id)
             id = setTimeout(exec, timeout)
         }

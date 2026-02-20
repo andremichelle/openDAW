@@ -99,13 +99,12 @@ export const ResourceBrowser = <T, >({
                                             refresh: () => reload.get().update()
                                         })))
                                 }
+                                const debounceSetLocation = Runtime.debounce(() => {
+                                    location.setValue(AssetLocation.Local)
+                                    reload.get().update()
+                                }, 500)
                                 lifecycle.own(filter.catchupAndSubscribe(update))
-                                lifecycle.own(service.subscribeSignal(() => {
-                                    Runtime.debounce(() => {
-                                        location.setValue(AssetLocation.Local)
-                                        reload.get().update()
-                                    }, 500)
-                                }, config.importSignal))
+                                lifecycle.own(service.subscribeSignal(debounceSetLocation, config.importSignal))
                                 searchInput.focus()
                                 return entries
                             }}/>
