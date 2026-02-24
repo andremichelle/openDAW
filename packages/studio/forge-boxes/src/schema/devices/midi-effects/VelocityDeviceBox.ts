@@ -13,7 +13,7 @@ export const VelocityDeviceBox: BoxSchema<Pointers> = DeviceFactory.createMidiEf
         constraints: "unipolar", unit: "%"
     },
     12: {
-        type: "int32", name: "random-seed",
+        type: "int32", name: "random-seed", pointerRules: ParameterPointerRules,
         value: 0x800, constraints: "any", unit: ""
     },
     13: {
