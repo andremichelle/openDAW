@@ -133,6 +133,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 complete = Math.min(complete,
                     (trackBoxAdapter.regions.collection
                         .greaterEqual(position + 1)?.position ?? Number.POSITIVE_INFINITY))
+                if (complete <= position) {return}
                 editing.modify(() => project.api.createTrackRegion(trackBoxAdapter.box, position, complete - position)
                     .ifSome(region => selection.select(region)))
             }

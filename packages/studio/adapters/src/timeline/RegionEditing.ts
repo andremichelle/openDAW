@@ -22,7 +22,8 @@ export namespace RegionEditing {
     export const clip = (region: AnyRegionBoxAdapter, begin: ppqn, end: ppqn): void => {
         if (UnionAdapterTypes.isLoopableRegion(region)) {
             const {position, complete, loopOffset, loopDuration} = region
-            if (complete - end <= 0) {return panic(`duration will zero or negative(${complete - end})`)}
+            if (begin - position <= 0) {return panic(`first part duration will be zero or negative(${begin - position})`)}
+            if (complete - end <= 0) {return panic(`second part duration will be zero or negative(${complete - end})`)}
             region.duration = begin - position
             region.copyTo({
                 position: end,

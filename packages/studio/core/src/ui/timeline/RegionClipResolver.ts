@@ -216,6 +216,11 @@ export class RegionClipResolver {
                 case "start":
                     if (UnionAdapterTypes.isLoopableRegion(region)) {
                         const delta = task.position - region.position
+                        if (delta >= region.duration) {
+                            region.box.delete()
+                            console.debug("[ClipResolver.exec] start→delete (delta exceeds duration)", {before, delta})
+                            break
+                        }
                         const oldDuration = region.duration
                         const oldLoopOffset = region.loopOffset
                         const oldLoopDuration = region.loopDuration
@@ -229,7 +234,13 @@ export class RegionClipResolver {
                     break
                 case "complete":
                     if (UnionAdapterTypes.isLoopableRegion(region)) {
-                        region.duration = task.position - task.region.position
+                        const newDuration = task.position - region.position
+                        if (newDuration <= 0) {
+                            region.box.delete()
+                            console.debug("[ClipResolver.exec] complete→delete (duration non-positive)", {before, newDuration})
+                            break
+                        }
+                        region.duration = newDuration
                         console.debug("[ClipResolver.exec] complete", {before, after: {p: region.position, d: region.duration, c: region.complete}})
                     } else {
                         return panic("Not yet implemented")
