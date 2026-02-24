@@ -74,29 +74,26 @@ export class RegionClipResolver {
     static validateTrack(track: TrackBoxAdapter): void {
         const array = track.regions.collection.asArray()
         if (array.length === 0) {return}
-        try {
-            let prev = array[0]
-            assert(prev.duration > 0, `duration(${prev.duration}) must be positive`)
-            for (let i = 1; i < array.length; i++) {
-                const next = array[i]
-                assert(next.duration > 0, `duration(${next.duration}) must be positive`)
-                if (!allowOverlap(prev) && prev.complete > next.position) {
-                    return panic("Overlapping detected after clipping")
-                }
-                prev = next
-            }
-        } catch (error: any) {
-            console.error("[validateTrack] OVERLAP", JSON.stringify({
-                track: TrackType[track.type],
-                regions: array.map(region => ({
-                    p: region.position,
-                    d: region.duration,
-                    c: region.complete,
-                    sel: region.isSelected,
-                    type: region.toString()
+        let prev = array[0]
+        assert(prev.duration > 0, `duration(${prev.duration}) must be positive`)
+        for (let i = 1; i < array.length; i++) {
+            const next = array[i]
+            assert(next.duration > 0, `duration(${next.duration}) must be positive`)
+            if (!allowOverlap(prev) && prev.complete > next.position) {
+                console.error("[validateTrack] OVERLAP", JSON.stringify({
+                    track: TrackType[track.type],
+                    regions: array.map(region => ({
+                        p: region.position,
+                        d: region.duration,
+                        c: region.complete,
+                        sel: region.isSelected,
+                        type: region.toString()
+                    })),
+                    stack: new Error().stack
                 }))
-            }))
-            throw error
+                return
+            }
+            prev = next
         }
     }
 

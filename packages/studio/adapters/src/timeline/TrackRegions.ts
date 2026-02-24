@@ -20,6 +20,8 @@ export class TrackRegions {
     readonly #collection: RegionCollection<AnyRegionBoxAdapter>
     readonly #adapters: SortedSet<UUID.Bytes, AnyRegionBoxAdapter>
 
+    #overlapCheckPending: boolean = false
+
     constructor(adapter: TrackBoxAdapter, boxAdapters: BoxAdapters) {
         this.#trackBoxAdapter = adapter
 
@@ -65,6 +67,30 @@ export class TrackRegions {
 
     onIndexingChanged(): void {
         this.#collection.onIndexingChanged()
+        if (!this.#overlapCheckPending) {
+            this.#overlapCheckPending = true
+            const stack = new Error().stack
+            queueMicrotask(() => {
+                this.#overlapCheckPending = false
+                const regions = this.#collection.asArray()
+                for (let i = 1; i < regions.length; i++) {
+                    const prev = regions[i - 1]
+                    const next = regions[i]
+                    if (prev.complete > next.position) {
+                        console.error("[TrackRegions] Overlap after position change", {
+                            track: this.#trackBoxAdapter.listIndex,
+                            prev: {p: prev.position, d: prev.duration, c: prev.complete, type: prev.toString()},
+                            next: {p: next.position, d: next.duration, c: next.complete, type: next.toString()},
+                            allRegions: regions.map(region => ({
+                                p: region.position, d: region.duration, c: region.complete, sel: region.isSelected
+                            })),
+                            stack
+                        })
+                        break
+                    }
+                }
+            })
+        }
         this.dispatchChange()
     }
 
