@@ -36,6 +36,7 @@ import {
     ValueRegionBox
 } from "@opendaw/studio-boxes"
 import {
+    AnyRegionBox,
     AnyRegionBoxAdapter,
     AudioUnitBoxAdapter,
     AudioUnitFactory,
@@ -299,7 +300,11 @@ export class ProjectApi {
         })
     }
 
-    createTrackRegion(trackBox: TrackBox, position: ppqn, duration: ppqn, {name, hue}: ClipRegionOptions = {}) {
+    createTrackRegion(trackBox: TrackBox,
+                      position: ppqn,
+                      duration: ppqn,
+                      {name, hue}: ClipRegionOptions = {}): Option<AnyRegionBox> {
+        if (duration <= 0.0) {return Option.None}
         const {boxGraph} = this.#project
         const type = trackBox.type.getValue()
         switch (type) {
