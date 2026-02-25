@@ -1,5 +1,5 @@
 import {asInstanceOf, DefaultObservableValue, Option, panic, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
-import {dbToGain, RenderQuantum} from "@opendaw/lib-dsp"
+import {dbToGain, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {OfflineEngineRenderer, Project} from "@opendaw/studio-core"
 import {Files} from "@opendaw/lib-dom"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
@@ -60,7 +60,10 @@ export namespace VideoRenderer {
             }
             const compositionCanvas = new OffscreenCanvas(width, height)
             const compositionCtx = compositionCanvas.getContext("2d")!
-            const overlay = await VideoOverlay.create({width, height, projectName})
+            const overlay = await VideoOverlay.create({
+                width, height, projectName,
+                toParts: (position: ppqn) => project.timelineBoxAdapter.signatureTrack.toParts(position)
+            })
 
             const renderer = await OfflineEngineRenderer.create(project, Option.None, sampleRate)
             renderer.play()

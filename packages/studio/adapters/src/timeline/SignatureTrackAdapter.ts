@@ -279,6 +279,12 @@ export class SignatureTrackAdapter implements Terminable {
         return event.accumulatedPpqn + barsFromEvent * barPpqn
     }
 
+    toParts(position: ppqn): { bars: int, beats: int, semiquavers: int, ticks: int } {
+        const {event} = this.#findSignatureEventAt(position)
+        const parts = PPQN.toParts(position - event.accumulatedPpqn, event.nominator, event.denominator)
+        return {...parts, bars: parts.bars + event.accumulatedBars}
+    }
+
     barLengthAt(position: ppqn): ppqn {
         const [nom, denom] = this.signatureAt(position)
         return PPQN.fromSignature(nom, denom)

@@ -131,7 +131,7 @@ export const TimeAxis = ({lifecycle, service, snapping, range, mapper}: Construc
                 return resolvers
             }} provider={() => ({
                 unit: "bars",
-                value: (PPQN.toParts(durationInPulses.getValue()).bars + 1).toString()
+                value: (signatureTrack.toParts(durationInPulses.getValue()).bars + 1).toString()
             })} location={() => {
                 const rect = endMarkerElement.getBoundingClientRect()
                 return {x: rect.left - 32, y: rect.top}

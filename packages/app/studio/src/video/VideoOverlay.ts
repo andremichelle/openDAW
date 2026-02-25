@@ -1,10 +1,11 @@
-import {Terminable} from "@opendaw/lib-std"
-import {PPQN, ppqn} from "@opendaw/lib-dsp"
+import {int, Terminable} from "@opendaw/lib-std"
+import {ppqn} from "@opendaw/lib-dsp"
 
 export interface VideoOverlayConfig {
     readonly width: number
     readonly height: number
     readonly projectName: string
+    readonly toParts: (position: ppqn) => { bars: int, beats: int, semiquavers: int, ticks: int }
 }
 
 export class VideoOverlay implements Terminable {
@@ -66,8 +67,8 @@ export class VideoOverlay implements Terminable {
 
     #renderPosition(position: ppqn, fontSize: number): void {
         const ctx = this.#ctx
-        const {width, height, projectName} = this.#config
-        const {bars, beats, semiquavers, ticks} = PPQN.toParts(Math.abs(position) | 0)
+        const {width, height, projectName, toParts} = this.#config
+        const {bars, beats, semiquavers, ticks} = toParts(position)
         const positionFontSize = Math.round(fontSize * 0.7)
         const charWidth = positionFontSize * 0.65
         const separatorWidth = positionFontSize * 0.4

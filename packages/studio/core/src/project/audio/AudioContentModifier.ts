@@ -1,5 +1,5 @@
 import {EmptyExec, Exec, isDefined, isInstanceOf, RuntimeNotifier, UUID} from "@opendaw/lib-std"
-import {TimeBase} from "@opendaw/lib-dsp"
+import {seconds, TimeBase} from "@opendaw/lib-dsp"
 import {
     AudioPitchStretchBox,
     AudioRegionBox,
@@ -17,6 +17,8 @@ export namespace AudioContentModifier {
         const audioAdapters = adapters.filter(adapter => !adapter.isPlayModeNoStretch)
         if (audioAdapters.length === 0) {return EmptyExec}
         return () => audioAdapters.forEach((adapter) => {
+            const audibleDuration = adapter.optWarpMarkers
+                .mapOr(warpMarkers => warpMarkers.last()?.seconds ?? 0, 0)
             adapter.box.playMode.defer()
             adapter.asPlayModeTimeStretch.ifSome(({box}) => {
                 if (box.pointerHub.filter(Pointers.AudioPlayMode).length === 0) {box.delete()}
@@ -24,7 +26,7 @@ export namespace AudioContentModifier {
             adapter.asPlayModePitchStretch.ifSome(({box}) => {
                 if (box.pointerHub.filter(Pointers.AudioPlayMode).length === 0) {box.delete()}
             })
-            switchTimeBaseToSeconds(adapter)
+            switchTimeBaseToSeconds(adapter, audibleDuration)
         })
     }
 
@@ -52,7 +54,8 @@ export namespace AudioContentModifier {
                         }))
                 }
             } else {
-                AudioContentHelpers.addDefaultWarpMarkers(boxGraph, pitchStretch, adapter.duration, adapter.file.endInSeconds)
+                AudioContentHelpers.addDefaultWarpMarkers(boxGraph, pitchStretch,
+                    adapter.duration, adapter.box.duration.getValue())
             }
             switchTimeBaseToMusical(adapter)
         })
@@ -93,7 +96,8 @@ export namespace AudioContentModifier {
                         }))
                 }
             } else {
-                AudioContentHelpers.addDefaultWarpMarkers(boxGraph, timeStretch, adapter.duration, adapter.file.endInSeconds)
+                AudioContentHelpers.addDefaultWarpMarkers(boxGraph, timeStretch,
+                    adapter.duration, adapter.box.duration.getValue())
             }
             if (isDefined(transients) && adapter.file.transients.length() === 0) {
                 const markersField = adapter.file.box.transientMarkers
@@ -106,15 +110,14 @@ export namespace AudioContentModifier {
         })
     }
 
-    const switchTimeBaseToSeconds = ({box, file, timeBase}: AudioContentBoxAdapter): void => {
+    const switchTimeBaseToSeconds = ({box, timeBase}: AudioContentBoxAdapter, audibleDuration: seconds): void => {
         if (timeBase === TimeBase.Seconds) {return}
-        // Reset to 100% playback speed (original file speed)
         box.timeBase.setValue(TimeBase.Seconds)
-        box.duration.setValue(file.endInSeconds)
+        box.duration.setValue(audibleDuration)
         box.accept({
             visitAudioRegionBox: (box: AudioRegionBox) => {
                 box.loopOffset.setValue(0)
-                box.loopDuration.setValue(file.endInSeconds)
+                box.loopDuration.setValue(audibleDuration)
             }
         })
     }
