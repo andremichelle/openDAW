@@ -30,7 +30,11 @@ export const MusicalUnitDisplay = ({lifecycle, service}: Construct) => {
             lifecycle.ownAll(
                 service.engine.position.catchupAndSubscribe(owner => {
                     const position = owner.getValue()
-                    const {bars, beats, semiquavers, ticks} = PPQN.toParts(Math.abs(position))
+                    const [nominator, denominator] = service.projectProfileService.getValue().match({
+                        some: ({project}) => project.timelineBoxAdapter.signatureTrack.signatureAt(position),
+                        none: () => [4, 4]
+                    })
+                    const {bars, beats, semiquavers, ticks} = PPQN.toParts(Math.abs(position), nominator, denominator)
                     barUnitString.setValue((bars + 1).toString().padStart(3, "0"))
                     beatUnitString.setValue((beats + 1).toString())
                     semiquaverUnitString.setValue((semiquavers + 1).toString())
