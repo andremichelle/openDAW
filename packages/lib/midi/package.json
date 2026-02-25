@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/lib-midi",
-  "version": "0.0.54",
+  "version": "0.0.55",
   "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -23,8 +23,8 @@
     "test": "echo \"No tests to run\""
   },
   "dependencies": {
-    "@opendaw/lib-dsp": "^0.0.72",
-    "@opendaw/lib-std": "^0.0.69"
+    "@opendaw/lib-dsp": "^0.0.73",
+    "@opendaw/lib-std": "^0.0.70"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.27",
