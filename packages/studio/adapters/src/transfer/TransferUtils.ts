@@ -18,6 +18,7 @@ import {AudioUnitBox, AuxSendBox, BoxIO, BoxVisitor, RootBox, TrackBox} from "@o
 import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {AnyRegionBox, UnionBoxTypes} from "../unions"
+import {AudioUnitOrdering} from "../factories/AudioUnitOrdering"
 
 export namespace TransferUtils {
     export type UUIDMapper = { source: UUID.Bytes, target: UUID.Bytes }
@@ -111,7 +112,15 @@ export namespace TransferUtils {
         const targetSet = new Set<AudioUnitBox>(targets)
         const allAudioUnits = IndexedBox.collectIndexedBoxes(rootBox.audioUnits, AudioUnitBox)
         const existing = allAudioUnits.filter(box => !targetSet.has(box))
-        const position = isDefined(insertIndex) ? clamp(insertIndex, 0, existing.length) : existing.length
+        let position: int
+        if (isDefined(insertIndex)) {
+            position = clamp(insertIndex, 0, existing.length)
+        } else {
+            const maxOrder = targets.reduce((max, box) =>
+                Math.max(max, AudioUnitOrdering[box.type.getValue()] ?? 0), 0)
+            position = existing.findIndex(box => (AudioUnitOrdering[box.type.getValue()] ?? 0) > maxOrder)
+            if (position === -1) {position = existing.length}
+        }
         const ordered = [...existing.slice(0, position), ...targets, ...existing.slice(position)]
         ordered.forEach((box, index) => box.index.setValue(index))
     }

@@ -34,7 +34,7 @@ import {NoEffectPlaceholder} from "@/ui/devices/panel/NoEffectPlaceholder"
 import {DeviceMount} from "@/ui/devices/panel/DeviceMount"
 import {Box} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {AudioUnitFreeze, Project, ProjectProfile} from "@opendaw/studio-core"
+import {Project, ProjectProfile} from "@opendaw/studio-core"
 import {ShadertoyPreview} from "@/ui/devices/panel/ShadertoyPreview"
 
 const className = Html.adoptStyleSheet(css, "DevicePanel")
@@ -197,23 +197,25 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
     const updateFrozenState = (): void => {
         const profile = service.projectProfileService.getValue()
         if (profile.isEmpty()) {return}
-        const optEditing = profile.unwrap().project.userEditingManager.audioUnit.get()
+        const project = profile.unwrap().project
+        const optEditing = project.userEditingManager.audioUnit.get()
         if (optEditing.isEmpty()) {return}
-        const audioUnitBoxAdapter = profile.unwrap().project.boxAdapters
+        const audioUnitBoxAdapter = project.boxAdapters
             .adapterFor(optEditing.unwrap().box, Devices.isHost).audioUnitBoxAdapter()
-        containers.classList.toggle("frozen", AudioUnitFreeze.isFrozen(audioUnitBoxAdapter))
+        containers.classList.toggle("frozen", project.audioUnitFreeze.isFrozen(audioUnitBoxAdapter))
     }
+    const freezeLifecycle = lifecycle.own(new Terminator())
     const chainLifeTime = lifecycle.own(new Terminator())
-    lifecycle.ownAll(
-        AudioUnitFreeze.subscribe(() => updateFrozenState()),
-        service.projectProfileService.catchupAndSubscribe((option: Option<ProjectProfile>) => {
+    lifecycle.own(service.projectProfileService.catchupAndSubscribe((option: Option<ProjectProfile>) => {
             chainLifeTime.terminate()
-            option.ifSome(({project: {userEditingManager}}) =>
-                userEditingManager.audioUnit.catchupAndSubscribe((target) => {
+            freezeLifecycle.terminate()
+            option.ifSome(({project}) => {
+                freezeLifecycle.own(project.audioUnitFreeze.subscribe(() => updateFrozenState()))
+                project.userEditingManager.audioUnit.catchupAndSubscribe((target) => {
                     chainLifeTime.terminate()
                     if (target.isEmpty()) {return}
                     const editingBox = target.unwrap().box
-                    const {deviceHost, instrument} = getContext(service.project, editingBox)
+                    const {deviceHost, instrument} = getContext(project, editingBox)
                     chainLifeTime.own(subscribeChain({
                         midiEffects: deviceHost.midiEffects,
                         instrument,
@@ -221,7 +223,8 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
                         host: deviceHost
                     }))
                     updateFrozenState()
-                }))
+                })
+            })
         })
     )
     const element: HTMLElement = (

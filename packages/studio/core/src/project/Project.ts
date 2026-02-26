@@ -65,6 +65,7 @@ import {MidiData} from "@opendaw/lib-midi"
 import {StudioPreferences} from "../StudioPreferences"
 import {RegionOverlapResolver, TimelineFocus} from "../ui"
 import {SampleStorage} from "../samples"
+import {AudioUnitFreeze} from "../AudioUnitFreeze"
 
 export type RestartWorklet = { unload: Func<unknown, Promise<unknown>>, load: Procedure<EngineWorklet> }
 
@@ -133,6 +134,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly overlapResolver: RegionOverlapResolver
     readonly timelineFocus: TimelineFocus
     readonly engine = new EngineFacade()
+    readonly audioUnitFreeze: AudioUnitFreeze
 
     readonly #rootBoxAdapter: RootBoxAdapter
     readonly #timelineBoxAdapter: TimelineBoxAdapter
@@ -181,6 +183,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.mixer = new Mixer(this.#rootBoxAdapter.audioUnits)
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
         this.timelineFocus = this.#terminator.own(new TimelineFocus())
+        this.audioUnitFreeze = this.#terminator.own(new AudioUnitFreeze(this))
 
         console.debug(`Project was created on ${this.rootBoxAdapter.created.toString()}`)
 

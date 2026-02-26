@@ -29,16 +29,15 @@ component
         width: max-content
         column-gap: 0.125em
 
-        &.frozen
-          filter: saturate(0)
-          pointer-events: none !important
-
-          > div
-            pointer-events: none
-
         > div
           display: flex
           pointer-events: auto
+
+        &.frozen
+          filter: saturate(0)
+
+          *
+            pointer-events: none !important
 
           &.midi-container
             border-top: 1px var(--color-orange) solid

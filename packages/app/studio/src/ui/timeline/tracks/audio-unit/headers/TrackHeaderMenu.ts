@@ -1,13 +1,18 @@
 import {CaptureAudio, MenuItem, MonitoringMode, Project} from "@opendaw/studio-core"
 import {isInstanceOf, Procedure, RuntimeNotifier, UUID} from "@opendaw/lib-std"
-import {AudioUnitBoxAdapter, DeviceAccepts, TrackBoxAdapter, TrackType, TransferAudioUnits} from "@opendaw/studio-adapters"
+import {
+    AudioUnitBoxAdapter,
+    DeviceAccepts,
+    TrackBoxAdapter,
+    TrackType,
+    TransferAudioUnits
+} from "@opendaw/studio-adapters"
 import {DebugMenus} from "@/ui/menu/debug"
 import {MidiImport} from "@/ui/timeline/MidiImport.ts"
 import {CaptureMidiBox, TrackBox} from "@opendaw/studio-boxes"
 import {StudioService} from "@/service/StudioService"
 import {MenuCapture} from "@/ui/timeline/tracks/audio-unit/menu/capture"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
-import {AudioUnitFreeze} from "@opendaw/studio-core"
 
 export const installTrackHeaderMenu = (service: StudioService,
                                        audioUnitBoxAdapter: AudioUnitBoxAdapter,
@@ -74,9 +79,19 @@ export const installTrackHeaderMenu = (service: StudioService,
             separatorBefore: true
         }).setTriggerProcedure(() => {
             const copies = editing.modify(() => TransferAudioUnits
-                .transfer([trackBoxAdapter.audioUnit], project.skeleton), false).unwrap()
+                .transfer([trackBoxAdapter.audioUnit], project.skeleton, {
+                    insertIndex: trackBoxAdapter.audioUnit.index.getValue() + 1
+                }), false).unwrap()
             userEditingManager.audioUnit.edit(copies[0].editing)
         }),
+        MenuItem.default({
+            label: "Freeze AudioUnit",
+            hidden: audioUnitBoxAdapter.isOutput || project.audioUnitFreeze.isFrozen(audioUnitBoxAdapter)
+        }).setTriggerProcedure(() => project.audioUnitFreeze.freeze(audioUnitBoxAdapter)),
+        MenuItem.default({
+            label: "Unfreeze AudioUnit",
+            hidden: !project.audioUnitFreeze.isFrozen(audioUnitBoxAdapter)
+        }).setTriggerProcedure(() => project.audioUnitFreeze.unfreeze(audioUnitBoxAdapter)),
         MenuItem.default({
             label: "Extract AudioUnit Into New Project"
         }).setTriggerProcedure(async () => {
@@ -125,15 +140,6 @@ export const installTrackHeaderMenu = (service: StudioService,
             hidden: !acceptMidi,
             separatorBefore: true
         }).setTriggerProcedure(() => MidiImport.toTracks(project, audioUnitBoxAdapter)),
-        MenuItem.default({
-            label: "Freeze AudioUnit",
-            hidden: audioUnitBoxAdapter.isOutput || AudioUnitFreeze.isFrozen(audioUnitBoxAdapter),
-            separatorBefore: true
-        }).setTriggerProcedure(() => AudioUnitFreeze.freeze(project, audioUnitBoxAdapter)),
-        MenuItem.default({
-            label: "Unfreeze AudioUnit",
-            hidden: !AudioUnitFreeze.isFrozen(audioUnitBoxAdapter)
-        }).setTriggerProcedure(() => AudioUnitFreeze.unfreeze(project, audioUnitBoxAdapter)),
         MenuItem.default({
             label: `Delete '${audioUnitBoxAdapter.input.label.unwrapOrElse("No Input")}'`,
             selectable: !audioUnitBoxAdapter.isOutput,

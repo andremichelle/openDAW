@@ -15,7 +15,6 @@ import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {EffectFactories} from "@opendaw/studio-core"
-import {AudioUnitFreeze} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "TrackHeader")
 
@@ -79,14 +78,15 @@ export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAd
             </MenuButton>
         </div>
     )
+    const {audioUnitFreeze} = project
     const updateFrozenState = () => {
-        const frozen = AudioUnitFreeze.isFrozen(audioUnitBoxAdapter)
+        const frozen = audioUnitFreeze.isFrozen(audioUnitBoxAdapter)
         lockIcon.style.display = frozen ? "" : "none"
     }
     updateFrozenState()
     const audioUnitEditing = project.userEditingManager.audioUnit
     lifecycle.ownAll(
-        AudioUnitFreeze.subscribe((uuid: UUID.Bytes) => {
+        audioUnitFreeze.subscribe((uuid: UUID.Bytes) => {
             if (UUID.equals(uuid, audioUnitBoxAdapter.uuid)) {updateFrozenState()}
         }),
         Events.subscribeDblDwn(nameLabel, async event => {

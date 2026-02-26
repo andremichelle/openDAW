@@ -1,29 +1,37 @@
-import {Errors, Notifier, Observer, Option, RuntimeNotifier, Subscription, UUID} from "@opendaw/lib-std"
+import {Errors, Notifier, Observer, Option, RuntimeNotifier, Subscription, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioData} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
-import {AudioUnitBoxAdapter, ExportStemsConfiguration, RootBoxAdapter} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, ExportStemsConfiguration} from "@opendaw/studio-adapters"
 import {OfflineEngineRenderer} from "./OfflineEngineRenderer"
-import {Project} from "./project"
 import {Address} from "@opendaw/lib-box"
 
-const frozenAudioUnits: Map<string, AudioData> = new Map()
-const notifier = new Notifier<UUID.Bytes>()
+import type {Project} from "./project"
 
-export namespace AudioUnitFreeze {
-    export const isFrozen = (audioUnitBoxAdapter: AudioUnitBoxAdapter): boolean =>
-        frozenAudioUnits.has(UUID.toString(audioUnitBoxAdapter.uuid))
+type FrozenEntry = { audioData: AudioData, deletionSubscription: Terminable }
 
-    export const subscribe = (observer: Observer<UUID.Bytes>): Subscription => notifier.subscribe(observer)
+export class AudioUnitFreeze implements Terminable {
+    readonly #project: Project
+    readonly #frozenAudioUnits: Map<string, FrozenEntry> = new Map()
+    readonly #notifier = new Notifier<UUID.Bytes>()
 
-    export const hasSidechainDependents = (rootBoxAdapter: RootBoxAdapter,
-                                           audioUnitBoxAdapter: AudioUnitBoxAdapter): boolean => {
+    constructor(project: Project) {
+        this.#project = project
+    }
+
+    isFrozen(audioUnitBoxAdapter: AudioUnitBoxAdapter): boolean {
+        return this.#frozenAudioUnits.has(UUID.toString(audioUnitBoxAdapter.uuid))
+    }
+
+    subscribe(observer: Observer<UUID.Bytes>): Subscription {return this.#notifier.subscribe(observer)}
+
+    hasSidechainDependents(audioUnitBoxAdapter: AudioUnitBoxAdapter): boolean {
         const targetAddresses: Array<Address> = []
         for (const output of audioUnitBoxAdapter.labeledAudioOutputs()) {
             targetAddresses.push(output.address)
         }
         if (targetAddresses.length === 0) {return false}
         const edges = audioUnitBoxAdapter.box.graph.edges()
-        for (const otherUnit of rootBoxAdapter.audioUnits.adapters()) {
+        for (const otherUnit of this.#project.rootBoxAdapter.audioUnits.adapters()) {
             if (UUID.equals(otherUnit.uuid, audioUnitBoxAdapter.uuid)) {continue}
             for (const effect of otherUnit.audioEffects.adapters()) {
                 for (const [_, target] of edges.outgoingEdgesOf(effect.box)) {
@@ -36,10 +44,9 @@ export namespace AudioUnitFreeze {
         return false
     }
 
-    export const freeze = async (project: Project,
-                                 audioUnitBoxAdapter: AudioUnitBoxAdapter): Promise<void> => {
-        const {engine, rootBoxAdapter} = project
-        if (hasSidechainDependents(rootBoxAdapter, audioUnitBoxAdapter)) {
+    async freeze(audioUnitBoxAdapter: AudioUnitBoxAdapter): Promise<void> {
+        const {engine} = this.#project
+        if (this.hasSidechainDependents(audioUnitBoxAdapter)) {
             await RuntimeNotifier.info({
                 headline: "Cannot Freeze",
                 message: "This audio unit is used as a sidechain source by another device."
@@ -56,7 +63,7 @@ export namespace AudioUnitFreeze {
                 fileName: "freeze"
             }
         }
-        const copiedProject = project.copy()
+        const copiedProject = this.#project.copy()
         const abortController = new AbortController()
         const dialog = RuntimeNotifier.progress({
             headline: "Freezing AudioUnit...",
@@ -80,15 +87,30 @@ export namespace AudioUnitFreeze {
         dialog.terminate()
         const audioData = renderResult.value
         engine.setFrozenAudio(audioUnitBoxAdapter.uuid, audioData)
-        frozenAudioUnits.set(audioUnitUuid, audioData)
-        notifier.notify(audioUnitBoxAdapter.uuid)
+        const deletionSubscription = audioUnitBoxAdapter.box.subscribeDeletion(() =>
+            this.#removeFrozen(audioUnitBoxAdapter.uuid, audioUnitUuid))
+        this.#frozenAudioUnits.set(audioUnitUuid, {audioData, deletionSubscription})
+        this.#notifier.notify(audioUnitBoxAdapter.uuid)
     }
 
-    export const unfreeze = (project: Project,
-                             audioUnitBoxAdapter: AudioUnitBoxAdapter): void => {
-        const audioUnitUuid = UUID.toString(audioUnitBoxAdapter.uuid)
-        project.engine.setFrozenAudio(audioUnitBoxAdapter.uuid, null)
-        frozenAudioUnits.delete(audioUnitUuid)
-        notifier.notify(audioUnitBoxAdapter.uuid)
+    unfreeze(audioUnitBoxAdapter: AudioUnitBoxAdapter): void {
+        this.#removeFrozen(audioUnitBoxAdapter.uuid, UUID.toString(audioUnitBoxAdapter.uuid))
+    }
+
+    terminate(): void {
+        for (const [key, entry] of this.#frozenAudioUnits) {
+            entry.deletionSubscription.terminate()
+            this.#project.engine.setFrozenAudio(UUID.parse(key), null)
+        }
+        this.#frozenAudioUnits.clear()
+    }
+
+    #removeFrozen(uuid: UUID.Bytes, key: string): void {
+        const entry = this.#frozenAudioUnits.get(key)
+        if (entry === undefined) {return}
+        entry.deletionSubscription.terminate()
+        this.#project.engine.setFrozenAudio(uuid, null)
+        this.#frozenAudioUnits.delete(key)
+        this.#notifier.notify(uuid)
     }
 }
