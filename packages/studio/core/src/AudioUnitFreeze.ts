@@ -67,6 +67,7 @@ export class AudioUnitFreeze implements Terminable {
                 fileName: "freeze"
             }
         }
+        engine.stop(true)
         const copiedProject = this.#project.copy()
         const abortController = new AbortController()
         const dialog = RuntimeNotifier.progress({
