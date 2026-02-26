@@ -15,7 +15,7 @@ import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {EffectFactories} from "@opendaw/studio-core"
-import {AudioUnitFreeze} from "@/service/AudioUnitFreeze"
+import {AudioUnitFreeze} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "TrackHeader")
 
@@ -43,9 +43,13 @@ export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAd
         }))
     )
     const color = ColorCodes.forAudioType(audioUnitBoxAdapter.type)
+    const lockIcon: HTMLElement = <Icon symbol={IconSymbol.Lock} className="lock-icon"/>
     const element: HTMLElement = (
         <div className={Html.buildClassList(className, "is-primary")} tabindex={-1}>
-            <Icon symbol={TrackType.toIconSymbol(trackBoxAdapter.type)} style={{color: color.toString()}}/>
+            <div className="icon-container">
+                <Icon symbol={TrackType.toIconSymbol(trackBoxAdapter.type)} style={{color: color.toString()}}/>
+                {lockIcon}
+            </div>
             <div className="labels">
                 {nameLabel}
                 {controlLabel}
@@ -75,13 +79,15 @@ export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAd
             </MenuButton>
         </div>
     )
-    element.classList.toggle("frozen", AudioUnitFreeze.isFrozen(audioUnitBoxAdapter))
+    const updateFrozenState = () => {
+        const frozen = AudioUnitFreeze.isFrozen(audioUnitBoxAdapter)
+        lockIcon.style.display = frozen ? "" : "none"
+    }
+    updateFrozenState()
     const audioUnitEditing = project.userEditingManager.audioUnit
     lifecycle.ownAll(
         AudioUnitFreeze.subscribe((uuid: UUID.Bytes) => {
-            if (UUID.equals(uuid, audioUnitBoxAdapter.uuid)) {
-                element.classList.toggle("frozen", AudioUnitFreeze.isFrozen(audioUnitBoxAdapter))
-            }
+            if (UUID.equals(uuid, audioUnitBoxAdapter.uuid)) {updateFrozenState()}
         }),
         Events.subscribeDblDwn(nameLabel, async event => {
             const {status, error, value} = await Promises.tryCatch(Surface.get(nameLabel)

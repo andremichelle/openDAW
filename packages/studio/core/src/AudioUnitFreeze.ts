@@ -1,15 +1,9 @@
-import {Errors, isInstanceOf, Notifier, Observer, Option, RuntimeNotifier, Subscription, UUID} from "@opendaw/lib-std"
+import {Errors, Notifier, Observer, Option, RuntimeNotifier, Subscription, UUID} from "@opendaw/lib-std"
 import {AudioData} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
-import {
-    AudioUnitBoxAdapter,
-    CompressorDeviceBoxAdapter,
-    ExportStemsConfiguration,
-    GateDeviceBoxAdapter,
-    RootBoxAdapter
-} from "@opendaw/studio-adapters"
-import {OfflineEngineRenderer} from "@opendaw/studio-core"
-import {StudioService} from "@/service/StudioService"
+import {AudioUnitBoxAdapter, ExportStemsConfiguration, RootBoxAdapter} from "@opendaw/studio-adapters"
+import {OfflineEngineRenderer} from "./OfflineEngineRenderer"
+import {Project} from "./project"
 import {Address} from "@opendaw/lib-box"
 
 const frozenAudioUnits: Map<string, AudioData> = new Map()
@@ -27,16 +21,14 @@ export namespace AudioUnitFreeze {
         for (const output of audioUnitBoxAdapter.labeledAudioOutputs()) {
             targetAddresses.push(output.address)
         }
+        if (targetAddresses.length === 0) {return false}
+        const edges = audioUnitBoxAdapter.box.graph.edges()
         for (const otherUnit of rootBoxAdapter.audioUnits.adapters()) {
             if (UUID.equals(otherUnit.uuid, audioUnitBoxAdapter.uuid)) {continue}
             for (const effect of otherUnit.audioEffects.adapters()) {
-                if (isInstanceOf(effect, CompressorDeviceBoxAdapter) || isInstanceOf(effect, GateDeviceBoxAdapter)) {
-                    const sideChainTarget = effect.sideChain.targetAddress
-                    if (sideChainTarget.nonEmpty()) {
-                        const address = sideChainTarget.unwrap()
-                        if (targetAddresses.some(targetAddr => targetAddr.equals(address))) {
-                            return true
-                        }
+                for (const [_, target] of edges.outgoingEdgesOf(effect.box)) {
+                    if (targetAddresses.some(addr => addr.equals(target))) {
+                        return true
                     }
                 }
             }
@@ -44,10 +36,10 @@ export namespace AudioUnitFreeze {
         return false
     }
 
-    export const freeze = async (service: StudioService,
+    export const freeze = async (project: Project,
                                  audioUnitBoxAdapter: AudioUnitBoxAdapter): Promise<void> => {
-        const {project, engine} = service
-        if (hasSidechainDependents(project.rootBoxAdapter, audioUnitBoxAdapter)) {
+        const {engine, rootBoxAdapter} = project
+        if (hasSidechainDependents(rootBoxAdapter, audioUnitBoxAdapter)) {
             await RuntimeNotifier.info({
                 headline: "Cannot Freeze",
                 message: "This audio unit is used as a sidechain source by another device."
@@ -76,7 +68,7 @@ export namespace AudioUnitFreeze {
                 Option.wrap(exportConfiguration),
                 progress => dialog.message = `${Math.round(progress)}s rendered`,
                 abortController.signal,
-                service.sampleRate
+                engine.sampleRate
             ))
         if (renderResult.status === "rejected") {
             dialog.terminate()
@@ -92,10 +84,10 @@ export namespace AudioUnitFreeze {
         notifier.notify(audioUnitBoxAdapter.uuid)
     }
 
-    export const unfreeze = (service: StudioService,
+    export const unfreeze = (project: Project,
                              audioUnitBoxAdapter: AudioUnitBoxAdapter): void => {
         const audioUnitUuid = UUID.toString(audioUnitBoxAdapter.uuid)
-        service.engine.setFrozenAudio(audioUnitBoxAdapter.uuid, null)
+        project.engine.setFrozenAudio(audioUnitBoxAdapter.uuid, null)
         frozenAudioUnits.delete(audioUnitUuid)
         notifier.notify(audioUnitBoxAdapter.uuid)
     }

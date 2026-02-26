@@ -10,15 +10,26 @@ component
   outline: none
   pointer-events: all
 
-  &.frozen
-    opacity: 0.5
-
   &.accept-drop
     background-color: rgba(white, 0.04)
 
-  > svg
-    font-size: 1.25em
+  > div.icon-container
+    position: relative
     place-self: center
+    display: grid
+    place-items: center
+
+    > svg
+      font-size: 1.25em
+
+    > svg.lock-icon
+      position: absolute
+      font-size: 1em
+      color: var(--color-red)
+      bottom: -3px
+      right: -5px
+      opacity: 0.9
+      filter: drop-shadow(0 3px 1px rgba(black, 0.75))
 
   > div.labels
     padding: 0 0.5em

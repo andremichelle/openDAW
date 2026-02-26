@@ -62,6 +62,7 @@ export enum IconSymbol {
     Insert,
     Invert,
     Info,
+    Lock,
     Loop,
     LoopEnd,
     LoopStart,

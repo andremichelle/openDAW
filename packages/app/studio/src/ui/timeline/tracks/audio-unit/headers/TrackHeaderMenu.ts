@@ -7,7 +7,7 @@ import {CaptureMidiBox, TrackBox} from "@opendaw/studio-boxes"
 import {StudioService} from "@/service/StudioService"
 import {MenuCapture} from "@/ui/timeline/tracks/audio-unit/menu/capture"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
-import {AudioUnitFreeze} from "@/service/AudioUnitFreeze"
+import {AudioUnitFreeze} from "@opendaw/studio-core"
 
 export const installTrackHeaderMenu = (service: StudioService,
                                        audioUnitBoxAdapter: AudioUnitBoxAdapter,
@@ -129,11 +129,11 @@ export const installTrackHeaderMenu = (service: StudioService,
             label: "Freeze AudioUnit",
             hidden: audioUnitBoxAdapter.isOutput || AudioUnitFreeze.isFrozen(audioUnitBoxAdapter),
             separatorBefore: true
-        }).setTriggerProcedure(() => AudioUnitFreeze.freeze(service, audioUnitBoxAdapter)),
+        }).setTriggerProcedure(() => AudioUnitFreeze.freeze(project, audioUnitBoxAdapter)),
         MenuItem.default({
             label: "Unfreeze AudioUnit",
             hidden: !AudioUnitFreeze.isFrozen(audioUnitBoxAdapter)
-        }).setTriggerProcedure(() => AudioUnitFreeze.unfreeze(service, audioUnitBoxAdapter)),
+        }).setTriggerProcedure(() => AudioUnitFreeze.unfreeze(project, audioUnitBoxAdapter)),
         MenuItem.default({
             label: `Delete '${audioUnitBoxAdapter.input.label.unwrapOrElse("No Input")}'`,
             selectable: !audioUnitBoxAdapter.isOutput,
