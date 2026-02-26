@@ -10,7 +10,7 @@ export class FrozenPlaybackProcessor implements Processor, Terminable {
     readonly #audioOutput: AudioBuffer = new AudioBuffer()
     readonly #eventInput: EventBuffer = new EventBuffer()
 
-    #readPosition: int = 0
+    #readPosition: int = -1
     #registration: Terminable
 
     constructor(context: EngineContext, data: AudioData) {
@@ -23,7 +23,7 @@ export class FrozenPlaybackProcessor implements Processor, Terminable {
     get eventInput(): EventBuffer {return this.#eventInput}
 
     reset(): void {
-        this.#readPosition = 0
+        this.#readPosition = -1
         this.#audioOutput.clear()
     }
 
@@ -35,7 +35,7 @@ export class FrozenPlaybackProcessor implements Processor, Terminable {
         const [outL, outR] = this.#audioOutput.channels()
         for (const block of blocks) {
             if (!((block.flags & BlockFlag.transporting) && (block.flags & BlockFlag.playing))) {continue}
-            if (block.flags & BlockFlag.discontinuous) {
+            if ((block.flags & BlockFlag.discontinuous) || this.#readPosition < 0) {
                 this.#readPosition = Math.round(
                     this.#context.tempoMap.intervalToSeconds(0, block.p0) * dataSampleRate)
             }
@@ -58,9 +58,7 @@ export class FrozenPlaybackProcessor implements Processor, Terminable {
         this.#readPosition = readPosition
     }
 
-    terminate(): void {
-        this.#registration.terminate()
-    }
+    terminate(): void {this.#registration.terminate()}
 
     toString(): string {return `{${this.constructor.name}}`}
 }
