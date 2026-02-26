@@ -95,13 +95,10 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
             </Checkbox>
         </ControlIndicator>
     )
-    const iconElement: HTMLElement = <div
-        style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: adapter.isOutput ? "auto" : "grab"
-        }}>
+    const lockIcon: HTMLElement = <Icon symbol={IconSymbol.Lock} className="lock-icon"/>
+    lockIcon.style.display = adapter.isInstrument && project.audioUnitFreeze.isFrozen(adapter) ? "" : "none"
+    const iconElement: HTMLElement = <div className="icon-container"
+                                          style={{cursor: adapter.isOutput ? "auto" : "grab"}}>
         <IconCartridge lifecycle={lifecycle} symbol={adapter.input.iconValue}
                        style={{
                            fontSize: "2em",
@@ -111,6 +108,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
                            marginBottom: "0.5em",
                            color: ColorCodes.forAudioType(adapter.type).toString()
                        }}/>
+        {adapter.isInstrument && lockIcon}
     </div>
     const classList = Html.buildClassList(className,
         isAux && "aux", isBus && "bus", isOutput && "output", compact && "compact")
@@ -157,6 +155,18 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
             silent: (value: boolean) => peakMeter.classList.toggle("silent", value)
         } satisfies ChannelStripView),
         ContextMenu.subscribe(element, collector => {
+            if (adapter.isInstrument) {
+                const isFrozen = project.audioUnitFreeze.isFrozen(adapter)
+                collector.addItems(
+                    MenuItem.default({
+                        label: "Freeze AudioUnit",
+                        hidden: isFrozen
+                    }).setTriggerProcedure(() => project.audioUnitFreeze.freeze(adapter)),
+                    MenuItem.default({
+                        label: "Unfreeze AudioUnit",
+                        hidden: !isFrozen
+                    }).setTriggerProcedure(() => project.audioUnitFreeze.unfreeze(adapter)))
+            }
             if (!isOutput) {
                 collector.addItems(
                     MenuItem.default({label: `Delete '${adapter.input.label.unwrapOrElse("Untitled")}'`})
@@ -194,7 +204,14 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
                 type: "channelstrip",
                 start_index: adapter.indexField.getValue()
             }), element),
-        volume.subscribe(updateVolumeLabel)
+        volume.subscribe(updateVolumeLabel),
+        adapter.isInstrument
+            ? project.audioUnitFreeze.subscribe(uuid => {
+                if (UUID.equals(uuid, adapter.uuid)) {
+                    lockIcon.style.display = project.audioUnitFreeze.isFrozen(adapter) ? "" : "none"
+                }
+            })
+            : Terminable.Empty
     )
     return element
 }

@@ -87,11 +87,11 @@ export const installTrackHeaderMenu = (service: StudioService,
         }),
         MenuItem.default({
             label: "Freeze AudioUnit",
-            hidden: audioUnitBoxAdapter.isOutput || isFrozen
+            hidden: !audioUnitBoxAdapter.isInstrument || isFrozen
         }).setTriggerProcedure(() => project.audioUnitFreeze.freeze(audioUnitBoxAdapter)),
         MenuItem.default({
             label: "Unfreeze AudioUnit",
-            hidden: audioUnitBoxAdapter.isOutput || !isFrozen
+            hidden: !audioUnitBoxAdapter.isInstrument || !isFrozen
         }).setTriggerProcedure(() => project.audioUnitFreeze.unfreeze(audioUnitBoxAdapter)),
         MenuItem.default({
             label: "Extract AudioUnit Into New Project"
