@@ -23,7 +23,8 @@ export const installTrackHeaderMenu = (service: StudioService,
     const acceptMidi = audioUnitBoxAdapter.captureBox.mapOr(box => isInstanceOf(box, CaptureMidiBox), false)
     const trackType = DeviceAccepts.toTrackType(accepts)
     const {project} = service
-    const {captureDevices, editing, userEditingManager, selection} = project
+    const {audioUnitFreeze, captureDevices, editing, userEditingManager, selection} = project
+    const isFrozen = audioUnitFreeze.isFrozen(audioUnitBoxAdapter)
     return parent.addMenuItem(
         MenuItem.default({label: "Enabled", checked: trackBoxAdapter.enabled.getValue()})
             .setTriggerProcedure(() => editing.modify(() => trackBoxAdapter.enabled.toggle())),
@@ -86,11 +87,11 @@ export const installTrackHeaderMenu = (service: StudioService,
         }),
         MenuItem.default({
             label: "Freeze AudioUnit",
-            hidden: audioUnitBoxAdapter.isOutput || project.audioUnitFreeze.isFrozen(audioUnitBoxAdapter)
+            hidden: audioUnitBoxAdapter.isOutput || isFrozen
         }).setTriggerProcedure(() => project.audioUnitFreeze.freeze(audioUnitBoxAdapter)),
         MenuItem.default({
             label: "Unfreeze AudioUnit",
-            hidden: !project.audioUnitFreeze.isFrozen(audioUnitBoxAdapter)
+            hidden: audioUnitBoxAdapter.isOutput || !isFrozen
         }).setTriggerProcedure(() => project.audioUnitFreeze.unfreeze(audioUnitBoxAdapter)),
         MenuItem.default({
             label: "Extract AudioUnit Into New Project"
@@ -111,7 +112,7 @@ export const installTrackHeaderMenu = (service: StudioService,
             })
             service.projectProfileService.setProject(newProject, "NEW")
         }),
-        MenuItem.default({label: "Move", separatorBefore: true})
+        MenuItem.default({label: "Move", separatorBefore: true, selectable: !isFrozen})
             .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                 MenuItem.default({label: "Track 1 Up", selectable: trackBoxAdapter.indexField.getValue() > 0})
                     .setTriggerProcedure(() => editing.modify(() => audioUnitBoxAdapter.moveTrack(trackBoxAdapter, -1))),
@@ -129,15 +130,20 @@ export const installTrackHeaderMenu = (service: StudioService,
                         .filter(adapter => !adapter.isOutput).length - 1 && false
                 }).setTriggerProcedure(() => editing.modify(() => audioUnitBoxAdapter.move(1)))
             )),
-        MenuItem.default({label: "Select Clips", selectable: !trackBoxAdapter.clips.collection.isEmpty()})
-            .setTriggerProcedure(() => trackBoxAdapter.clips.collection.adapters()
-                .forEach(clip => selection.select(clip.box))),
-        MenuItem.default({label: "Select Regions", selectable: !trackBoxAdapter.regions.collection.isEmpty()})
-            .setTriggerProcedure(() => trackBoxAdapter.regions.collection.asArray()
-                .forEach(region => selection.select(region.box))),
+        MenuItem.default({
+            label: "Select Clips",
+            selectable: !trackBoxAdapter.clips.collection.isEmpty() && !isFrozen
+        }).setTriggerProcedure(() => trackBoxAdapter.clips.collection.adapters()
+            .forEach(clip => selection.select(clip.box))),
+        MenuItem.default({
+            label: "Select Regions",
+            selectable: !trackBoxAdapter.regions.collection.isEmpty() && !isFrozen
+        }).setTriggerProcedure(() => trackBoxAdapter.regions.collection.asArray()
+            .forEach(region => selection.select(region.box))),
         MenuItem.default({
             label: "Import MIDI File...",
             hidden: !acceptMidi,
+            selectable: !isFrozen,
             separatorBefore: true
         }).setTriggerProcedure(() => MidiImport.toTracks(project, audioUnitBoxAdapter)),
         MenuItem.default({
@@ -148,7 +154,7 @@ export const installTrackHeaderMenu = (service: StudioService,
             project.api.deleteAudioUnit(audioUnitBoxAdapter.box))),
         MenuItem.default({
             label: `Delete ${TrackType.toLabelString(trackBoxAdapter.type)} Track`,
-            selectable: !audioUnitBoxAdapter.isOutput,
+            selectable: !audioUnitBoxAdapter.isOutput && !isFrozen,
             hidden: audioUnitBoxAdapter.tracks.collection.size() === 1
         }).setTriggerProcedure(() => editing.modify(() => {
             if (audioUnitBoxAdapter.tracks.collection.size() === 1) {

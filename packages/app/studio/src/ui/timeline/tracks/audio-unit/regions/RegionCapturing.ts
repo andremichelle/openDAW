@@ -10,7 +10,7 @@ import {PointerRadiusDistance} from "@/ui/timeline/constants.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
-import {TimelineRange} from "@opendaw/studio-core"
+import {AudioUnitFreeze, TimelineRange} from "@opendaw/studio-core"
 import {RegionLabel} from "@/ui/timeline/RegionLabel"
 
 export type RegionCaptureTarget =
@@ -25,7 +25,7 @@ export type RegionCaptureTarget =
     | { type: "track", track: TrackContext }
 
 export namespace RegionCapturing {
-    export const create = (element: Element, manager: TracksManager, range: TimelineRange) =>
+    export const create = (element: Element, manager: TracksManager, range: TimelineRange, audioUnitFreeze: AudioUnitFreeze) =>
         new ElementCapturing<RegionCaptureTarget>(element, {
             capture: (x: number, y: number): Nullable<RegionCaptureTarget> => {
                 y += manager.scrollableContainer.scrollTop
@@ -37,6 +37,9 @@ export namespace RegionCapturing {
                     .rightMostMapped(tracks, y, NumberComparator, component => component.position)
                 if (trackIndex < 0 || trackIndex >= tracks.length) {return null}
                 const track = tracks[trackIndex]
+                if (audioUnitFreeze.isFrozen(track.audioUnitBoxAdapter)) {
+                    return {type: "track", track}
+                }
                 const position = Math.floor(range.xToUnit(x))
                 const threshold = range.unitsPerPixel * PointerRadiusDistance
                 const collection = track.trackBoxAdapter.regions.collection

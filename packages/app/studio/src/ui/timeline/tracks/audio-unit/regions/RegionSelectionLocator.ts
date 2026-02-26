@@ -3,17 +3,19 @@ import {AnyRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {isDefined, Iterables, Selection} from "@opendaw/lib-std"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {PointerRadiusDistance} from "@/ui/timeline/constants"
-import {TimelineRange} from "@opendaw/studio-core"
+import {AudioUnitFreeze, TimelineRange} from "@opendaw/studio-core"
 
 export const createRegionLocator = (manager: TracksManager,
                                     range: TimelineRange,
-                                    regionSelection: Selection<AnyRegionBoxAdapter>)
+                                    regionSelection: Selection<AnyRegionBoxAdapter>,
+                                    audioUnitFreeze: AudioUnitFreeze)
     : TimelineSelectableLocator<AnyRegionBoxAdapter> => ({
     selectableAt: ({u, v}: TimelineCoordinates): Iterable<AnyRegionBoxAdapter> => {
         const tracks = manager.tracks()
         const index = manager.localToIndex(v)
         if (index < 0 || index >= tracks.length) {return Iterables.empty()}
         const component = tracks[index]
+        if (audioUnitFreeze.isFrozen(component.audioUnitBoxAdapter)) {return Iterables.empty()}
         const threshold = range.unitsPerPixel * PointerRadiusDistance
         const collection = component.trackBoxAdapter.regions.collection
         const before = collection.lowerEqual(u)
@@ -34,6 +36,7 @@ export const createRegionLocator = (manager: TracksManager,
         for (let index = startIndex; index < tracks.length; index++) {
             const component = tracks[index]
             if (component.position >= v1) {break}
+            if (audioUnitFreeze.isFrozen(component.audioUnitBoxAdapter)) {continue}
             regions.push(...component.trackBoxAdapter.regions.collection.iterateRange(u0, u1))
         }
         return regions

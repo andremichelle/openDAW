@@ -22,6 +22,10 @@ export class AudioUnitFreeze implements Terminable {
         return this.#frozenAudioUnits.has(UUID.toString(audioUnitBoxAdapter.uuid))
     }
 
+    isFrozenUuid(uuid: UUID.Bytes): boolean {
+        return this.#frozenAudioUnits.has(UUID.toString(uuid))
+    }
+
     subscribe(observer: Observer<UUID.Bytes>): Subscription {return this.#notifier.subscribe(observer)}
 
     hasSidechainDependents(audioUnitBoxAdapter: AudioUnitBoxAdapter): boolean {
@@ -87,6 +91,22 @@ export class AudioUnitFreeze implements Terminable {
         dialog.terminate()
         const audioData = renderResult.value
         engine.setFrozenAudio(audioUnitBoxAdapter.uuid, audioData)
+        const {regionSelection, userEditingManager} = this.#project
+        const frozenRegions = regionSelection.selected()
+            .filter(region => region.trackBoxAdapter
+                .mapOr(track => UUID.equals(track.audioUnit.address.uuid, audioUnitBoxAdapter.uuid), false))
+        if (frozenRegions.length > 0) {regionSelection.deselect(...frozenRegions)}
+        userEditingManager.timeline.get().ifSome(vertex => {
+            const regionUuid = vertex.box.address.uuid
+            for (const track of audioUnitBoxAdapter.tracks.values()) {
+                if (track.regions.collection.asArray().some(region => UUID.equals(region.uuid, regionUuid))) {
+                    userEditingManager.timeline.clear()
+                    break
+                }
+            }
+        })
+        this.#project.captureDevices.get(audioUnitBoxAdapter.uuid)
+            .ifSome(capture => capture.armed.setValue(false))
         const deletionSubscription = audioUnitBoxAdapter.box.subscribeDeletion(() =>
             this.#removeFrozen(audioUnitBoxAdapter.uuid, audioUnitUuid))
         this.#frozenAudioUnits.set(audioUnitUuid, {audioData, deletionSubscription})

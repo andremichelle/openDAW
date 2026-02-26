@@ -62,8 +62,9 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             <CutCursor lifecycle={lifecycle} position={markerPosition} range={range}/>
         </div>
     )
-    const capturing: ElementCapturing<RegionCaptureTarget> = RegionCapturing.create(element, manager, range)
-    const regionLocator = createRegionLocator(manager, range, regionSelection)
+    const capturing: ElementCapturing<RegionCaptureTarget> = RegionCapturing.create(element, manager, range, project.audioUnitFreeze)
+    const {audioUnitFreeze} = project
+    const regionLocator = createRegionLocator(manager, range, regionSelection, audioUnitFreeze)
     const dragAndDrop = new RegionDragAndDrop(service, capturing, timeline.snapping)
     const shortcuts = ShortcutManager.get().createContext(element, "Regions")
     const {engine, boxGraph, overlapResolver, timelineFocus} = project
@@ -89,6 +90,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         ClipboardManager.install(element, clipboardHandler),
         shortcuts.register(RegionsShortcuts["select-all"].shortcut, () => {
             regionSelection.select(...manager.tracks()
+                .filter(track => !audioUnitFreeze.isFrozen(track.audioUnitBoxAdapter))
                 .flatMap(({trackBoxAdapter: {regions}}) => regions.collection.asArray()))
         }),
         shortcuts.register(RegionsShortcuts["deselect-all"].shortcut, () => regionSelection.deselectAll()),
@@ -124,6 +126,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                     service.panelLayout.showIfAvailable(PanelType.ContentEditor)
                 })
             } else if (target.type === "track") {
+                if (audioUnitFreeze.isFrozen(target.track.audioUnitBoxAdapter)) {return}
                 const {trackBoxAdapter} = target.track
                 const x = event.clientX - element.getBoundingClientRect().left
                 let {position, complete} = snapping.xToBarInterval(x)
