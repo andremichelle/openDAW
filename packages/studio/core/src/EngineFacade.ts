@@ -110,6 +110,9 @@ export class EngineFacade implements Engine {
     loadClickSound(index: 0 | 1, data: AudioData): void {
         this.#worklet.ifSome(worklet => worklet.loadClickSound(index, data))
     }
+    setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void {
+        this.#worklet.ifSome(worklet => worklet.setFrozenAudio(uuid, audioData))
+    }
     subscribeClipNotification(observer: Observer<ClipNotification>): Subscription {
         return this.#worklet.unwrap("No worklet to subscribeClipNotification").subscribeClipNotification(observer)
     }

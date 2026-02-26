@@ -6,6 +6,7 @@ export namespace AudioUnitOptions {
     export const Default: AudioUnitOptions = {
         includeAudioEffects: true,
         includeSends: true,
-        useInstrumentOutput: false
+        useInstrumentOutput: false,
+        skipChannelStrip: false
     }
 }

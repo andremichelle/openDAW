@@ -1,5 +1,5 @@
 import css from "./TrackHeader.sass?inline"
-import {Errors, Lifecycle, panic, Terminator} from "@opendaw/lib-std"
+import {Errors, Lifecycle, panic, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
@@ -15,6 +15,7 @@ import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {EffectFactories} from "@opendaw/studio-core"
+import {AudioUnitFreeze} from "@/service/AudioUnitFreeze"
 
 const className = Html.adoptStyleSheet(css, "TrackHeader")
 
@@ -74,8 +75,14 @@ export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAd
             </MenuButton>
         </div>
     )
+    element.classList.toggle("frozen", AudioUnitFreeze.isFrozen(audioUnitBoxAdapter))
     const audioUnitEditing = project.userEditingManager.audioUnit
     lifecycle.ownAll(
+        AudioUnitFreeze.subscribe((uuid: UUID.Bytes) => {
+            if (UUID.equals(uuid, audioUnitBoxAdapter.uuid)) {
+                element.classList.toggle("frozen", AudioUnitFreeze.isFrozen(audioUnitBoxAdapter))
+            }
+        }),
         Events.subscribeDblDwn(nameLabel, async event => {
             const {status, error, value} = await Promises.tryCatch(Surface.get(nameLabel)
                 .requestFloatingTextInput(event, trackBoxAdapter.targetName.unwrapOrElse("")))

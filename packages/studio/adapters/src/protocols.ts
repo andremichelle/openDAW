@@ -25,6 +25,7 @@ export interface EngineCommands extends Terminable {
     /** @internal */
     setupMIDI(port: MessagePort, buffer: SharedArrayBuffer): void
     loadClickSound(index: 0 | 1, data: AudioData): void
+    setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void
     /** @internal */
     updateMonitoringMap(map: ReadonlyArray<MonitoringMapEntry>): void
 }

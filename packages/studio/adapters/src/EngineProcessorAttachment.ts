@@ -16,6 +16,7 @@ export type ExportStemConfiguration = {
     includeAudioEffects: boolean
     includeSends: boolean
     useInstrumentOutput: boolean
+    skipChannelStrip?: boolean
     fileName: string
 }
 

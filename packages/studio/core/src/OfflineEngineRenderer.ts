@@ -1,4 +1,4 @@
-import {Errors, int, isDefined, Option, panic, Progress, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
+import {Errors, int, isDefined, Nullable, Option, panic, Progress, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
 import {AudioData, ppqn} from "@opendaw/lib-dsp"
 import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
 import {
@@ -113,6 +113,7 @@ export class OfflineEngineRenderer {
                 setupMIDI(port: MessagePort, buffer: SharedArrayBuffer): void { dispatcher.dispatchAndForget(this.setupMIDI, port, buffer) }
                 updateMonitoringMap(map: ReadonlyArray<MonitoringMapEntry>): void { dispatcher.dispatchAndForget(this.updateMonitoringMap, map) }
                 loadClickSound(index: 0 | 1, data: AudioData): void { dispatcher.dispatchAndForget(this.loadClickSound, index, data) }
+                setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void { dispatcher.dispatchAndForget(this.setFrozenAudio, uuid, audioData) }
                 terminate(): void { dispatcher.dispatchAndForget(this.terminate) }
             }
         )

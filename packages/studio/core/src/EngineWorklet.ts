@@ -140,6 +140,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     loadClickSound(index: 0 | 1, data: AudioData): void {
                         dispatcher.dispatchAndForget(this.loadClickSound, index, data)
                     }
+                    setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void {
+                        dispatcher.dispatchAndForget(this.setFrozenAudio, uuid, audioData)
+                    }
                     noteSignal(signal: NoteSignal): void {dispatcher.dispatchAndForget(this.noteSignal, signal)}
                     ignoreNoteRegion(uuid: UUID.Bytes): void {
                         dispatcher.dispatchAndForget(this.ignoreNoteRegion, uuid)
@@ -245,6 +248,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     }
     wake(): void {Atomics.store(this.#controlFlags, 0, 0)}
     loadClickSound(index: 0 | 1, data: AudioData): void {this.#commands.loadClickSound(index, data)}
+    setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void {this.#commands.setFrozenAudio(uuid, audioData)}
 
     get isPlaying(): ObservableValue<boolean> {return this.#isPlaying}
     get isRecording(): ObservableValue<boolean> {return this.#isRecording}
