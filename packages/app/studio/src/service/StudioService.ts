@@ -278,8 +278,12 @@ export class StudioService implements ProjectEnv {
         if (isAbsent(firstFile)) {return}
         const {status, value: JSZip} = await ExternalLib.JSZip()
         if (status === "rejected") {return}
-        const zip = await JSZip.loadAsync(await firstFile.arrayBuffer())
-        const audioEntries = Object.entries(zip.files)
+        const zipResult = await Promises.tryCatch(JSZip.loadAsync(await firstFile.arrayBuffer()))
+        if (zipResult.status === "rejected") {
+            await RuntimeNotifier.info({headline: "Import Failed", message: String(zipResult.error)})
+            return
+        }
+        const audioEntries = Object.entries(zipResult.value.files)
             .filter(([path, file]) => {
                 if (file.dir) {return false}
                 const lower = path.toLowerCase()
@@ -300,7 +304,10 @@ export class StudioService implements ProjectEnv {
             const name = path.substring(path.lastIndexOf("/") + 1).replace(/\.wav$/i, "")
             dialog.message = `Importing ${name} (${index + 1}/${audioEntries.length})`
             const arrayBuffer = await file.async("arraybuffer").then(buffer => buffer.slice(0))
-            const {status, value: sample, error} = await Promises.tryCatch(this.#sampleService.importFile({name, arrayBuffer}))
+            const {status, value: sample, error} = await Promises.tryCatch(this.#sampleService.importFile({
+                name,
+                arrayBuffer
+            }))
             if (status === "rejected") {
                 console.warn(`Failed to import '${name}'`, error)
                 dialog.terminate()
