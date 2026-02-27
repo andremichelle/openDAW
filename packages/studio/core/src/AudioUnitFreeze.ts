@@ -1,4 +1,4 @@
-import {Errors, Notifier, Observer, Option, RuntimeNotifier, Subscription, Terminable, UUID} from "@opendaw/lib-std"
+import {Errors, Notifier, Observer, Option, RuntimeNotifier, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {AudioData} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioUnitBoxAdapter, ExportStemsConfiguration} from "@opendaw/studio-adapters"
@@ -11,11 +11,18 @@ type FrozenEntry = { audioData: AudioData, deletionSubscription: Terminable }
 
 export class AudioUnitFreeze implements Terminable {
     readonly #project: Project
+    readonly #terminator = new Terminator()
     readonly #frozenAudioUnits: Map<string, FrozenEntry> = new Map()
     readonly #notifier = new Notifier<UUID.Bytes>()
 
     constructor(project: Project) {
         this.#project = project
+
+        const {timelineBoxAdapter} = project
+        this.#terminator.ownAll(
+            timelineBoxAdapter.box.bpm.subscribe(() => this.#unfreezeAll()),
+            timelineBoxAdapter.catchupAndSubscribeTempoAutomation(() => this.#unfreezeAll())
+        )
     }
 
     isFrozen(audioUnitBoxAdapter: AudioUnitBoxAdapter): boolean {
@@ -118,11 +125,19 @@ export class AudioUnitFreeze implements Terminable {
     }
 
     terminate(): void {
+        this.#terminator.terminate()
         for (const [key, entry] of this.#frozenAudioUnits) {
             entry.deletionSubscription.terminate()
             this.#project.engine.setFrozenAudio(UUID.parse(key), null)
         }
         this.#frozenAudioUnits.clear()
+    }
+
+    #unfreezeAll(): void {
+        const keys = Array.from(this.#frozenAudioUnits.keys())
+        for (const key of keys) {
+            this.#removeFrozen(UUID.parse(key), key)
+        }
     }
 
     #removeFrozen(uuid: UUID.Bytes, key: string): void {
