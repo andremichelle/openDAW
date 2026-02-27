@@ -42,6 +42,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                 path: "/manuals/cloud-backup"
             },
             {type: "page", label: "Mixer", path: "/manuals/mixer"},
+            {type: "page", label: "Freeze AudioUnit", path: "/manuals/freeze-audiounit"},
             {type: "page", label: "Audio Bus", path: "/manuals/audio-bus"},
             {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"},
             {
