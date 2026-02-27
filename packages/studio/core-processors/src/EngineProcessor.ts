@@ -423,6 +423,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     }
 
     get preferences(): PreferencesClient<EngineSettings> {return this.#preferences}
+    get baseFrequency(): number {return this.#rootBoxAdapter.box.baseFrequency.getValue()}
     get boxGraph(): BoxGraph<BoxIO.TypeMap> {return this.#boxGraph}
     get boxAdapters(): BoxAdapters {return this.#boxAdapters}
     get sampleManager(): SampleLoaderManager {return this.#sampleManager}

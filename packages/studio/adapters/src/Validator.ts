@@ -4,6 +4,7 @@ import {Arrays, Attempt, Attempts, clamp, int} from "@opendaw/lib-std"
 import {UnionBoxTypes} from "./unions"
 import {TimeBase} from "@opendaw/lib-dsp"
 import {TempoRange} from "./TempoRange"
+import {BaseFrequencyRange} from "./BaseFrequencyRange"
 
 export namespace Validator {
     export const isTimeSignatureValid = (numerator: int, denominator: int): Attempt<[int, int], string> => {
@@ -18,7 +19,11 @@ export namespace Validator {
 
     export const clampBpm = (bpm: number): number => Number.isFinite(bpm)
         ? clamp(bpm, TempoRange.min, TempoRange.max)
-        : 120.0
+        : TempoRange.default
+
+    export const clampBaseFrequency = (hz: number): number => Number.isFinite(hz)
+        ? clamp(hz, BaseFrequencyRange.min, BaseFrequencyRange.max)
+        : BaseFrequencyRange.default
 
     export const hasOverlappingRegions = (boxGraph: BoxGraph): boolean => boxGraph.boxes()
         .some(box => box.accept<BoxVisitor<boolean>>({

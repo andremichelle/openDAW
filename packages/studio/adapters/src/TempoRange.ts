@@ -1,1 +1,1 @@
-export const TempoRange = {min: 30, max: 1000} as const
+export const TempoRange = {min: 30, max: 1000, default: 120.0} as const

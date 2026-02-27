@@ -150,7 +150,7 @@ export class VaporisateurDeviceProcessor extends AudioProcessor
         this.readAllParameters()
     }
 
-    computeFrequency(event: NoteEvent): number {return midiToHz(event.pitch + event.cent / 100.0, 440.0)}
+    computeFrequency(event: NoteEvent): number {return midiToHz(event.pitch + event.cent / 100.0, this.context.baseFrequency)}
     get glideTime(): ppqn {return this.#glideTime}
     get parameterFilterKeyboard(): AutomatableParameter<number> {return this.#parameterFilterKeyboard}
     get parameterLfoShape(): AutomatableParameter<ClassicWaveform> {return this.#parameterLfoShape}

@@ -16,6 +16,7 @@ export interface EngineContext extends BoxAdaptersContext, Terminable {
     get engineToClient(): EngineToClient
     get audioOutputBufferRegistry(): AudioOutputBufferRegistry
     get preferences(): PreferencesClient<EngineSettings>
+    get baseFrequency(): number
 
     getAudioUnit(uuid: UUID.Bytes): AudioUnit
     registerProcessor(processor: Processor): Terminable
