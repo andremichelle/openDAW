@@ -1,5 +1,12 @@
 import {EmptyExec, isInstanceOf, Selection, Terminable} from "@opendaw/lib-std"
-import {AudioContentModifier, ContextMenu, ElementCapturing, MenuItem, TimelineRange} from "@opendaw/studio-core"
+import {
+    AudioConsolidation,
+    AudioContentModifier,
+    ContextMenu,
+    ElementCapturing,
+    MenuItem,
+    TimelineRange
+} from "@opendaw/studio-core"
 import {AnyRegionBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {RegionCaptureTarget} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
 import {TimelineBox} from "@opendaw/studio-boxes"
@@ -15,7 +22,6 @@ import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {StudioService} from "@/service/StudioService"
 import {Promises} from "@opendaw/lib-runtime"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
-import {AudioConsolidation} from "@/service/AudioConsolidation"
 
 type Construct = {
     element: Element
