@@ -25,6 +25,7 @@ import {TidalDeviceBox} from "./audio-effects/TidalDeviceBox"
 import {DattorroReverbDeviceBox} from "./audio-effects/DattorroReverbDeviceBox"
 import {GateDeviceBox} from "./audio-effects/GateDeviceBox"
 import {NeuralAmpDeviceBox} from "./audio-effects/NeuralAmpDeviceBox"
+import {WaveshaperDeviceBox} from "./audio-effects/WaveshaperDeviceBox"
 
 export const DeviceDefinitions = [
     UnknownAudioEffectDevice,
@@ -55,5 +56,6 @@ export const DeviceDefinitions = [
     ArpeggioDeviceBox,
     PitchDeviceBox,
     ZeitgeistDeviceBox,
-    NeuralAmpDeviceBox
+    NeuralAmpDeviceBox,
+    WaveshaperDeviceBox
 ]

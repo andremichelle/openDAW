@@ -25,6 +25,7 @@ import {
     UnknownMidiEffectDeviceBox,
     VaporisateurDeviceBox,
     VelocityDeviceBox,
+    WaveshaperDeviceBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {DelayDeviceProcessor} from "./devices/audio-effects/DelayDeviceProcessor"
@@ -54,6 +55,7 @@ import {
     UnknownMidiEffectDeviceBoxAdapter,
     VaporisateurDeviceBoxAdapter,
     VelocityDeviceBoxAdapter,
+    WaveshaperDeviceBoxAdapter,
     ZeitgeistDeviceBoxAdapter
 } from "@opendaw/studio-adapters"
 import {NopDeviceProcessor} from "./devices/audio-effects/NopDeviceProcessor"
@@ -86,6 +88,7 @@ import {VelocityDeviceProcessor} from "./devices/midi-effects/VelocityDeviceProc
 import {TidalDeviceProcessor} from "./devices/audio-effects/TidalDeviceProcessor"
 import {DattorroReverbDeviceProcessor} from "./devices/audio-effects/DattorroReverbDeviceProcessor"
 import {NeuralAmpDeviceProcessor} from "./devices/audio-effects/NeuralAmpDeviceProcessor"
+import {WaveshaperDeviceProcessor} from "./devices/audio-effects/WaveshaperDeviceProcessor"
 
 export namespace InstrumentDeviceProcessorFactory {
     export const create = (context: EngineContext,
@@ -156,6 +159,8 @@ export namespace AudioEffectDeviceProcessorFactory {
             visitModularDeviceBox: (box: ModularDeviceBox): AudioEffectDeviceProcessor =>
                 new NopDeviceProcessor(context, context.boxAdapters.adapterFor(box, ModularDeviceBoxAdapter)),
             visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox): AudioEffectDeviceProcessor =>
-                new NeuralAmpDeviceProcessor(context, context.boxAdapters.adapterFor(box, NeuralAmpDeviceBoxAdapter))
+                new NeuralAmpDeviceProcessor(context, context.boxAdapters.adapterFor(box, NeuralAmpDeviceBoxAdapter)),
+            visitWaveshaperDeviceBox: (box: WaveshaperDeviceBox): AudioEffectDeviceProcessor =>
+                new WaveshaperDeviceProcessor(context, context.boxAdapters.adapterFor(box, WaveshaperDeviceBoxAdapter))
         }), `Could not create audio-effect for'${box.name}'`)
 }

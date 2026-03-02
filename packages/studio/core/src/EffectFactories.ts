@@ -21,6 +21,7 @@ import {
     StereoToolDeviceBox,
     TidalDeviceBox,
     VelocityDeviceBox,
+    WaveshaperDeviceBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {IconSymbol} from "@opendaw/studio-enums"
@@ -246,6 +247,21 @@ export namespace EffectFactories {
             })
     }
 
+    export const Waveshaper: EffectFactory = {
+        defaultName: "Waveshaper",
+        defaultIcon: IconSymbol.Curve,
+        description: "Applies nonlinear waveshaping distortion",
+        manualPage: DeviceManualUrls.Waveshaper,
+        separatorBefore: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index): WaveshaperDeviceBox =>
+            WaveshaperDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Waveshaper")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
     export const Tidal: EffectFactory = {
         defaultName: "Tidal",
         defaultIcon: IconSymbol.Tidal,
@@ -366,6 +382,7 @@ export namespace EffectFactories {
         Revamp,
         Crusher,
         Fold,
+        Waveshaper,
         Tidal,
         NeuralAmp,
         Maximizer

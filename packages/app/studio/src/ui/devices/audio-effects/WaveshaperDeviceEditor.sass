@@ -1,0 +1,34 @@
+@use "@/mixins"
+
+component
+  display: flex
+  flex-direction: column
+  min-width: 140px
+  @include mixins.Control
+  position: relative
+
+  > div.equation
+    display: flex
+    font-size: 0.625rem
+    align-items: center
+    justify-content: space-between
+
+    > h1
+      color: var(--color-dark)
+      font-size: 0.625rem
+
+  > canvas
+    top: 0.5em
+    left: 0
+    width: 100%
+    aspect-ratio: 7 / 4
+    position: relative
+    border-radius: 8px
+    outline: 1px solid hsla(200, 40%, 70%, 0.12)
+
+  > div.controls
+    margin-top: 1.25em
+    width: 100%
+    display: grid
+    grid-template-columns: 0.5em 1fr 0.5em 1fr 0.5em 1fr 0.5em
+    justify-content: space-around
