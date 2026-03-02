@@ -2,11 +2,11 @@ import css from "./Display.sass?inline"
 import {Html} from "@opendaw/lib-dom"
 import {Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {CanvasPainter} from "@/ui/canvas/painter"
 import {dbToGain, Waveshaper} from "@opendaw/lib-dsp"
 import {Colors} from "@opendaw/studio-enums"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {WaveshaperDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {CanvasPainter} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "Display")
 
