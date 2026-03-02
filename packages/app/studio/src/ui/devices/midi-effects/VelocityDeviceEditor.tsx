@@ -10,7 +10,7 @@ import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {EffectFactories} from "@opendaw/studio-core"
 import {Icon} from "@/ui/components/Icon"
-import {CanvasPainter} from "@/ui/canvas/painter"
+import {CanvasPainter} from "../../../../../../studio/core/src/ui/canvas/painter"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "VelocityDeviceEditor")

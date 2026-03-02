@@ -3,7 +3,7 @@ import {int, isDefined, Lifecycle, Nullable, Option, UUID} from "@opendaw/lib-st
 import {StudioService} from "@/service/StudioService.ts"
 import {MarkerBoxAdapter, MarkerTrackAdapter, TimelineBoxAdapter} from "@opendaw/studio-adapters"
 import {createElement} from "@opendaw/lib-jsx"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
+import {ElementCapturing} from "../../../../../../../../studio/core/src/ui/canvas/capturing.ts"
 import {MarkerBox} from "@opendaw/studio-boxes"
 import {MarkerRenderer} from "@/ui/timeline/tracks/primary/marker/MarkerRenderer"
 import {MarkerContextMenu} from "@/ui/timeline/tracks/primary/marker/MarkerContextMenu"

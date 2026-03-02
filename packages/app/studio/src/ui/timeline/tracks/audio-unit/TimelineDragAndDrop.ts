@@ -2,10 +2,9 @@ import {isDefined, Nullable, Option, panic, RuntimeNotifier, UUID} from "@openda
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, Sample, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
-import {AudioFileBoxFactory, Project, Workers} from "@opendaw/studio-core"
+import {AudioFileBoxFactory, ElementCapturing, Project, Workers} from "@opendaw/studio-core"
 import {ClipCaptureTarget} from "@/ui/timeline/tracks/audio-unit/clips/ClipCapturing.ts"
 import {AnyDragData} from "@/ui/AnyDragData.ts"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {StudioService} from "@/service/StudioService"
 import {RegionCaptureTarget} from "./regions/RegionCapturing"
 

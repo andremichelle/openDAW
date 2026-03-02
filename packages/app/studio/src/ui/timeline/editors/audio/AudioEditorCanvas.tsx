@@ -1,10 +1,8 @@
 import css from "./AudioEditorCanvas.sass?inline"
 import {isDefined, Lifecycle, Nullable, ObservableValue, Option, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {Project, TimelineRange} from "@opendaw/studio-core"
-import {CanvasPainter} from "@/ui/canvas/painter.ts"
+import {AudioRenderer, CanvasPainter, Project, TimelineRange} from "@opendaw/studio-core"
 import {EventCollection, LoopableRegion, ppqn} from "@opendaw/lib-dsp"
-import {renderAudio} from "@/ui/timeline/renderer/audio.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {renderTimeGrid} from "@/ui/timeline/editors/TimeGridRenderer.ts"
 import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
@@ -58,7 +56,7 @@ export const AudioEditorCanvas = ({
                     const pass = LoopableRegion.locateLoop(reader, range.unitMin - range.unitPadding, range.unitMax)
                     if (pass.isEmpty()) {return}
                     const tempoMap = reader.trackBoxAdapter.unwrap().context.tempoMap
-                    renderAudio(context, range, file, tempoMap, observableOptPlayMode, waveformOffset.getValue(),
+                    AudioRenderer.render(context, range, file, tempoMap, observableOptPlayMode, waveformOffset.getValue(),
                         gain.getValue(), {top: 0, bottom: actualHeight},
                         `hsl(${reader.hue}, ${60}%, 45%)`, pass.unwrap(), false)
 

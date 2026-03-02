@@ -6,8 +6,6 @@ import {SelectionRectangle} from "@/ui/timeline/SelectionRectangle.tsx"
 import {BoxEditing} from "@opendaw/lib-box"
 import {createPropertySelectionLocator} from "@/ui/timeline/editors/notes/property/PropertySelectionLocator.ts"
 import {createPropertyCapturing} from "@/ui/timeline/editors/notes/property/PropertyEventCapturing.ts"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
-import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {createPropertyPainter} from "@/ui/timeline/editors/notes/property/PropertyPainter.ts"
 import {PropertyNodeSize} from "@/ui/timeline/editors/notes/Constants.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
@@ -25,7 +23,7 @@ import {installValueInput} from "@/ui/timeline/editors/ValueInput.ts"
 
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {Dragging, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
-import {TimelineRange} from "@opendaw/studio-core"
+import {CanvasPainter, ElementCapturing, TimelineRange} from "@opendaw/studio-core"
 import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 
 const className = Html.adoptStyleSheet(css, "PropertyEditor")

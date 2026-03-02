@@ -1,6 +1,6 @@
 import {SignatureEvent, SignatureTrackAdapter} from "@opendaw/studio-adapters"
 import {isDefined, Nullable} from "@opendaw/lib-std"
-import {CanvasPainter} from "@/ui/canvas/painter"
+import {CanvasPainter} from "../../../../../../../../studio/core/src/ui/canvas/painter"
 import {Context2d} from "@opendaw/lib-dom"
 import {TimelineRange} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"

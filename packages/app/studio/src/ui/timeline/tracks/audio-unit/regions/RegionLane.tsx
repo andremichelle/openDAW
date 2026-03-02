@@ -2,11 +2,10 @@ import css from "./RegionLane.sass?inline"
 import {Html} from "@opendaw/lib-dom"
 import {Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {renderRegions} from "@/ui/timeline/tracks/audio-unit/regions/RegionRenderer.ts"
 import {TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-import {TimelineRange} from "@opendaw/studio-core"
+import {CanvasPainter, TimelineRange} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "RegionLane")
 

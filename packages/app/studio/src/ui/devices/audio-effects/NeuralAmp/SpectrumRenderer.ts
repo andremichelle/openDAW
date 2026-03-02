@@ -2,7 +2,7 @@ import {int, linear, Nullable, Terminable, Terminator} from "@opendaw/lib-std"
 import {gainToDb} from "@opendaw/lib-dsp"
 import {NeuralAmpDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {LiveStreamReceiver} from "@opendaw/lib-fusion"
-import {CanvasPainter} from "@/ui/canvas/painter.ts"
+import {CanvasPainter} from "../../../../../../../studio/core/src/ui/canvas/painter.ts"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 
 export const createSpectrumRenderer = (canvas: HTMLCanvasElement,

@@ -14,7 +14,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {CaptureMidi, Project, StudioPreferences, TimelineRange} from "@opendaw/studio-core"
+import {CanvasPainter, CaptureMidi, Project, StudioPreferences, TimelineRange} from "@opendaw/studio-core"
 import {PitchPositioner} from "./PitchPositioner.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {Scroller} from "@/ui/components/Scroller.tsx"
@@ -36,7 +36,6 @@ import {NoteDurationModifier} from "@/ui/timeline/editors/notes/NoteDurationModi
 import {installContextMenu} from "@/ui/timeline/editors/notes/pitch/PitchContextMenu.ts"
 import {NoteEventBox} from "@opendaw/studio-boxes"
 import {NoteCreateModifier} from "@/ui/timeline/editors/notes/NoteCreateModifier.ts"
-import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {CssUtils, Dragging, Events, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {PPQN, ppqn} from "@opendaw/lib-dsp"

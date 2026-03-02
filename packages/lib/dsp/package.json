@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/lib-dsp",
-  "version": "0.0.73",
+  "version": "0.0.74",
   "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

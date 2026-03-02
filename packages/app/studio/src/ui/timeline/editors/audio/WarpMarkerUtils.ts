@@ -1,9 +1,8 @@
 import {EventCollection, ppqn} from "@opendaw/lib-dsp"
 import {Nullable} from "@opendaw/lib-std"
 import {WarpMarkerBoxAdapter} from "@opendaw/studio-adapters"
-import {TimelineRange} from "@opendaw/studio-core"
+import {ElementCapturing, TimelineRange} from "@opendaw/studio-core"
 import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader"
-import {ElementCapturing} from "@/ui/canvas/capturing"
 
 export namespace WarpMarkerUtils {
     export const findAdjacent = (position: ppqn,

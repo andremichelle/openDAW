@@ -1,5 +1,4 @@
-import {ContextMenu, MenuItem} from "@opendaw/studio-core"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
+import {AudioContentModifier, ContextMenu, ElementCapturing, MenuItem, Project} from "@opendaw/studio-core"
 import {AnyClipBoxAdapter, AudioClipBoxAdapter} from "@opendaw/studio-adapters"
 import {EmptyExec, Procedure, Selection, UUID} from "@opendaw/lib-std"
 import {Surface} from "@/ui/surface/Surface.tsx"
@@ -9,7 +8,6 @@ import {DebugMenus} from "@/ui/menu/debug"
 import {exportNotesToMidiFile} from "@/ui/timeline/editors/notes/NoteUtils"
 import {AudioRegionBox, NoteRegionBox, ValueRegionBox} from "@opendaw/studio-boxes"
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
-import {AudioContentModifier, Project} from "@opendaw/studio-core"
 import {Promises} from "@opendaw/lib-runtime"
 
 type Creation = {

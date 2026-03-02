@@ -3,8 +3,7 @@ import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {TAU, unitValue} from "@opendaw/lib-std"
 import {EventCollection, Interpolation, LoopableRegion, PPQN, ValueEvent} from "@opendaw/lib-dsp"
-import {TimelineRange} from "@opendaw/studio-core"
-import {renderValueStream} from "@/ui/timeline/renderer/value.ts"
+import {TimelineRange, ValueStreamRenderer} from "@opendaw/studio-core"
 import {Html} from "@opendaw/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "AutomationPage")
@@ -632,7 +631,7 @@ export const AutomationPage: PageFactory<StudioService> = ({}: PageContext<Studi
                             const windowMin = pass.resultStart - pass.rawStart
                             const windowMax = pass.resultEnd - pass.rawStart
                             const iterator = ValueEvent.iterateWindow(eventCollection, windowMin, windowMax)
-                            renderValueStream(context, range, iterator, valueToY, contentColor, 0.2, 0.0, pass)
+                            ValueStreamRenderer.render(context, range, iterator, valueToY, contentColor, 0.2, 0.0, pass)
                             context.strokeStyle = "rgba(255, 255, 255, 0.25)"
                         }
                         const offset = section.position - section.loopOffset

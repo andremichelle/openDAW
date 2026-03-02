@@ -1,8 +1,7 @@
-import {TimelineRange} from "@opendaw/studio-core"
+import {ElementCapturing, TimelineRange} from "@opendaw/studio-core"
 import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader"
 import {EventCollection, ppqn} from "@opendaw/lib-dsp"
 import {TransientMarkerBoxAdapter, WarpMarkerBoxAdapter} from "@opendaw/studio-adapters"
-import {ElementCapturing} from "@/ui/canvas/capturing"
 import {BinarySearch, isNotNull, Nullable, NumberComparator} from "@opendaw/lib-std"
 
 export namespace TransientMarkerUtils {

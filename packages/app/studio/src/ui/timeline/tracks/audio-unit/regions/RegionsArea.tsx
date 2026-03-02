@@ -9,7 +9,6 @@ import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {AnyRegionBoxAdapter, RegionEditing} from "@opendaw/studio-adapters"
 import {createRegionLocator} from "@/ui/timeline/tracks/audio-unit/regions/RegionSelectionLocator.ts"
 import {installRegionContextMenu} from "@/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {RegionCaptureTarget, RegionCapturing} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
 import {StudioService} from "@/service/StudioService.ts"
 import {SelectionRectangle} from "@/ui/timeline/SelectionRectangle.tsx"
@@ -27,7 +26,7 @@ import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@open
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
-import {ClipboardManager, RegionsClipboard, TimelineRange} from "@opendaw/studio-core"
+import {ClipboardManager, ElementCapturing, RegionsClipboard, TimelineRange} from "@opendaw/studio-core"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 
 const className = Html.adoptStyleSheet(css, "RegionsArea")

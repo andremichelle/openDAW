@@ -15,7 +15,6 @@ import {createElement} from "@opendaw/lib-jsx"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {AnyClipBoxAdapter, ClipAdapters, isVertexOfBox, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {ClipCaptureTarget, ClipCapturing} from "@/ui/timeline/tracks/audio-unit/clips/ClipCapturing.ts"
 import {TimelineSelectableLocator} from "@/ui/timeline/TimelineSelectableLocator.ts"
 import {createClipSelectableLocator} from "@/ui/timeline/tracks/audio-unit/clips/ClipSelectableLocator.ts"
@@ -31,6 +30,7 @@ import {Dragging, Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {DragAndDrop} from "@/ui/DragAndDrop.ts"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
+import {ElementCapturing} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "ClipsArea")
 

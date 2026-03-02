@@ -1,9 +1,8 @@
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {CreateParameters, TimelineDragAndDrop} from "@/ui/timeline/tracks/audio-unit/TimelineDragAndDrop"
 import {ClipCaptureTarget} from "./ClipCapturing"
 import {ClipWidth} from "@/ui/timeline/tracks/audio-unit/clips/constants"
 import {StudioService} from "@/service/StudioService"
-import {AudioContentFactory} from "@opendaw/studio-core"
+import {AudioContentFactory, ElementCapturing} from "@opendaw/studio-core"
 
 export class ClipDragAndDrop extends TimelineDragAndDrop<ClipCaptureTarget> {
     constructor(service: StudioService, capturing: ElementCapturing<ClipCaptureTarget>) {

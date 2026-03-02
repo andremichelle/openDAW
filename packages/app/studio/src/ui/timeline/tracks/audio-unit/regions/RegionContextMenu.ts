@@ -1,6 +1,5 @@
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {EmptyExec, isInstanceOf, Selection, Terminable} from "@opendaw/lib-std"
-import {AudioContentModifier, ContextMenu, MenuItem, TimelineRange} from "@opendaw/studio-core"
+import {AudioContentModifier, ContextMenu, ElementCapturing, MenuItem, TimelineRange} from "@opendaw/studio-core"
 import {AnyRegionBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {RegionCaptureTarget} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
 import {TimelineBox} from "@opendaw/studio-boxes"

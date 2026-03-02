@@ -1,7 +1,7 @@
-import {CanvasUnitPainter} from "@/ui/canvas/painter.ts"
+import {CanvasUnitPainter} from "../../../../../../../studio/core/src/ui/canvas/painter.ts"
 import {int, linear, Nullable, Terminable} from "@opendaw/lib-std"
 import {RevampDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {Scale} from "@/ui/canvas/scale.ts"
+import {Scale} from "../../../../../../../studio/core/src/ui/canvas/scale.ts"
 import {
     Bell,
     CurveRenderer,

@@ -1,7 +1,7 @@
 import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
-import {ElementCapturing} from "@/ui/canvas/capturing"
+import {ElementCapturing} from "../../../../../../../../studio/core/src/ui/canvas/capturing"
 import {MarkerBoxAdapter} from "@opendaw/studio-adapters"
 import {Arrays, EmptyExec} from "@opendaw/lib-std"
 import {BoxEditing} from "@opendaw/lib-box"

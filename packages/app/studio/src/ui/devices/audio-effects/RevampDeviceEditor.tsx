@@ -21,7 +21,7 @@ import {
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
-import {LinearScale} from "@/ui/canvas/scale.ts"
+import {LinearScale} from "../../../../../../studio/core/src/ui/canvas/scale.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {ControlIndicator} from "@/ui/components/ControlIndicator"
 import {attachParameterContextMenu} from "@/ui/menu/automation"

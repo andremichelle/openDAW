@@ -1,10 +1,10 @@
 import {AnyClipBoxAdapter} from "@opendaw/studio-adapters"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {BinarySearch, int, Nullable, NumberComparator} from "@opendaw/lib-std"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {ClipWidth} from "@/ui/timeline/tracks/audio-unit/clips/constants.ts"
 import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
+import {ElementCapturing} from "@opendaw/studio-core"
 
 export type ClipCaptureTarget =
     | { type: "clip", track: TrackContext, clip: AnyClipBoxAdapter }

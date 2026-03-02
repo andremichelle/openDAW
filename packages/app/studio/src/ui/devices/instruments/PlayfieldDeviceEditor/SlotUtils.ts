@@ -1,6 +1,6 @@
 import {int} from "@opendaw/lib-std"
 import {PeaksPainter} from "@opendaw/lib-fusion"
-import {CanvasPainter} from "@/ui/canvas/painter"
+import {CanvasPainter} from "../../../../../../../studio/core/src/ui/canvas/painter"
 
 import {PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
 

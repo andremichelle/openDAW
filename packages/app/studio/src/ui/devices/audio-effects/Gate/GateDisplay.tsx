@@ -3,7 +3,7 @@ import {AnimationFrame, Html} from "@opendaw/lib-dom"
 import {Lifecycle, unitValue} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
-import {CanvasPainter} from "@/ui/canvas/painter"
+import {CanvasPainter} from "../../../../../../../studio/core/src/ui/canvas/painter"
 import {GateDeviceBoxAdapter} from "@opendaw/studio-adapters"
 
 const className = Html.adoptStyleSheet(css, "GateDisplay")

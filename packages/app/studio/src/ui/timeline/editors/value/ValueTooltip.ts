@@ -3,12 +3,11 @@ import {ValueCaptureTarget} from "@/ui/timeline/editors/value/ValueEventCapturin
 import {Surface} from "@/ui/surface/Surface"
 import {ValueModifyStrategy} from "@/ui/timeline/editors/value/ValueModifyStrategies"
 import {Events} from "@opendaw/lib-dom"
-import {ElementCapturing} from "@/ui/canvas/capturing"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext"
 import {ValueModifier} from "@/ui/timeline/editors/value/ValueModifier"
 import {ValueEvent} from "@opendaw/lib-dsp"
-import {TimelineRange} from "@opendaw/studio-core"
+import {ElementCapturing, TimelineRange} from "@opendaw/studio-core"
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 
 export namespace ValueTooltip {

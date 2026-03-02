@@ -1,6 +1,5 @@
 import {RegionCaptureTarget} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
-import {AudioContentFactory} from "@opendaw/studio-core"
+import {AudioContentFactory, ElementCapturing} from "@opendaw/studio-core"
 import {CreateParameters, TimelineDragAndDrop} from "@/ui/timeline/tracks/audio-unit/TimelineDragAndDrop"
 import {Snapping} from "@/ui/timeline/Snapping"
 import {StudioService} from "@/service/StudioService"

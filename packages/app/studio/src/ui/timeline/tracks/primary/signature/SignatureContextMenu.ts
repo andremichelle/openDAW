@@ -1,5 +1,5 @@
 import {ContextMenu, MenuItem} from "@opendaw/studio-core"
-import {ElementCapturing} from "@/ui/canvas/capturing"
+import {ElementCapturing} from "../../../../../../../../studio/core/src/ui/canvas/capturing"
 import {Parsing, SignatureEvent, SignatureTrackAdapter} from "@opendaw/studio-adapters"
 import {EmptyExec} from "@opendaw/lib-std"
 import {BoxEditing} from "@opendaw/lib-box"

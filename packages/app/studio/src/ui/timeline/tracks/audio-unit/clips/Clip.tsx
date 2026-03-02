@@ -8,14 +8,13 @@ import {
     ValueClipBoxAdapter
 } from "@opendaw/studio-adapters"
 import {createElement} from "@opendaw/lib-jsx"
-import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {createNoteClipPainter} from "@/ui/timeline/tracks/audio-unit/clips/painter/NoteClipPainter.ts"
 import {createAudioClipPainter} from "@/ui/timeline/tracks/audio-unit/clips/painter/AudioClipPainter.ts"
 import {createValueClipPainter} from "@/ui/timeline/tracks/audio-unit/clips/painter/ValueClipPainter.ts"
 import {ClipPlaybackButton} from "./ClipPlaybackButton"
 import {ppqn} from "@opendaw/lib-dsp"
 import {Events, Html} from "@opendaw/lib-dom"
-import {Project} from "@opendaw/studio-core"
+import {CanvasPainter, Project} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "Clip")
 
