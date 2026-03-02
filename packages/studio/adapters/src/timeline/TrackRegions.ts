@@ -74,6 +74,8 @@ export class TrackRegions {
     }
 
     subscribeChanges(observer: Observer<void>): Subscription {return this.#changeNotifier.subscribe(observer)}
+    /** @internal */
     dispatchChange(): void {this.#changeNotifier.notify()}
+    /** @internal */
     terminate() {this.#terminator.terminate()}
 }

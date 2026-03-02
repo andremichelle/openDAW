@@ -126,7 +126,7 @@ export namespace RecordAudio {
                     currentTake.ifSome(({regionBox: {duration}}) => {
                         recordingWorklet.limit(Math.ceil((currentWaveformOffset + duration.getValue()) * sampleRate))
                     })
-                    fileBox.ifSome(fb => fb.endInSeconds.setValue(recordingWorklet.numberOfFrames / sampleRate))
+                    fileBox.ifSome(({endInSeconds}) => endInSeconds.setValue(recordingWorklet.numberOfFrames / sampleRate))
                 }
             }),
             engine.position.catchupAndSubscribe(owner => {
@@ -177,7 +177,7 @@ export namespace RecordAudio {
                             duration.setValue(takeSeconds)
                             loopDuration.setValue(takeSeconds)
                             recordingWorklet.setFillLength(recordingWorklet.numberOfFrames)
-                            fileBox.ifSome(fb => fb.endInSeconds.setValue(totalSeconds))
+                            fileBox.ifSome(box => box.endInSeconds.setValue(totalSeconds))
                         } else {
                             terminator.terminate()
                             currentTake = Option.None
