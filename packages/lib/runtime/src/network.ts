@@ -25,7 +25,9 @@ export namespace network {
     export const defaultFetch = async (input: RequestInfo | URL, init?: RequestInit,
                                        handler?: Progress.Handler): Promise<Response> => {
         const wrap = isDefined(handler) ? progress(handler) : identity
-        while (true) {
+        const limit = 30
+        let retryCounts = 0
+        while (++retryCounts < limit) {
             try {
                 return wrap(await fetch(input, init))
             } catch (reason) {
@@ -42,6 +44,7 @@ export namespace network {
                 }
             }
         }
+        return Promise.reject("timeout")
     }
 
     export const progress = (progress: Progress.Handler) => (response: Response): Response => {
