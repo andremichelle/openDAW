@@ -137,7 +137,10 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                                 const jsCode = emitOutput.outputFiles[0].text
                                     .replace(/^["']use strict["'];?/, "")
                                 await host.executeScript(jsCode, {
-                                    sampleRate: service.audioContext.sampleRate
+                                    sampleRate: service.audioContext.sampleRate,
+                                    baseFrequency: service.optProject
+                                        .map(project => project.rootBox.baseFrequency.getValue())
+                                        .unwrapOrElse(440.0)
                                 })
                             } else {
                                 await RuntimeNotifier.info({

@@ -26,6 +26,8 @@ import {
     UserInterfaceBox
 } from "@moises-ai/studio-boxes"
 import {
+    AnyRegionBoxAdapter,
+    AudioUnitBoxAdapter,
     BoxAdapters,
     BoxAdaptersContext,
     ClipSequencing,
@@ -38,6 +40,7 @@ import {
     ProcessorOptions,
     ProjectMandatoryBoxes,
     ProjectSkeleton,
+    RegionAdapters,
     RootBoxAdapter,
     SampleLoaderManager,
     SoundfontLoaderManager,
@@ -62,6 +65,7 @@ import {MidiData} from "@moises-ai/lib-midi"
 import {StudioPreferences} from "../StudioPreferences"
 import {RegionOverlapResolver, TimelineFocus} from "../ui"
 import {SampleStorage} from "../samples"
+import {AudioUnitFreeze} from "../AudioUnitFreeze"
 
 export type RestartWorklet = { unload: Func<unknown, Promise<unknown>>, load: Procedure<EngineWorklet> }
 
@@ -110,8 +114,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     readonly rootBox: RootBox
     readonly userInterfaceBoxes: ReadonlyArray<UserInterfaceBox>
-    readonly masterBusBox: AudioBusBox
-    readonly masterAudioUnit: AudioUnitBox
+    readonly primaryAudioBusBox: AudioBusBox
+    readonly primaryAudioUnitBox: AudioUnitBox
     readonly timelineBox: TimelineBox
 
     readonly api: ProjectApi
@@ -119,6 +123,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly editing: BoxEditing
     readonly selection: VertexSelection
     readonly deviceSelection: FilteredSelection<DeviceBoxAdapter>
+    readonly regionSelection: FilteredSelection<AnyRegionBoxAdapter>
     readonly boxAdapters: BoxAdapters
     readonly userEditingManager: UserEditingManager
     readonly parameterFieldAdapters: ParameterFieldAdapters
@@ -129,6 +134,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly overlapResolver: RegionOverlapResolver
     readonly timelineFocus: TimelineFocus
     readonly engine = new EngineFacade()
+    readonly audioUnitFreeze: AudioUnitFreeze
 
     readonly #rootBoxAdapter: RootBoxAdapter
     readonly #timelineBoxAdapter: TimelineBoxAdapter
@@ -136,16 +142,16 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     private constructor(env: ProjectEnv, boxGraph: BoxGraph, {
         rootBox,
         userInterfaceBoxes,
-        primaryAudioBus,
-        primaryAudioOutputUnit,
+        primaryAudioBusBox,
+        primaryAudioUnitBox,
         timelineBox
     }: ProjectMandatoryBoxes) {
         this.#env = env
         this.boxGraph = boxGraph
         this.rootBox = rootBox
         this.userInterfaceBoxes = userInterfaceBoxes
-        this.masterBusBox = primaryAudioBus
-        this.masterAudioUnit = primaryAudioOutputUnit
+        this.primaryAudioBusBox = primaryAudioBusBox
+        this.primaryAudioUnitBox = primaryAudioUnitBox
         this.timelineBox = timelineBox
 
         this.api = new ProjectApi(this)
@@ -160,6 +166,13 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                 fy: vertex => this.boxAdapters.adapterFor(vertex.box, Devices.isAny)
             }
         ))
+        this.regionSelection = this.#terminator.own(this.selection.createFilteredSelection(
+            isVertexOfBox(UnionBoxTypes.isRegionBox),
+            {
+                fx: (adapter: AnyRegionBoxAdapter) => adapter.box,
+                fy: vertex => RegionAdapters.for(this.boxAdapters, vertex.box)
+            }
+        ))
         this.#timelineBoxAdapter = this.boxAdapters.adapterFor(this.timelineBox, TimelineBoxAdapter)
         this.tempoMap = this.#terminator.own(new VaryingTempoMap(this.#timelineBoxAdapter))
         this.userEditingManager = new UserEditingManager(this.editing)
@@ -170,6 +183,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.mixer = new Mixer(this.#rootBoxAdapter.audioUnits)
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
         this.timelineFocus = this.#terminator.own(new TimelineFocus())
+        this.audioUnitFreeze = this.#terminator.own(new AudioUnitFreeze(this))
 
         console.debug(`Project was created on ${this.rootBoxAdapter.created.toString()}`)
 
@@ -227,6 +241,13 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         Recording.start(this, countIn).finally()
     }
 
+    stopRecording(): void {
+        this.engine.stopRecording()
+        this.editing.mark()
+    }
+
+    isRecording(): boolean {return Recording.isRecording}
+
     follow(box: UserInterfaceBox): void {
         this.userEditingManager.follow(box)
         this.midiLearning.followUser(box.midiControllers)
@@ -245,6 +266,9 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     get clipSequencing(): ClipSequencing {return panic("Only available in audio context")}
     get isAudioContext(): boolean {return false}
     get isMainThread(): boolean {return true}
+    get primaryAudioUnitBoxAdapter(): AudioUnitBoxAdapter {
+        return this.boxAdapters.adapterFor(this.primaryAudioUnitBox, AudioUnitBoxAdapter)
+    }
     get liveStreamBroadcaster(): LiveStreamBroadcaster {return panic("Only available in audio context")}
 
     get skeleton(): ProjectSkeleton {
@@ -253,8 +277,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
             mandatoryBoxes: {
                 rootBox: this.rootBox,
                 timelineBox: this.timelineBox,
-                primaryAudioBus: this.masterBusBox,
-                primaryAudioOutputUnit: this.masterAudioUnit,
+                primaryAudioBusBox: this.primaryAudioBusBox,
+                primaryAudioUnitBox: this.primaryAudioUnitBox,
                 userInterfaceBoxes: this.userInterfaceBoxes
             }
         }
@@ -291,6 +315,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                     capture.clearRecordedRegions()
                 }), false)
             this.engine.stop(true)
+            this.engine.setPosition(Recording.wasStartingAt())
             const subscription = this.engine.isRecording.catchupAndSubscribe(owner => {
                 if (!owner.getValue()) {
                     queueMicrotask(() => subscription.terminate())
@@ -361,11 +386,11 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         if (!this.#userCreatedSamples.hasKey(uuid)) {return}
         this.#userCreatedSamples.removeByKey(uuid)
         const autoDelete = StudioPreferences.settings.storage["auto-delete-orphaned-samples"]
-        if (!autoDelete && !await RuntimeNotifier.approve({
-            headline: "Delete Sample?",
-            message: "The sample is no longer used. Delete it from storage? This cannot be undone!",
-            approveText: "Delete",
-            cancelText: "Keep"
+        if (!autoDelete && await RuntimeNotifier.approve({
+            headline: "Keep Sample?",
+            message: "The sample is no longer used. Do you want to keep it in storage? Deletion of samples cannot be undone!",
+            approveText: "Keep",
+            cancelText: "Delete"
         })) {return}
         SampleStorage.get().deleteItem(uuid).catch((reason: unknown) =>
             console.warn("Failed to delete sample from storage", reason))

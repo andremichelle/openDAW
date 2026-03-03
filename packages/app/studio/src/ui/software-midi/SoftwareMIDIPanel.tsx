@@ -1,13 +1,13 @@
 import css from "./SoftwareMIDIPanel.sass?inline"
 import {Dragging, Events, Html, Shortcut, ShortcutManager} from "@moises-ai/lib-dom"
 import {
-    asDefined,
     asInstanceOf,
     byte,
     clamp,
     DefaultObservableValue,
     int,
     isInstanceOf,
+    isUndefined,
     Lifecycle,
     Option,
     ParseResult,
@@ -17,11 +17,10 @@ import {
 } from "@moises-ai/lib-std"
 import {createElement, DomElement} from "@moises-ai/lib-jsx"
 import {PianoRollLayout} from "@/ui/PianoRollLayout"
-import {MidiDevices} from "@moises-ai/studio-core"
+import {MenuItem, MidiDevices} from "@moises-ai/studio-core"
 import {AudioUnitBoxAdapter} from "@moises-ai/studio-adapters"
 import {NumberInput} from "@/ui/components/NumberInput"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {MenuItem} from "@moises-ai/studio-core"
 import {Icon} from "@/ui/components/Icon"
 import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {MidiData} from "@moises-ai/lib-midi"
@@ -138,7 +137,9 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
         if (event.buttons === 0) {return}
         if (isInstanceOf(event.target, SVGRectElement)) {
             const rect = event.target as SVGRectElement
-            const key = parseInt(asDefined(rect.dataset.key))
+            const dataKey = rect.dataset.key
+            if (isUndefined(dataKey)) {return}
+            const key = parseInt(dataKey)
             if (lastPointerKey === key) {return}
             stopPointerNote()
             const pitch = key + octave.getValue() * 12

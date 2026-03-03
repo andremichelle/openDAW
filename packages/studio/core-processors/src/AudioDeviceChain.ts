@@ -122,15 +122,45 @@ export class AudioDeviceChain implements DeviceChain {
     toString(): string {return `{${this.constructor.name}}`}
 
     #wire(): void {
-        const isOutputUnit = this.#audioUnit.adapter.isOutput
         const context = this.#audioUnit.context
         const optInput = this.#audioUnit.input()
+        if (optInput.isEmpty()) {return}
+        const isOutputUnit = this.#audioUnit.adapter.isOutput
         const optOutput = this.#audioUnit.adapter.output.adapter.map(adapter =>
             context.getAudioUnit(adapter.deviceHost().uuid).inputAsAudioBus())
-        if (optInput.isEmpty() || (optOutput.isEmpty() && !isOutputUnit)) {return}
+        if (this.#audioUnit.frozen.nonEmpty()) {
+            const frozenProcessor = this.#audioUnit.frozen.unwrap().processor
+            this.#audioUnit.setPreChannelStripSource(Option.wrap(frozenProcessor.audioOutput))
+            this.#disconnector.own(this.#channelStrip.setAudioSource(frozenProcessor.audioOutput))
+            this.#disconnector.own(context.registerEdge(frozenProcessor, this.#channelStrip))
+            if (this.#options.includeSends) {
+                this.#auxSends.forEach(auxSend => {
+                    const target = context.getAudioUnit(auxSend.adapter.targetBus.deviceHost().uuid)
+                    this.#disconnector.own(auxSend.setAudioSource(frozenProcessor.audioOutput))
+                    this.#disconnector.own(target.inputAsAudioBus().addAudioSource(auxSend.audioOutput))
+                    this.#disconnector.own(context.registerEdge(frozenProcessor, auxSend))
+                    this.#disconnector.own(context.registerEdge(auxSend, target.inputAsAudioBus()))
+                })
+            }
+            if (optOutput.nonEmpty() && !isOutputUnit) {
+                const audioBus = optOutput.unwrap()
+                this.#disconnector.own(audioBus.addAudioSource(this.#channelStrip.audioOutput))
+                this.#disconnector.own(context.registerEdge(this.#channelStrip, audioBus))
+            }
+            return
+        }
+        if (this.#options.useInstrumentOutput) {
+            if (optOutput.nonEmpty() && !isOutputUnit) {
+                const source = optInput.unwrap()
+                const audioBus = optOutput.unwrap()
+                this.#disconnector.own(audioBus.addAudioSource(source.audioOutput))
+                this.#disconnector.own(context.registerEdge(source.outgoing, audioBus))
+            }
+            return
+        }
+        if (optOutput.isEmpty() && !isOutputUnit) {return}
         let source: AudioDeviceProcessor = optInput.unwrap()
         let edgeSource: Processor = source.outgoing
-        // Insert monitoring mixer into edge chain if active
         if (this.#monitoringMixer.nonEmpty() && this.#monitoringMixer.unwrap().isActive) {
             const mixer = this.#monitoringMixer.unwrap()
             this.#disconnector.own(mixer.setAudioSource(source.audioOutput))
@@ -149,8 +179,16 @@ export class AudioDeviceChain implements DeviceChain {
                 }
             }
         }
+        this.#audioUnit.setPreChannelStripSource(Option.wrap(source.audioOutput))
+        if (this.#options.skipChannelStrip) {
+            if (optOutput.nonEmpty() && !isOutputUnit) {
+                const audioBus = optOutput.unwrap()
+                this.#disconnector.own(audioBus.addAudioSource(source.audioOutput))
+                this.#disconnector.own(context.registerEdge(edgeSource, audioBus))
+            }
+            return
+        }
         if (this.#options.includeSends) {
-            // Connect with aux sends (pre-mode) TODO Post-Mode
             this.#auxSends.forEach(auxSend => {
                 const target = context.getAudioUnit(auxSend.adapter.targetBus.deviceHost().uuid)
                 this.#disconnector.own(auxSend.setAudioSource(source.audioOutput))

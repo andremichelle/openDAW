@@ -17,6 +17,9 @@ export namespace Errors {
     export const isNotAllowed = (error: unknown): error is { name: string, message: string } =>
         isDOMException(error) && error.name === "NotAllowedError"
 
+    export const isNotReadable = (error: unknown): error is { name: string, message: string } =>
+        isDOMException(error) && error.name === "NotReadableError"
+
     export const CatchAbort = (error: unknown) =>
         error === AbortError ? undefined : panic(error)
 

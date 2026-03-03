@@ -1,5 +1,4 @@
-import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
+import {AudioContentModifier, ContextMenu, ElementCapturing, MenuItem, Project} from "@moises-ai/studio-core"
 import {AnyClipBoxAdapter, AudioClipBoxAdapter} from "@moises-ai/studio-adapters"
 import {EmptyExec, Procedure, Selection, UUID} from "@moises-ai/lib-std"
 import {Surface} from "@/ui/surface/Surface.tsx"
@@ -9,7 +8,6 @@ import {DebugMenus} from "@/ui/menu/debug"
 import {exportNotesToMidiFile} from "@/ui/timeline/editors/notes/NoteUtils"
 import {AudioRegionBox, NoteRegionBox, ValueRegionBox} from "@moises-ai/studio-boxes"
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
-import {AudioContentModifier, Project} from "@moises-ai/studio-core"
 import {Promises} from "@moises-ai/lib-runtime"
 
 type Creation = {

@@ -1,4 +1,4 @@
-import {LinearScale, LogScale} from "@/ui/canvas/scale.ts"
+import {LinearScale, LogScale} from "../../../../../../../studio/core/src/ui/canvas/scale.ts"
 import {BiquadCoeff} from "@moises-ai/lib-dsp"
 import {Arrays, Color, ValueGuide, ValueMapping} from "@moises-ai/lib-std"
 import {ColorSet} from "./Curves.ts"

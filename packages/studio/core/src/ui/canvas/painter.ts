@@ -1,6 +1,6 @@
 import {asDefined, Exec, Procedure, Terminable, Terminator} from "@moises-ai/lib-std"
-import {Scale} from "@/ui/canvas/scale"
 import {AnimationFrame, Html} from "@moises-ai/lib-dom"
+import {Scale} from "./scale"
 
 export class CanvasPainter implements Terminable {
     readonly #rendering: CanvasRenderer

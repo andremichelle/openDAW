@@ -68,6 +68,7 @@ export class SignatureTrackAdapter implements Terminable {
 
     nonEmpty(): boolean {return this.#adapters.size() > 0}
 
+    /** @internal */
     dispatchChange(): void {this.changeNotifier.notify()}
 
     signatureAt(position: ppqn): Readonly<[int, int]> {
@@ -277,6 +278,12 @@ export class SignatureTrackAdapter implements Terminable {
         const {event, barPpqn} = this.#findSignatureEventAt(position)
         const barsFromEvent = Math.round((position - event.accumulatedPpqn) / barPpqn)
         return event.accumulatedPpqn + barsFromEvent * barPpqn
+    }
+
+    toParts(position: ppqn): { bars: int, beats: int, semiquavers: int, ticks: int } {
+        const {event} = this.#findSignatureEventAt(position)
+        const parts = PPQN.toParts(position - event.accumulatedPpqn, event.nominator, event.denominator)
+        return {...parts, bars: parts.bars + event.accumulatedBars}
     }
 
     barLengthAt(position: ppqn): ppqn {

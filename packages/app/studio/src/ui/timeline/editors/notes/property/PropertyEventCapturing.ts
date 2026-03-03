@@ -1,11 +1,10 @@
-import {Capturing} from "@/ui/canvas/capturing.ts"
 import {Nullable, ObservableValue, ValueAxis} from "@moises-ai/lib-std"
 import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
 import {EventRadius} from "@/ui/timeline/editors/notes/Constants.ts"
 import {PropertyAccessor} from "@/ui/timeline/editors/notes/property/PropertyAccessor.ts"
 import {NoteModifyStrategy} from "@/ui/timeline/editors/notes/NoteModifyStrategies.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {TimelineRange} from "@moises-ai/studio-core"
+import {Capturing, TimelineRange} from "@moises-ai/studio-core"
 
 export const createPropertyCapturing = (valueAxis: ValueAxis,
                                         range: TimelineRange,

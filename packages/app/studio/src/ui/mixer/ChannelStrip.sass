@@ -18,6 +18,21 @@ component
   @include mixins.dragging
   @include mixins.unit-type-colors
 
+  > div.icon-container
+    position: relative
+    display: flex
+    align-items: center
+    justify-content: center
+
+    > svg.lock-icon
+      position: absolute
+      font-size: 1em
+      color: var(--color-red)
+      bottom: 12px
+      right: 12px
+      opacity: 0.9
+      filter: drop-shadow(0 3px 1px rgba(black, 0.75))
+
   &.editing
     border-top: 0.125em var(--color) solid
     background: linear-gradient(to bottom, var(--color) -500%, rgba(white, 0.02) 10%)

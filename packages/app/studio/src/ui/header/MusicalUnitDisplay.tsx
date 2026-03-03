@@ -2,7 +2,6 @@ import css from "./MusicalUnitDisplay.sass?inline"
 import {Html} from "@moises-ai/lib-dom"
 import {DefaultObservableValue, Lifecycle} from "@moises-ai/lib-std"
 import {createElement} from "@moises-ai/lib-jsx"
-import {PPQN} from "@moises-ai/lib-dsp"
 import {UnitDisplay} from "@/ui/header/UnitDisplay"
 import {StudioService} from "@/service/StudioService"
 import {StudioPreferences} from "@moises-ai/studio-core"
@@ -30,7 +29,10 @@ export const MusicalUnitDisplay = ({lifecycle, service}: Construct) => {
             lifecycle.ownAll(
                 service.engine.position.catchupAndSubscribe(owner => {
                     const position = owner.getValue()
-                    const {bars, beats, semiquavers, ticks} = PPQN.toParts(Math.abs(position))
+                    const {bars, beats, semiquavers, ticks} = service.projectProfileService.getValue().match({
+                        some: ({project}) => project.timelineBoxAdapter.signatureTrack.toParts(position),
+                        none: () => ({bars: 0, beats: 0, semiquavers: 0, ticks: 0})
+                    })
                     barUnitString.setValue((bars + 1).toString().padStart(3, "0"))
                     beatUnitString.setValue((beats + 1).toString())
                     semiquaverUnitString.setValue((semiquavers + 1).toString())

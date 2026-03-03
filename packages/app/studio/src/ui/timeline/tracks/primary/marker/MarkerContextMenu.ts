@@ -1,7 +1,7 @@
 import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
 import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
-import {ElementCapturing} from "@/ui/canvas/capturing"
+import {ElementCapturing} from "../../../../../../../../studio/core/src/ui/canvas/capturing"
 import {MarkerBoxAdapter} from "@moises-ai/studio-adapters"
 import {Arrays, EmptyExec} from "@moises-ai/lib-std"
 import {BoxEditing} from "@moises-ai/lib-box"

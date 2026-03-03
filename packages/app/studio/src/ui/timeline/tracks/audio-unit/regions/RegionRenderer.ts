@@ -1,13 +1,18 @@
 import {int, Iterables, Option, unitValue} from "@moises-ai/lib-std"
 import {LoopableRegion, ValueEvent} from "@moises-ai/lib-dsp"
 import {AudioRegionBoxAdapter, NoteRegionBoxAdapter, ValueRegionBoxAdapter} from "@moises-ai/studio-adapters"
-import {RegionModifyStrategies, RegionModifyStrategy, TimeGrid, TimelineRange} from "@moises-ai/studio-core"
+import {
+    AudioFadingRenderer,
+    AudioRenderer,
+    NotesRenderer,
+    RegionBound,
+    RegionModifyStrategies,
+    RegionModifyStrategy,
+    TimeGrid,
+    TimelineRange,
+    ValueStreamRenderer
+} from "@moises-ai/studio-core"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-import {renderNotes} from "@/ui/timeline/renderer/notes.ts"
-import {RegionBound} from "@/ui/timeline/renderer/env.ts"
-import {renderAudio} from "@/ui/timeline/renderer/audio.ts"
-import {renderFading} from "@/ui/timeline/renderer/fading.ts"
-import {renderValueStream} from "@/ui/timeline/renderer/value.ts"
 import {Context2d} from "@moises-ai/lib-dom"
 import {RegionPaintBucket} from "@/ui/timeline/tracks/audio-unit/regions/RegionPaintBucket"
 import {RegionLabel} from "@/ui/timeline/RegionLabel"
@@ -84,6 +89,8 @@ export const renderRegions = (context: CanvasRenderingContext2D,
             context.fillStyle = contentColor
             region.accept({
                 visitNoteRegionBoxAdapter: (region: NoteRegionBoxAdapter): void => {
+                    const optCollection = region.optCollection
+                    if (optCollection.isEmpty()) {return}
                     for (const pass of LoopableRegion.locateLoops({
                         position, complete,
                         loopOffset: strategy.readLoopOffset(region),
@@ -94,7 +101,7 @@ export const renderRegions = (context: CanvasRenderingContext2D,
                             context.fillStyle = loopStrokeColor
                             context.fillRect(x, labelHeight, 1, height - labelHeight)
                         }
-                        renderNotes(context, range, region, bound, contentColor, pass)
+                        NotesRenderer.render(context, range, optCollection.unwrap(), bound, contentColor, pass)
                     }
                 },
                 visitAudioRegionBoxAdapter: (region: AudioRegionBoxAdapter): void => {
@@ -109,12 +116,12 @@ export const renderRegions = (context: CanvasRenderingContext2D,
                             context.fillRect(x, labelHeight, 1, height - labelHeight)
                         }
                         const tempoMap = region.trackBoxAdapter.unwrap().context.tempoMap
-                        renderAudio(context, range, region.file, tempoMap,
+                        AudioRenderer.render(context, range, region.file, tempoMap,
                             region.observableOptPlayMode, region.waveformOffset.getValue(),
                             region.gain.getValue(), bound, contentColor, pass
                         )
                     }
-                    renderFading(context, range, region.fading, bound, position, complete, labelBackground)
+                    AudioFadingRenderer.render(context, range, region.fading, bound, position, complete, labelBackground)
                     const isRecording = region.file.getOrCreateLoader().state.type === "record"
                     if (isRecording) {}
                 },
@@ -143,7 +150,7 @@ export const renderRegions = (context: CanvasRenderingContext2D,
                         context.strokeStyle = contentColor
                         context.beginPath()
                         const adapters = ValueEvent.iterateWindow(events, windowMin, windowMax)
-                        renderValueStream(context, range, adapters, valueToY, contentColor, 0.2, 0.0, pass)
+                        ValueStreamRenderer.render(context, range, adapters, valueToY, contentColor, 0.2, 0.0, pass)
                         context.stroke()
                     }
                     context.restore()

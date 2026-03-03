@@ -10,6 +10,13 @@ export const RootBox: BoxSchema<Pointers> = {
             2: {type: "field", name: "users", pointerRules: {accepts: [Pointers.User], mandatory: true}},
             3: {type: "string", name: "created"},
             4: {type: "pointer", name: "groove", mandatory: true, pointerType: Pointers.Groove},
+            5: {
+                type: "float32",
+                name: "base-frequency",
+                constraints: {min: 400, max: 480, scaling: "linear"},
+                unit: "Hz",
+                value: 440.0
+            },
             10: {
                 type: "field",
                 name: "modular-setups",

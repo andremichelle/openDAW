@@ -1,6 +1,6 @@
 import {int} from "@moises-ai/lib-std"
 import {PeaksPainter} from "@moises-ai/lib-fusion"
-import {CanvasPainter} from "@/ui/canvas/painter"
+import {CanvasPainter} from "../../../../../../../studio/core/src/ui/canvas/painter"
 
 import {PlayfieldSampleBoxAdapter} from "@moises-ai/studio-adapters"
 

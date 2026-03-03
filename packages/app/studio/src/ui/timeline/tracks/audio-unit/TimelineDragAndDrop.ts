@@ -2,10 +2,9 @@ import {isDefined, Nullable, Option, panic, RuntimeNotifier, UUID} from "@moises
 import {Promises} from "@moises-ai/lib-runtime"
 import {AudioFileBox} from "@moises-ai/studio-boxes"
 import {InstrumentFactories, Sample, TrackBoxAdapter, TrackType} from "@moises-ai/studio-adapters"
-import {AudioFileBoxFactory, Project, Workers} from "@moises-ai/studio-core"
+import {AudioFileBoxFactory, ElementCapturing, Project, Workers} from "@moises-ai/studio-core"
 import {ClipCaptureTarget} from "@/ui/timeline/tracks/audio-unit/clips/ClipCapturing.ts"
 import {AnyDragData} from "@/ui/AnyDragData.ts"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {StudioService} from "@/service/StudioService"
 import {RegionCaptureTarget} from "./regions/RegionCapturing"
 

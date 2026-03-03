@@ -1,8 +1,7 @@
-import {TimelineRange} from "@moises-ai/studio-core"
+import {ElementCapturing, TimelineRange} from "@moises-ai/studio-core"
 import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader"
 import {EventCollection, ppqn} from "@moises-ai/lib-dsp"
 import {TransientMarkerBoxAdapter, WarpMarkerBoxAdapter} from "@moises-ai/studio-adapters"
-import {ElementCapturing} from "@/ui/canvas/capturing"
 import {BinarySearch, isNotNull, Nullable, NumberComparator} from "@moises-ai/lib-std"
 
 export namespace TransientMarkerUtils {

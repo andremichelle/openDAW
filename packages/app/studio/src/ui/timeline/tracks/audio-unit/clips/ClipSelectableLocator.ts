@@ -2,10 +2,10 @@ import {TimelineSelectableLocator} from "@/ui/timeline/TimelineSelectableLocator
 import {AnyClipBoxAdapter} from "@moises-ai/studio-adapters"
 import {Coordinates, Iterables} from "@moises-ai/lib-std"
 import {ppqn} from "@moises-ai/lib-dsp"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {ClipWidth} from "@/ui/timeline/tracks/audio-unit/clips/constants.ts"
 import {ClipCaptureTarget} from "@/ui/timeline/tracks/audio-unit/clips/ClipCapturing.ts"
+import {ElementCapturing} from "@moises-ai/studio-core"
 
 export const createClipSelectableLocator = (capturing: ElementCapturing<ClipCaptureTarget>, manager: TracksManager)
     : TimelineSelectableLocator<AnyClipBoxAdapter> => ({

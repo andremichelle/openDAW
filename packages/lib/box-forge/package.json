@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/lib-box-forge",
-    "version": "0.0.73",
+    "version": "0.0.78",
     "private": true,
     "sideEffects": false,
     "license": "LGPL-3.0-or-later",

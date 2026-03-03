@@ -1,5 +1,5 @@
 import {asInstanceOf, DefaultObservableValue, Option, panic, RuntimeNotifier, TimeSpan} from "@moises-ai/lib-std"
-import {dbToGain, RenderQuantum} from "@moises-ai/lib-dsp"
+import {dbToGain, ppqn, RenderQuantum} from "@moises-ai/lib-dsp"
 import {OfflineEngineRenderer, Project} from "@moises-ai/studio-core"
 import {Files} from "@moises-ai/lib-dom"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
@@ -60,7 +60,10 @@ export namespace VideoRenderer {
             }
             const compositionCanvas = new OffscreenCanvas(width, height)
             const compositionCtx = compositionCanvas.getContext("2d")!
-            const overlay = await VideoOverlay.create({width, height, projectName})
+            const overlay = await VideoOverlay.create({
+                width, height, projectName,
+                toParts: (position: ppqn) => project.timelineBoxAdapter.signatureTrack.toParts(position)
+            })
 
             const renderer = await OfflineEngineRenderer.create(project, Option.None, sampleRate)
             renderer.play()

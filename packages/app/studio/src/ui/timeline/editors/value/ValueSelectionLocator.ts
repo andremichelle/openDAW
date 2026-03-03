@@ -2,10 +2,9 @@ import {TimelineCoordinates, TimelineSelectableLocator} from "@/ui/timeline/Time
 import {ValueEventBoxAdapter} from "@moises-ai/studio-adapters"
 import {Iterables, ValueAxis} from "@moises-ai/lib-std"
 import {ValueEvent} from "@moises-ai/lib-dsp"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {ValueCaptureTarget} from "@/ui/timeline/editors/value/ValueEventCapturing.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {TimelineRange} from "@moises-ai/studio-core"
+import {ElementCapturing, TimelineRange} from "@moises-ai/studio-core"
 
 export const createValueSelectionLocator = (reader: ValueEventOwnerReader,
                                             range: TimelineRange,

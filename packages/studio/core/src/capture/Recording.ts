@@ -1,9 +1,8 @@
-import {asInstanceOf, assert, Errors, Option, Terminable, Terminator} from "@moises-ai/lib-std"
+import {assert, Errors, Option, Terminable, Terminator, UUID} from "@moises-ai/lib-std"
 import {Promises} from "@moises-ai/lib-runtime"
-import {AudioUnitType} from "@moises-ai/studio-enums"
-import {AudioUnitBox} from "@moises-ai/studio-boxes"
-import {InstrumentFactories} from "@moises-ai/studio-adapters"
 import {Project} from "../project"
+import {ppqn} from "@moises-ai/lib-dsp"
+import {RecordAutomation} from "./RecordAutomation"
 
 export class Recording {
     static get isRecording(): boolean {return this.#isRecording}
@@ -14,22 +13,25 @@ export class Recording {
         }
         this.#isRecording = true
         assert(this.#instance.isEmpty(), "Recording already in progress")
-        this.#prepare(project)
         const {captureDevices, engine, editing} = project
         const terminator = new Terminator()
         const captures = captureDevices.filterArmed()
-        if (captures.length === 0) {
-            this.#isRecording = false
-            return Errors.warn("No track is armed for Recording")
+        if (captures.length > 0) {
+            const {status, error} =
+                await Promises.tryCatch(Promise.all(captures.map(capture => capture.prepareRecording())))
+            if (status === "rejected") {
+                this.#isRecording = false
+                return Errors.warn(String(error))
+            }
+            captures.forEach(capture => capture.clearRecordedRegions())
+            terminator.ownAll(...captures.map(capture => capture.startRecording()))
         }
-        const {status, error} =
-            await Promises.tryCatch(Promise.all(captures.map(capture => capture.prepareRecording())))
-        if (status === "rejected") {
-            this.#isRecording = false
-            return Errors.warn(String(error))
-        }
-        captures.forEach(capture => capture.clearRecordedRegions())
-        terminator.ownAll(...captures.map(capture => capture.startRecording()))
+        terminator.own(RecordAutomation.start(project))
+        const armedUUIDs = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        captures.forEach(capture => armedUUIDs.add(capture.audioUnitBox.address.uuid))
+        project.regionSelection.deselect(...project.regionSelection.selected()
+            .filter(region => region.trackBoxAdapter
+                .mapOr(track => armedUUIDs.hasKey(track.audioUnit.address.uuid), () => false)))
         engine.prepareRecordingState(countIn)
         const {isRecording, isCountingIn} = engine
         const stop = (): void => {
@@ -42,28 +44,8 @@ export class Recording {
             engine.isCountingIn.subscribe(stop),
             Terminable.create(() => Recording.#instance = Option.None)
         )
-        this.#instance = Option.wrap(new Recording(countIn))
+        this.#instance = Option.wrap(new Recording(countIn && !engine.isPlaying.getValue(), engine.position.getValue()))
         return terminator
-    }
-
-    static #prepare({api, captureDevices, editing, rootBox, userEditingManager}: Project): void {
-        const captures = captureDevices.filterArmed()
-        const instruments = rootBox.audioUnits.pointerHub.incoming()
-            .map(({box}) => asInstanceOf(box, AudioUnitBox))
-            .filter(box => box.type.getValue() === AudioUnitType.Instrument)
-        if (instruments.length === 0) {
-            const {audioUnitBox} = editing
-                .modify(() => api.createInstrument(InstrumentFactories.Tape))
-                .unwrap("Could not create Tape")
-            captureDevices.get(audioUnitBox.address.uuid)
-                .unwrap("Could not unwrap capture")
-                .armed.setValue(true)
-        } else if (captures.length === 0) {
-            userEditingManager.audioUnit.get()
-                .ifSome(({box: {address: {uuid}}}) =>
-                    captureDevices.get(uuid)
-                        .ifSome(capture => capture.armed.setValue(true))) // auto arm editing audio-unit
-        }
     }
 
     static #isRecording: boolean = false
@@ -71,6 +53,7 @@ export class Recording {
     static #instance: Option<Recording> = Option.None
 
     static wasCountingIn(): boolean {return this.#instance.mapOr(recording => recording.countIn, () => false)}
+    static wasStartingAt(): ppqn {return this.#instance.mapOr(recording => recording.startPosition, () => 0.0)}
 
-    private constructor(readonly countIn: boolean) {}
+    private constructor(readonly countIn: boolean, readonly startPosition: ppqn) {}
 }

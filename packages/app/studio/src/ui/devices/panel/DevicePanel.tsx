@@ -194,23 +194,39 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         return terminator
     }
 
+    const updateFrozenState = (): void => {
+        const profile = service.projectProfileService.getValue()
+        if (profile.isEmpty()) {return}
+        const project = profile.unwrap().project
+        const optEditing = project.userEditingManager.audioUnit.get()
+        if (optEditing.isEmpty()) {return}
+        const audioUnitBoxAdapter = project.boxAdapters
+            .adapterFor(optEditing.unwrap().box, Devices.isHost).audioUnitBoxAdapter()
+        containers.classList.toggle("frozen", project.audioUnitFreeze.isFrozen(audioUnitBoxAdapter))
+    }
+    const freezeLifecycle = lifecycle.own(new Terminator())
     const chainLifeTime = lifecycle.own(new Terminator())
     lifecycle.own(service.projectProfileService.catchupAndSubscribe((option: Option<ProjectProfile>) => {
-        chainLifeTime.terminate()
-        option.ifSome(({project: {userEditingManager}}) =>
-            userEditingManager.audioUnit.catchupAndSubscribe((target) => {
-                chainLifeTime.terminate()
-                if (target.isEmpty()) {return}
-                const editingBox = target.unwrap().box
-                const {deviceHost, instrument} = getContext(service.project, editingBox)
-                chainLifeTime.own(subscribeChain({
-                    midiEffects: deviceHost.midiEffects,
-                    instrument,
-                    audioEffects: deviceHost.audioEffects,
-                    host: deviceHost
-                }))
-            }))
-    }))
+            chainLifeTime.terminate()
+            freezeLifecycle.terminate()
+            option.ifSome(({project}) => {
+                freezeLifecycle.own(project.audioUnitFreeze.subscribe(() => updateFrozenState()))
+                project.userEditingManager.audioUnit.catchupAndSubscribe((target) => {
+                    chainLifeTime.terminate()
+                    if (target.isEmpty()) {return}
+                    const editingBox = target.unwrap().box
+                    const {deviceHost, instrument} = getContext(project, editingBox)
+                    chainLifeTime.own(subscribeChain({
+                        midiEffects: deviceHost.midiEffects,
+                        instrument,
+                        audioEffects: deviceHost.audioEffects,
+                        host: deviceHost
+                    }))
+                    updateFrozenState()
+                })
+            })
+        })
+    )
     const element: HTMLElement = (
         <div className={className}>
             <div className="devices">

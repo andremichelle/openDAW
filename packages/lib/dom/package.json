@@ -1,6 +1,6 @@
 {
     "name": "@moises-ai/lib-dom",
-    "version": "0.0.72",
+    "version": "0.0.75",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",

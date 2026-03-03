@@ -47,6 +47,7 @@ export class CaptureDevices implements Terminable {
     get(uuid: UUID.Bytes): Option<Capture> {return this.#captures.opt(uuid)}
 
     setArm(subject: Capture, exclusive: boolean): void {
+        if (this.#project.audioUnitFreeze.isFrozenUuid(subject.audioUnitBox.address.uuid)) {return}
         const arming = !subject.armed.getValue()
         subject.armed.setValue(arming)
         if (arming && exclusive) {
@@ -58,7 +59,9 @@ export class CaptureDevices implements Terminable {
 
     filterArmed(): ReadonlyArray<Capture> {
         return this.#captures.values()
-            .filter(capture => capture.armed.getValue() && capture.audioUnitBox.input.pointerHub.nonEmpty())
+            .filter(capture => capture.armed.getValue()
+                && capture.audioUnitBox.input.pointerHub.nonEmpty()
+                && !this.#project.audioUnitFreeze.isFrozenUuid(capture.audioUnitBox.address.uuid))
     }
 
     terminate(): void {

@@ -221,6 +221,9 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                         }) ?? true)),
                 panic: () => this.#panic = true,
                 loadClickSound: (index: 0 | 1, data: AudioData): void => this.#metronome.loadClickSound(index, data),
+                setFrozenAudio: (uuid: UUID.Bytes, audioData: Nullable<AudioData>): void => {
+                    this.optAudioUnit(uuid).ifSome(unit => unit.setFrozenAudio(Option.wrap(audioData)))
+                },
                 updateMonitoringMap: (map: ReadonlyArray<MonitoringMapEntry>): void => {
                     this.#audioUnits.forEach(unit => unit.clearMonitoringChannels())
                     for (const {uuid, channels} of map) {
@@ -420,6 +423,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     }
 
     get preferences(): PreferencesClient<EngineSettings> {return this.#preferences}
+    get baseFrequency(): number {return this.#rootBoxAdapter.box.baseFrequency.getValue()}
     get boxGraph(): BoxGraph<BoxIO.TypeMap> {return this.#boxGraph}
     get boxAdapters(): BoxAdapters {return this.#boxAdapters}
     get sampleManager(): SampleLoaderManager {return this.#sampleManager}

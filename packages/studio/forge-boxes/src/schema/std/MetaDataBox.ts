@@ -8,7 +8,7 @@ export const MetaDataBox: BoxSchema<Pointers> = {
         fields: {
             1: {type: "pointer", name: "target", mandatory: true, pointerType: Pointers.MetaData},
             2: {type: "string", name: "origin"},
-            3: {type: "string", name: "value"}
+            3: {type: "string", name: "value", value: "{}"} // JSON
         }
     }
 }

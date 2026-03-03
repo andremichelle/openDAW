@@ -3,7 +3,7 @@ import {AnimationFrame, Html} from "@moises-ai/lib-dom"
 import {Lifecycle, unitValue} from "@moises-ai/lib-std"
 import {createElement} from "@moises-ai/lib-jsx"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
-import {CanvasPainter} from "@/ui/canvas/painter"
+import {CanvasPainter} from "../../../../../../../studio/core/src/ui/canvas/painter"
 import {GateDeviceBoxAdapter} from "@moises-ai/studio-adapters"
 
 const className = Html.adoptStyleSheet(css, "GateDisplay")

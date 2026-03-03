@@ -21,6 +21,7 @@ import {ShortcutTooltip} from "@/ui/shortcuts/ShortcutTooltip"
 import {UndoRedoButtons} from "@/ui/header/UndoRedoButtons"
 import {MetronomeControl} from "@/ui/header/MetronomeControl"
 import {PerformanceStats} from "@/ui/header/PerformanceStats"
+import {BaseFrequencyControl} from "@/ui/header/BaseFrequencyControl"
 
 const className = Html.adoptStyleSheet(css, "Header")
 
@@ -104,6 +105,7 @@ export const Header = ({lifecycle, service}: Construct) => {
             <TransportGroup lifecycle={lifecycle} service={service}/>
             <hr/>
             <TimeStateDisplay lifecycle={lifecycle} service={service}/>
+            <BaseFrequencyControl lifecycle={lifecycle} service={service}/>
             <hr/>
             <MetronomeControl lifecycle={lifecycle}
                               service={service}

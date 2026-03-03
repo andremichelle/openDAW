@@ -18,11 +18,20 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
 
     readPosition(region: AnyRegionBoxAdapter): ppqn {return region.position}
     readDuration(region: AnyLoopableRegionBoxAdapter): ppqn {
-        const newLoopDuration = this.readLoopDuration(region)
-        if (newLoopDuration <= region.loopDuration) {return region.duration}
-        return Math.max(region.duration, newLoopDuration - region.loopOffset)
+        return this.readComplete(region) - this.readPosition(region)
     }
-    readComplete(region: AnyLoopableRegionBoxAdapter): ppqn {return region.position + this.readDuration(region)}
+    readComplete(region: AnyLoopableRegionBoxAdapter): ppqn {
+        const newLoopDuration = this.readLoopDuration(region)
+        const duration = newLoopDuration <= region.loopDuration
+            ? region.duration
+            : Math.max(region.duration, newLoopDuration - region.loopOffset)
+        const complete = region.position + duration
+        return region.trackBoxAdapter.map(trackAdapter => trackAdapter.regions.collection
+            .greaterEqual(region.complete, region => region.isSelected)).match({
+            none: () => complete,
+            some: region => complete > region.position ? region.position : complete
+        })
+    }
     readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {return region.loopOffset}
     readLoopDuration(region: AnyLoopableRegionBoxAdapter): ppqn {
         if (!region.canResize) {return region.loopDuration}
@@ -111,11 +120,31 @@ export class RegionLoopDurationModifier implements RegionModifier {
                 duration: this.#selectedModifyStrategy.readDuration(region),
                 loopDuration: this.#selectedModifyStrategy.readLoopDuration(region)
             }))
+        const regionSnapshot = (region: AnyRegionBoxAdapter) =>
+            ({p: region.position, d: region.duration, c: region.complete, s: region.isSelected})
+        const trackSnapshots = modifiedTracks.map(track => ({
+            trackIndex: track.listIndex,
+            before: track.regions.collection.asArray().map(regionSnapshot)
+        }))
+        console.debug("[RegionLoopDurationModifier.approve]", {
+            deltaLoopDuration: this.#deltaLoopDuration,
+            changes: result.map(entry => ({
+                p: entry.region.position, oldD: entry.region.duration, newD: entry.duration,
+                oldLD: entry.region.loopDuration, newLD: entry.loopDuration
+            })),
+            trackSnapshots
+        })
         this.#project.overlapResolver.apply(modifiedTracks, this.#adapters, this, 0, (_trackResolver) => {
             result.forEach(({region, duration, loopDuration}) => {
                 region.duration = duration
                 region.loopDuration = loopDuration
             })
+        })
+        console.debug("[RegionLoopDurationModifier.approve] after", {
+            tracks: modifiedTracks.map(track => ({
+                trackIndex: track.listIndex,
+                regions: track.regions.collection.asArray().map(regionSnapshot)
+            }))
         })
     }
 

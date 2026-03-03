@@ -3,12 +3,11 @@ import {ValueCaptureTarget} from "@/ui/timeline/editors/value/ValueEventCapturin
 import {Surface} from "@/ui/surface/Surface"
 import {ValueModifyStrategy} from "@/ui/timeline/editors/value/ValueModifyStrategies"
 import {Events} from "@moises-ai/lib-dom"
-import {ElementCapturing} from "@/ui/canvas/capturing"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext"
 import {ValueModifier} from "@/ui/timeline/editors/value/ValueModifier"
 import {ValueEvent} from "@moises-ai/lib-dsp"
-import {TimelineRange} from "@moises-ai/studio-core"
+import {ElementCapturing, TimelineRange} from "@moises-ai/studio-core"
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 
 export namespace ValueTooltip {

@@ -1,12 +1,11 @@
-import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
-import {BoxEditing} from "@moises-ai/lib-box"
 import {Objects, Selection} from "@moises-ai/lib-std"
-import {ValueEventBoxAdapter} from "@moises-ai/studio-adapters"
-import {ValueCaptureTarget} from "@/ui/timeline/editors/value/ValueEventCapturing.ts"
+import {BoxEditing} from "@moises-ai/lib-box"
 import {Interpolation} from "@moises-ai/lib-dsp"
-import {DebugMenus} from "@/ui/menu/debug.ts"
+import {ContextMenu, ElementCapturing, MenuItem} from "@moises-ai/studio-core"
+import {ValueEventBoxAdapter} from "@moises-ai/studio-adapters"
+import {ValueCaptureTarget} from "@/ui/timeline/editors/value/ValueEventCapturing"
 import {ValueEventEditing} from "@/ui/timeline/editors/value/ValueEventEditing"
+import {DebugMenus} from "@/ui/menu/debug"
 
 type Construct = {
     element: Element

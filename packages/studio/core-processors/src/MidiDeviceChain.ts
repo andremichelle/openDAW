@@ -74,6 +74,7 @@ export class MidiDeviceChain implements DeviceChain {
     toString(): string {return `{${this.constructor.name}}`}
 
     #wire(): void {
+        if (this.#audioUnit.frozen.nonEmpty()) {return}
         const optInput = this.#audioUnit.input().flatMap(unit => unit.noteEventTarget)
         if (optInput.isEmpty()) {return}
         const input = optInput.unwrap()

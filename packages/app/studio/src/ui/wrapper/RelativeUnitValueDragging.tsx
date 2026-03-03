@@ -86,23 +86,21 @@ export const RelativeUnitValueDragging = ({
             const terminator = lifecycle.own(new Terminator())
             return (enabled) => {
                 terminator.terminate()
-                if (enabled) {
-                    let value: Nullable<unitValue> = null
-                    terminator.own(Events.subscribe(element, "wheel", event => {
-                        if (value === null) {
-                            value = parameter.getUnitValue()
-                        }
-                        const ratio = parameter.valueMapping.floating() ? 0.008 : 0.01
-                        value = clampUnit(value - Math.sign(event.deltaY) * ratio)
-                        editing.modify(() => parameter.setUnitValue(value!), false)
-                        Runtime.debounce(() => {
-                            value = null
-                            editing.mark()
-                        })
-                        event.preventDefault()
-                        event.stopImmediatePropagation()
-                    }))
-                }
+                if (!enabled) {return}
+                let value: Nullable<unitValue> = null
+                const debounceApprove = Runtime.debounce(() => {
+                    value = null
+                    editing.mark()
+                })
+                terminator.own(Events.subscribe(element, "wheel", event => {
+                    value ??= parameter.getUnitValue()
+                    const ratio = parameter.valueMapping.floating() ? 0.008 : 0.01
+                    value = clampUnit(value - Math.sign(event.deltaY) * ratio)
+                    editing.modify(() => parameter.setUnitValue(value!), false)
+                    debounceApprove()
+                    event.preventDefault()
+                    event.stopImmediatePropagation()
+                }))
             }
         })(), "pointer", "modifying-controls-wheel")
     )

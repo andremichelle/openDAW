@@ -1,4 +1,4 @@
-import {LinearScale} from "@/ui/canvas/scale"
+import {LinearScale} from "../../../../../../../studio/core/src/ui/canvas/scale"
 
 const height = 157
 const padding = 10

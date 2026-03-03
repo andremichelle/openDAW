@@ -25,7 +25,8 @@ export class AudioDevices {
         return this.query(this.#queryEnumerateDevices("audiooutput"))
     }
 
-    static async queryAudioInputDeviceStream(sampleRate: number, deviceId?: string, channelCount: int = 2): Promise<MediaStream> {
+    static async queryAudioInputDeviceStream(sampleRate: number,
+                                             deviceId?: string, channelCount: int = 2): Promise<MediaStream> {
         console.debug(`requestAudioInputDevice deviceId: ${deviceId ?? "default"}, channelCount: ${channelCount}`)
         return this.query(mediaDevices => mediaDevices.getUserMedia({
             audio: {
@@ -86,12 +87,9 @@ export class AudioDevices {
     }
 
     static async #getUserMedia(): Promise<boolean> {
-        // This will trigger a prompt if needed and fail when denied
-        console.debug("enter getUserMedia")
         const {status} = await Promises.tryCatch(navigator.mediaDevices
             .getUserMedia({audio: this.#DefaultMediaTrackConstraints()})
             .then(stream => stream.getTracks().forEach(track => track.stop())))
-        console.debug("exit getUserMedia", status)
         return status === "resolved"
     }
 

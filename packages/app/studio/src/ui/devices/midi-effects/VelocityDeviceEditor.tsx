@@ -10,7 +10,7 @@ import {Html} from "@moises-ai/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {EffectFactories} from "@moises-ai/studio-core"
 import {Icon} from "@/ui/components/Icon"
-import {CanvasPainter} from "@/ui/canvas/painter"
+import {CanvasPainter} from "../../../../../../studio/core/src/ui/canvas/painter"
 import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "VelocityDeviceEditor")

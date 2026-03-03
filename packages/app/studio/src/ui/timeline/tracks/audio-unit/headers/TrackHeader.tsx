@@ -1,5 +1,5 @@
 import css from "./TrackHeader.sass?inline"
-import {Errors, Lifecycle, panic, Terminator} from "@moises-ai/lib-std"
+import {Errors, Lifecycle, panic, Terminator, UUID} from "@moises-ai/lib-std"
 import {createElement, Group, replaceChildren} from "@moises-ai/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
@@ -42,9 +42,13 @@ export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAd
         }))
     )
     const color = ColorCodes.forAudioType(audioUnitBoxAdapter.type)
+    const lockIcon: HTMLElement = <Icon symbol={IconSymbol.Lock} className="lock-icon"/>
     const element: HTMLElement = (
         <div className={Html.buildClassList(className, "is-primary")} tabindex={-1}>
-            <Icon symbol={TrackType.toIconSymbol(trackBoxAdapter.type)} style={{color: color.toString()}}/>
+            <div className="icon-container">
+                <Icon symbol={TrackType.toIconSymbol(trackBoxAdapter.type)} style={{color: color.toString()}}/>
+                {lockIcon}
+            </div>
             <div className="labels">
                 {nameLabel}
                 {controlLabel}
@@ -74,8 +78,17 @@ export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAd
             </MenuButton>
         </div>
     )
+    const {audioUnitFreeze} = project
+    const updateFrozenState = () => {
+        const frozen = audioUnitFreeze.isFrozen(audioUnitBoxAdapter)
+        lockIcon.style.display = frozen ? "" : "none"
+    }
+    updateFrozenState()
     const audioUnitEditing = project.userEditingManager.audioUnit
     lifecycle.ownAll(
+        audioUnitFreeze.subscribe((uuid: UUID.Bytes) => {
+            if (UUID.equals(uuid, audioUnitBoxAdapter.uuid)) {updateFrozenState()}
+        }),
         Events.subscribeDblDwn(nameLabel, async event => {
             const {status, error, value} = await Promises.tryCatch(Surface.get(nameLabel)
                 .requestFloatingTextInput(event, trackBoxAdapter.targetName.unwrapOrElse("")))

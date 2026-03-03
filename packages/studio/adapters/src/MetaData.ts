@@ -1,6 +1,17 @@
-import {Box} from "@moises-ai/lib-box"
+import {Box, PointerField} from "@moises-ai/lib-box"
 import {Pointers} from "@moises-ai/studio-enums"
-import {isNotUndefined, JSONValue, Nullable, panic, tryCatch, UUID} from "@moises-ai/lib-std"
+import {
+    isNotUndefined,
+    JSONValue,
+    Nullable,
+    Observer,
+    Option,
+    panic,
+    Subscription,
+    Terminable,
+    tryCatch,
+    UUID
+} from "@moises-ai/lib-std"
 import {MetaDataBox} from "@moises-ai/studio-boxes"
 
 export namespace MetaData {
@@ -11,7 +22,7 @@ export namespace MetaData {
      * @param value The value to store. Must be JSON-serializable.
      * @param origin The origin of the meta-data. Must be unique to the app.
      */
-    export const store = (target: Box<Pointers.MetaData>, value: JSONValue, origin: string): void => {
+    export const store = (target: Box<Pointers.MetaData | Pointers>, value: JSONValue, origin: string): void => {
         if (origin === "") {return panic("MetaData.store: origin must be unique to your app.")}
         const available = target.pointerHub
             .filter(Pointers.MetaData)
@@ -33,9 +44,9 @@ export namespace MetaData {
      * Reads the meta-data from the target box.
      * Returns a failed Attempt if no meta-data is found or the value is not deserializable.
      * @param target The box to read the meta-data from.
-     * @param origin The origin of the meta-data. Must be unique to the app.
+     * @param origin The origin of the meta-data. Should be unique to the app.
      */
-    export const read = (target: Box<Pointers.MetaData>, origin: string): Nullable<JSONValue> => {
+    export const read = (target: Box<Pointers.MetaData | Pointers>, origin: string): Nullable<JSONValue> => {
         if (origin === "") {return panic("MetaData.read: origin must be unique to your app.")}
         const existingBox = target.pointerHub
             .filter(Pointers.MetaData)
@@ -55,12 +66,56 @@ export namespace MetaData {
      * @param target The box to delete the meta-data from.
      * @param origin The origin of the meta-data. Must be unique to the app.
      */
-    export const clear = (target: Box<Pointers.MetaData>, origin: string): void => {
+    export const clear = (target: Box<Pointers.MetaData | Pointers>, origin: string): void => {
         if (origin === "") {return panic("MetaData.clear: origin must be unique to your app.")}
         target.pointerHub
             .filter(Pointers.MetaData)
             .map(({box}) => box)
             .filter((box: Box): box is MetaDataBox => box instanceof MetaDataBox && box.origin.getValue() === origin)
             .forEach(box => box.delete())
+    }
+
+    /**
+     * Subscribes to meta-data changes on the target box for the given origin.
+     * Catches up with existing meta-data and subscribes to future additions/removals.
+     * The observer receives the parsed JSONValue or null when cleared.
+     * @param target The box to observe meta-data on.
+     * @param origin The origin of the meta-data. Must be unique to the app.
+     * @param observer Called with the current value whenever it changes, or null when removed.
+     */
+    export const catchupAndSubscribe = (target: Box<Pointers.MetaData | Pointers>,
+                                        origin: string,
+                                        observer: Observer<Option<JSONValue>>): Terminable => {
+        if (origin === "") {return panic("MetaData.catchupAndSubscribe: origin must be unique to your app.")}
+        const subscriptions = UUID.newSet<{ uuid: UUID.Bytes, subscription: Subscription }>(entry => entry.uuid)
+        const notifyValue = (metaDataBox: MetaDataBox): void => {
+            const {status, value, error} = tryCatch(() => JSON.parse(metaDataBox.value.getValue()))
+            if (status === "success") {
+                observer(Option.wrap(value))
+            } else {
+                console.warn(error)
+                observer(Option.None)
+            }
+        }
+        const pointerHubSubscription = target.pointerHub.catchupAndSubscribe({
+            onAdded: ({box}: PointerField) => {
+                if (!(box instanceof MetaDataBox) || box.origin.getValue() !== origin) {return}
+                const subscription = box.value.catchupAndSubscribe(() => notifyValue(box))
+                subscriptions.add({uuid: box.address.uuid, subscription})
+            },
+            onRemoved: ({box}: PointerField) => {
+                if (!(box instanceof MetaDataBox) || box.origin.getValue() !== origin) {return}
+                const entry = subscriptions.removeByKey(box.address.uuid)
+                entry.subscription.terminate()
+                observer(Option.None)
+            }
+        }, Pointers.MetaData)
+        return {
+            terminate: () => {
+                pointerHubSubscription.terminate()
+                subscriptions.forEach(({subscription}) => subscription.terminate())
+                subscriptions.clear()
+            }
+        }
     }
 }

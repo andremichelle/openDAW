@@ -1,5 +1,5 @@
 import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
-import {ElementCapturing} from "@/ui/canvas/capturing"
+import {ElementCapturing} from "../../../../../../../../studio/core/src/ui/canvas/capturing"
 import {Parsing, SignatureEvent, SignatureTrackAdapter} from "@moises-ai/studio-adapters"
 import {EmptyExec} from "@moises-ai/lib-std"
 import {BoxEditing} from "@moises-ai/lib-box"

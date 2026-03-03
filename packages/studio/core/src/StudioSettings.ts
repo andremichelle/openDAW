@@ -9,12 +9,14 @@ export const StudioSettingsSchema = z.object({
         "visible-help-hints": z.boolean(),
         "enable-history-buttons": z.boolean(),
         "auto-open-clips": z.boolean(),
-        "scrollbar-padding": z.boolean()
+        "scrollbar-padding": z.boolean(),
+        "base-frequency": z.boolean()
     }).default({
         "visible-help-hints": true,
         "enable-history-buttons": navigator.maxTouchPoints > 0,
         "auto-open-clips": true,
-        "scrollbar-padding": Browser.isWindows()
+        "scrollbar-padding": Browser.isWindows(),
+        "base-frequency": false
     }),
     "time-display": z.object({
         "musical": z.boolean(),

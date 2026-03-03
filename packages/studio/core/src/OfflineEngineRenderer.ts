@@ -1,8 +1,9 @@
-import {Errors, int, isDefined, Option, panic, Progress, Terminator, TimeSpan, UUID} from "@moises-ai/lib-std"
+import {Errors, int, isDefined, Nullable, Option, panic, Progress, Terminator, TimeSpan, UUID} from "@moises-ai/lib-std"
 import {AudioData, ppqn} from "@moises-ai/lib-dsp"
 import {Communicator, Messenger, Wait} from "@moises-ai/lib-runtime"
 import {
     EngineCommands,
+    EngineStateSchema,
     EngineToClient,
     ExportStemsConfiguration,
     MonitoringMapEntry,
@@ -54,7 +55,7 @@ export class OfflineEngineRenderer {
         )
         const channel = new MessageChannel()
         const progressChannel = new MessageChannel()
-        const syncStreamBuffer = new SharedArrayBuffer(1024)
+        const syncStreamBuffer = new SharedArrayBuffer(EngineStateSchema().bytesTotal + 1)
         const controlFlagsBuffer = new SharedArrayBuffer(4)
         const terminator = new Terminator()
         const engineMessenger = Messenger.for(channel.port2)
@@ -112,6 +113,7 @@ export class OfflineEngineRenderer {
                 setupMIDI(port: MessagePort, buffer: SharedArrayBuffer): void { dispatcher.dispatchAndForget(this.setupMIDI, port, buffer) }
                 updateMonitoringMap(map: ReadonlyArray<MonitoringMapEntry>): void { dispatcher.dispatchAndForget(this.updateMonitoringMap, map) }
                 loadClickSound(index: 0 | 1, data: AudioData): void { dispatcher.dispatchAndForget(this.loadClickSound, index, data) }
+                setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void { dispatcher.dispatchAndForget(this.setFrozenAudio, uuid, audioData) }
                 terminate(): void { dispatcher.dispatchAndForget(this.terminate) }
             }
         )
@@ -205,6 +207,16 @@ export class OfflineEngineRenderer {
     stop(): void {
         this.#engineCommands.stop(true)
         this.#protocol.stop()
+    }
+
+    setPosition(position: ppqn): void {
+        this.#engineCommands.setPosition(position)
+    }
+
+    async waitForLoading(): Promise<void> {
+        while (!await this.#engineCommands.queryLoadingComplete()) {
+            await Wait.timeSpan(TimeSpan.millis(100))
+        }
     }
 
     terminate(): void {

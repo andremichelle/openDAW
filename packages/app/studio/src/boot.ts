@@ -8,7 +8,16 @@ import {installCursors} from "@/ui/Cursors.ts"
 import {BuildInfo} from "./BuildInfo"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {replaceChildren} from "@moises-ai/lib-jsx"
-import {ContextMenu} from "@moises-ai/studio-core"
+import {
+    AudioWorklets,
+    CloudAuthManager,
+    ContextMenu, GlobalSoundfontLoaderManager,
+    GlobalSampleLoaderManager,
+    OfflineEngineRenderer,
+    OpenSampleAPI,
+    OpenSoundfontAPI,
+    Workers
+} from "@moises-ai/studio-core"
 import {testFeatures} from "@/features.ts"
 import {MissingFeature} from "@/ui/MissingFeature.tsx"
 import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
@@ -18,16 +27,6 @@ import {AnimationFrame, Browser, Html, ShortcutManager} from "@moises-ai/lib-dom
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
-import {
-    AudioWorklets,
-    CloudAuthManager,
-    DefaultSoundfontLoaderManager,
-    GlobalSampleLoaderManager,
-    OfflineEngineRenderer,
-    OpenSampleAPI,
-    OpenSoundfontAPI,
-    Workers
-} from "@moises-ai/studio-core"
 import {AudioData} from "@moises-ai/lib-dsp"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Menu} from "@/ui/components/Menu"
@@ -46,7 +45,7 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
         alert("Error loading build info. Please reload the page.")
         return
     }
-    console.debug("buildInfo", buildInfo)
+    console.debug("buildInfo", JSON.stringify(buildInfo, null, 2))
     await FontLoader.load()
     await Workers.install(workersUrl)
     AudioWorklets.install(workletsUrl)
@@ -77,7 +76,7 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[AudioData, SampleMetaData]> =>
             OpenSampleAPI.get().load(uuid, progress)
     })
-    const soundfontManager = new DefaultSoundfontLoaderManager({
+    const soundfontManager = new GlobalSoundfontLoaderManager({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[ArrayBuffer, SoundfontMetaData]> =>
             OpenSoundfontAPI.get().load(uuid, progress)
     })

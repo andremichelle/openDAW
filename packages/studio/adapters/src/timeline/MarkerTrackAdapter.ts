@@ -45,6 +45,7 @@ export class MarkerTrackAdapter implements Terminable {
     get events(): EventCollection<MarkerBoxAdapter> {return this.#events}
     get object(): MarkerTrack {return this.#object}
 
+    /** @internal */
     dispatchChange(): void {this.changeNotifier.notify()}
 
     onSortingChanged(): void {

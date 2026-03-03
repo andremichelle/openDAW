@@ -22,7 +22,7 @@ import {
  */
 export class CompressorDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {
     static readonly PEAK_DECAY_PER_SAMPLE = Math.exp(-1.0 / (sampleRate * 0.500))
-    static readonly REDUCTION_DECAY_PER_SAMPLE = RenderQuantum / sampleRate * 0.050
+
 
     static ID: int = 0 | 0
 
@@ -89,6 +89,7 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
         this.#adapter = adapter
         this.#output = new AudioBuffer()
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
+        // input max, reduction, output max
         this.#editorValues = new Float32Array([Number.NEGATIVE_INFINITY, 0.0, Number.NEGATIVE_INFINITY])
         this.#smoothInputGain = Ramp.linear(sampleRate)
 
@@ -235,15 +236,7 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
         // Smooth attenuation - still logarithmic
         this.#ballistics.applyBallistics(this.#sidechainSignal, from, to)
 
-        // Get minimum = max gain reduction from a sidechain signal
-        for (let i = from; i < to; i++) {
-            const peak = this.#sidechainSignal[i]
-            if (this.#redMin >= peak) {
-                this.#redMin = peak
-            } else {
-                this.#redMin += CompressorDeviceProcessor.REDUCTION_DECAY_PER_SAMPLE
-            }
-        }
+        this.#redMin = this.#sidechainSignal[to - 1]
 
         // Calculate auto makeup
         this.#autoMakeup = this.#calculateAutoMakeup(this.#sidechainSignal, from, to)

@@ -1,7 +1,6 @@
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {Nullable} from "@moises-ai/lib-std"
 import {PointerRadiusDistance} from "@/ui/timeline/constants.ts"
-import {TimelineRange} from "@moises-ai/studio-core"
+import {ElementCapturing, TimelineRange} from "@moises-ai/studio-core"
 
 import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 

@@ -1,6 +1,6 @@
 {
     "name": "@moises-ai/studio-sdk",
-    "version": "0.0.103",
+    "version": "0.0.119",
     "license": "LGPL-3.0-or-later",
     "type": "module",
     "publishConfig": {
@@ -37,7 +37,7 @@
     "scripts": {
         "sync-version": "node scripts/sync-version.js",
         "build": "npm run sync-version && tsc",
-        "prepublishOnly": "npm run sync-version"
+        "prepublishOnly": "npm run build"
     },
     "devDependencies": {
         "@opendaw/typescript-config": "*"

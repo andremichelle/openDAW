@@ -1,11 +1,10 @@
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {Arrays, Curve, Func, isDefined, Nullable, unitValue} from "@moises-ai/lib-std"
 import {ValueEventBoxAdapter} from "@moises-ai/studio-adapters"
 import {ValueEvent} from "@moises-ai/lib-dsp"
 import {EventRadius, EventRatio, MidPointRadius} from "./Constants"
 import {PointerRadiusDistance} from "@/ui/timeline/constants.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {TimelineRange} from "@moises-ai/studio-core"
+import {ElementCapturing, TimelineRange} from "@moises-ai/studio-core"
 
 export type ValueCaptureTarget =
     | { type: "event", event: ValueEventBoxAdapter }

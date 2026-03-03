@@ -1,5 +1,4 @@
-import {ContextMenu} from "@moises-ai/studio-core"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
+import {ContextMenu, ElementCapturing} from "@moises-ai/studio-core"
 import {BoxEditing} from "@moises-ai/lib-box"
 import {MutableObservableValue, Selection} from "@moises-ai/lib-std"
 import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"

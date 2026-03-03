@@ -2,10 +2,9 @@ import css from "./TimeAxis.sass?inline"
 import {clamp, EmptyExec, isDefined, Lifecycle, Nullable, Option} from "@moises-ai/lib-std"
 import {createElement} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {TimeGrid, TimelineRange} from "@moises-ai/studio-core"
+import {CanvasPainter, TimeGrid, TimelineRange} from "@moises-ai/studio-core"
 import {Colors} from "@moises-ai/studio-enums"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {CanvasPainter} from "@/ui/canvas/painter.ts"
 import {ppqn, PPQN} from "@moises-ai/lib-dsp"
 import {Dragging, Html} from "@moises-ai/lib-dom"
 import {DblClckTextInput} from "@/ui/wrapper/DblClckTextInput"
@@ -131,7 +130,7 @@ export const TimeAxis = ({lifecycle, service, snapping, range, mapper}: Construc
                 return resolvers
             }} provider={() => ({
                 unit: "bars",
-                value: (PPQN.toParts(durationInPulses.getValue()).bars + 1).toString()
+                value: (signatureTrack.toParts(durationInPulses.getValue()).bars + 1).toString()
             })} location={() => {
                 const rect = endMarkerElement.getBoundingClientRect()
                 return {x: rect.left - 32, y: rect.top}
