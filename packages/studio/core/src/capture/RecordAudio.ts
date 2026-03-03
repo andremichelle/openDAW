@@ -1,10 +1,21 @@
-import {asInstanceOf, int, Nullable, Option, quantizeFloor, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
+import {
+    asInstanceOf,
+    int,
+    Nullable,
+    Option,
+    quantizeFloor,
+    Terminable,
+    Terminator,
+    tryCatch,
+    UUID
+} from "@opendaw/lib-std"
 import {ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
 import {AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {ColorCodes, SampleLoaderManager, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
 import {Project} from "../project"
 import {RecordingWorklet} from "../RecordingWorklet"
 import {Capture} from "./Capture"
+import {Recording} from "./Recording"
 import {RecordTrack} from "./RecordTrack"
 
 export namespace RecordAudio {
@@ -35,7 +46,6 @@ export namespace RecordAudio {
         let lastPosition: ppqn = 0
         let currentWaveformOffset: number = outputLatency
         let takeNumber: int = 0
-        let hadCountIn: boolean = false
 
         const {env: {audioContext: {sampleRate}}, engine: {preferences: {settings: {recording}}}} = project
         const {loopArea} = timelineBox
@@ -134,11 +144,7 @@ export namespace RecordAudio {
                 const isRecording = engine.isRecording.getValue()
                 if (!isCountingIn && !isRecording) {return}
                 const currentPosition = owner.getValue()
-                // During count-in, just track that we had one
-                if (isCountingIn) {
-                    hadCountIn = true
-                    return
-                }
+                if (isCountingIn) {return}
                 // From here on, isRecording is true
                 const loopEnabled = loopArea.enabled.getValue()
                 const loopFrom = loopArea.from.getValue()
@@ -160,10 +166,11 @@ export namespace RecordAudio {
                     const preRecordingFrames = recordingWorklet.numberOfFrames
                     const preRecordingSeconds = preRecordingFrames / sampleRate
                     // If there was count-in, use pre-recording frames as offset; otherwise use outputLatency
-                    const waveformOffset = hadCountIn ? preRecordingSeconds : outputLatency
+                    const countedIn = Recording.wasCountingIn()
+                    const waveformOffset = countedIn ? preRecordingSeconds : outputLatency
                     editing.modify(() => {
                         fileBox = Option.wrap(createFileBox())
-                        const position = quantizeFloor(currentPosition, beats)
+                        const position = countedIn ? quantizeFloor(currentPosition, beats) : currentPosition
                         currentTake = Option.wrap(createTakeRegion(position, waveformOffset, null))
                     }, false)
                     currentWaveformOffset = waveformOffset
