@@ -22,7 +22,7 @@ export namespace MetaData {
      * @param value The value to store. Must be JSON-serializable.
      * @param origin The origin of the meta-data. Must be unique to the app.
      */
-    export const store = (target: Box<Pointers.MetaData>, value: JSONValue, origin: string): void => {
+    export const store = (target: Box<Pointers.MetaData | Pointers>, value: JSONValue, origin: string): void => {
         if (origin === "") {return panic("MetaData.store: origin must be unique to your app.")}
         const available = target.pointerHub
             .filter(Pointers.MetaData)

@@ -451,7 +451,13 @@ export class BoxGraph<BoxMap = any> {
         this.beginTransaction()
         const entries = Object.entries(value as Record<string, { name: string, fields: JSONValue }>)
         for (const [uuid, {name, fields}] of entries) {
-            this.createBox(name as keyof BoxMap, UUID.parse(uuid), box => box.fromJSON(fields))
+            this.createBox(name as keyof BoxMap, UUID.parse(uuid), box => {
+                try {
+                    box.fromJSON(fields)
+                } catch (reason: unknown) {
+                    console.warn(reason)
+                }
+            })
         }
         this.endTransaction()
     }
