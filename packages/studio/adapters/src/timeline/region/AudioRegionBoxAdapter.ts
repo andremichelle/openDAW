@@ -33,6 +33,8 @@ import {AudioPitchStretchBoxAdapter} from "../../audio/AudioPitchStretchBoxAdapt
 import {AudioTimeStretchBoxAdapter} from "../../audio/AudioTimeStretchBoxAdapter"
 import {WarpMarkerBoxAdapter} from "../../audio/WarpMarkerBoxAdapter"
 import {FadingAdapter} from "./FadingAdapter"
+import {NoteRegionBoxAdapter} from "./NoteRegionBoxAdapter"
+import {ValueRegionBoxAdapter} from "./ValueRegionBoxAdapter"
 
 type CopyToParams = {
     target?: Field<Pointers.RegionCollection>
@@ -162,6 +164,10 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
     get complete(): ppqn {return this.position + this.duration}
     get loopOffset(): ppqn {return this.#box.loopOffset.getValue()}
     get loopDuration(): ppqn {return this.#loopDurationConverter.toPPQN(this.position)}
+
+    isNoteRegion(): this is NoteRegionBoxAdapter {return false}
+    isAudioRegion(): this is AudioRegionBoxAdapter {return true}
+    isValueRegion(): this is ValueRegionBoxAdapter {return false}
 
     resolveDuration(position: ppqn): ppqn {return this.#durationConverter.toPPQN(position)}
     resolveComplete(position: ppqn): ppqn {return position + this.resolveDuration(position)}

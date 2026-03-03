@@ -25,6 +25,8 @@ import {ValueEventBox, ValueEventCollectionBox, ValueRegionBox} from "@opendaw/s
 import {InterpolationFieldAdapter} from "../event/InterpolationFieldAdapter"
 import {ValueEventBoxAdapter} from "../event/ValueEventBoxAdapter"
 import {MutableRegion} from "./MutableRegion"
+import {AudioRegionBoxAdapter} from "./AudioRegionBoxAdapter"
+import {NoteRegionBoxAdapter} from "./NoteRegionBoxAdapter"
 
 type CopyToParams = {
     target?: Field<Pointers.RegionCollection>
@@ -148,6 +150,10 @@ export class ValueRegionBoxAdapter
     get offset(): ppqn {return this.position - this.loopOffset}
     get complete(): ppqn {return this.position + this.duration}
 
+    isNoteRegion(): this is NoteRegionBoxAdapter {return false}
+    isAudioRegion(): this is AudioRegionBoxAdapter {return false}
+    isValueRegion(): this is ValueRegionBoxAdapter {return true}
+
     resolveDuration(_position: ppqn): ppqn {return this.duration}
     resolveComplete(position: ppqn): ppqn {return position + this.duration}
     resolveLoopDuration(_position: ppqn): ppqn {return this.loopDuration}
@@ -236,7 +242,11 @@ export class ValueRegionBoxAdapter
                 const region = anyRegion as ValueRegionBoxAdapter
                 const collection = region.optCollection.unwrap()
                 const events = collection.events
-                for (const {rawStart, regionStart, regionEnd} of LoopableRegion.locateLoops(region, region.position, region.complete)) {
+                for (const {
+                    rawStart,
+                    regionStart,
+                    regionEnd
+                } of LoopableRegion.locateLoops(region, region.position, region.complete)) {
                     const searchMin = regionStart - rawStart
                     const searchMax = regionEnd - rawStart
                     const firstContent = events.greaterEqual(searchMin)

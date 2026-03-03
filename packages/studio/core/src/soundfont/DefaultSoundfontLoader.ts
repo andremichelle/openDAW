@@ -1,13 +1,13 @@
 import {Notifier, Observer, Option, Progress, Subscription, Terminable, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {SoundfontLoader, SoundfontLoaderState, SoundfontMetaData} from "@opendaw/studio-adapters"
-import {DefaultSoundfontLoaderManager} from "./DefaultSoundfontLoaderManager"
+import {GlobalSoundfontLoaderManager} from "./GlobalSoundfontLoaderManager"
 import {SoundfontStorage} from "./SoundfontStorage"
 import type {SoundFont2} from "soundfont2"
 import {ExternalLib} from "../ExternalLib"
 
 export class DefaultSoundfontLoader implements SoundfontLoader {
-    readonly #manager: DefaultSoundfontLoaderManager
+    readonly #manager: GlobalSoundfontLoaderManager
 
     readonly #uuid: UUID.Bytes
     readonly #notifier: Notifier<SoundfontLoaderState>
@@ -16,7 +16,7 @@ export class DefaultSoundfontLoader implements SoundfontLoader {
     #soundfont: Option<SoundFont2> = Option.None
     #state: SoundfontLoaderState = {type: "progress", progress: 0.0}
 
-    constructor(manager: DefaultSoundfontLoaderManager, uuid: UUID.Bytes) {
+    constructor(manager: GlobalSoundfontLoaderManager, uuid: UUID.Bytes) {
         this.#manager = manager
         this.#uuid = uuid
 

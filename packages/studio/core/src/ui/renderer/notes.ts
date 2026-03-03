@@ -1,15 +1,14 @@
-import {NoteRegionBoxAdapter} from "@opendaw/studio-adapters"
+import {NoteEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 import {LoopableRegion} from "@opendaw/lib-dsp"
 import {RegionBound, TimelineRange} from "../../index"
 
 export namespace NotesRenderer {
     export const render = (context: CanvasRenderingContext2D,
                            range: TimelineRange,
-                           region: NoteRegionBoxAdapter,
+                           collection: NoteEventCollectionBoxAdapter,
                            {top, bottom}: RegionBound,
                            contentColor: string,
                            {rawStart, regionStart, resultStart, resultEnd}: LoopableRegion.LoopCycle) => {
-        const collection = region.optCollection.unwrap()
         const height = bottom - top
         context.fillStyle = contentColor
         const padding = 8

@@ -11,8 +11,7 @@ import {replaceChildren} from "@opendaw/lib-jsx"
 import {
     AudioWorklets,
     CloudAuthManager,
-    ContextMenu,
-    DefaultSoundfontLoaderManager,
+    ContextMenu, GlobalSoundfontLoaderManager,
     GlobalSampleLoaderManager,
     OfflineEngineRenderer,
     OpenSampleAPI,
@@ -77,7 +76,7 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[AudioData, SampleMetaData]> =>
             OpenSampleAPI.get().load(uuid, progress)
     })
-    const soundfontManager = new DefaultSoundfontLoaderManager({
+    const soundfontManager = new GlobalSoundfontLoaderManager({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[ArrayBuffer, SoundfontMetaData]> =>
             OpenSoundfontAPI.get().load(uuid, progress)
     })

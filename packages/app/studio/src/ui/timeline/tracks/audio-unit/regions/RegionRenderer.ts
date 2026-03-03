@@ -89,6 +89,8 @@ export const renderRegions = (context: CanvasRenderingContext2D,
             context.fillStyle = contentColor
             region.accept({
                 visitNoteRegionBoxAdapter: (region: NoteRegionBoxAdapter): void => {
+                    const optCollection = region.optCollection
+                    if (optCollection.isEmpty()) {return}
                     for (const pass of LoopableRegion.locateLoops({
                         position, complete,
                         loopOffset: strategy.readLoopOffset(region),
@@ -99,7 +101,7 @@ export const renderRegions = (context: CanvasRenderingContext2D,
                             context.fillStyle = loopStrokeColor
                             context.fillRect(x, labelHeight, 1, height - labelHeight)
                         }
-                        NotesRenderer.render(context, range, region, bound, contentColor, pass)
+                        NotesRenderer.render(context, range, optCollection.unwrap(), bound, contentColor, pass)
                     }
                 },
                 visitAudioRegionBoxAdapter: (region: AudioRegionBoxAdapter): void => {

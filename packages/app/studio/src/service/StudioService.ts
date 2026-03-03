@@ -43,7 +43,7 @@ import {
     AudioWorklets,
     CloudAuthManager,
     DawProjectService,
-    DefaultSoundfontLoaderManager,
+    GlobalSoundfontLoaderManager,
     EngineFacade,
     EngineWorklet,
     ExternalLib,
@@ -122,7 +122,7 @@ export class StudioService implements ProjectEnv {
                 readonly audioWorklets: AudioWorklets,
                 readonly audioDevices: AudioOutputDevice,
                 readonly sampleManager: GlobalSampleLoaderManager,
-                readonly soundfontManager: DefaultSoundfontLoaderManager,
+                readonly soundfontManager: GlobalSoundfontLoaderManager,
                 readonly cloudAuthManager: CloudAuthManager,
                 readonly buildInfo: BuildInfo) {
         this.#sampleService = new SampleService(audioContext,
