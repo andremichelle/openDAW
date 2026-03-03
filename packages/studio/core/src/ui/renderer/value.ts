@@ -1,5 +1,5 @@
-import {LoopableRegion, ValueEvent} from "@opendaw/lib-dsp"
-import {asDefined, assert, Curve, Func, unitValue} from "@opendaw/lib-std"
+import {LoopableRegion, ValueEvent} from "@moises-ai/lib-dsp"
+import {asDefined, assert, Curve, Func, unitValue} from "@moises-ai/lib-std"
 import {TimelineRange} from "../../index"
 
 export namespace ValueStreamRenderer {

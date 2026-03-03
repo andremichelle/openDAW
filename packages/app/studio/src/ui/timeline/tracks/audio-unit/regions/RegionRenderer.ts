@@ -1,6 +1,6 @@
-import {int, Iterables, Option, unitValue} from "@opendaw/lib-std"
-import {LoopableRegion, ValueEvent} from "@opendaw/lib-dsp"
-import {AudioRegionBoxAdapter, NoteRegionBoxAdapter, ValueRegionBoxAdapter} from "@opendaw/studio-adapters"
+import {int, Iterables, Option, unitValue} from "@moises-ai/lib-std"
+import {LoopableRegion, ValueEvent} from "@moises-ai/lib-dsp"
+import {AudioRegionBoxAdapter, NoteRegionBoxAdapter, ValueRegionBoxAdapter} from "@moises-ai/studio-adapters"
 import {
     AudioFadingRenderer,
     AudioRenderer,
@@ -11,9 +11,9 @@ import {
     TimeGrid,
     TimelineRange,
     ValueStreamRenderer
-} from "@opendaw/studio-core"
+} from "@moises-ai/studio-core"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-import {Context2d} from "@opendaw/lib-dom"
+import {Context2d} from "@moises-ai/lib-dom"
 import {RegionPaintBucket} from "@/ui/timeline/tracks/audio-unit/regions/RegionPaintBucket"
 import {RegionLabel} from "@/ui/timeline/RegionLabel"
 

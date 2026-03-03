@@ -1,5 +1,5 @@
-import {asDefined, Exec, Procedure, Terminable, Terminator} from "@opendaw/lib-std"
-import {AnimationFrame, Html} from "@opendaw/lib-dom"
+import {asDefined, Exec, Procedure, Terminable, Terminator} from "@moises-ai/lib-std"
+import {AnimationFrame, Html} from "@moises-ai/lib-dom"
 import {Scale} from "./scale"
 
 export class CanvasPainter implements Terminable {

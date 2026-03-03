@@ -1,5 +1,5 @@
-import {Curve, TAU} from "@opendaw/lib-std"
-import {FadingEnvelope} from "@opendaw/lib-dsp"
+import {Curve, TAU} from "@moises-ai/lib-std"
+import {FadingEnvelope} from "@moises-ai/lib-dsp"
 import {TimelineRange} from "../../index"
 import {RegionBound} from "./env"
 

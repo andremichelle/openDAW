@@ -1,8 +1,8 @@
 import {RegionBound} from "./env"
-import {Option} from "@opendaw/lib-std"
-import {dbToGain, LoopableRegion, PPQN, TempoChangeGrid, TempoMap} from "@opendaw/lib-dsp"
-import {Peaks, PeaksPainter} from "@opendaw/lib-fusion"
-import {AudioFileBoxAdapter, AudioPlayMode} from "@opendaw/studio-adapters"
+import {Option} from "@moises-ai/lib-std"
+import {dbToGain, LoopableRegion, PPQN, TempoChangeGrid, TempoMap} from "@moises-ai/lib-dsp"
+import {Peaks, PeaksPainter} from "@moises-ai/lib-fusion"
+import {AudioFileBoxAdapter, AudioPlayMode} from "@moises-ai/studio-adapters"
 import {TimelineRange} from "../timeline/TimelineRange"
 
 export namespace AudioRenderer {

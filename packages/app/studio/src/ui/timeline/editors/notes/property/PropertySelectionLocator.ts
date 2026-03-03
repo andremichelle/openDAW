@@ -1,10 +1,10 @@
 import {TimelineCoordinates, TimelineSelectableLocator} from "@/ui/timeline/TimelineSelectableLocator.ts"
-import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
-import {Intervals, Iterables, ObservableValue, ValueAxis} from "@opendaw/lib-std"
+import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
+import {Intervals, Iterables, ObservableValue, ValueAxis} from "@moises-ai/lib-std"
 import {PropertyAccessor} from "@/ui/timeline/editors/notes/property/PropertyAccessor.ts"
 import {NoteModifyStrategy} from "@/ui/timeline/editors/notes/NoteModifyStrategies.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {ElementCapturing, TimelineRange} from "@opendaw/studio-core"
+import {ElementCapturing, TimelineRange} from "@moises-ai/studio-core"
 
 export const createPropertySelectionLocator = (owner: NoteEventOwnerReader,
                                                range: TimelineRange,

@@ -1,7 +1,7 @@
-import {Option, quantizeCeil, quantizeFloor, SortedSet, Terminable, unitValue, UUID} from "@opendaw/lib-std"
-import {Interpolation, ppqn, PPQN} from "@opendaw/lib-dsp"
-import {Address} from "@opendaw/lib-box"
-import {TrackBox, ValueEventBox, ValueEventCollectionBox, ValueRegionBox} from "@opendaw/studio-boxes"
+import {Option, quantizeCeil, quantizeFloor, SortedSet, Terminable, unitValue, UUID} from "@moises-ai/lib-std"
+import {Interpolation, ppqn, PPQN} from "@moises-ai/lib-dsp"
+import {Address} from "@moises-ai/lib-box"
+import {TrackBox, ValueEventBox, ValueEventCollectionBox, ValueRegionBox} from "@moises-ai/studio-boxes"
 import {
     AutomatableParameterFieldAdapter,
     ColorCodes,
@@ -11,7 +11,7 @@ import {
     TrackBoxAdapter,
     TrackType,
     ValueEventCollectionBoxAdapter
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {Project} from "../project"
 import {RegionClipResolver} from "../ui"
 

@@ -1,7 +1,7 @@
-import {assert, Errors, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
-import {Promises} from "@opendaw/lib-runtime"
+import {assert, Errors, Option, Terminable, Terminator, UUID} from "@moises-ai/lib-std"
+import {Promises} from "@moises-ai/lib-runtime"
 import {Project} from "../project"
-import {ppqn} from "@opendaw/lib-dsp"
+import {ppqn} from "@moises-ai/lib-dsp"
 import {RecordAutomation} from "./RecordAutomation"
 
 export class Recording {

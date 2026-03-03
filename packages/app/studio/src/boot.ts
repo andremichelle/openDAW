@@ -1,13 +1,13 @@
 import "./main.sass"
 import {App} from "@/ui/App.tsx"
-import {panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
 import {StudioService} from "@/service/StudioService"
-import {SampleMetaData, SoundfontMetaData} from "@opendaw/studio-adapters"
+import {SampleMetaData, SoundfontMetaData} from "@moises-ai/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {installCursors} from "@/ui/Cursors.ts"
 import {BuildInfo} from "./BuildInfo"
 import {Surface} from "@/ui/surface/Surface.tsx"
-import {replaceChildren} from "@opendaw/lib-jsx"
+import {replaceChildren} from "@moises-ai/lib-jsx"
 import {
     AudioWorklets,
     CloudAuthManager,
@@ -17,17 +17,17 @@ import {
     OpenSampleAPI,
     OpenSoundfontAPI,
     Workers
-} from "@opendaw/studio-core"
+} from "@moises-ai/studio-core"
 import {testFeatures} from "@/features.ts"
 import {MissingFeature} from "@/ui/MissingFeature.tsx"
 import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
 import {showStoragePersistDialog} from "@/AppDialogs"
-import {Promises} from "@opendaw/lib-runtime"
-import {AnimationFrame, Browser, Html, ShortcutManager} from "@opendaw/lib-dom"
+import {Promises} from "@moises-ai/lib-runtime"
+import {AnimationFrame, Browser, Html, ShortcutManager} from "@moises-ai/lib-dom"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
-import {AudioData} from "@opendaw/lib-dsp"
+import {AudioData} from "@moises-ai/lib-dsp"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Menu} from "@/ui/components/Menu"
 

@@ -1,8 +1,8 @@
-import {asDefined, ByteArrayInput, Nullable, Option, UUID} from "@opendaw/lib-std"
-import {Box, PointerField} from "@opendaw/lib-box"
-import {ppqn} from "@opendaw/lib-dsp"
-import {Pointers} from "@opendaw/studio-enums"
-import {BoxIO, TrackBox} from "@opendaw/studio-boxes"
+import {asDefined, ByteArrayInput, Nullable, Option, UUID} from "@moises-ai/lib-std"
+import {Box, PointerField} from "@moises-ai/lib-box"
+import {ppqn} from "@moises-ai/lib-dsp"
+import {Pointers} from "@moises-ai/studio-enums"
+import {BoxIO, TrackBox} from "@moises-ai/studio-boxes"
 import {AnyRegionBox, UnionBoxTypes} from "../unions"
 
 export namespace TransferRegions {

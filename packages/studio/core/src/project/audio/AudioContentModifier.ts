@@ -1,16 +1,16 @@
-import {EmptyExec, Exec, isDefined, isInstanceOf, RuntimeNotifier, UUID} from "@opendaw/lib-std"
-import {seconds, TimeBase} from "@opendaw/lib-dsp"
+import {EmptyExec, Exec, isDefined, isInstanceOf, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
+import {seconds, TimeBase} from "@moises-ai/lib-dsp"
 import {
     AudioPitchStretchBox,
     AudioRegionBox,
     AudioTimeStretchBox,
     TransientMarkerBox,
     WarpMarkerBox
-} from "@opendaw/studio-boxes"
-import {AudioContentBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-boxes"
+import {AudioContentBoxAdapter, AudioRegionBoxAdapter} from "@moises-ai/studio-adapters"
 import {AudioContentHelpers} from "./AudioContentHelpers"
 import {Workers} from "../../Workers"
-import {Pointers} from "@opendaw/studio-enums"
+import {Pointers} from "@moises-ai/studio-enums"
 
 export namespace AudioContentModifier {
     export const toNotStretched = async (adapters: ReadonlyArray<AudioContentBoxAdapter>): Promise<Exec> => {

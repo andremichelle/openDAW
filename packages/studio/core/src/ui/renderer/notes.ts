@@ -1,5 +1,5 @@
-import {NoteEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
-import {LoopableRegion} from "@opendaw/lib-dsp"
+import {NoteEventCollectionBoxAdapter} from "@moises-ai/studio-adapters"
+import {LoopableRegion} from "@moises-ai/lib-dsp"
 import {RegionBound, TimelineRange} from "../../index"
 
 export namespace NotesRenderer {

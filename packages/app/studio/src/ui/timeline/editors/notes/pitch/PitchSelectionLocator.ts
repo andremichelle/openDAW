@@ -1,7 +1,7 @@
-import {ElementCapturing, TimelineRange} from "@opendaw/studio-core"
+import {ElementCapturing, TimelineRange} from "@moises-ai/studio-core"
 import {TimelineCoordinates, TimelineSelectableLocator} from "@/ui/timeline/TimelineSelectableLocator.ts"
-import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
-import {Iterables, ValueAxis} from "@opendaw/lib-std"
+import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
+import {Iterables, ValueAxis} from "@moises-ai/lib-std"
 import {PitchCaptureTarget} from "@/ui/timeline/editors/notes/pitch/PitchEventCapturing.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 

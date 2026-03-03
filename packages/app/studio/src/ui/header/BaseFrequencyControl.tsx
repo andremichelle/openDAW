@@ -1,12 +1,12 @@
 import css from "./BaseFrequencyControl.sass?inline"
-import {DefaultObservableValue, EmptyExec, Lifecycle, Option, Terminator} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {DefaultObservableValue, EmptyExec, Lifecycle, Option, Terminator} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {DblClckTextInput} from "@/ui/wrapper/DblClckTextInput"
 import {UnitDisplay} from "@/ui/header/UnitDisplay"
-import {Dragging, Html} from "@opendaw/lib-dom"
-import {StudioPreferences} from "@opendaw/studio-core"
-import {BaseFrequencyRange, Validator} from "@opendaw/studio-adapters"
+import {Dragging, Html} from "@moises-ai/lib-dom"
+import {StudioPreferences} from "@moises-ai/studio-core"
+import {BaseFrequencyRange, Validator} from "@moises-ai/studio-adapters"
 
 const className = Html.adoptStyleSheet(css, "BaseFrequencyControl")
 

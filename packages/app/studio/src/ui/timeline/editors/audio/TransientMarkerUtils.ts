@@ -1,8 +1,8 @@
-import {ElementCapturing, TimelineRange} from "@opendaw/studio-core"
+import {ElementCapturing, TimelineRange} from "@moises-ai/studio-core"
 import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader"
-import {EventCollection, ppqn} from "@opendaw/lib-dsp"
-import {TransientMarkerBoxAdapter, WarpMarkerBoxAdapter} from "@opendaw/studio-adapters"
-import {BinarySearch, isNotNull, Nullable, NumberComparator} from "@opendaw/lib-std"
+import {EventCollection, ppqn} from "@moises-ai/lib-dsp"
+import {TransientMarkerBoxAdapter, WarpMarkerBoxAdapter} from "@moises-ai/studio-adapters"
+import {BinarySearch, isNotNull, Nullable, NumberComparator} from "@moises-ai/lib-std"
 
 export namespace TransientMarkerUtils {
     const MARKER_RADIUS = 4

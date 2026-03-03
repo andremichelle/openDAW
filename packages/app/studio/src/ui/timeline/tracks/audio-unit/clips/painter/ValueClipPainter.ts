@@ -1,7 +1,7 @@
-import {ValueClipBoxAdapter} from "@opendaw/studio-adapters"
-import {Point, Procedure, TAU} from "@opendaw/lib-std"
-import {ValueEvent} from "@opendaw/lib-dsp"
-import {CanvasPainter} from "@opendaw/studio-core"
+import {ValueClipBoxAdapter} from "@moises-ai/studio-adapters"
+import {Point, Procedure, TAU} from "@moises-ai/lib-std"
+import {ValueEvent} from "@moises-ai/lib-dsp"
+import {CanvasPainter} from "@moises-ai/studio-core"
 
 export const createValueClipPainter = (adapter: ValueClipBoxAdapter): Procedure<CanvasPainter> => painter => {
     const {context, actualHeight: size} = painter

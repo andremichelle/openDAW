@@ -1,6 +1,6 @@
-import {Errors, int, isDefined, Nullable, Option, panic, Progress, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
-import {AudioData, ppqn} from "@opendaw/lib-dsp"
-import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
+import {Errors, int, isDefined, Nullable, Option, panic, Progress, Terminator, TimeSpan, UUID} from "@moises-ai/lib-std"
+import {AudioData, ppqn} from "@moises-ai/lib-dsp"
+import {Communicator, Messenger, Wait} from "@moises-ai/lib-runtime"
 import {
     EngineCommands,
     EngineStateSchema,
@@ -11,7 +11,7 @@ import {
     OfflineEngineInitializeConfig,
     OfflineEngineProtocol,
     OfflineEngineRenderConfig
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {Project} from "./project"
 import {AudioWorklets} from "./AudioWorklets"
 import {MIDIReceiver} from "./midi"

@@ -1,11 +1,11 @@
 import {TimelineSelectableLocator} from "@/ui/timeline/TimelineSelectableLocator.ts"
-import {AnyClipBoxAdapter} from "@opendaw/studio-adapters"
-import {Coordinates, Iterables} from "@opendaw/lib-std"
-import {ppqn} from "@opendaw/lib-dsp"
+import {AnyClipBoxAdapter} from "@moises-ai/studio-adapters"
+import {Coordinates, Iterables} from "@moises-ai/lib-std"
+import {ppqn} from "@moises-ai/lib-dsp"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {ClipWidth} from "@/ui/timeline/tracks/audio-unit/clips/constants.ts"
 import {ClipCaptureTarget} from "@/ui/timeline/tracks/audio-unit/clips/ClipCapturing.ts"
-import {ElementCapturing} from "@opendaw/studio-core"
+import {ElementCapturing} from "@moises-ai/studio-core"
 
 export const createClipSelectableLocator = (capturing: ElementCapturing<ClipCaptureTarget>, manager: TracksManager)
     : TimelineSelectableLocator<AnyClipBoxAdapter> => ({

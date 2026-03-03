@@ -1,6 +1,6 @@
-import {Nullable} from "@opendaw/lib-std"
+import {Nullable} from "@moises-ai/lib-std"
 import {PointerRadiusDistance} from "@/ui/timeline/constants.ts"
-import {ElementCapturing, TimelineRange} from "@opendaw/studio-core"
+import {ElementCapturing, TimelineRange} from "@moises-ai/studio-core"
 
 import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 

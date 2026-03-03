@@ -10,17 +10,17 @@ import {
     TAU,
     unitValue,
     ValueMapping
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {ValueEvent} from "@opendaw/lib-dsp"
+import {ValueEvent} from "@moises-ai/lib-dsp"
 import {renderTimeGrid} from "@/ui/timeline/editors/TimeGridRenderer.ts"
 import {EventRadius, MidPointRadius} from "@/ui/timeline/editors/value/Constants.ts"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {ValueModifier} from "./ValueModifier"
 import {ValueModifyStrategy} from "@/ui/timeline/editors/value/ValueModifyStrategies.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {SelectableValueEvent} from "@opendaw/studio-adapters"
-import {CanvasPainter, TimelineRange, ValueStreamRenderer} from "@opendaw/studio-core"
+import {SelectableValueEvent} from "@moises-ai/studio-adapters"
+import {CanvasPainter, TimelineRange, ValueStreamRenderer} from "@moises-ai/studio-core"
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 
 export type Construct = {

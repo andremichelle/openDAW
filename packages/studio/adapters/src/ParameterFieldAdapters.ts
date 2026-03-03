@@ -1,5 +1,5 @@
-import {Notifier, Observer, Option, SortedSet, Subscription, Terminable, unitValue} from "@opendaw/lib-std"
-import {Address} from "@opendaw/lib-box"
+import {Notifier, Observer, Option, SortedSet, Subscription, Terminable, unitValue} from "@moises-ai/lib-std"
+import {Address} from "@moises-ai/lib-box"
 import {AutomatableParameterFieldAdapter} from "./AutomatableParameterFieldAdapter"
 
 export type ParameterWriteEvent = {

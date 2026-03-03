@@ -30,7 +30,7 @@ import {Dragging, Events, Html, Keyboard} from "@moises-ai/lib-dom"
 import {DragAndDrop} from "@/ui/DragAndDrop.ts"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
-import {ElementCapturing} from "@opendaw/studio-core"
+import {ElementCapturing} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "ClipsArea")
 

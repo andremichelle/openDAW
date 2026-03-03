@@ -1,9 +1,9 @@
 import {RegionCaptureTarget} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
-import {AudioContentFactory, ElementCapturing} from "@opendaw/studio-core"
+import {AudioContentFactory, ElementCapturing} from "@moises-ai/studio-core"
 import {CreateParameters, TimelineDragAndDrop} from "@/ui/timeline/tracks/audio-unit/TimelineDragAndDrop"
 import {Snapping} from "@/ui/timeline/Snapping"
 import {StudioService} from "@/service/StudioService"
-import {TransientPlayMode} from "@opendaw/studio-enums"
+import {TransientPlayMode} from "@moises-ai/studio-enums"
 
 export class RegionDragAndDrop extends TimelineDragAndDrop<RegionCaptureTarget> {
     readonly #snapping: Snapping

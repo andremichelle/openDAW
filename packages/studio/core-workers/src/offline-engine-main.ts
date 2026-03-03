@@ -1,7 +1,7 @@
-import {Arrays, int, isDefined, Option, TimeSpan} from "@opendaw/lib-std"
-import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
-import {dbToGain, RenderQuantum} from "@opendaw/lib-dsp"
-import {OfflineEngineInitializeConfig, OfflineEngineProtocol, OfflineEngineRenderConfig} from "@opendaw/studio-adapters"
+import {Arrays, int, isDefined, Option, TimeSpan} from "@moises-ai/lib-std"
+import {Communicator, Messenger, Wait} from "@moises-ai/lib-runtime"
+import {dbToGain, RenderQuantum} from "@moises-ai/lib-dsp"
+import {OfflineEngineInitializeConfig, OfflineEngineProtocol, OfflineEngineRenderConfig} from "@moises-ai/studio-adapters"
 import {AudioWorkletProcessor, setupWorkletGlobals, updateFrameTime, WorkletGlobals} from "./worklet-env"
 
 const globals = globalThis as unknown as WorkletGlobals

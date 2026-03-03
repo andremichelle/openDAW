@@ -1,6 +1,6 @@
-import {asInstanceOf, int} from "@opendaw/lib-std"
-import {Box, IndexedBox} from "@opendaw/lib-box"
-import {AudioUnitBox, RootBox} from "@opendaw/studio-boxes"
+import {asInstanceOf, int} from "@moises-ai/lib-std"
+import {Box, IndexedBox} from "@moises-ai/lib-box"
+import {AudioUnitBox, RootBox} from "@moises-ai/studio-boxes"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {TransferUtils} from "./TransferUtils"
 

@@ -3,13 +3,13 @@ import {
     AnyRegionBoxAdapter,
     AudioRegionBoxAdapter,
     UnionAdapterTypes
-} from "@opendaw/studio-adapters"
-import {BinarySearch, Geom, isDefined, isInstanceOf, Nullable, NumberComparator} from "@opendaw/lib-std"
+} from "@moises-ai/studio-adapters"
+import {BinarySearch, Geom, isDefined, isInstanceOf, Nullable, NumberComparator} from "@moises-ai/lib-std"
 import {PointerRadiusDistance} from "@/ui/timeline/constants.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
-import {AudioUnitFreeze, ElementCapturing, TimelineRange} from "@opendaw/studio-core"
+import {AudioUnitFreeze, ElementCapturing, TimelineRange} from "@moises-ai/studio-core"
 import {RegionLabel} from "@/ui/timeline/RegionLabel"
 
 export type RegionCaptureTarget =

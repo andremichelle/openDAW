@@ -8,10 +8,10 @@ import {
     Terminator,
     tryCatch,
     UUID
-} from "@opendaw/lib-std"
-import {ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
-import {AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
-import {ColorCodes, SampleLoaderManager, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
+} from "@moises-ai/lib-std"
+import {ppqn, PPQN, TimeBase} from "@moises-ai/lib-dsp"
+import {AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@moises-ai/studio-boxes"
+import {ColorCodes, SampleLoaderManager, TrackType, UnionBoxTypes} from "@moises-ai/studio-adapters"
 import {Project} from "../project"
 import {RecordingWorklet} from "../RecordingWorklet"
 import {Capture} from "./Capture"

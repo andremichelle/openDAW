@@ -1,4 +1,4 @@
-import {int, Unhandled} from "@opendaw/lib-std"
+import {int, Unhandled} from "@moises-ai/lib-std"
 
 // https://www.desmos.com/calculator/04tpdtpkfy
 export namespace Waveshaper {

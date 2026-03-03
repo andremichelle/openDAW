@@ -1,5 +1,5 @@
-import {Box, PointerField} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
+import {Box, PointerField} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
 import {
     isNotUndefined,
     JSONValue,
@@ -11,8 +11,8 @@ import {
     Terminable,
     tryCatch,
     UUID
-} from "@opendaw/lib-std"
-import {MetaDataBox} from "@opendaw/studio-boxes"
+} from "@moises-ai/lib-std"
+import {MetaDataBox} from "@moises-ai/studio-boxes"
 
 export namespace MetaData {
     /**

@@ -108,8 +108,8 @@ const createMockFileSystem = () => {
 let protocol: OpfsProtocol
 let mockFs: ReturnType<typeof createMockFileSystem>
 
-vi.mock("@opendaw/lib-runtime", async () => {
-    const actual = await vi.importActual<typeof import("@opendaw/lib-runtime")>("@opendaw/lib-runtime")
+vi.mock("@moises-ai/lib-runtime", async () => {
+    const actual = await vi.importActual<typeof import("@moises-ai/lib-runtime")>("@moises-ai/lib-runtime")
     return {
         ...actual,
         Communicator: {
