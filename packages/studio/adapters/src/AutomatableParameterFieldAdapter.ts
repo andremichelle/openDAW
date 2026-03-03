@@ -158,7 +158,11 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
         return this.#controlSource.subscribe(observer)
     }
     getValue(): T {return this.#field.getValue()}
-    setValue(value: T) {this.#field.setValue(value)}
+    setValue(value: T) {
+        const previousUnitValue = this.getUnitValue()
+        this.#field.setValue(value)
+        this.#context.parameterFieldAdapters.notifyWrite(this, previousUnitValue)
+    }
     setUnitValue(value: unitValue): void {this.setValue(this.#valueMapping.y(value))}
     getUnitValue(): unitValue {return this.#valueMapping.x(this.getValue())}
     getControlledValue(): T {return this.#valueMapping.y(this.getControlledUnitValue())}

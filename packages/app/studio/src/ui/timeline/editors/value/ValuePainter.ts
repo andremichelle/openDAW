@@ -10,19 +10,17 @@ import {
     TAU,
     unitValue,
     ValueMapping
-} from "@moises-ai/lib-std"
+} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {CanvasPainter} from "@/ui/canvas/painter.ts"
-import {renderValueStream} from "@/ui/timeline/renderer/value.ts"
-import {ValueEvent} from "@moises-ai/lib-dsp"
+import {ValueEvent} from "@opendaw/lib-dsp"
 import {renderTimeGrid} from "@/ui/timeline/editors/TimeGridRenderer.ts"
 import {EventRadius, MidPointRadius} from "@/ui/timeline/editors/value/Constants.ts"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {ValueModifier} from "./ValueModifier"
 import {ValueModifyStrategy} from "@/ui/timeline/editors/value/ValueModifyStrategies.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {SelectableValueEvent} from "@moises-ai/studio-adapters"
-import {TimelineRange} from "@moises-ai/studio-core"
+import {SelectableValueEvent} from "@opendaw/studio-adapters"
+import {CanvasPainter, TimelineRange, ValueStreamRenderer} from "@opendaw/studio-core"
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 
 export type Construct = {
@@ -83,6 +81,7 @@ export const createValuePainter =
         context.setLineDash(Arrays.empty())
         context.lineWidth = devicePixelRatio
         const contentColor = `hsl(${reader.hue}, ${reader.mute ? 0 : 60}%, 45%)`
+        if (!reader.hasContent) {return}
         const start = range.unitMin - range.unitPadding
         const end = range.unitMax
         const events = reader.content.events
@@ -104,7 +103,7 @@ export const createValuePainter =
                 return () => strategy.iterator(start - offset, end - offset)
             }
         })
-        renderValueStream(
+        ValueStreamRenderer.render(
             context, range, createIterator(), valueToPixel,
             contentColor, 0.04, valueEditing.anchorModel.getValue(), {
                 index: 0,

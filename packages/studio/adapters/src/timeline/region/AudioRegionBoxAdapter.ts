@@ -1,4 +1,5 @@
 import {
+    Arrays,
     asEnumValue,
     int,
     isInstanceOf,
@@ -32,9 +33,11 @@ import {AudioPitchStretchBoxAdapter} from "../../audio/AudioPitchStretchBoxAdapt
 import {AudioTimeStretchBoxAdapter} from "../../audio/AudioTimeStretchBoxAdapter"
 import {WarpMarkerBoxAdapter} from "../../audio/WarpMarkerBoxAdapter"
 import {FadingAdapter} from "./FadingAdapter"
+import {NoteRegionBoxAdapter} from "./NoteRegionBoxAdapter"
+import {ValueRegionBoxAdapter} from "./ValueRegionBoxAdapter"
 
 type CopyToParams = {
-    track?: Field<Pointers.RegionCollection>
+    target?: Field<Pointers.RegionCollection>
     position?: ppqn
     duration?: ppqn
     loopOffset?: ppqn
@@ -162,6 +165,10 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
     get loopOffset(): ppqn {return this.#box.loopOffset.getValue()}
     get loopDuration(): ppqn {return this.#loopDurationConverter.toPPQN(this.position)}
 
+    isNoteRegion(): this is NoteRegionBoxAdapter {return false}
+    isAudioRegion(): this is AudioRegionBoxAdapter {return true}
+    isValueRegion(): this is ValueRegionBoxAdapter {return false}
+
     resolveDuration(position: ppqn): ppqn {return this.#durationConverter.toPPQN(position)}
     resolveComplete(position: ppqn): ppqn {return position + this.resolveDuration(position)}
     resolveLoopDuration(position: ppqn): ppqn {return this.#loopDurationConverter.toPPQN(position)}
@@ -244,7 +251,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
             AudioRegionBox.create(this.#context.boxGraph, UUID.generate(), box => {
                 box.timeBase.setValue(this.#box.timeBase.getValue())
                 box.position.setValue(params?.position ?? this.#box.position.getValue())
-                box.regions.refer(params?.track ?? this.#box.regions.targetVertex.unwrap())
+                box.regions.refer(params?.target ?? this.#box.regions.targetVertex.unwrap())
                 box.file.refer(this.#box.file.targetVertex.unwrap())
                 box.events.refer(eventTarget)
                 box.mute.setValue(this.mute)
@@ -261,10 +268,12 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
         return adapter
     }
 
-    consolidate(): void {
-        // TODO This needs to done by creating a new audio file
+    consolidate(): void {}
+    canFlatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>): boolean {
+        return regions.length > 0
+            && Arrays.satisfy(regions, (a, b) => a.trackBoxAdapter.contains(b.trackBoxAdapter.unwrap()))
+            && regions.every(region => region.isSelected && region instanceof AudioRegionBoxAdapter)
     }
-    canFlatten(_regions: ReadonlyArray<RegionBoxAdapter<unknown>>): boolean {return false}
     flatten(_regions: ReadonlyArray<RegionBoxAdapter<unknown>>): Option<AudioRegionBox> {
         // TODO This needs to done by creating a new audio file
         return Option.None

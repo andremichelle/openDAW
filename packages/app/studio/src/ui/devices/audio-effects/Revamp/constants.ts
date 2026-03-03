@@ -1,8 +1,8 @@
-import {LinearScale, LogScale} from "@/ui/canvas/scale.ts"
-import {BiquadCoeff} from "@moises-ai/lib-dsp"
-import {Arrays, Color, ValueGuide, ValueMapping} from "@moises-ai/lib-std"
+import {LinearScale, LogScale} from "../../../../../../../studio/core/src/ui/canvas/scale.ts"
+import {BiquadCoeff} from "@opendaw/lib-dsp"
+import {Arrays, Color, ValueGuide, ValueMapping} from "@opendaw/lib-std"
 import {ColorSet} from "./Curves.ts"
-import {IconSymbol} from "@moises-ai/studio-enums"
+import {IconSymbol} from "@opendaw/studio-enums"
 
 export const ems = [7 / 6, 7 / 6, 7 / 6]
 export const xAxis = new LogScale(20.0, 20_000.0)

@@ -1,8 +1,8 @@
-import {int} from "@moises-ai/lib-std"
-import {PeaksPainter} from "@moises-ai/lib-fusion"
-import {CanvasPainter} from "@/ui/canvas/painter"
+import {int} from "@opendaw/lib-std"
+import {PeaksPainter} from "@opendaw/lib-fusion"
+import {CanvasPainter} from "../../../../../../../studio/core/src/ui/canvas/painter"
 
-import {PlayfieldSampleBoxAdapter} from "@moises-ai/studio-adapters"
+import {PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
 
 export namespace SlotUtils {
     export const color = (semitone: int) => `hsl(${semitone / 13 * 360}, 100%, 70%)`

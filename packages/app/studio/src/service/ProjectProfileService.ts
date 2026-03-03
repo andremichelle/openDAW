@@ -79,7 +79,12 @@ export class ProjectProfileService {
     }
 
     async load(uuid: UUID.Bytes, meta: ProjectMeta) {
-        const project: Project = await ProjectStorage.loadProject(uuid).then(buffer => Project.loadAnyVersion(this.#env, buffer))
+        const {status, value: project, error} = await Promises.tryCatch(
+            ProjectStorage.loadProject(uuid).then(buffer => Project.loadAnyVersion(this.#env, buffer)))
+        if (status === "rejected") {
+            await RuntimeNotifier.info({headline: "Could not load project", message: String(error)})
+            return
+        }
         await this.#sampleService.replaceMissingFiles(project.boxGraph, this.#sampleManager)
         await this.#soundfontService.replaceMissingFiles(project.boxGraph, this.#soundfontManager)
         const cover = await ProjectStorage.loadCover(uuid)
@@ -156,8 +161,10 @@ export class ProjectProfileService {
                 ]
             })
             if (file.name.endsWith(".json")) {
+                console.debug("importing json file")
                 const jsonString = await file.text()
                 const json = JSON.parse(jsonString)
+                console.debug("parsed json", json)
                 const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
                 boxGraph.fromJSON(json)
                 boxGraph.debugBoxes()
@@ -173,7 +180,7 @@ export class ProjectProfileService {
             }
         } catch (error) {
             if (!Errors.isAbort(error)) {
-                Dialogs.info({headline: "Could not load project", message: String(error)}).finally()
+                Dialogs.info({headline: "Could not load json", message: String(error)}).finally()
             }
         }
     }

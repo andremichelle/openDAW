@@ -1,8 +1,7 @@
-import {AnyLoopableRegionBoxAdapter, AnyRegionBoxAdapter, UnionAdapterTypes} from "@moises-ai/studio-adapters"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
-import {isDefined, Nullable, Option, Provider} from "@moises-ai/lib-std"
+import {AnyLoopableRegionBoxAdapter, AnyRegionBoxAdapter, UnionAdapterTypes} from "@opendaw/studio-adapters"
+import {isDefined, Nullable, Option, Provider} from "@opendaw/lib-std"
 import {PointerRadiusDistance} from "@/ui/timeline/constants.ts"
-import {TimelineRange} from "@moises-ai/studio-core"
+import {ElementCapturing, TimelineRange} from "@opendaw/studio-core"
 
 export type CaptureTarget =
     | { type: "region-position", region: AnyRegionBoxAdapter }

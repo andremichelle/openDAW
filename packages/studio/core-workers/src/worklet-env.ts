@@ -1,22 +1,35 @@
-export class AudioWorkletProcessor {
-    readonly port: MessagePort
-    constructor() { this.port = (globalThis as any).__workletPort__ }
+type WorkletProcessorConstructor = new (options: Record<string, unknown>) => AudioWorkletProcessor
+
+export type WorkletGlobals = {
+    sampleRate: number
+    currentFrame: number
+    currentTime: number
+    AudioWorkletProcessor: typeof AudioWorkletProcessor
+    registerProcessor: (name: string, ctor: WorkletProcessorConstructor) => void
+    __registeredProcessors__: Record<string, WorkletProcessorConstructor>
+    __workletPort__: MessagePort
 }
 
-export function setupWorkletGlobals(config: { sampleRate: number }): void {
-    const g = globalThis as any
-    g.sampleRate = config.sampleRate
-    g.currentFrame = 0
-    g.currentTime = 0
-    g.AudioWorkletProcessor = AudioWorkletProcessor
-    g.registerProcessor = (name: string, ctor: any) => {
-        g.__registeredProcessors__ = g.__registeredProcessors__ || {}
-        g.__registeredProcessors__[name] = ctor
+const globals = globalThis as unknown as WorkletGlobals
+
+export class AudioWorkletProcessor {
+    readonly port: MessagePort
+    constructor() { this.port = globals.__workletPort__ }
+    process(_inputs: Float32Array[][], _outputs: Float32Array[][]): boolean { return false }
+}
+
+export const setupWorkletGlobals = (config: { sampleRate: number }): void => {
+    globals.sampleRate = config.sampleRate
+    globals.currentFrame = 0
+    globals.currentTime = 0
+    globals.AudioWorkletProcessor = AudioWorkletProcessor
+    globals.registerProcessor = (name: string, ctor: WorkletProcessorConstructor) => {
+        globals.__registeredProcessors__ = globals.__registeredProcessors__ || {}
+        globals.__registeredProcessors__[name] = ctor
     }
 }
 
-export function updateFrameTime(frame: number, sampleRate: number): void {
-    const g = globalThis as any
-    g.currentFrame = frame
-    g.currentTime = frame / sampleRate
+export const updateFrameTime = (frame: number, sampleRate: number): void => {
+    globals.currentFrame = frame
+    globals.currentTime = frame / sampleRate
 }

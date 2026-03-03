@@ -1,14 +1,13 @@
 import css from "./LoopAreaEditor.sass?inline"
-import {asDefined, Lifecycle, Nullable, Option} from "@moises-ai/lib-std"
-import {CssUtils, deferNextFrame, Dragging, Events, Html} from "@moises-ai/lib-dom"
-import {createElement} from "@moises-ai/lib-jsx"
-import {BoxEditing, Propagation} from "@moises-ai/lib-box"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
+import {asDefined, Lifecycle, Nullable, Option} from "@opendaw/lib-std"
+import {CssUtils, deferNextFrame, Dragging, Events, Html} from "@opendaw/lib-dom"
+import {createElement} from "@opendaw/lib-jsx"
+import {BoxEditing, Propagation} from "@opendaw/lib-box"
 import {installCursor} from "@/ui/hooks/cursor.ts"
-import {TimelineRange} from "@moises-ai/studio-core"
+import {ElementCapturing, TimelineRange} from "@opendaw/studio-core"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {LoopArea} from "@moises-ai/studio-boxes"
-import {Colors} from "@moises-ai/studio-enums"
+import {LoopArea} from "@opendaw/studio-boxes"
+import {Colors} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "loop-area-editor")
 

@@ -1,30 +1,14 @@
 import css from "./RegionsArea.sass?inline"
-import {
-    clamp,
-    DefaultObservableValue,
-    EmptyExec,
-    Lifecycle,
-    Nullable,
-    Option,
-    Selection,
-    Unhandled
-} from "@moises-ai/lib-std"
-import {createElement} from "@moises-ai/lib-jsx"
+import {clamp, DefaultObservableValue, EmptyExec, Lifecycle, Nullable, Option, Unhandled} from "@opendaw/lib-std"
+import {createElement} from "@opendaw/lib-jsx"
 import {CutCursor} from "@/ui/timeline/CutCursor.tsx"
-import {PPQN, ppqn} from "@moises-ai/lib-dsp"
+import {PPQN, ppqn} from "@opendaw/lib-dsp"
 import {installAutoScroll} from "@/ui/AutoScroll.ts"
 import {Config} from "@/ui/timeline/Config.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-import {
-    AnyRegionBoxAdapter,
-    isVertexOfBox,
-    RegionAdapters,
-    RegionEditing,
-    UnionBoxTypes
-} from "@moises-ai/studio-adapters"
+import {AnyRegionBoxAdapter, RegionEditing} from "@opendaw/studio-adapters"
 import {createRegionLocator} from "@/ui/timeline/tracks/audio-unit/regions/RegionSelectionLocator.ts"
 import {installRegionContextMenu} from "@/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
 import {RegionCaptureTarget, RegionCapturing} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
 import {StudioService} from "@/service/StudioService.ts"
 import {SelectionRectangle} from "@/ui/timeline/SelectionRectangle.tsx"
@@ -38,11 +22,11 @@ import {RegionContentStartModifier} from "@/ui/timeline/tracks/audio-unit/region
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {RegionDragAndDrop} from "@/ui/timeline/tracks/audio-unit/regions/RegionDragAndDrop.ts"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
-import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@moises-ai/lib-dom"
+import {CssUtils, Dragging, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
-import {ClipboardManager, RegionsClipboard, TimelineRange} from "@moises-ai/studio-core"
+import {ClipboardManager, ElementCapturing, RegionsClipboard, TimelineRange} from "@opendaw/studio-core"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 
 const className = Html.adoptStyleSheet(css, "RegionsArea")
@@ -70,20 +54,16 @@ type Construct = {
 export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollContainer, range}: Construct) => {
     const {project, timeline} = service
     const {snapping} = timeline
-    const {selection, editing, boxAdapters, timelineBox, userEditingManager} = project
+    const {selection, regionSelection, editing, boxAdapters, timelineBox, userEditingManager} = project
     const markerPosition = lifecycle.own(new DefaultObservableValue<Nullable<ppqn>>(null))
-    const regionSelection: Selection<AnyRegionBoxAdapter> = lifecycle.own(selection
-        .createFilteredSelection(isVertexOfBox(UnionBoxTypes.isRegionBox), {
-            fx: (adapter: AnyRegionBoxAdapter) => adapter.box,
-            fy: vertex => RegionAdapters.for(boxAdapters, vertex.box)
-        }))
     const element: HTMLElement = (
         <div className={className} tabIndex={-1} data-scope="regions">
             <CutCursor lifecycle={lifecycle} position={markerPosition} range={range}/>
         </div>
     )
-    const capturing: ElementCapturing<RegionCaptureTarget> = RegionCapturing.create(element, manager, range)
-    const regionLocator = createRegionLocator(manager, range, regionSelection)
+    const capturing: ElementCapturing<RegionCaptureTarget> = RegionCapturing.create(element, manager, range, project.audioUnitFreeze)
+    const {audioUnitFreeze} = project
+    const regionLocator = createRegionLocator(manager, range, regionSelection, audioUnitFreeze)
     const dragAndDrop = new RegionDragAndDrop(service, capturing, timeline.snapping)
     const shortcuts = ShortcutManager.get().createContext(element, "Regions")
     const {engine, boxGraph, overlapResolver, timelineFocus} = project
@@ -99,6 +79,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         getFocusedTrack: () => timelineFocus.track,
         overlapResolver
     })
+
     lifecycle.ownAll(
         regionSelection.catchupAndSubscribe({
             onSelected: (selectable: AnyRegionBoxAdapter) => selectable.onSelected(),
@@ -108,6 +89,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         ClipboardManager.install(element, clipboardHandler),
         shortcuts.register(RegionsShortcuts["select-all"].shortcut, () => {
             regionSelection.select(...manager.tracks()
+                .filter(track => !audioUnitFreeze.isFrozen(track.audioUnitBoxAdapter))
                 .flatMap(({trackBoxAdapter: {regions}}) => regions.collection.asArray()))
         }),
         shortcuts.register(RegionsShortcuts["deselect-all"].shortcut, () => regionSelection.deselectAll()),
@@ -143,6 +125,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                     service.panelLayout.showIfAvailable(PanelType.ContentEditor)
                 })
             } else if (target.type === "track") {
+                if (audioUnitFreeze.isFrozen(target.track.audioUnitBoxAdapter)) {return}
                 const {trackBoxAdapter} = target.track
                 const x = event.clientX - element.getBoundingClientRect().left
                 let {position, complete} = snapping.xToBarInterval(x)
@@ -152,6 +135,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 complete = Math.min(complete,
                     (trackBoxAdapter.regions.collection
                         .greaterEqual(position + 1)?.position ?? Number.POSITIVE_INFINITY))
+                if (complete <= position) {return}
                 editing.modify(() => project.api.createTrackRegion(trackBoxAdapter.box, position, complete - position)
                     .ifSome(region => selection.select(region)))
             }

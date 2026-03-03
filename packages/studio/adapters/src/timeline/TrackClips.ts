@@ -29,6 +29,7 @@ export class TrackClips implements Terminable {
     get trackBoxAdapter(): TrackBoxAdapter {return this.#trackBoxAdapter}
     get collection(): IndexedBoxAdapterCollection<AnyClipBoxAdapter, Pointers.ClipCollection> {return this.#collection}
 
+    /** @internal */
     dispatchChange(): void {this.#changeNotifier.notify()}
     subscribeChanges(observer: Observer<void>): Subscription {return this.#changeNotifier.subscribe(observer)}
     terminate(): void {this.#terminator.terminate()}

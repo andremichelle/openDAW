@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.56](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-xml@0.0.55...@opendaw/lib-xml@0.0.56) (2026-02-25)
+
+**Note:** Version bump only for package @opendaw/lib-xml
+
+## [0.0.55](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-xml@0.0.54...@opendaw/lib-xml@0.0.55) (2026-02-14)
+
+**Note:** Version bump only for package @opendaw/lib-xml
+
+## [0.0.54](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-xml@0.0.53...@opendaw/lib-xml@0.0.54) (2026-02-12)
+
+**Note:** Version bump only for package @opendaw/lib-xml
+
 ## [0.0.53](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-xml@0.0.52...@opendaw/lib-xml@0.0.53) (2026-02-06)
 
 **Note:** Version bump only for package @opendaw/lib-xml

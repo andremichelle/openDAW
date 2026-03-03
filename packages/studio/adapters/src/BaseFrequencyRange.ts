@@ -1,0 +1,1 @@
+export const BaseFrequencyRange = {min: 400, max: 480, default: 440.0} as const

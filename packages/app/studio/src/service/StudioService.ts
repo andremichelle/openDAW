@@ -5,6 +5,7 @@ import {
     Errors,
     Func,
     int,
+    isAbsent,
     Notifier,
     Nullable,
     Observer,
@@ -16,7 +17,7 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@moises-ai/lib-std"
+} from "@opendaw/lib-std"
 import {populateStudioMenu} from "@/service/StudioMenu"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
@@ -31,19 +32,21 @@ import {ProjectProfileService} from "./ProjectProfileService"
 import {StudioSignal} from "./StudioSignal"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {FooterLabel} from "@/service/FooterLabel"
-import {RouteLocation} from "@moises-ai/lib-jsx"
-import {PPQN} from "@moises-ai/lib-dsp"
-import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@moises-ai/lib-dom"
-import {Promises} from "@moises-ai/lib-runtime"
-import {ExportStemsConfiguration, PresetDecoder} from "@moises-ai/studio-adapters"
-import {Address} from "@moises-ai/lib-box"
+import {RouteLocation} from "@opendaw/lib-jsx"
+import {PPQN} from "@opendaw/lib-dsp"
+import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@opendaw/lib-dom"
+import {Promises} from "@opendaw/lib-runtime"
+import {ExportStemsConfiguration, InstrumentFactories, PresetDecoder} from "@opendaw/studio-adapters"
+import {Address} from "@opendaw/lib-box"
 import {
+    AudioContentFactory,
     AudioWorklets,
     CloudAuthManager,
     DawProjectService,
-    DefaultSoundfontLoaderManager,
+    GlobalSoundfontLoaderManager,
     EngineFacade,
     EngineWorklet,
+    ExternalLib,
     FilePickerAcceptTypes,
     GlobalSampleLoaderManager,
     Project,
@@ -57,10 +60,10 @@ import {
     SoundfontService,
     StudioPreferences,
     TimelineRange
-} from "@moises-ai/studio-core"
+} from "@opendaw/studio-core"
 import {ProjectDialogs} from "@/project/ProjectDialogs"
-import {AudioUnitBox} from "@moises-ai/studio-boxes"
-import {AudioUnitType} from "@moises-ai/studio-enums"
+import {AudioFileBox, AudioUnitBox} from "@opendaw/studio-boxes"
+import {AudioUnitType} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
 import {Mixdowns} from "@/service/Mixdowns"
@@ -119,7 +122,7 @@ export class StudioService implements ProjectEnv {
                 readonly audioWorklets: AudioWorklets,
                 readonly audioDevices: AudioOutputDevice,
                 readonly sampleManager: GlobalSampleLoaderManager,
-                readonly soundfontManager: DefaultSoundfontLoaderManager,
+                readonly soundfontManager: GlobalSoundfontLoaderManager,
                 readonly cloudAuthManager: CloudAuthManager,
                 readonly buildInfo: BuildInfo) {
         this.#sampleService = new SampleService(audioContext,
@@ -266,6 +269,75 @@ export class StudioService implements ProjectEnv {
             this.#projectProfileService.setValue(Option.wrap(
                 new ProjectProfile(UUID.generate(), project, ProjectMeta.init("Untitled"), Option.None)))
         }
+    }
+
+    async importStems(): Promise<void> {
+        const fileResult = await Promises.tryCatch(Files.open({types: [FilePickerAcceptTypes.ZipFileType]}))
+        if (fileResult.status === "rejected") {return}
+        const firstFile = fileResult.value.at(0)
+        if (isAbsent(firstFile)) {return}
+        const {status, value: JSZip} = await ExternalLib.JSZip()
+        if (status === "rejected") {return}
+        const zipResult = await Promises.tryCatch(JSZip.loadAsync(await firstFile.arrayBuffer()))
+        if (zipResult.status === "rejected") {
+            await RuntimeNotifier.info({headline: "Import Failed", message: String(zipResult.error)})
+            return
+        }
+        const audioEntries = Object.entries(zipResult.value.files)
+            .filter(([path, file]) => {
+                if (file.dir) {return false}
+                const lower = path.toLowerCase()
+                if (!lower.endsWith(".wav")) {return false}
+                if (lower.startsWith("__macosx/")) {return false}
+                const name = path.substring(path.lastIndexOf("/") + 1)
+                return !name.startsWith("._")
+            })
+        if (audioEntries.length === 0) {return}
+        if (!this.hasProfile) {
+            this.#projectProfileService.setValue(Option.wrap(
+                new ProjectProfile(UUID.generate(), Project.new(this), ProjectMeta.init("Untitled"), Option.None)))
+        }
+        const {editing, boxGraph} = this.project
+        let dialog = RuntimeNotifier.progress({headline: "Importing Stems..."})
+        for (let index = 0; index < audioEntries.length; index++) {
+            const [path, file] = audioEntries[index]
+            const name = path.substring(path.lastIndexOf("/") + 1).replace(/\.wav$/i, "")
+            dialog.message = `Importing ${name} (${index + 1}/${audioEntries.length})`
+            const arrayBuffer = await file.async("arraybuffer").then(buffer => buffer.slice(0))
+            const {status, value: sample, error} = await Promises.tryCatch(this.#sampleService.importFile({
+                name,
+                arrayBuffer
+            }))
+            if (status === "rejected") {
+                console.warn(`Failed to import '${name}'`, error)
+                dialog.terminate()
+                const skip = await RuntimeNotifier.approve({
+                    headline: `Failed to import '${name}'`,
+                    message: String(error),
+                    approveText: "Skip",
+                    cancelText: "Cancel Import"
+                })
+                if (!skip) {break}
+                dialog = RuntimeNotifier.progress({headline: "Importing Stems..."})
+                continue
+            }
+            const uuid = UUID.parse(sample.uuid)
+            await Promises.tryCatch(this.sampleManager.getAudioData(uuid))
+            editing.modify(() => {
+                const {trackBox, instrumentBox} = this.project.api.createInstrument(InstrumentFactories.Tape)
+                instrumentBox.label.setValue(name)
+                const audioFileBox = boxGraph.findBox<AudioFileBox>(uuid)
+                    .unwrapOrElse(() => AudioFileBox.create(boxGraph, uuid, box => {
+                        box.fileName.setValue(name)
+                        box.startInSeconds.setValue(0)
+                        box.endInSeconds.setValue(sample.duration)
+                    }))
+                AudioContentFactory.createNotStretchedRegion({
+                    boxGraph, sample, audioFileBox, position: 0, targetTrack: trackBox
+                })
+            })
+        }
+        dialog.terminate()
     }
 
     runIfProject<R>(procedure: Func<Project, R>): Option<R> {

@@ -1,5 +1,5 @@
 export * from "./DefaultSoundfontLoader"
-export * from "./DefaultSoundfontLoaderManager"
+export * from "./GlobalSoundfontLoaderManager"
 export * from "./OpenSoundfontAPI"
 export * from "./SoundfontProvider"
 export * from "./SoundfontService"

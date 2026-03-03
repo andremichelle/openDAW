@@ -5,9 +5,6 @@ const _RecordingCountInBars = [1, 2, 3, 4, 5, 6, 7, 8] as const
 const _OlderTakeActionOptions = ["disable-track", "mute-region"] as const
 const _OlderTakeScopeOptions = ["all", "previous-only"] as const
 
-const isDevOrLocalhost = typeof location !== "undefined" &&
-    (location.hostname === "localhost" || location.hostname === "dev.opendaw.studio")
-
 export const EngineSettingsSchema = z.object({
     metronome: z.object({
         enabled: z.boolean(),
@@ -36,7 +33,7 @@ export const EngineSettingsSchema = z.object({
         olderTakeScope: z.union(_OlderTakeScopeOptions.map(value => z.literal(value)))
     }).default({
         countInBars: 1,
-        allowTakes: isDevOrLocalhost,
+        allowTakes: true,
         olderTakeAction: "mute-region",
         olderTakeScope: "previous-only"
     })

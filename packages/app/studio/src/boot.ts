@@ -1,34 +1,33 @@
 import "./main.sass"
 import {App} from "@/ui/App.tsx"
-import {panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
+import {panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
-import {SampleMetaData, SoundfontMetaData} from "@moises-ai/studio-adapters"
+import {SampleMetaData, SoundfontMetaData} from "@opendaw/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {installCursors} from "@/ui/Cursors.ts"
 import {BuildInfo} from "./BuildInfo"
 import {Surface} from "@/ui/surface/Surface.tsx"
-import {replaceChildren} from "@moises-ai/lib-jsx"
-import {ContextMenu} from "@moises-ai/studio-core"
-import {testFeatures} from "@/features.ts"
-import {MissingFeature} from "@/ui/MissingFeature.tsx"
-import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
-import {showStoragePersistDialog} from "@/AppDialogs"
-import {Promises} from "@moises-ai/lib-runtime"
-import {AnimationFrame, Browser, Html, ShortcutManager} from "@moises-ai/lib-dom"
-import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
-import {FontLoader} from "@/ui/FontLoader"
-import {ErrorHandler} from "@/errors/ErrorHandler.ts"
+import {replaceChildren} from "@opendaw/lib-jsx"
 import {
     AudioWorklets,
     CloudAuthManager,
-    DefaultSoundfontLoaderManager,
+    ContextMenu, GlobalSoundfontLoaderManager,
     GlobalSampleLoaderManager,
     OfflineEngineRenderer,
     OpenSampleAPI,
     OpenSoundfontAPI,
     Workers
-} from "@moises-ai/studio-core"
-import {AudioData} from "@moises-ai/lib-dsp"
+} from "@opendaw/studio-core"
+import {testFeatures} from "@/features.ts"
+import {MissingFeature} from "@/ui/MissingFeature.tsx"
+import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
+import {showStoragePersistDialog} from "@/AppDialogs"
+import {Promises} from "@opendaw/lib-runtime"
+import {AnimationFrame, Browser, Html, ShortcutManager} from "@opendaw/lib-dom"
+import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
+import {FontLoader} from "@/ui/FontLoader"
+import {ErrorHandler} from "@/errors/ErrorHandler.ts"
+import {AudioData} from "@opendaw/lib-dsp"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Menu} from "@/ui/components/Menu"
 
@@ -46,7 +45,7 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
         alert("Error loading build info. Please reload the page.")
         return
     }
-    console.debug("buildInfo", buildInfo)
+    console.debug("buildInfo", JSON.stringify(buildInfo, null, 2))
     await FontLoader.load()
     await Workers.install(workersUrl)
     AudioWorklets.install(workletsUrl)
@@ -77,7 +76,7 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[AudioData, SampleMetaData]> =>
             OpenSampleAPI.get().load(uuid, progress)
     })
-    const soundfontManager = new DefaultSoundfontLoaderManager({
+    const soundfontManager = new GlobalSoundfontLoaderManager({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[ArrayBuffer, SoundfontMetaData]> =>
             OpenSoundfontAPI.get().load(uuid, progress)
     })

@@ -42,9 +42,9 @@ export class TrackBoxAdapter implements BoxAdapter {
         this.#box = box
 
         this.#terminator = new Terminator()
+        this.#listIndex = this.#terminator.own(new DefaultObservableValue(-1))
         this.#clips = this.#terminator.own(new TrackClips(this, context.boxAdapters))
         this.#regions = this.#terminator.own(new TrackRegions(this, context.boxAdapters))
-        this.#listIndex = this.#terminator.own(new DefaultObservableValue(-1))
     }
 
     catchupAndSubscribePath(observer: Observer<Option<[string, string]>>): Subscription {

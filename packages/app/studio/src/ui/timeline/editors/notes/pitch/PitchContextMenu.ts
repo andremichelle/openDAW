@@ -1,12 +1,11 @@
-import {ContextMenu} from "@moises-ai/studio-core"
-import {ElementCapturing} from "@/ui/canvas/capturing.ts"
-import {BoxEditing} from "@moises-ai/lib-box"
-import {MutableObservableValue, Selection} from "@moises-ai/lib-std"
-import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
+import {ContextMenu, ElementCapturing} from "@opendaw/studio-core"
+import {BoxEditing} from "@opendaw/lib-box"
+import {MutableObservableValue, Selection} from "@opendaw/lib-std"
+import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {PitchCaptureTarget} from "@/ui/timeline/editors/notes/pitch/PitchEventCapturing.ts"
 import {createPitchMenu} from "@/ui/timeline/editors/notes/pitch/PitchMenu.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {EventCollection} from "@moises-ai/lib-dsp"
+import {EventCollection} from "@opendaw/lib-dsp"
 
 type Construct = {
     element: Element

@@ -7,7 +7,7 @@ import {Surface} from "@/ui/surface/Surface.tsx"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo"
 
-const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP"]
+const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP", "Zotero Connector"]
 const IgnoredErrors = [
     "ResizeObserver loop completed with undelivered notifications.",
     "Request timeout appSettingsDistributor.getValue"
@@ -100,6 +100,12 @@ export class ErrorHandler {
         // Handle Monaco editor worker errors (throws Event objects when workers fail to load)
         if (reason instanceof Event || (reason instanceof Error && this.#looksLikeMonacoError(reason.message, reason.stack))) {
             console.warn("Monaco editor error (web workers may be unavailable):", reason)
+            event.preventDefault()
+            return true
+        }
+        // Handle Monaco CancellationError (name "Canceled" survives minification unlike stack traces)
+        if (reason instanceof Error && reason.name === "Canceled") {
+            console.debug(`Monaco CancellationError: ${reason.message}`)
             event.preventDefault()
             return true
         }

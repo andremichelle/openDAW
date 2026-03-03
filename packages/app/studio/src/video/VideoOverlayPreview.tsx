@@ -34,7 +34,8 @@ export const VideoOverlayPreview = ({lifecycle}: Construct) => {
                 const overlay = await VideoOverlay.create({
                     width: WIDTH,
                     height: HEIGHT,
-                    projectName: "Dub Techno"
+                    projectName: "Dub Techno",
+                    toParts: (position) => PPQN.toParts(Math.abs(position) | 0)
                 })
                 lifecycle.own(overlay)
 

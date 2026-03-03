@@ -60,8 +60,15 @@ export abstract class AssetService<T extends Sample | Soundfont> {
                 if (Errors.isAbort(error) || Errors.isNotAllowed(error)) {return} else {return panic(String(error)) }
             }
             if (files.length === 0) {return}
-            const arrayBuffer = await files[0].arrayBuffer()
-            const asset = await this.importFile({uuid, arrayBuffer, progressHandler: Progress.Empty})
+            const readResult = await Promises.tryCatch(files[0].arrayBuffer())
+            if (readResult.status === "rejected") {
+                await RuntimeNotifier.info({
+                    headline: "File Read Error",
+                    message: `'${files[0].name}' could not be read. The file may be on an inaccessible location.`
+                })
+                continue
+            }
+            const asset = await this.importFile({uuid, arrayBuffer: readResult.value, progressHandler: Progress.Empty})
             await RuntimeNotifier.info({
                 headline: "Replaced Asset",
                 message: `${asset.name} has been replaced`
@@ -84,10 +91,14 @@ export abstract class AssetService<T extends Sample | Soundfont> {
         const rejected: Array<string> = []
         const imported: Array<T> = []
         for (const [index, file] of files.entries()) {
-            const arrayBuffer = await file.arrayBuffer()
+            const readResult = await Promises.tryCatch(file.arrayBuffer())
+            if (readResult.status === "rejected") {
+                rejected.push(`'${file.name}' could not be read`)
+                continue
+            }
             const {status, value, error} = await Promises.tryCatch(this.importFile({
                 name: file.name,
-                arrayBuffer: arrayBuffer,
+                arrayBuffer: readResult.value,
                 progressHandler: progressHandler[index]
             }))
             if (status === "rejected") {rejected.push(String(error))} else {imported.push(value)}

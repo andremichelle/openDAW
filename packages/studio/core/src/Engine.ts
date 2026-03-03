@@ -7,7 +7,9 @@ export interface Engine extends Terminable {
     play(): void
     stop(): void
     setPosition(position: ppqn): void
+    /** @internal */
     prepareRecordingState(countIn: boolean): void
+    /** @internal */
     stopRecording(): void
     isReady(): Promise<void>
     queryLoadingComplete(): Promise<boolean>
@@ -16,6 +18,7 @@ export interface Engine extends Terminable {
     sleep(): void
     wake(): void
     loadClickSound(index: 0 | 1, data: AudioData): void
+    setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void
     noteSignal(signal: NoteSignal): void
     subscribeNotes(observer: Observer<NoteSignal>): Subscription
     ignoreNoteRegion(uuid: UUID.Bytes): void

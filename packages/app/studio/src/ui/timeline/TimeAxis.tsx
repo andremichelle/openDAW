@@ -1,13 +1,12 @@
 import css from "./TimeAxis.sass?inline"
-import {clamp, EmptyExec, isDefined, Lifecycle, Nullable, Option} from "@moises-ai/lib-std"
-import {createElement} from "@moises-ai/lib-jsx"
+import {clamp, EmptyExec, isDefined, Lifecycle, Nullable, Option} from "@opendaw/lib-std"
+import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {TimeGrid, TimelineRange} from "@moises-ai/studio-core"
-import {Colors} from "@moises-ai/studio-enums"
+import {CanvasPainter, TimeGrid, TimelineRange} from "@opendaw/studio-core"
+import {Colors} from "@opendaw/studio-enums"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {CanvasPainter} from "@/ui/canvas/painter.ts"
-import {ppqn, PPQN} from "@moises-ai/lib-dsp"
-import {Dragging, Html} from "@moises-ai/lib-dom"
+import {ppqn, PPQN} from "@opendaw/lib-dsp"
+import {Dragging, Html} from "@opendaw/lib-dom"
 import {DblClckTextInput} from "@/ui/wrapper/DblClckTextInput"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
@@ -131,7 +130,7 @@ export const TimeAxis = ({lifecycle, service, snapping, range, mapper}: Construc
                 return resolvers
             }} provider={() => ({
                 unit: "bars",
-                value: (PPQN.toParts(durationInPulses.getValue()).bars + 1).toString()
+                value: (signatureTrack.toParts(durationInPulses.getValue()).bars + 1).toString()
             })} location={() => {
                 const rect = endMarkerElement.getBoundingClientRect()
                 return {x: rect.left - 32, y: rect.top}

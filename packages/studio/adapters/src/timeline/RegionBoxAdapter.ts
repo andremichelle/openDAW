@@ -31,6 +31,10 @@ export interface RegionBoxAdapter<CONTENT> extends BoxAdapter, Region, Selectabl
     get hasCollection(): boolean
     get optCollection(): Option<CONTENT>
 
+    isAudioRegion(): this is AudioRegionBoxAdapter
+    isNoteRegion(): this is NoteRegionBoxAdapter
+    isValueRegion(): this is ValueRegionBoxAdapter
+
     /** Resolve duration at a given position (for preview during drag operations) */
     resolveDuration(position: ppqn): ppqn
     /** Resolve complete (position + duration) at a given position (for preview during drag operations) */

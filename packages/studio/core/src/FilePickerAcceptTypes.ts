@@ -33,6 +33,11 @@ export namespace FilePickerAcceptTypes {
         accept: {"application/octet-stream": [".odb"]}
     }
 
+    export const ZipFileType: FilePickerAcceptType = {
+        description: "zip file",
+        accept: {"application/octet-stream": [".zip"]}
+    }
+
     export const DawprojectFileType: FilePickerAcceptType = {
         description: "dawproject",
         accept: {"application/octet-stream": [".dawproject"]}

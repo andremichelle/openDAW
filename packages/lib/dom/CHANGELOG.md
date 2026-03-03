@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.75](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dom@0.0.74...@opendaw/lib-dom@0.0.75) (2026-02-25)
+
+**Note:** Version bump only for package @opendaw/lib-dom
+
+## [0.0.74](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dom@0.0.73...@opendaw/lib-dom@0.0.74) (2026-02-14)
+
+**Note:** Version bump only for package @opendaw/lib-dom
+
+## [0.0.73](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dom@0.0.72...@opendaw/lib-dom@0.0.73) (2026-02-12)
+
+**Note:** Version bump only for package @opendaw/lib-dom
+
 ## [0.0.72](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dom@0.0.71...@opendaw/lib-dom@0.0.72) (2026-02-06)
 
 **Note:** Version bump only for package @opendaw/lib-dom

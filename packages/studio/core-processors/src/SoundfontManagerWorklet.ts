@@ -10,7 +10,7 @@ class SoundfontLoaderWorklet implements SoundfontLoader {
     #soundfont: Option<SoundFont2> = Option.None
 
     constructor(readonly uuid: UUID.Bytes, readonly engineToClient: EngineToClient) {
-        engineToClient.fetchSoundfont(uuid).then((data) => this.#soundfont = Option.wrap(data))
+        engineToClient.fetchSoundfont(uuid).then(data => this.#soundfont = Option.wrap(data), console.warn)
     }
 
     get soundfont(): Option<SoundFont2> {return this.#soundfont}

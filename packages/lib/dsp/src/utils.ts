@@ -15,5 +15,7 @@ export const estimateBpm = (duration: number, maxBpm: number = 180.0): number =>
     const bpm = barsToBpm(Math.pow(2.0, Math.floor(Math.log(bpmToBars(maxBpm, duration)) / Math.LN2)), duration)
     return Math.round(bpm * 1000.0) / 1000.0
 }
-export const semitoneToHz = (semitones: number) => 440 * Math.pow(2.0, (semitones - 69.0) / 12.0)
-export const hzToSemitone = (hz: number) => 69.0 + 12.0 * Math.log2(hz / 440.0)
+export const semitoneToHz = (semitones: number, baseFrequency: number = 440.0) =>
+    baseFrequency * Math.pow(2.0, (semitones - 69.0) / 12.0)
+export const hzToSemitone = (hz: number, baseFrequency: number = 440.0) =>
+    69.0 + 12.0 * Math.log2(hz / baseFrequency)

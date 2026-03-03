@@ -1,22 +1,24 @@
-import {EmptyExec, Exec, isDefined, isInstanceOf, UUID} from "@moises-ai/lib-std"
-import {TimeBase} from "@moises-ai/lib-dsp"
+import {EmptyExec, Exec, isDefined, isInstanceOf, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {seconds, TimeBase} from "@opendaw/lib-dsp"
 import {
     AudioPitchStretchBox,
     AudioRegionBox,
     AudioTimeStretchBox,
     TransientMarkerBox,
     WarpMarkerBox
-} from "@moises-ai/studio-boxes"
-import {AudioContentBoxAdapter, AudioRegionBoxAdapter} from "@moises-ai/studio-adapters"
+} from "@opendaw/studio-boxes"
+import {AudioContentBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioContentHelpers} from "./AudioContentHelpers"
 import {Workers} from "../../Workers"
-import {Pointers} from "@moises-ai/studio-enums"
+import {Pointers} from "@opendaw/studio-enums"
 
 export namespace AudioContentModifier {
     export const toNotStretched = async (adapters: ReadonlyArray<AudioContentBoxAdapter>): Promise<Exec> => {
         const audioAdapters = adapters.filter(adapter => !adapter.isPlayModeNoStretch)
         if (audioAdapters.length === 0) {return EmptyExec}
         return () => audioAdapters.forEach((adapter) => {
+            const audibleDuration = adapter.optWarpMarkers
+                .mapOr(warpMarkers => warpMarkers.last()?.seconds ?? 0, 0)
             adapter.box.playMode.defer()
             adapter.asPlayModeTimeStretch.ifSome(({box}) => {
                 if (box.pointerHub.filter(Pointers.AudioPlayMode).length === 0) {box.delete()}
@@ -24,7 +26,7 @@ export namespace AudioContentModifier {
             adapter.asPlayModePitchStretch.ifSome(({box}) => {
                 if (box.pointerHub.filter(Pointers.AudioPlayMode).length === 0) {box.delete()}
             })
-            switchTimeBaseToSeconds(adapter)
+            switchTimeBaseToSeconds(adapter, audibleDuration)
         })
     }
 
@@ -52,7 +54,8 @@ export namespace AudioContentModifier {
                         }))
                 }
             } else {
-                AudioContentHelpers.addDefaultWarpMarkers(boxGraph, pitchStretch, adapter.duration, adapter.file.endInSeconds)
+                AudioContentHelpers.addDefaultWarpMarkers(boxGraph, pitchStretch,
+                    adapter.duration, adapter.box.duration.getValue())
             }
             switchTimeBaseToMusical(adapter)
         })
@@ -61,6 +64,7 @@ export namespace AudioContentModifier {
     export const toTimeStretch = async (adapters: ReadonlyArray<AudioContentBoxAdapter>): Promise<Exec> => {
         const audioAdapters = adapters.filter(adapter => adapter.asPlayModeTimeStretch.isEmpty())
         if (audioAdapters.length === 0) {return EmptyExec}
+        const handler = RuntimeNotifier.progress({headline: "Detecting Transients..."})
         const tasks = await Promise.all(audioAdapters.map(async adapter => {
             if (adapter.file.transients.length() === 0) {
                 return {
@@ -70,6 +74,7 @@ export namespace AudioContentModifier {
             }
             return {adapter}
         }))
+        handler.terminate()
         return () => tasks.forEach(({adapter, transients}) => {
             const optPitchStretch = adapter.asPlayModePitchStretch
             const boxGraph = adapter.box.graph
@@ -91,9 +96,10 @@ export namespace AudioContentModifier {
                         }))
                 }
             } else {
-                AudioContentHelpers.addDefaultWarpMarkers(boxGraph, timeStretch, adapter.duration, adapter.file.endInSeconds)
+                AudioContentHelpers.addDefaultWarpMarkers(boxGraph, timeStretch,
+                    adapter.duration, adapter.box.duration.getValue())
             }
-            if (isDefined(transients)) {
+            if (isDefined(transients) && adapter.file.transients.length() === 0) {
                 const markersField = adapter.file.box.transientMarkers
                 transients.forEach(position => TransientMarkerBox.create(boxGraph, UUID.generate(), box => {
                     box.owner.refer(markersField)
@@ -104,15 +110,14 @@ export namespace AudioContentModifier {
         })
     }
 
-    const switchTimeBaseToSeconds = ({box, file, timeBase}: AudioContentBoxAdapter): void => {
+    const switchTimeBaseToSeconds = ({box, timeBase}: AudioContentBoxAdapter, audibleDuration: seconds): void => {
         if (timeBase === TimeBase.Seconds) {return}
-        // Reset to 100% playback speed (original file speed)
         box.timeBase.setValue(TimeBase.Seconds)
-        box.duration.setValue(file.endInSeconds)
+        box.duration.setValue(audibleDuration)
         box.accept({
             visitAudioRegionBox: (box: AudioRegionBox) => {
                 box.loopOffset.setValue(0)
-                box.loopDuration.setValue(file.endInSeconds)
+                box.loopDuration.setValue(audibleDuration)
             }
         })
     }

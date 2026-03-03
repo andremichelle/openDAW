@@ -1,16 +1,14 @@
 import css from "./AudioEditorCanvas.sass?inline"
-import {isDefined, Lifecycle, Nullable, ObservableValue, Option, Terminator} from "@moises-ai/lib-std"
-import {createElement} from "@moises-ai/lib-jsx"
-import {Project, TimelineRange} from "@moises-ai/studio-core"
-import {CanvasPainter} from "@/ui/canvas/painter.ts"
-import {EventCollection, LoopableRegion, ppqn} from "@moises-ai/lib-dsp"
-import {renderAudio} from "@/ui/timeline/renderer/audio.ts"
+import {isDefined, Lifecycle, Nullable, ObservableValue, Option, Terminator} from "@opendaw/lib-std"
+import {createElement} from "@opendaw/lib-jsx"
+import {AudioRenderer, CanvasPainter, Project, TimelineRange} from "@opendaw/studio-core"
+import {EventCollection, LoopableRegion, ppqn} from "@opendaw/lib-dsp"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {renderTimeGrid} from "@/ui/timeline/editors/TimeGridRenderer.ts"
 import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {installEditorBody} from "../EditorBody"
-import {Dragging, Html} from "@moises-ai/lib-dom"
-import {WarpMarkerBoxAdapter} from "@moises-ai/studio-adapters"
+import {Dragging, Html} from "@opendaw/lib-dom"
+import {WarpMarkerBoxAdapter} from "@opendaw/studio-adapters"
 import {createAudioCapturing} from "@/ui/timeline/editors/audio/AudioCapturing"
 import {installCursor} from "@/ui/hooks/cursor"
 import {Cursor} from "@/ui/Cursors"
@@ -58,7 +56,7 @@ export const AudioEditorCanvas = ({
                     const pass = LoopableRegion.locateLoop(reader, range.unitMin - range.unitPadding, range.unitMax)
                     if (pass.isEmpty()) {return}
                     const tempoMap = reader.trackBoxAdapter.unwrap().context.tempoMap
-                    renderAudio(context, range, file, tempoMap, observableOptPlayMode, waveformOffset.getValue(),
+                    AudioRenderer.render(context, range, file, tempoMap, observableOptPlayMode, waveformOffset.getValue(),
                         gain.getValue(), {top: 0, bottom: actualHeight},
                         `hsl(${reader.hue}, ${60}%, 45%)`, pass.unwrap(), false)
 

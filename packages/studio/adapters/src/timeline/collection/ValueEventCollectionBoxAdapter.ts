@@ -155,10 +155,10 @@ export class ValueEventCollectionBoxAdapter implements BoxAdapter {
     subscribeChange(observer: Observer<this>): Subscription {return this.#changeNotifier.subscribe(observer)}
 
     createEvent({position, index, value, interpolation}: CreateEventParams): ValueEventBoxAdapter {
-        // Position is stored as integer in box, so truncate for comparison to prevent duplicates
         const intPosition = Math.trunc(position)
         const existing = this.#adapters.values().find(event => event.position === intPosition && event.index === index)
-        if (isDefined(existing)) {
+        // the adapters might be out of sync until the current transaction ends. Therefore, we check with isAttached.
+        if (isDefined(existing) && existing.box.isAttached()) {
             // Return an existing event instead of creating a duplicate-update its value
             existing.box.value.setValue(value)
             InterpolationFieldAdapter.write(existing.box.interpolation, interpolation)

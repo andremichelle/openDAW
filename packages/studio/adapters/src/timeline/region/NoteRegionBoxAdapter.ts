@@ -20,9 +20,11 @@ import {LoopableRegionBoxAdapter, RegionBoxAdapter, RegionBoxAdapterVisitor} fro
 import {NoteEventCollectionBoxAdapter} from "../collection/NoteEventCollectionBoxAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {MutableRegion} from "./MutableRegion"
+import {ValueRegionBoxAdapter} from "./ValueRegionBoxAdapter"
+import {AudioRegionBoxAdapter} from "./AudioRegionBoxAdapter"
 
 type CopyToParams = {
-    track?: Field<Pointers.RegionCollection>
+    target?: Field<Pointers.RegionCollection>
     position?: ppqn
     duration?: ppqn
     loopOffset?: ppqn
@@ -87,6 +89,10 @@ export class NoteRegionBoxAdapter
     set duration(value: ppqn) {this.#box.duration.setValue(value)}
     set loopOffset(value: ppqn) {this.#box.loopOffset.setValue(value)}
     set loopDuration(value: ppqn) {this.#box.loopDuration.setValue(value)}
+
+    isNoteRegion(): this is NoteRegionBoxAdapter {return true}
+    isAudioRegion(): this is AudioRegionBoxAdapter {return false}
+    isValueRegion(): this is ValueRegionBoxAdapter {return false}
 
     moveContentStart(delta: ppqn): void {
         this.optCollection.ifSome(collection => collection.events.asArray()
@@ -173,7 +179,7 @@ export class NoteRegionBoxAdapter
             box.label.setValue(this.label)
             box.mute.setValue(this.mute)
             box.events.refer(eventTarget)
-            box.regions.refer(params?.track ?? this.#box.regions.targetVertex.unwrap())
+            box.regions.refer(params?.target ?? this.#box.regions.targetVertex.unwrap())
         }), NoteRegionBoxAdapter)
     }
 

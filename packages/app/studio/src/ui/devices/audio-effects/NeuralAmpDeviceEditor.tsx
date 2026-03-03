@@ -1,11 +1,11 @@
 import css from "./NeuralAmpDeviceEditor.sass?inline"
-import {DeviceHost, NeuralAmpDeviceBoxAdapter} from "@moises-ai/studio-adapters"
-import {isDefined, Lifecycle, UUID} from "@moises-ai/lib-std"
-import {createElement} from "@moises-ai/lib-jsx"
+import {DeviceHost, NeuralAmpDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {isDefined, Lifecycle, UUID} from "@opendaw/lib-std"
+import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
-import {Files, Html} from "@moises-ai/lib-dom"
+import {Files, Html} from "@opendaw/lib-dom"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {StudioService} from "@/service/StudioService"
@@ -13,11 +13,10 @@ import {ControlBuilder} from "@/ui/devices/ControlBuilder"
 import {NamModel} from "@opendaw/nam-wasm"
 import {showNamModelDialog} from "./NeuralAmp/NamModelDialog"
 import {createSpectrumRenderer} from "./NeuralAmp/SpectrumRenderer"
-import {Colors, IconSymbol} from "@moises-ai/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
 import {Button} from "@/ui/components/Button"
-import {EffectFactories} from "@moises-ai/studio-core"
-import {NeuralAmpModelBox} from "@moises-ai/studio-boxes"
+import {NeuralAmpModelBox} from "@opendaw/studio-boxes"
 
 const className = Html.adoptStyleSheet(css, "NeuralAmpDeviceEditor")
 
@@ -151,6 +150,6 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
                       )}
-                      icon={EffectFactories.AudioNamed.NeuralAmp.defaultIcon}/>
+                      icon={IconSymbol.NeuralAmp}/>
     )
 }

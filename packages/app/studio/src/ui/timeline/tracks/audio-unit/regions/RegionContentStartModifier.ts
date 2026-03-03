@@ -17,7 +17,12 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
     constructor(tool: RegionContentStartModifier) {this.#tool = tool}
 
     readPosition(region: AnyRegionBoxAdapter): ppqn {
-        return region.position + this.#computeDelta(region)
+        const position = region.position + this.#computeDelta(region)
+        return region.trackBoxAdapter.map(trackAdapter => trackAdapter.regions.collection
+            .lowerEqual(region.position, prev => prev !== region && prev.isSelected)).match({
+            none: () => position,
+            some: prev => position < prev.complete ? prev.complete : position
+        })
     }
     readComplete(region: AnyRegionBoxAdapter): ppqn {return region.complete}
     readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {
@@ -114,8 +119,29 @@ export class RegionContentStartModifier implements RegionModifier {
         if (adapters.length === 0) {return}
         const modifiedTracks: ReadonlyArray<TrackBoxAdapter> = Arrays.removeDuplicates(adapters
             .map(adapter => adapter.trackBoxAdapter.unwrapOrNull()).filter(isNotNull))
+        const regionSnapshot = (region: AnyRegionBoxAdapter) =>
+            ({p: region.position, d: region.duration, s: region.isSelected})
+        const trackSnapshots = modifiedTracks.map(track => ({
+            trackIndex: track.listIndex,
+            before: track.regions.collection.asArray().map(regionSnapshot)
+        }))
+        const result = adapters.map(region => {
+            const readPos = this.#selectedModifyStrategy.readPosition(region)
+            return {region, delta: readPos - region.position, readPos, readComplete: region.complete}
+        })
+        console.debug("[ContentStartModifier.approve]", {
+            toolDelta: this.#delta,
+            masks: result.map(entry => ({readPos: entry.readPos, readComplete: entry.readComplete, delta: entry.delta})),
+            trackSnapshots
+        })
         this.#project.overlapResolver.apply(modifiedTracks, adapters, this, 0, () => {
-            adapters.forEach(region => region.moveContentStart(this.#delta))
+            result.forEach(({region, delta}) => region.moveContentStart(delta))
+        })
+        console.debug("[ContentStartModifier.approve] after", {
+            tracks: modifiedTracks.map(track => ({
+                trackIndex: track.listIndex,
+                regions: track.regions.collection.asArray().map(regionSnapshot)
+            }))
         })
     }
 

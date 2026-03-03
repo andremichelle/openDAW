@@ -42,6 +42,19 @@ export namespace OpfsWorker {
                 })
             }
 
+            async exists(path: string): Promise<boolean> {
+                return await this.#acquireLock(path, async () => {
+                    if (DEBUG) {console.debug(`exists ${path}`)}
+                    const handle = await this.#resolveFile(path)
+                    try {
+                        const size = handle.getSize()
+                        return size > 0
+                    } finally {
+                        handle.close()
+                    }
+                })
+            }
+
             async delete(path: string): Promise<void> {
                 await this.#acquireLock(path, async () => {
                     const segments = pathToSegments(path)
