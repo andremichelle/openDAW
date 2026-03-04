@@ -8,6 +8,17 @@ const COLOR_PALETTE: &[&str] = &[
 
 const MAX_ASSET_SIZE: u64 = 100 * 1024 * 1024; // 100MB
 
+#[table(accessor = user_s3_config, private)]
+pub struct UserS3Config {
+    #[primary_key]
+    pub identity: Identity,
+    pub bucket: String,
+    pub region: String,
+    pub access_key_id: String,
+    pub secret_access_key: String,
+    pub endpoint: String,
+}
+
 #[table(accessor = room, public)]
 pub struct Room {
     #[primary_key]
@@ -56,12 +67,23 @@ pub fn ping(ctx: &ReducerContext) -> Result<(), String> {
 pub fn create_room(ctx: &ReducerContext) -> Result<(), String> {
     let charset = b"abcdefghijklmnopqrstuvwxyz0123456789";
     let mut rng = ctx.rng();
-    let room_id: String = (0..8)
-        .map(|_| {
-            let idx = (rng.next_u32() as usize) % charset.len();
-            charset[idx] as char
-        })
-        .collect();
+    let mut room_id: String;
+    let mut attempts = 0u32;
+    loop {
+        room_id = (0..8)
+            .map(|_| {
+                let idx = (rng.next_u32() as usize) % charset.len();
+                charset[idx] as char
+            })
+            .collect();
+        if ctx.db.room().id().find(&room_id).is_none() {
+            break;
+        }
+        attempts += 1;
+        if attempts >= 5 {
+            return Err("failed to generate unique room ID after 5 attempts".to_string());
+        }
+    }
     let now = ctx.timestamp;
     ctx.db.room().insert(Room {
         id: room_id.clone(),
@@ -134,6 +156,11 @@ pub fn register_asset(
         .ok_or_else(|| format!("room not found: {}", room_id))?;
     if size_bytes > MAX_ASSET_SIZE {
         return Err(format!("asset too large: {} bytes (max {})", size_bytes, MAX_ASSET_SIZE));
+    }
+    let duplicate = ctx.db.room_asset().room_id().filter(&room_id)
+        .any(|entry| entry.asset_id == asset_id);
+    if duplicate {
+        return Err(format!("asset {} already registered in room {}", asset_id, room_id));
     }
     ctx.db.room_asset().insert(RoomAsset {
         id: 0,
@@ -241,6 +268,9 @@ pub fn update_presence(
         .find(|entry| entry.identity == ctx.sender());
     match existing {
         Some(mut record) => {
+            ctx.db.room_participant().room_id().filter(&room_id)
+                .find(|entry| entry.identity == ctx.sender())
+                .ok_or("Not in this room")?;
             record.cursor_x = cursor_x;
             record.cursor_y = cursor_y;
             record.cursor_target = cursor_target;
@@ -289,6 +319,11 @@ pub fn box_create(ctx: &ReducerContext, room_id: String, box_uuid: String, box_n
     if data.len() > 1024 * 1024 {
         return Err("Box data too large (max 1MB)".to_string());
     }
+    let duplicate = ctx.db.box_state().room_id().filter(&room_id)
+        .any(|entry| entry.box_uuid == box_uuid);
+    if duplicate {
+        return Err(format!("box {} already exists in room {}", box_uuid, room_id));
+    }
     ctx.db.box_state().insert(BoxState { id: 0, room_id, box_uuid, box_name, data });
     Ok(())
 }
@@ -321,6 +356,49 @@ pub fn box_delete(ctx: &ReducerContext, room_id: String, box_uuid: String) -> Re
     Ok(())
 }
 
+#[reducer]
+pub fn save_s3_config(
+    ctx: &ReducerContext,
+    bucket: String,
+    region: String,
+    access_key_id: String,
+    secret_access_key: String,
+    endpoint: String,
+) -> Result<(), String> {
+    if bucket.is_empty() || region.is_empty() || access_key_id.is_empty() || secret_access_key.is_empty() {
+        return Err("bucket, region, access_key_id, and secret_access_key are required".to_string());
+    }
+    if let Some(existing) = ctx.db.user_s3_config().identity().find(&ctx.sender()) {
+        let mut updated = existing;
+        updated.bucket = bucket;
+        updated.region = region;
+        updated.access_key_id = access_key_id;
+        updated.secret_access_key = secret_access_key;
+        updated.endpoint = endpoint;
+        ctx.db.user_s3_config().identity().update(updated);
+    } else {
+        ctx.db.user_s3_config().insert(UserS3Config {
+            identity: ctx.sender(),
+            bucket,
+            region,
+            access_key_id,
+            secret_access_key,
+            endpoint,
+        });
+    }
+    log::info!("S3 config saved for {:?}", ctx.sender());
+    Ok(())
+}
+
+#[reducer]
+pub fn clear_s3_config(ctx: &ReducerContext) -> Result<(), String> {
+    if ctx.db.user_s3_config().identity().find(&ctx.sender()).is_some() {
+        ctx.db.user_s3_config().identity().delete(&ctx.sender());
+        log::info!("S3 config cleared for {:?}", ctx.sender());
+    }
+    Ok(())
+}
+
 #[reducer(client_disconnected)]
 fn client_disconnected(ctx: &ReducerContext) {
     let participants: Vec<RoomParticipant> = ctx.db.room_participant().iter()
@@ -340,6 +418,10 @@ fn client_disconnected(ctx: &ReducerContext) {
 
 #[reducer(init)]
 fn init(ctx: &ReducerContext) {
+    if ctx.db.cleanup_schedule().iter().count() > 0 {
+        log::info!("Cleanup schedule already exists, skipping");
+        return;
+    }
     ctx.db.cleanup_schedule().insert(CleanupSchedule {
         scheduled_id: 0,
         scheduled_at: ScheduleAt::Interval(std::time::Duration::from_secs(300).into()),
