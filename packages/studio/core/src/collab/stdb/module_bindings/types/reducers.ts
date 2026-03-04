@@ -16,7 +16,6 @@ import PingReducer from "../ping_reducer";
 import PromoteRoomReducer from "../promote_room_reducer";
 import RegisterAssetReducer from "../register_asset_reducer";
 import SendSignalReducer from "../send_signal_reducer";
-import UpdateAssetS3UrlReducer from "../update_asset_s_3_url_reducer";
 import UpdatePresenceReducer from "../update_presence_reducer";
 
 export type BoxCreateParams = __Infer<typeof BoxCreateReducer>;
@@ -29,6 +28,5 @@ export type PingParams = __Infer<typeof PingReducer>;
 export type PromoteRoomParams = __Infer<typeof PromoteRoomReducer>;
 export type RegisterAssetParams = __Infer<typeof RegisterAssetReducer>;
 export type SendSignalParams = __Infer<typeof SendSignalReducer>;
-export type UpdateAssetS3UrlParams = __Infer<typeof UpdateAssetS3UrlReducer>;
 export type UpdatePresenceParams = __Infer<typeof UpdatePresenceReducer>;
 

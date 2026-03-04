@@ -93,10 +93,6 @@ export const populateStudioMenu = (service: StudioService) => {
                                     icon: IconSymbol.GoogleDrive
                                 }).setTriggerProcedure(() =>
                                     CloudBackup.backup(service.cloudAuthManager, "GoogleDrive").catch(EmptyExec)),
-                                MenuItem.default({
-                                    label: "S3 Storage...",
-                                    separatorBefore: true
-                                }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/cloud-storage")),
                                 MenuItem.default({label: "Help", icon: IconSymbol.Help})
                                     .setTriggerProcedure(() => RouteLocation.get().navigateTo("/manuals/cloud-backup"))
                             )

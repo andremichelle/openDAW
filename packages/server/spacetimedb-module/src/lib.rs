@@ -8,17 +8,6 @@ const COLOR_PALETTE: &[&str] = &[
 
 const MAX_ASSET_SIZE: u64 = 100 * 1024 * 1024; // 100MB
 
-#[table(accessor = user_s3_config, private)]
-pub struct UserS3Config {
-    #[primary_key]
-    pub identity: Identity,
-    pub bucket: String,
-    pub region: String,
-    pub access_key_id: String,
-    pub secret_access_key: String,
-    pub endpoint: String,
-}
-
 #[table(accessor = room, public)]
 pub struct Room {
     #[primary_key]
@@ -53,7 +42,6 @@ pub struct RoomAsset {
     pub name: String,
     pub size_bytes: u64,
     pub mime_type: String,
-    pub s3_url: Option<String>,
     pub uploaded_by: Identity,
 }
 
@@ -169,29 +157,9 @@ pub fn register_asset(
         name,
         size_bytes,
         mime_type,
-        s3_url: None,
         uploaded_by: ctx.sender(),
     });
     log::info!("asset {} registered in room {}", asset_id, room_id);
-    Ok(())
-}
-
-#[reducer]
-pub fn update_asset_s3_url(
-    ctx: &ReducerContext,
-    room_id: String,
-    asset_id: String,
-    s3_url: String,
-) -> Result<(), String> {
-    let mut asset = ctx.db.room_asset().room_id().filter(&room_id)
-        .find(|entry| entry.asset_id == asset_id)
-        .ok_or_else(|| format!("asset {} not found in room {}", asset_id, room_id))?;
-    if asset.uploaded_by != ctx.sender() {
-        return Err("only the uploader can update the S3 URL".to_string());
-    }
-    asset.s3_url = Some(s3_url);
-    ctx.db.room_asset().id().update(asset);
-    log::info!("asset {} s3_url updated in room {}", asset_id, room_id);
     Ok(())
 }
 
@@ -353,49 +321,6 @@ pub fn box_delete(ctx: &ReducerContext, room_id: String, box_uuid: String) -> Re
         .find(|entry| entry.box_uuid == box_uuid)
         .ok_or("Box not found")?;
     ctx.db.box_state().id().delete(&state.id);
-    Ok(())
-}
-
-#[reducer]
-pub fn save_s3_config(
-    ctx: &ReducerContext,
-    bucket: String,
-    region: String,
-    access_key_id: String,
-    secret_access_key: String,
-    endpoint: String,
-) -> Result<(), String> {
-    if bucket.is_empty() || region.is_empty() || access_key_id.is_empty() || secret_access_key.is_empty() {
-        return Err("bucket, region, access_key_id, and secret_access_key are required".to_string());
-    }
-    if let Some(existing) = ctx.db.user_s3_config().identity().find(&ctx.sender()) {
-        let mut updated = existing;
-        updated.bucket = bucket;
-        updated.region = region;
-        updated.access_key_id = access_key_id;
-        updated.secret_access_key = secret_access_key;
-        updated.endpoint = endpoint;
-        ctx.db.user_s3_config().identity().update(updated);
-    } else {
-        ctx.db.user_s3_config().insert(UserS3Config {
-            identity: ctx.sender(),
-            bucket,
-            region,
-            access_key_id,
-            secret_access_key,
-            endpoint,
-        });
-    }
-    log::info!("S3 config saved for {:?}", ctx.sender());
-    Ok(())
-}
-
-#[reducer]
-pub fn clear_s3_config(ctx: &ReducerContext) -> Result<(), String> {
-    if ctx.db.user_s3_config().identity().find(&ctx.sender()).is_some() {
-        ctx.db.user_s3_config().identity().delete(&ctx.sender());
-        log::info!("S3 config cleared for {:?}", ctx.sender());
-    }
     Ok(())
 }
 

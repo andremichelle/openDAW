@@ -1,10 +1,7 @@
-import {Optional} from "@opendaw/lib-std"
-
 export type CollabConfig = {
     readonly endpoint: string
     readonly shareBaseUrl?: string
     readonly databaseName?: string
-    readonly s3?: S3Config
 }
 
 export type RoomInfo = {
@@ -24,7 +21,6 @@ export type AssetMeta = {
     readonly name: string
     readonly sizeBytes: number
     readonly mimeType: string
-    readonly s3Url: Optional<string>
 }
 
 export type PresenceData = {
@@ -34,12 +30,4 @@ export type PresenceData = {
     readonly cursorX: number
     readonly cursorY: number
     readonly cursorTarget: string
-}
-
-export type S3Config = {
-    readonly bucket: string
-    readonly region: string
-    readonly accessKeyId: string
-    readonly secretAccessKey: string
-    readonly endpoint?: string
 }

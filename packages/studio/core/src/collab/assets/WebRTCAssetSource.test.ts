@@ -50,7 +50,7 @@ describe("WebRTCAssetSource", () => {
         const peerManager = new PeerManager()
         const source = new WebRTCAssetSource(peerManager)
         await expect(source.publish("a", new ArrayBuffer(0), {
-            assetId: "a", name: "test", sizeBytes: 0, mimeType: "audio/wav", s3Url: undefined,
+            assetId: "a", name: "test", sizeBytes: 0, mimeType: "audio/wav",
         })).resolves.toBeUndefined()
     })
     it("requests asset from peer via data channel", async () => {

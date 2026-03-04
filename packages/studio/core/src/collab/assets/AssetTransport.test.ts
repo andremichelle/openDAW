@@ -64,7 +64,7 @@ describe("AssetTransportChain", () => {
         const source2 = createMockSource("s2", new Map())
         const chain = new AssetTransportChain([source1, source2])
         const data = new ArrayBuffer(4)
-        const meta = {assetId: "a1", name: "test.wav", sizeBytes: 4, mimeType: "audio/wav", s3Url: undefined}
+        const meta = {assetId: "a1", name: "test.wav", sizeBytes: 4, mimeType: "audio/wav"}
         await chain.publish("a1", data, meta)
         expect(source1.publish).toHaveBeenCalledWith("a1", data, meta)
         expect(source2.publish).toHaveBeenCalledWith("a1", data, meta)
@@ -78,7 +78,7 @@ describe("AssetTransportChain", () => {
         const goodSource = createMockSource("good", new Map())
         const chain = new AssetTransportChain([failSource, goodSource])
         const data = new ArrayBuffer(4)
-        const meta = {assetId: "a1", name: "test.wav", sizeBytes: 4, mimeType: "audio/wav", s3Url: undefined}
+        const meta = {assetId: "a1", name: "test.wav", sizeBytes: 4, mimeType: "audio/wav"}
         await chain.publish("a1", data, meta).catch(() => {})
         expect(failSource.publish).toHaveBeenCalled()
         expect(goodSource.publish).toHaveBeenCalled()

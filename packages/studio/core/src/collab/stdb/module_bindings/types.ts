@@ -54,7 +54,6 @@ export const RoomAsset = __t.object("RoomAsset", {
   name: __t.string(),
   sizeBytes: __t.u64(),
   mimeType: __t.string(),
-  s3Url: __t.option(__t.string()),
   uploadedBy: __t.identity(),
 });
 export type RoomAsset = __Infer<typeof RoomAsset>;

@@ -6,7 +6,6 @@ import {PresenceService} from "./PresenceService"
 import {PeerManager} from "./webrtc/PeerManager"
 import {AssetSource, AssetTransportChain} from "./assets/AssetTransport"
 import {OpfsAssetSource} from "./assets/OpfsAssetSource"
-import {S3AssetSource} from "./assets/S3AssetSource"
 import {WebRTCAssetSource} from "./assets/WebRTCAssetSource"
 import {StdbConnection, StdbConnectionState} from "./stdb/StdbConnection"
 import {BoxStateRow, StdbSync} from "./StdbSync"
@@ -70,8 +69,6 @@ type SdkConnection = {
         boxCreate(params: {roomId: string, boxUuid: string, boxName: string, data: string}): void
         boxUpdate(params: {roomId: string, boxUuid: string, data: string}): void
         boxDelete(params: {roomId: string, boxUuid: string}): void
-        saveS3Config(params: {bucket: string, region: string, accessKeyId: string, secretAccessKey: string, endpoint: string}): void
-        clearS3Config(params: Record<string, never>): void
     }
     subscriptionBuilder(): {
         onApplied(cb: (ctx: unknown) => void): {
@@ -106,9 +103,6 @@ export class CollabService implements Terminable {
         this.presence = new PresenceService()
         this.peerManager = new PeerManager()
         const sources: Array<AssetSource> = [new OpfsAssetSource()]
-        if (isDefined(config.s3)) {
-            sources.push(new S3AssetSource(config.s3))
-        }
         sources.push(new WebRTCAssetSource(this.peerManager))
         this.assets = new AssetTransportChain(sources)
         this.connection = new StdbConnection({
@@ -183,22 +177,6 @@ export class CollabService implements Terminable {
         this.#setState(CollabState.Disconnected)
         this.connection.disconnect()
         this.presence.clear()
-    }
-
-    saveS3Config(config: {bucket: string, region: string, accessKeyId: string, secretAccessKey: string, endpoint: string}): void {
-        const conn = this.connection.sdk as Optional<SdkConnection>
-        if (!isDefined(conn)) {return}
-        try {conn.reducers.saveS3Config(config)} catch (error: unknown) {
-            console.error("[CollabService] saveS3Config reducer error:", error)
-        }
-    }
-
-    clearS3Config(): void {
-        const conn = this.connection.sdk as Optional<SdkConnection>
-        if (!isDefined(conn)) {return}
-        try {conn.reducers.clearS3Config({} as Record<string, never>)} catch (error: unknown) {
-            console.error("[CollabService] clearS3Config reducer error:", error)
-        }
     }
 
     updateCursor(cursorX: number, cursorY: number, cursorTarget: string): void {

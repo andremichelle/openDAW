@@ -44,7 +44,6 @@ import PingReducer from "./ping_reducer";
 import PromoteRoomReducer from "./promote_room_reducer";
 import RegisterAssetReducer from "./register_asset_reducer";
 import SendSignalReducer from "./send_signal_reducer";
-import UpdateAssetS3UrlReducer from "./update_asset_s_3_url_reducer";
 import UpdatePresenceReducer from "./update_presence_reducer";
 
 // Import all procedure arg schemas
@@ -156,7 +155,6 @@ const reducersSchema = __reducers(
   __reducerSchema("promote_room", PromoteRoomReducer),
   __reducerSchema("register_asset", RegisterAssetReducer),
   __reducerSchema("send_signal", SendSignalReducer),
-  __reducerSchema("update_asset_s_3_url", UpdateAssetS3UrlReducer),
   __reducerSchema("update_presence", UpdatePresenceReducer),
 );
 

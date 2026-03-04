@@ -69,13 +69,6 @@ describe("CollabService", () => {
         const service = new CollabService(config)
         expect(service.assets.sourceNames).toEqual(["opfs", "webrtc"])
     })
-    it("has 3 asset sources when S3 is configured (opfs, s3, webrtc)", () => {
-        const service = new CollabService({
-            ...config,
-            s3: {bucket: "my-bucket", region: "us-east-1", accessKeyId: "key", secretAccessKey: "secret"},
-        })
-        expect(service.assets.sourceNames).toEqual(["opfs", "s3", "webrtc"])
-    })
     it("cleans up on terminate", () => {
         const service = new CollabService(config)
         service.createRoom()

@@ -87,7 +87,7 @@ describe("Collaboration Integration", () => {
         }
         const chain = new AssetTransportChain([source1, source2])
         const data = new Uint8Array([10, 20, 30]).buffer
-        const meta = {assetId: "shared-asset", name: "audio.wav", sizeBytes: 3, mimeType: "audio/wav", s3Url: undefined}
+        const meta = {assetId: "shared-asset", name: "audio.wav", sizeBytes: 3, mimeType: "audio/wav"}
         await chain.publish("shared-asset", data, meta)
         const resolved = await chain.resolve("shared-asset")
         expect(resolved).toBeDefined()

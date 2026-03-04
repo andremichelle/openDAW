@@ -17,6 +17,5 @@ export default __t.row({
   name: __t.string(),
   sizeBytes: __t.u64().name("size_bytes"),
   mimeType: __t.string().name("mime_type"),
-  s3Url: __t.option(__t.string()).name("s_3_url"),
   uploadedBy: __t.identity().name("uploaded_by"),
 });
