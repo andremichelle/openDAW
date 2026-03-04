@@ -1,0 +1,90 @@
+@use "@/colors"
+@use "@/mixins"
+
+component
+  @include mixins.floating
+  flex-direction: column
+  row-gap: 1em
+  padding: 1.5em 2em
+  max-width: 24em
+  width: 100%
+  position: fixed
+  top: 50%
+  left: 50%
+  transform: translate(-50%, -50%)
+
+  > h2
+    color: var(--color-blue)
+    margin: 0
+
+  > p
+    color: var(--color-gray)
+    margin: 0
+
+    > code
+      color: var(--color-orange)
+      font-family: monospace
+      padding: 0.125em 0.375em
+      background-color: rgba(black, 0.3)
+      border-radius: 2px
+
+  > label
+    display: flex
+    flex-direction: column
+    row-gap: 0.375em
+    color: var(--color-gray)
+
+    > input
+      appearance: none
+      border: none
+      outline: none
+      background-color: rgba(black, 0.12)
+      box-shadow: 0 0 0 0.5px rgba(white, 0.1)
+      color: var(--color-bright)
+      padding: 0.5em 0.625em
+      border-radius: 0.25em
+      font-family: inherit
+      font-size: 1em
+
+      &:focus
+        box-shadow: 0 0 0 0.5px var(--color-blue)
+
+      &:disabled
+        opacity: 0.5
+
+      &::placeholder
+        color: var(--color-dark)
+
+  > div.join-actions
+    display: flex
+    column-gap: 0.5em
+
+    > button
+      flex: 1
+      appearance: none
+      border: none
+      outline: none
+      padding: 0.5em 1em
+      border-radius: 0.25em
+      font-family: inherit
+      font-size: 1em
+      cursor: pointer
+
+      &:first-child
+        background-color: var(--color-blue)
+        color: white
+        box-shadow: 0 0 0.75em rgba(from var(--color-blue) r g b / 0.3)
+
+        &:hover:not(:disabled)
+          box-shadow: 0 0 1em rgba(from var(--color-blue) r g b / 0.5)
+
+        &:disabled
+          opacity: 0.5
+          cursor: default
+
+      &:last-child
+        background-color: rgba(white, 0.06)
+        color: var(--color-gray)
+
+        &:hover
+          background-color: rgba(white, 0.1)

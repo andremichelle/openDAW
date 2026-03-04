@@ -1,0 +1,100 @@
+@use "@/colors"
+@use "@/mixins"
+
+component
+  @include mixins.floating
+  flex-direction: column
+  row-gap: 1em
+  padding: 1.5em 2em
+  max-width: 28em
+  width: 100%
+
+  > h3
+    color: var(--color-cream)
+    margin: 0
+
+  > div.share-url-row
+    display: flex
+    column-gap: 0.5em
+
+    > input
+      flex: 1
+      appearance: none
+      border: none
+      outline: none
+      background-color: rgba(black, 0.12)
+      box-shadow: 0 0 0 0.5px rgba(white, 0.1)
+      color: var(--color-bright)
+      padding: 0.5em 0.625em
+      border-radius: 0.25em
+      font-family: monospace
+      font-size: 0.875em
+
+    > button
+      appearance: none
+      border: none
+      outline: none
+      padding: 0.5em 1em
+      border-radius: 0.25em
+      font-family: inherit
+      font-size: 1em
+      cursor: pointer
+      background-color: var(--color-green)
+      color: white
+      box-shadow: 0 0 0.75em rgba(from var(--color-green) r g b / 0.3)
+      white-space: nowrap
+
+      &:hover
+        box-shadow: 0 0 1em rgba(from var(--color-green) r g b / 0.5)
+
+  > p.share-hint
+    color: var(--color-dark)
+    margin: 0
+    font-size: 0.875em
+
+  > div.share-persist
+    display: flex
+    flex-direction: column
+    row-gap: 0.5em
+    padding: 0.75em
+    background-color: rgba(black, 0.15)
+    border-radius: 0.25em
+    border-left: 2px solid var(--color-orange)
+
+    > p
+      color: var(--color-gray)
+      margin: 0
+      font-size: 0.875em
+
+    > button
+      appearance: none
+      border: none
+      outline: none
+      padding: 0.5em 1em
+      border-radius: 0.25em
+      font-family: inherit
+      font-size: 1em
+      cursor: pointer
+      background-color: var(--color-orange)
+      color: white
+      box-shadow: 0 0 0.75em rgba(from var(--color-orange) r g b / 0.3)
+      width: fit-content
+
+      &:hover
+        box-shadow: 0 0 1em rgba(from var(--color-orange) r g b / 0.5)
+
+  > button.share-close
+    appearance: none
+    border: none
+    outline: none
+    padding: 0.5em 1em
+    border-radius: 0.25em
+    font-family: inherit
+    font-size: 1em
+    cursor: pointer
+    background-color: rgba(white, 0.06)
+    color: var(--color-gray)
+    align-self: flex-end
+
+    &:hover
+      background-color: rgba(white, 0.1)

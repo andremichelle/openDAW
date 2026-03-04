@@ -1,5 +1,9 @@
+import css from "./ParticipantPanel.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@opendaw/lib-dom"
 import {PresenceData} from "@opendaw/studio-core"
+
+const className = Html.adoptStyleSheet(css, "ParticipantPanel")
 
 type ParticipantPanelProps = {
     readonly participants: ReadonlyArray<PresenceData>
@@ -10,7 +14,7 @@ type ParticipantPanelProps = {
 export const ParticipantPanel = ({participants, isOpen, onToggle}: ParticipantPanelProps) => {
     const totalCount = participants.length + 1
     return (
-        <div className="participant-panel">
+        <div className={className}>
             <button className="participant-toggle" onclick={onToggle}>
                 <span className="participant-count">{totalCount}</span>
                 <span>collaborators</span>

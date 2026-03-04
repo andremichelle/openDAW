@@ -1,4 +1,8 @@
+import css from "./CollabSettings.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@opendaw/lib-dom"
+
+const className = Html.adoptStyleSheet(css, "CollabSettings")
 
 const ENDPOINT_KEY = "opendaw-stdb-endpoint"
 const DEFAULT_ENDPOINT = "wss://maincloud.spacetimedb.com"
@@ -20,7 +24,7 @@ export const CollabSettings = () => {
         input.value = DEFAULT_ENDPOINT
     }
     return (
-        <div className="collab-settings">
+        <div className={className}>
             <h3>Collaboration Server</h3>
             <label>SpacetimeDB Endpoint{input}</label>
             <div className="collab-settings-actions">

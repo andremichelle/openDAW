@@ -1,0 +1,68 @@
+@use "@/colors"
+@use "@/mixins"
+
+component
+  display: flex
+  flex-direction: column
+  position: relative
+
+  > button.participant-toggle
+    appearance: none
+    border: none
+    outline: none
+    display: flex
+    align-items: center
+    column-gap: 0.375em
+    padding: 0.25em 0.625em
+    border-radius: 1em
+    font-family: inherit
+    font-size: 0.75rem
+    cursor: pointer
+    background-color: rgba(white, 0.06)
+    color: var(--color-gray)
+
+    &:hover
+      background-color: rgba(white, 0.1)
+
+    > span.participant-count
+      display: flex
+      align-items: center
+      justify-content: center
+      min-width: 1.25em
+      height: 1.25em
+      border-radius: 0.625em
+      background-color: var(--color-blue)
+      color: white
+      font-size: 0.875em
+      font-weight: 500
+
+  > div.participant-list
+    position: absolute
+    top: 100%
+    right: 0
+    margin-top: 0.25em
+    display: flex
+    flex-direction: column
+    row-gap: 0.125em
+    padding: 0.5em
+    border-radius: 0.375em
+    min-width: 10em
+    @include colors.panel-background-dark
+    box-shadow: 0 0 0 0.5px rgba(white, 0.1), 0 1em 1.5em rgba(black, 0.3)
+
+    > div.participant-item
+      display: flex
+      align-items: center
+      column-gap: 0.5em
+      padding: 0.25em 0.375em
+      border-radius: 0.25em
+      color: var(--color-gray)
+
+      &.local
+        color: var(--color-bright)
+
+      > span.participant-dot
+        width: 0.5em
+        height: 0.5em
+        border-radius: 50%
+        flex-shrink: 0

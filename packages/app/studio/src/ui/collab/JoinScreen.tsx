@@ -1,4 +1,8 @@
+import css from "./JoinScreen.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@opendaw/lib-dom"
+
+const className = Html.adoptStyleSheet(css, "JoinScreen")
 
 type JoinScreenProps = {
     readonly roomId: string
@@ -40,7 +44,7 @@ export const JoinScreen = ({roomId, onJoin, onCancel, isConnecting}: JoinScreenP
     })
     if (savedName.trim().length === 0) {joinButton.disabled = true}
     return (
-        <div className="join-screen">
+        <div className={className}>
             <h2>Join Session</h2>
             <p>Room: <code>{roomId}</code></p>
             <label>Your name{input}</label>

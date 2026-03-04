@@ -1,4 +1,8 @@
+import css from "./ShareDialog.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@opendaw/lib-dom"
+
+const className = Html.adoptStyleSheet(css, "ShareDialog")
 
 type ShareDialogProps = {
     readonly shareUrl: string
@@ -19,7 +23,7 @@ export const ShareDialog = ({shareUrl, onClose, onPromoteRoom, isPersistent}: Sh
         setTimeout(() => copyButton.textContent = "Copy Link", 2000)
     })
     return (
-        <div className="share-dialog">
+        <div className={className}>
             <h3>Share this session</h3>
             <div className="share-url-row">
                 <input type="text" value={shareUrl} readonly={true}/>
