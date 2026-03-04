@@ -13,10 +13,11 @@ export class S3AssetSource implements AssetSource {
     }
 
     getUrl(assetId: string): string {
+        const encodedId = encodeURIComponent(assetId)
         if (isDefined(this.#config.endpoint)) {
-            return `${this.#config.endpoint}/${this.#config.bucket}/${ASSET_PREFIX}/${assetId}`
+            return `${this.#config.endpoint}/${this.#config.bucket}/${ASSET_PREFIX}/${encodedId}`
         }
-        return `https://${this.#config.bucket}.s3.${this.#config.region}.amazonaws.com/${ASSET_PREFIX}/${assetId}`
+        return `https://${this.#config.bucket}.s3.${this.#config.region}.amazonaws.com/${ASSET_PREFIX}/${encodedId}`
     }
 
     async resolve(assetId: string): Promise<Optional<ArrayBuffer>> {

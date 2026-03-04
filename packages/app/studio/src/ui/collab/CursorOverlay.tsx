@@ -15,6 +15,7 @@ export const CursorOverlay = ({participants}: CursorOverlayProps) => {
         }}>
             {participants.map(participant => (
                 <div
+                    key={participant.identity}
                     className="remote-cursor"
                     style={{
                         position: "absolute",

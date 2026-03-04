@@ -1,21 +1,21 @@
 import {Optional} from "@opendaw/lib-std"
 import {CollabConfig} from "./types"
 
-const DEFAULT_SHARE_BASE = "https://opendaw.studio"
-
 export class RoomService {
     readonly #config: CollabConfig
     readonly #shareBase: string
 
     constructor(config: CollabConfig) {
         this.#config = config
-        this.#shareBase = config.shareBaseUrl ?? DEFAULT_SHARE_BASE
+        this.#shareBase = config.shareBaseUrl ?? (typeof window !== "undefined" ? window.location.origin : "http://localhost")
     }
 
     generateRoomId(): string {
         const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+        const randomBytes = new Uint8Array(8)
+        crypto.getRandomValues(randomBytes)
         let result = ""
-        for (let i = 0; i < 8; i++) {result += chars[Math.floor(Math.random() * chars.length)]}
+        for (let i = 0; i < 8; i++) {result += chars[randomBytes[i] % chars.length]}
         return result
     }
 

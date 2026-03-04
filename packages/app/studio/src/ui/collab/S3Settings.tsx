@@ -30,7 +30,11 @@ export const S3Settings = () => {
     const statusLabel: HTMLSpanElement = <span/>
     const handleSave = () => {
         if (bucketInput.value.length === 0 || regionInput.value.length === 0
-            || accessKeyInput.value.length === 0 || secretKeyInput.value.length === 0) {return}
+            || accessKeyInput.value.length === 0 || secretKeyInput.value.length === 0) {
+            statusLabel.textContent = "All fields except endpoint are required."
+            setTimeout(() => statusLabel.textContent = "", 3000)
+            return
+        }
         const data: S3ConfigState = {
             bucket: bucketInput.value,
             region: regionInput.value,

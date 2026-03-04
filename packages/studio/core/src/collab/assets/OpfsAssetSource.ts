@@ -27,7 +27,10 @@ export class OpfsAssetSource implements AssetSource {
         const dir = await root.getDirectoryHandle(this.#folder, {create: true})
         const file = await dir.getFileHandle(assetId, {create: true})
         const writable = await file.createWritable()
-        await writable.write(data)
-        await writable.close()
+        try {
+            await writable.write(data)
+        } finally {
+            await writable.close()
+        }
     }
 }

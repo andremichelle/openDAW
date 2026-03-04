@@ -3,7 +3,6 @@ import {PresenceData} from "@opendaw/studio-core"
 
 type ParticipantPanelProps = {
     readonly participants: ReadonlyArray<PresenceData>
-    readonly localIdentity: string
     readonly isOpen: boolean
     readonly onToggle: () => void
 }
@@ -23,7 +22,7 @@ export const ParticipantPanel = ({participants, isOpen, onToggle}: ParticipantPa
                         <span>You</span>
                     </div>
                     {participants.map(participant => (
-                        <div className="participant-item">
+                        <div key={participant.identity} className="participant-item">
                             <span className="participant-dot" style={{background: participant.color}}/>
                             <span>{participant.displayName}</span>
                         </div>
