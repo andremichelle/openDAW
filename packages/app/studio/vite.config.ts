@@ -29,6 +29,7 @@ export default defineConfig(({command}) => {
             }
         },
         optimizeDeps: {
+            include: ["spacetimedb"],
             exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util", "monaco-editor"]
         },
         build: {
@@ -56,7 +57,7 @@ export default defineConfig(({command}) => {
         server: {
             port: 8080,
             host: "localhost",
-            https: command === "serve" ? {
+            https: (command === "serve" && certsExist) ? {
                 key: readFileSync(resolve(__dirname, "../../../certs/localhost-key.pem")),
                 cert: readFileSync(resolve(__dirname, "../../../certs/localhost.pem"))
             } : undefined,

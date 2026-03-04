@@ -1,7 +1,7 @@
 import {createElement} from "@opendaw/lib-jsx"
 
 const ENDPOINT_KEY = "opendaw-stdb-endpoint"
-const DEFAULT_ENDPOINT = "wss://live.opendaw.studio"
+const DEFAULT_ENDPOINT = "wss://maincloud.spacetimedb.com"
 
 export const CollabSettings = () => {
     const input: HTMLInputElement = <input

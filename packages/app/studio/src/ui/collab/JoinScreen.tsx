@@ -20,6 +20,9 @@ export const JoinScreen = ({roomId, onJoin, onCancel, isConnecting}: JoinScreenP
         const name = input.value.trim()
         if (name.length === 0) {return}
         localStorage.setItem("opendaw-display-name", name)
+        joinButton.disabled = true
+        joinButton.textContent = "Connecting..."
+        input.disabled = true
         onJoin(name)
     }
     input.addEventListener("keydown", (event: KeyboardEvent) => {

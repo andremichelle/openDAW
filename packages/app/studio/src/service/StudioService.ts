@@ -36,13 +36,14 @@ import {RouteLocation} from "@opendaw/lib-jsx"
 import {PPQN} from "@opendaw/lib-dsp"
 import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
-import {ExportStemsConfiguration, InstrumentFactories, PresetDecoder} from "@opendaw/studio-adapters"
-import {Address} from "@opendaw/lib-box"
+import {ExportStemsConfiguration, InstrumentFactories, PresetDecoder, ProjectSkeleton} from "@opendaw/studio-adapters"
+import {Address, BoxGraph} from "@opendaw/lib-box"
 import {
     AudioContentFactory,
     AudioWorklets,
     CloudAuthManager,
     CollabService,
+    CollabState,
     DawProjectService,
     DefaultSoundfontLoaderManager,
     EngineFacade,
@@ -63,7 +64,7 @@ import {
     TimelineRange
 } from "@opendaw/studio-core"
 import {ProjectDialogs} from "@/project/ProjectDialogs"
-import {AudioFileBox, AudioUnitBox} from "@opendaw/studio-boxes"
+import {AudioFileBox, AudioUnitBox, BoxIO} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
@@ -106,7 +107,9 @@ export class StudioService implements ProjectEnv {
     readonly samplePlayback: SamplePlayback
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
-    readonly collabService = new CollabService({endpoint: "wss://live.opendaw.studio"})
+    readonly collabService = new CollabService({
+        endpoint: localStorage.getItem("opendaw-stdb-endpoint") ?? "wss://maincloud.spacetimedb.com",
+    })
 
     readonly #softwareKeyboardLifeCycle = new Terminator()
     readonly #signals = new Notifier<StudioSignal>()
@@ -365,6 +368,16 @@ export class StudioService implements ProjectEnv {
         RouteLocation.get().navigateTo("/")
     }
 
+    createCollabBoxGraph(): BoxGraph<BoxIO.TypeMap> {
+        return new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
+    }
+
+    loadCollabProject(boxGraph: BoxGraph<BoxIO.TypeMap>): void {
+        const mandatoryBoxes = ProjectSkeleton.findMandatoryBoxes(boxGraph)
+        this.#projectProfileService.setProject(
+            Project.fromSkeleton(this, {boxGraph, mandatoryBoxes}), "Collab Session")
+    }
+
     registerFooter(factory: Provider<FooterLabel>): void {
         this.#factoryFooterLabel = Option.wrap(factory)
     }
@@ -494,14 +507,17 @@ export class StudioService implements ProjectEnv {
     }
 
     #configBeforeUnload(): void {
-        if (!Browser.isLocalHost()) {
-            window.addEventListener("beforeunload", (event: Event) => {
+        window.addEventListener("beforeunload", (event: Event) => {
+            if (this.collabService.state !== CollabState.Disconnected) {
+                this.collabService.leaveRoom()
+            }
+            if (!Browser.isLocalHost()) {
                 if (!navigator.onLine) {event.preventDefault()}
                 if (this.hasProfile && this.profile.hasUnsavedChanges()) {
                     event.preventDefault()
                 }
-            })
-        }
+            }
+        })
     }
 
     #checkRecovery(): void {

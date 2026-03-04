@@ -114,30 +114,45 @@ export const Header = ({lifecycle, service}: Construct) => {
             <hr/>
             <div style={{flex: "1 0 0"}}/>
             {(() => {
+                const dot: HTMLSpanElement = <span className="collab-dot" style={{
+                    width: "6px",
+                    height: "6px",
+                    borderRadius: "50%",
+                    display: "inline-block",
+                }}/>
+                const label: HTMLSpanElement = <span className="collab-label"/>
                 const collabIndicator: HTMLSpanElement = <span style={{
                     display: "none",
                     alignItems: "center",
                     gap: "4px",
                     fontSize: "11px",
-                    color: Colors.green.toString(),
-                    cursor: "default"
+                    cursor: "default",
                 }}>
-                    <span style={{
-                        width: "6px",
-                        height: "6px",
-                        borderRadius: "50%",
-                        background: Colors.green.toString(),
-                        display: "inline-block"
-                    }}/>
-                    <span className="collab-count">1</span>
+                    {dot}
+                    {label}
                 </span>
-                lifecycle.own(service.collabService.presence.onChange.subscribe(() => {
-                    const count = service.collabService.presence.participants.length + 1
-                    const isActive = service.collabService.state !== CollabState.Disconnected
-                    collabIndicator.style.display = isActive ? "flex" : "none"
-                    const countEl = collabIndicator.querySelector(".collab-count")
-                    if (countEl !== null) {countEl.textContent = String(count)}
-                }))
+                const updateIndicator = () => {
+                    const state = service.collabService.state
+                    if (state === CollabState.Disconnected) {
+                        collabIndicator.style.display = "none"
+                        return
+                    }
+                    collabIndicator.style.display = "flex"
+                    if (state === CollabState.Connecting) {
+                        const orange = Colors.orange.toString()
+                        dot.style.background = orange
+                        collabIndicator.style.color = orange
+                        label.textContent = "Connecting..."
+                    } else {
+                        const green = Colors.green.toString()
+                        dot.style.background = green
+                        collabIndicator.style.color = green
+                        const count = service.collabService.presence.participants.length + 1
+                        label.textContent = String(count)
+                    }
+                }
+                lifecycle.own(service.collabService.onChange.subscribe(updateIndicator))
+                lifecycle.own(service.collabService.presence.onChange.subscribe(updateIndicator))
                 return collabIndicator
             })()}
             {location.origin.includes("dev.opendaw.studio")

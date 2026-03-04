@@ -5,8 +5,11 @@ import {StudioService} from "@/service/StudioService.ts"
 import {Html} from "@opendaw/lib-dom"
 import {WorkspaceBuilder} from "@/ui/workspace/WorkspaceBuilder"
 import {CursorOverlay} from "@/ui/collab/CursorOverlay"
+import {CollabState} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "WorkspacePage")
+
+const CURSOR_THROTTLE_MS = 100
 
 export const WorkspacePage: PageFactory<StudioService> = ({lifecycle, service}: PageContext<StudioService>) => {
     const main: HTMLElement = <main/>
@@ -21,5 +24,18 @@ export const WorkspacePage: PageFactory<StudioService> = ({lifecycle, service}: 
             participants: service.collabService.presence.participants
         }))
     }))
-    return <div className={className} style={{position: "relative"}}>{main}{cursorContainer}</div>
+    let lastCursorSend = 0
+    const wrapper: HTMLDivElement = <div className={className} style={{position: "relative"}}>{main}{cursorContainer}</div>
+    wrapper.addEventListener("mousemove", (event: MouseEvent) => {
+        if (service.collabService.state !== CollabState.Connected) {return}
+        const now = performance.now()
+        if (now - lastCursorSend < CURSOR_THROTTLE_MS) {return}
+        lastCursorSend = now
+        const rect = wrapper.getBoundingClientRect()
+        const cursorX = event.clientX - rect.left
+        const cursorY = event.clientY - rect.top
+        const target = event.target instanceof HTMLElement ? (event.target.dataset.trackId ?? "") : ""
+        service.collabService.updateCursor(cursorX, cursorY, target)
+    })
+    return wrapper
 }

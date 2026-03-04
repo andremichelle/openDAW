@@ -116,11 +116,13 @@ export const populateStudioMenu = (service: StudioService) => {
                         parent.addMenuItem(
                             MenuItem.default({
                                 label: "Share Session...",
-                                selectable: !isConnected
+                                selectable: service.hasProfile && !isConnected
                             }).setTriggerProcedure(async () => {
-                                    collabService.createRoom()
-                                    const roomId = collabService.roomId
-                                    if (isAbsent(roomId)) {return}
+                                    const storedName = localStorage.getItem("opendaw-display-name") ?? "Host"
+                                    const displayName = prompt("Enter your display name:", storedName)
+                                    if (isAbsent(displayName) || displayName.trim().length === 0) {return}
+                                    localStorage.setItem("opendaw-display-name", displayName.trim())
+                                    const roomId = await collabService.createRoom(displayName.trim(), service.project.boxGraph)
                                     const shareUrl = collabService.room.getShareUrl(roomId)
                                     await navigator.clipboard.writeText(shareUrl)
                                     await RuntimeNotifier.info({
@@ -137,7 +139,6 @@ export const populateStudioMenu = (service: StudioService) => {
                                     const parsed = RoomService.parseShareUrl(input)
                                     const roomId = parsed ?? input.trim()
                                     if (roomId.length === 0) {return}
-                                    collabService.joinRoom(roomId)
                                     RouteLocation.get().navigateTo(`/r/${roomId}`)
                                 }),
                             MenuItem.default({
