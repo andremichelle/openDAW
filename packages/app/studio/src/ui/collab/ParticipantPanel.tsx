@@ -22,7 +22,7 @@ export const ParticipantPanel = ({participants, isOpen, onToggle}: ParticipantPa
             {isOpen && (
                 <div className="participant-list">
                     <div className="participant-item local">
-                        <span className="participant-dot" style={{background: "#4ECDC4"}}/>
+                        <span className="participant-dot"/>
                         <span>You</span>
                     </div>
                     {participants.map(participant => (

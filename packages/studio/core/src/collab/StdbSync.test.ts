@@ -1,4 +1,5 @@
 import {describe, expect, it, vi} from "vitest"
+import {Optional} from "@opendaw/lib-std"
 import {BoxStateRow, StdbSync, StdbSyncConnection} from "./StdbSync"
 
 type MockBox = {
@@ -64,8 +65,8 @@ const createMockConn = (): StdbSyncConnection & {
 }
 
 const createMockGraph = (boxes: Array<MockBox> = []) => {
-    let transactionListener: TransactionListener | undefined
-    let immediateListener: UpdateListener | undefined
+    let transactionListener: Optional<TransactionListener> = undefined
+    let immediateListener: Optional<UpdateListener> = undefined
     const pendingUpdates: Array<unknown> = []
     return {
         _boxes: boxes,
