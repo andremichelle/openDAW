@@ -1,6 +1,5 @@
 import {ContextMenu, ElementCapturing} from "@opendaw/studio-core"
-import {BoxEditing} from "@opendaw/lib-box"
-import {MutableObservableValue, Selection} from "@opendaw/lib-std"
+import {MutableObservableValue, Selection, Editing} from "@opendaw/lib-std"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {PitchCaptureTarget} from "@/ui/timeline/editors/notes/pitch/PitchEventCapturing.ts"
 import {createPitchMenu} from "@/ui/timeline/editors/notes/pitch/PitchMenu.ts"
@@ -11,7 +10,7 @@ type Construct = {
     element: Element
     capturing: ElementCapturing<PitchCaptureTarget>
     snapping: Snapping
-    editing: BoxEditing
+    editing: Editing
     selection: Selection<NoteEventBoxAdapter>
     events: EventCollection<NoteEventBoxAdapter>
     stepRecording: MutableObservableValue<boolean>

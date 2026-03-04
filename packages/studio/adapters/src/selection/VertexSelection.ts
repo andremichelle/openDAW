@@ -2,6 +2,7 @@ import {
     asInstanceOf,
     assert,
     Bijective,
+    Editing,
     int,
     Listeners,
     Option,
@@ -13,7 +14,7 @@ import {
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {Address, Addressable, BoxEditing, BoxGraph, Field, PointerField} from "@opendaw/lib-box"
+import {Address, Addressable, BoxGraph, Field, PointerField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {SelectionBox} from "@opendaw/studio-boxes"
 import {SelectableVertex} from "./SelectableVertex"
@@ -32,7 +33,7 @@ export class VertexSelection implements Selection<SelectableVertex> {
 
     #target: Option<Field> = Option.None
 
-    constructor(readonly editing: BoxEditing, readonly boxGraph: BoxGraph) {
+    constructor(readonly editing: Editing, readonly boxGraph: BoxGraph) {
         this.#lifeTime = new Terminator()
         this.#entityMap = UUID.newSet(entry => entry.box.address.uuid)
         this.#selectableMap = Address.newSet(entry => entry.selectable.address)

@@ -1,7 +1,7 @@
 import {DeviceHost, Devices, EffectDeviceBoxAdapter, PresetDecoder, PresetEncoder} from "@opendaw/studio-adapters"
 import {EffectFactories, FilePickerAcceptTypes, MenuItem, Project} from "@opendaw/studio-core"
-import {BoxEditing, PrimitiveField, PrimitiveValues, StringField} from "@opendaw/lib-box"
-import {EmptyExec, isInstanceOf, panic, RuntimeNotifier} from "@opendaw/lib-std"
+import {PrimitiveField, PrimitiveValues, StringField} from "@opendaw/lib-box"
+import {Editing, EmptyExec, isInstanceOf, panic, RuntimeNotifier} from "@opendaw/lib-std"
 import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
 import {StudioService} from "@/service/StudioService"
@@ -101,7 +101,7 @@ export namespace MenuItems {
         )
     }
 
-    export const createForValue = <V extends PrimitiveValues>(editing: BoxEditing,
+    export const createForValue = <V extends PrimitiveValues>(editing: Editing,
                                                               label: string,
                                                               primitive: PrimitiveField<V, any>,
                                                               value: V) =>
@@ -122,7 +122,7 @@ export namespace MenuItems {
         )
     }
 
-    const populateMenuItemToRenameDevice = (editing: BoxEditing, labelField: StringField) =>
+    const populateMenuItemToRenameDevice = (editing: Editing, labelField: StringField) =>
         MenuItem.default({label: "Rename..."}).setTriggerProcedure(() => {
             const resolvers = Promise.withResolvers<string>()
             const surface = Surface.get()
@@ -139,7 +139,7 @@ export namespace MenuItems {
             .setTriggerProcedure(() => RouteLocation.get().navigateTo(path))
     }
 
-    const populateMenuItemToDeleteDevice = (editing: BoxEditing, ...devices: ReadonlyArray<EffectDeviceBoxAdapter>) => {
+    const populateMenuItemToDeleteDevice = (editing: Editing, ...devices: ReadonlyArray<EffectDeviceBoxAdapter>) => {
         const label = `Delete '${devices.map(device => device.labelField.getValue()).join(", ")}'`
         return MenuItem.default({label})
             .setTriggerProcedure(() => editing.modify(() => Devices.deleteEffectDevices(devices)))

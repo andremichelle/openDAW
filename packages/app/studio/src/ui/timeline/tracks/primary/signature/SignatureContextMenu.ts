@@ -1,10 +1,7 @@
-import {ContextMenu, MenuItem} from "@opendaw/studio-core"
-import {ElementCapturing} from "../../../../../../../../studio/core/src/ui/canvas/capturing"
+import {ContextMenu, ElementCapturing, MenuItem, TimelineRange} from "@opendaw/studio-core"
 import {Parsing, SignatureEvent, SignatureTrackAdapter} from "@opendaw/studio-adapters"
-import {EmptyExec} from "@opendaw/lib-std"
-import {BoxEditing} from "@opendaw/lib-box"
+import {Editing, EmptyExec} from "@opendaw/lib-std"
 import {DebugMenus} from "@/ui/menu/debug"
-import {TimelineRange} from "@opendaw/studio-core"
 import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
 
@@ -16,7 +13,7 @@ export namespace SignatureContextMenu {
     export const install = (element: Element,
                             range: TimelineRange,
                             capturing: ElementCapturing<SignatureEvent>,
-                            editing: BoxEditing,
+                            editing: Editing,
                             trackAdapter: SignatureTrackAdapter) => {
         return ContextMenu.subscribe(element, ({addItems, client}: ContextMenu.Collector) => {
             const signature = capturing.captureEvent(client)

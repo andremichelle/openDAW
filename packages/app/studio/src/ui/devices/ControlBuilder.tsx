@@ -3,14 +3,14 @@ import {Column} from "@/ui/devices/Column.tsx"
 import {createElement} from "@opendaw/lib-jsx"
 import {LKR} from "@/ui/devices/constants.ts"
 import {ParameterLabelKnob} from "@/ui/devices/ParameterLabelKnob.tsx"
-import {Color, TerminableOwner, ValueGuide} from "@opendaw/lib-std"
-import {BoxEditing, PrimitiveValues} from "@opendaw/lib-box"
+import {Color, TerminableOwner, ValueGuide, Editing} from "@opendaw/lib-std"
+import {PrimitiveValues} from "@opendaw/lib-box"
 import {MIDILearning} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
 
 type Creation<T extends PrimitiveValues> = {
     lifecycle: TerminableOwner
-    editing: BoxEditing
+    editing: Editing
     midiLearning: MIDILearning
     adapter: DeviceBoxAdapter
     parameter: AutomatableParameterFieldAdapter<T>

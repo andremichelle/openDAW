@@ -1,9 +1,8 @@
 import css from "./ParameterLabel.sass?inline"
-import {ControlSource, Lifecycle, Terminable} from "@opendaw/lib-std"
+import {ControlSource, Lifecycle, Terminable, Editing} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {attachParameterContextMenu} from "@/ui/menu/automation.ts"
 import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {BoxEditing} from "@opendaw/lib-box"
 import {Html} from "@opendaw/lib-dom"
 import {MIDILearning} from "@opendaw/studio-core"
 
@@ -11,7 +10,7 @@ const className = Html.adoptStyleSheet(css, "ParameterLabel")
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     midiLearning: MIDILearning
     adapter: DeviceBoxAdapter
     parameter: AutomatableParameterFieldAdapter

@@ -1,5 +1,6 @@
 import {
     Arrays,
+    Editing,
     Func,
     isDefined,
     panic,
@@ -120,7 +121,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     readonly api: ProjectApi
     readonly captureDevices: CaptureDevices
-    readonly editing: BoxEditing
+    readonly editing: Editing
     readonly selection: VertexSelection
     readonly deviceSelection: FilteredSelection<DeviceBoxAdapter>
     readonly regionSelection: FilteredSelection<AnyRegionBoxAdapter>
@@ -155,7 +156,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.timelineBox = timelineBox
 
         this.api = new ProjectApi(this)
-        this.editing = new BoxEditing(this.boxGraph)
+        this.editing = env.createEditing?.(this.boxGraph) ?? new BoxEditing(this.boxGraph)
         this.selection = new VertexSelection(this.editing, this.boxGraph)
         this.parameterFieldAdapters = new ParameterFieldAdapters()
         this.boxAdapters = this.#terminator.own(new BoxAdapters(this))

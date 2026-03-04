@@ -152,7 +152,7 @@ export class StudioService implements ProjectEnv {
     panicEngine(): void {this.runIfProject(({engine}) => engine.panic())}
 
     async newProject() {
-        if (this.hasProfile && !this.project.editing.isEmpty()) {
+        if (this.hasProfile && !this.project.editing.hasNoChanges()) {
             const approved = await RuntimeNotifier.approve({
                 headline: "Closing Project?",
                 message: "You will lose all progress!"
@@ -169,7 +169,7 @@ export class StudioService implements ProjectEnv {
             this.switchScreen("dashboard")
             return
         }
-        if (this.project.editing.isEmpty()) {
+        if (this.project.editing.hasNoChanges()) {
             this.#projectProfileService.setValue(Option.None)
         } else {
             const approved = await RuntimeNotifier.approve({

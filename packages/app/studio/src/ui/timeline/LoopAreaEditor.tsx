@@ -1,8 +1,8 @@
 import css from "./LoopAreaEditor.sass?inline"
-import {asDefined, Lifecycle, Nullable, Option} from "@opendaw/lib-std"
+import {asDefined, Lifecycle, Nullable, Option, Editing} from "@opendaw/lib-std"
 import {CssUtils, deferNextFrame, Dragging, Events, Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
-import {BoxEditing, Propagation} from "@opendaw/lib-box"
+import {Propagation} from "@opendaw/lib-box"
 import {installCursor} from "@/ui/hooks/cursor.ts"
 import {ElementCapturing, TimelineRange} from "@opendaw/studio-core"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
@@ -21,7 +21,7 @@ type Target = keyof typeof CursorMap
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     range: TimelineRange
     snapping: Snapping
     loopArea: LoopArea

@@ -1,10 +1,9 @@
 import {AudioUnitBox, TrackBox} from "@opendaw/studio-boxes"
-import {asInstanceOf, int, Nullable, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, Editing, int, Nullable, UUID} from "@opendaw/lib-std"
 import {TrackType} from "@opendaw/studio-adapters"
-import {BoxEditing} from "@opendaw/lib-box"
 
 export namespace RecordTrack {
-    export const findOrCreate = (editing: BoxEditing,
+    export const findOrCreate = (editing: Editing,
                                  audioUnitBox: AudioUnitBox,
                                  type: TrackType,
                                  excludeTrack: Nullable<TrackBox> = null): TrackBox => {

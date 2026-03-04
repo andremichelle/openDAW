@@ -9,9 +9,8 @@ import {
     Subscription,
     Terminable,
     unitValue
-} from "@opendaw/lib-std"
+, Editing} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {BoxEditing} from "@opendaw/lib-box"
 import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {EventCollection, NoteEvent, ppqn} from "@opendaw/lib-dsp"
@@ -39,7 +38,7 @@ class SelectedModifyStrategy implements NoteModifyStrategy {
 }
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     selection: Selection<NoteEventBoxAdapter>
     positioner: PitchPositioner
@@ -52,7 +51,7 @@ type Construct = Readonly<{
 export class NoteMoveModifier implements NoteModifier {
     static create(construct: Construct): NoteMoveModifier {return new NoteMoveModifier(construct)}
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #selection: Selection<NoteEventBoxAdapter>
     readonly #positioner: PitchPositioner

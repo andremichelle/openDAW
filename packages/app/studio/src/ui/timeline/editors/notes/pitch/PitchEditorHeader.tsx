@@ -1,5 +1,5 @@
 import css from "./PitchEditorHeader.sass?inline"
-import {int, Lifecycle, Selection} from "@opendaw/lib-std"
+import {int, Lifecycle, Selection, Editing} from "@opendaw/lib-std"
 import {ScaleSelector} from "@/ui/timeline/editors/notes/pitch/ScaleSelector.tsx"
 import {ScaleConfigurator} from "@/ui/timeline/editors/notes/pitch/ScaleConfigurator.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
@@ -11,7 +11,6 @@ import {ScaleConfig} from "@/ui/timeline/editors/notes/pitch/ScaleConfig.ts"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {PropertyTable} from "@/ui/timeline/editors/notes/property/PropertyTable.tsx"
-import {BoxEditing} from "@opendaw/lib-box"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {Html} from "@opendaw/lib-dom"
@@ -21,7 +20,7 @@ const className = Html.adoptStyleSheet(css, "PitchEditorHeader")
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     modifyContext: ObservableModifyContext<NoteModifier>
     selection: Selection<NoteEventBoxAdapter>
     scale: ScaleConfig

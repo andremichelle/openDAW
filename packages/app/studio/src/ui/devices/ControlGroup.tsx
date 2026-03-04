@@ -1,9 +1,8 @@
 import css from "./ControlGroup.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {Color, int, Lifecycle} from "@opendaw/lib-std"
+import {Color, int, Lifecycle, Editing} from "@opendaw/lib-std"
 import {createElement, Frag} from "@opendaw/lib-jsx"
 import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {BoxEditing} from "@opendaw/lib-box"
 import {MIDILearning} from "@opendaw/studio-core"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import {ParameterLabel} from "@/ui/components/ParameterLabel"
@@ -15,7 +14,7 @@ type Construct = {
     gridUV: { u: int, v: int }
     color: Color
     name: string
-    editing: BoxEditing
+    editing: Editing
     midiLearning: MIDILearning
     deviceAdapter: DeviceBoxAdapter
     parameters: ReadonlyArray<AutomatableParameterFieldAdapter<number>>

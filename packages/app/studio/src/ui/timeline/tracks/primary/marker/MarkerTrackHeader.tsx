@@ -5,15 +5,14 @@ import {Checkbox} from "@/ui/components/Checkbox"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 import {Icon} from "@/ui/components/Icon"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {Lifecycle} from "@opendaw/lib-std"
-import {BoxEditing} from "@opendaw/lib-box"
+import {Lifecycle, Editing} from "@opendaw/lib-std"
 import {TimelineBox} from "@opendaw/studio-boxes"
 
 const className = Html.adoptStyleSheet(css, "MarkerTrackHeader")
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     timelineBox: TimelineBox
 }
 

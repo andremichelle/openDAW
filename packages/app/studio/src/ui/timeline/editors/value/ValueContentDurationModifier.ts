@@ -1,6 +1,5 @@
-import {int, Notifier, Observer, Option, Terminable, unitValue} from "@opendaw/lib-std"
+import {int, Notifier, Observer, Option, Terminable, unitValue, Editing} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {BoxEditing} from "@opendaw/lib-box"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {Interpolation, ppqn, PPQN, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
@@ -8,7 +7,7 @@ import {SelectableValueEvent} from "@opendaw/studio-adapters"
 import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     snapping: Snapping
     pointerPulse: ppqn
@@ -20,7 +19,7 @@ export class ValueContentDurationModifier implements ValueModifier {
         return new ValueContentDurationModifier(construct)
     }
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #snapping: Snapping
     readonly #pointerPulse: ppqn

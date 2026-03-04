@@ -1,6 +1,5 @@
-import {int, Notifier, Observer, Option, Terminable} from "@opendaw/lib-std"
+import {int, Notifier, Observer, Option, Terminable, Editing} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {BoxEditing} from "@opendaw/lib-box"
 import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
@@ -9,7 +8,7 @@ import {UINoteEvent} from "./UINoteEvent"
 import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     snapping: Snapping
     pointerPulse: ppqn
@@ -21,7 +20,7 @@ export class NoteContentDurationModifier implements NoteModifier {
         return new NoteContentDurationModifier(construct)
     }
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #snapping: Snapping
     readonly #pointerPulse: ppqn

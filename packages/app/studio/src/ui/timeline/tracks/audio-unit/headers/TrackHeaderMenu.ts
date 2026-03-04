@@ -96,7 +96,7 @@ export const installTrackHeaderMenu = (service: StudioService,
         MenuItem.default({
             label: "Extract AudioUnit Into New Project"
         }).setTriggerProcedure(async () => {
-            if (service.hasProfile && !project.editing.isEmpty()) {
+            if (service.hasProfile && !project.editing.hasNoChanges()) {
                 const approved = await RuntimeNotifier.approve({
                     headline: "Closing Project?",
                     message: "You will lose all progress!"

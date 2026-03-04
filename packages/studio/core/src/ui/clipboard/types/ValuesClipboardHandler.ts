@@ -1,5 +1,5 @@
-import {ByteArrayInput, ByteArrayOutput, Option, Procedure, Provider, Selection} from "@opendaw/lib-std"
-import {Address, BoxEditing, BoxGraph} from "@opendaw/lib-box"
+import {ByteArrayInput, ByteArrayOutput, Editing, Option, Procedure, Provider, Selection} from "@opendaw/lib-std"
+import {Address, BoxGraph} from "@opendaw/lib-box"
 import {ppqn} from "@opendaw/lib-dsp"
 import {Pointers} from "@opendaw/studio-enums"
 import {ValueEventBox} from "@opendaw/studio-boxes"
@@ -14,7 +14,7 @@ export namespace ValuesClipboard {
         readonly getEnabled: Provider<boolean>
         readonly getPosition: Provider<ppqn>
         readonly setPosition: Procedure<ppqn>
-        readonly editing: BoxEditing
+        readonly editing: Editing
         readonly selection: Selection<ValueEventBoxAdapter>
         readonly collection: ValueEventCollectionBoxAdapter
         readonly targetAddress: Address

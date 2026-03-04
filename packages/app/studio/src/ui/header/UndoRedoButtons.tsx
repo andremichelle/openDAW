@@ -24,7 +24,7 @@ export const UndoRedoButtons = ({lifecycle, service: {projectProfileService}}: C
         projectProfileService.catchupAndSubscribe(optProfile => {
             runtime.terminate()
             if (optProfile.isEmpty()) {return}
-            const editing = optProfile.unwrap().project.editing
+            const {editing} = optProfile.unwrap().project
             const updateState = () => {
                 undoButton.classList.toggle("enabled", editing.canUndo())
                 redoButton.classList.toggle("enabled", editing.canRedo())

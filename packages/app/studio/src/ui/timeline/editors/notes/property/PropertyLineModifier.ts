@@ -1,5 +1,4 @@
-import {clamp, Notifier, Observer, Option, Selection, Terminable, unitValue, ValueAxis} from "@opendaw/lib-std"
-import {BoxEditing} from "@opendaw/lib-box"
+import {clamp, Notifier, Observer, Option, Selection, Terminable, unitValue, ValueAxis, Editing} from "@opendaw/lib-std"
 import {Line, NoteModifyStrategy, Point} from "../NoteModifyStrategies.ts"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {EventCollection, NoteEvent, ppqn} from "@opendaw/lib-dsp"
@@ -16,7 +15,7 @@ import {Dragging} from "@opendaw/lib-dom"
 import {TimelineRange} from "@opendaw/studio-core"
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     property: PropertyAccessor
     selection: Selection<NoteEventBoxAdapter>
@@ -31,7 +30,7 @@ export class PropertyLineModifier implements NoteModifier, NoteModifyStrategy {
         return new PropertyLineModifier(construct)
     }
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #property: PropertyAccessor
     readonly #selection: Selection<NoteEventBoxAdapter>

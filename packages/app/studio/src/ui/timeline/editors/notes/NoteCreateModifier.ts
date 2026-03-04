@@ -1,6 +1,5 @@
-import {IterableIterators, int, MakeMutable, Notifier, Observer, Option, Selection, Terminable} from "@opendaw/lib-std"
+import {IterableIterators, int, MakeMutable, Notifier, Observer, Option, Selection, Terminable, Editing} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {BoxEditing} from "@opendaw/lib-box"
 import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
 import {EventCollection, ppqn} from "@opendaw/lib-dsp"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
@@ -10,7 +9,7 @@ import {UINoteEvent} from "@/ui/timeline/editors/notes/UINoteEvent.ts"
 import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     snapping: Snapping
     selection: Selection<NoteEventBoxAdapter>
@@ -24,7 +23,7 @@ export class NoteCreateModifier implements NoteModifier {
         return new NoteCreateModifier(construct)
     }
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #snapping: Snapping
     readonly #selection: Selection<NoteEventBoxAdapter>

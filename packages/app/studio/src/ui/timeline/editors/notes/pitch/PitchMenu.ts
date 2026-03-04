@@ -1,13 +1,12 @@
-import {BoxEditing} from "@opendaw/lib-box"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {MutableObservableValue, Procedure, Selection} from "@opendaw/lib-std"
+import {MutableObservableValue, Procedure, Selection, Editing} from "@opendaw/lib-std"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {EventCollection} from "@opendaw/lib-dsp"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
 import {MenuCollector, MenuItem} from "@opendaw/studio-core"
 
 export const createPitchMenu = ({editing, snapping, selection, events, stepRecording}: {
-    editing: BoxEditing
+    editing: Editing
     snapping: Snapping
     selection: Selection<NoteEventBoxAdapter>
     events: EventCollection<NoteEventBoxAdapter>

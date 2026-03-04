@@ -1,5 +1,4 @@
-import {Objects, Selection} from "@opendaw/lib-std"
-import {BoxEditing} from "@opendaw/lib-box"
+import {Objects, Selection, Editing} from "@opendaw/lib-std"
 import {Interpolation} from "@opendaw/lib-dsp"
 import {ContextMenu, ElementCapturing, MenuItem} from "@opendaw/studio-core"
 import {ValueEventBoxAdapter} from "@opendaw/studio-adapters"
@@ -10,7 +9,7 @@ import {DebugMenus} from "@/ui/menu/debug"
 type Construct = {
     element: Element
     capturing: ElementCapturing<ValueCaptureTarget>
-    editing: BoxEditing
+    editing: Editing
     selection: Selection<ValueEventBoxAdapter>
 }
 

@@ -1,5 +1,5 @@
-import {ByteArrayInput, ByteArrayOutput, int, Option, Optional, Provider} from "@opendaw/lib-std"
-import {Box, BoxEditing, BoxGraph, IndexedBox} from "@opendaw/lib-box"
+import {ByteArrayInput, ByteArrayOutput, Editing, int, Option, Optional, Provider} from "@opendaw/lib-std"
+import {Box, BoxGraph, IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
     AudioBusBox,
@@ -23,7 +23,7 @@ type AudioUnitMetadata = {
 export namespace AudioUnitsClipboard {
     export type Context = {
         readonly getEnabled: Provider<boolean>
-        readonly editing: BoxEditing
+        readonly editing: Editing
         readonly boxGraph: BoxGraph
         readonly rootBoxAdapter: RootBoxAdapter
         readonly audioUnitEditing: UserEditing
