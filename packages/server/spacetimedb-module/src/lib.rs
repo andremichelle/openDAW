@@ -1,5 +1,5 @@
 use spacetimedb::{table, reducer, Table, ReducerContext, Identity, Timestamp, ScheduleAt};
-use spacetimedb::rand::Rng;
+use spacetimedb::rand::RngCore;
 
 const COLOR_PALETTE: &[&str] = &[
     "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4",
@@ -8,7 +8,7 @@ const COLOR_PALETTE: &[&str] = &[
 
 const MAX_ASSET_SIZE: u64 = 100 * 1024 * 1024; // 100MB
 
-#[table(name = room, public)]
+#[table(accessor = room, public)]
 pub struct Room {
     #[primary_key]
     pub id: String,
@@ -18,7 +18,7 @@ pub struct Room {
     pub last_active_at: Timestamp,
 }
 
-#[table(name = room_participant, public)]
+#[table(accessor = room_participant, public)]
 pub struct RoomParticipant {
     #[primary_key]
     #[auto_inc]
@@ -31,7 +31,7 @@ pub struct RoomParticipant {
     pub joined_at: Timestamp,
 }
 
-#[table(name = room_asset, public)]
+#[table(accessor = room_asset, public)]
 pub struct RoomAsset {
     #[primary_key]
     #[auto_inc]
@@ -48,21 +48,24 @@ pub struct RoomAsset {
 
 #[reducer]
 pub fn ping(ctx: &ReducerContext) -> Result<(), String> {
-    log::info!("ping from {:?}", ctx.sender);
+    log::info!("ping from {:?}", ctx.sender());
     Ok(())
 }
 
 #[reducer]
 pub fn create_room(ctx: &ReducerContext) -> Result<(), String> {
     let charset = b"abcdefghijklmnopqrstuvwxyz0123456789";
-    let mut rng = spacetimedb::rand::thread_rng();
+    let mut rng = ctx.rng();
     let room_id: String = (0..8)
-        .map(|_| charset[rng.gen_range(0..charset.len())] as char)
+        .map(|_| {
+            let idx = (rng.next_u32() as usize) % charset.len();
+            charset[idx] as char
+        })
         .collect();
     let now = ctx.timestamp;
     ctx.db.room().insert(Room {
         id: room_id.clone(),
-        creator_identity: ctx.sender,
+        creator_identity: ctx.sender(),
         is_persistent: false,
         created_at: now,
         last_active_at: now,
@@ -75,28 +78,33 @@ pub fn create_room(ctx: &ReducerContext) -> Result<(), String> {
 pub fn join_room(ctx: &ReducerContext, room_id: String, display_name: String) -> Result<(), String> {
     ctx.db.room().id().find(&room_id)
         .ok_or_else(|| format!("room not found: {}", room_id))?;
+    let already_joined = ctx.db.room_participant().room_id().filter(&room_id)
+        .any(|entry| entry.identity == ctx.sender());
+    if already_joined {
+        return Err("already a participant in this room".to_string());
+    }
     let participant_count = ctx.db.room_participant().room_id().filter(&room_id).count();
     let color_index = participant_count % COLOR_PALETTE.len();
     let color = COLOR_PALETTE[color_index].to_string();
     ctx.db.room_participant().insert(RoomParticipant {
         id: 0,
         room_id: room_id.clone(),
-        identity: ctx.sender,
+        identity: ctx.sender(),
         display_name,
         color,
         joined_at: ctx.timestamp,
     });
-    log::info!("{:?} joined room {}", ctx.sender, room_id);
+    log::info!("{:?} joined room {}", ctx.sender(), room_id);
     Ok(())
 }
 
 #[reducer]
 pub fn leave_room(ctx: &ReducerContext, room_id: String) -> Result<(), String> {
     let participant = ctx.db.room_participant().room_id().filter(&room_id)
-        .find(|entry| entry.identity == ctx.sender)
+        .find(|entry| entry.identity == ctx.sender())
         .ok_or_else(|| format!("not a participant in room: {}", room_id))?;
     ctx.db.room_participant().id().delete(&participant.id);
-    log::info!("{:?} left room {}", ctx.sender, room_id);
+    log::info!("{:?} left room {}", ctx.sender(), room_id);
     Ok(())
 }
 
@@ -104,7 +112,7 @@ pub fn leave_room(ctx: &ReducerContext, room_id: String) -> Result<(), String> {
 pub fn promote_room(ctx: &ReducerContext, room_id: String) -> Result<(), String> {
     let mut room = ctx.db.room().id().find(&room_id)
         .ok_or_else(|| format!("room not found: {}", room_id))?;
-    if room.creator_identity != ctx.sender {
+    if room.creator_identity != ctx.sender() {
         return Err("only the room creator can promote a room".to_string());
     }
     room.is_persistent = true;
@@ -135,7 +143,7 @@ pub fn register_asset(
         size_bytes,
         mime_type,
         s3_url: None,
-        uploaded_by: ctx.sender,
+        uploaded_by: ctx.sender(),
     });
     log::info!("asset {} registered in room {}", asset_id, room_id);
     Ok(())
@@ -151,15 +159,16 @@ pub fn update_asset_s3_url(
     let mut asset = ctx.db.room_asset().room_id().filter(&room_id)
         .find(|entry| entry.asset_id == asset_id)
         .ok_or_else(|| format!("asset {} not found in room {}", asset_id, room_id))?;
+    if asset.uploaded_by != ctx.sender() {
+        return Err("only the uploader can update the S3 URL".to_string());
+    }
     asset.s3_url = Some(s3_url);
     ctx.db.room_asset().id().update(asset);
     log::info!("asset {} s3_url updated in room {}", asset_id, room_id);
     Ok(())
 }
 
-// --- WebRTC Signaling ---
-
-#[table(name = webrtc_signal, public)]
+#[table(accessor = webrtc_signal, public)]
 pub struct WebrtcSignal {
     #[primary_key]
     #[auto_inc]
@@ -181,6 +190,11 @@ pub fn send_signal(
     signal_type: String,
     payload: String,
 ) -> Result<(), String> {
+    ctx.db.room().id().find(&room_id)
+        .ok_or_else(|| format!("room not found: {}", room_id))?;
+    ctx.db.room_participant().room_id().filter(&room_id)
+        .find(|entry| entry.identity == ctx.sender())
+        .ok_or_else(|| "not a participant in this room".to_string())?;
     if !["offer", "answer", "ice"].contains(&signal_type.as_str()) {
         return Err(format!("Invalid signal type: {}", signal_type));
     }
@@ -190,7 +204,7 @@ pub fn send_signal(
     ctx.db.webrtc_signal().insert(WebrtcSignal {
         id: 0,
         room_id,
-        from_identity: ctx.sender,
+        from_identity: ctx.sender(),
         to_identity,
         signal_type,
         payload,
@@ -199,9 +213,7 @@ pub fn send_signal(
     Ok(())
 }
 
-// --- Presence ---
-
-#[table(name = presence, public)]
+#[table(accessor = presence, public)]
 pub struct Presence {
     #[primary_key]
     #[auto_inc]
@@ -226,7 +238,7 @@ pub fn update_presence(
     cursor_target: String,
 ) -> Result<(), String> {
     let existing = ctx.db.presence().room_id().filter(&room_id)
-        .find(|entry| entry.identity == ctx.sender);
+        .find(|entry| entry.identity == ctx.sender());
     match existing {
         Some(mut record) => {
             record.cursor_x = cursor_x;
@@ -237,12 +249,12 @@ pub fn update_presence(
         }
         None => {
             let participant = ctx.db.room_participant().room_id().filter(&room_id)
-                .find(|entry| entry.identity == ctx.sender)
+                .find(|entry| entry.identity == ctx.sender())
                 .ok_or("Not in this room")?;
             ctx.db.presence().insert(Presence {
                 id: 0,
                 room_id,
-                identity: ctx.sender,
+                identity: ctx.sender(),
                 display_name: participant.display_name.clone(),
                 color: participant.color.clone(),
                 cursor_x,
@@ -255,9 +267,7 @@ pub fn update_presence(
     Ok(())
 }
 
-// --- BoxGraph State Sync ---
-
-#[table(name = box_state, public)]
+#[table(accessor = box_state, public)]
 pub struct BoxState {
     #[primary_key]
     #[auto_inc]
@@ -271,6 +281,11 @@ pub struct BoxState {
 
 #[reducer]
 pub fn box_create(ctx: &ReducerContext, room_id: String, box_uuid: String, box_name: String, data: String) -> Result<(), String> {
+    ctx.db.room().id().find(&room_id)
+        .ok_or_else(|| format!("room not found: {}", room_id))?;
+    ctx.db.room_participant().room_id().filter(&room_id)
+        .find(|entry| entry.identity == ctx.sender())
+        .ok_or_else(|| "not a participant in this room".to_string())?;
     if data.len() > 1024 * 1024 {
         return Err("Box data too large (max 1MB)".to_string());
     }
@@ -280,6 +295,9 @@ pub fn box_create(ctx: &ReducerContext, room_id: String, box_uuid: String, box_n
 
 #[reducer]
 pub fn box_update(ctx: &ReducerContext, room_id: String, box_uuid: String, data: String) -> Result<(), String> {
+    ctx.db.room_participant().room_id().filter(&room_id)
+        .find(|entry| entry.identity == ctx.sender())
+        .ok_or_else(|| "not a participant in this room".to_string())?;
     if data.len() > 1024 * 1024 {
         return Err("Box data too large (max 1MB)".to_string());
     }
@@ -293,6 +311,9 @@ pub fn box_update(ctx: &ReducerContext, room_id: String, box_uuid: String, data:
 
 #[reducer]
 pub fn box_delete(ctx: &ReducerContext, room_id: String, box_uuid: String) -> Result<(), String> {
+    ctx.db.room_participant().room_id().filter(&room_id)
+        .find(|entry| entry.identity == ctx.sender())
+        .ok_or_else(|| "not a participant in this room".to_string())?;
     let state = ctx.db.box_state().room_id().filter(&room_id)
         .find(|entry| entry.box_uuid == box_uuid)
         .ok_or("Box not found")?;
@@ -300,18 +321,42 @@ pub fn box_delete(ctx: &ReducerContext, room_id: String, box_uuid: String) -> Re
     Ok(())
 }
 
-// --- Scheduled Cleanup ---
+#[reducer(client_disconnected)]
+fn client_disconnected(ctx: &ReducerContext) {
+    let participants: Vec<RoomParticipant> = ctx.db.room_participant().iter()
+        .filter(|participant| participant.identity == ctx.sender())
+        .collect();
+    for participant in participants {
+        ctx.db.room_participant().id().delete(&participant.id);
+        log::info!("{:?} disconnected from room {}", ctx.sender(), participant.room_id);
+    }
+    let presences: Vec<Presence> = ctx.db.presence().iter()
+        .filter(|record| record.identity == ctx.sender())
+        .collect();
+    for record in presences {
+        ctx.db.presence().id().delete(&record.id);
+    }
+}
 
-#[table(name = cleanup_schedule, scheduled(cleanup_stale_rooms))]
+#[reducer(init)]
+fn init(ctx: &ReducerContext) {
+    ctx.db.cleanup_schedule().insert(CleanupSchedule {
+        scheduled_id: 0,
+        scheduled_at: ScheduleAt::Interval(std::time::Duration::from_secs(300).into()),
+    });
+    log::info!("Cleanup schedule initialized (every 300 seconds)");
+}
+
+#[table(accessor = cleanup_schedule, scheduled(cleanup_stale_rooms))]
 pub struct CleanupSchedule {
     #[primary_key]
     #[auto_inc]
-    pub id: u64,
+    pub scheduled_id: u64,
     pub scheduled_at: ScheduleAt,
 }
 
 #[reducer]
-pub fn cleanup_stale_rooms(ctx: &ReducerContext, _schedule: CleanupSchedule) -> Result<(), String> {
+fn cleanup_stale_rooms(ctx: &ReducerContext, _schedule: CleanupSchedule) {
     let stale_room_ids: Vec<String> = ctx.db.room().iter()
         .filter(|room| !room.is_persistent)
         .filter(|room| {
@@ -335,5 +380,4 @@ pub fn cleanup_stale_rooms(ctx: &ReducerContext, _schedule: CleanupSchedule) -> 
         ctx.db.room().id().delete(&room_id);
         log::info!("Cleaned up stale room: {}", room_id);
     }
-    Ok(())
 }
