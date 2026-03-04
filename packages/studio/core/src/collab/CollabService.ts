@@ -70,6 +70,8 @@ type SdkConnection = {
         boxCreate(params: {roomId: string, boxUuid: string, boxName: string, data: string}): void
         boxUpdate(params: {roomId: string, boxUuid: string, data: string}): void
         boxDelete(params: {roomId: string, boxUuid: string}): void
+        saveS3Config(params: {bucket: string, region: string, accessKeyId: string, secretAccessKey: string, endpoint: string}): void
+        clearS3Config(params: Record<string, never>): void
     }
     subscriptionBuilder(): {
         onApplied(cb: (ctx: unknown) => void): {
@@ -94,6 +96,7 @@ export class CollabService implements Terminable {
     #displayName: Optional<string> = undefined
     #isCreating = false
     #pendingRoomResolve: Optional<(roomId: string) => void> = undefined
+    #pendingRoomReject: Optional<(reason: Error) => void> = undefined
     #boxGraph: Optional<BoxGraph<any>> = undefined
     #stdbSync: Optional<StdbSync<any>> = undefined
 
@@ -128,6 +131,7 @@ export class CollabService implements Terminable {
                 this.#roomId = undefined
                 this.#isCreating = false
                 this.#pendingRoomResolve = undefined
+                this.#pendingRoomReject = undefined
                 this.presence.clear()
                 this.#setState(CollabState.Disconnected)
             }
@@ -144,8 +148,9 @@ export class CollabService implements Terminable {
         this.#isCreating = true
         this.#setState(CollabState.Connecting)
         this.connection.connect()
-        return new Promise<string>(resolve => {
+        return new Promise<string>((resolve, reject) => {
             this.#pendingRoomResolve = resolve
+            this.#pendingRoomReject = reject
         })
     }
 
@@ -174,9 +179,26 @@ export class CollabService implements Terminable {
         this.#roomId = undefined
         this.#isCreating = false
         this.#pendingRoomResolve = undefined
+        this.#pendingRoomReject = undefined
         this.#setState(CollabState.Disconnected)
         this.connection.disconnect()
         this.presence.clear()
+    }
+
+    saveS3Config(config: {bucket: string, region: string, accessKeyId: string, secretAccessKey: string, endpoint: string}): void {
+        const conn = this.connection.sdk as Optional<SdkConnection>
+        if (!isDefined(conn)) {return}
+        try {conn.reducers.saveS3Config(config)} catch (error: unknown) {
+            console.error("[CollabService] saveS3Config reducer error:", error)
+        }
+    }
+
+    clearS3Config(): void {
+        const conn = this.connection.sdk as Optional<SdkConnection>
+        if (!isDefined(conn)) {return}
+        try {conn.reducers.clearS3Config({} as Record<string, never>)} catch (error: unknown) {
+            console.error("[CollabService] clearS3Config reducer error:", error)
+        }
     }
 
     updateCursor(cursorX: number, cursorY: number, cursorTarget: string): void {
@@ -198,6 +220,7 @@ export class CollabService implements Terminable {
         this.#roomId = undefined
         this.#isCreating = false
         this.#pendingRoomResolve = undefined
+        this.#pendingRoomReject = undefined
         this.#state = CollabState.Disconnected
         this.#terminator.terminate()
         this.onChange.terminate()
@@ -237,6 +260,17 @@ export class CollabService implements Terminable {
         const conn = this.connection.sdk as Optional<SdkConnection>
         const selfIdentity = this.connection.identity
         if (!isDefined(conn)) {
+            console.debug("[CollabService] SDK not available, entering connected state without subscriptions")
+            if (this.#isCreating) {
+                const roomId = this.#roomId ?? this.room.generateRoomId()
+                this.#roomId = roomId
+                this.#isCreating = false
+                if (isDefined(this.#pendingRoomResolve)) {
+                    this.#pendingRoomResolve(roomId)
+                    this.#pendingRoomResolve = undefined
+                    this.#pendingRoomReject = undefined
+                }
+            }
             this.#setState(CollabState.Connected)
             return
         }
@@ -328,10 +362,10 @@ export class CollabService implements Terminable {
                 console.error("[CollabService] presence subscription error:", err)
             })
             .subscribe([
-                `SELECT * FROM presence WHERE room_id = '${roomId}'`,
-                `SELECT * FROM room_participant WHERE room_id = '${roomId}'`,
-                `SELECT * FROM box_state WHERE room_id = '${roomId}'`,
-            ])
+                "SELECT * FROM presence WHERE room_id = ?",
+                "SELECT * FROM room_participant WHERE room_id = ?",
+                "SELECT * FROM box_state WHERE room_id = ?",
+            ].map(query => query.replace("?", `'${roomId.replace(/'/g, "''")}'`)))
     }
 
     #initBoxSync(conn: SdkConnection, roomId: string, isHost: boolean): void {

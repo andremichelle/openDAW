@@ -39,18 +39,21 @@ export class StdbSync<T> implements Terminable {
 
     static joinRoom<T>(boxGraph: BoxGraph<T>, conn: StdbSyncConnection, roomId: string, rows: Iterable<BoxStateRow>): StdbSync<T> {
         boxGraph.beginTransaction()
-        for (const box of [...boxGraph.boxes()]) {
-            box.outgoingEdges().forEach(([pointer]) => pointer.defer())
-            box.incomingEdges().forEach(pointer => pointer.defer())
-            boxGraph.unstageBox(box)
+        try {
+            for (const box of [...boxGraph.boxes()]) {
+                box.outgoingEdges().forEach(([pointer]) => pointer.defer())
+                box.incomingEdges().forEach(pointer => pointer.defer())
+                boxGraph.unstageBox(box)
+            }
+            for (const row of rows) {
+                if (row.roomId !== roomId) {continue}
+                const uuid = UUID.parse(row.boxUuid)
+                const name = row.boxName as keyof T
+                boxGraph.createBox(name, uuid, box => box.fromJSON(JSON.parse(row.data)))
+            }
+        } finally {
+            boxGraph.endTransaction()
         }
-        for (const row of rows) {
-            if (row.roomId !== roomId) {continue}
-            const uuid = UUID.parse(row.boxUuid)
-            const name = row.boxName as keyof T
-            boxGraph.createBox(name, uuid, box => box.fromJSON(JSON.parse(row.data)))
-        }
-        boxGraph.endTransaction()
         return new StdbSync(boxGraph, conn, roomId)
     }
 
@@ -135,13 +138,13 @@ export class StdbSync<T> implements Terminable {
             if (row.roomId !== this.#roomId) {return}
             const uuid = UUID.parse(row.boxUuid)
             if (!this.#boxGraph.findBox(uuid).isEmpty()) {return}
+            this.#ignoreUpdates = true
             this.#boxGraph.beginTransaction()
-            const name = row.boxName as keyof T
-            this.#boxGraph.createBox(name, uuid, box => box.fromJSON(JSON.parse(row.data)))
             try {
-                this.#ignoreUpdates = true
-                this.#boxGraph.endTransaction()
+                const name = row.boxName as keyof T
+                this.#boxGraph.createBox(name, uuid, box => box.fromJSON(JSON.parse(row.data)))
             } finally {
+                this.#boxGraph.endTransaction()
                 this.#ignoreUpdates = false
             }
         })
@@ -150,12 +153,12 @@ export class StdbSync<T> implements Terminable {
             const uuid = UUID.parse(newRow.boxUuid)
             const optBox = this.#boxGraph.findBox(uuid)
             if (optBox.isEmpty()) {return}
+            this.#ignoreUpdates = true
             this.#boxGraph.beginTransaction()
-            optBox.unwrap().fromJSON(JSON.parse(newRow.data))
             try {
-                this.#ignoreUpdates = true
-                this.#boxGraph.endTransaction()
+                optBox.unwrap().fromJSON(JSON.parse(newRow.data))
             } finally {
+                this.#boxGraph.endTransaction()
                 this.#ignoreUpdates = false
             }
         })
@@ -165,14 +168,14 @@ export class StdbSync<T> implements Terminable {
             const optBox = this.#boxGraph.findBox(uuid)
             if (optBox.isEmpty()) {return}
             const box = optBox.unwrap()
+            this.#ignoreUpdates = true
             this.#boxGraph.beginTransaction()
-            box.outgoingEdges().forEach(([pointer]) => pointer.defer())
-            box.incomingEdges().forEach(pointer => pointer.defer())
-            this.#boxGraph.unstageBox(box)
             try {
-                this.#ignoreUpdates = true
-                this.#boxGraph.endTransaction()
+                box.outgoingEdges().forEach(([pointer]) => pointer.defer())
+                box.incomingEdges().forEach(pointer => pointer.defer())
+                this.#boxGraph.unstageBox(box)
             } finally {
+                this.#boxGraph.endTransaction()
                 this.#ignoreUpdates = false
             }
         })

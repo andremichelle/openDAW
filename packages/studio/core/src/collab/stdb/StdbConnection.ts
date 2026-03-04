@@ -124,6 +124,7 @@ export class StdbConnection implements Terminable {
                 .onDisconnect((...args: Array<unknown>) => {
                     console.debug("[StdbConnection] onDisconnect fired!", args)
                     this.#sdkConnection = undefined
+                    this.#rawSdkConnection = undefined
                     this.#identity = undefined
                     this.#setState(StdbConnectionState.Disconnected)
                 })
