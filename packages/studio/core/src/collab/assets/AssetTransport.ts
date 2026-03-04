@@ -20,10 +20,14 @@ export class AssetTransportChain {
 
     async resolve(assetId: string): Promise<Optional<ArrayBuffer>> {
         for (const source of this.#sources) {
-            const result = await source.resolve(assetId)
-            if (isDefined(result)) {
-                console.debug(`Asset '${assetId}' resolved from ${source.name}`)
-                return result
+            try {
+                const result = await source.resolve(assetId)
+                if (isDefined(result)) {
+                    console.debug(`Asset '${assetId}' resolved from ${source.name}`)
+                    return result
+                }
+            } catch (error) {
+                console.warn(`Asset source '${source.name}' threw during resolve:`, error)
             }
         }
         console.warn(`Asset '${assetId}' not found in any source`)

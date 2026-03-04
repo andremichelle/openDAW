@@ -1,5 +1,6 @@
-import {describe, expect, it} from "vitest"
+import {describe, expect, it, vi} from "vitest"
 import {CollabService, CollabState} from "./CollabService"
+import {StdbConnectionState} from "./stdb/StdbConnection"
 
 globalThis.RTCPeerConnection = class MockRTCPeerConnection {
     close() {}
@@ -53,11 +54,10 @@ describe("CollabService", () => {
         service.joinRoom("abc123")
         expect(service.roomId).toBe("abc123")
     })
-    it("generates roomId on createRoom", () => {
+    it("roomId is undefined after createRoom (server-generated)", () => {
         const service = new CollabService(config)
         service.createRoom()
-        expect(service.roomId).toBeDefined()
-        expect(service.roomId!.length).toBeGreaterThan(0)
+        expect(service.roomId).toBeUndefined()
     })
     it("clears roomId on leaveRoom", () => {
         const service = new CollabService(config)
@@ -72,7 +72,7 @@ describe("CollabService", () => {
     it("has 3 asset sources when S3 is configured (opfs, s3, webrtc)", () => {
         const service = new CollabService({
             ...config,
-            s3: {bucket: "my-bucket", region: "us-east-1", accessKeyId: "key", secretAccessKey: "secret"}
+            s3: {bucket: "my-bucket", region: "us-east-1", accessKeyId: "key", secretAccessKey: "secret"},
         })
         expect(service.assets.sourceNames).toEqual(["opfs", "s3", "webrtc"])
     })
@@ -82,5 +82,113 @@ describe("CollabService", () => {
         service.terminate()
         expect(service.state).toBe(CollabState.Disconnected)
         expect(service.roomId).toBeUndefined()
+    })
+    it("onChange notifies Connecting on createRoom", () => {
+        const service = new CollabService(config)
+        const states: Array<CollabState> = []
+        service.onChange.subscribe(state => states.push(state))
+        service.createRoom()
+        expect(states).toContain(CollabState.Connecting)
+    })
+    it("onChange notifies Connected when connection.simulateConnected is called", () => {
+        const service = new CollabService(config)
+        const states: Array<CollabState> = []
+        service.onChange.subscribe(state => states.push(state))
+        service.createRoom()
+        service.connection.simulateConnected("test-id", "test-token")
+        expect(states).toEqual([CollabState.Connecting, CollabState.Connected])
+        expect(service.state).toBe(CollabState.Connected)
+    })
+    it("onChange notifies Disconnected on leaveRoom", () => {
+        const service = new CollabService(config)
+        const states: Array<CollabState> = []
+        service.onChange.subscribe(state => states.push(state))
+        service.createRoom()
+        service.connection.simulateConnected("test-id", "test-token")
+        service.leaveRoom()
+        expect(states).toEqual([CollabState.Connecting, CollabState.Connected, CollabState.Disconnected])
+    })
+    it("unexpected disconnect notifies Disconnected", () => {
+        const service = new CollabService(config)
+        const states: Array<CollabState> = []
+        service.onChange.subscribe(state => states.push(state))
+        service.createRoom()
+        service.connection.simulateConnected("test-id", "test-token")
+        service.connection.disconnect()
+        expect(states).toContain(CollabState.Disconnected)
+        expect(service.state).toBe(CollabState.Disconnected)
+        expect(service.roomId).toBeUndefined()
+    })
+    it("unexpected disconnect clears presence", () => {
+        const service = new CollabService(config)
+        service.createRoom()
+        service.connection.simulateConnected("test-id", "test-token")
+        service.presence.updatePresence({
+            identity: "other", displayName: "Bob", color: "#00F",
+            cursorX: 0, cursorY: 0, cursorTarget: "",
+        })
+        expect(service.presence.participants).toHaveLength(1)
+        service.connection.disconnect()
+        expect(service.presence.participants).toHaveLength(0)
+    })
+    it("full lifecycle: createRoom→connect→presence→leaveRoom", () => {
+        const service = new CollabService(config)
+        const states: Array<CollabState> = []
+        service.onChange.subscribe(state => states.push(state))
+        service.createRoom()
+        expect(service.roomId).toBeUndefined()
+        service.connection.simulateConnected("host-id", "host-token")
+        service.presence.updatePresence({
+            identity: "guest-1", displayName: "Guest", color: "#0F0",
+            cursorX: 50, cursorY: 50, cursorTarget: "track-1",
+        })
+        expect(service.presence.participants).toHaveLength(1)
+        service.leaveRoom()
+        expect(service.state).toBe(CollabState.Disconnected)
+        expect(service.roomId).toBeUndefined()
+        expect(service.presence.participants).toHaveLength(0)
+        expect(states).toEqual([CollabState.Connecting, CollabState.Connected, CollabState.Disconnected])
+    })
+    it("joinRoom while already connected disconnects first via leaveRoom", () => {
+        const service = new CollabService(config)
+        service.createRoom()
+        service.connection.simulateConnected("id-1", "token-1")
+        expect(service.state).toBe(CollabState.Connected)
+        service.leaveRoom()
+        service.joinRoom("new-room")
+        expect(service.state).toBe(CollabState.Connecting)
+        expect(service.roomId).toBe("new-room")
+    })
+    it("leaveRoom when disconnected is safe", () => {
+        const service = new CollabService(config)
+        const spy = vi.fn()
+        service.onChange.subscribe(spy)
+        service.leaveRoom()
+        expect(spy).toHaveBeenCalledWith(CollabState.Disconnected)
+        expect(service.state).toBe(CollabState.Disconnected)
+    })
+    it("joinRoom with different IDs sets correct roomId each time", () => {
+        const service = new CollabService(config)
+        service.joinRoom("room-1")
+        expect(service.roomId).toBe("room-1")
+        service.leaveRoom()
+        service.joinRoom("room-2")
+        expect(service.roomId).toBe("room-2")
+    })
+    it("terminate while connecting", () => {
+        const service = new CollabService(config)
+        service.createRoom()
+        expect(service.state).toBe(CollabState.Connecting)
+        service.terminate()
+        expect(service.state).toBe(CollabState.Disconnected)
+        expect(service.roomId).toBeUndefined()
+    })
+    it("databaseName passes through to connection config", () => {
+        const service = new CollabService({...config, databaseName: "my-db"})
+        expect(service.connection.config.databaseName).toBe("my-db")
+    })
+    it("databaseName defaults to 'opendaw'", () => {
+        const service = new CollabService(config)
+        expect(service.connection.config.databaseName).toBe("opendaw")
     })
 })

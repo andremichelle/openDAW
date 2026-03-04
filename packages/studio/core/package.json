@@ -45,7 +45,7 @@
     "@opendaw/studio-boxes": "^0.0.78",
     "@opendaw/studio-enums": "^0.0.66",
     "dropbox": "^10.34.0",
-    "spacetimedb": "^1.5.0",
+    "spacetimedb": "^2.0.2",
     "y-websocket": "^1.4.5",
     "yjs": "^13.6.27",
     "zod": "^4.1.12"
