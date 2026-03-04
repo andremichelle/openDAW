@@ -108,12 +108,37 @@ export const populateStudioMenu = (service: StudioService) => {
                             )
                         }),
                     MenuItem.default({
+                        label: "Collaborate",
+                        separatorBefore: true
+                    }).setRuntimeChildrenProcedure(parent => {
+                        parent.addMenuItem(
+                            MenuItem.default({label: "Share Session..."})
+                                .setTriggerProcedure(async () => {
+                                    const dialog = RuntimeNotifier.progress({
+                                        headline: "Creating Session...",
+                                        message: "Setting up a collaborative session..."
+                                    })
+                                    dialog.terminate()
+                                }),
+                            MenuItem.default({label: "Join Session..."})
+                                .setTriggerProcedure(async () => {
+                                    const url = prompt("Enter a session URL or room ID:", "")
+                                    if (isAbsent(url)) {return}
+                                }),
+                            MenuItem.default({
+                                label: "Leave Session",
+                                selectable: false
+                            }).setTriggerProcedure(async () => {
+                            })
+                        )
+                    }),
+                    MenuItem.default({
                         label: "Experimental Features",
                         hidden: !StudioPreferences.settings.debug["enable-beta-features"],
                         separatorBefore: true
                     }).setRuntimeChildrenProcedure(parent => {
                         parent.addMenuItem(
-                            MenuItem.default({label: "Connect Room..."})
+                            MenuItem.default({label: "Connect Room (Legacy)..."})
                                 .setTriggerProcedure(async () => {
                                     const roomName = prompt("Enter a room name:", "")
                                     if (isAbsent(roomName)) {return}
