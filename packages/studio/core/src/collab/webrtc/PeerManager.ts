@@ -1,4 +1,4 @@
-import {Notifier, Optional, Terminable} from "@opendaw/lib-std"
+import {isDefined, Notifier, Optional, Terminable} from "@opendaw/lib-std"
 
 export class PeerManager implements Terminable {
     readonly #peers: Map<string, RTCPeerConnection> = new Map()
@@ -18,9 +18,14 @@ export class PeerManager implements Terminable {
 
     removePeer(peerId: string): void {
         const connection = this.#peers.get(peerId)
-        if (connection === undefined) {return}
+        if (!isDefined(connection)) {return}
         connection.close()
         this.#peers.delete(peerId)
+        const channel = this.#dataChannels.get(peerId)
+        if (isDefined(channel)) {
+            channel.close()
+            this.#dataChannels.delete(peerId)
+        }
         this.onPeerDisconnected.notify(peerId)
     }
 

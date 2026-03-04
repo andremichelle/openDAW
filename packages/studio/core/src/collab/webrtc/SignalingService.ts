@@ -48,6 +48,8 @@ export class SignalingService implements Terminable {
             this.sendAnswer(signal.fromIdentity, '{"sdp":"auto-answer"}')
         } else if (signal.signalType === "answer") {
             this.#peerManager.addPeer(signal.fromIdentity)
+        } else if (signal.signalType === "ice") {
+            console.debug("[SignalingService] ICE candidate from", signal.fromIdentity)
         }
     }
 

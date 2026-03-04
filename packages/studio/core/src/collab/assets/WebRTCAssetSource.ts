@@ -46,8 +46,8 @@ export class WebRTCAssetSource implements AssetSource {
                     const message = JSON.parse(event.data)
                     if (message.assetId !== assetId) {return}
                     cleanup()
-                    if (message.type === "response") {
-                        resolve(new Uint8Array(message.data).buffer)
+                    if (message.type === "response" && Array.isArray(message.data)) {
+                        resolve(Uint8Array.from(message.data).buffer)
                     } else {
                         resolve(undefined)
                     }
