@@ -31,7 +31,8 @@ export class CollabService implements Terminable {
             new OpfsAssetSource(),
             new WebRTCAssetSource(this.peerManager),
         ])
-        this.#terminator.ownAll(this.presence, this.peerManager)
+        this.#terminator.own(this.presence)
+        this.#terminator.own(this.peerManager)
     }
 
     get state(): CollabState {
