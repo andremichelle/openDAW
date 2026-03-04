@@ -108,7 +108,10 @@ export class StudioService implements ProjectEnv {
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
     readonly collabService = new CollabService({
-        endpoint: localStorage.getItem("opendaw-stdb-endpoint") ?? "wss://maincloud.spacetimedb.com",
+        endpoint: localStorage.getItem("opendaw-stdb-endpoint")
+            ?? import.meta.env.VITE_STDB_ENDPOINT
+            ?? "wss://maincloud.spacetimedb.com",
+        databaseName: import.meta.env.VITE_STDB_DATABASE ?? "opendaw",
     })
 
     readonly #softwareKeyboardLifeCycle = new Terminator()

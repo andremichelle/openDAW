@@ -5,7 +5,7 @@ import {Html} from "@opendaw/lib-dom"
 const className = Html.adoptStyleSheet(css, "CollabSettings")
 
 const ENDPOINT_KEY = "opendaw-stdb-endpoint"
-const DEFAULT_ENDPOINT = "wss://maincloud.spacetimedb.com"
+const DEFAULT_ENDPOINT = import.meta.env.VITE_STDB_ENDPOINT ?? "wss://maincloud.spacetimedb.com"
 
 export const CollabSettings = () => {
     const input: HTMLInputElement = <input
