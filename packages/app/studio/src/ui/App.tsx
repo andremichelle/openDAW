@@ -20,7 +20,7 @@ import {PrivacyPage} from "@/ui/pages/PrivacyPage"
 import {PreferencesPage} from "@/ui/pages/PreferencesPage"
 import {TestPage} from "@/ui/pages/TestPage"
 import {RoomPage} from "@/ui/pages/RoomPage"
-import {CloudStoragePage} from "@/ui/pages/CloudStoragePage"
+import {CollabSettingsPage} from "@/ui/pages/CollabSettingsPage"
 
 export const App = (service: StudioService) => {
     const terminator = new Terminator()
@@ -53,7 +53,7 @@ export const App = (service: StudioService) => {
                     {path: "/users", factory: UsersPage},
                     {path: "/open-bundle/*", factory: OpenBundlePage},
                     {path: "/r/*", factory: RoomPage},
-                    {path: "/cloud-storage", factory: CloudStoragePage},
+                    {path: "/collab-settings", factory: CollabSettingsPage},
                     {path: "/test", factory: TestPage}
                 ]}
             />
