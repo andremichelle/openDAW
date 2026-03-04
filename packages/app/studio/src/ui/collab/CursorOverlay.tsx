@@ -1,3 +1,4 @@
+import {createElement} from "@opendaw/lib-jsx"
 import {PresenceData} from "@opendaw/studio-core"
 
 type CursorOverlayProps = {
@@ -6,20 +7,24 @@ type CursorOverlayProps = {
 
 export const CursorOverlay = ({participants}: CursorOverlayProps) => {
     return (
-        <div className="cursor-overlay" style={{position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1000}}>
+        <div className="cursor-overlay" style={{
+            position: "absolute",
+            inset: "0",
+            pointerEvents: "none",
+            zIndex: "1000"
+        }}>
             {participants.map(participant => (
                 <div
-                    key={participant.identity}
                     className="remote-cursor"
                     style={{
                         position: "absolute",
-                        left: participant.cursorX,
-                        top: participant.cursorY,
+                        left: `${participant.cursorX}px`,
+                        top: `${participant.cursorY}px`,
                         transition: "left 0.1s, top 0.1s",
                     }}
                 >
                     <svg width="16" height="20" viewBox="0 0 16 20" fill={participant.color}>
-                        <path d="M0 0 L0 16 L4 12 L8 20 L10 19 L6 11 L12 11 Z" />
+                        <path d="M0 0 L0 16 L4 12 L8 20 L10 19 L6 11 L12 11 Z"/>
                     </svg>
                     <span
                         className="cursor-label"

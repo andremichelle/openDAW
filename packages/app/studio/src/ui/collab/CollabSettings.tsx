@@ -1,37 +1,32 @@
-import {useCallback, useState} from "react"
+import {createElement} from "@opendaw/lib-jsx"
 
 const ENDPOINT_KEY = "opendaw-stdb-endpoint"
 const DEFAULT_ENDPOINT = "wss://live.opendaw.studio"
 
 export const CollabSettings = () => {
-    const [endpoint, setEndpoint] = useState(
-        localStorage.getItem(ENDPOINT_KEY) ?? DEFAULT_ENDPOINT
-    )
-    const [saved, setSaved] = useState(false)
-    const handleSave = useCallback(() => {
-        localStorage.setItem(ENDPOINT_KEY, endpoint)
-        setSaved(true)
-        setTimeout(() => setSaved(false), 2000)
-    }, [endpoint])
-    const handleReset = useCallback(() => {
+    const input: HTMLInputElement = <input
+        type="text"
+        value={localStorage.getItem(ENDPOINT_KEY) ?? DEFAULT_ENDPOINT}
+        placeholder={DEFAULT_ENDPOINT}
+    />
+    const statusLabel: HTMLSpanElement = <span/>
+    const handleSave = () => {
+        localStorage.setItem(ENDPOINT_KEY, input.value)
+        statusLabel.textContent = "Saved!"
+        setTimeout(() => statusLabel.textContent = "", 2000)
+    }
+    const handleReset = () => {
         localStorage.removeItem(ENDPOINT_KEY)
-        setEndpoint(DEFAULT_ENDPOINT)
-    }, [])
+        input.value = DEFAULT_ENDPOINT
+    }
     return (
         <div className="collab-settings">
             <h3>Collaboration Server</h3>
-            <label>
-                SpacetimeDB Endpoint
-                <input
-                    type="text"
-                    value={endpoint}
-                    onChange={event => setEndpoint(event.target.value)}
-                    placeholder={DEFAULT_ENDPOINT}
-                />
-            </label>
+            <label>SpacetimeDB Endpoint{input}</label>
             <div className="collab-settings-actions">
-                <button onClick={handleSave}>{saved ? "Saved!" : "Save"}</button>
-                <button onClick={handleReset}>Reset to Default</button>
+                <button onclick={handleSave}>Save</button>
+                <button onclick={handleReset}>Reset to Default</button>
+                {statusLabel}
             </div>
         </div>
     )

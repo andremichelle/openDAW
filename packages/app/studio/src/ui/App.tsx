@@ -19,6 +19,7 @@ import {UsersPage} from "@/ui/pages/UsersPage"
 import {PrivacyPage} from "@/ui/pages/PrivacyPage"
 import {PreferencesPage} from "@/ui/pages/PreferencesPage"
 import {TestPage} from "@/ui/pages/TestPage"
+import {RoomPage} from "@/ui/pages/RoomPage"
 
 export const App = (service: StudioService) => {
     const terminator = new Terminator()
@@ -50,6 +51,7 @@ export const App = (service: StudioService) => {
                     {path: "/graph", factory: GraphPage},
                     {path: "/users", factory: UsersPage},
                     {path: "/open-bundle/*", factory: OpenBundlePage},
+                    {path: "/r/*", factory: RoomPage},
                     {path: "/test", factory: TestPage}
                 ]}
             />

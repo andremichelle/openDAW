@@ -3,7 +3,7 @@ import {Browser, Files} from "@opendaw/lib-dom"
 import {RouteLocation} from "@opendaw/lib-jsx"
 import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {CloudBackup, FilePickerAcceptTypes, MenuItem, StudioPreferences, YService} from "@opendaw/studio-core"
+import {CloudBackup, FilePickerAcceptTypes, MenuItem, RoomService, StudioPreferences, YService} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {VideoRenderer} from "@/video/VideoRenderer"
@@ -111,25 +111,42 @@ export const populateStudioMenu = (service: StudioService) => {
                         label: "Collaborate",
                         separatorBefore: true
                     }).setRuntimeChildrenProcedure(parent => {
+                        const {collabService} = service
+                        const isConnected = collabService.state !== "disconnected"
                         parent.addMenuItem(
-                            MenuItem.default({label: "Share Session..."})
-                                .setTriggerProcedure(async () => {
-                                    const dialog = RuntimeNotifier.progress({
-                                        headline: "Creating Session...",
-                                        message: "Setting up a collaborative session..."
+                            MenuItem.default({
+                                label: "Share Session...",
+                                selectable: !isConnected
+                            }).setTriggerProcedure(async () => {
+                                    collabService.createRoom()
+                                    const roomId = collabService.roomId
+                                    if (isAbsent(roomId)) {return}
+                                    const shareUrl = collabService.room.getShareUrl(roomId)
+                                    await navigator.clipboard.writeText(shareUrl)
+                                    await RuntimeNotifier.info({
+                                        headline: "Session Created",
+                                        message: `Link copied to clipboard:\n${shareUrl}`
                                     })
-                                    dialog.terminate()
                                 }),
-                            MenuItem.default({label: "Join Session..."})
-                                .setTriggerProcedure(async () => {
-                                    const url = prompt("Enter a session URL or room ID:", "")
-                                    if (isAbsent(url)) {return}
+                            MenuItem.default({
+                                label: "Join Session...",
+                                selectable: !isConnected
+                            }).setTriggerProcedure(async () => {
+                                    const input = prompt("Enter a session URL or room ID:", "")
+                                    if (isAbsent(input)) {return}
+                                    const parsed = RoomService.parseShareUrl(input)
+                                    const roomId = parsed ?? input.trim()
+                                    if (roomId.length === 0) {return}
+                                    collabService.joinRoom(roomId)
+                                    RouteLocation.get().navigateTo(`/r/${roomId}`)
                                 }),
                             MenuItem.default({
                                 label: "Leave Session",
-                                selectable: false
+                                selectable: isConnected
                             }).setTriggerProcedure(async () => {
-                            })
+                                    collabService.leaveRoom()
+                                    RouteLocation.get().navigateTo("/")
+                                })
                         )
                     }),
                     MenuItem.default({

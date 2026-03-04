@@ -1,4 +1,4 @@
-import {useCallback, useState} from "react"
+import {createElement} from "@opendaw/lib-jsx"
 
 type JoinScreenProps = {
     readonly roomId: string
@@ -9,34 +9,38 @@ type JoinScreenProps = {
 
 export const JoinScreen = ({roomId, onJoin, onCancel, isConnecting}: JoinScreenProps) => {
     const savedName = localStorage.getItem("opendaw-display-name") ?? ""
-    const [displayName, setDisplayName] = useState(savedName)
-    const handleJoin = useCallback(() => {
-        const name = displayName.trim()
+    const input: HTMLInputElement = <input
+        type="text"
+        value={savedName}
+        placeholder="Enter your name"
+        maxLength={32}
+        autofocus={true}
+    />
+    const handleJoin = () => {
+        const name = input.value.trim()
         if (name.length === 0) {return}
         localStorage.setItem("opendaw-display-name", name)
         onJoin(name)
-    }, [displayName, onJoin])
+    }
+    input.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (event.key === "Enter") {handleJoin()}
+    })
+    const joinButton: HTMLButtonElement = <button
+        onclick={handleJoin}
+        disabled={isConnecting}
+    >{isConnecting ? "Connecting..." : "Join"}</button>
+    input.addEventListener("input", () => {
+        joinButton.disabled = isConnecting || input.value.trim().length === 0
+    })
+    if (savedName.trim().length === 0) {joinButton.disabled = true}
     return (
         <div className="join-screen">
             <h2>Join Session</h2>
             <p>Room: <code>{roomId}</code></p>
-            <label>
-                Your name
-                <input
-                    type="text"
-                    value={displayName}
-                    onChange={event => setDisplayName(event.target.value)}
-                    placeholder="Enter your name"
-                    maxLength={32}
-                    autoFocus
-                    onKeyDown={event => event.key === "Enter" && handleJoin()}
-                />
-            </label>
+            <label>Your name{input}</label>
             <div className="join-actions">
-                <button onClick={handleJoin} disabled={isConnecting || displayName.trim().length === 0}>
-                    {isConnecting ? "Connecting..." : "Join"}
-                </button>
-                <button onClick={onCancel}>Cancel</button>
+                {joinButton}
+                <button onclick={onCancel}>Cancel</button>
             </div>
         </div>
     )

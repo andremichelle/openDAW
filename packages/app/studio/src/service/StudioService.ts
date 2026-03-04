@@ -42,6 +42,7 @@ import {
     AudioContentFactory,
     AudioWorklets,
     CloudAuthManager,
+    CollabService,
     DawProjectService,
     DefaultSoundfontLoaderManager,
     EngineFacade,
@@ -105,6 +106,7 @@ export class StudioService implements ProjectEnv {
     readonly samplePlayback: SamplePlayback
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
+    readonly collabService = new CollabService({endpoint: "wss://live.opendaw.studio"})
 
     readonly #softwareKeyboardLifeCycle = new Terminator()
     readonly #signals = new Notifier<StudioSignal>()

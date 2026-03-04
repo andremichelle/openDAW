@@ -1,4 +1,4 @@
-import {useCallback, useState} from "react"
+import {createElement} from "@opendaw/lib-jsx"
 
 type ShareDialogProps = {
     readonly shareUrl: string
@@ -8,18 +8,18 @@ type ShareDialogProps = {
 }
 
 export const ShareDialog = ({shareUrl, onClose, onPromoteRoom, isPersistent}: ShareDialogProps) => {
-    const [copied, setCopied] = useState(false)
-    const handleCopy = useCallback(async () => {
+    const copyButton: HTMLButtonElement = <button>Copy Link</button>
+    copyButton.addEventListener("click", async () => {
         await navigator.clipboard.writeText(shareUrl)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-    }, [shareUrl])
+        copyButton.textContent = "Copied!"
+        setTimeout(() => copyButton.textContent = "Copy Link", 2000)
+    })
     return (
         <div className="share-dialog">
             <h3>Share this session</h3>
             <div className="share-url-row">
-                <input type="text" value={shareUrl} readOnly />
-                <button onClick={handleCopy}>{copied ? "Copied!" : "Copy Link"}</button>
+                <input type="text" value={shareUrl} readonly={true}/>
+                {copyButton}
             </div>
             <p className="share-hint">
                 Anyone with this link can join and collaborate in real-time.
@@ -27,10 +27,10 @@ export const ShareDialog = ({shareUrl, onClose, onPromoteRoom, isPersistent}: Sh
             {!isPersistent && (
                 <div className="share-persist">
                     <p>This session is temporary and will expire after everyone leaves.</p>
-                    <button onClick={onPromoteRoom}>Make Persistent</button>
+                    <button onclick={onPromoteRoom}>Make Persistent</button>
                 </div>
             )}
-            <button className="share-close" onClick={onClose}>Close</button>
+            <button className="share-close" onclick={onClose}>Close</button>
         </div>
     )
 }

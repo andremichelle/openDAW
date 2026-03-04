@@ -22,6 +22,7 @@ import {UndoRedoButtons} from "@/ui/header/UndoRedoButtons"
 import {MetronomeControl} from "@/ui/header/MetronomeControl"
 import {PerformanceStats} from "@/ui/header/PerformanceStats"
 import {BaseFrequencyControl} from "@/ui/header/BaseFrequencyControl"
+import {CollabState} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "Header")
 
@@ -112,8 +113,34 @@ export const Header = ({lifecycle, service}: Construct) => {
                               preferences={preferences}/>
             <hr/>
             <div style={{flex: "1 0 0"}}/>
-            {
-                location.origin.includes("dev.opendaw.studio")
+            {(() => {
+                const collabIndicator: HTMLSpanElement = <span style={{
+                    display: "none",
+                    alignItems: "center",
+                    gap: "4px",
+                    fontSize: "11px",
+                    color: Colors.green.toString(),
+                    cursor: "default"
+                }}>
+                    <span style={{
+                        width: "6px",
+                        height: "6px",
+                        borderRadius: "50%",
+                        background: Colors.green.toString(),
+                        display: "inline-block"
+                    }}/>
+                    <span className="collab-count">1</span>
+                </span>
+                lifecycle.own(service.collabService.presence.onChange.subscribe(() => {
+                    const count = service.collabService.presence.participants.length + 1
+                    const isActive = service.collabService.state !== CollabState.Disconnected
+                    collabIndicator.style.display = isActive ? "flex" : "none"
+                    const countEl = collabIndicator.querySelector(".collab-count")
+                    if (countEl !== null) {countEl.textContent = String(count)}
+                }))
+                return collabIndicator
+            })()}
+            {location.origin.includes("dev.opendaw.studio")
                 && (<h5 style={{color: Colors.cream.toString()}}>DEV VERSION (UNSTABLE)</h5>)}
             <div style={{flex: "2 0 0"}}/>
             <hr/>
