@@ -31,12 +31,16 @@
     "markdown-it": "^14.1.0",
     "markdown-it-table": "^4.1.1",
     "mediabunny": "^1.0.3",
-    "monaco-editor": "^0.54.0"
+    "monaco-editor": "^0.54.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.27",
     "@opendaw/typescript-config": "^0.0.29",
     "@types/markdown-it": "^14.1.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "@types/node": "^22.15.18",
     "eslint": "^8.57.0",
     "sass": "^1.88.0",
