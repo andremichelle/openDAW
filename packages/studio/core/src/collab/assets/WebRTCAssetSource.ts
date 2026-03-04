@@ -8,6 +8,7 @@ type WebRTCAssetSourceOptions = {
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000
+const MAX_PAYLOAD_BYTES = 50 * 1024 * 1024
 
 export class WebRTCAssetSource implements AssetSource {
     readonly name = "webrtc"
@@ -47,6 +48,10 @@ export class WebRTCAssetSource implements AssetSource {
                     if (message.assetId !== assetId) {return}
                     cleanup()
                     if (message.type === "response" && Array.isArray(message.data)) {
+                        if (message.data.length > MAX_PAYLOAD_BYTES) {
+                            resolve(undefined)
+                            return
+                        }
                         resolve(Uint8Array.from(message.data).buffer)
                     } else {
                         resolve(undefined)

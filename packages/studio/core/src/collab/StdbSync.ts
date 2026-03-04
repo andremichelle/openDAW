@@ -1,4 +1,4 @@
-import {EmptyExec, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {EmptyExec, JSONValue, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {BoxGraph, Update} from "@opendaw/lib-box"
 
 export type BoxStateRow = {
@@ -26,13 +26,17 @@ export type StdbSyncConnection = {
 export class StdbSync<T> implements Terminable {
     static populateRoom<T>(boxGraph: BoxGraph<T>, conn: StdbSyncConnection, roomId: string): StdbSync<T> {
         for (const box of boxGraph.boxes()) {
-            const boxUuid = UUID.toString(box.address.uuid)
-            conn.reducers.boxCreate({
-                roomId,
-                boxUuid,
-                boxName: box.name as string,
-                data: JSON.stringify(box.toJSON()),
-            })
+            try {
+                const boxUuid = UUID.toString(box.address.uuid)
+                conn.reducers.boxCreate({
+                    roomId,
+                    boxUuid,
+                    boxName: box.name as string,
+                    data: JSON.stringify(box.toJSON()),
+                })
+            } catch (error: unknown) {
+                console.error("[StdbSync] populateRoom boxCreate error:", error)
+            }
         }
         return new StdbSync(boxGraph, conn, roomId)
     }
@@ -62,6 +66,7 @@ export class StdbSync<T> implements Terminable {
     readonly #conn: StdbSyncConnection
     readonly #roomId: string
     readonly #updates: Array<Update> = []
+    // Prevents echo: set true when applying remote changes to suppress re-sending them
     #ignoreUpdates = false
 
     constructor(boxGraph: BoxGraph<T>, conn: StdbSyncConnection, roomId: string) {
@@ -138,11 +143,18 @@ export class StdbSync<T> implements Terminable {
             if (row.roomId !== this.#roomId) {return}
             const uuid = UUID.parse(row.boxUuid)
             if (!this.#boxGraph.findBox(uuid).isEmpty()) {return}
+            let parsed: JSONValue
+            try {
+                parsed = JSON.parse(row.data) as JSONValue
+            } catch (error: unknown) {
+                console.error("[StdbSync] onInsert JSON.parse error:", error)
+                return
+            }
             this.#ignoreUpdates = true
             this.#boxGraph.beginTransaction()
             try {
                 const name = row.boxName as keyof T
-                this.#boxGraph.createBox(name, uuid, box => box.fromJSON(JSON.parse(row.data)))
+                this.#boxGraph.createBox(name, uuid, box => box.fromJSON(parsed))
             } finally {
                 this.#boxGraph.endTransaction()
                 this.#ignoreUpdates = false
@@ -153,10 +165,17 @@ export class StdbSync<T> implements Terminable {
             const uuid = UUID.parse(newRow.boxUuid)
             const optBox = this.#boxGraph.findBox(uuid)
             if (optBox.isEmpty()) {return}
+            let parsed: JSONValue
+            try {
+                parsed = JSON.parse(newRow.data) as JSONValue
+            } catch (error: unknown) {
+                console.error("[StdbSync] onUpdate JSON.parse error:", error)
+                return
+            }
             this.#ignoreUpdates = true
             this.#boxGraph.beginTransaction()
             try {
-                optBox.unwrap().fromJSON(JSON.parse(newRow.data))
+                optBox.unwrap().fromJSON(parsed)
             } finally {
                 this.#boxGraph.endTransaction()
                 this.#ignoreUpdates = false
