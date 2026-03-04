@@ -124,6 +124,9 @@ export class CollabService implements Terminable {
                 this.#boxGraph = undefined
                 this.#roomId = undefined
                 this.#isCreating = false
+                if (isDefined(this.#pendingRoomReject)) {
+                    this.#pendingRoomReject(new Error("Connection failed"))
+                }
                 this.#pendingRoomResolve = undefined
                 this.#pendingRoomReject = undefined
                 this.presence.clear()
@@ -204,6 +207,13 @@ export class CollabService implements Terminable {
         this.onChange.terminate()
     }
 
+    static #sanitizeRoomId(roomId: string): string {
+        if (!/^[a-z0-9]{1,32}$/.test(roomId)) {
+            throw new Error(`Invalid room ID: ${roomId}`)
+        }
+        return roomId
+    }
+
     #setState(state: CollabState): void {
         this.#state = state
         this.onChange.notify(state)
@@ -260,6 +270,7 @@ export class CollabService implements Terminable {
     }
 
     #setupAsHost(conn: SdkConnection, selfIdentity: Optional<string>): void {
+        // Guards against stale onInsert events from before our subscription was applied
         let reducerCalled = false
         conn.db.room.onInsert((_ctx: unknown, row: RoomRow) => {
             console.debug("[CollabService] room.onInsert:", row.id)
@@ -343,7 +354,7 @@ export class CollabService implements Terminable {
                 "SELECT * FROM presence WHERE room_id = ?",
                 "SELECT * FROM room_participant WHERE room_id = ?",
                 "SELECT * FROM box_state WHERE room_id = ?",
-            ].map(query => query.replace("?", `'${roomId.replace(/'/g, "''")}'`)))
+            ].map(query => query.replace("?", `'${CollabService.#sanitizeRoomId(roomId)}'`)))
     }
 
     #initBoxSync(conn: SdkConnection, roomId: string, isHost: boolean): void {

@@ -86,6 +86,13 @@ pub fn create_room(ctx: &ReducerContext) -> Result<(), String> {
 
 #[reducer]
 pub fn join_room(ctx: &ReducerContext, room_id: String, display_name: String) -> Result<(), String> {
+    let display_name = display_name.trim().to_string();
+    if display_name.is_empty() {
+        return Err("display name must not be empty".to_string());
+    }
+    if display_name.len() > 64 {
+        return Err("display name too long (max 64 characters)".to_string());
+    }
     ctx.db.room().id().find(&room_id)
         .ok_or_else(|| format!("room not found: {}", room_id))?;
     let already_joined = ctx.db.room_participant().room_id().filter(&room_id)
@@ -287,6 +294,8 @@ pub fn box_create(ctx: &ReducerContext, room_id: String, box_uuid: String, box_n
     if data.len() > 1024 * 1024 {
         return Err("Box data too large (max 1MB)".to_string());
     }
+    serde_json::from_str::<serde_json::Value>(&data)
+        .map_err(|err| format!("invalid JSON in box data: {}", err))?;
     let duplicate = ctx.db.box_state().room_id().filter(&room_id)
         .any(|entry| entry.box_uuid == box_uuid);
     if duplicate {
@@ -304,6 +313,8 @@ pub fn box_update(ctx: &ReducerContext, room_id: String, box_uuid: String, data:
     if data.len() > 1024 * 1024 {
         return Err("Box data too large (max 1MB)".to_string());
     }
+    serde_json::from_str::<serde_json::Value>(&data)
+        .map_err(|err| format!("invalid JSON in box data: {}", err))?;
     let mut state = ctx.db.box_state().room_id().filter(&room_id)
         .find(|entry| entry.box_uuid == box_uuid)
         .ok_or("Box not found")?;

@@ -8,4 +8,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 spacetimedb = "=2.0.2"
+serde_json = "1"
 log = "0.4"

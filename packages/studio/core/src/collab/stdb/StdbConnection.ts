@@ -134,6 +134,7 @@ export class StdbConnection implements Terminable {
             this.#rawSdkConnection = conn
         } catch (error: unknown) {
             console.error("[StdbConnection] #connectSdk error:", error)
+            this.#setState(StdbConnectionState.Disconnected)
         }
     }
 }
