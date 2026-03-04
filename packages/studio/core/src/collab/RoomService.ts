@@ -12,6 +12,13 @@ export class RoomService {
         this.#shareBase = config.shareBaseUrl ?? DEFAULT_SHARE_BASE
     }
 
+    generateRoomId(): string {
+        const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+        let result = ""
+        for (let i = 0; i < 8; i++) {result += chars[Math.floor(Math.random() * chars.length)]}
+        return result
+    }
+
     getShareUrl(roomId: string): string {
         return `${this.#shareBase}/r/${roomId}`
     }

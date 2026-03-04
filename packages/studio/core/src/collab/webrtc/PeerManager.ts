@@ -1,7 +1,8 @@
-import {Notifier, Terminable} from "@opendaw/lib-std"
+import {Notifier, Optional, Terminable} from "@opendaw/lib-std"
 
 export class PeerManager implements Terminable {
     readonly #peers: Map<string, RTCPeerConnection> = new Map()
+    readonly #dataChannels: Map<string, RTCDataChannel> = new Map()
     readonly onPeerConnected: Notifier<string> = new Notifier()
     readonly onPeerDisconnected: Notifier<string> = new Notifier()
 
@@ -23,8 +24,16 @@ export class PeerManager implements Terminable {
         this.onPeerDisconnected.notify(peerId)
     }
 
-    getConnection(peerId: string): RTCPeerConnection | undefined {
+    getConnection(peerId: string): Optional<RTCPeerConnection> {
         return this.#peers.get(peerId)
+    }
+
+    setDataChannel(peerId: string, channel: RTCDataChannel): void {
+        this.#dataChannels.set(peerId, channel)
+    }
+
+    getDataChannel(peerId: string): Optional<RTCDataChannel> {
+        return this.#dataChannels.get(peerId)
     }
 
     terminate(): void {
@@ -32,7 +41,11 @@ export class PeerManager implements Terminable {
             connection.close()
             this.onPeerDisconnected.notify(peerId)
         }
+        for (const [, channel] of this.#dataChannels) {
+            channel.close()
+        }
         this.#peers.clear()
+        this.#dataChannels.clear()
         this.onPeerConnected.terminate()
         this.onPeerDisconnected.terminate()
     }

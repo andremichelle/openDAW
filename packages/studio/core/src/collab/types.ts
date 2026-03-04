@@ -3,6 +3,7 @@ import {Optional} from "@opendaw/lib-std"
 export type CollabConfig = {
     readonly endpoint: string
     readonly shareBaseUrl?: string
+    readonly s3?: S3Config
 }
 
 export type RoomInfo = {

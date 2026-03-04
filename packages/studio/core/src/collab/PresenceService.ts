@@ -20,6 +20,11 @@ export class PresenceService implements Terminable {
         this.onChange.notify()
     }
 
+    clear(): void {
+        this.#participants.clear()
+        this.onChange.notify()
+    }
+
     terminate(): void {
         this.#participants.clear()
         this.onChange.terminate()

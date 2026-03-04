@@ -14,6 +14,10 @@ export class AssetTransportChain {
         this.#sources = sources
     }
 
+    get sourceNames(): ReadonlyArray<string> {
+        return this.#sources.map(source => source.name)
+    }
+
     async resolve(assetId: string): Promise<Optional<ArrayBuffer>> {
         for (const source of this.#sources) {
             const result = await source.resolve(assetId)

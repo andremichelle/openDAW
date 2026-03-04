@@ -15,4 +15,9 @@ describe("RoomService", () => {
         const roomId = RoomService.parseShareUrl("https://opendaw.studio/other")
         expect(roomId).toBeUndefined()
     })
+    it("generates an 8-character alphanumeric room ID", () => {
+        const service = new RoomService({endpoint: "wss://localhost:3000"})
+        const roomId = service.generateRoomId()
+        expect(roomId).toMatch(/^[a-z0-9]{8}$/)
+    })
 })
