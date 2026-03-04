@@ -40,13 +40,14 @@ describe("Collaboration Integration", () => {
         host.terminate()
         guest.terminate()
     })
-    it("host creates room, connection fails, state returns to disconnected", () => {
+    it("host creates room, connection fails, state returns to disconnected", async () => {
         const service = new CollabService(config)
         const states: Array<CollabState> = []
         service.onChange.subscribe(state => states.push(state))
-        service.createRoom()
+        const roomPromise = service.createRoom()
         expect(service.state).toBe(CollabState.Connecting)
         service.connection.disconnect()
+        await expect(roomPromise).rejects.toThrow("Connection failed")
         expect(service.state).toBe(CollabState.Disconnected)
         expect(service.roomId).toBeUndefined()
         expect(states).toEqual([CollabState.Connecting, CollabState.Disconnected])
