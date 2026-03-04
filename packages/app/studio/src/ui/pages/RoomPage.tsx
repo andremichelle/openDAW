@@ -4,7 +4,7 @@ import {StudioService} from "@/service/StudioService"
 import {JoinScreen} from "@/ui/collab/JoinScreen"
 import {CollabState} from "@opendaw/studio-core"
 
-export const RoomPage: PageFactory<StudioService> = ({path, service}: PageContext<StudioService>) => {
+export const RoomPage: PageFactory<StudioService> = ({path, service, lifecycle}: PageContext<StudioService>) => {
     const segments = path.split("/")
     const roomId = segments[2] ?? ""
     const isConnecting = service.collabService.state === CollabState.Connecting
@@ -18,7 +18,7 @@ export const RoomPage: PageFactory<StudioService> = ({path, service}: PageContex
         }}>
             <JoinScreen
                 roomId={roomId}
-                onJoin={async (displayName: string) => {
+                onJoin={(displayName: string) => {
                     console.debug(`Joining room ${roomId} as ${displayName}`)
                     const boxGraph = service.createCollabBoxGraph()
                     service.collabService.joinRoom(roomId, displayName, boxGraph)
@@ -32,6 +32,7 @@ export const RoomPage: PageFactory<StudioService> = ({path, service}: PageContex
                             RouteLocation.get().navigateTo("/")
                         }
                     })
+                    lifecycle.own(subscription)
                 }}
                 onCancel={() => {
                     RouteLocation.get().navigateTo("/")

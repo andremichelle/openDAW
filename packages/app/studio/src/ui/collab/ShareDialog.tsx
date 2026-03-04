@@ -10,8 +10,12 @@ type ShareDialogProps = {
 export const ShareDialog = ({shareUrl, onClose, onPromoteRoom, isPersistent}: ShareDialogProps) => {
     const copyButton: HTMLButtonElement = <button>Copy Link</button>
     copyButton.addEventListener("click", async () => {
-        await navigator.clipboard.writeText(shareUrl)
-        copyButton.textContent = "Copied!"
+        try {
+            await navigator.clipboard.writeText(shareUrl)
+            copyButton.textContent = "Copied!"
+        } catch {
+            copyButton.textContent = "Failed"
+        }
         setTimeout(() => copyButton.textContent = "Copy Link", 2000)
     })
     return (

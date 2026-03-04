@@ -151,6 +151,7 @@ export const Header = ({lifecycle, service}: Construct) => {
                         label.textContent = String(count)
                     }
                 }
+                updateIndicator()
                 lifecycle.own(service.collabService.onChange.subscribe(updateIndicator))
                 lifecycle.own(service.collabService.presence.onChange.subscribe(updateIndicator))
                 return collabIndicator

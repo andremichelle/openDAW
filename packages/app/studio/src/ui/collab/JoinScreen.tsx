@@ -16,9 +16,12 @@ export const JoinScreen = ({roomId, onJoin, onCancel, isConnecting}: JoinScreenP
         maxLength={32}
         autofocus={true}
     />
+    let joinSubmitted = false
     const handleJoin = () => {
+        if (joinSubmitted) {return}
         const name = input.value.trim()
         if (name.length === 0) {return}
+        joinSubmitted = true
         localStorage.setItem("opendaw-display-name", name)
         joinButton.disabled = true
         joinButton.textContent = "Connecting..."

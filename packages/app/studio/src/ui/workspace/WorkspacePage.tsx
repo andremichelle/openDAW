@@ -19,11 +19,13 @@ export const WorkspacePage: PageFactory<StudioService> = ({lifecycle, service}: 
         screenLifeTime.terminate()
         WorkspaceBuilder.buildScreen(screenLifeTime, service.panelLayout, main, owner.getValue())
     }))
-    lifecycle.own(service.collabService.presence.onChange.subscribe(() => {
+    const updateCursors = () => {
         replaceChildren(cursorContainer, CursorOverlay({
             participants: service.collabService.presence.participants
         }))
-    }))
+    }
+    updateCursors()
+    lifecycle.own(service.collabService.presence.onChange.subscribe(updateCursors))
     let lastCursorSend = 0
     const wrapper: HTMLDivElement = <div className={className} style={{position: "relative"}}>{main}{cursorContainer}</div>
     wrapper.addEventListener("mousemove", (event: MouseEvent) => {
