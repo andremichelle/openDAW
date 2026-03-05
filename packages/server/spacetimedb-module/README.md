@@ -7,6 +7,8 @@ Real-time collaboration backend for openDAW, powered by [SpacetimeDB](https://sp
 - [Rust](https://rustup.rs/) (stable)
 - [SpacetimeDB CLI](https://spacetimedb.com/install) v2.0+
 
+The TypeScript client SDK (`spacetimedb` npm package) is already listed in `packages/studio/core/package.json`. Run `npm install` from the repo root if you haven't already.
+
 ## Local Development
 
 ### 1. Install the SpacetimeDB CLI
