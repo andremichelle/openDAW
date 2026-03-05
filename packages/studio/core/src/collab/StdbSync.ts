@@ -101,10 +101,11 @@ export class StdbSync<T> implements Terminable {
     }
 
     #flushUpdates(): void {
+        const pending = [...this.#updates]
         const created = new Set<string>()
         const deleted = new Set<string>()
         const updated = new Set<string>()
-        for (const update of this.#updates) {
+        for (const update of pending) {
             const key = update.type === "primitive" || update.type === "pointer"
                 ? UUID.toString(update.address.uuid)
                 : UUID.toString(update.uuid)
@@ -116,7 +117,7 @@ export class StdbSync<T> implements Terminable {
                 updated.add(key)
             }
         }
-        this.#updates.length = 0
+        let hadFailure = false
         for (const boxUuid of created) {
             if (deleted.has(boxUuid)) {continue}
             const optBox = this.#boxGraph.findBox(UUID.parse(boxUuid))
@@ -130,6 +131,7 @@ export class StdbSync<T> implements Terminable {
                     data: JSON.stringify(box.toJSON()),
                 })
             } catch (error: unknown) {
+                hadFailure = true
                 console.error("[StdbSync] flushUpdates boxCreate error:", error)
             }
         }
@@ -138,6 +140,7 @@ export class StdbSync<T> implements Terminable {
             try {
                 this.#conn.reducers.boxDelete({roomId: this.#roomId, boxUuid})
             } catch (error: unknown) {
+                hadFailure = true
                 console.error("[StdbSync] flushUpdates boxDelete error:", error)
             }
         }
@@ -152,8 +155,12 @@ export class StdbSync<T> implements Terminable {
                     data: JSON.stringify(optBox.unwrap().toJSON()),
                 })
             } catch (error: unknown) {
+                hadFailure = true
                 console.error("[StdbSync] flushUpdates boxUpdate error:", error)
             }
+        }
+        if (!hadFailure) {
+            this.#updates.length = 0
         }
     }
 

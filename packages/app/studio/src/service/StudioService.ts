@@ -109,10 +109,17 @@ export class StudioService implements ProjectEnv {
     readonly engine = new EngineFacade()
     readonly collabService = new CollabService({
         endpoint: (() => {
-            try {return localStorage.getItem("opendaw-stdb-endpoint")} catch {return null}
-        })()
-            ?? import.meta.env.VITE_STDB_ENDPOINT
-            ?? "wss://maincloud.spacetimedb.com",
+            const stored = (() => {
+                try {return localStorage.getItem("opendaw-stdb-endpoint")} catch {return null}
+            })()
+            const envValue = import.meta.env.VITE_STDB_ENDPOINT
+            const fallback = "wss://maincloud.spacetimedb.com"
+            const resolved = stored ?? envValue ?? fallback
+            if (resolved === fallback && import.meta.env.DEV) {
+                console.warn("[CollabService] No VITE_STDB_ENDPOINT set — using production fallback:", fallback)
+            }
+            return resolved
+        })(),
         databaseName: import.meta.env.VITE_STDB_DATABASE ?? "opendaw",
     })
 

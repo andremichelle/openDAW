@@ -43,21 +43,22 @@ export class WebRTCAssetSource implements AssetSource {
                 resolve(undefined)
             }, this.#timeoutMs)
             const onMessage = (event: MessageEvent) => {
+                if (typeof event.data !== "string") {return}
+                let message: Record<string, unknown>
                 try {
-                    const message = JSON.parse(event.data)
-                    if (message.assetId !== assetId) {return}
-                    cleanup()
-                    if (message.type === "response" && Array.isArray(message.data)) {
-                        if (message.data.length > MAX_PAYLOAD_BYTES) {
-                            resolve(undefined)
-                            return
-                        }
-                        resolve(Uint8Array.from(message.data).buffer)
-                    } else {
-                        resolve(undefined)
-                    }
+                    message = JSON.parse(event.data) as Record<string, unknown>
                 } catch {
-                    cleanup()
+                    return
+                }
+                if (message.assetId !== assetId) {return}
+                cleanup()
+                if (message.type === "response" && Array.isArray(message.data)) {
+                    if ((message.data as Array<unknown>).length > MAX_PAYLOAD_BYTES) {
+                        resolve(undefined)
+                        return
+                    }
+                    resolve(Uint8Array.from(message.data as Array<number>).buffer)
+                } else {
                     resolve(undefined)
                 }
             }
