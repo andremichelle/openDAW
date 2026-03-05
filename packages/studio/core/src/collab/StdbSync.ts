@@ -122,26 +122,38 @@ export class StdbSync<T> implements Terminable {
             const optBox = this.#boxGraph.findBox(UUID.parse(boxUuid))
             if (optBox.isEmpty()) {continue}
             const box = optBox.unwrap()
-            this.#conn.reducers.boxCreate({
-                roomId: this.#roomId,
-                boxUuid,
-                boxName: box.name as string,
-                data: JSON.stringify(box.toJSON()),
-            })
+            try {
+                this.#conn.reducers.boxCreate({
+                    roomId: this.#roomId,
+                    boxUuid,
+                    boxName: box.name as string,
+                    data: JSON.stringify(box.toJSON()),
+                })
+            } catch (error: unknown) {
+                console.error("[StdbSync] flushUpdates boxCreate error:", error)
+            }
         }
         for (const boxUuid of deleted) {
             if (created.has(boxUuid)) {continue}
-            this.#conn.reducers.boxDelete({roomId: this.#roomId, boxUuid})
+            try {
+                this.#conn.reducers.boxDelete({roomId: this.#roomId, boxUuid})
+            } catch (error: unknown) {
+                console.error("[StdbSync] flushUpdates boxDelete error:", error)
+            }
         }
         for (const boxUuid of updated) {
             if (created.has(boxUuid) || deleted.has(boxUuid)) {continue}
             const optBox = this.#boxGraph.findBox(UUID.parse(boxUuid))
             if (optBox.isEmpty()) {continue}
-            this.#conn.reducers.boxUpdate({
-                roomId: this.#roomId,
-                boxUuid,
-                data: JSON.stringify(optBox.unwrap().toJSON()),
-            })
+            try {
+                this.#conn.reducers.boxUpdate({
+                    roomId: this.#roomId,
+                    boxUuid,
+                    data: JSON.stringify(optBox.unwrap().toJSON()),
+                })
+            } catch (error: unknown) {
+                console.error("[StdbSync] flushUpdates boxUpdate error:", error)
+            }
         }
     }
 
