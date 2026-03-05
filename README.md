@@ -56,6 +56,8 @@ If you are interested in helping, here are areas where we need support:
 
 We always appreciate help on open issues: https://github.com/andremichelle/openDAW/issues
 
+To discuss contributions, book a call: https://calendly.com/andremichelle/opendaw-on-tour
+
 ---
 
 ## Huge Shoutout To The Incredible openDAW Community!
