@@ -1,23 +1,35 @@
-import {describe, expect, it, vi} from "vitest"
+import {afterAll, beforeAll, describe, expect, it, vi} from "vitest"
 import {CollabService, CollabState} from "./CollabService"
 import {SignalingService} from "./webrtc/SignalingService"
 import {PeerManager} from "./webrtc/PeerManager"
 import {AssetTransportChain, AssetSource} from "./assets/AssetTransport"
 import {SignalMessage} from "./webrtc/types"
 
-globalThis.RTCPeerConnection = class MockRTCPeerConnection {
-    close() {}
-} as any
+const OriginalRTCPeerConnection = globalThis.RTCPeerConnection
+
+beforeAll(() => {
+    globalThis.RTCPeerConnection = class MockRTCPeerConnection {
+        close() {}
+        setRemoteDescription() {return Promise.resolve()}
+        setLocalDescription() {return Promise.resolve()}
+        createAnswer() {return Promise.resolve({type: "answer", sdp: "mock-sdp"})}
+        addIceCandidate() {return Promise.resolve()}
+    } as any
+})
+
+afterAll(() => {
+    globalThis.RTCPeerConnection = OriginalRTCPeerConnection
+})
 
 describe("Collaboration Integration", () => {
     const config = {endpoint: "wss://localhost:3000"}
 
-    it("host creates room, guest joins, both see presence, guest leaves", () => {
+    it("host creates room, guest joins, both see presence, guest leaves", async () => {
         const host = new CollabService(config)
         const guest = new CollabService(config)
-        host.createRoom()
-        const roomId = host.roomId!
+        const roomPromise = host.createRoom()
         host.connection.simulateConnected("host-id", "host-token")
+        const roomId = await roomPromise
         expect(host.state).toBe(CollabState.Connected)
         guest.joinRoom(roomId)
         guest.connection.simulateConnected("guest-id", "guest-token")
@@ -53,7 +65,7 @@ describe("Collaboration Integration", () => {
         expect(states).toEqual([CollabState.Connecting, CollabState.Disconnected])
         service.terminate()
     })
-    it("signaling flow: host and guest exchange offer/answer, become peers", () => {
+    it("signaling flow: host and guest exchange offer/answer, become peers", async () => {
         const hostPeers = new PeerManager()
         const guestPeers = new PeerManager()
         const hostSignaling = new SignalingService("host-id", hostPeers)
@@ -63,11 +75,11 @@ describe("Collaboration Integration", () => {
         hostSignaling.onOutgoingSignal.subscribe(signal => hostOutgoing.push(signal))
         guestSignaling.onOutgoingSignal.subscribe(signal => guestOutgoing.push(signal))
         hostSignaling.sendOffer("guest-id", '{"sdp":"host-offer"}')
-        guestSignaling.handleIncomingSignal(hostOutgoing[0])
+        await guestSignaling.handleIncomingSignal(hostOutgoing[0])
         expect(guestPeers.peerIds).toContain("host-id")
         expect(guestOutgoing).toHaveLength(1)
         expect(guestOutgoing[0].signalType).toBe("answer")
-        hostSignaling.handleIncomingSignal(guestOutgoing[0])
+        await hostSignaling.handleIncomingSignal(guestOutgoing[0])
         expect(hostPeers.peerIds).toContain("guest-id")
         hostSignaling.terminate()
         guestSignaling.terminate()
@@ -94,13 +106,13 @@ describe("Collaboration Integration", () => {
         expect(resolved).toBeDefined()
         expect(new Uint8Array(resolved!)).toEqual(new Uint8Array([10, 20, 30]))
     })
-    it("leave one room and join another resets state", () => {
+    it("leave one room and join another resets state", async () => {
         const service = new CollabService(config)
         const states: Array<CollabState> = []
         service.onChange.subscribe(state => states.push(state))
-        service.createRoom()
-        const firstRoom = service.roomId
+        const roomPromise = service.createRoom()
         service.connection.simulateConnected("my-id", "my-token")
+        const firstRoom = await roomPromise
         service.presence.updatePresence({
             identity: "peer-1", displayName: "Peer", color: "#0FF",
             cursorX: 0, cursorY: 0, cursorTarget: "",

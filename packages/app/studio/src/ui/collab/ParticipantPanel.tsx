@@ -15,7 +15,7 @@ export const ParticipantPanel = ({participants, isOpen, onToggle}: ParticipantPa
     const totalCount = participants.length + 1
     return (
         <div className={className}>
-            <button className="participant-toggle" onclick={onToggle}>
+            <button type="button" className="participant-toggle" onclick={onToggle}>
                 <span className="participant-count">{totalCount}</span>
                 <span>collaborators</span>
             </button>

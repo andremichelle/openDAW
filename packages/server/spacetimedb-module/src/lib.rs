@@ -121,6 +121,16 @@ pub fn leave_room(ctx: &ReducerContext, room_id: String) -> Result<(), String> {
         .find(|entry| entry.identity == ctx.sender())
         .ok_or_else(|| format!("not a participant in room: {}", room_id))?;
     ctx.db.room_participant().id().delete(&participant.id);
+    if let Some(record) = ctx.db.presence().room_id().filter(&room_id)
+        .find(|entry| entry.identity == ctx.sender()) {
+        ctx.db.presence().id().delete(&record.id);
+    }
+    let signals: Vec<WebrtcSignal> = ctx.db.webrtc_signal().room_id().filter(&room_id)
+        .filter(|signal| signal.from_identity == ctx.sender() || signal.to_identity == ctx.sender())
+        .collect();
+    for signal in signals {
+        ctx.db.webrtc_signal().id().delete(&signal.id);
+    }
     log::info!("{:?} left room {}", ctx.sender(), room_id);
     Ok(())
 }
@@ -149,6 +159,9 @@ pub fn register_asset(
 ) -> Result<(), String> {
     ctx.db.room().id().find(&room_id)
         .ok_or_else(|| format!("room not found: {}", room_id))?;
+    ctx.db.room_participant().room_id().filter(&room_id)
+        .find(|entry| entry.identity == ctx.sender())
+        .ok_or_else(|| "not a participant in this room".to_string())?;
     if size_bytes > MAX_ASSET_SIZE {
         return Err(format!("asset too large: {} bytes (max {})", size_bytes, MAX_ASSET_SIZE));
     }
@@ -184,6 +197,8 @@ pub struct WebrtcSignal {
     pub created_at: Timestamp,
 }
 
+const SIGNAL_TTL_SECS: u64 = 300;
+
 #[reducer]
 pub fn send_signal(
     ctx: &ReducerContext,
@@ -197,6 +212,9 @@ pub fn send_signal(
     ctx.db.room_participant().room_id().filter(&room_id)
         .find(|entry| entry.identity == ctx.sender())
         .ok_or_else(|| "not a participant in this room".to_string())?;
+    ctx.db.room_participant().room_id().filter(&room_id)
+        .find(|entry| entry.identity == to_identity)
+        .ok_or_else(|| "target identity is not a participant in this room".to_string())?;
     if !["offer", "answer", "ice"].contains(&signal_type.as_str()) {
         return Err(format!("Invalid signal type: {}", signal_type));
     }
@@ -382,6 +400,17 @@ fn cleanup_stale_rooms(ctx: &ReducerContext, _schedule: CleanupSchedule) {
         })
         .map(|room| room.id.clone())
         .collect();
+    let now_micros = ctx.timestamp.to_duration_since_unix_epoch().as_micros() as u64;
+    let ttl_micros = SIGNAL_TTL_SECS * 1_000_000;
+    let stale_signals: Vec<WebrtcSignal> = ctx.db.webrtc_signal().iter()
+        .filter(|signal| {
+            let created_micros = signal.created_at.to_duration_since_unix_epoch().as_micros() as u64;
+            now_micros.saturating_sub(created_micros) > ttl_micros
+        })
+        .collect();
+    for signal in stale_signals {
+        ctx.db.webrtc_signal().id().delete(&signal.id);
+    }
     for room_id in stale_room_ids {
         for asset in ctx.db.room_asset().room_id().filter(&room_id).collect::<Vec<_>>() {
             ctx.db.room_asset().id().delete(&asset.id);

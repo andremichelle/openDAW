@@ -1,9 +1,17 @@
-globalThis.RTCPeerConnection = class MockRTCPeerConnection {
-    close() {}
-} as any
-
-import {describe, expect, it, vi} from "vitest"
+import {afterAll, beforeAll, describe, expect, it, vi} from "vitest"
 import {PeerManager} from "./PeerManager"
+
+const OriginalRTCPeerConnection = globalThis.RTCPeerConnection
+
+beforeAll(() => {
+    globalThis.RTCPeerConnection = class MockRTCPeerConnection {
+        close() {}
+    } as any
+})
+
+afterAll(() => {
+    globalThis.RTCPeerConnection = OriginalRTCPeerConnection
+})
 
 describe("PeerManager", () => {
     it("tracks connected peer IDs", () => {
@@ -98,5 +106,15 @@ describe("PeerManager", () => {
         expect(manager.peerIds).toHaveLength(3)
         manager.terminate()
         expect(manager.peerIds).toEqual([])
+    })
+    it("setDataChannel closes previous channel before replacing", () => {
+        const manager = new PeerManager()
+        manager.addPeer("peer-1")
+        const oldChannel = {close: vi.fn()} as any
+        const newChannel = {close: vi.fn()} as any
+        manager.setDataChannel("peer-1", oldChannel)
+        manager.setDataChannel("peer-1", newChannel)
+        expect(oldChannel.close).toHaveBeenCalled()
+        expect(manager.getDataChannel("peer-1")).toBe(newChannel)
     })
 })

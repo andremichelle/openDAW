@@ -34,6 +34,10 @@ export class PeerManager implements Terminable {
     }
 
     setDataChannel(peerId: string, channel: RTCDataChannel): void {
+        const existing = this.#dataChannels.get(peerId)
+        if (isDefined(existing)) {
+            existing.close()
+        }
         this.#dataChannels.set(peerId, channel)
     }
 

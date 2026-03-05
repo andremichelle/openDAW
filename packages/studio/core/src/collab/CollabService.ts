@@ -140,18 +140,36 @@ export class CollabService implements Terminable {
     get displayName(): Optional<string> {return this.#displayName}
 
     createRoom(displayName?: string, boxGraph?: BoxGraph<any>): Promise<string> {
+        if (this.#state !== CollabState.Disconnected) {
+            return Promise.reject(new Error("Already connecting or connected"))
+        }
         this.#displayName = displayName ?? this.#getStoredDisplayName()
         this.#boxGraph = boxGraph
         this.#isCreating = true
         this.#setState(CollabState.Connecting)
         this.connection.connect()
         return new Promise<string>((resolve, reject) => {
-            this.#pendingRoomResolve = resolve
-            this.#pendingRoomReject = reject
+            const timeoutId = setTimeout(() => {
+                if (isDefined(this.#pendingRoomReject)) {
+                    this.#pendingRoomReject(new Error("createRoom timed out after 30 seconds"))
+                    this.#pendingRoomResolve = undefined
+                    this.#pendingRoomReject = undefined
+                    this.leaveRoom()
+                }
+            }, 30_000)
+            this.#pendingRoomResolve = (roomId: string) => {
+                clearTimeout(timeoutId)
+                resolve(roomId)
+            }
+            this.#pendingRoomReject = (reason: Error) => {
+                clearTimeout(timeoutId)
+                reject(reason)
+            }
         })
     }
 
     joinRoom(roomId: string, displayName?: string, boxGraph?: BoxGraph<any>): void {
+        if (this.#state !== CollabState.Disconnected) {return}
         this.#roomId = roomId
         this.#displayName = displayName ?? this.#getStoredDisplayName()
         this.#boxGraph = boxGraph
@@ -283,6 +301,7 @@ export class CollabService implements Terminable {
             if (isDefined(this.#pendingRoomResolve)) {
                 this.#pendingRoomResolve(row.id)
                 this.#pendingRoomResolve = undefined
+                this.#pendingRoomReject = undefined
             }
             this.#joinAndSubscribe(conn, row.id, selfIdentity, wasCreating)
         })
@@ -340,8 +359,12 @@ export class CollabService implements Terminable {
         conn.subscriptionBuilder()
             .onApplied((_ctx: unknown) => {
                 console.debug("[CollabService] presence subscription onApplied, joining room")
-                try {conn.reducers.joinRoom({roomId, displayName: name})} catch (error: unknown) {
+                try {
+                    conn.reducers.joinRoom({roomId, displayName: name})
+                } catch (error: unknown) {
                     console.error("[CollabService] joinRoom reducer error:", error)
+                    this.leaveRoom()
+                    return
                 }
                 this.#scanExistingPresence(conn, roomId, selfIdentity)
                 this.#initBoxSync(conn, roomId, isHost)

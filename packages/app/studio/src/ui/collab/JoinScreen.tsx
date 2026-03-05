@@ -12,7 +12,8 @@ type JoinScreenProps = {
 }
 
 export const JoinScreen = ({roomId, onJoin, onCancel, isConnecting}: JoinScreenProps) => {
-    const savedName = localStorage.getItem("opendaw-display-name") ?? ""
+    let savedName = ""
+    try {savedName = localStorage.getItem("opendaw-display-name") ?? ""} catch { /* restricted env */ }
     const input: HTMLInputElement = <input
         type="text"
         value={savedName}
@@ -26,14 +27,14 @@ export const JoinScreen = ({roomId, onJoin, onCancel, isConnecting}: JoinScreenP
         const name = input.value.trim()
         if (name.length === 0) {return}
         joinSubmitted = true
-        localStorage.setItem("opendaw-display-name", name)
+        try {localStorage.setItem("opendaw-display-name", name)} catch { /* restricted env */ }
         joinButton.disabled = true
         joinButton.textContent = "Connecting..."
         input.disabled = true
         onJoin(name)
     }
     input.addEventListener("keydown", (event: KeyboardEvent) => {
-        if (event.key === "Enter") {handleJoin()}
+        if (event.key === "Enter" && !joinSubmitted) {handleJoin()}
     })
     const joinButton: HTMLButtonElement = <button
         onclick={handleJoin}

@@ -35,6 +35,7 @@ export class StdbConnection implements Terminable {
     #token: Optional<string> = undefined
     #sdkConnection: Optional<{disconnect(): void}> = undefined
     #rawSdkConnection: Optional<unknown> = undefined
+    #connectGeneration = 0
     readonly #config: StdbConnectionConfig
 
     constructor(config: StdbConnectionConfig) {
@@ -51,11 +52,13 @@ export class StdbConnection implements Terminable {
     connect(): void {
         if (this.#state !== StdbConnectionState.Disconnected) {return}
         this.#setState(StdbConnectionState.Connecting)
-        this.#connectSdk()
+        const generation = ++this.#connectGeneration
+        this.#connectSdk(generation)
     }
 
     disconnect(): void {
         if (this.#state === StdbConnectionState.Disconnected) {return}
+        this.#connectGeneration++
         if (isDefined(this.#sdkConnection)) {
             this.#sdkConnection.disconnect()
         }
@@ -89,7 +92,7 @@ export class StdbConnection implements Terminable {
         this.onChange.notify(state)
     }
 
-    async #connectSdk(): Promise<void> {
+    async #connectSdk(generation: number): Promise<void> {
         const savedToken = this.#token ?? tryGetSessionStorage(TOKEN_STORAGE_KEY)
         try {
             console.debug("[StdbConnection] importing module_bindings...")
@@ -104,7 +107,8 @@ export class StdbConnection implements Terminable {
             }
             const conn = builder
                 .onConnect((_connection: unknown, identity: {toHexString?: () => string}, token: string) => {
-                    console.debug("[StdbConnection] onConnect fired!", identity, token?.substring(0, 20))
+                    if (generation !== this.#connectGeneration) {return}
+                    console.debug("[StdbConnection] onConnect fired!", identity)
                     const identityHex = typeof identity?.toHexString === "function"
                         ? identity.toHexString()
                         : String(identity)
@@ -114,6 +118,7 @@ export class StdbConnection implements Terminable {
                     this.#setState(StdbConnectionState.Connected)
                 })
                 .onConnectError((_ctx: unknown, error: Error) => {
+                    if (generation !== this.#connectGeneration) {return}
                     console.error("[StdbConnection] onConnectError:", error)
                     this.#token = undefined
                     try { globalThis.sessionStorage?.removeItem(TOKEN_STORAGE_KEY) } catch { /* noop */ }
@@ -122,6 +127,7 @@ export class StdbConnection implements Terminable {
                     this.#setState(StdbConnectionState.Disconnected)
                 })
                 .onDisconnect((...args: Array<unknown>) => {
+                    if (generation !== this.#connectGeneration) {return}
                     console.debug("[StdbConnection] onDisconnect fired!", args)
                     this.#sdkConnection = undefined
                     this.#rawSdkConnection = undefined

@@ -42,7 +42,7 @@ cp packages/app/studio/.env.example packages/app/studio/.env
 
 Edit `.env`:
 
-```
+```dotenv
 VITE_STDB_ENDPOINT=ws://localhost:3000
 VITE_STDB_DATABASE=opendaw
 ```

@@ -1,4 +1,4 @@
-import {Notifier, Terminable} from "@opendaw/lib-std"
+import {isDefined, Notifier, Terminable} from "@opendaw/lib-std"
 import {PeerManager} from "./PeerManager"
 import {SignalMessage} from "./types"
 
@@ -41,15 +41,25 @@ export class SignalingService implements Terminable {
         })
     }
 
-    handleIncomingSignal(signal: SignalMessage): void {
+    async handleIncomingSignal(signal: SignalMessage): Promise<void> {
         if (signal.toIdentity !== this.#localIdentity) {return}
         if (signal.signalType === "offer") {
             this.#peerManager.addPeer(signal.fromIdentity)
-            this.sendAnswer(signal.fromIdentity, '{"sdp":"auto-answer"}')
+            const connection = this.#peerManager.getConnection(signal.fromIdentity)
+            if (!isDefined(connection)) {return}
+            await connection.setRemoteDescription(JSON.parse(signal.payload) as RTCSessionDescriptionInit)
+            const answer = await connection.createAnswer()
+            await connection.setLocalDescription(answer)
+            this.sendAnswer(signal.fromIdentity, JSON.stringify(answer))
         } else if (signal.signalType === "answer") {
             this.#peerManager.addPeer(signal.fromIdentity)
+            const connection = this.#peerManager.getConnection(signal.fromIdentity)
+            if (!isDefined(connection)) {return}
+            await connection.setRemoteDescription(JSON.parse(signal.payload) as RTCSessionDescriptionInit)
         } else if (signal.signalType === "ice") {
-            console.debug("[SignalingService] ICE candidate from", signal.fromIdentity)
+            const connection = this.#peerManager.getConnection(signal.fromIdentity)
+            if (!isDefined(connection)) {return}
+            await connection.addIceCandidate(JSON.parse(signal.payload) as RTCIceCandidateInit)
         }
     }
 

@@ -36,10 +36,12 @@ export class AssetTransportChain {
 
     async publish(assetId: string, data: ArrayBuffer, meta: AssetMeta): Promise<void> {
         const results = await Promise.allSettled(this.#sources.map(source => source.publish(assetId, data, meta)))
-        for (const result of results) {
-            if (result.status === "rejected") {
-                console.warn("[AssetTransportChain] publish partial failure:", result.reason)
-            }
+        const failures = results.filter(result => result.status === "rejected")
+        for (const result of failures) {
+            console.warn("[AssetTransportChain] publish partial failure:", (result as PromiseRejectedResult).reason)
+        }
+        if (failures.length === results.length) {
+            throw new Error(`[AssetTransportChain] publish failed on all ${results.length} source(s)`)
         }
     }
 }

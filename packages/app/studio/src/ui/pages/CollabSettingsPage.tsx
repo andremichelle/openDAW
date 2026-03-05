@@ -7,7 +7,7 @@ import {CollabSettings} from "@/ui/collab/CollabSettings"
 
 const className = Html.adoptStyleSheet(css, "CollabSettingsPage")
 
-export const CollabSettingsPage: PageFactory<StudioService> = ({}: PageContext<StudioService>) => {
+export const CollabSettingsPage: PageFactory<StudioService> = (_context: PageContext<StudioService>) => {
     return (
         <div className={className}>
             <BackButton/>

@@ -66,7 +66,12 @@ export class WebRTCAssetSource implements AssetSource {
                 channel.removeEventListener("message", onMessage)
             }
             channel.addEventListener("message", onMessage)
-            channel.send(JSON.stringify({type: "request", assetId}))
+            try {
+                channel.send(JSON.stringify({type: "request", assetId}))
+            } catch {
+                cleanup()
+                resolve(undefined)
+            }
         })
     }
 }

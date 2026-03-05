@@ -47,6 +47,9 @@ component
       &:hover
         box-shadow: 0 0 1em rgba(from var(--color-green) r g b / 0.5)
 
+      &:focus-visible
+        box-shadow: 0 0 0 2px var(--color-blue)
+
   > p.share-hint
     color: var(--color-dark)
     margin: 0
@@ -83,6 +86,9 @@ component
       &:hover
         box-shadow: 0 0 1em rgba(from var(--color-orange) r g b / 0.5)
 
+      &:focus-visible
+        box-shadow: 0 0 0 2px var(--color-blue)
+
   > button.share-close
     appearance: none
     border: none
@@ -98,3 +104,6 @@ component
 
     &:hover
       background-color: rgba(white, 0.1)
+
+    &:focus-visible
+      box-shadow: 0 0 0 2px var(--color-blue)

@@ -122,13 +122,20 @@ export const populateStudioMenu = (service: StudioService) => {
                                     const displayName = prompt("Enter your display name:", storedName)
                                     if (isAbsent(displayName) || displayName.trim().length === 0) {return}
                                     localStorage.setItem("opendaw-display-name", displayName.trim())
-                                    const roomId = await collabService.createRoom(displayName.trim(), service.project.boxGraph)
-                                    const shareUrl = collabService.room.getShareUrl(roomId)
-                                    await navigator.clipboard.writeText(shareUrl)
-                                    await RuntimeNotifier.info({
-                                        headline: "Session Created",
-                                        message: `Link copied to clipboard:\n${shareUrl}`
-                                    })
+                                    try {
+                                        const roomId = await collabService.createRoom(displayName.trim(), service.project.boxGraph)
+                                        const shareUrl = collabService.room.getShareUrl(roomId)
+                                        await navigator.clipboard.writeText(shareUrl)
+                                        await RuntimeNotifier.info({
+                                            headline: "Session Created",
+                                            message: `Link copied to clipboard:\n${shareUrl}`
+                                        })
+                                    } catch (error: unknown) {
+                                        await RuntimeNotifier.info({
+                                            headline: "Session Failed",
+                                            message: String(error)
+                                        })
+                                    }
                                 }),
                             MenuItem.default({
                                 label: "Join Session...",

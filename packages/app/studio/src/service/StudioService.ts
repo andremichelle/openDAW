@@ -108,7 +108,9 @@ export class StudioService implements ProjectEnv {
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
     readonly collabService = new CollabService({
-        endpoint: localStorage.getItem("opendaw-stdb-endpoint")
+        endpoint: (() => {
+            try {return localStorage.getItem("opendaw-stdb-endpoint")} catch {return null}
+        })()
             ?? import.meta.env.VITE_STDB_ENDPOINT
             ?? "wss://maincloud.spacetimedb.com",
         databaseName: import.meta.env.VITE_STDB_DATABASE ?? "opendaw",
@@ -375,10 +377,18 @@ export class StudioService implements ProjectEnv {
         return new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
     }
 
-    loadCollabProject(boxGraph: BoxGraph<BoxIO.TypeMap>): void {
+    async loadCollabProject(boxGraph: BoxGraph<BoxIO.TypeMap>): Promise<boolean> {
+        if (this.hasProfile && !this.project.editing.isEmpty()) {
+            const approved = await RuntimeNotifier.approve({
+                headline: "Join Collaboration?",
+                message: "You have unsaved changes that will be lost!"
+            })
+            if (!approved) {return false}
+        }
         const mandatoryBoxes = ProjectSkeleton.findMandatoryBoxes(boxGraph)
         this.#projectProfileService.setProject(
             Project.fromSkeleton(this, {boxGraph, mandatoryBoxes}), "Collab Session")
+        return true
     }
 
     registerFooter(factory: Provider<FooterLabel>): void {

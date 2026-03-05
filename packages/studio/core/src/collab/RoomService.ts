@@ -24,7 +24,7 @@ export class RoomService {
     }
 
     static parseShareUrl(url: string): Optional<string> {
-        const match = url.match(/\/r\/([a-z0-9]+)$/)
+        const match = url.match(/\/r\/([a-z0-9]+)(?:[?#/]|$)/)
         return match?.[1]
     }
 
