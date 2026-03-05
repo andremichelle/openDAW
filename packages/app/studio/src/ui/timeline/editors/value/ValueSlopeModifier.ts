@@ -9,8 +9,7 @@ import {
     Terminable,
     unitValue,
     ValueAxis
-} from "@opendaw/lib-std"
-import {BoxEditing} from "@opendaw/lib-box"
+, Editing} from "@opendaw/lib-std"
 import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 import {Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
@@ -19,7 +18,7 @@ import {ValueEventOwnerReader} from "../EventOwnerReader"
 import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     valueAxis: ValueAxis
     reference: ValueEventBoxAdapter
@@ -29,7 +28,7 @@ type Construct = Readonly<{
 export class ValueSlopeModifier implements ValueModifier {
     static create(construct: Construct): ValueSlopeModifier {return new ValueSlopeModifier(construct)}
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #reference: ValueEventBoxAdapter
     readonly #successor: ValueEventBoxAdapter

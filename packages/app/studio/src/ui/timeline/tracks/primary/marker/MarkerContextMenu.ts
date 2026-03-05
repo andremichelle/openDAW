@@ -1,19 +1,16 @@
-import {ContextMenu, MenuItem} from "@opendaw/studio-core"
+import {ContextMenu, ElementCapturing, MenuItem, TimelineRange} from "@opendaw/studio-core"
 import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
-import {ElementCapturing} from "../../../../../../../../studio/core/src/ui/canvas/capturing"
 import {MarkerBoxAdapter} from "@opendaw/studio-adapters"
-import {Arrays, EmptyExec} from "@opendaw/lib-std"
-import {BoxEditing} from "@opendaw/lib-box"
+import {Arrays, Editing, EmptyExec} from "@opendaw/lib-std"
 import {DebugMenus} from "@/ui/menu/debug"
 import {Markers} from "@/ui/timeline/tracks/primary/marker/Markers"
-import {TimelineRange} from "@opendaw/studio-core"
 
 export namespace MarkerContextMenu {
     export const install = (element: Element,
                             range: TimelineRange,
                             capturing: ElementCapturing<MarkerBoxAdapter>,
-                            editing: BoxEditing) => {
+                            editing: Editing) => {
         return ContextMenu.subscribe(element, ({addItems, client}: ContextMenu.Collector) => {
             const adapter = capturing.captureEvent(client)
             if (adapter === null) {return}

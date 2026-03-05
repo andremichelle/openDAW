@@ -10,6 +10,7 @@ export * from "./sync-log"
 export * from "./ui"
 export * from "./ysync"
 
+export * from "./AudioConsolidation"
 export * from "./AudioDevices"
 export * from "./AudioOfflineRenderer"
 export * from "./OfflineEngineRenderer"

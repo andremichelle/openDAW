@@ -3,10 +3,10 @@ import {
     BinarySearch,
     Comparator,
     Func,
-    IterableIterators,
     int,
     Integer,
     isDefined,
+    IterableIterators,
     mod,
     Nullable,
     NumberComparator,
@@ -54,17 +54,19 @@ export namespace LoopableRegion {
     export interface LoopCycle {
         // index of the cycle
         index: int
-        // Full raw loop cycle, independent of region and search bounds
+        /* Full raw loop cycle, independent of region and search bounds */
         rawStart: ppqn
         rawEnd: ppqn
-        // Loop cycle clipped to fit within the defined region
+        /* Loop cycle clipped to fit within the defined region */
         regionStart: ppqn
         regionEnd: ppqn
-        // Loop cycle clipped to the result space based on the search range
+        /* Loop cycle clipped to the result space based on the search range */
         resultStart: ppqn
         resultEnd: ppqn
-        // Ratio indicating the start point within the result space (0 = full, >0 = clipped at the start)
-        // Ratio indicating the end point within the result space (1 = full, <1 = clipped at the end)
+        /*
+        Ratio indicating the start point within the result space (0 = full, >0 = clipped at the start)
+        Ratio indicating the end point within the result space (1 = full, <1 = clipped at the end)
+        */
         resultStartValue: unitValue
         resultEndValue: unitValue
     }

@@ -1,7 +1,7 @@
 import css from "./SidechainButton.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
-import {Option} from "@opendaw/lib-std"
-import {Address, BoxEditing, PointerField} from "@opendaw/lib-box"
+import {Option, Editing} from "@opendaw/lib-std"
+import {Address, PointerField} from "@opendaw/lib-box"
 import {Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {LabeledAudioOutput, RootBoxAdapter} from "@opendaw/studio-adapters"
@@ -11,7 +11,7 @@ import {MenuButton} from "@/ui/components/MenuButton"
 const className = Html.adoptStyleSheet(css, "SidechainButton")
 
 type Construct = {
-    editing: BoxEditing
+    editing: Editing
     rootBoxAdapter: RootBoxAdapter
     sideChain: PointerField<Pointers.SideChain>
 }

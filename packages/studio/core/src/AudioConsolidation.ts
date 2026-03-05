@@ -10,7 +10,7 @@ import {
     SampleService,
     WavFile,
     Workers
-} from "@opendaw/studio-core"
+} from "./index"
 
 export namespace AudioConsolidation {
     export const flatten = async (project: Project,

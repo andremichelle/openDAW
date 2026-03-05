@@ -10,10 +10,9 @@ import {
     Strings,
     Terminator,
     unitValue
-} from "@opendaw/lib-std"
+, Editing} from "@opendaw/lib-std"
 import {ValueDragging} from "@/ui/hooks/dragging.ts"
 import {ValueTooltip} from "@/ui/surface/ValueTooltip.tsx"
-import {BoxEditing} from "@opendaw/lib-box"
 import {CssUtils, Events, Html} from "@opendaw/lib-dom"
 import {Colors} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
@@ -101,7 +100,7 @@ export const MaximizerVolumeMarkers: ReadonlyArray<VolumeMarker> = [
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     parameter: Parameter<number>
     markers?: ReadonlyArray<VolumeMarker>
 }

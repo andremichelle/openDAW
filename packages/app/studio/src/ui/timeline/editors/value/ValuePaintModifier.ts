@@ -11,8 +11,7 @@ import {
     Terminable,
     unitValue,
     ValueAxis
-} from "@opendaw/lib-std"
-import {BoxEditing} from "@opendaw/lib-box"
+, Editing} from "@opendaw/lib-std"
 import {SelectableValueEvent, ValueEventBoxAdapter} from "@opendaw/studio-adapters"
 import {Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
@@ -22,7 +21,7 @@ import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     reader: ValueEventOwnerReader
     selection: Selection<ValueEventBoxAdapter>
@@ -35,7 +34,7 @@ type Stroke = { position: ppqn, value: unitValue }
 export class ValuePaintModifier implements ValueModifier {
     static create(construct: Construct): ValuePaintModifier {return new ValuePaintModifier(construct)}
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #reader: ValueEventOwnerReader
     readonly #selection: Selection<ValueEventBoxAdapter>

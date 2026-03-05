@@ -12,6 +12,7 @@ import {
     unitValue,
     UUID
 } from "@opendaw/lib-std"
+import {BoxEditing} from "@opendaw/lib-box"
 import {NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
 import {AudioUnitBoxAdapter, ColorCodes, TrackType} from "@opendaw/studio-adapters"
 import {PPQN, ppqn} from "@opendaw/lib-dsp"
@@ -111,7 +112,10 @@ export namespace MidiImport {
             }
         }
         console.time("midi-import")
-        const modificationProcess = editing.beginModification()
+        // TODO Remove the cast by refactoring
+        // use modify and revertPending on error
+        const boxEditing = editing as BoxEditing
+        const modificationProcess = boxEditing.beginModification()
         const {status, error} = await Promises.tryCatch(Wait.complete(generate()))
         console.timeEnd("midi-import")
         if (status === "resolved") {

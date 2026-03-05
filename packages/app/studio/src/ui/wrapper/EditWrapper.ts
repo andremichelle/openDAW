@@ -1,18 +1,14 @@
 import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
-import {BoxEditing, PrimitiveValues} from "@opendaw/lib-box"
-import {MutableObservableValue, ObservableValue, Observer, Subscription} from "@opendaw/lib-std"
+import {PrimitiveValues} from "@opendaw/lib-box"
+import {Editing, MutableObservableValue, ObservableValue, Observer, Subscription} from "@opendaw/lib-std"
 
 export namespace EditWrapper {
     export const forValue = <T extends PrimitiveValues>(
-        editing: BoxEditing, owner: MutableObservableValue<T>): MutableObservableValue<T> =>
+        editing: Editing, owner: MutableObservableValue<T>): MutableObservableValue<T> =>
         new class implements MutableObservableValue<T> {
             getValue(): T {return owner.getValue()}
             setValue(value: T) {
-                if (editing.mustModify()) {
-                    editing.modify(() => owner.setValue(value), false)
-                } else {
-                    owner.setValue(value)
-                }
+                editing.modify(() => owner.setValue(value), false)
             }
             subscribe(observer: Observer<ObservableValue<T>>): Subscription {
                 return owner.subscribe(() => observer(this))
@@ -23,16 +19,12 @@ export namespace EditWrapper {
         }
 
     export const forAutomatableParameter = <T extends PrimitiveValues>(
-        editing: BoxEditing,
+        editing: Editing,
         adapter: AutomatableParameterFieldAdapter<T>): MutableObservableValue<T> =>
         new class implements MutableObservableValue<T> {
             getValue(): T {return adapter.getControlledValue()}
             setValue(value: T) {
-                if (editing.mustModify()) {
-                    editing.modify(() => adapter.setValue(value))
-                } else {
-                    adapter.setValue(value)
-                }
+                editing.modify(() => adapter.setValue(value))
             }
             subscribe(observer: Observer<ObservableValue<T>>): Subscription {
                 return adapter.subscribe(() => observer(this))

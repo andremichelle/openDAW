@@ -16,7 +16,7 @@ export type CursorEvent = {
 
 export type CursorProvider<TYPE> = {
     get: (capture: TYPE, event: CursorEvent) => Maybe<CssUtils.Cursor | number>
-    leave?: () => void // cleanup, if you synchronized someting to certain cursors
+    leave?: () => void // cleanup, if you synchronized some controls to certain cursors
 }
 
 export const installCursor = <TARGET>(element: Element,

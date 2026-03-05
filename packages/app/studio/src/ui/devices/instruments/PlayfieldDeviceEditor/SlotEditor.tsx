@@ -5,7 +5,7 @@ import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Icon} from "@/ui/components/Icon"
 import {AutomatableParameterFieldAdapter, Gate, PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
-import {CanvasPainter} from "../../../../../../../studio/core/src/ui/canvas/painter"
+import {CanvasPainter} from "@opendaw/studio-core"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {ControlIndicator} from "@/ui/components/ControlIndicator"
@@ -16,8 +16,7 @@ import {RadioGroup} from "@/ui/components/RadioGroup"
 import {ParameterLabel} from "@/ui/components/ParameterLabel"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import {SnapValueThresholdInPixels} from "@/ui/timeline/editors/value/ValueMoveModifier"
-import {Colors} from "@opendaw/studio-enums"
-import {IconSymbol, Pointers} from "@opendaw/studio-enums"
+import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {PointerField} from "@opendaw/lib-box"
 
 const className = Html.adoptStyleSheet(css, "SlotEditor")
@@ -87,7 +86,7 @@ export const SlotEditor = ({lifecycle, service, adapter}: Construct) => {
                         }
                     }, false)
                 },
-                cancel: () => editing.clearPending(),
+                cancel: () => editing.revertPending(),
                 approve: () => editing.mark()
             } satisfies Dragging.Process)
         }),

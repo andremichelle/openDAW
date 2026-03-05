@@ -3,7 +3,7 @@ import {SoundfontLoader, SoundfontLoaderManager, SoundfontMetaData} from "@opend
 import {DefaultSoundfontLoader} from "./DefaultSoundfontLoader"
 import {SoundfontProvider} from "./SoundfontProvider"
 
-export class DefaultSoundfontLoaderManager implements SoundfontLoaderManager, SoundfontProvider {
+export class GlobalSoundfontLoaderManager implements SoundfontLoaderManager, SoundfontProvider {
     readonly #provider: SoundfontProvider
     readonly #loaders: SortedSet<UUID.Bytes, SoundfontLoader>
 

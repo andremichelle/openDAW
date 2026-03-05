@@ -1,5 +1,5 @@
 import css from "./PropertyTable.sass?inline"
-import {Arrays, Lifecycle, Nullable, Option, Selection} from "@opendaw/lib-std"
+import {Arrays, Lifecycle, Nullable, Option, Selection, Editing} from "@opendaw/lib-std"
 import {deferNextFrame, Html} from "@opendaw/lib-dom"
 import {TimeCodeInput} from "@/ui/components/TimeCodeInput.tsx"
 import {PropertyParameters} from "@/ui/timeline/editors/notes/property/PropertyParameters.ts"
@@ -8,7 +8,6 @@ import {createElement, Inject} from "@opendaw/lib-jsx"
 import {MidiKeys} from "@opendaw/lib-dsp"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {BoxEditing} from "@opendaw/lib-box"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {NoteModifyStrategies} from "@/ui/timeline/editors/notes/NoteModifyStrategies.ts"
@@ -20,7 +19,7 @@ type Construct = {
     lifecycle: Lifecycle
     selection: Selection<NoteEventBoxAdapter>
     modifyContext: ObservableModifyContext<NoteModifier>
-    editing: BoxEditing
+    editing: Editing
 }
 
 export const PropertyTable = ({lifecycle, selection, modifyContext, editing}: Construct) => {

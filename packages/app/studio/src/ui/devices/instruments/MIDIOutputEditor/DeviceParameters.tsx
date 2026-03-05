@@ -1,17 +1,16 @@
 import css from "./DeviceParameters.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {clamp, int, Lifecycle, ParseResult, StringResult} from "@opendaw/lib-std"
+import {clamp, int, Lifecycle, ParseResult, StringResult, Editing} from "@opendaw/lib-std"
 import {createElement, Frag} from "@opendaw/lib-jsx"
 import {NumberInput} from "@/ui/components/NumberInput"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
-import {BoxEditing} from "@opendaw/lib-box"
 import {MIDIOutputDeviceBox} from "@opendaw/studio-boxes"
 
 const className = Html.adoptStyleSheet(css, "DeviceParameters")
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     box: MIDIOutputDeviceBox
 }
 

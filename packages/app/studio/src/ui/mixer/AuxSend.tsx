@@ -1,5 +1,5 @@
 import css from "./AuxSend.sass?inline"
-import {DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
+import {DefaultObservableValue, Lifecycle, Editing} from "@opendaw/lib-std"
 import {createElement, DomElement, Inject} from "@opendaw/lib-jsx"
 import {AuxSendBoxAdapter} from "@opendaw/studio-adapters"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
@@ -9,14 +9,13 @@ import {MenuItem} from "@opendaw/studio-core"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {IconCartridge} from "@/ui/components/Icon.tsx"
 import {SnapCenter} from "@/ui/configs.ts"
-import {BoxEditing} from "@opendaw/lib-box"
 import {Html} from "@opendaw/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "AuxSend")
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     adapter: AuxSendBoxAdapter
 }
 

@@ -39,6 +39,11 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
         ]).then(EmptyExec)
     }
 
+    async exists(uuid: UUID.Bytes): Promise<boolean> {
+        const path = `${this.folder}/${UUID.toString(uuid)}`
+        return Workers.Opfs.exists(path)
+    }
+
     async updateSampleMeta(uuid: UUID.Bytes, meta: SampleMetaData): Promise<void> {
         const path = `${this.folder}/${UUID.toString(uuid)}`
         return Workers.Opfs.write(`${path}/meta.json`, new TextEncoder().encode(JSON.stringify(meta)))

@@ -22,7 +22,7 @@ export namespace MetaData {
      * @param value The value to store. Must be JSON-serializable.
      * @param origin The origin of the meta-data. Must be unique to the app.
      */
-    export const store = (target: Box<Pointers.MetaData>, value: JSONValue, origin: string): void => {
+    export const store = (target: Box<Pointers.MetaData | Pointers>, value: JSONValue, origin: string): void => {
         if (origin === "") {return panic("MetaData.store: origin must be unique to your app.")}
         const available = target.pointerHub
             .filter(Pointers.MetaData)
@@ -44,7 +44,7 @@ export namespace MetaData {
      * Reads the meta-data from the target box.
      * Returns a failed Attempt if no meta-data is found or the value is not deserializable.
      * @param target The box to read the meta-data from.
-     * @param origin The origin of the meta-data. Must be unique to the app.
+     * @param origin The origin of the meta-data. Should be unique to the app.
      */
     export const read = (target: Box<Pointers.MetaData | Pointers>, origin: string): Nullable<JSONValue> => {
         if (origin === "") {return panic("MetaData.read: origin must be unique to your app.")}

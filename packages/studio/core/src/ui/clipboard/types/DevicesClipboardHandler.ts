@@ -1,5 +1,5 @@
-import {ByteArrayInput, ByteArrayOutput, int, isDefined, Option, Optional, Provider, RuntimeNotifier} from "@opendaw/lib-std"
-import {Box, BoxEditing, BoxGraph} from "@opendaw/lib-box"
+import {ByteArrayInput, ByteArrayOutput, Editing, int, isDefined, Option, Optional, Provider, RuntimeNotifier} from "@opendaw/lib-std"
+import {Box, BoxGraph} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {
     AudioEffectDeviceAdapter,
@@ -32,7 +32,7 @@ type DeviceMetadata = {
 export namespace DevicesClipboard {
     export type Context = {
         readonly getEnabled: Provider<boolean>
-        readonly editing: BoxEditing
+        readonly editing: Editing
         readonly selection: FilteredSelection<DeviceBoxAdapter>
         readonly boxGraph: BoxGraph
         readonly boxAdapters: BoxAdapters

@@ -44,7 +44,7 @@ export class Recording {
             engine.isCountingIn.subscribe(stop),
             Terminable.create(() => Recording.#instance = Option.None)
         )
-        this.#instance = Option.wrap(new Recording(countIn, engine.position.getValue()))
+        this.#instance = Option.wrap(new Recording(countIn && !engine.isPlaying.getValue(), engine.position.getValue()))
         return terminator
     }
 

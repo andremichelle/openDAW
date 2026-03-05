@@ -161,8 +161,10 @@ export class ProjectProfileService {
                 ]
             })
             if (file.name.endsWith(".json")) {
+                console.debug("importing json file")
                 const jsonString = await file.text()
                 const json = JSON.parse(jsonString)
+                console.debug("parsed json", json)
                 const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
                 boxGraph.fromJSON(json)
                 boxGraph.debugBoxes()
@@ -178,7 +180,7 @@ export class ProjectProfileService {
             }
         } catch (error) {
             if (!Errors.isAbort(error)) {
-                Dialogs.info({headline: "Could not load project", message: String(error)}).finally()
+                Dialogs.info({headline: "Could not load json", message: String(error)}).finally()
             }
         }
     }

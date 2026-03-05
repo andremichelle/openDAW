@@ -3,6 +3,30 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.119](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.0.118...@opendaw/studio-core@0.0.119) (2026-03-04)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.0.118](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.0.117...@opendaw/studio-core@0.0.118) (2026-03-04)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.0.117](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.0.116...@opendaw/studio-core@0.0.117) (2026-03-03)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.0.116](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.0.115...@opendaw/studio-core@0.0.116) (2026-03-03)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.0.115](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.0.114...@opendaw/studio-core@0.0.115) (2026-03-03)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.0.114](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.0.113...@opendaw/studio-core@0.0.114) (2026-03-02)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
 ## [0.0.113](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.0.112...@opendaw/studio-core@0.0.113) (2026-03-02)
 
 **Note:** Version bump only for package @opendaw/studio-core

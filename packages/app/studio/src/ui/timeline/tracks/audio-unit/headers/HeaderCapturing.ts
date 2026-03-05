@@ -1,4 +1,4 @@
-import {ElementCapturing} from "../../../../../../../../studio/core/src/ui/canvas/capturing"
+import {ElementCapturing} from "@opendaw/studio-core"
 import {BinarySearch, int, Nullable, NumberComparator} from "@opendaw/lib-std"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager"

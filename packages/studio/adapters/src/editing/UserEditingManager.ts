@@ -1,5 +1,4 @@
-import {Terminable, Terminator} from "@opendaw/lib-std"
-import {BoxEditing} from "@opendaw/lib-box"
+import {Editing, Terminable, Terminator} from "@opendaw/lib-std"
 import {UserInterfaceBox} from "@opendaw/studio-boxes"
 import {UserEditing} from "./UserEditing"
 
@@ -9,7 +8,7 @@ export class UserEditingManager implements Terminable {
     readonly #timeline: UserEditing
     readonly #audioUnit: UserEditing
 
-    constructor(editing: BoxEditing) {
+    constructor(editing: Editing) {
         this.#terminator = new Terminator()
         this.#modularSystem = this.#terminator.own(new UserEditing(editing))
         this.#timeline = this.#terminator.own(new UserEditing(editing))
