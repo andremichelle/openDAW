@@ -40,6 +40,20 @@ The source code for openDAW is available under **AGPL v3 (or later)**
 
 ---
 
+## Looking for Contributors
+
+We are looking for contributors who can write **clean, human-written code** that follows the existing style and conventions of the project. No AI-generated submissions!
+
+If you are interested in helping, here are areas where we need support:
+
+1. **Offline App** — e.g. wrapping openDAW with [Tauri](https://tauri.app/) for a native desktop experience
+2. **PWA** — turning openDAW into a fully installable Progressive Web App with offline support
+3. **Timeline Track Management** — design and UX help for track layout, ordering, grouping, and interaction
+
+We always appreciate help on open issues: https://github.com/andremichelle/openDAW/issues
+
+---
+
 ## Huge Shoutout To The Incredible openDAW Community!
 
 To everyone who has contributed feedback, reported bugs, suggested improvements, or helped spread the word — thank you!
