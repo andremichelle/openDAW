@@ -46,12 +46,12 @@ const ensureDir = (filePath) => {
     }
 }
 
-const collectFiles = (dir, prefix) => {
+const collectFiles = (dir, relativeBase = "") => {
     const results = []
     if (!fs.existsSync(dir)) return results
     const entries = fs.readdirSync(dir, {withFileTypes: true})
     for (const entry of entries) {
-        const relative = prefix ? `${prefix}/${entry.name}` : entry.name
+        const relative = relativeBase ? `${relativeBase}/${entry.name}` : entry.name
         if (entry.isDirectory()) {
             results.push(...collectFiles(path.join(dir, entry.name), relative))
         } else {
@@ -104,7 +104,7 @@ const server = http.createServer(async (req, res) => {
                 res.end("Invalid path")
                 return
             }
-            const files = collectFiles(searchDir, prefix || undefined)
+            const files = collectFiles(searchDir)
             res.writeHead(200, {"Content-Type": "application/json"})
             res.end(JSON.stringify(files))
             return
