@@ -104,6 +104,7 @@ export namespace PreferencesPageLabels {
             fields: {
                 countInBars: "Count-in bars",
                 allowTakes: "Allow takes",
+                automationEnabled: "Record automation",
                 olderTakeAction: "Older take action",
                 olderTakeScope: "Older take scope"
             }
