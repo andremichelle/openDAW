@@ -6,13 +6,17 @@ export class SelfHostedHandler implements CloudHandler {
 
     constructor(baseUrl: string) {this.#baseUrl = baseUrl.replace(/\/$/, "")}
 
+    #encodePath(path: string): string {
+        return path.split("/").map(encodeURIComponent).join("/")
+    }
+
     async alive(): Promise<void> {
         const response = await fetch(`${this.#baseUrl}/health`)
         if (!response.ok) {throw new Error(`Storage server unreachable: ${response.status}`)}
     }
 
     async upload(path: string, data: ArrayBuffer): Promise<void> {
-        const response = await fetch(`${this.#baseUrl}/files/${encodeURIComponent(path)}`, {
+        const response = await fetch(`${this.#baseUrl}/files/${this.#encodePath(path)}`, {
             method: "PUT",
             body: data
         })
@@ -20,14 +24,14 @@ export class SelfHostedHandler implements CloudHandler {
     }
 
     async download(path: string): Promise<ArrayBuffer> {
-        const response = await fetch(`${this.#baseUrl}/files/${encodeURIComponent(path)}`)
+        const response = await fetch(`${this.#baseUrl}/files/${this.#encodePath(path)}`)
         if (response.status === 404) {throw new Errors.FileNotFound(path)}
         if (!response.ok) {throw new Error(`Download failed: ${response.status}`)}
         return response.arrayBuffer()
     }
 
     async exists(path: string): Promise<boolean> {
-        const response = await fetch(`${this.#baseUrl}/files/${encodeURIComponent(path)}`, {method: "HEAD"})
+        const response = await fetch(`${this.#baseUrl}/files/${this.#encodePath(path)}`, {method: "HEAD"})
         return response.ok
     }
 
@@ -39,7 +43,7 @@ export class SelfHostedHandler implements CloudHandler {
     }
 
     async delete(path: string): Promise<void> {
-        const response = await fetch(`${this.#baseUrl}/files/${encodeURIComponent(path)}`, {method: "DELETE"})
+        const response = await fetch(`${this.#baseUrl}/files/${this.#encodePath(path)}`, {method: "DELETE"})
         if (!response.ok) {throw new Error(`Delete failed: ${response.status}`)}
     }
 }
