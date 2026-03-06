@@ -69,94 +69,107 @@ const readBody = (req) => new Promise((resolve, reject) => {
 })
 
 const server = http.createServer(async (req, res) => {
-    const headers = corsHeaders(req)
-    for (const [key, value] of Object.entries(headers)) {
-        res.setHeader(key, value)
-    }
-    if (req.method === "OPTIONS") {
-        res.writeHead(204)
-        res.end()
-        return
-    }
-    if (!checkOrigin(req)) {
-        res.writeHead(403, {"Content-Type": "text/plain"})
-        res.end("Forbidden")
-        return
-    }
-    const url = new URL(req.url, `http://${req.headers.host}`)
-    if (url.pathname === "/health") {
-        res.writeHead(200, {"Content-Type": "text/plain"})
-        res.end("ok")
-        return
-    }
-    if (!url.pathname.startsWith("/files")) {
-        res.writeHead(404, {"Content-Type": "text/plain"})
-        res.end("Not Found")
-        return
-    }
-    const filePath = url.pathname.slice("/files".length).replace(/^\//, "")
-    if (req.method === "GET" && (!filePath || filePath === "")) {
-        const prefix = url.searchParams.get("prefix") || ""
-        const searchDir = safePath(prefix)
-        if (!searchDir) {
+    try {
+        const headers = corsHeaders(req)
+        for (const [key, value] of Object.entries(headers)) {
+            res.setHeader(key, value)
+        }
+        if (req.method === "OPTIONS") {
+            res.writeHead(204)
+            res.end()
+            return
+        }
+        if (!checkOrigin(req)) {
+            res.writeHead(403, {"Content-Type": "text/plain"})
+            res.end("Forbidden")
+            return
+        }
+        const url = new URL(req.url, `http://${req.headers.host}`)
+        if (url.pathname === "/health") {
+            res.writeHead(200, {"Content-Type": "text/plain"})
+            res.end("ok")
+            return
+        }
+        if (!url.pathname.startsWith("/files")) {
+            res.writeHead(404, {"Content-Type": "text/plain"})
+            res.end("Not Found")
+            return
+        }
+        const filePath = url.pathname.slice("/files".length).replace(/^\//, "")
+        if (req.method === "GET" && (!filePath || filePath === "")) {
+            const prefix = url.searchParams.get("prefix") || ""
+            const searchDir = safePath(prefix)
+            if (!searchDir) {
+                res.writeHead(400, {"Content-Type": "text/plain"})
+                res.end("Invalid path")
+                return
+            }
+            const files = collectFiles(searchDir, prefix || undefined)
+            res.writeHead(200, {"Content-Type": "application/json"})
+            res.end(JSON.stringify(files))
+            return
+        }
+        const resolved = safePath(filePath)
+        if (!resolved) {
             res.writeHead(400, {"Content-Type": "text/plain"})
             res.end("Invalid path")
             return
         }
-        const files = collectFiles(searchDir, prefix || undefined)
-        res.writeHead(200, {"Content-Type": "application/json"})
-        res.end(JSON.stringify(files))
-        return
-    }
-    const resolved = safePath(filePath)
-    if (!resolved) {
-        res.writeHead(400, {"Content-Type": "text/plain"})
-        res.end("Invalid path")
-        return
-    }
-    switch (req.method) {
-        case "PUT": {
-            const body = await readBody(req)
-            ensureDir(resolved)
-            fs.writeFileSync(resolved, body)
-            res.writeHead(204)
-            res.end()
-            break
-        }
-        case "GET": {
-            if (!fs.existsSync(resolved) || fs.statSync(resolved).isDirectory()) {
-                res.writeHead(404, {"Content-Type": "text/plain"})
-                res.end("Not Found")
-                return
+        switch (req.method) {
+            case "PUT": {
+                const body = await readBody(req)
+                ensureDir(resolved)
+                fs.writeFileSync(resolved, body)
+                res.writeHead(204)
+                res.end()
+                break
             }
-            const data = fs.readFileSync(resolved)
-            res.writeHead(200, {
-                "Content-Type": "application/octet-stream",
-                "Content-Length": data.length
-            })
-            res.end(data)
-            break
-        }
-        case "HEAD": {
-            if (fs.existsSync(resolved) && !fs.statSync(resolved).isDirectory()) {
-                res.writeHead(200)
-            } else {
-                res.writeHead(404)
+            case "GET": {
+                if (!fs.existsSync(resolved) || fs.statSync(resolved).isDirectory()) {
+                    res.writeHead(404, {"Content-Type": "text/plain"})
+                    res.end("Not Found")
+                    return
+                }
+                const data = fs.readFileSync(resolved)
+                res.writeHead(200, {
+                    "Content-Type": "application/octet-stream",
+                    "Content-Length": data.length
+                })
+                res.end(data)
+                break
             }
-            res.end()
-            break
-        }
-        case "DELETE": {
-            if (fs.existsSync(resolved)) {
-                fs.unlinkSync(resolved)
+            case "HEAD": {
+                if (fs.existsSync(resolved) && !fs.statSync(resolved).isDirectory()) {
+                    res.writeHead(200)
+                } else {
+                    res.writeHead(404)
+                }
+                res.end()
+                break
             }
-            res.writeHead(204)
-            res.end()
-            break
+            case "DELETE": {
+                if (fs.existsSync(resolved)) {
+                    const stat = fs.statSync(resolved)
+                    if (stat.isDirectory()) {
+                        fs.rmSync(resolved, {recursive: true})
+                    } else {
+                        fs.unlinkSync(resolved)
+                    }
+                }
+                res.writeHead(204)
+                res.end()
+                break
+            }
+            default: {
+                res.writeHead(405, {"Content-Type": "text/plain"})
+                res.end("Method Not Allowed")
+            }
         }
-        default: {
-            res.writeHead(405, {"Content-Type": "text/plain"})
-            res.end("Method Not Allowed")
+    } catch (err) {
+        console.error("Request error:", req.method, req.url, err)
+        if (!res.headersSent) {
+            res.writeHead(500, {"Content-Type": "text/plain"})
+            res.end("Internal Server Error")
         }
     }
 })
