@@ -2,6 +2,7 @@
 
 import {WebSocketServer} from "ws"
 import https from "https"
+import http from "http"
 import fs from "fs"
 import * as number from "lib0/number"
 import {setupWSConnection} from "./utils.js"
@@ -10,19 +11,26 @@ import * as map from 'lib0/map'
 const host = process.env.HOST || "0.0.0.0"
 const port = number.parseInt(process.env.PORT || "443")
 const isDev = process.env.NODE_ENV === "development"
+const disableTls = process.env.DISABLE_TLS === "true"
 
-const certConfig = isDev ? {
-    key: fs.readFileSync("../../../certs/localhost-key.pem"),
-    cert: fs.readFileSync("../../../certs/localhost.pem"),
-} : {
-    key: fs.readFileSync("/etc/letsencrypt/live/live.opendaw.studio/privkey.pem"),
-    cert: fs.readFileSync("/etc/letsencrypt/live/live.opendaw.studio/fullchain.pem"),
-}
-
-const server = https.createServer(certConfig, (_req, res) => {
+const requestHandler = (_req, res) => {
     res.writeHead(200, {"Content-Type": "text/plain"})
     res.end("okay")
-})
+}
+
+let server
+if (disableTls) {
+    server = http.createServer(requestHandler)
+} else {
+    const certConfig = isDev ? {
+        key: fs.readFileSync("../../../certs/localhost-key.pem"),
+        cert: fs.readFileSync("../../../certs/localhost.pem"),
+    } : {
+        key: fs.readFileSync("/etc/letsencrypt/live/live.opendaw.studio/privkey.pem"),
+        cert: fs.readFileSync("/etc/letsencrypt/live/live.opendaw.studio/fullchain.pem"),
+    }
+    server = https.createServer(certConfig, requestHandler)
+}
 
 // Yjs sync WebSocket server
 const wss = new WebSocketServer({noServer: true})
@@ -144,8 +152,9 @@ server.on("upgrade", (req, socket, head) => {
     }
 })
 
+const protocol = disableTls ? "ws" : "wss"
 server.listen(port, host, () => {
-    console.log(`running at '${host}' on port ${port} (${isDev ? 'development' : 'production'})`)
-    console.log(`- Yjs sync: wss://${host === '0.0.0.0' ? 'localhost' : host}:${port}/`)
-    console.log(`- WebRTC signaling: wss://${host === '0.0.0.0' ? 'localhost' : host}:${port}/signaling`)
+    console.log(`running at '${host}' on port ${port} (${isDev ? 'development' : 'production'}${disableTls ? ', TLS disabled' : ''})`)
+    console.log(`- Yjs sync: ${protocol}://${host === '0.0.0.0' ? 'localhost' : host}:${port}/`)
+    console.log(`- WebRTC signaling: ${protocol}://${host === '0.0.0.0' ? 'localhost' : host}:${port}/signaling`)
 })

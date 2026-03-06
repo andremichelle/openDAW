@@ -237,13 +237,15 @@ const pingTimeout = 30000
 export const setupWSConnection = (conn, req, {docName = (req.url || '').slice(1).split('?')[0], gc = true} = {}) => {
     console.log("Incoming WS from origin:", req.headers.origin)
 
-    // ✅ Allow only specific origins
     const allowedOrigins = [
         'https://opendaw.studio',
         'https://live.opendaw.studio',
         'https://localhost:8080',
         'https://inspector.yjs.dev'
     ]
+    if (process.env.ALLOWED_ORIGINS) {
+        process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).forEach(o => allowedOrigins.push(o))
+    }
     const origin = req.headers.origin
     if (origin && !allowedOrigins.includes(origin)) {
         console.warn('Rejected WS connection from origin:', origin)

@@ -11,9 +11,9 @@ import {WebsocketProvider} from "y-websocket"
 // https://inspector.yjs.dev/
 
 export namespace YService {
-    const USE_LOCAL_SERVER = false
-    const LOCAL_SERVER_URL = "wss://localhost:1234"
-    const ONLINE_SERVER_URL = "wss://live.opendaw.studio"
+    const USE_LOCAL_SERVER = import.meta.env.VITE_VJS_USE_LOCAL_SERVER === "true"
+    const LOCAL_SERVER_URL = import.meta.env.VITE_VJS_LOCAL_SERVER_URL || "wss://localhost:1234"
+    const ONLINE_SERVER_URL = import.meta.env.VITE_VJS_ONLINE_SERVER_URL || "wss://live.opendaw.studio"
     const serverUrl = USE_LOCAL_SERVER ? LOCAL_SERVER_URL : ONLINE_SERVER_URL
 
     export const getOrCreateRoom = async (optProject: Option<Project>,

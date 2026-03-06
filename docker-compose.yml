@@ -1,0 +1,23 @@
+services:
+  studio:
+    build:
+      context: .
+      dockerfile: docker/studio.Dockerfile
+      args:
+        VITE_VJS_ONLINE_SERVER_URL: wss://live.opendaw.wheneverbaby.ca
+    ports:
+      - "9090:80"
+    restart: unless-stopped
+
+  yjs-server:
+    build:
+      context: .
+      dockerfile: docker/yjs.Dockerfile
+    ports:
+      - "5678:1234"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "1234"
+      DISABLE_TLS: "true"
+      ALLOWED_ORIGINS: "https://opendaw.wheneverbaby.ca"
+    restart: unless-stopped
