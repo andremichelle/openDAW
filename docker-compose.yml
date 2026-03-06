@@ -33,7 +33,7 @@ services:
       context: .
       dockerfile: docker/storage.Dockerfile
     ports:
-      - "3000:3000"
+      - "3473:3000"
     environment:
       PORT: "3000"
       STORAGE_DIR: "/data"
