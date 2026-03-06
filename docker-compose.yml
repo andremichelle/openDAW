@@ -6,6 +6,8 @@ services:
       args:
         VITE_VJS_ONLINE_SERVER_URL: wss://live.opendaw.wheneverbaby.ca
         VITE_SELFHOSTED_STORAGE_URL: https://storage.opendaw.wheneverbaby.ca
+        VITE_API_ROOT: https://api.opendaw.wheneverbaby.ca
+        VITE_ASSETS_ROOT: https://assets.opendaw.wheneverbaby.ca
     ports:
       - "9090:80"
     restart: unless-stopped

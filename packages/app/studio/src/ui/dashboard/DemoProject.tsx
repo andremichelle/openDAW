@@ -13,7 +13,7 @@ type Construct = {
 
 export const DemoProject = ({json, load}: Construct) => {
     const coverUrl = json.hasCover
-        ? `https://api.opendaw.studio/music/cover.php?id=${json.id}&preview=true`
+        ? `${import.meta.env.VITE_API_ROOT || "https://api.opendaw.studio"}/music/cover.php?id=${json.id}&preview=true`
         : "./empty.svg"
     return (
         <div className={className} onclick={load}>

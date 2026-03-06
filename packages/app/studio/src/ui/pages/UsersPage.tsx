@@ -14,7 +14,7 @@ export const UsersPage: PageFactory<StudioService> = ({lifecycle}: PageContext<S
         <div className={className}>
             <h1>Peak Concurrent Users</h1>
             <Await
-                factory={() => fetch("https://api.opendaw.studio/users/graph.json", {
+                factory={() => fetch(`${import.meta.env.VITE_API_ROOT || "https://api.opendaw.studio"}/users/graph.json`, {
                     mode: "cors",
                     credentials: "include"
                 })
