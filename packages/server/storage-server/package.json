@@ -1,0 +1,13 @@
+{
+    "type": "module",
+    "name": "storage-server",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "dev": "HOST=0.0.0.0 PORT=3000 node server.js",
+        "start": "HOST=0.0.0.0 PORT=3000 node server.js"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC"
+}

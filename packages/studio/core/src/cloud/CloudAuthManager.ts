@@ -4,10 +4,12 @@ import {CloudService} from "./CloudService"
 import {CloudHandler} from "./CloudHandler"
 import {DropboxHandler} from "./DropboxHandler"
 import {GoogleDriveHandler} from "./GoogleDriveHandler"
+import {SelfHostedHandler} from "./SelfHostedHandler"
 
 type ClientIds = {
     Dropbox: string
     GoogleDrive: string
+    SelfHostedStorageUrl?: string
 }
 
 export class CloudAuthManager {
@@ -44,6 +46,13 @@ export class CloudAuthManager {
                 }
                 case "GoogleDrive": {
                     return Promises.memoizeAsync(this.#oauthGoogle.bind(this), TimeSpan.hours(1))
+                }
+                case "SelfHosted": {
+                    const url = this.#clientIds.SelfHostedStorageUrl
+                    if (!isDefined(url) || url === "") {
+                        return panic("Self-hosted storage URL is not configured")
+                    }
+                    return () => Promise.resolve(new SelfHostedHandler(url))
                 }
                 default:
                     return panic(`Unsupported service: ${service}`)

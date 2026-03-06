@@ -1,1 +1,1 @@
-export type CloudService = "Dropbox" | "GoogleDrive"
+export type CloudService = "Dropbox" | "GoogleDrive" | "SelfHosted"
