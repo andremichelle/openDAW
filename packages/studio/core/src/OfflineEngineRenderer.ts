@@ -1,8 +1,10 @@
-import {Errors, int, isDefined, Nullable, Option, panic, Progress, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, int, isDefined, Nullable, Option, panic, SyncStream, Terminable, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
 import {AudioData, ppqn} from "@opendaw/lib-dsp"
 import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
+import {AnimationFrame} from "@opendaw/lib-dom"
 import {
     EngineCommands,
+    EngineState,
     EngineStateSchema,
     EngineToClient,
     ExportStemsConfiguration,
@@ -41,8 +43,8 @@ export class OfflineEngineRenderer {
         const protocol = Communicator.sender<OfflineEngineProtocol>(
             messenger.channel("offline-engine"),
             dispatcher => new class implements OfflineEngineProtocol {
-                initialize(enginePort: MessagePort, progressPort: MessagePort, config: OfflineEngineInitializeConfig): Promise<void> {
-                    return dispatcher.dispatchAndReturn(this.initialize, enginePort, progressPort, config)
+                initialize(enginePort: MessagePort, config: OfflineEngineInitializeConfig): Promise<void> {
+                    return dispatcher.dispatchAndReturn(this.initialize, enginePort, config)
                 }
                 render(config: OfflineEngineRenderConfig): Promise<Float32Array[]> {
                     return dispatcher.dispatchAndReturn(this.render, config)
@@ -54,8 +56,8 @@ export class OfflineEngineRenderer {
             }
         )
         const channel = new MessageChannel()
-        const progressChannel = new MessageChannel()
-        const syncStreamBuffer = new SharedArrayBuffer(EngineStateSchema().bytesTotal + 1)
+        const engineStateIO = EngineStateSchema()
+        const reader = SyncStream.reader<EngineState>(engineStateIO, () => {})
         const controlFlagsBuffer = new SharedArrayBuffer(4)
         const terminator = new Terminator()
         const engineMessenger = Messenger.for(channel.port2)
@@ -119,18 +121,17 @@ export class OfflineEngineRenderer {
         )
 
         channel.port2.start()
-        progressChannel.port2.start()
 
         terminator.own(source.liveStreamReceiver.connect(engineMessenger.channel("engine-live-data")))
 
         const {port, sab} = terminator.own(MIDIReceiver.create(() => 0,
             (deviceId, data, relativeTimeInMs) => source.receivedMIDIFromEngine(deviceId, data, relativeTimeInMs)))
 
-        await protocol.initialize(channel.port1, progressChannel.port1, {
+        await protocol.initialize(channel.port1, {
             sampleRate,
             numberOfChannels,
             processorsUrl: AudioWorklets.processorsUrl,
-            syncStreamBuffer,
+            syncStreamBuffer: reader.buffer,
             controlFlagsBuffer,
             project: source.toArrayBuffer(),
             exportConfiguration: optExportConfiguration.unwrapOrUndefined()
@@ -143,7 +144,8 @@ export class OfflineEngineRenderer {
             protocol,
             engineCommands,
             terminator,
-            progressChannel.port2,
+            reader,
+            engineStateIO,
             sampleRate,
             numberOfChannels
         )
@@ -151,7 +153,7 @@ export class OfflineEngineRenderer {
 
     static async start(source: Project,
                        optExportConfiguration: Option<ExportStemsConfiguration>,
-                       progress: Progress.Handler,
+                       progress: DefaultObservableValue<number>,
                        abortSignal?: AbortSignal,
                        sampleRate: int = 48_000
     ): Promise<AudioData> {
@@ -160,8 +162,9 @@ export class OfflineEngineRenderer {
         boxGraph.beginTransaction()
         enabled.setValue(false)
         boxGraph.endTransaction()
+        const endPosition = source.lastRegionAction()
         const renderer = await this.create(source, optExportConfiguration, sampleRate)
-        const result = await renderer.render({}, progress, abortSignal)
+        const result = await renderer.render({}, endPosition, progress, abortSignal)
         boxGraph.beginTransaction()
         enabled.setValue(wasEnabled)
         boxGraph.endTransaction()
@@ -172,7 +175,8 @@ export class OfflineEngineRenderer {
     readonly #protocol: OfflineEngineProtocol
     readonly #engineCommands: EngineCommands
     readonly #terminator: Terminator
-    readonly #progressPort: MessagePort
+    readonly #reader: SyncStream.Reader
+    readonly #engineStateIO: ReturnType<typeof EngineStateSchema>
     readonly #sampleRate: int
     readonly #numberOfChannels: int
 
@@ -183,7 +187,8 @@ export class OfflineEngineRenderer {
         protocol: OfflineEngineProtocol,
         engineCommands: EngineCommands,
         terminator: Terminator,
-        progressPort: MessagePort,
+        reader: SyncStream.Reader,
+        engineStateIO: ReturnType<typeof EngineStateSchema>,
         sampleRate: int,
         numberOfChannels: int
     ) {
@@ -191,7 +196,8 @@ export class OfflineEngineRenderer {
         this.#protocol = protocol
         this.#engineCommands = engineCommands
         this.#terminator = terminator
-        this.#progressPort = progressPort
+        this.#reader = reader
+        this.#engineStateIO = engineStateIO
         this.#sampleRate = sampleRate
         this.#numberOfChannels = numberOfChannels
     }
@@ -232,30 +238,35 @@ export class OfflineEngineRenderer {
 
     async render(
         config: OfflineEngineRenderConfig,
-        progress: Progress.Handler,
+        endPosition: ppqn,
+        progress: DefaultObservableValue<number>,
         abortSignal?: AbortSignal
     ): Promise<AudioData> {
         const {promise, reject, resolve} = Promise.withResolvers<AudioData>()
         let cancelled = false
-
+        const polling = endPosition > 0
+            ? AnimationFrame.add(() => {
+                this.#reader.tryRead()
+                progress.setValue(Math.min(1.0, this.#engineStateIO.object.position / endPosition))
+            })
+            : Terminable.Empty
         if (isDefined(abortSignal)) {
             abortSignal.onabort = () => {
+                polling.terminate()
                 this.stop()
                 this.terminate()
                 cancelled = true
                 reject(Errors.AbortError)
             }
         }
-
-        this.#progressPort.onmessage = (event: MessageEvent<{ frames: number }>) =>
-            progress(event.data.frames / this.#sampleRate)
-
         while (!await this.#engineCommands.queryLoadingComplete()) {
             await Wait.timeSpan(TimeSpan.millis(100))
         }
         this.play()
         this.#protocol.render(config).then(channels => {
+            polling.terminate()
             if (cancelled) {return}
+            progress.setValue(1.0)
             this.terminate()
             const numberOfFrames = channels[0].length
             const audioData = AudioData.create(this.#sampleRate, numberOfFrames, this.#numberOfChannels)
@@ -264,6 +275,7 @@ export class OfflineEngineRenderer {
             }
             resolve(audioData)
         }).catch(reason => {
+            polling.terminate()
             if (!cancelled) {
                 this.terminate()
                 reject(reason)

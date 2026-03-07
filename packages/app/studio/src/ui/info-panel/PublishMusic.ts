@@ -1,5 +1,5 @@
 import {OfflineEngineRenderer, ProjectBundle, ProjectProfile, WavFile} from "@opendaw/studio-core"
-import {isDefined, Option, panic, Procedure, Progress, TimeSpan} from "@opendaw/lib-std"
+import {DefaultObservableValue, isDefined, Option, panic, Procedure, Progress} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 
 export namespace PublishMusic {
@@ -10,7 +10,8 @@ export namespace PublishMusic {
         if (bundleResult.status === "rejected") {
             return panic(bundleResult.error)
         }
-        const renderProgress = (seconds: number) => `Mixdown audio...(${log(TimeSpan.toHHMMSS(seconds))})`
+        log("Mixdown audio...")
+        const renderProgress = new DefaultObservableValue(0.0)
         const mixdownResult = await Promises.tryCatch(OfflineEngineRenderer.start(profile.project, Option.None, renderProgress))
         if (mixdownResult.status === "rejected") {
             return panic(mixdownResult.error)

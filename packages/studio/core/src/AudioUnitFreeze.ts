@@ -1,4 +1,4 @@
-import {Errors, Notifier, Observer, Option, RuntimeNotifier, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, Notifier, Observer, Option, RuntimeNotifier, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {AudioData} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioUnitBoxAdapter, ExportStemsConfiguration} from "@opendaw/studio-adapters"
@@ -76,15 +76,17 @@ export class AudioUnitFreeze implements Terminable {
         }
         const copiedProject = this.#project.copy()
         const abortController = new AbortController()
+        const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({
             headline: "Freezing AudioUnit...",
+            progress,
             cancel: () => abortController.abort()
         })
         const renderResult = await Promises.tryCatch(
             OfflineEngineRenderer.start(
                 copiedProject,
                 Option.wrap(exportConfiguration),
-                progress => dialog.message = `${Math.round(progress)}s rendered`,
+                progress,
                 abortController.signal,
                 engine.sampleRate
             ))
