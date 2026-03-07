@@ -32,7 +32,8 @@ export const Display = ({lifecycle, editing, adapter}: Construct) => {
                               color: Colors.dark,
                               activeColor: Colors.white
                           }}
-                          mapping={value => value.toUpperCase()}/>
+                          mapping={value => value.toUpperCase()}
+                          width="72px"/>
             </div>
             <canvas onInit={canvas => {
                 const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
