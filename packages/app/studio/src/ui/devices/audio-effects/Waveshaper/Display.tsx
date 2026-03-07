@@ -49,26 +49,31 @@ export const Display = ({lifecycle, editing, adapter}: Construct) => {
                     context.lineTo(toX(0), actualHeight)
                     context.moveTo(0, toY(0))
                     context.lineTo(actualWidth, toY(0))
-                    context.strokeStyle = Colors.shadow.toString()
+                    context.strokeStyle = DisplayPaint.strokeStyle(0.25)
                     context.stroke()
                     context.beginPath()
                     context.moveTo(toX(-range), toY(-range))
                     context.lineTo(toX(range), toY(range))
-                    context.strokeStyle = DisplayPaint.strokeStyle(0.15)
+                    context.strokeStyle = DisplayPaint.strokeStyle(0.25)
                     context.stroke()
-                    context.beginPath()
                     const steps = actualWidth
-                    for (let px = 0; px <= steps; px++) {
+                    const zeroY = toY(0)
+                    const path = new Path2D()
+                    path.moveTo(toX(-range), toY(Waveshaper.apply(-range * inputGainValue, equation)))
+                    for (let px = 1; px <= steps; px++) {
                         const x = -range + (px / steps) * 2.0 * range
-                        const y = Waveshaper.apply(x * inputGainValue, equation)
-                        if (px === 0) {
-                            context.moveTo(toX(x), toY(y))
-                        } else {
-                            context.lineTo(toX(x), toY(y))
-                        }
+                        path.lineTo(toX(x), toY(Waveshaper.apply(x * inputGainValue, equation)))
                     }
                     context.strokeStyle = DisplayPaint.strokeStyle(0.75)
-                    context.stroke()
+                    context.stroke(path)
+                    path.lineTo(toX(range), zeroY)
+                    path.lineTo(toX(-range), zeroY)
+                    const gradient = context.createLinearGradient(0, toY(1), 0, toY(-1))
+                    gradient.addColorStop(0, DisplayPaint.strokeStyle(0.0))
+                    gradient.addColorStop(0.5, DisplayPaint.strokeStyle(0.12))
+                    gradient.addColorStop(1, DisplayPaint.strokeStyle(0.0))
+                    context.fillStyle = gradient
+                    context.fill(path)
                     context.restore()
                 }))
                 lifecycle.ownAll(
