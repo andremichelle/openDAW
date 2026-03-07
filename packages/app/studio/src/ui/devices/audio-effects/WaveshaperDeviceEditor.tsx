@@ -31,7 +31,7 @@ export const WaveshaperDeviceEditor = ({lifecycle, service, adapter, deviceHost}
                       populateMenu={parent => MenuItems.forEffectDevice(parent, service, deviceHost, adapter)}
                       populateControls={() => (
                           <div className={className}>
-                              <Display lifecycle={lifecycle} adapter={adapter}/>
+                              <Display lifecycle={lifecycle} editing={editing} adapter={adapter}/>
                               {[
                                   ControlBuilder.createKnob({
                                       lifecycle, editing, midiLearning, adapter, parameter: inputGain, anchor: 0.0,

@@ -21,7 +21,13 @@ export namespace Waveshaper {
             case "arctan":
                 return (2.0 / Math.PI) * Math.atan(x)
             case "asymmetric":
-                return x < 0.0 ? x : x / (1.0 + x)
+                if (x >= 0.0) return x / (1.0 + x)
+                if (x >= -2.0 / 3.0) return x
+                if (x >= -1.0) {
+                    const t = 3.0 * (x + 1.0)
+                    return t * t * (2.0 - t) / 3.0 - 1.0
+                }
+                return -1.0
             default:
                 return Unhandled(equation)
         }
@@ -66,8 +72,22 @@ export namespace Waveshaper {
                 return
             case "asymmetric":
                 for (let i = fromIndex; i < toIndex; i++) {
-                    l[i] = l[i] < 0.0 ? l[i] : l[i] / (1.0 + l[i])
-                    r[i] = r[i] < 0.0 ? r[i] : r[i] / (1.0 + r[i])
+                    if (l[i] >= 0.0) {
+                        l[i] = l[i] / (1.0 + l[i])
+                    } else if (l[i] < -1.0) {
+                        l[i] = -1.0
+                    } else if (l[i] < -2.0 / 3.0) {
+                        const tl = 3.0 * (l[i] + 1.0)
+                        l[i] = tl * tl * (2.0 - tl) / 3.0 - 1.0
+                    }
+                    if (r[i] >= 0.0) {
+                        r[i] = r[i] / (1.0 + r[i])
+                    } else if (r[i] < -1.0) {
+                        r[i] = -1.0
+                    } else if (r[i] < -2.0 / 3.0) {
+                        const tr = 3.0 * (r[i] + 1.0)
+                        r[i] = tr * tr * (2.0 - tr) / 3.0 - 1.0
+                    }
                 }
                 return
             default:

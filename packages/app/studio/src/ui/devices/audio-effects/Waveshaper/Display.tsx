@@ -1,24 +1,39 @@
 import css from "./Display.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Editing, Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {dbToGain, Waveshaper} from "@opendaw/lib-dsp"
 import {Colors} from "@opendaw/studio-enums"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {WaveshaperDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {CanvasPainter} from "@opendaw/studio-core"
+import {DropDown} from "@/ui/composite/DropDown.tsx"
+import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 
 const className = Html.adoptStyleSheet(css, "Display")
 
 type Construct = {
     lifecycle: Lifecycle
+    editing: Editing
     adapter: WaveshaperDeviceBoxAdapter
 }
 
-export const Display = ({lifecycle, adapter}: Construct) => {
+export const Display = ({lifecycle, editing, adapter}: Construct) => {
     const {inputGain} = adapter.namedParameter
+    const {equation} = adapter.box
     return (
         <div className={className}>
+            <div className="equation-select">
+                <DropDown lifecycle={lifecycle}
+                          owner={EditWrapper.forValue(editing, equation)}
+                          provider={() => Waveshaper.Equations}
+                          appearance={{
+                              framed: true, landscape: true,
+                              color: Colors.dark,
+                              activeColor: Colors.white
+                          }}
+                          mapping={value => value.toUpperCase()}/>
+            </div>
             <canvas onInit={canvas => {
                 const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
                     const {devicePixelRatio, context, actualWidth, actualHeight} = painter
