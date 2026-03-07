@@ -40,6 +40,26 @@ The source code for openDAW is available under **AGPL v3 (or later)**
 
 ---
 
+## Looking for Contributors
+
+We welcome contributions that follow the existing style and conventions of the project. AI-assisted code is fine, but
+every contributor must **understand every line of code they submit**. If you use AI tools, please document your process
+in [`/plans`](https://github.com/andremichelle/openDAW/tree/main/plans). Keep pull requests small and focused. Large
+PRs will not be reviewed. Split big contributions into smaller commits that add requirements gradually and maintain
+operations of the app.
+
+If you are interested in helping, here are areas where we need support:
+
+1. **Offline App** — e.g. wrapping openDAW with [Tauri](https://tauri.app/) for a native desktop experience
+2. **PWA** — turning openDAW into a fully installable Progressive Web App with offline support
+3. **Timeline Track Management** — design and UX help for track layout, ordering, grouping, and interaction
+
+We always appreciate help on open issues: https://github.com/andremichelle/openDAW/issues
+
+To discuss contributions, book a call: https://calendly.com/andremichelle/opendaw-on-tour
+
+---
+
 ## Huge Shoutout To The Incredible openDAW Community!
 
 To everyone who has contributed feedback, reported bugs, suggested improvements, or helped spread the word — thank you!
@@ -50,7 +70,8 @@ you [@ccswdavidson](https://github.com/ccswdavidson), [@Chaosmeister](https://gi
 and [@xnstad](https://github.com/xnstad) for testing the repositories and identifying issues during the installation of
 openDAW!
 
-Special shout-out to the biggest bug hunters: [kanaris](https://kanaris.net/), [@Chaosmeister](https://github.com/Chaosmeister)
+Special shout-out to the biggest bug
+hunters: [kanaris](https://kanaris.net/), [@Chaosmeister](https://github.com/Chaosmeister)
 and [BeatMax Prediction](https://linktr.ee/beatmax_prediction). Your relentless attention to detail made a huge
 difference!
 
@@ -64,7 +85,9 @@ Stephen Tai, Pathfinder, One Sound Every Day (santino), kanaris, Oli Larkin
 
 ### openDAW Supporter — $5.00
 
-Cal Lycus, Jetdarc, Truls Enstad, Polarity, Ynot Etluhcs, Mats Gisselson, Ola, SKYENCE, BeatMax_Prediction, Kim T, Nyenoidz, Steve Meiers, 4ohm, Yito, Shawn Lukas, Tommes, David Thompson, Harry Gillich, OxVolt, Wojciech Miłkowski, skyboundzoo, JHINZ, Mark Dammer, fork-kun, Martin Eigel
+Cal Lycus, Jetdarc, Truls Enstad, Polarity, Ynot Etluhcs, Mats Gisselson, Ola, SKYENCE, BeatMax_Prediction, Kim T,
+Nyenoidz, Steve Meiers, 4ohm, Yito, Shawn Lukas, Tommes, David Thompson, Harry Gillich, OxVolt, Wojciech Miłkowski,
+skyboundzoo, JHINZ, Mark Dammer, fork-kun, Martin Eigel
 
 ---
 

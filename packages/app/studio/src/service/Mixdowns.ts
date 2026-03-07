@@ -1,4 +1,4 @@
-import {DefaultObservableValue, Errors, Option, panic, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, Option, panic, RuntimeNotifier} from "@opendaw/lib-std"
 import {AudioData} from "@opendaw/lib-dsp"
 import {
     ExternalLib,
@@ -18,11 +18,12 @@ export namespace Mixdowns {
     export const exportMixdown = async ({project: source, meta}: ProjectProfile): Promise<void> => {
         const project = source.copy()
         const abortController = new AbortController()
+        const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({
             headline: "Rendering mixdown...",
+            progress,
             cancel: () => abortController.abort()
         })
-        const progress = (seconds: number) => dialog.message = `Progress: ${TimeSpan.toHHMMSS(seconds)}`
         const result = await Promises.tryCatch(OfflineEngineRenderer
             .start(project, Option.None, progress, abortController.signal))
         dialog.terminate()
@@ -68,11 +69,12 @@ export namespace Mixdowns {
                                       config: ExportStemsConfiguration): Promise<void> => {
         const project = source.copy()
         const abortController = new AbortController()
+        const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({
             headline: "Rendering mixdown...",
+            progress,
             cancel: () => abortController.abort()
         })
-        const progress = (seconds: number) => dialog.message = `Progress: ${TimeSpan.toHHMMSS(seconds)}`
         const {status, value, error: renderError} = await Promises.tryCatch(OfflineEngineRenderer
             .start(project, Option.wrap(config), progress, abortController.signal))
         dialog.terminate()

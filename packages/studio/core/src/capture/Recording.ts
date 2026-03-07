@@ -26,7 +26,9 @@ export class Recording {
             captures.forEach(capture => capture.clearRecordedRegions())
             terminator.ownAll(...captures.map(capture => capture.startRecording()))
         }
-        terminator.own(RecordAutomation.start(project))
+        if (project.engine.preferences.settings.recording.automationEnabled) {
+            terminator.own(RecordAutomation.start(project))
+        }
         const armedUUIDs = UUID.newSet<UUID.Bytes>(uuid => uuid)
         captures.forEach(capture => armedUUIDs.add(capture.audioUnitBox.address.uuid))
         project.regionSelection.deselect(...project.regionSelection.selected()
