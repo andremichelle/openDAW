@@ -35,12 +35,17 @@ export namespace network {
                 if (navigator.onLine) {
                     await Wait.timeSpan(TimeSpan.seconds(1))
                 } else {
-                    await RuntimeNotifier.info({
+                    const retry = await RuntimeNotifier.approve({
                         headline: "No Internet Connection",
                         message: "You appear to be offline.",
-                        okText: "Retry"
+                        approveText: "Retry",
+                        cancelText: "Cancel"
                     })
-                    await Wait.timeSpan(TimeSpan.seconds(1))
+                    if (retry) {
+                        await Wait.timeSpan(TimeSpan.seconds(1))
+                    } else {
+                        return Promise.reject(reason)
+                    }
                 }
             }
         }
