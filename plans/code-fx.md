@@ -94,7 +94,7 @@ The mapping defines how the knob's 0→1 range maps to min→max. Parameter valu
 #### Instance Methods
 
 - `constructor()` — allocate memory, initialise state. `sampleRate` is available on `globalThis`.
-- `process(inputL: Float32Array, inputR: Float32Array, outputL: Float32Array, outputR: Float32Array, fromIndex: number, toIndex: number): void` — block-based stereo processing, same loop structure as all openDAW device processors
+- `process(inputL: Float32Array, inputR: Float32Array, outputL: Float32Array, outputR: Float32Array, fromIndex: number, toIndex: number): void` — block-based stereo processing. The host reads `block.s0`/`block.s1` and passes them as `fromIndex`/`toIndex` — the user never sees the Block type.
 - `paramChanged?(name: string, value: number)` — called when a parameter is updated (for recalculating coefficients)
 - `noteOn?(note: number, velocity: number)` — called when a note starts (instruments only)
 - `noteOff?(note: number)` — called when a note ends (instruments only)
@@ -159,7 +159,7 @@ The `AudioWorkletGlobalScope` has no `eval()`, `new Function()`, `import()`, or 
 4. **Main thread**: `audioContext.audioWorklet.addModule(blobUrl)` — loads the module into the shared worklet scope
 5. **Worklet**: the existing `CodeFxDeviceProcessor` picks up the new factory from `globalThis.openDAW.codeFxProcessors[uuid]` and swaps in the new user processor instance (resetting state)
 
-The `CodeFxDeviceProcessor` is a standard device processor (like `WaveshaperDeviceProcessor`). It delegates `processAudio()` to the user's `Processor` instance. The host wraps every call with:
+The `CodeFxDeviceProcessor` is a standard device processor (like `WaveshaperDeviceProcessor`). It delegates `processAudio(block)` to the user's `Processor` instance, extracting `block.s0`/`block.s1` as the sample range (per the block-fix refactor — see `plans/block-fix.md`). The host wraps every call with:
 - **Error recovery**: try/catch around `process()` — runtime exceptions silence the processor and report the error to the editor instead of crashing the engine
 - **Peak metering**: `PeakBroadcaster.process()` runs on the output after the user's code, providing level meters in the device editor
 - **Version gating**: if the BoxGraph version doesn't match the loaded code, the processor outputs silence until the new module arrives
@@ -717,7 +717,7 @@ export class CodeFxDeviceProcessor extends AudioProcessor implements AudioEffect
     index(): int {return this.#adapter.indexField.getValue()}
     adapter(): AudioEffectDeviceAdapter {return this.#adapter}
 
-    processAudio(_block: Block, fromIndex: int, toIndex: int): void {
+    processAudio(block: Block): void {
         // If silenced (version mismatch), poll for code arrival
         if (this.#silenced) {
             const uuid = UUID.toString(this.#adapter.uuid)
@@ -726,13 +726,10 @@ export class CodeFxDeviceProcessor extends AudioProcessor implements AudioEffect
             if (isDefined(registry) && registry.version === expectedVersion) {
                 this.#swapProcessor(registry.create, expectedVersion)
             }
-            if (this.#silenced) {
-                // Still no match — output silence
-                // ISSUE: Should we pass through dry signal instead of silence?
-                return
-            }
+            if (this.#silenced) {return}
         }
         if (this.#source.isEmpty() || this.#userProcessor.isEmpty()) {return}
+        const {s0, s1} = block
         const source = this.#source.unwrap()
         const proc = this.#userProcessor.unwrap()
         const srcL = source.getChannel(0)
@@ -740,16 +737,12 @@ export class CodeFxDeviceProcessor extends AudioProcessor implements AudioEffect
         const outL = this.#output.getChannel(0)
         const outR = this.#output.getChannel(1)
         try {
-            proc.process(srcL, srcR, outL, outR, fromIndex, toIndex)
+            proc.process(srcL, srcR, outL, outR, s0, s1)
         } catch (err) {
-            // Catch runtime errors to prevent crashing the entire engine
             this.#silenced = true
             this.#error = Option.wrap(String(err))
-            // ISSUE: After a runtime error, the processor is silenced forever
-            // until the next recompile. Should we add a retry mechanism?
-            // Probably not — the error will persist until the code is fixed.
         }
-        this.#peaks.process(outL, outR, fromIndex, toIndex)
+        this.#peaks.process(outL, outR, s0, s1)
     }
 
     parameterChanged(parameter: AutomatableParameter): void {
@@ -860,7 +853,7 @@ Each `addModule()` call adds code that persists in the worklet scope forever —
 
 Resolved during pseudo-implementation:
 
-- **Block-based stereo processing**: `process(inputL, inputR, outputL, outputR, fromIndex, toIndex)` — same pattern as all other openDAW device processors. No per-sample function call overhead, full stereo/cross-channel capability.
+- **Block-based stereo processing**: `process(inputL, inputR, outputL, outputR, fromIndex, toIndex)` — the host extracts `s0`/`s1` from the per-chunk `Block` (see `plans/block-fix.md`) and passes them to the user's process method. The user never sees the `Block` type — they get plain index parameters. No per-sample function call overhead, full stereo/cross-channel capability.
 - **Error recovery is host-injected**: broken code silences the processor until the next successful recompile. The user never handles this.
 - **Peak metering is host-injected**: `PeakBroadcaster` runs on the output after the user's `process()` call. The user never handles this.
 - **Error reporting**: add a method to `EngineContext` for forwarding runtime errors from the worklet to the main thread.
