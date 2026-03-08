@@ -44,7 +44,8 @@ export const Display = ({lifecycle, editing, adapter}: Construct) => {
                     const toX = (value: number) => ((value + range) / (2.0 * range)) * actualWidth
                     const toY = (value: number) => ((range - value) / (2.0 * range)) * actualHeight
                     context.save()
-                    context.setLineDash([4, 4])
+                    const dash = 2 * devicePixelRatio
+                    context.setLineDash([dash, dash])
                     context.lineWidth = devicePixelRatio
                     context.beginPath()
                     context.moveTo(toX(0), 0)
@@ -62,6 +63,7 @@ export const Display = ({lifecycle, editing, adapter}: Construct) => {
                     const zeroY = toY(0)
                     const path = new Path2D()
                     context.setLineDash(Arrays.empty())
+                    context.lineWidth = devicePixelRatio
                     path.moveTo(toX(-range), toY(Waveshaper.apply(-range * inputGainValue, equation)))
                     for (let px = 1; px <= steps; px++) {
                         const x = -range + (px / steps) * 2.0 * range

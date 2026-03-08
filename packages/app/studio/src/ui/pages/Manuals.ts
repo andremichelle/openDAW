@@ -136,6 +136,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                         label: "Tidal",
                         path: "/manuals/devices/audio/tidal",
                         icon: EffectFactories.Tidal.defaultIcon
+                    },
+                    {
+                        type: "page",
+                        label: "Waveshaper",
+                        path: "/manuals/devices/audio/waveshaper",
+                        icon: EffectFactories.AudioNamed.Waveshaper.defaultIcon
                     }
                 ]
             },
