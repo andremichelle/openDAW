@@ -81,7 +81,7 @@ export class StereoToolDeviceProcessor extends AudioProcessor implements AudioEf
     index(): int {return this.#adapter.indexField.getValue()}
     adapter(): AudioEffectDeviceAdapter {return this.#adapter}
 
-    processAudio(_block: Readonly<Block>, fromIndex: number, toIndex: number): void {
+    processAudio({s0, s1}: Block): void {
         if (this.#source.isEmpty()) {return}
         if (this.#needsUpdate) {
             this.#matrix.update(this.#params, this.#mixing, this.#processed)
@@ -89,8 +89,8 @@ export class StereoToolDeviceProcessor extends AudioProcessor implements AudioEf
         }
         const source = this.#source.unwrap().channels() as StereoMatrix.Channels
         const target = this.#output.channels() as StereoMatrix.Channels
-        this.#matrix.processFrames(source, target, fromIndex, toIndex)
-        this.#peaks.processStereo(target, fromIndex, toIndex)
+        this.#matrix.processFrames(source, target, s0, s1)
+        this.#peaks.processStereo(target, s0, s1)
         this.#processed = true
     }
 

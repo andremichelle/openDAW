@@ -1,6 +1,6 @@
 import {Arrays, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioProcessor} from "../../../AudioProcessor"
-import {AudioGenerator, Processor} from "../../../processing"
+import {AudioGenerator, Block, Processor} from "../../../processing"
 import {PeakBroadcaster} from "../../../PeakBroadcaster"
 import {EventBuffer} from "../../../EventBuffer"
 import {EngineContext} from "../../../EngineContext"
@@ -50,7 +50,7 @@ export class MixProcessor extends AudioProcessor implements AudioDeviceProcessor
     get audioOutput(): AudioBuffer {return this.#audioOutput}
     get eventInput(): EventBuffer {return this.#eventBuffer}
 
-    processAudio(_block: Readonly<{}>, _fromIndex: number, _toIndex: number): void {}
+    processAudio(_block: Block): void {}
 
     reset(): void {this.#peaksBroadcaster.clear()}
 

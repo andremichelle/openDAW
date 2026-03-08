@@ -86,10 +86,10 @@ export class SampleProcessor extends AudioProcessor implements DeviceProcessor, 
         }
     }
 
-    processAudio(_block: Block, fromIndex: int, toIndex: int): void {
-        this.#audioOutput.clear(fromIndex, toIndex)
+    processAudio({s0, s1}: Block): void {
+        this.#audioOutput.clear(s0, s1)
         for (let i = this.#voices.length - 1; i >= 0; i--) {
-            if (this.#voices[i].processAdd(this.#audioOutput.channels(), fromIndex, toIndex)) {
+            if (this.#voices[i].processAdd(this.#audioOutput.channels(), s0, s1)) {
                 this.#voices.splice(i, 1)
             }
         }

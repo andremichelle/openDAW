@@ -6,7 +6,7 @@ import {PeakBroadcaster} from "../../PeakBroadcaster"
 import {FreeVerb} from "../../FreeVerb"
 import {AudioProcessor} from "../../AudioProcessor"
 import {AutomatableParameter} from "../../AutomatableParameter"
-import {Processor} from "../../processing"
+import {Block, Processor} from "../../processing"
 import {AudioEffectDeviceProcessor} from "../../AudioEffectDeviceProcessor"
 
 export class ReverbDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {
@@ -70,11 +70,11 @@ export class ReverbDeviceProcessor extends AudioProcessor implements AudioEffect
     index(): int {return this.#adapter.indexField.getValue()}
     adapter(): AudioEffectDeviceAdapter {return this.#adapter}
 
-    processAudio(_block: Readonly<{}>, fromIndex: number, toIndex: number) {
+    processAudio({s0, s1}: Block): void {
         if (this.#source.isEmpty()) {return}
-        this.#reverb.process(this.#output, this.#source.unwrap(), fromIndex, toIndex)
+        this.#reverb.process(this.#output, this.#source.unwrap(), s0, s1)
         const [outL, outR] = this.#output.channels()
-        this.#peaks.process(outL, outR, fromIndex, toIndex)
+        this.#peaks.process(outL, outR, s0, s1)
     }
 
     parameterChanged(parameter: AutomatableParameter): void {

@@ -69,17 +69,17 @@ export class CrusherDeviceProcessor extends AudioProcessor implements AudioEffec
 
     adapter(): AudioEffectDeviceAdapter {return this.#adapter}
 
-    processAudio(_block: Block, fromIndex: int, toIndex: int): void {
+    processAudio({s0, s1}: Block): void {
         if (this.#source.isEmpty()) {return}
         const input = this.#source.unwrap()
         this.#dsp.process(
             input.channels() as StereoMatrix.Channels,
             this.#output.channels() as StereoMatrix.Channels,
-            fromIndex, toIndex)
+            s0, s1)
         this.#peaks.process(
             this.#output.getChannel(0),
             this.#output.getChannel(1),
-            fromIndex, toIndex)
+            s0, s1)
     }
 
     parameterChanged(parameter: AutomatableParameter): void {

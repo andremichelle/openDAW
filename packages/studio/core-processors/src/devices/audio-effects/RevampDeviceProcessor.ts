@@ -139,7 +139,7 @@ export class RevampDeviceProcessor extends AudioProcessor implements AudioEffect
     index(): int {return this.#adapter.indexField.getValue()}
     adapter(): AudioEffectDeviceAdapter {return this.#adapter}
 
-    processAudio(_block: Block, fromIndex: int, toIndex: int) {
+    processAudio({s0, s1}: Block): void {
         if (this.#source.isEmpty()) {return}
         const [outL, outR] = this.#output.channels()
         const input = this.#source.unwrap()
@@ -148,22 +148,22 @@ export class RevampDeviceProcessor extends AudioProcessor implements AudioEffect
             this.#biquadCoeff.forEach((coeff, index) => {
                 if (this.#enabled[index]) {
                     const [fltL, fltR] = this.#biquadProcessors[index]
-                    fltL.process(coeff, inpL, outL, fromIndex, toIndex)
-                    fltR.process(coeff, inpR, outR, fromIndex, toIndex)
+                    fltL.process(coeff, inpL, outL, s0, s1)
+                    fltR.process(coeff, inpR, outR, s0, s1)
                     inpL = outL
                     inpR = outR
                 }
             })
         } else {
             const [inpL, inpR] = input.channels()
-            for (let i = fromIndex; i < toIndex; i++) {
+            for (let i = s0; i < s1; i++) {
                 outL[i] = inpL[i]
                 outR[i] = inpR[i]
             }
         }
-        this.#peaks.process(outL, outR, fromIndex, toIndex)
+        this.#peaks.process(outL, outR, s0, s1)
         if (this.#needsSpectrum) {
-            this.#audioAnalyser.process(outL, outR, fromIndex, toIndex)
+            this.#audioAnalyser.process(outL, outR, s0, s1)
         }
     }
 

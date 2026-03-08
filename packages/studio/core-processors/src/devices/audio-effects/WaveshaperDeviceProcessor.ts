@@ -72,31 +72,31 @@ export class WaveshaperDeviceProcessor extends AudioProcessor implements AudioEf
     index(): int {return this.#adapter.indexField.getValue()}
     adapter(): AudioEffectDeviceAdapter {return this.#adapter}
 
-    processAudio(_block: Block, fromIndex: int, toIndex: int): void {
+    processAudio({s0, s1}: Block): void {
         if (this.#source.isEmpty()) {return}
         const source = this.#source.unwrap()
         const srcL = source.getChannel(0)
         const srcR = source.getChannel(1)
         const outL = this.#output.getChannel(0)
         const outR = this.#output.getChannel(1)
-        for (let i = fromIndex; i < toIndex; i++) {
+        for (let i = s0; i < s1; i++) {
             outL[i] = srcL[i]
             outR[i] = srcR[i]
         }
-        for (let i = fromIndex; i < toIndex; i++) {
+        for (let i = s0; i < s1; i++) {
             const gain = this.#smoothInputGain.moveAndGet()
             outL[i] *= gain
             outR[i] *= gain
         }
-        Waveshaper.process(this.#output.channels() as [Float32Array, Float32Array], this.#equation, fromIndex, toIndex)
-        for (let i = fromIndex; i < toIndex; i++) {
+        Waveshaper.process(this.#output.channels() as [Float32Array, Float32Array], this.#equation, s0, s1)
+        for (let i = s0; i < s1; i++) {
             const gain = this.#smoothOutputGain.moveAndGet()
             const wet = this.#smoothMix.moveAndGet()
             const dry = 1.0 - wet
             outL[i] = srcL[i] * dry + outL[i] * gain * wet
             outR[i] = srcR[i] * dry + outR[i] * gain * wet
         }
-        this.#peaks.process(outL, outR, fromIndex, toIndex)
+        this.#peaks.process(outL, outR, s0, s1)
         this.#processed = true
     }
 

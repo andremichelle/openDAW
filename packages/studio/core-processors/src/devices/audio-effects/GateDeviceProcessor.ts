@@ -132,7 +132,7 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
 
     handleEvent(_event: Event): void {}
 
-    processAudio(_block: Block, from: int, to: int): void {
+    processAudio({s0, s1}: Block): void {
         if (this.#source.isEmpty()) return
         const source = this.#source.unwrap()
         const srcL = source.getChannel(0)
@@ -142,7 +142,7 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
         const useSidechain = this.#sideChain.nonEmpty()
         const scL = useSidechain ? this.#sideChain.unwrap().getChannel(0) : srcL
         const scR = useSidechain ? this.#sideChain.unwrap().getChannel(1) : srcR
-        for (let i = from; i < to; i++) {
+        for (let i = s0; i < s1; i++) {
             const level = Math.max(Math.abs(scL[i]), Math.abs(scR[i]))
             if (this.#inpMax <= level) {
                 this.#inpMax = level
@@ -176,7 +176,7 @@ export class GateDeviceProcessor extends AudioProcessor implements AudioEffectDe
             }
         }
 
-        this.#peaks.process(outL, outR, from, to)
+        this.#peaks.process(outL, outR, s0, s1)
     }
 
     parameterChanged(parameter: AutomatableParameter): void {

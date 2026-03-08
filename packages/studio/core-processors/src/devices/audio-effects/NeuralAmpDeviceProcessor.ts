@@ -134,18 +134,18 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
 
     handleEvent(_event: Event): void {}
 
-    processAudio(_block: Block, from: number, to: number): void {
+    processAudio({s0, s1}: Block): void {
         if (this.#terminated || this.#source.isEmpty()) {return}
         const [inL, inR] = this.#source.unwrap().channels() as StereoMatrix.Channels
         const [outL, outR] = this.#output.channels() as StereoMatrix.Channels
-        const numFrames = to - from
+        const numFrames = s1 - s0
         const module = NeuralAmpDeviceProcessor.#wasmModule
         if (module.isEmpty() || !this.#modelLoaded || this.#instances[0] < 0) {
-            for (let i = from; i < to; i++) {
+            for (let i = s0; i < s1; i++) {
                 outL[i] = inL[i]
                 outR[i] = inR[i]
             }
-            this.#peaks.process(outL, outR, from, to)
+            this.#peaks.process(outL, outR, s0, s1)
             return
         }
         const wasm = module.unwrap()
@@ -158,29 +158,29 @@ export class NeuralAmpDeviceProcessor extends AudioProcessor implements AudioEff
         const dry = 1.0 - wet
         if (this.#mono) {
             for (let i = 0; i < numFrames; i++) {
-                bufInL[i] = (inL[from + i] + inR[from + i]) * 0.5 * inputGain
+                bufInL[i] = (inL[s0 + i] + inR[s0 + i]) * 0.5 * inputGain
             }
             wasm.process(instanceL, bufInL.subarray(0, numFrames), bufOutL.subarray(0, numFrames))
             for (let i = 0; i < numFrames; i++) {
                 const wetSample = bufOutL[i] * outputGain
-                outL[from + i] = inL[from + i] * dry + wetSample * wet
-                outR[from + i] = inR[from + i] * dry + wetSample * wet
+                outL[s0 + i] = inL[s0 + i] * dry + wetSample * wet
+                outR[s0 + i] = inR[s0 + i] * dry + wetSample * wet
             }
         } else {
             for (let i = 0; i < numFrames; i++) {
-                bufInL[i] = inL[from + i] * inputGain
-                bufInR[i] = inR[from + i] * inputGain
+                bufInL[i] = inL[s0 + i] * inputGain
+                bufInR[i] = inR[s0 + i] * inputGain
             }
             wasm.process(instanceL, bufInL.subarray(0, numFrames), bufOutL.subarray(0, numFrames))
             wasm.process(instanceR, bufInR.subarray(0, numFrames), bufOutR.subarray(0, numFrames))
             for (let i = 0; i < numFrames; i++) {
-                outL[from + i] = inL[from + i] * dry + bufOutL[i] * outputGain * wet
-                outR[from + i] = inR[from + i] * dry + bufOutR[i] * outputGain * wet
+                outL[s0 + i] = inL[s0 + i] * dry + bufOutL[i] * outputGain * wet
+                outR[s0 + i] = inR[s0 + i] * dry + bufOutR[i] * outputGain * wet
             }
         }
-        this.#peaks.process(outL, outR, from, to)
+        this.#peaks.process(outL, outR, s0, s1)
         if (this.#needsSpectrum) {
-            this.#audioAnalyser.process(outL, outR, from, to)
+            this.#audioAnalyser.process(outL, outR, s0, s1)
         }
     }
 

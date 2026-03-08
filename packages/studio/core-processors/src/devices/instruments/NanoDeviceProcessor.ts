@@ -82,11 +82,11 @@ export class NanoDeviceProcessor extends AudioProcessor implements InstrumentDev
         }
     }
 
-    processAudio(_block: Block, fromIndex: int, toIndex: int): void {
+    processAudio({s0, s1}: Block): void {
         if (!this.#enabled) {return}
-        this.#audioOutput.clear(fromIndex, toIndex)
+        this.#audioOutput.clear(s0, s1)
         for (let i = this.#voices.length - 1; i >= 0; i--) {
-            if (this.#voices[i].processAdd(this.#audioOutput, fromIndex, toIndex)) {
+            if (this.#voices[i].processAdd(this.#audioOutput, s0, s1)) {
                 this.#voices.splice(i, 1)
             }
         }

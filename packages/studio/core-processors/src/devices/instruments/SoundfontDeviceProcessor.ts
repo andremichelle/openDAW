@@ -95,11 +95,11 @@ export class SoundfontDeviceProcessor extends AudioProcessor implements Instrume
         }
     }
 
-    processAudio(_block: Block, fromIndex: int, toIndex: int): void {
+    processAudio({s0, s1}: Block): void {
         if (!this.#enabled) {return}
-        this.#audioOutput.clear(fromIndex, toIndex)
+        this.#audioOutput.clear(s0, s1)
         for (let index = this.#voices.length - 1; index >= 0; index--) {
-            if (this.#voices[index].processAdd(this.#audioOutput, fromIndex, toIndex)) {
+            if (this.#voices[index].processAdd(this.#audioOutput, s0, s1)) {
                 this.#voices.splice(index, 1)
             }
         }

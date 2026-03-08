@@ -46,7 +46,7 @@ export class AuxSendProcessor extends AudioProcessor implements Processor, Audio
 
     get audioOutput(): AudioBuffer {return this.#audioOutput}
 
-    processAudio(_block: Block, fromIndex: number, toIndex: number): void {
+    processAudio({s0, s1}: Block): void {
         if (this.#source.isEmpty()) {return}
         if (this.#needsUpdate) {
             const gain = dbToGain(this.#parameterSendGain.getValue())
@@ -61,14 +61,14 @@ export class AuxSendProcessor extends AudioProcessor implements Processor, Audio
         const srcL = source.getChannel(0)
         const srcR = source.getChannel(1)
         if (this.#rampGainL.isInterpolating() || this.#rampGainR.isInterpolating()) {
-            for (let i = fromIndex; i < toIndex; i++) {
+            for (let i = s0; i < s1; i++) {
                 outL[i] = srcL[i] * this.#rampGainL.moveAndGet()
                 outR[i] = srcR[i] * this.#rampGainR.moveAndGet()
             }
         } else {
             const gainL = this.#rampGainL.get()
             const gainR = this.#rampGainR.get()
-            for (let i = fromIndex; i < toIndex; i++) {
+            for (let i = s0; i < s1; i++) {
                 outL[i] = srcL[i] * gainL
                 outR[i] = srcR[i] * gainR
             }

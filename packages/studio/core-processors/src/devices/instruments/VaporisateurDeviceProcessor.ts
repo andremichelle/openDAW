@@ -194,10 +194,10 @@ export class VaporisateurDeviceProcessor extends AudioProcessor
         }
     }
 
-    processAudio(block: Block, fromIndex: int, toIndex: int): void {
+    processAudio(block: Block): void {
         if (!this.#enabled) {return}
-        this.#voicing.process(this.#audioOutput, block, fromIndex, toIndex)
-        this.#limiter.replace(this.#audioOutput, fromIndex, toIndex)
+        this.#voicing.process(this.#audioOutput, block, block.s0, block.s1)
+        this.#limiter.replace(this.#audioOutput, block.s0, block.s1)
     }
 
     parameterChanged(parameter: AutomatableParameter): void {
