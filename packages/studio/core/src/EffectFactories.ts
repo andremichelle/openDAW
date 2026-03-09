@@ -311,7 +311,7 @@ export namespace EffectFactories {
 
     export const Werkstatt: EffectFactory = {
         defaultName: "Werkstatt",
-        defaultIcon: IconSymbol.Flask,
+        defaultIcon: IconSymbol.Code,
         description: "User-scripted DSP processor",
         manualPage: DeviceManualUrls.Werkstatt,
         separatorBefore: false,

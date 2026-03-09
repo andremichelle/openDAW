@@ -18,6 +18,7 @@ export enum IconSymbol {
     Clips,
     Close,
     CloudFolder,
+    Code,
     CollapseDown,
     Compressor,
     Connected,
