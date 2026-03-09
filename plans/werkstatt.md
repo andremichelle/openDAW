@@ -24,23 +24,26 @@ Prove the full pipeline end-to-end: forge schema → generated Box → adapter �
 class Processor {
     process(inputL: Float32Array, inputR: Float32Array,
             outputL: Float32Array, outputR: Float32Array,
-            fromIndex: number, toIndex: number): void {
+            block: {index, p0, p1, s0, s1, bpm, flags}): void {
         // user DSP code
     }
 }
 ```
 
 - `constructor()` — allocate memory, initialise state. `sampleRate` is available on `globalThis`.
-- `process()` — block-based stereo processing. The host passes `block.s0`/`block.s1` as `fromIndex`/`toIndex`.
+- `process()` — block-based stereo processing. The `block` object provides:
+  - `s0`/`s1` — sample range (loop indices into the Float32Arrays)
+  - `p0`/`p1` — position in ppqn (pulse per quarter note)
+  - `bpm` — current tempo
+  - `flags` — bitmask: `1` = transporting, `2` = discontinuous, `4` = playing, `8` = bpmChanged
+  - `index` — block index
 
 ### Example: Hard Clipper
 
 ```typescript
 class Processor {
-    process(inputL: Float32Array, inputR: Float32Array,
-            outputL: Float32Array, outputR: Float32Array,
-            fromIndex: number, toIndex: number): void {
-        for (let i = fromIndex; i < toIndex; i++) {
+    process(inputL, inputR, outputL, outputR, block) {
+        for (let i = block.s0; i < block.s1; i++) {
             outputL[i] = Math.max(-0.5, Math.min(0.5, inputL[i]))
             outputR[i] = Math.max(-0.5, Math.min(0.5, inputR[i]))
         }
@@ -53,11 +56,9 @@ class Processor {
 ```typescript
 class Processor {
     phase = 0
-    process(inputL: Float32Array, inputR: Float32Array,
-            outputL: Float32Array, outputR: Float32Array,
-            fromIndex: number, toIndex: number): void {
+    process(inputL, inputR, outputL, outputR, block) {
         const inc = 440 / sampleRate
-        for (let i = fromIndex; i < toIndex; i++) {
+        for (let i = block.s0; i < block.s1; i++) {
             const mod = Math.sin(this.phase * Math.PI * 2)
             this.phase += inc
             if (this.phase >= 1) this.phase -= 1
@@ -433,9 +434,7 @@ const removeParameter = (paramBox: WerkstattParameterBox) => {
 ```typescript
 class Processor {
     paramChanged?(name: string, value: number): void
-    process(inputL: Float32Array, inputR: Float32Array,
-            outputL: Float32Array, outputR: Float32Array,
-            fromIndex: number, toIndex: number): void
+    process(inputL, inputR, outputL, outputR, block): void
 }
 ```
 
@@ -445,19 +444,17 @@ Parameters configured in the UI: `time` (0.001–2.0, exp), `feedback` (0–0.95
 
 ```typescript
 class Processor {
-    readonly bufferL = new Float32Array(sampleRate * 2)
-    readonly bufferR = new Float32Array(sampleRate * 2)
+    bufferL = new Float32Array(sampleRate * 2)
+    bufferR = new Float32Array(sampleRate * 2)
     writeHead = 0
     delaySamples = sampleRate * 0.5
     feedback = 0.5
-    paramChanged(name: string, value: number) {
+    paramChanged(name, value) {
         if (name === "time") this.delaySamples = value * sampleRate
         if (name === "feedback") this.feedback = value
     }
-    process(inputL: Float32Array, inputR: Float32Array,
-            outputL: Float32Array, outputR: Float32Array,
-            fromIndex: number, toIndex: number): void {
-        for (let i = fromIndex; i < toIndex; i++) {
+    process(inputL, inputR, outputL, outputR, block) {
+        for (let i = block.s0; i < block.s1; i++) {
             const readHead = (this.writeHead - this.delaySamples + this.bufferL.length) % this.bufferL.length
             const delayedL = this.bufferL[readHead]
             const delayedR = this.bufferR[readHead]
@@ -481,12 +478,12 @@ class Processor {
     x1R = 0; x2R = 0; y1R = 0; y2R = 0
     b0 = 0; b1 = 0; b2 = 0; a1 = 0; a2 = 0
     cutoff = 1000; resonance = 0.707
-    paramChanged(name: string, value: number) {
+    paramChanged(name, value) {
         if (name === "cutoff") this.cutoff = value
         if (name === "resonance") this.resonance = value
         this.recalcCoefficients(this.cutoff, this.resonance)
     }
-    recalcCoefficients(cutoff: number, resonance: number) {
+    recalcCoefficients(cutoff, resonance) {
         const w0 = 2 * Math.PI * cutoff / sampleRate
         const alpha = Math.sin(w0) / (2 * resonance)
         const cosw0 = Math.cos(w0)
@@ -497,10 +494,8 @@ class Processor {
         this.a1 = (-2 * cosw0) / a0
         this.a2 = (1 - alpha) / a0
     }
-    process(inputL: Float32Array, inputR: Float32Array,
-            outputL: Float32Array, outputR: Float32Array,
-            fromIndex: number, toIndex: number): void {
-        for (let i = fromIndex; i < toIndex; i++) {
+    process(inputL, inputR, outputL, outputR, block) {
+        for (let i = block.s0; i < block.s1; i++) {
             const outL = this.b0 * inputL[i] + this.b1 * this.x1L + this.b2 * this.x2L
                 - this.a1 * this.y1L - this.a2 * this.y2L
             this.x2L = this.x1L; this.x1L = inputL[i]
@@ -558,6 +553,14 @@ The processor must be **stateful** — many DSP algorithms need persistent memor
 - Accumulators, phase counters, envelopes
 
 Memory is just typed arrays — `Float32Array` for audio buffers, `Float64Array` for state requiring precision. `sampleRate` is available on `globalThis` in the worklet.
+
+## Testing
+
+### Offline Rendering
+Werkstatt must work with offline rendering (`OfflineEngineRenderer`). The user code injection via `addModule()` must also happen on the offline `AudioContext`. Verify:
+- Werkstatt processes audio correctly during `OfflineEngineRenderer.step()`
+- Version gating resolves before first audio block
+- Error recovery (silencing) works in offline context
 
 ## Unsolved Issues
 

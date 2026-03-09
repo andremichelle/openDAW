@@ -18,6 +18,7 @@ import {
     UnknownMidiEffectDeviceBox,
     VelocityDeviceBox,
     WaveshaperDeviceBox,
+    WerkstattDeviceBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 
@@ -26,3 +27,4 @@ export type EffectBox =
     | MaximizerDeviceBox | DelayDeviceBox | ReverbDeviceBox | RevampDeviceBox | StereoToolDeviceBox | TidalDeviceBox
     | ModularDeviceBox | UnknownAudioEffectDeviceBox | CompressorDeviceBox | GateDeviceBox
     | CrusherDeviceBox | FoldDeviceBox | DattorroReverbDeviceBox | NeuralAmpDeviceBox | WaveshaperDeviceBox
+    | WerkstattDeviceBox

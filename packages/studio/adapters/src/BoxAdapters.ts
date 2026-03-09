@@ -74,6 +74,7 @@ import {
     VelocityDeviceBox,
     WarpMarkerBox,
     WaveshaperDeviceBox,
+    WerkstattDeviceBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {AudioUnitBoxAdapter} from "./audio-unit/AudioUnitBoxAdapter"
@@ -133,6 +134,7 @@ import {TidalDeviceBoxAdapter} from "./devices/audio-effects/TidalDeviceBoxAdapt
 import {DattorroReverbDeviceBoxAdapter} from "./devices/audio-effects/DattorroReverbDeviceBoxAdapter"
 import {NeuralAmpDeviceBoxAdapter} from "./devices/audio-effects/NeuralAmpDeviceBoxAdapter"
 import {WaveshaperDeviceBoxAdapter} from "./devices/audio-effects/WaveshaperDeviceBoxAdapter"
+import {WerkstattDeviceBoxAdapter} from "./devices/audio-effects/WerkstattDeviceBoxAdapter"
 import {NeuralAmpModelBoxAdapter} from "./nam/NeuralAmpModelBoxAdapter"
 import {AudioPitchStretchBoxAdapter} from "./audio/AudioPitchStretchBoxAdapter"
 import {TransientMarkerBoxAdapter} from "./audio/TransientMarkerBoxAdapter"
@@ -252,6 +254,7 @@ export class BoxAdapters implements Terminable {
             visitValueRegionBox: (box: ValueRegionBox) => new ValueRegionBoxAdapter(this.#context, box),
             visitVaporisateurDeviceBox: (box: VaporisateurDeviceBox) => new VaporisateurDeviceBoxAdapter(this.#context, box),
             visitWaveshaperDeviceBox: (box: WaveshaperDeviceBox) => new WaveshaperDeviceBoxAdapter(this.#context, box),
+            visitWerkstattDeviceBox: (box: WerkstattDeviceBox) => new WerkstattDeviceBoxAdapter(this.#context, box),
             visitVelocityDeviceBox: (box: VelocityDeviceBox) => new VelocityDeviceBoxAdapter(this.#context, box),
             visitZeitgeistDeviceBox: (box: ZeitgeistDeviceBox) => new ZeitgeistDeviceBoxAdapter(this.#context, box)
         }), `Could not find factory for ${unknownBox}`)

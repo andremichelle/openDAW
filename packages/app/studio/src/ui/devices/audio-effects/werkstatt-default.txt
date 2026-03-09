@@ -1,0 +1,21 @@
+class Processor {
+    bufferL = new Float32Array(sampleRate * 2)
+    bufferR = new Float32Array(sampleRate * 2)
+    writeHead = 0
+    delaySamples = Math.round(sampleRate * 60 / 120 / 4 * 3)
+    feedback = 0.5
+    process({src, out}, {s0, s1}) {
+        const [srcL, srcR] = src
+        const [outL, outR] = out
+        for (let i = s0; i < s1; i++) {
+            const readHead = (this.writeHead - this.delaySamples + this.bufferL.length) % this.bufferL.length
+            const delayedL = this.bufferL[readHead]
+            const delayedR = this.bufferR[readHead]
+            this.bufferL[this.writeHead] = srcL[i] + delayedL * this.feedback
+            this.bufferR[this.writeHead] = srcR[i] + delayedR * this.feedback
+            this.writeHead = (this.writeHead + 1) % this.bufferL.length
+            outL[i] = srcL[i] + delayedL * 0.5
+            outR[i] = srcR[i] + delayedR * 0.5
+        }
+    }
+}
