@@ -33,11 +33,10 @@ The display shows the selected transfer curve in real-time, updating as you chan
 
 ## 2. Input Gain
 
-Pre-gain before waveshaping. Range: **-18 dB to 18 dB**.
+Pre-gain before waveshaping. Range: **0 dB to 40 dB**.
 
 Controls how hard the signal is driven into the transfer function:
 
-- **Negative values**: Signal stays in the linear center of the curve, producing subtle harmonic coloring
 - **0 dB**: Unity gain, moderate saturation depending on signal level
 - **Positive values**: Signal is pushed deeper into the nonlinear region, producing heavier distortion
 
@@ -57,7 +56,7 @@ Useful for parallel distortion, where blending a small amount of shaped signal p
 
 ## 4. Output Gain
 
-Post-gain after waveshaping. Range: **-18 dB to 18 dB**.
+Post-gain after waveshaping. Range: **-24 dB to 24 dB**.
 
 Compensates for level changes caused by the waveshaping and input gain. Use to match the output level to the bypassed signal.
 
