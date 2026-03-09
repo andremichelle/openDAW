@@ -16,6 +16,7 @@ import {
     Subscription,
     Terminable,
     Terminator,
+    tryCatch,
     UUID
 } from "@opendaw/lib-std"
 import {populateStudioMenu} from "@/service/StudioMenu"
@@ -454,7 +455,17 @@ export class StudioService implements ProjectEnv {
                     }
                 }
                 this.engine.releaseWorklet()
-                this.engine.setWorklet(project.startAudioWorklet(restart, {}))
+                const {status, value: worklet, error} = tryCatch(() => project.startAudioWorklet(restart, {}))
+                if (status === "failure") {
+                    Dialogs.info({
+                        headline: "Audio-Engine Error",
+                        message: `Could not start the audio engine. Your browser may not support all required features. (${Errors.toString(error)})`,
+                        okText: "OK",
+                        cancelable: false
+                    }).finally()
+                    return
+                }
+                this.engine.setWorklet(worklet)
                 lifeTime.ownAll(
                     project,
                     snapping.registerSignatureTrackAdapter(project.timelineBoxAdapter.signatureTrack),
