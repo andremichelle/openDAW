@@ -4,7 +4,7 @@
 
 An educational device where students write DSP code and see the frequency/harmonic response in a connected spectrum analyser. Inspired by Plugin Doctor's static response analysis.
 
-Built on top of the [Script Device](script-device.md) — same Processor class contract, same parameter system, same worklet integration. Formular adds an onboard analyser that runs measurement signals through the user's code and visualises the results.
+Built on top of the [Werkstatt](werkstatt.md) — same Processor class contract, same parameter system, same worklet integration. Formular adds an onboard analyser that runs measurement signals through the user's code and visualises the results.
 
 ## Analysis Techniques
 
@@ -47,7 +47,7 @@ Impulse method breaks down because the output depends on signal level.
 
 ## Proposed Device Architecture
 
-- **Code editor**: student writes DSP code (init + process functions) — inherited from Script Device
+- **Code editor**: student writes DSP code (init + process functions) — inherited from Werkstatt
 - **Mode 1 — Impulse**: Dirac → FFT → frequency + phase response (filters)
 - **Mode 2 — Single tone**: adjustable frequency sine → FFT → harmonic spectrum (distortion)
 - **Mode 3 — Swept sine**: log chirp → deconvolution → linear IR + harmonic separation (advanced)

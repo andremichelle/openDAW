@@ -1,4 +1,4 @@
-# Script Device — User-Scripted DSP Processor
+# Werkstatt — User-Scripted DSP Processor
 
 ## Concept
 
@@ -70,10 +70,10 @@ class Processor {
 
 ### Forge Schema
 
-#### ScriptDeviceBox
+#### WerkstattBox
 
 ```typescript
-export const ScriptDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffect("ScriptDeviceBox", {
+export const WerkstattBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffect("WerkstattBox", {
     10: {type: "string", name: "code", value: ""},
     11: {type: "int32", name: "version", constraints: "any", unit: ""}
 })
@@ -84,20 +84,20 @@ No `parameters` hook field yet — added in iteration 2.
 ### Adapter
 
 ```typescript
-export class ScriptDeviceBoxAdapter implements AudioEffectDeviceAdapter {
+export class WerkstattBoxAdapter implements AudioEffectDeviceAdapter {
     readonly type = "audio-effect"
     readonly accepts = "audio"
-    readonly manualUrl = DeviceManualUrls.ScriptDevice
+    readonly manualUrl = DeviceManualUrls.Werkstatt
 
     readonly #context: BoxAdaptersContext
-    readonly #box: ScriptDeviceBox
+    readonly #box: WerkstattBox
 
-    constructor(context: BoxAdaptersContext, box: ScriptDeviceBox) {
+    constructor(context: BoxAdaptersContext, box: WerkstattBox) {
         this.#context = context
         this.#box = box
     }
 
-    get box(): ScriptDeviceBox {return this.#box}
+    get box(): WerkstattBox {return this.#box}
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get labelField(): StringField {return this.#box.label}
@@ -114,18 +114,18 @@ export class ScriptDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 ### Recompile Flow (Main Thread)
 
 ```typescript
-export namespace ScriptDeviceCompiler {
+export namespace WerkstattCompiler {
     export const compile = async (
         audioContext: BaseAudioContext,
-        deviceBox: ScriptDeviceBox
+        deviceBox: WerkstattBox
     ): Promise<void> => {
         const code = deviceBox.code.getValue()
         const uuid = UUID.toString(deviceBox.address.uuid)
         const version = deviceBox.version.getValue() + 1
         const wrappedCode = `
-            globalThis.openDAW.scriptProcessors["${uuid}"] = {
+            globalThis.openDAW.werkstattProcessors["${uuid}"] = {
                 version: ${version},
-                create: (function script() {
+                create: (function werkstatt() {
                     ${code}
                     return Processor
                 })()
@@ -146,8 +146,8 @@ export namespace ScriptDeviceCompiler {
 ### Device Processor (Worklet)
 
 ```typescript
-export class ScriptDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {
-    readonly #adapter: ScriptDeviceBoxAdapter
+export class WerkstattProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {
+    readonly #adapter: WerkstattBoxAdapter
     readonly #output: AudioBuffer
     readonly #peaks: PeakBroadcaster
 
@@ -157,7 +157,7 @@ export class ScriptDeviceProcessor extends AudioProcessor implements AudioEffect
     #silenced: boolean = false
     #error: Option<string> = Option.None
 
-    constructor(context: EngineContext, adapter: ScriptDeviceBoxAdapter) {
+    constructor(context: EngineContext, adapter: WerkstattBoxAdapter) {
         super(context)
         this.#adapter = adapter
         this.#output = new AudioBuffer()
@@ -178,7 +178,7 @@ export class ScriptDeviceProcessor extends AudioProcessor implements AudioEffect
 
     #tryLoadVersion(version: number): void {
         const uuid = UUID.toString(this.#adapter.uuid)
-        const registry = (globalThis as any).openDAW?.scriptProcessors?.[uuid]
+        const registry = (globalThis as any).openDAW?.werkstattProcessors?.[uuid]
         if (isDefined(registry) && registry.version === version) {
             this.#swapProcessor(registry.create, version)
         }
@@ -219,7 +219,7 @@ export class ScriptDeviceProcessor extends AudioProcessor implements AudioEffect
     processAudio(block: Block): void {
         if (this.#silenced) {
             const uuid = UUID.toString(this.#adapter.uuid)
-            const registry = (globalThis as any).openDAW?.scriptProcessors?.[uuid]
+            const registry = (globalThis as any).openDAW?.werkstattProcessors?.[uuid]
             const expectedVersion = this.#adapter.box.version.getValue()
             if (isDefined(registry) && registry.version === expectedVersion) {
                 this.#swapProcessor(registry.create, expectedVersion)
@@ -243,7 +243,7 @@ export class ScriptDeviceProcessor extends AudioProcessor implements AudioEffect
         this.#peaks.process(outL, outR, s0, s1)
     }
 
-    toString(): string {return `{ScriptDeviceProcessor}`}
+    toString(): string {return `{WerkstattProcessor}`}
 }
 ```
 
@@ -251,36 +251,36 @@ export class ScriptDeviceProcessor extends AudioProcessor implements AudioEffect
 
 ```typescript
 // In EffectFactories.ts
-export const ScriptDevice: EffectFactory = {
-    defaultName: "Script",
+export const Werkstatt: EffectFactory = {
+    defaultName: "Werkstatt",
     defaultIcon: IconSymbol.Code,
     description: "User-scripted DSP processor",
-    manualPage: DeviceManualUrls.ScriptDevice,
+    manualPage: DeviceManualUrls.Werkstatt,
     separatorBefore: false,
     type: "audio",
-    create: ({boxGraph}, hostField, index): ScriptDeviceBox =>
-        ScriptDeviceBox.create(boxGraph, UUID.generate(), box => {
-            box.label.setValue("Script")
+    create: ({boxGraph}, hostField, index): WerkstattBox =>
+        WerkstattBox.create(boxGraph, UUID.generate(), box => {
+            box.label.setValue("Werkstatt")
             box.index.setValue(index)
             box.host.refer(hostField)
         })
 }
 
 // In DeviceProcessorFactory.ts
-visitScriptDeviceBox: (box: ScriptDeviceBox): AudioEffectDeviceProcessor =>
-    new ScriptDeviceProcessor(context, context.boxAdapters.adapterFor(box, ScriptDeviceBoxAdapter))
+visitWerkstattBox: (box: WerkstattBox): AudioEffectDeviceProcessor =>
+    new WerkstattProcessor(context, context.boxAdapters.adapterFor(box, WerkstattBoxAdapter))
 
 // In BoxAdapters.ts
-visitScriptDeviceBox: (box: ScriptDeviceBox) => new ScriptDeviceBoxAdapter(this.#context, box)
+visitWerkstattBox: (box: WerkstattBox) => new WerkstattBoxAdapter(this.#context, box)
 
 // In BoxVisitor
-visitScriptDeviceBox?(box: ScriptDeviceBox): R
+visitWerkstattBox?(box: WerkstattBox): R
 
 // In DeviceEditorFactory.tsx
-visitScriptDeviceBox: (box: ScriptDeviceBox) => (
-    <ScriptDeviceEditor lifecycle={lifecycle}
+visitWerkstattBox: (box: WerkstattBox) => (
+    <WerkstattEditor lifecycle={lifecycle}
                         service={service}
-                        adapter={service.project.boxAdapters.adapterFor(box, ScriptDeviceBoxAdapter)}
+                        adapter={service.project.boxAdapters.adapterFor(box, WerkstattBoxAdapter)}
                         deviceHost={deviceHost}/>
 )
 ```
@@ -288,7 +288,7 @@ visitScriptDeviceBox: (box: ScriptDeviceBox) => (
 ### Editor (Sketch)
 
 ```typescript
-export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
+export const WerkstattEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
     return (
         <DeviceEditor lifecycle={lifecycle}
@@ -299,7 +299,7 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                                       code={adapter.box.code}
                                       onCompile={async (code) => {
                                           adapter.box.code.setValue(code)
-                                          await ScriptDeviceCompiler.compile(
+                                          await WerkstattCompiler.compile(
                                               service.audioContext, adapter.box)
                                       }}/>
                       )}
@@ -308,7 +308,7 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
                       )}
-                      icon={EffectFactories.ScriptDevice.defaultIcon}/>
+                      icon={EffectFactories.Werkstatt.defaultIcon}/>
     )
 }
 ```
@@ -321,18 +321,18 @@ Adds automatable parameters via +/- buttons in the editor. The code references t
 
 ### What Changes
 
-**Forge schema**: Add `parameters` hook field to `ScriptDeviceBox`, add `ScriptParameterBox`.
+**Forge schema**: Add `parameters` hook field to `WerkstattBox`, add `WerkstattParameterBox`.
 
 ```typescript
-// Add to ScriptDeviceBox
+// Add to WerkstattBox
 12: {type: "field", name: "parameters", pointerRules: {accepts: [Pointers.Parameter], mandatory: false}}
 ```
 
 ```typescript
-export const ScriptParameterBox: BoxSchema<Pointers> = {
+export const WerkstattParameterBox: BoxSchema<Pointers> = {
     type: "box",
     class: {
-        name: "ScriptParameterBox",
+        name: "WerkstattParameterBox",
         fields: {
             1: {type: "pointer", name: "owner", pointerType: Pointers.Parameter, mandatory: true},
             2: {type: "string", name: "name"},
@@ -357,14 +357,14 @@ this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
 this.#terminator.own(
     box.parameters.pointerHub.catchupAndSubscribe({
         onAdded: ({box}) => {
-            const paramBox = asInstanceOf(box, ScriptParameterBox)
+            const paramBox = asInstanceOf(box, WerkstattParameterBox)
             const mapping = this.#resolveMapping(paramBox)
             this.#parametric.createParameter(
                 paramBox.value, mapping.valueMapping, mapping.stringMapping,
                 paramBox.name.getValue())
         },
         onRemoved: ({box}) => this.#parametric
-            .removeParameter(asInstanceOf(box, ScriptParameterBox).value.address)
+            .removeParameter(asInstanceOf(box, WerkstattParameterBox).value.address)
     })
 )
 ```
@@ -383,13 +383,13 @@ The mapping defines how the knob's 0→1 range maps to min→max. Parameter valu
 // Add to constructor
 box.parameters.pointerHub.catchupAndSubscribe({
     onAdded: ({box}) => {
-        const paramBox = asInstanceOf(box, ScriptParameterBox)
+        const paramBox = asInstanceOf(box, WerkstattParameterBox)
         const param = this.bindParameter(
             parameters.parameterAt(paramBox.value.address))
         this.#parameters.push(param)
     },
     onRemoved: ({box}) => {
-        const paramBox = asInstanceOf(box, ScriptParameterBox)
+        const paramBox = asInstanceOf(box, WerkstattParameterBox)
         Arrays.removeIf(this.#parameters, parameter =>
             parameter.address === paramBox.value.address)
     }
@@ -397,7 +397,7 @@ box.parameters.pointerHub.catchupAndSubscribe({
 
 // Add method
 parameterChanged(parameter: AutomatableParameter): void {
-    const paramBox = asInstanceOf(parameter.adapter.field.box, ScriptParameterBox)
+    const paramBox = asInstanceOf(parameter.adapter.field.box, WerkstattParameterBox)
     const name = paramBox.name.getValue()
     const value = parameter.getValue()
     this.#userProcessor.ifSome(proc => {
@@ -413,7 +413,7 @@ parameterChanged(parameter: AutomatableParameter): void {
 ```typescript
 const addParameter = () => {
     editing.modify(() => {
-        ScriptParameterBox.create(boxGraph, UUID.generate(), paramBox => {
+        WerkstattParameterBox.create(boxGraph, UUID.generate(), paramBox => {
             paramBox.owner.refer(adapter.box.parameters)
             paramBox.name.setValue("param")
             paramBox.min.setValue(0)
@@ -423,7 +423,7 @@ const addParameter = () => {
         })
     })
 }
-const removeParameter = (paramBox: ScriptParameterBox) => {
+const removeParameter = (paramBox: WerkstattParameterBox) => {
     editing.modify(() => paramBox.delete())
 }
 ```
@@ -528,21 +528,21 @@ Use plain TypeScript — no custom language, no parser, no WASM compiler. The us
 
 The `AudioWorkletGlobalScope` has no `eval()`, `new Function()`, `import()`, or `fetch()`. The only way to load code is `audioContext.audioWorklet.addModule(url)` from the main thread.
 
-**Scoping**: The generated wrapper wraps user code in a **named IIFE**. All user-defined classes and variables are trapped in the closure — nothing leaks to the global except the factory registration. The registry key is the `ScriptDeviceBox` UUID, so each device instance has its own slot. The named IIFE (`function script()`) ensures meaningful error stack traces instead of `<anonymous>`:
+**Scoping**: The generated wrapper wraps user code in a **named IIFE**. All user-defined classes and variables are trapped in the closure — nothing leaks to the global except the factory registration. The registry key is the `WerkstattBox` UUID, so each device instance has its own slot. The named IIFE (`function werkstatt()`) ensures meaningful error stack traces instead of `<anonymous>`:
 
 ```javascript
-globalThis.openDAW.scriptProcessors["<ScriptDeviceBox.uuid>"] = {
+globalThis.openDAW.werkstattProcessors["<WerkstattBox.uuid>"] = {
     version: 42,
-    create: (function script() {
+    create: (function werkstatt() {
         class Processor { /* ... */ }
         return Processor
     })()
 }
 ```
 
-Two Script Device instances can both define `class Biquad` without collision. Each is inside its own IIFE closure.
+Two Werkstatt instances can both define `class Biquad` without collision. Each is inside its own IIFE closure.
 
-**Version gating**: Each recompile increments a version counter stored in the Box. The `ScriptDeviceProcessor` in the worklet:
+**Version gating**: Each recompile increments a version counter stored in the Box. The `WerkstattProcessor` in the worklet:
 - Watches the Box version field
 - When it changes, **immediately silences the old processor** (outputs zeros)
 - Polls the registry each `processAudio()` call for a matching version
@@ -569,7 +569,7 @@ Runtime errors caught in `processAudio()` need to reach the editor UI. Options: 
 
 ## Design Decisions
 
-- **Parameters managed via UI, not code**: +/- buttons in the editor create/remove `ScriptParameterBox` instances. The code references them by name via `paramChanged()`. This eliminates host-side reflection, main-thread eval, and parameter reconciliation entirely.
+- **Parameters managed via UI, not code**: +/- buttons in the editor create/remove `WerkstattParameterBox` instances. The code references them by name via `paramChanged()`. This eliminates host-side reflection, main-thread eval, and parameter reconciliation entirely.
 - **Block-based stereo processing**: `process(inputL, inputR, outputL, outputR, fromIndex, toIndex)` — the host extracts `s0`/`s1` from the per-chunk `Block`. No per-sample function call overhead, full stereo/cross-channel capability.
 - **Error recovery is host-injected**: broken code silences the processor until the next successful recompile.
 - **Peak metering is host-injected**: `PeakBroadcaster` runs on the output after the user's `process()` call.
