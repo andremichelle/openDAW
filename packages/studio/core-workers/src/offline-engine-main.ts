@@ -39,6 +39,9 @@ Communicator.executor<OfflineEngineProtocol>(
                 running: false
             })
         },
+        async addModule(code: string): Promise<void> {
+            new Function(code)()
+        },
         async step(numSamples: int): Promise<Float32Array[]> {
             const engine = state.unwrap()
             const result: Float32Array[] = Arrays.create(() => new Float32Array(numSamples), engine.numberOfChannels)

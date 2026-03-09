@@ -1,5 +1,5 @@
-import {int, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioEffectDeviceAdapter, WerkstattDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {int, isDefined, Nullable, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {AudioEffectDeviceAdapter, EngineToClient, WerkstattDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {EngineContext} from "../../EngineContext"
 import {Block, Processor} from "../../processing"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
@@ -8,10 +8,25 @@ import {AudioBuffer} from "@opendaw/lib-dsp"
 import {AudioProcessor} from "../../AudioProcessor"
 
 const HEADER_PATTERN = /^\/\/ @werkstatt (\w+) (\d+) (\d+)\n/
+const MAX_AMPLITUDE = 1000.0 // ~60dB
 
 const parseUpdate = (code: string): int => {
     const match = code.match(HEADER_PATTERN)
     return match !== null ? parseInt(match[3]) : -1
+}
+
+const validateOutput = (channels: ReadonlyArray<Float32Array>, s0: int, s1: int): Nullable<string> => {
+    for (let ch = 0; ch < channels.length; ch++) {
+        const channel = channels[ch]
+        for (let i = s0; i < s1; i++) {
+            const sample = channel[i]
+            if (sample !== sample) {return `NaN detected in output channel ${ch} at sample ${i}`}
+            if (sample > MAX_AMPLITUDE || sample < -MAX_AMPLITUDE) {
+                return `Signal overflow in channel ${ch} at sample ${i} (amplitude: ${sample.toFixed(1)})`
+            }
+        }
+    }
+    return null
 }
 
 interface UserIO {
@@ -29,8 +44,10 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
     readonly #id: int = WerkstattDeviceProcessor.ID++
 
     readonly #adapter: WerkstattDeviceBoxAdapter
+    readonly #engineToClient: EngineToClient
     readonly #output: AudioBuffer
     readonly #peaks: PeakBroadcaster
+    readonly #uuid: string
 
     #source: Option<AudioBuffer> = Option.None
     #userProcessor: Option<UserProcessor> = Option.None
@@ -40,8 +57,10 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
     constructor(context: EngineContext, adapter: WerkstattDeviceBoxAdapter) {
         super(context)
         this.#adapter = adapter
+        this.#engineToClient = context.engineToClient
         this.#output = new AudioBuffer()
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
+        this.#uuid = UUID.toString(adapter.uuid)
         this.ownAll(
             adapter.box.code.catchupAndSubscribe(owner => {
                 const newUpdate = parseUpdate(owner.getValue())
@@ -57,8 +76,7 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
     }
 
     #tryLoad(update: int): void {
-        const uuid = UUID.toString(this.#adapter.uuid)
-        const registry = (globalThis as any).openDAW?.werkstattProcessors?.[uuid]
+        const registry = (globalThis as any).openDAW?.werkstattProcessors?.[this.#uuid]
         if (isDefined(registry) && registry.update === update) {
             this.#swapProcessor(registry.create, update)
         }
@@ -70,9 +88,19 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
             this.#currentUpdate = update
             this.#silenced = false
         } catch (error) {
-            console.error("Werkstatt: failed to instantiate Processor", error)
+            this.#reportError(`Failed to instantiate Processor: ${error}`)
             this.#silenced = true
         }
+    }
+
+    #reportError(message: string): void {
+        this.#engineToClient.deviceMessage(this.#uuid, message)
+    }
+
+    #silence(message: string): void {
+        this.#silenced = true
+        this.#output.clear()
+        this.#reportError(message)
     }
 
     get incoming(): Processor {return this}
@@ -97,11 +125,9 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
 
     processAudio(block: Block): void {
         if (this.#silenced) {
-            const uuid = UUID.toString(this.#adapter.uuid)
-            const registry = (globalThis as any).openDAW?.werkstattProcessors?.[uuid]
             const expectedUpdate = parseUpdate(this.#adapter.box.code.getValue())
-            if (isDefined(registry) && registry.update === expectedUpdate) {
-                this.#swapProcessor(registry.create, expectedUpdate)
+            if (expectedUpdate > 0 && expectedUpdate !== this.#currentUpdate) {
+                this.#tryLoad(expectedUpdate)
             }
             if (this.#silenced) {return}
         }
@@ -115,8 +141,13 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
         try {
             proc.process(io, block)
         } catch (error) {
-            console.error("Werkstatt: runtime error in process()", error)
-            this.#silenced = true
+            this.#silence(`Runtime error: ${error}`)
+            return
+        }
+        const validationError = validateOutput(io.out, block.s0, block.s1)
+        if (validationError !== null) {
+            this.#silence(validationError)
+            return
         }
         this.#peaks.process(io.out[0], io.out[1], block.s0, block.s1)
     }

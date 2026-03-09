@@ -1,5 +1,6 @@
 import {DefaultObservableValue, Errors, int, isDefined, Nullable, Option, panic, SyncStream, Terminable, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
 import {AudioData, ppqn} from "@opendaw/lib-dsp"
+import {WerkstattDeviceBox} from "@opendaw/studio-boxes"
 import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
 import {AnimationFrame} from "@opendaw/lib-dom"
 import {
@@ -45,6 +46,9 @@ export class OfflineEngineRenderer {
             dispatcher => new class implements OfflineEngineProtocol {
                 initialize(enginePort: MessagePort, config: OfflineEngineInitializeConfig): Promise<void> {
                     return dispatcher.dispatchAndReturn(this.initialize, enginePort, config)
+                }
+                addModule(code: string): Promise<void> {
+                    return dispatcher.dispatchAndReturn(this.addModule, code)
                 }
                 render(config: OfflineEngineRenderConfig): Promise<Float32Array[]> {
                     return dispatcher.dispatchAndReturn(this.render, config)
@@ -95,7 +99,10 @@ export class OfflineEngineRenderer {
                 return response.arrayBuffer()
             },
             notifyClipSequenceChanges: (): void => {},
-            switchMarkerState: (): void => {}
+            switchMarkerState: (): void => {},
+            deviceMessage: (uuid: string, message: string): void => {
+                console.warn(`OFFLINE-ENGINE device(${uuid}): ${message}`)
+            }
         })
 
         const engineCommands = Communicator.sender<EngineCommands>(
@@ -137,6 +144,30 @@ export class OfflineEngineRenderer {
             exportConfiguration: optExportConfiguration.unwrapOrUndefined()
         })
 
+        const HEADER_PATTERN = /^\/\/ @werkstatt (\w+) (\d+) (\d+)\n/
+        for (const box of source.boxGraph.boxes()) {
+            if (box instanceof WerkstattDeviceBox) {
+                const code = box.code.getValue()
+                const match = code.match(HEADER_PATTERN)
+                if (match !== null) {
+                    const userCode = code.slice(match[0].length)
+                    const update = parseInt(match[3])
+                    const uuid = UUID.toString(box.address.uuid)
+                    await protocol.addModule(`
+                        if (typeof globalThis.openDAW === "undefined") { globalThis.openDAW = {} }
+                        if (typeof globalThis.openDAW.werkstattProcessors === "undefined") { globalThis.openDAW.werkstattProcessors = {} }
+                        globalThis.openDAW.werkstattProcessors["${uuid}"] = {
+                            update: ${update},
+                            create: (function werkstatt() {
+                                ${userCode}
+                                return Processor
+                            })()
+                        }
+                    `)
+                }
+            }
+        }
+
         engineCommands.setupMIDI(port, sab)
 
         return new OfflineEngineRenderer(
@@ -163,8 +194,9 @@ export class OfflineEngineRenderer {
         enabled.setValue(false)
         boxGraph.endTransaction()
         const endPosition = source.lastRegionAction()
+        const maxDurationSeconds = source.tempoMap.ppqnToSeconds(endPosition) + 30
         const renderer = await this.create(source, optExportConfiguration, sampleRate)
-        const result = await renderer.render({}, endPosition, progress, abortSignal)
+        const result = await renderer.render({maxDurationSeconds}, endPosition, progress, abortSignal)
         boxGraph.beginTransaction()
         enabled.setValue(wasEnabled)
         boxGraph.endTransaction()

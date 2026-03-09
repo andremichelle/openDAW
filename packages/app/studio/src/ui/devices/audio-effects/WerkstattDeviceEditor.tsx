@@ -1,7 +1,7 @@
 import css from "./WerkstattDeviceEditor.sass?inline"
 import defaultCode from "./werkstatt-default.txt?raw"
 import {DeviceHost, WerkstattDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Lifecycle, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
@@ -26,9 +26,18 @@ export const WerkstattDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
     const storedCode = box.code.getValue()
     const userCode = storedCode.length > 0 ? WerkstattCompiler.stripHeader(storedCode) : defaultCode
     const textarea = <textarea spellcheck={false}>{userCode}</textarea> as HTMLTextAreaElement
+    const errorDisplay = <div className="error"/> as HTMLDivElement
     const runButton = <button onclick={async () => {
+        errorDisplay.textContent = ""
+        errorDisplay.classList.remove("visible")
         await WerkstattCompiler.compile(service.audioContext, box, textarea.value)
     }}>Run</button>
+    lifecycle.ownAll(
+        service.engine.subscribeDeviceMessage(UUID.toString(adapter.uuid), message => {
+            errorDisplay.textContent = message
+            errorDisplay.classList.add("visible")
+        })
+    )
     return (
         <DeviceEditor lifecycle={lifecycle}
                       project={project}
@@ -37,6 +46,7 @@ export const WerkstattDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                       populateControls={() => (
                           <div className={className}>
                               {textarea}
+                              {errorDisplay}
                               {runButton}
                           </div>
                       )}
