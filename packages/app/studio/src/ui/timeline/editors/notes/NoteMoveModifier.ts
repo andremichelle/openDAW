@@ -1,6 +1,7 @@
 import {
     byte,
     clamp,
+    Editing,
     int,
     Notifier,
     Observer,
@@ -9,7 +10,7 @@ import {
     Subscription,
     Terminable,
     unitValue
-, Editing} from "@opendaw/lib-std"
+} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
@@ -69,7 +70,16 @@ export class NoteMoveModifier implements NoteModifier {
     #deltaPitch: int
     #deltaPosition: ppqn
 
-    private constructor({editing, element, selection, positioner, snapping, pointerPulse, pointerPitch, reference}: Construct) {
+    private constructor({
+                            editing,
+                            element,
+                            selection,
+                            positioner,
+                            snapping,
+                            pointerPulse,
+                            pointerPitch,
+                            reference
+                        }: Construct) {
         this.#editing = editing
         this.#element = element
         this.#selection = selection

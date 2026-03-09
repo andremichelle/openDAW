@@ -7,12 +7,11 @@ import {Sample} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {AssetLocation} from "@/ui/browse/AssetLocation"
 import {SampleDialogs} from "@/ui/browse/SampleDialogs"
-import {ContextMenu, MenuItem} from "@opendaw/studio-core"
+import {ContextMenu, MenuItem, SampleStorage} from "@opendaw/studio-core"
 import {SampleSelection} from "@/ui/browse/SampleSelection"
 import {Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {DragAndDrop} from "@/ui/DragAndDrop"
-import {SampleStorage} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 
 const className = Html.adoptStyleSheet(css, "Sample")

@@ -1,8 +1,7 @@
 import {MarkerBoxAdapter, MarkerTrackAdapter} from "@opendaw/studio-adapters"
 import {DefaultObservableValue, int, isDefined, Nullable, UUID} from "@opendaw/lib-std"
-import {CanvasPainter} from "../../../../../../../../studio/core/src/ui/canvas/painter"
+import {CanvasPainter, TimelineRange} from "@opendaw/studio-core"
 import {Context2d} from "@opendaw/lib-dom"
-import {TimelineRange} from "@opendaw/studio-core"
 
 export namespace MarkerRenderer {
     export const createTrackRenderer = (canvas: HTMLCanvasElement,

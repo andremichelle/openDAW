@@ -3,13 +3,12 @@ import {float, Lifecycle, ObservableValue, Option, Terminator} from "@opendaw/li
 import {createElement, Inject} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Html} from "@opendaw/lib-dom"
-import {FpsOptions, ProjectProfile, StudioPreferences} from "@opendaw/studio-core"
+import {ContextMenu, FpsOptions, MenuItem, ProjectProfile, StudioPreferences} from "@opendaw/studio-core"
 import {TapButton} from "@/ui/header/TapButton"
 import {MusicalUnitDisplay} from "@/ui/header/MusicalUnitDisplay"
 import {AbsoluteUnitDisplay} from "@/ui/header/AbsoluteUnitDisplay"
 import {TempoControl} from "@/ui/header/TempoControl"
 import {MeterControl} from "@/ui/header/MeterControl"
-import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "TimeStateDisplay")

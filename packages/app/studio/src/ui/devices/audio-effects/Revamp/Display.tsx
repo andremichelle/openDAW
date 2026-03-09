@@ -1,5 +1,5 @@
 import {Terminable} from "@opendaw/lib-std"
-import {Scale} from "../../../../../../../studio/core/src/ui/canvas/scale.ts"
+import {Scale} from "@opendaw/studio-core"
 import {createElement} from "@opendaw/lib-jsx"
 import {horizontalUnits, verticalUnits} from "./constants.ts"
 import {Html} from "@opendaw/lib-dom"

@@ -121,7 +121,11 @@ export class RegionDurationModifier implements RegionModifier {
         }))
         console.debug("[RegionDurationModifier.approve]", {
             deltaDuration: this.#deltaDuration, aligned: this.#aligned,
-            changes: result.map(entry => ({p: entry.region.position, oldD: entry.region.duration, newD: entry.duration})),
+            changes: result.map(entry => ({
+                p: entry.region.position,
+                oldD: entry.region.duration,
+                newD: entry.duration
+            })),
             trackSnapshots
         })
         this.#project.overlapResolver.apply(modifiedTracks, adapters, this, 0, (_trackResolver) => {

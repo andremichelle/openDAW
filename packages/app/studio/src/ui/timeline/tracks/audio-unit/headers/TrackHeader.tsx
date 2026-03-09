@@ -3,7 +3,7 @@ import {Errors, Lifecycle, panic, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
-import {MenuItem} from "@opendaw/studio-core"
+import {EffectFactories, MenuItem} from "@opendaw/studio-core"
 import {AudioUnitBoxAdapter, ColorCodes, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {AudioUnitChannelControls} from "@/ui/timeline/tracks/audio-unit/AudioUnitChannelControls.tsx"
 import {installTrackHeaderMenu} from "@/ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts"
@@ -14,7 +14,6 @@ import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
-import {EffectFactories} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "TrackHeader")
 

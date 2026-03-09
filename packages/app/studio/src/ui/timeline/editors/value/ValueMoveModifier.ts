@@ -3,6 +3,7 @@ import {
     asDefined,
     assert,
     clampUnit,
+    Editing,
     int,
     isNull,
     Notifier,
@@ -15,7 +16,7 @@ import {
     unitValue,
     ValueAxis,
     ValueMapping
-, Editing} from "@opendaw/lib-std"
+} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {SelectableValueEvent, ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 import {EventCollection, Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"

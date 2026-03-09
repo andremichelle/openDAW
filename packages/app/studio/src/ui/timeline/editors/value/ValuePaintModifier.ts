@@ -1,6 +1,7 @@
 import {
     Arrays,
     BinarySearch,
+    Editing,
     int,
     Notifier,
     NumberComparator,
@@ -11,7 +12,7 @@ import {
     Terminable,
     unitValue,
     ValueAxis
-, Editing} from "@opendaw/lib-std"
+} from "@opendaw/lib-std"
 import {SelectableValueEvent, ValueEventBoxAdapter} from "@opendaw/studio-adapters"
 import {Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"

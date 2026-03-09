@@ -15,7 +15,7 @@ import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {TimeCodeInput} from "@/ui/components/TimeCodeInput.tsx"
 import {NumberInput} from "@/ui/components/NumberInput.tsx"
 import {VUMeterDesign} from "@/ui/meter/VUMeterDesign.tsx"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {dbToGain} from "@opendaw/lib-dsp"
 import {RootBox, TimelineBox} from "@opendaw/studio-boxes"
 import {BoxGraph} from "@opendaw/lib-box"
@@ -24,7 +24,6 @@ import {ProgressBar} from "@/ui/components/ProgressBar.tsx"
 import {TextInput} from "../components/TextInput"
 import {SearchInput} from "../components/SearchInput"
 import {Html} from "@opendaw/lib-dom"
-import {Colors} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "ComponentsPage")
 

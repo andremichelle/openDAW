@@ -1,5 +1,5 @@
 import css from "./ParameterLabel.sass?inline"
-import {ControlSource, Lifecycle, Terminable, Editing} from "@opendaw/lib-std"
+import {ControlSource, Editing, Lifecycle, Terminable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {attachParameterContextMenu} from "@/ui/menu/automation.ts"
 import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@opendaw/studio-adapters"

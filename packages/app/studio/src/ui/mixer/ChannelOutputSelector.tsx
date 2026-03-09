@@ -5,10 +5,9 @@ import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {createElement, DomElement, Frag} from "@opendaw/lib-jsx"
 import {IconCartridge} from "@/ui/components/Icon.tsx"
 import {Html} from "@opendaw/lib-dom"
-import {MenuItem} from "@opendaw/studio-core"
+import {MenuItem, Project} from "@opendaw/studio-core"
 import {showNewAudioBusOrAuxDialog} from "@/ui/dialogs"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {Project} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "OutputSelector")
 

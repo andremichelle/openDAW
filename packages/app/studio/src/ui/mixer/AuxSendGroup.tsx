@@ -4,13 +4,12 @@ import {AudioBusFactory, AudioUnitBoxAdapter, AuxSendBoxAdapter} from "@opendaw/
 import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {AuxSend} from "@/ui/mixer/AuxSend.tsx"
 import {createElement} from "@opendaw/lib-jsx"
-import {MenuItem} from "@opendaw/studio-core"
+import {MenuItem, Project} from "@opendaw/studio-core"
 import {AuxSendBox} from "@opendaw/studio-boxes"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Icon} from "../components/Icon"
 import {showNewAudioBusOrAuxDialog} from "@/ui/dialogs.tsx"
 import {Html} from "@opendaw/lib-dom"
-import {Project} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "AuxSendGroup")
 

@@ -18,8 +18,7 @@ import {ParameterLabel} from "@/ui/components/ParameterLabel.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {DeviceInterfaceKnobBox} from "@opendaw/studio-boxes"
 import {Events, Html} from "@opendaw/lib-dom"
-import {Colors} from "@opendaw/studio-enums"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "GenericModuleView")
 

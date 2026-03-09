@@ -131,7 +131,11 @@ export class RegionContentStartModifier implements RegionModifier {
         })
         console.debug("[ContentStartModifier.approve]", {
             toolDelta: this.#delta,
-            masks: result.map(entry => ({readPos: entry.readPos, readComplete: entry.readComplete, delta: entry.delta})),
+            masks: result.map(entry => ({
+                readPos: entry.readPos,
+                readComplete: entry.readComplete,
+                delta: entry.delta
+            })),
             trackSnapshots
         })
         this.#project.overlapResolver.apply(modifiedTracks, adapters, this, 0, () => {

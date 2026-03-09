@@ -11,7 +11,7 @@ import {Knob} from "@/ui/components/Knob.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {SnapCenter} from "@/ui/configs"
 import {StudioService} from "@/service/StudioService"
-import {ContextMenu, MenuItem} from "@opendaw/studio-core"
+import {ChannelStripView, ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {AuxSendGroup} from "@/ui/mixer/AuxSendGroup.tsx"
 import {DblClckTextInput} from "@/ui/wrapper/DblClckTextInput.tsx"
 import {ChannelOutputSelector} from "@/ui/mixer/ChannelOutputSelector.tsx"
@@ -24,7 +24,6 @@ import {DragAndDrop} from "../DragAndDrop"
 import {Events, Html} from "@opendaw/lib-dom"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {AudioOutputSelector} from "./AudioOutputSelector"
-import {ChannelStripView} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "ChannelStrip")
 

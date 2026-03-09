@@ -1,4 +1,14 @@
-import {IterableIterators, int, MakeMutable, Notifier, Observer, Option, Selection, Terminable, Editing} from "@opendaw/lib-std"
+import {
+    Editing,
+    int,
+    IterableIterators,
+    MakeMutable,
+    Notifier,
+    Observer,
+    Option,
+    Selection,
+    Terminable
+} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
 import {EventCollection, ppqn} from "@opendaw/lib-dsp"

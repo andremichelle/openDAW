@@ -1,6 +1,7 @@
 import {
     clampUnit,
     Curve,
+    Editing,
     Iterables,
     Notifier,
     Observer,
@@ -9,7 +10,7 @@ import {
     Terminable,
     unitValue,
     ValueAxis
-, Editing} from "@opendaw/lib-std"
+} from "@opendaw/lib-std"
 import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 import {Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"

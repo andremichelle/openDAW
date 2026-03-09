@@ -1,4 +1,4 @@
-import {Objects, Selection, Editing} from "@opendaw/lib-std"
+import {Editing, Objects, Selection} from "@opendaw/lib-std"
 import {Interpolation} from "@opendaw/lib-dsp"
 import {ContextMenu, ElementCapturing, MenuItem} from "@opendaw/studio-core"
 import {ValueEventBoxAdapter} from "@opendaw/studio-adapters"

@@ -1,5 +1,5 @@
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {MutableObservableValue, Procedure, Selection, Editing} from "@opendaw/lib-std"
+import {Editing, MutableObservableValue, Procedure, Selection} from "@opendaw/lib-std"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {EventCollection} from "@opendaw/lib-dsp"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"

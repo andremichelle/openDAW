@@ -5,7 +5,7 @@ import {Checkbox} from "@/ui/components/Checkbox"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
-import {Lifecycle, Editing} from "@opendaw/lib-std"
+import {Editing, Lifecycle} from "@opendaw/lib-std"
 import {TimelineBox} from "@opendaw/studio-boxes"
 
 const className = Html.adoptStyleSheet(css, "SignatureTrackHeader")

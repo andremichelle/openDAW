@@ -1,5 +1,5 @@
 import css from "./PropertyTable.sass?inline"
-import {Arrays, Lifecycle, Nullable, Option, Selection, Editing} from "@opendaw/lib-std"
+import {Arrays, Editing, Lifecycle, Nullable, Option, Selection} from "@opendaw/lib-std"
 import {deferNextFrame, Html} from "@opendaw/lib-dom"
 import {TimeCodeInput} from "@/ui/components/TimeCodeInput.tsx"
 import {PropertyParameters} from "@/ui/timeline/editors/notes/property/PropertyParameters.ts"

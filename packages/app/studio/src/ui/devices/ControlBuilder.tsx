@@ -3,7 +3,7 @@ import {Column} from "@/ui/devices/Column.tsx"
 import {createElement} from "@opendaw/lib-jsx"
 import {LKR} from "@/ui/devices/constants.ts"
 import {ParameterLabelKnob} from "@/ui/devices/ParameterLabelKnob.tsx"
-import {Color, TerminableOwner, ValueGuide, Editing} from "@opendaw/lib-std"
+import {Color, Editing, TerminableOwner, ValueGuide} from "@opendaw/lib-std"
 import {PrimitiveValues} from "@opendaw/lib-box"
 import {MIDILearning} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
@@ -23,7 +23,18 @@ type Creation<T extends PrimitiveValues> = {
 
 export namespace ControlBuilder {
     export const createKnob = <T extends PrimitiveValues, >
-    ({lifecycle, editing, midiLearning, adapter, parameter, options, anchor, color, style, disableAutomation}: Creation<T>) => {
+    ({
+         lifecycle,
+         editing,
+         midiLearning,
+         adapter,
+         parameter,
+         options,
+         anchor,
+         color,
+         style,
+         disableAutomation
+     }: Creation<T>) => {
         return (
             <Column ems={LKR} color={color ?? Colors.cream} style={style}>
                 <h5>{parameter.name}</h5>

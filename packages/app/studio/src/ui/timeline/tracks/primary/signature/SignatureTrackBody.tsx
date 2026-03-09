@@ -3,7 +3,13 @@ import {EmptyExec, Lifecycle, Nullable, Option} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Dragging, Events, Html} from "@opendaw/lib-dom"
 import {ppqn} from "@opendaw/lib-dsp"
-import {Parsing, SignatureEvent, SignatureEventBoxAdapter, SignatureTrackAdapter, TimelineBoxAdapter} from "@opendaw/studio-adapters"
+import {
+    Parsing,
+    SignatureEvent,
+    SignatureEventBoxAdapter,
+    SignatureTrackAdapter,
+    TimelineBoxAdapter
+} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
 import {ElementCapturing} from "@opendaw/studio-core"
 import {SignatureDragPreview, SignatureRenderer} from "@/ui/timeline/tracks/primary/signature/SignatureRenderer"

@@ -1,9 +1,8 @@
 import css from "./PerformanceStats.sass?inline"
 import {AnimationFrame, Html} from "@opendaw/lib-dom"
 import {Lifecycle, Terminator} from "@opendaw/lib-std"
-import {StudioPreferences} from "@opendaw/studio-core"
+import {CanvasPainter, StudioPreferences} from "@opendaw/studio-core"
 import {createElement} from "@opendaw/lib-jsx"
-import {CanvasPainter} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {PERF_BUFFER_SIZE} from "@opendaw/studio-adapters"
@@ -43,7 +42,11 @@ export const PerformanceStats = ({lifecycle, service}: Construct) => {
                      animationLifeSpan.terminate()
                      if (show) {
                          const canvas = element.querySelector("canvas")!
-                         const painter = animationLifeSpan.own(new CanvasPainter(canvas, ({context, actualWidth, actualHeight}) => {
+                         const painter = animationLifeSpan.own(new CanvasPainter(canvas, ({
+                                                                                              context,
+                                                                                              actualWidth,
+                                                                                              actualHeight
+                                                                                          }) => {
                              const engine = service.engine
                              const perfBuffer = engine.perfBuffer
                              const perfIndex = engine.perfIndex

@@ -2,6 +2,7 @@ import css from "./VolumeSlider.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
 import {
     clampUnit,
+    Editing,
     EmptyExec,
     Lifecycle,
     Nullable,
@@ -10,7 +11,7 @@ import {
     Strings,
     Terminator,
     unitValue
-, Editing} from "@opendaw/lib-std"
+} from "@opendaw/lib-std"
 import {ValueDragging} from "@/ui/hooks/dragging.ts"
 import {ValueTooltip} from "@/ui/surface/ValueTooltip.tsx"
 import {CssUtils, Events, Html} from "@opendaw/lib-dom"

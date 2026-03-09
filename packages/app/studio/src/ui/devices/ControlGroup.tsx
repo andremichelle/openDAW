@@ -1,6 +1,6 @@
 import css from "./ControlGroup.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {Color, int, Lifecycle, Editing} from "@opendaw/lib-std"
+import {Color, Editing, int, Lifecycle} from "@opendaw/lib-std"
 import {createElement, Frag} from "@opendaw/lib-jsx"
 import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {MIDILearning} from "@opendaw/studio-core"

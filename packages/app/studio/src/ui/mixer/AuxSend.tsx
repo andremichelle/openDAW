@@ -1,5 +1,5 @@
 import css from "./AuxSend.sass?inline"
-import {DefaultObservableValue, Lifecycle, Editing} from "@opendaw/lib-std"
+import {DefaultObservableValue, Editing, Lifecycle} from "@opendaw/lib-std"
 import {createElement, DomElement, Inject} from "@opendaw/lib-jsx"
 import {AuxSendBoxAdapter} from "@opendaw/studio-adapters"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"

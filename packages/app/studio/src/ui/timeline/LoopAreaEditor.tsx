@@ -1,5 +1,5 @@
 import css from "./LoopAreaEditor.sass?inline"
-import {asDefined, Lifecycle, Nullable, Option, Editing} from "@opendaw/lib-std"
+import {asDefined, Editing, Lifecycle, Nullable, Option} from "@opendaw/lib-std"
 import {CssUtils, deferNextFrame, Dragging, Events, Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {Propagation} from "@opendaw/lib-box"

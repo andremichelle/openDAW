@@ -1,6 +1,6 @@
 import css from "./ParameterToggleButton.sass?inline"
 import {Events, Html} from "@opendaw/lib-dom"
-import {Lifecycle, Editing} from "@opendaw/lib-std"
+import {Editing, Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
 

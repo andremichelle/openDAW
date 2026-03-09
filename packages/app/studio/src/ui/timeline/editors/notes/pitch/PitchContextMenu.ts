@@ -1,5 +1,5 @@
 import {ContextMenu, ElementCapturing} from "@opendaw/studio-core"
-import {MutableObservableValue, Selection, Editing} from "@opendaw/lib-std"
+import {Editing, MutableObservableValue, Selection} from "@opendaw/lib-std"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {PitchCaptureTarget} from "@/ui/timeline/editors/notes/pitch/PitchEventCapturing.ts"
 import {createPitchMenu} from "@/ui/timeline/editors/notes/pitch/PitchMenu.ts"

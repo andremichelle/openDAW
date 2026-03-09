@@ -11,8 +11,9 @@ import {replaceChildren} from "@opendaw/lib-jsx"
 import {
     AudioWorklets,
     CloudAuthManager,
-    ContextMenu, GlobalSoundfontLoaderManager,
+    ContextMenu,
     GlobalSampleLoaderManager,
+    GlobalSoundfontLoaderManager,
     OfflineEngineRenderer,
     OpenSampleAPI,
     OpenSoundfontAPI,

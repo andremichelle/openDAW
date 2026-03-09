@@ -4,9 +4,8 @@ import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {createElement, Inject} from "@opendaw/lib-jsx"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Html} from "@opendaw/lib-dom"
-import {Colors} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "SnapSelector")
 

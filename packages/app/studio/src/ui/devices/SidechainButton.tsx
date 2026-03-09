@@ -1,6 +1,6 @@
 import css from "./SidechainButton.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
-import {Option, Editing} from "@opendaw/lib-std"
+import {Editing, Option} from "@opendaw/lib-std"
 import {Address, PointerField} from "@opendaw/lib-box"
 import {Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"

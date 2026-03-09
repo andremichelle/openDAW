@@ -1,5 +1,5 @@
 import css from "./PropertyEditor.sass?inline"
-import {Lifecycle, Nullable, ObservableValue, Option, Selection, unitValue, ValueAxis, Editing} from "@opendaw/lib-std"
+import {Editing, Lifecycle, Nullable, ObservableValue, Option, Selection, unitValue, ValueAxis} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {SelectionRectangle} from "@/ui/timeline/SelectionRectangle.tsx"

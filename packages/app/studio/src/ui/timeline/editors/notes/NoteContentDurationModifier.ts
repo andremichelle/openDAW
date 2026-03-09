@@ -1,4 +1,4 @@
-import {int, Notifier, Observer, Option, Terminable, Editing} from "@opendaw/lib-std"
+import {Editing, int, Notifier, Observer, Option, Terminable} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"

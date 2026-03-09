@@ -1,6 +1,6 @@
 import css from "./DeviceParameters.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {clamp, int, Lifecycle, ParseResult, StringResult, Editing} from "@opendaw/lib-std"
+import {clamp, Editing, int, Lifecycle, ParseResult, StringResult} from "@opendaw/lib-std"
 import {createElement, Frag} from "@opendaw/lib-jsx"
 import {NumberInput} from "@/ui/components/NumberInput"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"

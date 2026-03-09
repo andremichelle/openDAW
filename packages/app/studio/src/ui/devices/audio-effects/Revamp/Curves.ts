@@ -1,5 +1,5 @@
 import {Color, Notifier, Nullable, Observer, Subscription, Terminable} from "@opendaw/lib-std"
-import {CanvasUnitPainter} from "../../../../../../../studio/core/src/ui/canvas/painter.ts"
+import {CanvasUnitPainter} from "@opendaw/studio-core"
 import {
     AutomatableParameterFieldAdapter,
     BellParameters,
