@@ -7,6 +7,13 @@ import {AudioEffectDeviceProcessor} from "../../AudioEffectDeviceProcessor"
 import {AudioBuffer} from "@opendaw/lib-dsp"
 import {AudioProcessor} from "../../AudioProcessor"
 
+const HEADER_PATTERN = /^\/\/ @werkstatt (\w+) (\d+) (\d+)\n/
+
+const parseUpdate = (code: string): int => {
+    const match = code.match(HEADER_PATTERN)
+    return match !== null ? parseInt(match[3]) : -1
+}
+
 interface UserIO {
     src: ReadonlyArray<Float32Array>
     out: ReadonlyArray<Float32Array>
@@ -27,7 +34,7 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
 
     #source: Option<AudioBuffer> = Option.None
     #userProcessor: Option<UserProcessor> = Option.None
-    #currentVersion: number = -1
+    #currentUpdate: int = -1
     #silenced: boolean = false
 
     constructor(context: EngineContext, adapter: WerkstattDeviceBoxAdapter) {
@@ -36,12 +43,12 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
         this.#output = new AudioBuffer()
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
         this.ownAll(
-            adapter.box.version.catchupAndSubscribe(owner => {
-                const newVersion = owner.getValue()
-                if (newVersion !== this.#currentVersion) {
+            adapter.box.code.catchupAndSubscribe(owner => {
+                const newUpdate = parseUpdate(owner.getValue())
+                if (newUpdate > 0 && newUpdate !== this.#currentUpdate) {
                     this.#silenced = true
                     this.#userProcessor = Option.None
-                    this.#tryLoadVersion(newVersion)
+                    this.#tryLoad(newUpdate)
                 }
             }),
             context.registerProcessor(this),
@@ -49,18 +56,18 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
         )
     }
 
-    #tryLoadVersion(version: number): void {
+    #tryLoad(update: int): void {
         const uuid = UUID.toString(this.#adapter.uuid)
         const registry = (globalThis as any).openDAW?.werkstattProcessors?.[uuid]
-        if (isDefined(registry) && registry.version === version) {
-            this.#swapProcessor(registry.create, version)
+        if (isDefined(registry) && registry.update === update) {
+            this.#swapProcessor(registry.create, update)
         }
     }
 
-    #swapProcessor(ProcessorClass: any, version: number): void {
+    #swapProcessor(ProcessorClass: any, update: int): void {
         try {
             this.#userProcessor = Option.wrap(new ProcessorClass() as UserProcessor)
-            this.#currentVersion = version
+            this.#currentUpdate = update
             this.#silenced = false
         } catch (error) {
             console.error("Werkstatt: failed to instantiate Processor", error)
@@ -92,9 +99,9 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
         if (this.#silenced) {
             const uuid = UUID.toString(this.#adapter.uuid)
             const registry = (globalThis as any).openDAW?.werkstattProcessors?.[uuid]
-            const expectedVersion = this.#adapter.box.version.getValue()
-            if (isDefined(registry) && registry.version === expectedVersion) {
-                this.#swapProcessor(registry.create, expectedVersion)
+            const expectedUpdate = parseUpdate(this.#adapter.box.code.getValue())
+            if (isDefined(registry) && registry.update === expectedUpdate) {
+                this.#swapProcessor(registry.create, expectedUpdate)
             }
             if (this.#silenced) {return}
         }

@@ -23,13 +23,11 @@ type Construct = {
 export const WerkstattDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
     const box = adapter.box
-    const textarea = <textarea spellcheck={false}>{box.code.getValue() || defaultCode}</textarea> as HTMLTextAreaElement
+    const storedCode = box.code.getValue()
+    const userCode = storedCode.length > 0 ? WerkstattCompiler.stripHeader(storedCode) : defaultCode
+    const textarea = <textarea spellcheck={false}>{userCode}</textarea> as HTMLTextAreaElement
     const runButton = <button onclick={async () => {
-        const boxGraph = box.graph
-        boxGraph.beginTransaction()
-        box.code.setValue(textarea.value)
-        boxGraph.endTransaction()
-        await WerkstattCompiler.compile(service.audioContext, box)
+        await WerkstattCompiler.compile(service.audioContext, box, textarea.value)
     }}>Run</button>
     return (
         <DeviceEditor lifecycle={lifecycle}
