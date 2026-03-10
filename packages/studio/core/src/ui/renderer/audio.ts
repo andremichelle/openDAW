@@ -32,9 +32,6 @@ export namespace AudioRenderer {
         const durationInSeconds = file.endInSeconds - file.startInSeconds
         const numFrames = peaks.numFrames
         const numberOfChannels = peaks.numChannels
-        const ht = bottom - top
-        const peaksHeight = Math.floor((ht - 4) / numberOfChannels)
-        const scale = dbToGain(-gain)
         const segments: Array<Segment> = []
         if (playMode.nonEmpty()) {
             const {warpMarkers} = playMode.unwrap()
@@ -356,9 +353,13 @@ export namespace AudioRenderer {
             }
         }
 
+        // TODO Extract into rendering strategy
+        const height = bottom - top
+        const peaksHeight = Math.floor((height - 4) / numberOfChannels)
+        const scale = dbToGain(-gain)
         context.fillStyle = contentColor
         for (const {x0, x1, u0, u1, outside} of segments) {
-            context.globalAlpha = outside && !clip ? 0.25 : 1.0
+            context.globalAlpha = outside ? 0.25 : 1.0
             for (let channel = 0; channel < numberOfChannels; channel++) {
                 PeaksPainter.renderBlocks(context, peaks, channel, {
                     u0,
