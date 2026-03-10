@@ -316,9 +316,71 @@ export const WerkstattEditor = ({lifecycle, service, adapter, deviceHost}: Const
 
 ---
 
-## Iteration 2 — User-Managed Parameters
+## Iteration 2 — Code-Declared Parameters
 
-Adds automatable parameters via +/- buttons in the editor. The code references them by name via `paramChanged(name, value)`.
+Parameters are declared as `// @param` comments at the top of the user code. The compiler parses them on the main thread before `addModule()`, then reconciles the box graph — creating, updating, or removing `WerkstattParameterBox` instances to match. No UI buttons for adding/removing parameters; the code is the single source of truth.
+
+This makes the device fully vibe-codable: an AI can generate the complete effect (params + DSP) in one text block.
+
+### Parameter Declaration Format
+
+```
+// @param <name> <min> <max> <default> <mapping>
+```
+
+- `name` — identifier, used in `paramChanged(name, value)`
+- `min`, `max`, `default` — numeric literals (no expressions, no `sampleRate`, no computation)
+- `mapping` — one of: `linear`, `exp`, `log`, `int`
+
+Parameters are pure static data. No reading from the environment, no computed values. The host owns the parameter values; the code just receives them via `paramChanged()`.
+
+### Supported Mappings
+
+- `linear` — uniform distribution. Use for mix, gain, pan, etc.
+- `exp` — exponential distribution. Use for frequency, time constants, etc.
+- `log` — logarithmic distribution. Use for dB values.
+- `int` — linear but snapped to integers. Use for semitones, choices, etc.
+
+The mapping defines how the knob's 0→1 range maps to min→max. Parameter values passed to `paramChanged()` are always the mapped value (not the raw 0→1).
+
+### Compiler: Parsing and Reconciliation
+
+The compiler extracts parameter declarations before sending code to the worklet:
+
+```typescript
+const PARAM_PATTERN = /^\/\/ @param (\w+) ([.\d-]+) ([.\d-]+) ([.\d-]+) (\w+)$/gm
+
+interface ParamDeclaration {
+    name: string
+    min: number
+    max: number
+    defaultValue: number
+    mapping: string
+}
+
+const parseParams = (code: string): ParamDeclaration[] => {
+    const params: ParamDeclaration[] = []
+    let match: RegExpExecArray | null
+    while ((match = PARAM_PATTERN.exec(code)) !== null) {
+        params.push({
+            name: match[1],
+            min: parseFloat(match[2]),
+            max: parseFloat(match[3]),
+            defaultValue: parseFloat(match[4]),
+            mapping: match[5]
+        })
+    }
+    return params
+}
+```
+
+On compile, the compiler:
+1. Parses `// @param` comments from the code text
+2. Compares declared params against existing `WerkstattParameterBox` instances in the box graph
+3. Creates new param boxes for newly declared params
+4. Removes param boxes for params no longer declared
+5. Updates min/max/default/mapping on existing params whose declarations changed
+6. Sends the code (without param comments) to the worklet via `addModule()`
 
 ### What Changes
 
@@ -370,14 +432,6 @@ this.#terminator.own(
 )
 ```
 
-Supported mappings (selectable per parameter in the UI):
-- `linear` — uniform distribution. Use for mix, gain, pan, etc.
-- `exp` — exponential distribution. Use for frequency, time constants, etc.
-- `log` — logarithmic distribution. Use for dB values.
-- `int` — linear but snapped to integers. Use for semitones, choices, etc.
-
-The mapping defines how the knob's 0→1 range maps to min→max. Parameter values passed to `paramChanged()` are always the mapped value (not the raw 0→1).
-
 **Processor**: Add dynamic parameter binding and `paramChanged` forwarding.
 
 ```typescript
@@ -409,25 +463,7 @@ parameterChanged(parameter: AutomatableParameter): void {
 }
 ```
 
-**Editor**: Add +/- buttons and parameter list.
-
-```typescript
-const addParameter = () => {
-    editing.modify(() => {
-        WerkstattParameterBox.create(boxGraph, UUID.generate(), paramBox => {
-            paramBox.owner.refer(adapter.box.parameters)
-            paramBox.name.setValue("param")
-            paramBox.min.setValue(0)
-            paramBox.max.setValue(1)
-            paramBox.defaultValue.setValue(0)
-            paramBox.mapping.setValue("linear")
-        })
-    })
-}
-const removeParameter = (paramBox: WerkstattParameterBox) => {
-    editing.modify(() => paramBox.delete())
-}
-```
+**Editor**: Parameter knobs auto-generate from the box graph. No +/- buttons needed — the compiler reconciles on each Run.
 
 ### Class Contract (Extended)
 
@@ -440,9 +476,10 @@ class Processor {
 
 ### Example: Simple Delay
 
-Parameters configured in the UI: `time` (0.001–2.0, exp), `feedback` (0–0.95, linear)
-
 ```typescript
+// @param time 0.001 2.0 0.5 exp
+// @param feedback 0 0.95 0.5 linear
+
 class Processor {
     bufferL = new Float32Array(sampleRate * 2)
     bufferR = new Float32Array(sampleRate * 2)
@@ -470,9 +507,10 @@ class Processor {
 
 ### Example: Biquad Lowpass with Automatable Cutoff
 
-Parameters configured in the UI: `cutoff` (20–20000, exp), `resonance` (0.1–10, linear)
-
 ```typescript
+// @param cutoff 20 20000 1000 exp
+// @param resonance 0.1 10 0.707 linear
+
 class Processor {
     x1L = 0; x2L = 0; y1L = 0; y2L = 0
     x1R = 0; x2R = 0; y1R = 0; y2R = 0
@@ -567,12 +605,12 @@ Werkstatt must work with offline rendering (`OfflineEngineRenderer`). The user c
 ### 1. Cleanup of addModule Code
 Each `addModule()` call adds code that persists in the worklet scope forever — there's no way to unload a module. The registry entry per device UUID is overwritten on each recompile, but the IIFE closures from previous compiles remain in memory. Acceptable for a scripting device.
 
-### 2. Error Reporting
-Runtime errors caught in `processAudio()` need to reach the editor UI. Options: `broadcastFloats` with a special address, or a dedicated `MessagePort` channel.
+### 2. Error Reporting (Solved)
+Runtime errors are reported via `EngineToClient.deviceMessage(uuid, message)`. The `EngineWorklet` dispatches to per-device listeners via `SetMultimap`. The editor subscribes via `engine.subscribeDeviceMessage(uuid, listener)` and displays errors inline.
 
 ## Design Decisions
 
-- **Parameters managed via UI, not code**: +/- buttons in the editor create/remove `WerkstattParameterBox` instances. The code references them by name via `paramChanged()`. This eliminates host-side reflection, main-thread eval, and parameter reconciliation entirely.
+- **Parameters declared in code as comments**: `// @param name min max default mapping` at the top of the user code. The compiler parses them on the main thread (pure regex, no eval), then reconciles the box graph. This makes the device fully vibe-codable — an AI can generate the complete effect in one text block. Parameters are pure static data: no expressions, no environment reads, no computation.
 - **Block-based stereo processing**: `process(inputL, inputR, outputL, outputR, fromIndex, toIndex)` — the host extracts `s0`/`s1` from the per-chunk `Block`. No per-sample function call overhead, full stereo/cross-channel capability.
 - **Error recovery is host-injected**: broken code silences the processor until the next successful recompile.
 - **Peak metering is host-injected**: `PeakBroadcaster` runs on the output after the user's `process()` call.
