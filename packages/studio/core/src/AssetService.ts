@@ -4,10 +4,12 @@ import {
     Errors,
     isInstanceOf,
     isNotUndefined,
+    Notifier,
+    Observer,
     panic,
-    Procedure,
     Progress,
     RuntimeNotifier,
+    Subscription,
     UUID
 } from "@opendaw/lib-std"
 import {Files} from "@opendaw/lib-dom"
@@ -21,7 +23,8 @@ export namespace AssetService {
         uuid?: UUID.Bytes
         name?: string,
         arrayBuffer: ArrayBuffer,
-        progressHandler?: Progress.Handler
+        progressHandler?: Progress.Handler,
+        origin?: "import" | "recording"
     }
 }
 
@@ -31,7 +34,9 @@ export abstract class AssetService<T extends Sample | Soundfont> {
     protected abstract readonly boxType: Class<AudioFileBox | SoundfontFileBox>
     protected abstract readonly filePickerOptions: FilePickerOptions
 
-    protected constructor(protected readonly onUpdate: Procedure<T>) {}
+    protected readonly notifier: Notifier<T> = new Notifier<T>()
+
+    subscribe(observer: Observer<T>): Subscription {return this.notifier.subscribe(observer)}
 
     async browse(multiple: boolean): Promise<ReadonlyArray<T>> {
         return this.browseFiles(multiple, this.filePickerOptions)

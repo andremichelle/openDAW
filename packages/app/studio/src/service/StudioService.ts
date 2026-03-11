@@ -126,10 +126,10 @@ export class StudioService implements ProjectEnv {
                 readonly soundfontManager: GlobalSoundfontLoaderManager,
                 readonly cloudAuthManager: CloudAuthManager,
                 readonly buildInfo: BuildInfo) {
-        this.#sampleService = new SampleService(audioContext,
-            sample => this.#signals.notify({type: "import-sample", sample}))
-        this.#soundfontService = new SoundfontService(
-            soundfont => this.#signals.notify({type: "import-soundfont", soundfont}))
+        this.#sampleService = new SampleService(audioContext)
+        this.#sampleService.subscribe(sample => this.#signals.notify({type: "import-sample", sample}))
+        this.#soundfontService = new SoundfontService()
+        this.#soundfontService.subscribe(soundfont => this.#signals.notify({type: "import-soundfont", soundfont}))
         this.samplePlayback = new SamplePlayback()
         this.#projectProfileService = new ProjectProfileService({
             env: this,

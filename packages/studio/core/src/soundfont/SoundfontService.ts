@@ -1,4 +1,4 @@
-import {Arrays, Class, Option, panic, Procedure, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {Arrays, Class, Option, panic, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
 import {Wait} from "@opendaw/lib-runtime"
 import {SoundfontFileBox} from "@opendaw/studio-boxes"
@@ -18,9 +18,8 @@ export class SoundfontService extends AssetService<Soundfont> {
     #local: Option<Array<Soundfont>> = Option.None
     #remote: Option<ReadonlyArray<Soundfont>> = Option.None
 
-    constructor(onUpdate: Procedure<Soundfont>) {
-        super(onUpdate)
-
+    constructor() {
+        super()
         Promise.all([
             SoundfontStorage.get().list(),
             OpenSoundfontAPI.get().all()
@@ -72,7 +71,7 @@ export class SoundfontService extends AssetService<Soundfont> {
         if (!list.some(other => other.uuid === soundfont.uuid)) {
             list.push(soundfont)
         }
-        this.onUpdate(soundfont)
+        this.notifier.notify(soundfont)
         updater.terminate()
         return soundfont
     }
