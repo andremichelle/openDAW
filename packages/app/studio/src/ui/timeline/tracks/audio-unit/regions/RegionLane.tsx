@@ -2,7 +2,7 @@ import css from "./RegionLane.sass?inline"
 import {Html} from "@opendaw/lib-dom"
 import {Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {renderRegions} from "@/ui/timeline/tracks/audio-unit/regions/RegionRenderer.ts"
+import {RegionRenderer} from "@/ui/timeline/tracks/audio-unit/regions/RegionRenderer.ts"
 import {TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {CanvasPainter, TimelineRange} from "@opendaw/studio-core"
@@ -26,7 +26,7 @@ export const RegionLane = ({lifecycle, trackManager, range, adapter}: Construct)
     const element: Element = (<div className={className}>{canvas}</div>)
     const painter = lifecycle.own(new CanvasPainter(canvas, ({context}) => {
         if (visible) {
-            renderRegions(context, trackManager, range, adapter.listIndex)
+            RegionRenderer.render(context, trackManager, range, adapter.listIndex)
             updated = true
         }
     }))
