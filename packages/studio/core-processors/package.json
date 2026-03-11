@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-core-processors",
-  "version": "0.0.102",
+  "version": "0.0.103",
   "license": "LGPL-3.0-or-later",
   "private": true,
   "exports": {
