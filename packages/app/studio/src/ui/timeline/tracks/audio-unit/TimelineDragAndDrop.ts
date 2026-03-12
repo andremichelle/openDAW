@@ -33,11 +33,13 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
         if (target?.type === "track" && target.track.trackBoxAdapter.type !== TrackType.Audio) {
             return Option.None
         }
-        if (target?.type === "clip" && target.clip.trackBoxAdapter.unwrap().type !== TrackType.Audio) {
-            return Option.None
+        if (target?.type === "clip") {
+            const adapter = target.clip.trackBoxAdapter
+            if (adapter.isEmpty() || adapter.unwrap().type !== TrackType.Audio) {return Option.None}
         }
-        if (target?.type === "region" && target.region.trackBoxAdapter.unwrap().type !== TrackType.Audio) {
-            return Option.None
+        if (target?.type === "region") {
+            const adapter = target.region.trackBoxAdapter
+            if (adapter.isEmpty() || adapter.unwrap().type !== TrackType.Audio) {return Option.None}
         }
         if (data.type !== "sample" && data.type !== "instrument" && data.type !== "file") {
             return Option.None
@@ -94,9 +96,13 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
             } else if (drop?.type === "track") {
                 trackBoxAdapter = drop.track.trackBoxAdapter
             } else if (drop?.type === "clip") {
-                trackBoxAdapter = drop.clip.trackBoxAdapter.unwrap()
+                const clipTrack = drop.clip.trackBoxAdapter
+                if (clipTrack.isEmpty()) {return}
+                trackBoxAdapter = clipTrack.unwrap()
             } else if (drop?.type === "region") {
-                trackBoxAdapter = drop.region.trackBoxAdapter.unwrap()
+                const regionTrack = drop.region.trackBoxAdapter
+                if (regionTrack.isEmpty()) {return}
+                trackBoxAdapter = regionTrack.unwrap()
             } else {
                 return panic("Illegal State")
             }
