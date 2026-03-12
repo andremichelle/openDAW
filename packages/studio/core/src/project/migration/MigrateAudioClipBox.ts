@@ -9,6 +9,13 @@ const isIntEncodedAsFloat = (v: number) =>
     v > 0 && v < 1e-6 && Number.isFinite(v) && (v / 1.401298464324817e-45) % 1 === 0
 
 export const migrateAudioClipBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box: AudioClipBox): void => {
+    if (box.file.targetVertex.isEmpty()) {
+        console.debug("Migrate 'AudioClipBox' remove clip without AudioFileBox")
+        boxGraph.beginTransaction()
+        box.delete()
+        boxGraph.endTransaction()
+        return
+    }
     if (box.events.isEmpty()) {
         console.debug("Migrate 'AudioClipBox' to have a ValueEventCollectionBox")
         boxGraph.beginTransaction()

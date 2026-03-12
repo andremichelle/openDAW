@@ -32,7 +32,7 @@ export namespace SlotUtils {
                     layout.x1 = x1
                     layout.y0 = rowHeight * channelIndex
                     layout.y1 = rowHeight * (channelIndex + 1)
-                    PeaksPainter.renderBlocks(context, peaks, channelIndex, layout)
+                    PeaksPainter.renderPixelStrips(context, peaks, channelIndex, layout)
                 }
                 if (x0 > 0.0 || forceBounds) {
                     context.fillRect(Math.round(x0), 0, 1, height * devicePixelRatio)
@@ -49,7 +49,7 @@ export namespace SlotUtils {
                         layout.x1 = x0
                         layout.y0 = rowHeight * channelIndex
                         layout.y1 = rowHeight * (channelIndex + 1)
-                        PeaksPainter.renderBlocks(context, peaks, channelIndex, layout)
+                        PeaksPainter.renderPixelStrips(context, peaks, channelIndex, layout)
                     }
                 }
                 if (u1 < numFrames) {
@@ -61,7 +61,7 @@ export namespace SlotUtils {
                         layout.x1 = wd
                         layout.y0 = rowHeight * channelIndex
                         layout.y1 = rowHeight * (channelIndex + 1)
-                        PeaksPainter.renderBlocks(context, peaks, channelIndex, layout)
+                        PeaksPainter.renderPixelStrips(context, peaks, channelIndex, layout)
                     }
                 }
                 context.globalAlpha = 1.0
