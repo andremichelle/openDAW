@@ -1,4 +1,15 @@
-import {int, Notifier, Observer, Option, panic, Procedure, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {
+    int,
+    Notifier,
+    Observer,
+    Option,
+    panic,
+    Procedure,
+    Subscription,
+    Terminable,
+    Terminator,
+    UUID
+} from "@opendaw/lib-std"
 import {AudioData} from "@opendaw/lib-dsp"
 import {Peaks} from "@opendaw/lib-fusion"
 import {mergeChunkPlanes, RingBuffer, SampleLoader, SampleLoaderState} from "@opendaw/studio-adapters"
@@ -23,6 +34,7 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
     #state: SampleLoaderState = {type: "record"}
     #onSaved: Option<Procedure<UUID.Bytes>> = Option.None
     #sampleService: Option<SampleService> = Option.None
+    #bpm: Option<number> = Option.None
 
     constructor(context: BaseAudioContext, config: RingBuffer.Config) {
         super(context, "recording-processor", {
@@ -57,6 +69,7 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
     }
 
     set onSaved(callback: Procedure<UUID.Bytes>) {this.#onSaved = Option.wrap(callback)}
+    set bpm(value: number) {this.#bpm = Option.wrap(value)}
     set sampleService(service: SampleService) {this.#sampleService = Option.wrap(service)}
 
     setFillLength(value: int): void {this.#peakWriter.numFrames = value}
@@ -94,7 +107,9 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
         const audioData = AudioData.create(this.context.sampleRate, totalSamples, this.channelCount)
         mergedFrames.forEach((frame, index) => audioData.frames[index].set(frame))
         this.#data = Option.wrap(audioData)
-        const sample = await this.#sampleService.unwrap("SampleService not set").importRecording(audioData)
+        const sample = await this.#sampleService
+            .unwrap("SampleService not set")
+            .importRecording(audioData, this.#bpm.unwrapOrElse(120))
         this.#onSaved.ifSome(callback => callback(UUID.parse(sample.uuid)))
         this.#setState({type: "loaded"})
         this.terminate()

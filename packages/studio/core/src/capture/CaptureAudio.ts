@@ -122,6 +122,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         }
         const {gainNode, channelCount} = audioChain
         const recordingWorklet = audioWorklets.createRecording(channelCount, RenderQuantum)
+        recordingWorklet.bpm = project.timelineBox.bpm.getValue()
         recordingWorklet.sampleService = sampleService
         sampleManager.record(recordingWorklet)
         gainNode.connect(recordingWorklet)

@@ -22,6 +22,7 @@ export namespace AssetService {
     export type ImportArgs = {
         uuid?: UUID.Bytes
         name?: string,
+        bpm?: number,
         arrayBuffer: ArrayBuffer,
         progressHandler?: Progress.Handler,
         origin?: "import" | "recording"
