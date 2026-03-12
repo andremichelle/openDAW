@@ -1,7 +1,7 @@
 {
   "name": "@opendaw/lab",
   "private": true,
-  "version": "0.0.124",
+  "version": "0.0.125",
   "type": "module",
   "license": "LGPL-3.0-or-later",
   "scripts": {
@@ -19,7 +19,7 @@
     "@opendaw/lib-std": "^0.0.72",
     "@opendaw/studio-adapters": "^0.0.99",
     "@opendaw/studio-boxes": "^0.0.83",
-    "@opendaw/studio-core": "^0.0.124",
+    "@opendaw/studio-core": "^0.0.125",
     "@opendaw/studio-enums": "^0.0.68"
   },
   "devDependencies": {
