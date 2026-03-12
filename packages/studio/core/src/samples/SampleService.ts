@@ -12,7 +12,7 @@ import {Workers} from "../Workers"
 import {SampleStorage} from "./SampleStorage"
 import {OpenSampleAPI} from "./OpenSampleAPI"
 
-export class SampleService extends AssetService<Sample> {
+export class SampleService extends AssetService<Sample, AudioData> {
     protected readonly namePlural: string = "Samples"
     protected readonly nameSingular: string = "Sample"
     protected readonly boxType: Class<Box> = AudioFileBox
@@ -56,7 +56,7 @@ export class SampleService extends AssetService<Sample> {
         }
         const sample = {uuid: UUID.toString(uuid), ...meta}
         await SampleStorage.get().save({uuid, audio: audioData, peaks, meta})
-        this.notifier.notify(sample)
+        this.notifier.notify([sample, audioData])
         return sample
     }
 

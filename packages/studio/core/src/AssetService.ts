@@ -29,15 +29,15 @@ export namespace AssetService {
     }
 }
 
-export abstract class AssetService<T extends Sample | Soundfont> {
+export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
     protected abstract readonly nameSingular: string
     protected abstract readonly namePlural: string
     protected abstract readonly boxType: Class<AudioFileBox | SoundfontFileBox>
     protected abstract readonly filePickerOptions: FilePickerOptions
 
-    protected readonly notifier: Notifier<T> = new Notifier<T>()
+    protected readonly notifier: Notifier<[T, RAW]> = new Notifier<[T, RAW]>()
 
-    subscribe(observer: Observer<T>): Subscription {return this.notifier.subscribe(observer)}
+    subscribe(observer: Observer<[T, RAW]>): Subscription {return this.notifier.subscribe(observer)}
 
     async browse(multiple: boolean): Promise<ReadonlyArray<T>> {
         return this.browseFiles(multiple, this.filePickerOptions)

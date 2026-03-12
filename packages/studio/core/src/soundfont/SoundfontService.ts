@@ -9,7 +9,7 @@ import {OpenSoundfontAPI} from "./OpenSoundfontAPI"
 import {AssetService} from "../AssetService"
 import {ExternalLib} from "../ExternalLib"
 
-export class SoundfontService extends AssetService<Soundfont> {
+export class SoundfontService extends AssetService<Soundfont, void> {
     protected readonly namePlural: string = "Soundfonts"
     protected readonly nameSingular: string = "Soundfont"
     protected readonly boxType: Class<Box> = SoundfontFileBox
@@ -71,7 +71,7 @@ export class SoundfontService extends AssetService<Soundfont> {
         if (!list.some(other => other.uuid === soundfont.uuid)) {
             list.push(soundfont)
         }
-        this.notifier.notify(soundfont)
+        this.notifier.notify([soundfont, undefined])
         updater.terminate()
         return soundfont
     }
