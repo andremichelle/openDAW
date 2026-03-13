@@ -49,7 +49,7 @@ export class ValueContentDurationModifier implements ValueModifier {
     translateSearch(value: ppqn): ppqn {return value}
     isVisible(_event: SelectableValueEvent): boolean {return true}
     iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<SelectableValueEvent> {
-        return this.#reference.content.events.iterateRange(searchMin, searchMax)
+        return ValueEvent.iterateWindow(this.#reference.content.events, searchMin, searchMax)
     }
     readContentDuration(region: ValueEventOwnerReader): number {
         return Math.max(region.loopDuration + this.#deltaLoopDuration,

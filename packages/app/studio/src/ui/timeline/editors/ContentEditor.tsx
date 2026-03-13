@@ -207,12 +207,8 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                 }
             }) ?? (() => fallback(vertex.box))())
             range.width = contentEditor.clientWidth
-            owner.ifSome(reader => {
-                range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16)
-                if (!engine.isPlaying.getValue()) {
-                    engine.setPosition(reader.offset)
-                }
-            })
+            owner.ifSome(reader =>
+                range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16))
         },
         none: () => {
             owner = Option.None
