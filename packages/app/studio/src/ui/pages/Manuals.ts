@@ -142,6 +142,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                         label: "Waveshaper",
                         path: "/manuals/devices/audio/waveshaper",
                         icon: EffectFactories.AudioNamed.Waveshaper.defaultIcon
+                    },
+                    {
+                        type: "page",
+                        label: "Werkstatt",
+                        path: "/manuals/devices/audio/werkstatt",
+                        icon: EffectFactories.AudioNamed.Werkstatt.defaultIcon
                     }
                 ]
             },
