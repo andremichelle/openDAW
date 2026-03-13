@@ -1,6 +1,6 @@
 import css from "./WerkstattEditorPanel.sass?inline"
 import defaultCode from "../devices/audio-effects/werkstatt-default.txt?raw"
-import {Lifecycle, Nullable, Terminable} from "@opendaw/lib-std"
+import {Lifecycle, Nullable} from "@opendaw/lib-std"
 import {Await, createElement} from "@opendaw/lib-jsx"
 import {Events, Html, Keyboard, Shortcut} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
@@ -21,29 +21,14 @@ type Construct = {
 
 export const WerkstattEditorPanel = ({lifecycle, service}: Construct) => {
     const statusLabel: HTMLDivElement = (<div className="status idle">Idle</div>)
-    const nameLabel: HTMLSpanElement = (<span className="name">Code Editor</span>)
     const state = service.optWerkstattEditorState
-    let handler: Nullable<CodeEditorHandler> = state.map(entry => entry.handler).unwrapOrNull()
-    let previousScreen: Nullable<Workspace.ScreenKeys> = state.map(entry => entry.previousScreen).unwrapOrNull()
+    const handler: Nullable<CodeEditorHandler> = state.map(entry => entry.handler).unwrapOrNull()
+    const previousScreen: Nullable<Workspace.ScreenKeys> = state.map(entry => entry.previousScreen).unwrapOrNull()
     const initialCode = state.map(entry => entry.initialCode).unwrapOrElse(defaultCode)
-    let errorSubscription: Terminable = Terminable.Empty
     const setStatus = (text: string, type: "idle" | "success" | "error") => {
         statusLabel.textContent = text
         statusLabel.className = `status ${type}`
     }
-    const applyState = (newHandler: CodeEditorHandler, newPreviousScreen: Nullable<Workspace.ScreenKeys>) => {
-        errorSubscription.terminate()
-        handler = newHandler
-        previousScreen = newPreviousScreen
-        nameLabel.textContent = newHandler.name
-        errorSubscription = newHandler.subscribeErrors(message => setStatus(message, "error"))
-        setStatus("Idle", "idle")
-    }
-    if (handler !== null) {
-        nameLabel.textContent = handler.name
-        errorSubscription = handler.subscribeErrors(message => setStatus(message, "error"))
-    }
-    lifecycle.own({terminate: () => errorSubscription.terminate()})
     return (
         <div className={className}>
             <Await
@@ -78,7 +63,7 @@ export const WerkstattEditorPanel = ({lifecycle, service}: Construct) => {
                         theme: "vs-dark",
                         automaticLayout: true
                     })
-                    const runCode = async () => {
+                    const compileCode = async () => {
                         if (handler === null) {
                             setStatus("No handler connected", "error")
                             return
@@ -90,17 +75,15 @@ export const WerkstattEditorPanel = ({lifecycle, service}: Construct) => {
                             setStatus(String(reason), "error")
                         }
                     }
+                    if (handler !== null) {
+                        lifecycle.own(handler.subscribeErrors(message => setStatus(message, "error")))
+                    }
                     const allowed = ["c", "v", "x", "a", "z", "y"]
-                    editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.Enter, () => runCode().finally())
+                    editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.Enter, () => compileCode().finally())
                     lifecycle.ownAll(
-                        service.subscribeSignal(signal => {
-                            applyState(signal.state.handler, signal.state.previousScreen)
-                            model.setValue(signal.state.initialCode)
-                            requestAnimationFrame(() => editor.focus())
-                        }, "werkstatt-editor-update"),
                         Events.subscribe(container, "keydown", event => {
                             if (Keyboard.isControlKey(event) && event.code === "KeyS") {
-                                runCode()
+                                compileCode()
                                     .then(() => service.projectProfileService.save().finally())
                                     .finally()
                                 event.preventDefault()
@@ -126,16 +109,16 @@ export const WerkstattEditorPanel = ({lifecycle, service}: Construct) => {
                     return (
                         <div className="content">
                             <header>
-                                {nameLabel}
+                                <span className="name">{handler?.name ?? "Code Editor"}</span>
                                 <Button lifecycle={lifecycle}
-                                        onClick={runCode}
-                                        appearance={{tooltip: `Compile and run (${Shortcut.of("Enter", {alt: true}).format()})`}}>
-                                    <span>Run</span> <Icon symbol={IconSymbol.Play}/>
+                                        onClick={compileCode}
+                                        appearance={{tooltip: `Compile (${Shortcut.of("Enter", {alt: true}).format()})`}}>
+                                    <span>Compile</span> <Icon symbol={IconSymbol.Play}/>
                                 </Button>
                                 <Button lifecycle={lifecycle}
                                         onClick={close}
                                         appearance={{tooltip: "Close editor"}}>
-                                    <span>Close</span> <Icon symbol={IconSymbol.Exit}/>
+                                    <span>Close Editor</span> <Icon symbol={IconSymbol.Exit}/>
                                 </Button>
                             </header>
                             {container}

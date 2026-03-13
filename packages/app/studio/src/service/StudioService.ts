@@ -367,7 +367,8 @@ export class StudioService implements ProjectEnv {
         })
     }
 
-    switchScreen(key: Nullable<Workspace.ScreenKeys>): void {
+    switchScreen(key: Nullable<Workspace.ScreenKeys>, forceUpdate: boolean = false): void {
+        if (forceUpdate) {this.layout.screen.setValue(null)}
         this.layout.screen.setValue(key)
         RouteLocation.get().navigateTo("/")
     }
@@ -383,8 +384,8 @@ export class StudioService implements ProjectEnv {
 
     openWerkstattEditor(state: WerkstattEditorState): void {
         this.#werkstattEditorState = Option.wrap(state)
-        this.switchScreen("code")
-        this.#signals.notify({type: "werkstatt-editor-update", state})
+        this.switchScreen("code", true)
+        this.#werkstattEditorState = Option.None
     }
 
     resetPeaks(): void {this.#signals.notify({type: "reset-peaks"})}
