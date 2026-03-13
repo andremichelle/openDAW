@@ -27,6 +27,7 @@ import {GateDeviceBox} from "./audio-effects/GateDeviceBox"
 import {NeuralAmpDeviceBox} from "./audio-effects/NeuralAmpDeviceBox"
 import {WaveshaperDeviceBox} from "./audio-effects/WaveshaperDeviceBox"
 import {WerkstattDeviceBox} from "./audio-effects/WerkstattDeviceBox"
+import {WerkstattParameterBox} from "./audio-effects/WerkstattParameterBox"
 
 export const DeviceDefinitions = [
     UnknownAudioEffectDevice,
@@ -59,5 +60,6 @@ export const DeviceDefinitions = [
     ZeitgeistDeviceBox,
     NeuralAmpDeviceBox,
     WaveshaperDeviceBox,
-    WerkstattDeviceBox
+    WerkstattDeviceBox,
+    WerkstattParameterBox
 ]

@@ -2,7 +2,7 @@
 
 component
   display: grid
-  grid-template-rows: 1fr auto auto
+  grid-template-rows: 1fr auto auto auto
   gap: 4px
   padding: 4px
   width: 320px
@@ -52,3 +52,19 @@ component
 
     &:hover
       background: rgba(255, 255, 255, 0.2)
+
+  > .parameters
+    display: flex
+    flex-wrap: wrap
+    gap: 4px
+
+    > .param
+      display: flex
+      flex-direction: column
+      align-items: center
+      gap: 2px
+
+      > h3
+        font-size: 9px
+        color: #888
+        margin: 0

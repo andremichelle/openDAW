@@ -1,24 +1,40 @@
-import {Option, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
-import {WerkstattDeviceBox} from "@opendaw/studio-boxes"
+import {WerkstattDeviceBox, WerkstattParameterBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
+import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 
 export class WerkstattDeviceBoxAdapter implements AudioEffectDeviceAdapter {
+    readonly #terminator = new Terminator()
+
     readonly type = "audio-effect"
     readonly accepts = "audio"
     readonly manualUrl = DeviceManualUrls.Werkstatt
 
     readonly #context: BoxAdaptersContext
     readonly #box: WerkstattDeviceBox
+    readonly #parametric: ParameterAdapterSet
 
     constructor(context: BoxAdaptersContext, box: WerkstattDeviceBox) {
         this.#context = context
         this.#box = box
+        this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
+        this.#terminator.own(
+            box.parameters.pointerHub.catchupAndSubscribe({
+                onAdded: (({box}) => this.#parametric
+                    .createParameter(
+                        asInstanceOf(box, WerkstattParameterBox).value,
+                        ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 1}),
+                        asInstanceOf(box, WerkstattParameterBox).label.getValue())),
+                onRemoved: (({box}) => this.#parametric
+                    .removeParameter(asInstanceOf(box, WerkstattParameterBox).value.address))
+            })
+        )
     }
 
     get box(): WerkstattDeviceBox {return this.#box}
@@ -29,6 +45,7 @@ export class WerkstattDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     get enabledField(): BooleanField {return this.#box.enabled}
     get minimizedField(): BooleanField {return this.#box.minimized}
     get host(): PointerField<Pointers.AudioEffectHost> {return this.#box.host}
+    get parameters(): ParameterAdapterSet {return this.#parametric}
 
     deviceHost(): DeviceHost {
         return this.#context.boxAdapters
@@ -41,5 +58,5 @@ export class WerkstattDeviceBoxAdapter implements AudioEffectDeviceAdapter {
         yield {address: this.address, label: this.labelField.getValue(), children: () => Option.None}
     }
 
-    terminate(): void {}
+    terminate(): void {this.#terminator.terminate()}
 }

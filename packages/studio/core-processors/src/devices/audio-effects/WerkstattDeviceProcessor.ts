@@ -1,11 +1,13 @@
-import {int, isDefined, Nullable, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioEffectDeviceAdapter, EngineToClient, WerkstattDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {Arrays, asInstanceOf, int, isDefined, Nullable, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {AudioEffectDeviceAdapter, WerkstattDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {WerkstattParameterBox} from "@opendaw/studio-boxes"
 import {EngineContext} from "../../EngineContext"
 import {Block, Processor} from "../../processing"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
 import {AudioEffectDeviceProcessor} from "../../AudioEffectDeviceProcessor"
 import {AudioBuffer} from "@opendaw/lib-dsp"
 import {AudioProcessor} from "../../AudioProcessor"
+import {AutomatableParameter} from "../../AutomatableParameter"
 
 const HEADER_PATTERN = /^\/\/ @werkstatt (\w+) (\d+) (\d+)\n/
 const MAX_AMPLITUDE = 1000.0 // ~60dB
@@ -36,6 +38,7 @@ interface UserIO {
 
 interface UserProcessor {
     process(io: UserIO, block: Block): void
+    paramChanged?(label: string, value: number): void
 }
 
 export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {
@@ -44,10 +47,11 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
     readonly #id: int = WerkstattDeviceProcessor.ID++
 
     readonly #adapter: WerkstattDeviceBoxAdapter
-    readonly #engineToClient: EngineToClient
+    readonly #engineToClient: EngineContext["engineToClient"]
     readonly #output: AudioBuffer
     readonly #peaks: PeakBroadcaster
     readonly #uuid: string
+    readonly #boundParameters: Array<AutomatableParameter<number>>
 
     #source: Option<AudioBuffer> = Option.None
     #userProcessor: Option<UserProcessor> = Option.None
@@ -61,8 +65,10 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
         this.#output = new AudioBuffer()
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
         this.#uuid = UUID.toString(adapter.uuid)
+        this.#boundParameters = []
+        const {parameters, box} = adapter
         this.ownAll(
-            adapter.box.code.catchupAndSubscribe(owner => {
+            box.code.catchupAndSubscribe(owner => {
                 const newUpdate = parseUpdate(owner.getValue())
                 if (newUpdate > 0 && newUpdate !== this.#currentUpdate) {
                     this.#silenced = true
@@ -70,9 +76,23 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
                     this.#tryLoad(newUpdate)
                 }
             }),
+            box.parameters.pointerHub.catchupAndSubscribe({
+                onAdded: (({box}) => {
+                    const paramBox = asInstanceOf(box, WerkstattParameterBox)
+                    const bound = this.bindParameter(parameters.parameterAt(paramBox.value.address))
+                    this.#boundParameters.push(bound)
+                    this.parameterChanged(bound)
+                }),
+                onRemoved: (({box}) => {
+                    const paramBox = asInstanceOf(box, WerkstattParameterBox)
+                    Arrays.removeIf(this.#boundParameters, parameter =>
+                        parameter.address === paramBox.value.address)
+                })
+            }),
             context.registerProcessor(this),
             context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing)
         )
+        this.readAllParameters()
     }
 
     #tryLoad(update: int): void {
@@ -87,10 +107,22 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
             this.#userProcessor = Option.wrap(new ProcessorClass() as UserProcessor)
             this.#currentUpdate = update
             this.#silenced = false
+            this.#pushAllParameters()
         } catch (error) {
             this.#reportError(`Failed to instantiate Processor: ${error}`)
             this.#silenced = true
         }
+    }
+
+    #pushAllParameters(): void {
+        this.#userProcessor.ifSome(proc => {
+            if (isDefined(proc.paramChanged)) {
+                for (const bound of this.#boundParameters) {
+                    const paramBox = asInstanceOf(bound.adapter.field.box, WerkstattParameterBox)
+                    proc.paramChanged(paramBox.label.getValue(), bound.getValue())
+                }
+            }
+        })
     }
 
     #reportError(message: string): void {
@@ -101,6 +133,15 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
         this.#silenced = true
         this.#output.clear()
         this.#reportError(message)
+    }
+
+    parameterChanged(parameter: AutomatableParameter): void {
+        this.#userProcessor.ifSome(proc => {
+            if (isDefined(proc.paramChanged)) {
+                const paramBox = asInstanceOf(parameter.adapter.field.box, WerkstattParameterBox)
+                proc.paramChanged(paramBox.label.getValue(), parameter.getValue())
+            }
+        })
     }
 
     get incoming(): Processor {return this}
