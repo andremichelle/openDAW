@@ -51,13 +51,16 @@ export const WerkstattDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                 const werkstattParam = asInstanceOf(paramBox, WerkstattParameterBox)
                 const parameter = adapter.parameters.parameterAt(werkstattParam.value.address)
                 const terminator = new Terminator()
-                const element = ControlBuilder.createKnob({
+                const element: HTMLElement = ControlBuilder.createKnob({
                     lifecycle: terminator,
                     editing,
                     midiLearning,
                     adapter,
                     parameter
                 })
+                element.style.order = String(werkstattParam.index.getValue())
+                terminator.own(werkstattParam.index.catchupAndSubscribe(owner =>
+                    element.style.order = String(owner.getValue())))
                 knobs.appendChild(element)
                 set.add({uuid: paramBox.address.uuid, lifecycle: terminator})
                 terminator.own({terminate: () => element.remove()})

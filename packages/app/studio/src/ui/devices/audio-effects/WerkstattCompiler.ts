@@ -42,18 +42,25 @@ const reconcileParameters = (deviceBox: WerkstattDeviceBox, declared: ReadonlyAr
         const paramBox = asInstanceOf(pointer.box, WerkstattParameterBox)
         existingByLabel.set(paramBox.label.getValue(), paramBox)
     }
-    const declaredLabels = new Set(declared.map(declaration => declaration.label))
+    const seen = new Set<string>()
+    for (const {label} of declared) {seen.add(label)}
     for (const [label, paramBox] of existingByLabel) {
-        if (!declaredLabels.has(label)) {
+        if (!seen.has(label)) {
             paramBox.delete()
         }
     }
+    seen.clear()
     for (let index = 0; index < declared.length; index++) {
         const {label, defaultValue} = declared[index]
+        if (seen.has(label)) {continue}
+        seen.add(label)
         const existing = existingByLabel.get(label)
         if (isDefined(existing)) {
             existing.index.setValue(index)
-            existing.defaultValue.setValue(defaultValue)
+            if (existing.defaultValue.getValue() !== defaultValue) {
+                existing.defaultValue.setValue(defaultValue)
+                existing.value.setValue(defaultValue)
+            }
         } else {
             WerkstattParameterBox.create(boxGraph, UUID.generate(), paramBox => {
                 paramBox.owner.refer(deviceBox.parameters)
