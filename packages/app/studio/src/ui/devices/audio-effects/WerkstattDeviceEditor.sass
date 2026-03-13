@@ -1,41 +1,17 @@
 @use "@/mixins"
 
 component
-  display: grid
-  grid-template-columns: repeat(3, 4.5em)
-  grid-auto-rows: 17px
-  row-gap: 1px
+  display: flex
+  flex-direction: row
+  align-items: stretch
   align-content: start
-  position: relative
+  column-gap: 1em
+  margin-right: 1em
   @include mixins.Control
 
-  > div.control
+  > .knobs
     display: grid
-    grid-template-rows: auto auto
-    white-space: nowrap
-    justify-content: center
-    padding: 4px 4px 1px 4px
-
-    > h3
-      font-size: 9px
-      height: 12px
-      letter-spacing: 0.5px
-      text-align: center
-      text-transform: capitalize
-      color: var(--color-shadow)
-      z-index: 1
-
-  > button.edit
-    grid-column: 1 / -1
-    background: rgba(255, 255, 255, 0.1)
-    color: #c0c0c0
-    border: 1px solid rgba(255, 255, 255, 0.15)
-    border-radius: 2px
-    padding: 3px 8px
-    font-size: 10px
-    cursor: pointer
-    justify-self: start
-    margin-top: 4px
-
-    &:hover
-      background: rgba(255, 255, 255, 0.2)
+    grid-template-rows: repeat(3, 3.5em)
+    grid-auto-columns: 3.5em
+    grid-auto-flow: column
+    row-gap: 0.25em
