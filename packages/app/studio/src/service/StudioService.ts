@@ -384,7 +384,7 @@ export class StudioService implements ProjectEnv {
     openWerkstattEditor(state: WerkstattEditorState): void {
         this.#werkstattEditorState = Option.wrap(state)
         this.switchScreen("code")
-        this.#werkstattEditorState = Option.None
+        this.#signals.notify({type: "werkstatt-editor-update", state})
     }
 
     resetPeaks(): void {this.#signals.notify({type: "reset-peaks"})}
