@@ -1,4 +1,4 @@
-import {Arrays, asDefined, isDefined, RuntimeNotifier} from "@opendaw/lib-std"
+import {Arrays, asDefined, Errors, isDefined, RuntimeNotifier} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 
 export namespace Files {
@@ -6,6 +6,9 @@ export namespace Files {
         if (isDefined(window.showSaveFilePicker)) {
             const {status, error, value: handle} = await Promises.tryCatch(window.showSaveFilePicker(options))
             if (status === "rejected") {
+                if (Errors.isNotAllowed(error)) {
+                    return saveBlobFallback(arrayBuffer, options)
+                }
                 return RuntimeNotifier.info({
                     headline: "Could not show file picker",
                     message: String(error)
@@ -17,15 +20,19 @@ export namespace Files {
             await writable.close()
             return handle.name ?? "unknown"
         } else {
-            const blob = new Blob([arrayBuffer])
-            const url = URL.createObjectURL(blob)
-            const anchor = document.createElement("a")
-            anchor.href = url
-            anchor.download = options?.suggestedName ?? `unknown`
-            anchor.click()
-            URL.revokeObjectURL(url)
-            return options?.suggestedName ?? "Unknown"
+            return saveBlobFallback(arrayBuffer, options)
         }
+    }
+
+    const saveBlobFallback = (arrayBuffer: ArrayBuffer, options?: SaveFilePickerOptions): string => {
+        const blob = new Blob([arrayBuffer])
+        const url = URL.createObjectURL(blob)
+        const anchor = document.createElement("a")
+        anchor.href = url
+        anchor.download = options?.suggestedName ?? `unknown`
+        anchor.click()
+        URL.revokeObjectURL(url)
+        return options?.suggestedName ?? "Unknown"
     }
 
     export const open = async (options?: OpenFilePickerOptions): Promise<ReadonlyArray<File>> => {

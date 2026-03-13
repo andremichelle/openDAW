@@ -50,20 +50,11 @@ export class DawProjectService {
         dialog.terminate()
         if (status === "rejected") {
             return RuntimeNotifier.info({headline: "Export Error", message: String(error)})
-        } else {
-            const approved = await RuntimeNotifier.approve({
-                headline: "Save DawProject?",
-                message: "",
-                approveText: "Save"
-            })
-            if (!approved) {return}
-            const {status, error} = await Promises.tryCatch(Files.save(zip,
-                {types: [FilePickerAcceptTypes.DawprojectFileType]}))
-            if (status === "rejected" && !Errors.isAbort(error)) {
-                throw error
-            } else {
-                return
-            }
+        }
+        const saveResult = await Promises.tryCatch(Files.save(zip,
+            {types: [FilePickerAcceptTypes.DawprojectFileType]}))
+        if (saveResult.status === "rejected" && !Errors.isAbort(saveResult.error)) {
+            throw saveResult.error
         }
     }
 }
