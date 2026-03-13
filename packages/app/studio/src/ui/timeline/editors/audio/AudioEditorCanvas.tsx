@@ -57,7 +57,7 @@ export const AudioEditorCanvas = ({
                     if (pass.isEmpty()) {return}
                     const tempoMap = reader.trackBoxAdapter.unwrap().context.tempoMap
                     AudioRenderer.render(context, range, file, tempoMap, observableOptPlayMode, waveformOffset.getValue(),
-                        gain.getValue(), {top: 0, bottom: actualHeight},
+                        gain.getValue(), {top: 0, bottom: painter.height},
                         `hsl(${reader.hue}, ${60}%, 45%)`, pass.unwrap(), false)
 
                     const cursor = cursorModel.getValue()

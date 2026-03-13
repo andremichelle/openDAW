@@ -1,4 +1,4 @@
-import {Arrays, Class, isUndefined, Procedure, Progress, tryCatch, UUID} from "@opendaw/lib-std"
+import {Arrays, Class, isDefined, Progress, tryCatch, UUID} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
 import {AudioData, estimateBpm} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
@@ -12,18 +12,27 @@ import {Workers} from "../Workers"
 import {SampleStorage} from "./SampleStorage"
 import {OpenSampleAPI} from "./OpenSampleAPI"
 
-export class SampleService extends AssetService<Sample> {
+export class SampleService extends AssetService<Sample, AudioData> {
     protected readonly namePlural: string = "Samples"
     protected readonly nameSingular: string = "Sample"
     protected readonly boxType: Class<Box> = AudioFileBox
     protected readonly filePickerOptions: FilePickerOptions = FilePickerAcceptTypes.WavFiles
 
-    constructor(readonly audioContext: AudioContext, onUpdate: Procedure<Sample>) {
-        super(onUpdate)
+    constructor(readonly audioContext: AudioContext) {super()}
+
+    async importRecording(audioData: AudioData, bpm: number, name: string = "Recording"): Promise<Sample> {
+        const arrayBuffer = WavFile.encodeFloats({
+            frames: audioData.frames.slice(),
+            numberOfFrames: audioData.numberOfFrames,
+            numberOfChannels: audioData.numberOfChannels,
+            sampleRate: audioData.sampleRate
+        })
+        return this.importFile({name, bpm, arrayBuffer, origin: "recording"})
     }
 
-    async importFile({uuid, name, arrayBuffer, progressHandler = Progress.Empty}
-                     : AssetService.ImportArgs): Promise<Sample> {
+    async importFile({uuid, name, bpm, arrayBuffer, progressHandler = Progress.Empty, origin = "import"}
+                     : AssetService.ImportArgs,
+                     transformMeta?: (meta: SampleMetaData, audioData: Readonly<AudioData>) => Promise<void>): Promise<Sample> {
         console.debug(`importSample '${name}' (${arrayBuffer.byteLength >> 10}kb)`)
         uuid ??= await UUID.sha256(arrayBuffer)
         const audioData = await this.#decodeAudio(arrayBuffer)
@@ -36,15 +45,18 @@ export class SampleService extends AssetService<Sample> {
             audioData.numberOfFrames,
             audioData.numberOfChannels) as ArrayBuffer
         const meta: SampleMetaData = {
-            bpm: estimateBpm(duration),
-            name: isUndefined(name) ? "Unnnamed" : name,
+            bpm: bpm ?? estimateBpm(duration),
+            name: name ?? "Unnnamed",
             duration,
             sample_rate: audioData.sampleRate,
-            origin: "import"
+            origin
         }
-        await SampleStorage.get().save({uuid, audio: audioData, peaks, meta})
+        if (isDefined(transformMeta)) {
+            await transformMeta(meta, audioData)
+        }
         const sample = {uuid: UUID.toString(uuid), ...meta}
-        this.onUpdate(sample)
+        await SampleStorage.get().save({uuid, audio: audioData, peaks, meta})
+        this.notifier.notify([sample, audioData])
         return sample
     }
 

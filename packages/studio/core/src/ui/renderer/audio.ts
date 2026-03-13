@@ -6,7 +6,7 @@ import {AudioFileBoxAdapter, AudioPlayMode} from "@opendaw/studio-adapters"
 import {TimelineRange} from "../timeline/TimelineRange"
 
 export namespace AudioRenderer {
-    type Segment = {
+    export type Segment = {
         x0: number
         x1: number
         u0: number
@@ -14,27 +14,58 @@ export namespace AudioRenderer {
         outside: boolean
     }
 
-    export const render = (
-        context: CanvasRenderingContext2D,
-        range: TimelineRange,
-        file: AudioFileBoxAdapter,
-        tempoMap: TempoMap,
-        playMode: Option<AudioPlayMode>,
-        waveformOffset: number,
-        gain: number,
-        {top, bottom}: RegionBound,
-        contentColor: string,
-        {rawStart, resultStart, resultEnd}: LoopableRegion.LoopCycle,
-        clip: boolean = true
+    export interface Strategy {
+        render(context: CanvasRenderingContext2D,
+               segments: ReadonlyArray<Segment>,
+               peaks: Peaks,
+               bound: RegionBound,
+               gain: number): void
+    }
+
+    export const DefaultStrategy: Strategy = {
+        render(context, segments, peaks, {top, bottom}, gain): void {
+            const dpr = devicePixelRatio
+            const actualTop = top * dpr
+            const actualBottom = bottom * dpr
+            const height = actualBottom - actualTop
+            const numberOfChannels = peaks.numChannels
+            const peaksHeight = Math.floor((height - 4) / numberOfChannels)
+            const scale = dbToGain(-gain)
+            for (const {x0, x1, u0, u1, outside} of segments) {
+                context.globalAlpha = outside ? 0.25 : 1.0
+                for (let channel = 0; channel < numberOfChannels; channel++) {
+                    PeaksPainter.renderPixelStrips(context, peaks, channel, {
+                        u0,
+                        u1,
+                        v0: -scale,
+                        v1: +scale,
+                        x0,
+                        x1,
+                        y0: 3 + actualTop + channel * peaksHeight,
+                        y1: 3 + actualTop + (channel + 1) * peaksHeight
+                    })
+                }
+            }
+        }
+    }
+
+    export const render = (context: CanvasRenderingContext2D,
+                           range: TimelineRange,
+                           file: AudioFileBoxAdapter,
+                           tempoMap: TempoMap,
+                           playMode: Option<AudioPlayMode>,
+                           waveformOffset: number,
+                           gain: number,
+                           bound: RegionBound,
+                           contentColor: string,
+                           {rawStart, resultStart, resultEnd}: LoopableRegion.LoopCycle,
+                           clip: boolean = true,
+                           strategy: Strategy = DefaultStrategy
     ) => {
         if (file.peaks.isEmpty()) {return}
         const peaks: Peaks = file.peaks.unwrap()
         const durationInSeconds = file.endInSeconds - file.startInSeconds
         const numFrames = peaks.numFrames
-        const numberOfChannels = peaks.numChannels
-        const ht = bottom - top
-        const peaksHeight = Math.floor((ht - 4) / numberOfChannels)
-        const scale = dbToGain(-gain)
         const segments: Array<Segment> = []
         if (playMode.nonEmpty()) {
             const {warpMarkers} = playMode.unwrap()
@@ -357,20 +388,6 @@ export namespace AudioRenderer {
         }
 
         context.fillStyle = contentColor
-        for (const {x0, x1, u0, u1, outside} of segments) {
-            context.globalAlpha = outside && !clip ? 0.25 : 1.0
-            for (let channel = 0; channel < numberOfChannels; channel++) {
-                PeaksPainter.renderBlocks(context, peaks, channel, {
-                    u0,
-                    u1,
-                    v0: -scale,
-                    v1: +scale,
-                    x0,
-                    x1,
-                    y0: 3 + top + channel * peaksHeight,
-                    y1: 3 + top + (channel + 1) * peaksHeight
-                })
-            }
-        }
+        strategy.render(context, segments, peaks, bound, gain)
     }
 }

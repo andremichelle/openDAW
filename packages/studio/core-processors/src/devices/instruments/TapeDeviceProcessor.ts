@@ -20,14 +20,12 @@ import {DeviceProcessor} from "../../DeviceProcessor"
 import {NoteEventTarget} from "../../NoteEventSource"
 import {VOICE_FADE_DURATION} from "./Tape/constants"
 import {PitchVoice} from "./Tape/PitchVoice"
-import {Voice} from "./Tape/Voice"
 import {TimeStretchSequencer} from "./Tape/TimeStretchSequencer"
-
-type AnyVoice = Voice | PitchVoice
 
 type Lane = {
     adapter: TrackBoxAdapter
-    voices: Array<AnyVoice>
+    pitchVoices: SortedSet<UUID.Bytes, PitchVoice>
+    fadingVoices: Array<PitchVoice>
     sequencer: TimeStretchSequencer
 }
 
@@ -37,6 +35,11 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
     readonly #peaks: PeakBroadcaster
     readonly #lanes: SortedSet<UUID.Bytes, Lane>
     readonly #fadingGainBuffer: Float32Array = new Float32Array(RenderQuantum)
+    readonly #unitGainBuffer: Float32Array = (() => {
+        const buffer = new Float32Array(RenderQuantum)
+        buffer.fill(1.0)
+        return buffer
+    })()
 
     #enabled: boolean = true
 
@@ -55,7 +58,8 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             this.#adapter.deviceHost().audioUnitBoxAdapter().tracks.catchupAndSubscribe({
                 onAdd: (adapter: TrackBoxAdapter) => this.#lanes.add({
                     adapter,
-                    voices: [],
+                    pitchVoices: UUID.newSet<PitchVoice>(voice => voice.sourceUuid),
+                    fadingVoices: [],
                     sequencer: new TimeStretchSequencer()
                 }),
                 onRemove: (adapter: TrackBoxAdapter) => this.#lanes.removeByKey(adapter.uuid),
@@ -79,7 +83,8 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         this.#audioOutput.clear()
         this.eventInput.clear()
         this.#lanes.forEach(lane => {
-            lane.voices = []
+            lane.pitchVoices.clear()
+            lane.fadingVoices = []
             lane.sequencer.reset()
         })
     }
@@ -98,12 +103,17 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
     #processBlock(lane: Lane, block: Block): void {
         const {adapter} = lane
         if (adapter.type !== TrackType.Audio || !adapter.enabled.getValue()) {
-            lane.voices.forEach(voice => voice.startFadeOut(0))
+            this.#fadeOutAllPitchVoices(lane)
             lane.sequencer.reset()
             return
         }
-        const {p0, p1, flags} = block
+        const {p0, p1, s0, s1, flags} = block
         if (!Bits.every(flags, BlockFlag.transporting | BlockFlag.playing)) {return}
+        if (Bits.some(flags, BlockFlag.discontinuous)) {
+            this.#fadeOutAllPitchVoices(lane)
+            lane.sequencer.reset()
+        }
+        const visitedUuids: Set<string> = new Set()
         const intervals = this.context.clipSequencing.iterate(adapter.uuid, p0, p1)
         for (const {optClip, sectionFrom, sectionTo} of intervals) {
             optClip.match({
@@ -113,7 +123,6 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                         const file = region.file
                         const optData = file.getOrCreateLoader().data
                         if (optData.isEmpty()) {return}
-                        const waveformOffset = region.waveformOffset.getValue()
                         const timeStretch = region.asPlayModeTimeStretch
                         if (timeStretch.nonEmpty()) {
                             const transients: EventCollection<TransientMarkerBoxAdapter> = file.transients
@@ -121,13 +130,15 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                             for (const cycle of LoopableRegion.locateLoops(region, p0, p1)) {
                                 const timeStretchBoxAdapter = timeStretch.unwrap()
                                 this.#processPassTimestretch(lane, block, cycle,
-                                    optData.unwrap(), timeStretchBoxAdapter, transients, waveformOffset, region.fading,
+                                    optData.unwrap(), timeStretchBoxAdapter, transients,
+                                    region.waveformOffset.getValue(), region.fading,
                                     region.position, region.duration)
                             }
                         } else {
+                            visitedUuids.add(UUID.toString(region.uuid))
                             for (const cycle of LoopableRegion.locateLoops(region, p0, p1)) {
                                 this.#processPassPitch(
-                                    lane, block, cycle, region, optData.unwrap())
+                                    lane, block, cycle, region, optData.unwrap(), region.uuid)
                             }
                         }
                     }
@@ -152,26 +163,39 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                                 timeStretch, transients, clip.waveformOffset.getValue(), null, 0, clip.duration)
                         }
                     } else {
+                        visitedUuids.add(UUID.toString(clip.uuid))
                         for (const cycle of LoopableRegion.locateLoops({
                             position: 0.0,
                             loopDuration: clip.duration,
                             loopOffset: 0.0,
                             complete: Number.POSITIVE_INFINITY
                         }, sectionFrom, sectionTo)) {
-                            this.#processPassPitch(lane, block, cycle, clip, optData.unwrap())
+                            this.#processPassPitch(lane, block, cycle, clip, optData.unwrap(), clip.uuid)
                         }
                     }
                 }
             })
         }
+        lane.pitchVoices.removeByPredicate(voice => {
+            if (visitedUuids.has(UUID.toString(voice.sourceUuid))) {return false}
+            voice.startFadeOut(0)
+            lane.fadingVoices.push(voice)
+            return true
+        })
+        const sn = s1 - s0
+        for (const voice of lane.fadingVoices) {
+            voice.process(s0, sn, this.#unitGainBuffer)
+        }
+        lane.fadingVoices = lane.fadingVoices.filter(voice => !voice.done())
     }
 
     #processPassPitch(lane: Lane,
                       block: Block,
                       cycle: LoopableRegion.LoopCycle,
                       adapter: AudioContentBoxAdapter,
-                      data: AudioData): void {
-        const {p0, p1, s0, s1, flags} = block
+                      data: AudioData,
+                      sourceUuid: UUID.Bytes): void {
+        const {p0, p1, s0, s1} = block
         const sn = s1 - s0
         const pn = p1 - p0
         const r0 = (cycle.resultStart - p0) / pn
@@ -181,15 +205,11 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         const bpn = (bp1 - bp0) | 0
         const waveformOffset: number = adapter.waveformOffset.getValue()
         assert(s0 <= bp0 && bp1 <= s1, () => `Out of bounds ${bp0}, ${bp1}`)
-        if (Bits.some(flags, BlockFlag.discontinuous)) {
-            lane.voices.forEach(voice => voice.startFadeOut(0))
-            lane.sequencer.reset()
-        }
         const asPlayModePitch = adapter.asPlayModePitchStretch
         if (adapter.isPlayModeNoStretch) {
             const elapsedSeconds = this.context.tempoMap.intervalToSeconds(cycle.rawStart, cycle.resultStart)
             const offset = (elapsedSeconds + waveformOffset) * data.sampleRate
-            this.#updateOrCreatePitchVoice(lane, data, data.sampleRate / sampleRate, offset, 0)
+            this.#updateOrCreatePitchVoice(lane, sourceUuid, data, data.sampleRate / sampleRate, offset, 0)
         } else if (asPlayModePitch.isEmpty()) {
             const audioDurationSamples = data.numberOfFrames
             const audioDurationNormalized = cycle.resultEndValue - cycle.resultStartValue
@@ -197,25 +217,25 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             const timelineSamplesInCycle = (cycle.resultEnd - cycle.resultStart) / pn * sn
             const playbackRate = audioSamplesInCycle / timelineSamplesInCycle
             const offset = cycle.resultStartValue * data.numberOfFrames + waveformOffset * data.sampleRate
-            this.#updateOrCreatePitchVoice(lane, data, playbackRate, offset, 0)
+            this.#updateOrCreatePitchVoice(lane, sourceUuid, data, playbackRate, offset, 0)
         } else {
             const pitchBoxAdapter = asPlayModePitch.unwrap()
             const warpMarkers = pitchBoxAdapter.warpMarkers
             const firstWarp = warpMarkers.first()
             const lastWarp = warpMarkers.last()
             if (firstWarp === null || lastWarp === null) {
-                lane.voices.forEach(voice => voice.startFadeOut(0))
+                this.#evictPitchVoice(lane, sourceUuid)
                 return
             }
             const contentPpqn = cycle.resultStart - cycle.rawStart
             if (contentPpqn < firstWarp.position || contentPpqn >= lastWarp.position) {
-                lane.voices.forEach(voice => voice.startFadeOut(0))
+                this.#evictPitchVoice(lane, sourceUuid)
                 return
             }
             const currentSeconds = this.#ppqnToSeconds(contentPpqn, cycle.resultStartValue, warpMarkers)
             const playbackRate = this.#getPlaybackRateFromWarp(contentPpqn, warpMarkers, data.sampleRate, pn, sn)
             const offset = (currentSeconds + waveformOffset) * data.sampleRate
-            this.#updateOrCreatePitchVoice(lane, data, playbackRate, offset, 0)
+            this.#updateOrCreatePitchVoice(lane, sourceUuid, data, playbackRate, offset, 0)
         }
         if (isInstanceOf(adapter, AudioRegionBoxAdapter) && adapter.fading.hasFading) {
             const regionPosition = adapter.position
@@ -226,38 +246,53 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         } else {
             this.#fadingGainBuffer.fill(1.0, 0, bpn)
         }
-        for (const voice of lane.voices) {
+        const voice = lane.pitchVoices.getOrNull(sourceUuid)
+        if (voice !== null) {
             voice.process(bp0 | 0, bpn, this.#fadingGainBuffer)
+            if (voice.done()) {
+                lane.pitchVoices.removeByKey(sourceUuid)
+            }
         }
-        lane.voices = lane.voices.filter(voice => !voice.done())
     }
 
-    #updateOrCreatePitchVoice(lane: Lane, data: AudioData, playbackRate: number, offset: number, blockOffset: int): void {
+    #updateOrCreatePitchVoice(lane: Lane, sourceUuid: UUID.Bytes, data: AudioData,
+                              playbackRate: number, offset: number, blockOffset: int): void {
         const fadeLengthSamples = Math.round(VOICE_FADE_DURATION * sampleRate)
-        if (lane.voices.length === 0) {
-            lane.voices.push(new PitchVoice(this.#audioOutput, data, fadeLengthSamples, playbackRate, offset, blockOffset))
+        const existing = lane.pitchVoices.getOrNull(sourceUuid)
+        if (existing === null) {
+            lane.pitchVoices.add(
+                new PitchVoice(sourceUuid, this.#audioOutput, data, fadeLengthSamples, playbackRate, offset, blockOffset), true)
+        } else if (existing.isFadingOut()) {
+            lane.fadingVoices.push(existing)
+            lane.pitchVoices.add(
+                new PitchVoice(sourceUuid, this.#audioOutput, data, fadeLengthSamples, playbackRate, offset, blockOffset), true)
         } else {
-            let hasActiveVoice = false
-            for (const voice of lane.voices) {
-                if (voice instanceof PitchVoice) {
-                    if (voice.isFadingOut()) {
-                        continue
-                    }
-                    const drift = Math.abs(voice.readPosition - offset)
-                    if (drift > fadeLengthSamples) {
-                        voice.startFadeOut(blockOffset)
-                    } else {
-                        voice.setPlaybackRate(playbackRate)
-                        hasActiveVoice = true
-                    }
-                } else {
-                    voice.startFadeOut(blockOffset)
-                }
-            }
-            if (!hasActiveVoice) {
-                lane.voices.push(new PitchVoice(this.#audioOutput, data, fadeLengthSamples, playbackRate, offset, blockOffset))
+            const drift = Math.abs(existing.readPosition - offset)
+            if (drift > fadeLengthSamples) {
+                existing.startFadeOut(blockOffset)
+                lane.fadingVoices.push(existing)
+                lane.pitchVoices.add(
+                    new PitchVoice(sourceUuid, this.#audioOutput, data, fadeLengthSamples, playbackRate, offset, blockOffset), true)
+            } else {
+                existing.setPlaybackRate(playbackRate)
             }
         }
+    }
+
+    #evictPitchVoice(lane: Lane, sourceUuid: UUID.Bytes): void {
+        const voice = lane.pitchVoices.removeByKeyIfExist(sourceUuid)
+        if (voice !== null) {
+            voice.startFadeOut(0)
+            lane.fadingVoices.push(voice)
+        }
+    }
+
+    #fadeOutAllPitchVoices(lane: Lane): void {
+        for (const voice of lane.pitchVoices) {
+            voice.startFadeOut(0)
+            lane.fadingVoices.push(voice)
+        }
+        lane.pitchVoices.clear()
     }
 
     #processPassTimestretch(lane: Lane,
@@ -270,11 +305,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                             fadingConfig: FadingEnvelope.Config | null,
                             regionPosition: number,
                             regionDuration: number): void {
-        for (const voice of lane.voices) {
-            if (voice instanceof PitchVoice) {
-                voice.startFadeOut(0)
-            }
-        }
+        this.#fadeOutAllPitchVoices(lane)
         const {p0, p1, s0, s1} = block
         const sn = s1 - s0
         const pn = p1 - p0
@@ -300,8 +331,6 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             cycle,
             this.#fadingGainBuffer
         )
-        lane.voices = lane.voices.filter(voice =>
-            voice instanceof PitchVoice && !voice.done())
     }
 
     #getPlaybackRateFromWarp(ppqn: number,

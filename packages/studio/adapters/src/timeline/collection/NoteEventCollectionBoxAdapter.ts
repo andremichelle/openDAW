@@ -118,6 +118,16 @@ export class NoteEventCollectionBoxAdapter implements BoxAdapter, SelectableLoca
         return result
     }
 
+    overlapping(from: ppqn, to: ppqn, pitch: int): ReadonlyArray<NoteEventBoxAdapter> {
+        const result: Array<NoteEventBoxAdapter> = []
+        for (const event of this.#events.asArray()) {
+            if (event.pitch === pitch && event.complete > from && event.position < to) {
+                result.push(event)
+            }
+        }
+        return result
+    }
+
     requestSorting(): void {
         this.#events.onIndexingChanged()
         this.onEventPropertyChanged()
