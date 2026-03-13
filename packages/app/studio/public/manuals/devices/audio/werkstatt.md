@@ -78,6 +78,14 @@ When silenced, the device outputs silence until the next successful compile.
 
 Your code must define a `class Processor` with a `process` method. Optionally implement `paramChanged` to receive parameter updates.
 
+### Globals
+
+| Variable     | Type     | Description                              |
+|--------------|----------|------------------------------------------|
+| `sampleRate` | `number` | Audio sample rate in Hz (e.g. 44100, 48000) |
+
+### Processor class
+
 ```javascript
 class Processor {
     process(io, block) {
@@ -123,7 +131,7 @@ class Processor {
         const [srcL, srcR] = src
         const [outL, outR] = out
         const freq = 0.5 + this.speed * 19.5
-        const increment = freq / 44100
+        const increment = freq / sampleRate
         for (let i = s0; i < s1; i++) {
             const mod = 1.0 - this.depth * (0.5 + 0.5 * Math.sin(this.phase * Math.PI * 2))
             outL[i] = srcL[i] * mod
@@ -200,15 +208,18 @@ Examples:
 // @param mix 0.5
 // @param rate
 
+## Globals
+- sampleRate — number, the audio sample rate in Hz (e.g. 44100, 48000).
+  Always use this instead of hardcoding a sample rate.
+
 ## Constraints
 - Output is validated every block. NaN or amplitudes > 1000 will silence the processor.
 - Do not use import/export/require. No access to DOM or fetch.
 - The code runs in an AudioWorklet thread. Only AudioWorklet-safe APIs are available
   (Math, typed arrays, basic JS). No console, no setTimeout, no DOM.
+- You can define and use helper classes alongside the Processor class.
 - Performance matters: this runs at audio rate. Avoid allocations inside process().
   Pre-allocate buffers in the constructor or as class fields.
-- Sample rate is typically 44100 or 48000. Do not hardcode — if you need it,
-  derive timing from the block size.
 
 ## Template
 

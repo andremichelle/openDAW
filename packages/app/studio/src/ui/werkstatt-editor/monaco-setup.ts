@@ -9,5 +9,10 @@ monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
     noSyntaxValidation: false
 })
 
+monaco.languages.typescript.javascriptDefaults.addExtraLib(`
+/** Audio sample rate in Hz (e.g. 44100 or 48000) */
+declare const sampleRate: number;
+`, "ts:werkstatt-globals.d.ts")
+
 export {monaco}
 export type Monaco = typeof monaco
