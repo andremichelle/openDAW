@@ -19,10 +19,13 @@ class SelectedModifyStrategy implements RegionModifyStrategy {
     readPosition(region: AnyRegionBoxAdapter): ppqn {
         const position = region.position + this.#computeDelta(region)
         return region.trackBoxAdapter.map(trackAdapter => trackAdapter.regions.collection
-            .lowerEqual(region.position, prev => prev !== region && prev.isSelected)).match({
-            none: () => position,
-            some: prev => position < prev.complete ? prev.complete : position
-        })
+            .lowerEqual(region.position, prev => prev !== region && prev.isSelected))
+            .match({
+                none: () => position,
+                some: prev => position < prev.complete && prev.complete <= region.complete - PPQN.SemiQuaver
+                    ? prev.complete
+                    : position
+            })
     }
     readComplete(region: AnyRegionBoxAdapter): ppqn {return region.complete}
     readLoopOffset(region: AnyLoopableRegionBoxAdapter): ppqn {
