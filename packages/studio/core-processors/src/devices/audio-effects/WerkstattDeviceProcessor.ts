@@ -73,6 +73,7 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
                 if (newUpdate > 0 && newUpdate !== this.#currentUpdate) {
                     this.#silenced = true
                     this.#userProcessor = Option.None
+                    this.#output.clear()
                     this.#tryLoad(newUpdate)
                 }
             }),

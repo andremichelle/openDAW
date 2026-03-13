@@ -17,6 +17,7 @@ import {VUMeterPanel} from "@/ui/meter/VUMeterPanel"
 import {PianoModePanel} from "@/ui/piano-panel/PianoModePanel.tsx"
 import {ShadertoyPreview} from "@/ui/shadertoy/ShadertoyPreview"
 import {ShadertoyEditor} from "@/ui/shadertoy/ShadertoyEditor"
+import {WerkstattEditorPanel} from "@/ui/werkstatt-editor/WerkstattEditorPanel"
 
 export const createPanelFactory = (service: StudioService): PanelContentFactory => ({
     create: (lifecycle: Lifecycle, type: PanelType): JsxValue => {
@@ -47,6 +48,8 @@ export const createPanelFactory = (service: StudioService): PanelContentFactory 
                 return (<ShadertoyPreview lifecycle={lifecycle} service={service}/>)
             case PanelType.ShadertoyEditor:
                 return (<ShadertoyEditor lifecycle={lifecycle} service={service}/>)
+            case PanelType.WerkstattEditor:
+                return (<WerkstattEditorPanel lifecycle={lifecycle} service={service}/>)
             case PanelType.EmptyFlexSpace:
                 return (<FlexSpace/>)
             default:

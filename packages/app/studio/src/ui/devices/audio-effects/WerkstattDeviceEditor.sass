@@ -2,45 +2,31 @@
 
 component
   display: grid
-  grid-template-rows: 1fr auto auto auto
-  gap: 4px
-  padding: 4px
-  width: 320px
+  grid-template-columns: repeat(3, 4.5em)
+  grid-auto-rows: 17px
+  row-gap: 1px
+  align-content: start
+  position: relative
+  @include mixins.Control
 
-  > textarea
-    resize: none
-    width: 100%
-    height: 100%
-    background: rgba(0, 0, 0, 0.3)
-    color: #c0c0c0
-    border: 1px solid rgba(255, 255, 255, 0.1)
-    border-radius: 2px
-    font-family: monospace
-    font-size: 9px
-    line-height: 1.4
-    padding: 4px
-    outline: none
-    tab-size: 4
+  > div.control
+    display: grid
+    grid-template-rows: auto auto
+    white-space: nowrap
+    justify-content: center
+    padding: 4px 4px 1px 4px
 
-    &:focus
-      border-color: rgba(255, 255, 255, 0.3)
+    > h3
+      font-size: 9px
+      height: 12px
+      letter-spacing: 0.5px
+      text-align: center
+      text-transform: capitalize
+      color: var(--color-shadow)
+      z-index: 1
 
-  > .error
-    display: none
-    font-family: monospace
-    font-size: 9px
-    line-height: 1.3
-    color: #ff6060
-    background: rgba(255, 0, 0, 0.1)
-    border: 1px solid rgba(255, 0, 0, 0.3)
-    border-radius: 2px
-    padding: 3px 4px
-    white-space: pre-wrap
-    word-break: break-word
-    &.visible
-      display: block
-
-  > button
+  > button.edit
+    grid-column: 1 / -1
     background: rgba(255, 255, 255, 0.1)
     color: #c0c0c0
     border: 1px solid rgba(255, 255, 255, 0.15)
@@ -48,23 +34,8 @@ component
     padding: 3px 8px
     font-size: 10px
     cursor: pointer
-    justify-self: end
+    justify-self: start
+    margin-top: 4px
 
     &:hover
       background: rgba(255, 255, 255, 0.2)
-
-  > .parameters
-    display: flex
-    flex-wrap: wrap
-    gap: 4px
-
-    > .param
-      display: flex
-      flex-direction: column
-      align-items: center
-      gap: 2px
-
-      > h3
-        font-size: 9px
-        color: #888
-        margin: 0

@@ -219,6 +219,35 @@ export const DefaultWorkspace = Object.freeze({
             notMinimizable: true,
             constrains: {type: "flex", minSize: 0, flex: 1}
         })
+    },
+    "code": {
+        name: "Code",
+        icon: IconSymbol.Generator,
+        hidden: true,
+        content: {
+            type: "layout",
+            orientation: "horizontal",
+            contents: [
+                BrowserPanel,
+                {
+                    type: "layout",
+                    orientation: "vertical",
+                    contents: [
+                        PanelState.create({
+                            type: "panel",
+                            name: "Code Editor",
+                            icon: IconSymbol.Generator,
+                            panelType: PanelType.WerkstattEditor,
+                            notMinimizable: true,
+                            constrains: {type: "flex", minSize: 0, flex: 1}
+                        }),
+                        DevicesPanel
+                    ],
+                    constrains: {type: "flex", minSize: 0, flex: 1}
+                }
+            ],
+            constrains: {type: "flex", minSize: 20, flex: 1}
+        }
     }
 } satisfies Record<string, Workspace.Screen>)
 

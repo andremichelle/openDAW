@@ -73,8 +73,9 @@ export namespace WerkstattCompiler {
         deviceBox: WerkstattDeviceBox,
         source: string
     ): Promise<void> => {
-        const {userCode, update} = parseHeader(source)
-        const newUpdate = update + 1
+        const userCode = parseHeader(source).userCode
+        const currentUpdate = parseHeader(deviceBox.code.getValue()).update
+        const newUpdate = currentUpdate + 1
         const uuid = UUID.toString(deviceBox.address.uuid)
         const params = parseParams(userCode)
         const wrappedCode = `
@@ -88,6 +89,7 @@ export namespace WerkstattCompiler {
                 })()
             }
         `
+        new Function(wrappedCode)
         const boxGraph = deviceBox.graph
         boxGraph.beginTransaction()
         deviceBox.code.setValue(createHeader(newUpdate) + userCode)
