@@ -88,7 +88,8 @@ export class VertexSelection implements Selection<SelectableVertex> {
         }
         if (selectables.length === 0) {return}
         this.editing.modify(() => selectables
-            .forEach(selectable => this.#selectableMap.get(selectable.address).box.delete()), false)
+            .forEach(selectable => this.#selectableMap.opt(selectable.address)
+                .ifSome(entry => entry.box.delete())), false)
     }
 
     deselectAll(): void {
