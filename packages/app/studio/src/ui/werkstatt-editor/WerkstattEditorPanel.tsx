@@ -79,6 +79,9 @@ export const WerkstattEditorPanel = ({lifecycle, service}: Construct) => {
                     }
                     if (isDefined(handler)) {
                         lifecycle.own(handler.subscribeErrors(message => setStatus(message, "error")))
+                        lifecycle.own(handler.subscribeCode(code => {
+                            if (editor.getValue() !== code) {editor.setValue(code)}
+                        }))
                     }
                     const allowed = ["c", "v", "x", "a", "z", "y"]
                     editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.Enter, () => compileCode().finally())

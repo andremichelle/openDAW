@@ -35,7 +35,7 @@ export const WerkstattDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
     if (storedCode.length > 0) {
         WerkstattCompiler.load(service.audioContext, box).finally(EmptyExec)
     } else {
-        compile(userCode).finally(EmptyExec)
+        WerkstattCompiler.compile(service.audioContext, editing, box, userCode, true).finally(EmptyExec)
     }
     const toggleEditor = () => {
         const isActive = service.activeCodeEditor
@@ -49,7 +49,9 @@ export const WerkstattDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                     name: adapter.labelField,
                     compile,
                     subscribeErrors: observer =>
-                        service.engine.subscribeDeviceMessage(UUID.toString(adapter.uuid), observer)
+                        service.engine.subscribeDeviceMessage(UUID.toString(adapter.uuid), observer),
+                    subscribeCode: observer =>
+                        box.code.subscribe(owner => observer(WerkstattCompiler.stripHeader(owner.getValue())))
                 },
                 initialCode: WerkstattCompiler.stripHeader(box.code.getValue()) || defaultCode,
                 previousScreen: service.layout.screen.getValue()

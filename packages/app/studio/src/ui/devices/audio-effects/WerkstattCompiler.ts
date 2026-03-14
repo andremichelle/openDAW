@@ -110,17 +110,23 @@ export namespace WerkstattCompiler {
         audioContext: BaseAudioContext,
         editing: Editing,
         deviceBox: WerkstattDeviceBox,
-        source: string
+        source: string,
+        append: boolean = false
     ): Promise<void> => {
         const userCode = parseHeader(source).userCode
         const currentUpdate = parseHeader(deviceBox.code.getValue()).update
         const newUpdate = currentUpdate + 1
         const uuid = UUID.toString(deviceBox.address.uuid)
         const params = parseParams(userCode)
-        editing.append(() => {
+        const modifier = () => {
             deviceBox.code.setValue(createHeader(newUpdate) + userCode)
             reconcileParameters(deviceBox, params)
-        })
+        }
+        if (append) {
+            editing.append(modifier)
+        } else {
+            editing.modify(modifier)
+        }
         return registerWorklet(audioContext, uuid, newUpdate, userCode)
     }
 }

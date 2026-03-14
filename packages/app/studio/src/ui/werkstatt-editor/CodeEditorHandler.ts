@@ -6,4 +6,5 @@ export interface CodeEditorHandler {
 
     compile(code: string): Promise<void>
     subscribeErrors(observer: Procedure<string>): Subscription
+    subscribeCode(observer: Procedure<string>): Subscription
 }
