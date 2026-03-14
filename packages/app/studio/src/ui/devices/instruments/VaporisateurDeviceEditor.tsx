@@ -171,6 +171,10 @@ export const VaporisateurDeviceEditor = ({lifecycle, service, adapter, deviceHos
                       populateControls={() => (
                           <div className={className}>
                               <div className="label unisono-section"/>
+                              <div className="label oscillator-section"/>
+                              <div className="label filter-section"/>
+                              <div className="label lfo-section"/>
+                              <div className="label env-section"/>
                               <div style={{display: "contents"}}>
                                   <Logo/>
                                   <div/>
