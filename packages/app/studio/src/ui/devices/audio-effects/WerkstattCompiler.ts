@@ -1,4 +1,4 @@
-import {asInstanceOf, Editing, isDefined, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, Editing, isDefined, Nullable, UUID} from "@opendaw/lib-std"
 import {WerkstattDeviceBox, WerkstattParameterBox} from "@opendaw/studio-boxes"
 
 const COMPILER_VERSION = 1
@@ -12,18 +12,20 @@ interface ParamDeclaration {
 
 const parseHeader = (source: string): { userCode: string, update: number } => {
     const match = source.match(HEADER_PATTERN)
-    if (match !== null) {
-        return {userCode: source.slice(match[0].length), update: parseInt(match[3])}
+    return match !== null ? {
+        userCode: source.slice(match[0].length),
+        update: parseInt(match[3])
+    } : {
+        userCode: source,
+        update: 0
     }
-    return {userCode: source, update: 0}
 }
 
-const createHeader = (update: number): string =>
-    `// @werkstatt js ${COMPILER_VERSION} ${update}\n`
+const createHeader = (update: number): string => `// @werkstatt js ${COMPILER_VERSION} ${update}\n`
 
 const parseParams = (code: string): ReadonlyArray<ParamDeclaration> => {
     const params: Array<ParamDeclaration> = []
-    let match: RegExpExecArray | null
+    let match: Nullable<RegExpExecArray>
     PARAM_PATTERN.lastIndex = 0
     while ((match = PARAM_PATTERN.exec(code)) !== null) {
         params.push({
@@ -73,7 +75,10 @@ const reconcileParameters = (deviceBox: WerkstattDeviceBox, declared: ReadonlyAr
     }
 }
 
-const registerWorklet = async (audioContext: BaseAudioContext, uuid: string, update: number, userCode: string): Promise<void> => {
+const registerWorklet = async (audioContext: BaseAudioContext,
+                               uuid: string,
+                               update: number,
+                               userCode: string): Promise<void> => {
     const wrappedCode = `
         if (typeof globalThis.openDAW === "undefined") { globalThis.openDAW = {} }
         if (typeof globalThis.openDAW.werkstattProcessors === "undefined") { globalThis.openDAW.werkstattProcessors = {} }
@@ -85,7 +90,7 @@ const registerWorklet = async (audioContext: BaseAudioContext, uuid: string, upd
             })()
         }
     `
-    new Function(wrappedCode)
+    new Function(wrappedCode) // compile validation
     const blob = new Blob([wrappedCode], {type: "application/javascript"})
     const blobUrl = URL.createObjectURL(blob)
     try {
@@ -97,22 +102,17 @@ const registerWorklet = async (audioContext: BaseAudioContext, uuid: string, upd
 
 export namespace WerkstattCompiler {
     export const stripHeader = (source: string): string => parseHeader(source).userCode
-    export const load = async (
-        audioContext: BaseAudioContext,
-        deviceBox: WerkstattDeviceBox
-    ): Promise<void> => {
+    export const load = async (audioContext: BaseAudioContext, deviceBox: WerkstattDeviceBox): Promise<void> => {
         const {userCode, update} = parseHeader(deviceBox.code.getValue())
         if (update === 0) {return}
         const uuid = UUID.toString(deviceBox.address.uuid)
         return registerWorklet(audioContext, uuid, update, userCode)
     }
-    export const compile = async (
-        audioContext: BaseAudioContext,
-        editing: Editing,
-        deviceBox: WerkstattDeviceBox,
-        source: string,
-        append: boolean = false
-    ): Promise<void> => {
+    export const compile = async (audioContext: BaseAudioContext,
+                                  editing: Editing,
+                                  deviceBox: WerkstattDeviceBox,
+                                  source: string,
+                                  append: boolean = false): Promise<void> => {
         const userCode = parseHeader(source).userCode
         const currentUpdate = parseHeader(deviceBox.code.getValue()).update
         const newUpdate = currentUpdate + 1
