@@ -13,6 +13,8 @@ import {WerkstattCompiler} from "./WerkstattCompiler"
 import {WerkstattParameterBox} from "@opendaw/studio-boxes"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder"
 import {Button} from "@/ui/components/Button"
+import {Icon} from "@/ui/components/Icon"
+import {IconSymbol} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "WerkstattDeviceEditor")
 
@@ -79,12 +81,12 @@ export const WerkstattDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                               {knobs}
                               <Button lifecycle={lifecycle}
                                       onClick={openEditor}
-                                      appearance={{framed: true}}
+                                      appearance={{framed: true, tooltip: "Open Code Editor"}}
                                       style={{
-                                          fontSize: "10px",
+                                          fontSize: "16px",
                                           height: "min-content",
-                                          marginTop: "2em"
-                                      }}>Editor</Button>
+                                          marginTop: "1em"
+                                      }}><Icon symbol={IconSymbol.Code}/></Button>
                           </div>
                       )}
                       populateMeter={() => (

@@ -8,7 +8,7 @@ const BrowserPanel = PanelState.create({
     name: "Browser",
     icon: IconSymbol.Panel,
     panelType: PanelType.BrowserPanel,
-    constrains: {type: "flex", minSize: 240, maxSize: 480, flex: 0.25}
+    constrains: {type: "flex", minSize: 256, maxSize: 480, flex: 0}
 })
 const DevicesPanel = PanelState.create({
     type: "panel",
