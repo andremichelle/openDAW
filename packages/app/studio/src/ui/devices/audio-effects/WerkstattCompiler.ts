@@ -1,4 +1,4 @@
-import {asInstanceOf, isDefined, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, Editing, isDefined, UUID} from "@opendaw/lib-std"
 import {WerkstattDeviceBox, WerkstattParameterBox} from "@opendaw/studio-boxes"
 
 const COMPILER_VERSION = 1
@@ -10,7 +10,7 @@ interface ParamDeclaration {
     defaultValue: number
 }
 
-const parseHeader = (source: string): {userCode: string, update: number} => {
+const parseHeader = (source: string): { userCode: string, update: number } => {
     const match = source.match(HEADER_PATTERN)
     if (match !== null) {
         return {userCode: source.slice(match[0].length), update: parseInt(match[3])}
@@ -77,6 +77,7 @@ export namespace WerkstattCompiler {
     export const stripHeader = (source: string): string => parseHeader(source).userCode
     export const compile = async (
         audioContext: BaseAudioContext,
+        editing: Editing,
         deviceBox: WerkstattDeviceBox,
         source: string
     ): Promise<void> => {
@@ -97,11 +98,10 @@ export namespace WerkstattCompiler {
             }
         `
         new Function(wrappedCode)
-        const boxGraph = deviceBox.graph
-        boxGraph.beginTransaction()
-        deviceBox.code.setValue(createHeader(newUpdate) + userCode)
-        reconcileParameters(deviceBox, params)
-        boxGraph.endTransaction()
+        editing.modify(() => {
+            deviceBox.code.setValue(createHeader(newUpdate) + userCode)
+            reconcileParameters(deviceBox, params)
+        })
         const blob = new Blob([wrappedCode], {type: "application/javascript"})
         const blobUrl = URL.createObjectURL(blob)
         try {
