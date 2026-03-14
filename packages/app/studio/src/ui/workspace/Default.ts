@@ -8,7 +8,7 @@ const BrowserPanel = PanelState.create({
     name: "Browser",
     icon: IconSymbol.Panel,
     panelType: PanelType.BrowserPanel,
-    constrains: {type: "flex", minSize: 240, maxSize: 480, flex: 0.25}
+    constrains: {type: "flex", minSize: 256, maxSize: 480, flex: 0}
 })
 const DevicesPanel = PanelState.create({
     type: "panel",
@@ -219,6 +219,35 @@ export const DefaultWorkspace = Object.freeze({
             notMinimizable: true,
             constrains: {type: "flex", minSize: 0, flex: 1}
         })
+    },
+    "code": {
+        name: "Code",
+        icon: IconSymbol.Code,
+        hidden: true,
+        content: {
+            type: "layout",
+            orientation: "horizontal",
+            contents: [
+                BrowserPanel,
+                {
+                    type: "layout",
+                    orientation: "vertical",
+                    contents: [
+                        PanelState.create({
+                            type: "panel",
+                            name: "Code Editor",
+                            icon: IconSymbol.Code,
+                            panelType: PanelType.CodeEditor,
+                            notMinimizable: true,
+                            constrains: {type: "flex", minSize: 0, flex: 1}
+                        }),
+                        DevicesPanel
+                    ],
+                    constrains: {type: "flex", minSize: 0, flex: 1}
+                }
+            ],
+            constrains: {type: "flex", minSize: 20, flex: 1}
+        }
     }
 } satisfies Record<string, Workspace.Screen>)
 

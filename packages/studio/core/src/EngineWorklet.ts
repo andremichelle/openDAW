@@ -9,6 +9,8 @@ import {
     ObservableValue,
     Observer,
     Option,
+    Procedure,
+    SetMultimap,
     Subscription,
     SyncStream,
     Terminator,
@@ -65,6 +67,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #notifyClipNotification: Notifier<ClipNotification>
     readonly #notifyNoteSignals: Notifier<NoteSignal>
     readonly #playingClips: Array<UUID.Bytes>
+    readonly #deviceMessageListeners: SetMultimap<string, Procedure<string>> = new SetMultimap()
     readonly #commands: EngineCommands
     readonly #isReady: Promise<void>
 
@@ -171,6 +174,11 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         Communicator.executor<EngineToClient>(messenger.channel("engine-to-client"), {
                 log: (message: string): void => console.log("WORKLET", message),
                 error: (reason: unknown) => this.dispatchEvent(new ErrorEvent("error", {error: reason})),
+                deviceMessage: (uuid: string, message: string): void => {
+                    for (const listener of this.#deviceMessageListeners.get(uuid)) {
+                        listener(message)
+                    }
+                },
                 ready: (): void => resolve(),
                 fetchAudio: (uuid: UUID.Bytes): Promise<AudioData> => {
                     return new Promise((resolve, reject) => {
@@ -282,6 +290,11 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             changes: {started: this.#playingClips, stopped: Arrays.empty(), obsolete: Arrays.empty()}
         })
         return this.#notifyClipNotification.subscribe(observer)
+    }
+
+    subscribeDeviceMessage(uuid: string, listener: Procedure<string>): Subscription {
+        this.#deviceMessageListeners.add(uuid, listener)
+        return {terminate: () => this.#deviceMessageListeners.remove(uuid, listener)}
     }
 
     registerMonitoringSource(uuid: UUID.Bytes, node: AudioNode, numChannels: 1 | 2): void {

@@ -18,6 +18,7 @@ export interface OfflineEngineRenderConfig {
 
 export interface OfflineEngineProtocol {
     initialize(enginePort: MessagePort, config: OfflineEngineInitializeConfig): Promise<void>
+    addModule(code: string): Promise<void>
     render(config: OfflineEngineRenderConfig): Promise<Float32Array[]>
     step(samples: number): Promise<Float32Array[]>
     stop(): void

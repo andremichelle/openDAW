@@ -1,0 +1,51 @@
+@use "@/colors"
+
+component
+  display: flex
+  flex-direction: column
+  flex: 1
+  position: relative
+  @include colors.panel-background
+
+  .content
+    display: flex
+    flex-direction: column
+    flex: 1
+    overflow: hidden
+
+  header
+    height: 33px
+    padding: 1em
+    display: flex
+    align-items: center
+    flex-direction: row
+    column-gap: 1em
+    font-size: 11px
+    border-bottom: 1px solid var(--color-background)
+
+    > *, span
+      padding: 0.125em 0.125em
+      width: min-content
+      white-space: nowrap
+
+  .monaco-editor
+    flex: 1
+    position: relative
+    overflow: hidden
+
+  .status
+    padding: 0.5em 1em
+    font-size: 11px
+    font-family: monospace
+    white-space: pre-wrap
+    max-height: 80px
+    overflow-y: auto
+    border-top: 1px solid rgba(white, 0.1)
+    &.idle
+      color: rgba(white, 0.4)
+    &.success
+      color: hsl(120, 60%, 60%)
+    &.error
+      background-color: hsl(0, 50%, 15%)
+      color: hsl(0, 80%, 70%)
+      border-top-color: hsl(0, 50%, 25%)

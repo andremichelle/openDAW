@@ -22,6 +22,7 @@ import {
     TidalDeviceBox,
     VelocityDeviceBox,
     WaveshaperDeviceBox,
+    WerkstattDeviceBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {IconSymbol} from "@opendaw/studio-enums"
@@ -308,6 +309,21 @@ export namespace EffectFactories {
             })
     }
 
+    export const Werkstatt: EffectFactory = {
+        defaultName: "Werkstatt",
+        defaultIcon: IconSymbol.Code,
+        description: "User-scripted DSP processor",
+        manualPage: DeviceManualUrls.Werkstatt,
+        separatorBefore: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index): WerkstattDeviceBox =>
+            WerkstattDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Werkstatt")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
     export const Modular: EffectFactory = {
         defaultName: "🔇 Create New Modular Audio Effect (inaudible yet)",
         defaultIcon: IconSymbol.Box,
@@ -385,7 +401,8 @@ export namespace EffectFactories {
         Waveshaper,
         Tidal,
         NeuralAmp,
-        Maximizer
+        Maximizer,
+        Werkstatt
     }
     if (!includeNeuralAmp) {
         delete (AudioNamed as { NeuralAmp?: typeof NeuralAmp }).NeuralAmp

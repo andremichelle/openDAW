@@ -142,9 +142,6 @@ export class BoxEditing implements Editing {
         return this.#pending.length <= 0
     }
 
-    /** @deprecated No longer needed — modify() now handles calls during undo/redo transparently. */
-    mustModify(): boolean {return !this.#graph.inTransaction()}
-
     modify<R>(modifier: SyncProvider<Maybe<R>>, mark: boolean = true): Option<R> {
         assert(!this.#inProcess, "Cannot call modify while a modification process is running")
         if (this.#modifying || this.#graph.inTransaction()) {
@@ -169,6 +166,52 @@ export class BoxEditing implements Editing {
         this.#modifying = false
         this.#graph.edges().validateRequirements()
         if (mark) {this.mark()}
+        this.#notifier.notify()
+        return Option.wrap(result)
+    }
+
+    append<R>(modifier: SyncProvider<Maybe<R>>): Option<R> {
+        assert(!this.#inProcess, "Cannot call append while a modification process is running")
+        if (this.#modifying || this.#graph.inTransaction()) {
+            this.#notifier.notify()
+            return Option.wrap(modifier())
+        }
+        if (this.#pending.length > 0) {
+            if (this.#historyIndex > 0) {
+                this.#marked[this.#historyIndex - 1] =
+                    [...this.#marked[this.#historyIndex - 1], ...this.#pending.splice(0)]
+            } else {
+                this.mark()
+            }
+        }
+        this.#modifying = true
+        const updates: Array<Update> = []
+        const subscription = this.#graph.subscribeToAllUpdates({
+            onUpdate: (update: Update) => updates.push(update)
+        })
+        this.#graph.beginTransaction()
+        const result = modifier()
+        this.#graph.endTransaction()
+        subscription.terminate()
+        const optimized = optimizeUpdates(updates)
+        if (optimized.length > 0) {
+            const modification = new Modification(optimized)
+            if (this.#historyIndex > 0) {
+                if (this.#marked.length > this.#historyIndex) {
+                    if (this.#savedHistoryIndex > this.#historyIndex) {
+                        this.#savedHistoryIndex = -1
+                    }
+                    this.#marked.splice(this.#historyIndex)
+                }
+                this.#marked[this.#historyIndex - 1] =
+                    [...this.#marked[this.#historyIndex - 1], modification]
+            } else {
+                this.#marked.push([modification])
+                this.#historyIndex = this.#marked.length
+            }
+        }
+        this.#modifying = false
+        this.#graph.edges().validateRequirements()
         this.#notifier.notify()
         return Option.wrap(result)
     }

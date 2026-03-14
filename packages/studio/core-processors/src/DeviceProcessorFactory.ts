@@ -26,6 +26,7 @@ import {
     VaporisateurDeviceBox,
     VelocityDeviceBox,
     WaveshaperDeviceBox,
+    WerkstattDeviceBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {DelayDeviceProcessor} from "./devices/audio-effects/DelayDeviceProcessor"
@@ -56,6 +57,7 @@ import {
     VaporisateurDeviceBoxAdapter,
     VelocityDeviceBoxAdapter,
     WaveshaperDeviceBoxAdapter,
+    WerkstattDeviceBoxAdapter,
     ZeitgeistDeviceBoxAdapter
 } from "@opendaw/studio-adapters"
 import {NopDeviceProcessor} from "./devices/audio-effects/NopDeviceProcessor"
@@ -89,6 +91,7 @@ import {TidalDeviceProcessor} from "./devices/audio-effects/TidalDeviceProcessor
 import {DattorroReverbDeviceProcessor} from "./devices/audio-effects/DattorroReverbDeviceProcessor"
 import {NeuralAmpDeviceProcessor} from "./devices/audio-effects/NeuralAmpDeviceProcessor"
 import {WaveshaperDeviceProcessor} from "./devices/audio-effects/WaveshaperDeviceProcessor"
+import {WerkstattDeviceProcessor} from "./devices/audio-effects/WerkstattDeviceProcessor"
 
 export namespace InstrumentDeviceProcessorFactory {
     export const create = (context: EngineContext,
@@ -161,6 +164,8 @@ export namespace AudioEffectDeviceProcessorFactory {
             visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox): AudioEffectDeviceProcessor =>
                 new NeuralAmpDeviceProcessor(context, context.boxAdapters.adapterFor(box, NeuralAmpDeviceBoxAdapter)),
             visitWaveshaperDeviceBox: (box: WaveshaperDeviceBox): AudioEffectDeviceProcessor =>
-                new WaveshaperDeviceProcessor(context, context.boxAdapters.adapterFor(box, WaveshaperDeviceBoxAdapter))
+                new WaveshaperDeviceProcessor(context, context.boxAdapters.adapterFor(box, WaveshaperDeviceBoxAdapter)),
+            visitWerkstattDeviceBox: (box: WerkstattDeviceBox): AudioEffectDeviceProcessor =>
+                new WerkstattDeviceProcessor(context, context.boxAdapters.adapterFor(box, WerkstattDeviceBoxAdapter))
         }), `Could not create audio-effect for'${box.name}'`)
 }

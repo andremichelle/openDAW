@@ -146,6 +146,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
             dispatcher => new class implements EngineToClient {
                 log(message: string): void {dispatcher.dispatchAndForget(this.log, message)}
                 error(error: unknown): void {dispatcher.dispatchAndForget(this.error, error)}
+                deviceMessage(uuid: string, message: string): void {dispatcher.dispatchAndForget(this.deviceMessage, uuid, message)}
                 fetchAudio(uuid: UUID.Bytes): Promise<AudioData> {
                     return dispatcher.dispatchAndReturn(this.fetchAudio, uuid)
                 }

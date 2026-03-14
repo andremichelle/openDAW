@@ -1,0 +1,17 @@
+@use "@/mixins"
+
+component
+  display: flex
+  flex-direction: row
+  align-items: stretch
+  align-content: start
+  column-gap: 1em
+  margin-right: 1em
+  @include mixins.Control
+
+  > .knobs
+    display: grid
+    grid-template-rows: repeat(3, 3.5em)
+    grid-auto-columns: 3.5em
+    grid-auto-flow: column
+    row-gap: 0.25em

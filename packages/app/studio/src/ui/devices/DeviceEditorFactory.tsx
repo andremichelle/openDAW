@@ -28,6 +28,7 @@ import {
     VaporisateurDeviceBox,
     VelocityDeviceBox,
     WaveshaperDeviceBox,
+    WerkstattDeviceBox,
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {ArpeggioDeviceEditor} from "@/ui/devices/midi-effects/ArpeggioDeviceEditor.tsx"
@@ -60,6 +61,7 @@ import {
     VaporisateurDeviceBoxAdapter,
     VelocityDeviceBoxAdapter,
     WaveshaperDeviceBoxAdapter,
+    WerkstattDeviceBoxAdapter,
     ZeitgeistDeviceBoxAdapter
 } from "@opendaw/studio-adapters"
 import {DelayDeviceEditor} from "@/ui/devices/audio-effects/DelayDeviceEditor.tsx"
@@ -91,6 +93,7 @@ import {TidalDeviceEditor} from "@/ui/devices/audio-effects/TidalDeviceEditor"
 import {DattorroReverbDeviceEditor} from "@/ui/devices/audio-effects/DattorroReverbDeviceEditor"
 import {NeuralAmpDeviceEditor} from "@/ui/devices/audio-effects/NeuralAmpDeviceEditor"
 import {WaveshaperDeviceEditor} from "@/ui/devices/audio-effects/WaveshaperDeviceEditor"
+import {WerkstattDeviceEditor} from "@/ui/devices/audio-effects/WerkstattDeviceEditor"
 
 export namespace DeviceEditorFactory {
     export const toMidiEffectDeviceEditor = (service: StudioService, lifecycle: Lifecycle, box: Box, deviceHost: DeviceHost) =>
@@ -274,6 +277,12 @@ export namespace DeviceEditorFactory {
                                         service={service}
                                         adapter={service.project.boxAdapters.adapterFor(box, WaveshaperDeviceBoxAdapter)}
                                         deviceHost={deviceHost}/>
+            ),
+            visitWerkstattDeviceBox: (box: WerkstattDeviceBox) => (
+                <WerkstattDeviceEditor lifecycle={lifecycle}
+                                       service={service}
+                                       adapter={service.project.boxAdapters.adapterFor(box, WerkstattDeviceBoxAdapter)}
+                                       deviceHost={deviceHost}/>
             )
         }), `No AudioEffectDeviceEditor found for ${box}`)
 }

@@ -158,6 +158,7 @@ export class RegionLoopDurationModifier implements RegionModifier {
     }
 
     #dispatchChange(): void {
-        this.#adapters.forEach(adapter => adapter.trackBoxAdapter.unwrap().regions.dispatchChange())
+        this.#adapters.forEach(adapter => adapter.trackBoxAdapter
+            .ifSome(track => track.regions.dispatchChange()))
     }
 }
