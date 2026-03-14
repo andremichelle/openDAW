@@ -6,6 +6,7 @@ import {
     Func,
     int,
     isAbsent,
+    MutableObservableOption,
     Notifier,
     Nullable,
     Observer,
@@ -115,7 +116,7 @@ export class StudioService implements ProjectEnv {
     readonly #soundfontService: SoundfontService
 
     #shadertoyState: Option<ShadertoyState> = Option.None
-    #werkstattEditorState: Option<WerkstattEditorState> = Option.None
+    readonly #activeCodeEditor: MutableObservableOption<WerkstattEditorState> = new MutableObservableOption()
 
     #factoryFooterLabel: Option<Provider<FooterLabel>> = Option.None
 
@@ -367,8 +368,7 @@ export class StudioService implements ProjectEnv {
         })
     }
 
-    switchScreen(key: Nullable<Workspace.ScreenKeys>, forceUpdate: boolean = false): void {
-        if (forceUpdate) {this.layout.screen.setValue(null)}
+    switchScreen(key: Nullable<Workspace.ScreenKeys>): void {
         this.layout.screen.setValue(key)
         RouteLocation.get().navigateTo("/")
     }
@@ -380,12 +380,20 @@ export class StudioService implements ProjectEnv {
     factoryFooterLabel(): Option<Provider<FooterLabel>> {return this.#factoryFooterLabel}
 
     get optShadertoyState(): Option<ShadertoyState> {return this.#shadertoyState}
-    get optWerkstattEditorState(): Option<WerkstattEditorState> {return this.#werkstattEditorState}
+    get activeCodeEditor(): MutableObservableOption<WerkstattEditorState> {return this.#activeCodeEditor}
 
     openWerkstattEditor(state: WerkstattEditorState): void {
-        this.#werkstattEditorState = Option.wrap(state)
-        this.switchScreen("code", true)
-        this.#werkstattEditorState = Option.None
+        const previousScreen = this.layout.screen.getValue() === "code"
+            ? this.#activeCodeEditor.map(existing => existing.previousScreen).unwrapOrNull() ?? state.previousScreen
+            : state.previousScreen
+        this.layout.screen.setValue(null)
+        this.#activeCodeEditor.wrap({...state, previousScreen})
+        this.layout.screen.setValue("code")
+        RouteLocation.get().navigateTo("/")
+    }
+
+    closeCodeEditor(): void {
+        this.#activeCodeEditor.clear()
     }
 
     resetPeaks(): void {this.#signals.notify({type: "reset-peaks"})}

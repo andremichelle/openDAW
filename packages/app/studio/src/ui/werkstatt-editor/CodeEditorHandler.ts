@@ -1,7 +1,8 @@
-import {Procedure, Subscription} from "@opendaw/lib-std"
+import {MutableObservableValue, Procedure, Subscription, UUID} from "@opendaw/lib-std"
 
 export interface CodeEditorHandler {
-    readonly name: string
+    readonly uuid: UUID.Bytes
+    readonly name: MutableObservableValue<string>
 
     compile(code: string): Promise<void>
     subscribeErrors(observer: Procedure<string>): Subscription

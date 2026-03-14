@@ -1,6 +1,6 @@
 import css from "./WerkstattEditorPanel.sass?inline"
 import defaultCode from "../devices/audio-effects/werkstatt-default.txt?raw"
-import {Lifecycle, Nullable} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, Nullable} from "@opendaw/lib-std"
 import {Await, createElement} from "@opendaw/lib-jsx"
 import {Events, Html, Keyboard, Shortcut} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
@@ -10,7 +10,6 @@ import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
 import {CodeEditorHandler} from "./CodeEditorHandler"
-import {Workspace} from "@/ui/workspace/Workspace"
 
 const className = Html.adoptStyleSheet(css, "WerkstattEditorPanel")
 
@@ -21,14 +20,18 @@ type Construct = {
 
 export const WerkstattEditorPanel = ({lifecycle, service}: Construct) => {
     const statusLabel: HTMLDivElement = (<div className="status idle">Idle</div>)
-    const state = service.optWerkstattEditorState
-    const handler: Nullable<CodeEditorHandler> = state.map(entry => entry.handler).unwrapOrNull()
-    const previousScreen: Nullable<Workspace.ScreenKeys> = state.map(entry => entry.previousScreen).unwrapOrNull()
-    const initialCode = state.map(entry => entry.initialCode).unwrapOrElse(defaultCode)
+    const state = service.activeCodeEditor.unwrapOrNull()
+    const handler: Nullable<CodeEditorHandler> = isDefined(state) ? state.handler : null
+    const initialCode = isDefined(state) ? state.initialCode : defaultCode
     const setStatus = (text: string, type: "idle" | "success" | "error") => {
         statusLabel.textContent = text
         statusLabel.className = `status ${type}`
     }
+    const nameSpan: HTMLSpanElement = (<span className="name">Code Editor</span>)
+    if (isDefined(handler)) {
+        lifecycle.own(handler.name.catchupAndSubscribe(owner => nameSpan.textContent = owner.getValue()))
+    }
+    lifecycle.own({terminate: () => service.closeCodeEditor()})
     return (
         <div className={className}>
             <Await
@@ -64,7 +67,7 @@ export const WerkstattEditorPanel = ({lifecycle, service}: Construct) => {
                         automaticLayout: true
                     })
                     const compileCode = async () => {
-                        if (handler === null) {
+                        if (!isDefined(handler)) {
                             setStatus("No handler connected", "error")
                             return
                         }
@@ -75,7 +78,7 @@ export const WerkstattEditorPanel = ({lifecycle, service}: Construct) => {
                             setStatus(String(reason), "error")
                         }
                     }
-                    if (handler !== null) {
+                    if (isDefined(handler)) {
                         lifecycle.own(handler.subscribeErrors(message => setStatus(message, "error")))
                     }
                     const allowed = ["c", "v", "x", "a", "z", "y"]
@@ -105,11 +108,16 @@ export const WerkstattEditorPanel = ({lifecycle, service}: Construct) => {
                         Events.subscribe(container, "keypress", event => event.stopPropagation())
                     )
                     requestAnimationFrame(() => editor.focus())
-                    const close = () => service.switchScreen(previousScreen ?? "default")
+                    const close = () => {
+                        const previousScreen = service.activeCodeEditor
+                            .map(state => state.previousScreen).unwrapOrNull()
+                        service.closeCodeEditor()
+                        service.switchScreen(previousScreen ?? "default")
+                    }
                     return (
                         <div className="content">
                             <header>
-                                <span className="name">{handler?.name ?? "Code Editor"}</span>
+                                {nameSpan}
                                 <Button lifecycle={lifecycle}
                                         onClick={compileCode}
                                         appearance={{tooltip: `Compile (${Shortcut.of("Enter", {alt: true}).format()})`}}>

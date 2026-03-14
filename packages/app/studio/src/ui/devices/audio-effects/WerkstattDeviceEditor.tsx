@@ -35,19 +35,44 @@ export const WerkstattDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
         return WerkstattCompiler.compile(service.audioContext, box, code)
     }
     compile(userCode).finally(EmptyExec)
-    const openEditor = () => service.openWerkstattEditor({
-        handler: {
-            name: adapter.labelField.getValue(),
-            compile,
-            subscribeErrors: observer =>
-                service.engine.subscribeDeviceMessage(UUID.toString(adapter.uuid), observer)
-        },
-        initialCode: WerkstattCompiler.stripHeader(box.code.getValue()) || defaultCode,
-        previousScreen: service.layout.screen.getValue()
-    })
+    const toggleEditor = () => {
+        const isActive = service.activeCodeEditor
+            .map(state => UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
+        if (isActive) {
+            const previousScreen = service.activeCodeEditor.map(state => state.previousScreen).unwrapOrNull()
+            service.closeCodeEditor()
+            service.switchScreen(previousScreen ?? "default")
+        } else {
+            service.openWerkstattEditor({
+                handler: {
+                    uuid: adapter.uuid,
+                    name: adapter.labelField,
+                    compile,
+                    subscribeErrors: observer =>
+                        service.engine.subscribeDeviceMessage(UUID.toString(adapter.uuid), observer)
+                },
+                initialCode: WerkstattCompiler.stripHeader(box.code.getValue()) || defaultCode,
+                previousScreen: service.layout.screen.getValue()
+            })
+        }
+    }
     const knobs: HTMLElement = (<div className="knobs"/>)
+    const toggleEditorButton: HTMLElement = (
+        <Button lifecycle={lifecycle}
+                onClick={toggleEditor}
+                appearance={{framed: true, tooltip: "Toggle Code Editor"}}
+                style={{
+                    fontSize: "16px",
+                    height: "min-content",
+                    marginTop: "1em"
+                }}><Icon symbol={IconSymbol.Code}/></Button>
+    )
     const set = UUID.newSet<{ uuid: UUID.Bytes, lifecycle: Terminable }>(({uuid}) => uuid)
-    lifecycle.own(
+    lifecycle.ownAll(
+        service.activeCodeEditor.catchupAndSubscribe(option => {
+            const isActive = option.map(state => UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
+            toggleEditorButton.classList.toggle("active", isActive)
+        }),
         box.parameters.pointerHub.catchupAndSubscribe({
             onAdded: ({box: paramBox}) => {
                 const werkstattParam = asInstanceOf(paramBox, WerkstattParameterBox)
@@ -79,14 +104,7 @@ export const WerkstattDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                       populateControls={() => (
                           <div className={className}>
                               {knobs}
-                              <Button lifecycle={lifecycle}
-                                      onClick={openEditor}
-                                      appearance={{framed: true, tooltip: "Open Code Editor"}}
-                                      style={{
-                                          fontSize: "16px",
-                                          height: "min-content",
-                                          marginTop: "1em"
-                                      }}><Icon symbol={IconSymbol.Code}/></Button>
+                              {toggleEditorButton}
                           </div>
                       )}
                       populateMeter={() => (
