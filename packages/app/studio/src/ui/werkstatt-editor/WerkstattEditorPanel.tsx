@@ -107,12 +107,7 @@ export const WerkstattEditorPanel = ({lifecycle, service}: Construct) => {
                         Events.subscribe(container, "keypress", event => event.stopPropagation())
                     )
                     requestAnimationFrame(() => editor.focus())
-                    const close = () => {
-                        const previousScreen = service.activeCodeEditor
-                            .map(state => state.previousScreen).unwrapOrNull()
-                        service.closeCodeEditor()
-                        service.switchScreen(previousScreen ?? "default")
-                    }
+                    const close = () => service.closeCodeEditor()
                     return (
                         <div className="content">
                             <header>

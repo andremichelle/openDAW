@@ -98,7 +98,7 @@ export namespace WerkstattCompiler {
             }
         `
         new Function(wrappedCode)
-        editing.modify(() => {
+        editing.append(() => {
             deviceBox.code.setValue(createHeader(newUpdate) + userCode)
             reconcileParameters(deviceBox, params)
         })

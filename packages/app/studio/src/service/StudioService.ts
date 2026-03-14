@@ -393,7 +393,11 @@ export class StudioService implements ProjectEnv {
     }
 
     closeCodeEditor(): void {
+        const previousScreen = this.#activeCodeEditor.map(state => state.previousScreen).unwrapOrNull()
         this.#activeCodeEditor.clear()
+        if (this.layout.screen.getValue() === "code") {
+            queueMicrotask(() => this.switchScreen(previousScreen ?? "default"))
+        }
     }
 
     resetPeaks(): void {this.#signals.notify({type: "reset-peaks"})}

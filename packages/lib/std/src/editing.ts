@@ -12,6 +12,7 @@ export type SyncProvider<T> = true extends (T extends Promise<unknown> ? true : 
 
 export interface Editing {
     modify<R>(modifier: SyncProvider<Maybe<R>>, mark?: boolean): Option<R>
+    append<R>(modifier: SyncProvider<Maybe<R>>): Option<R>
     mark(): void
     canUndo(): boolean
     canRedo(): boolean
@@ -27,6 +28,7 @@ export interface Editing {
 export namespace Editing {
     export const Transient: Editing = Object.freeze({
         modify: <R>(modifier: SyncProvider<Maybe<R>>, _mark?: boolean): Option<R> => Option.wrap(modifier()),
+        append: <R>(modifier: SyncProvider<Maybe<R>>): Option<R> => Option.wrap(modifier()),
         mark: () => {},
         canUndo: () => false,
         canRedo: () => false,

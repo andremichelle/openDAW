@@ -106,8 +106,8 @@ export namespace AudioUnitsClipboard {
                 if (isOutputPaste) {
                     // Split into two transactions to ensure deletion notifications fire
                     // before new boxes are created (avoids "already has input" conflict)
-                    editing.modify(() => clearOutputContent(rootBoxAdapter), false)
-                    editing.modify(() => pasteOutputContent(entry.data, boxGraph, rootBoxAdapter))
+                    editing.modify(() => clearOutputContent(rootBoxAdapter))
+                    editing.append(() => pasteOutputContent(entry.data, boxGraph, rootBoxAdapter))
                 } else {
                     editing.modify(() => {
                         const pastedBox = pasteNewAudioUnit(entry.data, boxGraph, rootBoxAdapter, getEditedAudioUnit())

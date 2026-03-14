@@ -37,9 +37,7 @@ export const WerkstattDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
         const isActive = service.activeCodeEditor
             .map(state => UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
         if (isActive) {
-            const previousScreen = service.activeCodeEditor.map(state => state.previousScreen).unwrapOrNull()
             service.closeCodeEditor()
-            service.switchScreen(previousScreen ?? "default")
         } else {
             service.openWerkstattEditor({
                 handler: {
@@ -67,6 +65,13 @@ export const WerkstattDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
     )
     const set = UUID.newSet<{ uuid: UUID.Bytes, lifecycle: Terminable }>(({uuid}) => uuid)
     lifecycle.ownAll(
+        {
+            terminate: () => {
+                const isActive = service.activeCodeEditor
+                    .map(state => UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
+                if (isActive) {service.closeCodeEditor()}
+            }
+        },
         service.activeCodeEditor.catchupAndSubscribe(option => {
             const isActive = option.map(state => UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
             toggleEditorButton.classList.toggle("active", isActive)
