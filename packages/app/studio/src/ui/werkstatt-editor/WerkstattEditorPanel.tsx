@@ -31,7 +31,6 @@ export const WerkstattEditorPanel = ({lifecycle, service}: Construct) => {
     if (isDefined(handler)) {
         lifecycle.own(handler.name.catchupAndSubscribe(owner => nameSpan.textContent = owner.getValue()))
     }
-    lifecycle.own({terminate: () => service.closeCodeEditor()})
     return (
         <div className={className}>
             <Await
