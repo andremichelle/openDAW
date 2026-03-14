@@ -222,7 +222,7 @@ export const DefaultWorkspace = Object.freeze({
     },
     "code": {
         name: "Code",
-        icon: IconSymbol.Generator,
+        icon: IconSymbol.Code,
         hidden: true,
         content: {
             type: "layout",
@@ -236,8 +236,8 @@ export const DefaultWorkspace = Object.freeze({
                         PanelState.create({
                             type: "panel",
                             name: "Code Editor",
-                            icon: IconSymbol.Generator,
-                            panelType: PanelType.WerkstattEditor,
+                            icon: IconSymbol.Code,
+                            panelType: PanelType.CodeEditor,
                             notMinimizable: true,
                             constrains: {type: "flex", minSize: 0, flex: 1}
                         }),

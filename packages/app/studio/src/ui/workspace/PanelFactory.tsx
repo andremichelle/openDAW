@@ -48,7 +48,7 @@ export const createPanelFactory = (service: StudioService): PanelContentFactory 
                 return (<ShadertoyPreview lifecycle={lifecycle} service={service}/>)
             case PanelType.ShadertoyEditor:
                 return (<ShadertoyEditor lifecycle={lifecycle} service={service}/>)
-            case PanelType.WerkstattEditor:
+            case PanelType.CodeEditor:
                 return (<WerkstattEditorPanel lifecycle={lifecycle} service={service}/>)
             case PanelType.EmptyFlexSpace:
                 return (<FlexSpace/>)
