@@ -73,8 +73,39 @@ const reconcileParameters = (deviceBox: WerkstattDeviceBox, declared: ReadonlyAr
     }
 }
 
+const registerWorklet = async (audioContext: BaseAudioContext, uuid: string, update: number, userCode: string): Promise<void> => {
+    const wrappedCode = `
+        if (typeof globalThis.openDAW === "undefined") { globalThis.openDAW = {} }
+        if (typeof globalThis.openDAW.werkstattProcessors === "undefined") { globalThis.openDAW.werkstattProcessors = {} }
+        globalThis.openDAW.werkstattProcessors["${uuid}"] = {
+            update: ${update},
+            create: (function werkstatt() {
+                ${userCode}
+                return Processor
+            })()
+        }
+    `
+    new Function(wrappedCode)
+    const blob = new Blob([wrappedCode], {type: "application/javascript"})
+    const blobUrl = URL.createObjectURL(blob)
+    try {
+        await audioContext.audioWorklet.addModule(blobUrl)
+    } finally {
+        URL.revokeObjectURL(blobUrl)
+    }
+}
+
 export namespace WerkstattCompiler {
     export const stripHeader = (source: string): string => parseHeader(source).userCode
+    export const load = async (
+        audioContext: BaseAudioContext,
+        deviceBox: WerkstattDeviceBox
+    ): Promise<void> => {
+        const {userCode, update} = parseHeader(deviceBox.code.getValue())
+        if (update === 0) {return}
+        const uuid = UUID.toString(deviceBox.address.uuid)
+        return registerWorklet(audioContext, uuid, update, userCode)
+    }
     export const compile = async (
         audioContext: BaseAudioContext,
         editing: Editing,
@@ -86,28 +117,10 @@ export namespace WerkstattCompiler {
         const newUpdate = currentUpdate + 1
         const uuid = UUID.toString(deviceBox.address.uuid)
         const params = parseParams(userCode)
-        const wrappedCode = `
-            if (typeof globalThis.openDAW === "undefined") { globalThis.openDAW = {} }
-            if (typeof globalThis.openDAW.werkstattProcessors === "undefined") { globalThis.openDAW.werkstattProcessors = {} }
-            globalThis.openDAW.werkstattProcessors["${uuid}"] = {
-                update: ${newUpdate},
-                create: (function werkstatt() {
-                    ${userCode}
-                    return Processor
-                })()
-            }
-        `
-        new Function(wrappedCode)
         editing.append(() => {
             deviceBox.code.setValue(createHeader(newUpdate) + userCode)
             reconcileParameters(deviceBox, params)
         })
-        const blob = new Blob([wrappedCode], {type: "application/javascript"})
-        const blobUrl = URL.createObjectURL(blob)
-        try {
-            await audioContext.audioWorklet.addModule(blobUrl)
-        } finally {
-            URL.revokeObjectURL(blobUrl)
-        }
+        return registerWorklet(audioContext, uuid, newUpdate, userCode)
     }
 }

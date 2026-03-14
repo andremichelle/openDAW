@@ -32,7 +32,11 @@ export const WerkstattDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
     const storedCode = box.code.getValue()
     const userCode = storedCode.length > 0 ? WerkstattCompiler.stripHeader(storedCode) : defaultCode
     const compile = async (code: string) => WerkstattCompiler.compile(service.audioContext, editing, box, code)
-    compile(userCode).finally(EmptyExec)
+    if (storedCode.length > 0) {
+        WerkstattCompiler.load(service.audioContext, box).finally(EmptyExec)
+    } else {
+        compile(userCode).finally(EmptyExec)
+    }
     const toggleEditor = () => {
         const isActive = service.activeCodeEditor
             .map(state => UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
