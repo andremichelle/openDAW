@@ -1,4 +1,15 @@
-import {ByteArrayInput, ByteArrayOutput, Editing, int, isDefined, Option, Optional, Provider, RuntimeNotifier} from "@opendaw/lib-std"
+import {
+    ByteArrayInput,
+    ByteArrayOutput,
+    Editing,
+    int,
+    isDefined,
+    isNotNull,
+    Option,
+    Optional,
+    Provider,
+    RuntimeNotifier
+} from "@opendaw/lib-std"
 import {Box, BoxGraph} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {
@@ -101,17 +112,23 @@ export namespace DevicesClipboard {
                 ...midiEffects.map(adapter => adapter.box),
                 ...audioEffects.map(adapter => adapter.box)
             ]
-            const dependencies = deviceBoxes.flatMap(box =>
-                Array.from(boxGraph.dependenciesOf(box, {
+            const dependencies = deviceBoxes.flatMap(box => {
+                const preserved = Array.from(boxGraph.dependenciesOf(box, {
                     alwaysFollowMandatory: true,
                     excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
-                }).boxes).filter(dep => dep.resource === "preserved"))
+                }).boxes).filter(dep => dep.resource === "preserved")
+                const ownedChildren = box.incomingEdges()
+                    .filter(pointer => pointer.mandatory && !pointer.box.ephemeral
+                        && !DeviceBoxUtils.isDeviceBox(pointer.box) && !isDefined(pointer.box.resource))
+                    .map(pointer => pointer.box)
+                return [...preserved, ...ownedChildren]
+            })
             const allBoxes = [...deviceBoxes, ...dependencies]
-            const instrumentContent = instrument !== null
+            const instrumentContent = isNotNull(instrument)
                 ? (instrument.box.tags.content as Optional<InstrumentContent>) ?? ""
                 : ""
             const metadata: DeviceMetadata = {
-                hasInstrument: instrument !== null,
+                hasInstrument: isNotNull(instrument),
                 instrumentContent,
                 midiEffectCount: midiEffects.length,
                 midiEffectMaxIndex,
