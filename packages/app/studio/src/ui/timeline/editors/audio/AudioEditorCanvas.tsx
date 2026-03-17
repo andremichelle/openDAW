@@ -108,6 +108,7 @@ export const AudioEditorCanvas = ({
                         optPlayMode.ifSome(playMode => playModeTerminator.own(playMode.subscribe(painter.requestUpdate)))
                     }),
                     range.subscribe(painter.requestUpdate),
+                    snapping.subscribe(painter.requestUpdate),
                     Dragging.attach(canvas, event => {
                         const target = capturing.captureEvent(event)
                         if (target?.type !== "loop-duration") {return Option.None}

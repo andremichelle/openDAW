@@ -107,6 +107,7 @@ export const PropertyEditor =
             installEditorAuxBody(canvas, range),
             Html.watchResize(element, () => range.width = element.clientWidth),
             range.subscribe(painter.requestUpdate),
+            snapping.subscribe(painter.requestUpdate),
             reader.subscribeChange(painter.requestUpdate),
             propertyOwner.subscribe(painter.requestUpdate),
             modifyContext.subscribeUpdate(painter.requestUpdate),
