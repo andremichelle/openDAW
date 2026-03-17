@@ -16,8 +16,6 @@ export type Manual = (
     files: ReadonlyArray<Manual>
 }) & { separatorBefore?: boolean }
 
-const includeNeuralAmp = false
-
 export const Manuals: ReadonlyArray<Manual> = [
     {
         type: "folder",
@@ -113,12 +111,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                         path: "/manuals/devices/audio/maximizer",
                         icon: EffectFactories.Maximizer.defaultIcon
                     },
-                    ...(includeNeuralAmp ? [{
+                    {
                         type: "page",
                         label: "Neural Amp",
                         path: "/manuals/devices/audio/neural-amp",
                         icon: EffectFactories.AudioNamed.NeuralAmp.defaultIcon
-                    } satisfies Manual] : []),
+                    },
                     {
                         type: "page",
                         label: "Revamp",

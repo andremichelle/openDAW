@@ -386,8 +386,6 @@ export namespace EffectFactories {
         Zeitgeist
     }
 
-    const includeNeuralAmp = false
-
     export const AudioNamed = {
         StereoTool,
         Compressor,
@@ -403,9 +401,6 @@ export namespace EffectFactories {
         NeuralAmp,
         Maximizer,
         Werkstatt
-    }
-    if (!includeNeuralAmp) {
-        delete (AudioNamed as { NeuralAmp?: typeof NeuralAmp }).NeuralAmp
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> =
         Object.values(MidiNamed)
