@@ -1,6 +1,6 @@
 import css from "./NeuralAmpDeviceEditor.sass?inline"
 import {DeviceHost, NeuralAmpDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {isDefined, Lifecycle} from "@opendaw/lib-std"
+import {DefaultObservableValue, isDefined, Lifecycle, Nullable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
@@ -32,29 +32,28 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
     const {project} = service
     const {boxGraph, editing, midiLearning} = project
     const {inputGain, outputGain, mix} = adapter.namedParameter
-    let modelNameEl: HTMLSpanElement
-    let currentModel: NamModel | null = null
-    const updateModelName = () => {
+    const model = new DefaultObservableValue<Nullable<NamModel>>(null)
+    const updateModel = () => {
         const modelJson = adapter.getModelJson()
         if (modelJson.length === 0) {
-            modelNameEl.textContent = "No model loaded"
-            modelNameEl.className = "name empty"
-            currentModel = null
+            model.setValue(null)
         } else {
             try {
-                currentModel = NamModel.parse(modelJson)
-                modelNameEl.textContent = currentModel.metadata?.name ?? "Unknown Model"
-                modelNameEl.className = "name"
+                model.setValue(NamModel.parse(modelJson))
             } catch {
-                modelNameEl.textContent = "Invalid model"
-                modelNameEl.className = "name error"
-                currentModel = null
+                model.setValue(null)
             }
         }
     }
+    lifecycle.own(model)
+    lifecycle.own(adapter.modelField.subscribe(() => updateModel()))
+    updateModel()
     const browseApi = NamTone3000.browse(boxGraph, editing, adapter)
     const browseLocal = NamLocal.browse(boxGraph, editing, adapter)
-    const showModelInfo = () => {if (isDefined(currentModel)) {showNamModelDialog(currentModel)}}
+    const showModelInfo = () => {
+        const current = model.getValue()
+        if (isDefined(current)) {showNamModelDialog(current)}
+    }
     return (
         <DeviceEditor lifecycle={lifecycle}
                       project={project}
@@ -92,14 +91,30 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                           }}>
                                       <Icon symbol={IconSymbol.Browse}/>
                                   </Button>
-                                  <span className="name empty"
-                                        onInit={(element: HTMLSpanElement) => {
-                                            modelNameEl = element
-                                            updateModelName()
-                                            lifecycle.own(adapter.modelField.subscribe(() => updateModelName()))
-                                        }}/>
+                                  <span onInit={(element: HTMLSpanElement) => {
+                                      lifecycle.own(model.catchupAndSubscribe(observable => {
+                                          const current = observable.getValue()
+                                          if (isDefined(current)) {
+                                              element.textContent = current.metadata?.name ?? "Unknown Model"
+                                              element.className = "name"
+                                          } else {
+                                              element.textContent = "No model loaded"
+                                              element.className = "name empty"
+                                          }
+                                      }))
+                                  }}/>
                                   <Button lifecycle={lifecycle}
                                           onClick={showModelInfo}
+                                          onInit={(element: HTMLElement) => {
+                                              const updateColor = () => {
+                                                  element.parentElement!.style.setProperty("--color",
+                                                      isDefined(model.getValue())
+                                                          ? Colors.blue.toString()
+                                                          : Colors.shadow.toString())
+                                              }
+                                              lifecycle.own(model.subscribe(() => updateColor()))
+                                              queueMicrotask(updateColor)
+                                          }}
                                           appearance={{
                                               framed: true,
                                               cursor: "pointer",

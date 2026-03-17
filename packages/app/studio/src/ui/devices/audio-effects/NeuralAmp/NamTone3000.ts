@@ -1,7 +1,9 @@
-import {Editing, UUID} from "@opendaw/lib-std"
+import {Editing, Errors, UUID} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
 import {NeuralAmpModelBox} from "@opendaw/studio-boxes"
 import {BoxGraph} from "@opendaw/lib-box"
 import {NeuralAmpDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {showTone3000Dialog} from "./Tone3000Dialog"
 
 type ToneModel = { name: string, size: string, model_url: string }
 type ToneResponse = { title: string, models: ReadonlyArray<ToneModel> }
@@ -44,6 +46,8 @@ const downloadModel = async (modelUrl: string): Promise<string> => {
 
 export namespace NamTone3000 {
     export const browse = (boxGraph: BoxGraph, editing: Editing, adapter: NeuralAmpDeviceBoxAdapter) => async () => {
+        const {status} = await Promises.tryCatch(showTone3000Dialog())
+        if (status === "rejected") {return}
         try {
             const redirectUrl = `${window.location.origin}/tone3000-callback.html`
             const url = `${SelectEndpoint}?app_id=${AppId}&redirect_url=${encodeURIComponent(redirectUrl)}`
@@ -73,7 +77,7 @@ export namespace NamTone3000 {
             })
             localStorage.setItem(StorageDoneKey, "true")
         } catch (error) {
-            if (error instanceof DOMException && error.name === "AbortError") {return}
+            if (Errors.isAbort(error)) {return}
             console.error("Failed to load NAM model from Tone 3000:", error)
         }
     }

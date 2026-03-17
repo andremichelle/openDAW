@@ -6,14 +6,22 @@ import {Html} from "@opendaw/lib-dom"
 export type ButtonParameters = {
     lifecycle: Lifecycle
     onClick: Procedure<MouseEvent>
+    onInit?: Procedure<HTMLElement>
     style?: Partial<CSSStyleDeclaration>
     className?: string
     appearance?: Appearance
 }
 
-export const Button = ({lifecycle, onClick, style, className, appearance}: ButtonParameters, children: JsxValue) => {
+export const Button = ({
+                           lifecycle,
+                           onClick,
+                           onInit,
+                           style,
+                           className,
+                           appearance
+                       }: ButtonParameters, children: JsxValue) => {
     const id = Html.nextID()
-    const input: HTMLInputElement = <input type="button" id={id} onclick={onClick}/>
+    const input: HTMLInputElement = <input type="button" id={id} onclick={onClick} onInit={onInit}/>
     return (
         <ButtonCheckboxRadio lifecycle={lifecycle}
                              style={style}
