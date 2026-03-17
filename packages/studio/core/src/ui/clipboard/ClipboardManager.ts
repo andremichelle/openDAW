@@ -115,11 +115,13 @@ export namespace ClipboardManager {
                 if (entry.nonEmpty()) {
                     if (!handler.canPaste(entry.unwrap(), noClient)) {return}
                     event.preventDefault()
+                    event.stopImmediatePropagation()
                     handler.paste(entry.unwrap())
                 } else {
                     fallbackEntry.ifSome(entry => {
                         if (!handler.canPaste(entry, noClient)) {return}
                         event.preventDefault()
+                        event.stopImmediatePropagation()
                         handler.paste(entry)
                     })
                 }
