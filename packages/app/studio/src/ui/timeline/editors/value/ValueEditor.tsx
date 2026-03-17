@@ -113,7 +113,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 if (dblclck && !event.shiftKey) {
                     if (target === null || target.type === "loop-duration") {
                         const rect = canvas.getBoundingClientRect()
-                        const position = snapping.xToUnitRound(event.clientX - rect.left) - reader.offset
+                        const position = Math.round(range.xToUnit(event.clientX - rect.left) - reader.offset)
                         const clickValue = valueAxis.axisToValue(event.clientY - rect.top)
                         const formatValue = context.currentValue
                         const value: number = Math.abs(valueToPixel(clickValue) - valueToPixel(formatValue))
@@ -121,8 +121,8 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             ? formatValue
                             : context.quantize(clickValue)
                         return editing.modify(() =>
-                            ValueEventEditing.createOrMoveEvent(reader.content, snapping, position, value,
-                                context.floating ? Interpolation.Linear : Interpolation.None))
+                            ValueEventEditing.createOrMoveEvent(reader.content, position, value,
+                                context.floating ? Interpolation.Linear : Interpolation.None), false)
                             .match({
                                 none: () => Option.None,
                                 some: adapter => {
