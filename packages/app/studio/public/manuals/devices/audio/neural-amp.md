@@ -23,11 +23,21 @@ Example uses:
 
 ## 1. Loading Models
 
-### 1.1 Browse Button
+### 1.1 Tone 3000 (Recommended)
 
-Click the folder icon to open a file browser and select a NAM model file (`.nam` extension). The model name will appear in the display area.
+Click the T3K button to browse and load models directly from [Tone 3000](https://tone3000.com). A dialog will guide you through the process:
 
-### 1.2 Model Info
+1. Sign in with your email (one-time passcode, no password needed)
+2. Browse or search for a tone
+3. Click the **Download** button to send it back to your device
+
+The selected model is automatically loaded into the Neural Amp. Make sure popups are enabled for this site.
+
+### 1.2 Local Browse
+
+Click the folder icon to open a file browser and select a NAM model file (`.nam` extension) from your hard drive. The model name will appear in the display area.
+
+### 1.3 Model Info
 
 Click the info button (ⓘ) to view detailed metadata about the loaded model, including:
 
@@ -35,10 +45,6 @@ Click the info button (ⓘ) to view detailed metadata about the loaded model, in
 - Captured gear information
 - Training parameters
 - Architecture details
-
-### 1.3 Model Sources
-
-NAM models can be found on community sites like [ToneHunt](https://tonehunt.org) and [TONE3000](https://tone3000.com). Models are typically captures of real amplifiers, pedals, or complete signal chains.
 
 ---
 
