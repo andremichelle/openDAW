@@ -4,6 +4,10 @@ A programmable audio effect that lets you write custom DSP code in JavaScript. D
 
 ---
 
+![screenshot](werkstatt.webp)
+
+---
+
 ## 0. Overview
 
 _Werkstatt_ is a scriptable audio effect device. You write a `Processor` class in JavaScript that receives stereo audio buffers and outputs processed audio sample by sample. Parameters declared in the code appear as automatable knobs on the device panel.
