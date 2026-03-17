@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tone 3000</title>
+    <style>
+        body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center;
+            height: 100vh; margin: 0; background: #1a1a1a; color: #ccc; }
+        p { font-size: 1.2em; }
+    </style>
+</head>
+<body>
+<p id="status">Receiving tone...</p>
+<script>
+    const status = document.getElementById("status")
+    const toneUrl = new URLSearchParams(window.location.search).get("tone_url")
+    if (toneUrl) {
+        status.textContent = "Sending NAM to device..."
+        localStorage.setItem("tone3000_tone_url", toneUrl)
+        window.addEventListener("storage", (event) => {
+            if (event.key === "tone3000_done") {
+                status.textContent = "Done!"
+                localStorage.removeItem("tone3000_tone_url")
+                localStorage.removeItem("tone3000_done")
+                window.close()
+            }
+        })
+    } else {
+        status.textContent = "Error: No tone selected."
+    }
+</script>
+</body>
+</html>
