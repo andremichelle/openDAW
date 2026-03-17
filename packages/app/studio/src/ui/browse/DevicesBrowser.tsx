@@ -1,5 +1,5 @@
 import css from "./DevicesBrowser.sass?inline"
-import {isDefined, Lifecycle, panic} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, panic, RuntimeNotifier} from "@opendaw/lib-std"
 import {Html} from "@opendaw/lib-dom"
 import {createElement, RouteLocation} from "@opendaw/lib-jsx"
 import {DeviceHost, Devices, InstrumentFactories} from "@opendaw/studio-adapters"
@@ -94,9 +94,21 @@ const createEffectList = <
                     }).setTriggerProcedure(() => RouteLocation.get().navigateTo(entry.manualPage ?? "/")))))
                     element.onclick = () => {
                         const {boxAdapters, editing, userEditingManager} = project
-                        userEditingManager.audioUnit.get().ifSome(vertex => {
+                        const audioUnitOption = userEditingManager.audioUnit.get()
+                        if (audioUnitOption.isEmpty()) {
+                            RuntimeNotifier.info({
+                                headline: "Add Effect",
+                                message: "Please create an instrument or select an audio-bus first."
+                            }).finally()
+                            return
+                        }
+                        audioUnitOption.ifSome(vertex => {
                             const deviceHost: DeviceHost = boxAdapters.adapterFor(vertex.box, Devices.isHost)
                             if (type === "midi-effect" && deviceHost.inputAdapter.mapOr(input => input.accepts !== "midi", true)) {
+                                RuntimeNotifier.info({
+                                    headline: "Add Midi Effect",
+                                    message: "The selected audio unit does not have a midi input."
+                                }).finally()
                                 return
                             }
                             const effectField =
