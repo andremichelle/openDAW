@@ -134,6 +134,7 @@ export enum IconSymbol {
     TapeReel,
     Time,
     Timeline,
+    Tone3000,
     Tool,
     Triangle,
     Undo,

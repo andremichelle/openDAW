@@ -37,6 +37,7 @@ export namespace EffectFactories {
         description: "Generates rhythmic note sequences from chords",
         manualPage: DeviceManualUrls.Arpeggio,
         separatorBefore: false,
+        external: false,
         type: "midi",
         create: ({boxGraph}, hostField, index) =>
             ArpeggioDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -52,6 +53,7 @@ export namespace EffectFactories {
         description: "Shifts the pitch of incoming notes",
         manualPage: DeviceManualUrls.Pitch,
         separatorBefore: false,
+        external: false,
         type: "midi",
         create: ({boxGraph}, hostField, index) =>
             PitchDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -67,6 +69,7 @@ export namespace EffectFactories {
         description: "Manipulates the velocity of incoming notes",
         manualPage: DeviceManualUrls.Velocity,
         separatorBefore: false,
+        external: false,
         type: "midi",
         create: ({boxGraph}, hostField, index) =>
             VelocityDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -82,6 +85,7 @@ export namespace EffectFactories {
         description: "Distorts space and time",
         manualPage: DeviceManualUrls.Zeitgeist,
         separatorBefore: false,
+        external: false,
         type: "midi",
         create: (
             {boxGraph, rootBoxAdapter},
@@ -115,6 +119,7 @@ export namespace EffectFactories {
             "Computes a stereo transformation matrix with volume, panning, phase inversion and stereo width.",
         manualPage: DeviceManualUrls.StereoTool,
         separatorBefore: false,
+        external: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): StereoToolDeviceBox =>
             StereoToolDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -130,6 +135,7 @@ export namespace EffectFactories {
         description: "Echoes the input signal with time-based repeats",
         manualPage: DeviceManualUrls.Delay,
         separatorBefore: false,
+        external: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): DelayDeviceBox =>
             DelayDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -147,6 +153,7 @@ export namespace EffectFactories {
             "Dense algorithmic reverb based on Dattorro's design, capable of infinite decay",
         manualPage: DeviceManualUrls.DattorroReverb,
         separatorBefore: false,
+        external: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): DattorroReverbDeviceBox =>
             DattorroReverbDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -162,6 +169,7 @@ export namespace EffectFactories {
         description: "Brickwall limiter with automatic makeup gain",
         manualPage: DeviceManualUrls.Maximizer,
         separatorBefore: false,
+        external: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): MaximizerDeviceBox =>
             MaximizerDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -178,6 +186,7 @@ export namespace EffectFactories {
             "Reduces the dynamic range by attenuating signals above a threshold",
         manualPage: DeviceManualUrls.Compressor,
         separatorBefore: false,
+        external: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): CompressorDeviceBox =>
             CompressorDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -193,6 +202,7 @@ export namespace EffectFactories {
         description: "Attenuates signals below a threshold to reduce noise",
         manualPage: DeviceManualUrls.Gate,
         separatorBefore: false,
+        external: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): GateDeviceBox =>
             GateDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -208,6 +218,7 @@ export namespace EffectFactories {
         description: "Simulates space and depth with reflections",
         manualPage: DeviceManualUrls.Reverb,
         separatorBefore: false,
+        external: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): ReverbDeviceBox =>
             ReverbDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -224,6 +235,7 @@ export namespace EffectFactories {
         description: "Degrates the audio signal",
         manualPage: DeviceManualUrls.Crusher,
         separatorBefore: false,
+        external: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): CrusherDeviceBox =>
             CrusherDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -239,6 +251,7 @@ export namespace EffectFactories {
         description: "Folds the signal back into audio-range",
         manualPage: DeviceManualUrls.Fold,
         separatorBefore: false,
+        external: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): FoldDeviceBox =>
             FoldDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -254,6 +267,7 @@ export namespace EffectFactories {
         description: "Applies nonlinear waveshaping distortion",
         manualPage: DeviceManualUrls.Waveshaper,
         separatorBefore: false,
+        external: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): WaveshaperDeviceBox =>
             WaveshaperDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -269,6 +283,7 @@ export namespace EffectFactories {
         description: "Shape rhythm and space through volume and pan.",
         manualPage: DeviceManualUrls.Tidal,
         separatorBefore: false,
+        external: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): TidalDeviceBox =>
             TidalDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -285,6 +300,7 @@ export namespace EffectFactories {
         description: "Shapes the frequency balance of the sound",
         manualPage: DeviceManualUrls.Revamp,
         separatorBefore: false,
+        external: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): RevampDeviceBox =>
             RevampDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -295,15 +311,16 @@ export namespace EffectFactories {
     }
 
     export const NeuralAmp: EffectFactory = {
-        defaultName: "Neural Amp",
-        defaultIcon: IconSymbol.NeuralAmp,
+        defaultName: "Tone3000",
+        defaultIcon: IconSymbol.Tone3000,
         description: "Neural network-based amp modeling using NAM models",
         manualPage: DeviceManualUrls.NeuralAmp,
         separatorBefore: false,
+        external: true,
         type: "audio",
         create: ({boxGraph}, hostField, index): NeuralAmpDeviceBox =>
             NeuralAmpDeviceBox.create(boxGraph, UUID.generate(), (box) => {
-                box.label.setValue("Neural Amp")
+                box.label.setValue("Tone3000")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
@@ -315,6 +332,7 @@ export namespace EffectFactories {
         description: "User-scripted DSP processor",
         manualPage: DeviceManualUrls.Werkstatt,
         separatorBefore: false,
+        external: false,
         type: "audio",
         create: ({boxGraph}, hostField, index): WerkstattDeviceBox =>
             WerkstattDeviceBox.create(boxGraph, UUID.generate(), (box) => {
@@ -330,6 +348,7 @@ export namespace EffectFactories {
         description: "",
         manualPage: DeviceManualUrls.Modular,
         separatorBefore: true,
+        external: false,
         type: "audio",
         create: (
             {boxGraph, rootBox, userEditingManager},

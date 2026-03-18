@@ -84,60 +84,72 @@ const createInstrumentList = (lifecycle: Lifecycle, project: Project) => (
 
 const createEffectList = <
     R extends Record<string, EffectFactory>,
-    T extends DragDevice["type"]>(lifecycle: Lifecycle, project: Project, records: R, type: T): HTMLUListElement => (
-    <ul>{
-        Object.entries(records).map(([key, entry]) => {
-            const element = (
-                <li onInit={element => {
-                    lifecycle.own(ContextMenu.subscribe(element, collector => collector.addItems(MenuItem.default({
-                        label: `Visit Manual Page for ${entry.defaultName}`, selectable: isDefined(entry.manualPage)
-                    }).setTriggerProcedure(() => RouteLocation.get().navigateTo(entry.manualPage ?? "/")))))
-                    element.onclick = () => {
-                        const {boxAdapters, editing, userEditingManager} = project
-                        const audioUnitOption = userEditingManager.audioUnit.get()
-                        if (audioUnitOption.isEmpty()) {
+    T extends DragDevice["type"]>(lifecycle: Lifecycle, project: Project, records: R, type: T): HTMLUListElement => {
+    const entries = Object.entries(records)
+    const internal = entries.filter(([_, entry]) => !entry.external)
+    const external = entries.filter(([_, entry]) => entry.external)
+    const createItem = ([key, entry]: [string, EffectFactory]) => {
+        const element = (
+            <li onInit={element => {
+                lifecycle.own(ContextMenu.subscribe(element, collector => collector.addItems(MenuItem.default({
+                    label: `Visit Manual Page for ${entry.defaultName}`, selectable: isDefined(entry.manualPage)
+                }).setTriggerProcedure(() => RouteLocation.get().navigateTo(entry.manualPage ?? "/")))))
+                element.onclick = () => {
+                    const {boxAdapters, editing, userEditingManager} = project
+                    const audioUnitOption = userEditingManager.audioUnit.get()
+                    if (audioUnitOption.isEmpty()) {
+                        RuntimeNotifier.info({
+                            headline: "No Source Device Yet",
+                            message: "Please create an instrument or select an audio-bus first."
+                        }).finally()
+                        return
+                    }
+                    audioUnitOption.ifSome(vertex => {
+                        const deviceHost: DeviceHost = boxAdapters.adapterFor(vertex.box, Devices.isHost)
+                        if (type === "midi-effect" && deviceHost.inputAdapter.mapOr(input => input.accepts !== "midi", true)) {
                             RuntimeNotifier.info({
-                                headline: "Add Effect",
-                                message: "Please create an instrument or select an audio-bus first."
+                                headline: "Add Midi Effect",
+                                message: "The selected audio unit does not have a midi input."
                             }).finally()
                             return
                         }
-                        audioUnitOption.ifSome(vertex => {
-                            const deviceHost: DeviceHost = boxAdapters.adapterFor(vertex.box, Devices.isHost)
-                            if (type === "midi-effect" && deviceHost.inputAdapter.mapOr(input => input.accepts !== "midi", true)) {
-                                RuntimeNotifier.info({
-                                    headline: "Add Midi Effect",
-                                    message: "The selected audio unit does not have a midi input."
-                                }).finally()
-                                return
-                            }
-                            const effectField =
-                                type === "audio-effect" ? deviceHost.audioEffects.field()
-                                    : type === "midi-effect" ? deviceHost.midiEffects.field()
-                                        : panic(`Unknown ${type}`)
-                            editing.modify(() => entry.create(project, effectField, effectField.pointerHub.incoming().length))
-                        })
-                    }
-                }}>
-                    <div className="icon">
-                        <Icon symbol={entry.defaultIcon}/>
+                        const effectField =
+                            type === "audio-effect" ? deviceHost.audioEffects.field()
+                                : type === "midi-effect" ? deviceHost.midiEffects.field()
+                                    : panic(`Unknown ${type}`)
+                        editing.modify(() => entry.create(project, effectField, effectField.pointerHub.incoming().length))
+                    })
+                }
+            }}>
+                {entry.external
+                    ? <div className="icon external">
+                        <img src="/images/tone3000.svg" alt="logo"/>
                     </div>
-                    {entry.defaultName}
-                </li>
-            )
-            lifecycle.ownAll(
-                DragAndDrop.installSource(element, () => ({
-                    type: type as any,
-                    start_index: null,
-                    device: key as keyof typeof EffectFactories.MergedNamed
-                } satisfies DragDevice)),
-                TextTooltip.simple(element, () => {
-                    const {bottom, left} = element.getBoundingClientRect()
-                    return {clientX: left, clientY: bottom + 12, text: entry.description}
-                })
-            )
-            return element
-        })
-    }</ul>
-)
+                    : <div className="icon">
+                        <Icon symbol={entry.defaultIcon}/>
+                    </div>}
+                {entry.defaultName}
+            </li>
+        )
+        lifecycle.ownAll(
+            DragAndDrop.installSource(element, () => ({
+                type: type as any,
+                start_index: null,
+                device: key as keyof typeof EffectFactories.MergedNamed
+            } satisfies DragDevice)),
+            TextTooltip.simple(element, () => {
+                const {bottom, left} = element.getBoundingClientRect()
+                return {clientX: left, clientY: bottom + 12, text: entry.description}
+            })
+        )
+        return element
+    }
+    return (
+        <ul>
+            {internal.map(createItem)}
+            {external.length > 0 && <hr/>}
+            {external.map(createItem)}
+        </ul>
+    )
+}
 

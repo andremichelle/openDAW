@@ -78,7 +78,7 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                               tooltip: "Browse tone3000.com"
                                           }}
                                           className="tone3000-button">
-                                      <img src="images/tone3000-logo.webp" alt="tone3000 logo"/>
+                                      <img src="images/tone3000.svg" alt="tone3000 logo"/>
                                   </Button>
                                   <Button lifecycle={lifecycle}
                                           onClick={browseLocal}
@@ -151,6 +151,6 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
                       )}
-                      icon={IconSymbol.NeuralAmp}/>
+                      icon={IconSymbol.Tone3000}/>
     )
 }
