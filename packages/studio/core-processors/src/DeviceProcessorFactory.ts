@@ -18,6 +18,7 @@ import {
     RevampDeviceBox,
     ReverbDeviceBox,
     SoundfontDeviceBox,
+    SpielwerkDeviceBox,
     StereoToolDeviceBox,
     TapeDeviceBox,
     TidalDeviceBox,
@@ -49,6 +50,7 @@ import {
     RevampDeviceBoxAdapter,
     ReverbDeviceBoxAdapter,
     SoundfontDeviceBoxAdapter,
+    SpielwerkDeviceBoxAdapter,
     StereoToolDeviceBoxAdapter,
     TapeDeviceBoxAdapter,
     TidalDeviceBoxAdapter,
@@ -92,6 +94,7 @@ import {DattorroReverbDeviceProcessor} from "./devices/audio-effects/DattorroRev
 import {NeuralAmpDeviceProcessor} from "./devices/audio-effects/NeuralAmpDeviceProcessor"
 import {WaveshaperDeviceProcessor} from "./devices/audio-effects/WaveshaperDeviceProcessor"
 import {WerkstattDeviceProcessor} from "./devices/audio-effects/WerkstattDeviceProcessor"
+import {SpielwerkDeviceProcessor} from "./devices/midi-effects/SpielwerkDeviceProcessor"
 
 export namespace InstrumentDeviceProcessorFactory {
     export const create = (context: EngineContext,
@@ -127,7 +130,9 @@ export namespace MidiEffectDeviceProcessorFactory {
             visitVelocityDeviceBox: (box: VelocityDeviceBox): MidiEffectProcessor =>
                 new VelocityDeviceProcessor(context, context.boxAdapters.adapterFor(box, VelocityDeviceBoxAdapter)),
             visitZeitgeistDeviceBox: (box: ZeitgeistDeviceBox): MidiEffectProcessor =>
-                new ZeitgeistDeviceProcessor(context, context.boxAdapters.adapterFor(box, ZeitgeistDeviceBoxAdapter))
+                new ZeitgeistDeviceProcessor(context, context.boxAdapters.adapterFor(box, ZeitgeistDeviceBoxAdapter)),
+            visitSpielwerkDeviceBox: (box: SpielwerkDeviceBox): MidiEffectProcessor =>
+                new SpielwerkDeviceProcessor(context, context.boxAdapters.adapterFor(box, SpielwerkDeviceBoxAdapter))
         }), `Could not create midi-effect for'${box.name}'`)
 }
 

@@ -58,6 +58,7 @@ import {
     SignatureEventBox,
     SoundfontDeviceBox,
     SoundfontFileBox,
+    SpielwerkDeviceBox,
     StereoToolDeviceBox,
     TapeDeviceBox,
     TidalDeviceBox,
@@ -111,6 +112,7 @@ import {TapeDeviceBoxAdapter} from "./devices/instruments/TapeDeviceBoxAdapter"
 import {VaporisateurDeviceBoxAdapter} from "./devices/instruments/VaporisateurDeviceBoxAdapter"
 import {ArpeggioDeviceBoxAdapter} from "./devices/midi-effects/ArpeggioDeviceBoxAdapter"
 import {PitchDeviceBoxAdapter} from "./devices/midi-effects/PitchDeviceBoxAdapter"
+import {SpielwerkDeviceBoxAdapter} from "./devices/midi-effects/SpielwerkDeviceBoxAdapter"
 import {NanoDeviceBoxAdapter} from "./devices/instruments/NanoDeviceBoxAdapter"
 import {PlayfieldDeviceBoxAdapter} from "./devices/instruments/PlayfieldDeviceBoxAdapter"
 import {StereoToolDeviceBoxAdapter} from "./devices/audio-effects/StereoToolDeviceBoxAdapter"
@@ -242,6 +244,7 @@ export class BoxAdapters implements Terminable {
             visitRootBox: (box: RootBox): BoxAdapter => new RootBoxAdapter(this.#context, box),
             visitSoundfontDeviceBox: (box: SoundfontDeviceBox) => new SoundfontDeviceBoxAdapter(this.#context, box),
             visitSoundfontFileBox: (box: SoundfontFileBox) => new SoundfontFileBoxAdapter(this.#context, box),
+            visitSpielwerkDeviceBox: (box: SpielwerkDeviceBox) => new SpielwerkDeviceBoxAdapter(this.#context, box),
             visitStereoToolDeviceBox: (box: StereoToolDeviceBox) => new StereoToolDeviceBoxAdapter(this.#context, box),
             visitTapeDeviceBox: (box: TapeDeviceBox) => new TapeDeviceBoxAdapter(this.#context, box),
             visitTimelineBox: (box: TimelineBox) => new TimelineBoxAdapter(this.#context, box),

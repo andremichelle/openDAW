@@ -20,6 +20,7 @@ import {
     RevampDeviceBox,
     ReverbDeviceBox,
     SoundfontDeviceBox,
+    SpielwerkDeviceBox,
     StereoToolDeviceBox,
     TapeDeviceBox,
     TidalDeviceBox,
@@ -53,6 +54,7 @@ import {
     RevampDeviceBoxAdapter,
     ReverbDeviceBoxAdapter,
     SoundfontDeviceBoxAdapter,
+    SpielwerkDeviceBoxAdapter,
     StereoToolDeviceBoxAdapter,
     TapeDeviceBoxAdapter,
     TidalDeviceBoxAdapter,
@@ -93,6 +95,7 @@ import {TidalDeviceEditor} from "@/ui/devices/audio-effects/TidalDeviceEditor"
 import {DattorroReverbDeviceEditor} from "@/ui/devices/audio-effects/DattorroReverbDeviceEditor"
 import {NeuralAmpDeviceEditor} from "@/ui/devices/audio-effects/NeuralAmpDeviceEditor"
 import {WaveshaperDeviceEditor} from "@/ui/devices/audio-effects/WaveshaperDeviceEditor"
+import {SpielwerkDeviceEditor} from "@/ui/devices/midi-effects/SpielwerkDeviceEditor"
 import {WerkstattDeviceEditor} from "@/ui/devices/audio-effects/WerkstattDeviceEditor"
 
 export namespace DeviceEditorFactory {
@@ -127,6 +130,12 @@ export namespace DeviceEditorFactory {
                 <ZeitgeistDeviceEditor lifecycle={lifecycle}
                                        service={service}
                                        adapter={service.project.boxAdapters.adapterFor(box, ZeitgeistDeviceBoxAdapter)}
+                                       deviceHost={deviceHost}/>
+            ),
+            visitSpielwerkDeviceBox: (box: SpielwerkDeviceBox) => (
+                <SpielwerkDeviceEditor lifecycle={lifecycle}
+                                       service={service}
+                                       adapter={service.project.boxAdapters.adapterFor(box, SpielwerkDeviceBoxAdapter)}
                                        deviceHost={deviceHost}/>
             )
         }), `No MidiEffectDeviceEditor found for ${box}`)

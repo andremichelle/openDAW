@@ -27,6 +27,7 @@ This works universally — for transformers (1:1), generators (1:N), and filters
 ```typescript
 class Processor {
     paramChanged?(name: string, value: number): void
+    reset?(): void  // called on transport jump (seek, loop restart)
 
     // Called per block. Receives upstream note starts, yields output notes.
     // Each yielded note must have: { position, duration, pitch, velocity, cent }
@@ -42,6 +43,7 @@ class Processor {
 - `notes` — an iterator of upstream note starts in `[block.from, block.to)`. Each note is `{ position, duration, pitch, velocity, cent }`. Stop events are hidden from the user.
 - The user yields zero or more notes per input note. Each must have `position`, `duration`, `pitch`, `velocity`, `cent`. Position must be `>= block.from`. Notes with position in `[from, to)` are emitted immediately. Notes with position `>= to` are held in an internal scheduler and emitted in the appropriate future block.
 - `paramChanged` — optional, same as audio Werkstatt. Receives mapped parameter values from `// @param` declarations.
+- `reset` — optional. Called when the transport jumps (discontinuous flag: seek, loop restart). Use to clear accumulated state like held note arrays.
 
 ---
 
@@ -374,6 +376,9 @@ class Processor {
         if (name === "gate") this.gate = value
         if (name === "repeat") this.repeat = value
         if (name === "octaves") this.octaves = value
+    }
+    reset() {
+        this.held = []
     }
     activeAt(position) {
         return this.held

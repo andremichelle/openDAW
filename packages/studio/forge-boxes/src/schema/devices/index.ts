@@ -28,6 +28,7 @@ import {NeuralAmpDeviceBox} from "./audio-effects/NeuralAmpDeviceBox"
 import {WaveshaperDeviceBox} from "./audio-effects/WaveshaperDeviceBox"
 import {WerkstattDeviceBox} from "./audio-effects/WerkstattDeviceBox"
 import {WerkstattParameterBox} from "./audio-effects/WerkstattParameterBox"
+import {SpielwerkDeviceBox} from "./midi-effects/SpielwerkDeviceBox"
 
 export const DeviceDefinitions = [
     UnknownAudioEffectDevice,
@@ -61,5 +62,6 @@ export const DeviceDefinitions = [
     NeuralAmpDeviceBox,
     WaveshaperDeviceBox,
     WerkstattDeviceBox,
-    WerkstattParameterBox
+    WerkstattParameterBox,
+    SpielwerkDeviceBox
 ]

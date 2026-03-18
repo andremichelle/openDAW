@@ -1,0 +1,7 @@
+class Processor {
+    * processNotes(block, notes) {
+        for (const note of notes) {
+            yield note
+        }
+    }
+}

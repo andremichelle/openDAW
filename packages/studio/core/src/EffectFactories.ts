@@ -20,6 +20,7 @@ import {
     ReverbDeviceBox,
     StereoToolDeviceBox,
     TidalDeviceBox,
+    SpielwerkDeviceBox,
     VelocityDeviceBox,
     WaveshaperDeviceBox,
     WerkstattDeviceBox,
@@ -110,6 +111,22 @@ export namespace EffectFactories {
                 }
             )
         }
+    }
+
+    export const Spielwerk: EffectFactory = {
+        defaultName: "Spielwerk",
+        defaultIcon: IconSymbol.Code,
+        description: "User-scripted MIDI effect processor",
+        manualPage: DeviceManualUrls.Spielwerk,
+        separatorBefore: false,
+        external: false,
+        type: "midi",
+        create: ({boxGraph}, hostField, index) =>
+            SpielwerkDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Spielwerk")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
     }
 
     export const StereoTool: EffectFactory = {
@@ -402,7 +419,8 @@ export namespace EffectFactories {
         Arpeggio,
         Pitch,
         Velocity,
-        Zeitgeist
+        Zeitgeist,
+        Spielwerk
     }
 
     export const AudioNamed = {
