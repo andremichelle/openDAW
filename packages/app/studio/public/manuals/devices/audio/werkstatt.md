@@ -117,35 +117,9 @@ class Processor {
 
 ---
 
-## 6. Example: Stereo Tremolo
+## 6. Examples
 
-```javascript
-// @param speed 0.3
-// @param depth 0.5
-
-class Processor {
-    phase = 0
-    speed = 0.3
-    depth = 0.5
-    paramChanged(label, value) {
-        if (label === "speed") this.speed = value
-        if (label === "depth") this.depth = value
-    }
-    process({src, out}, {s0, s1}) {
-        const [srcL, srcR] = src
-        const [outL, outR] = out
-        const freq = 0.5 + this.speed * 19.5
-        const increment = freq / sampleRate
-        for (let i = s0; i < s1; i++) {
-            const mod = 1.0 - this.depth * (0.5 + 0.5 * Math.sin(this.phase * Math.PI * 2))
-            outL[i] = srcL[i] * mod
-            outR[i] = srcR[i] * mod
-            this.phase += increment
-            if (this.phase >= 1.0) this.phase -= 1.0
-        }
-    }
-}
-```
+Select **Examples** in the code editor toolbar to load ready-made processors (Hard Clipper, Ring Modulator, Simple Delay, Biquad Lowpass).
 
 ---
 
