@@ -2,6 +2,7 @@ import css from "./SpielwerkDeviceEditor.sass?inline"
 import defaultCode from "./spielwerk-default.txt?raw"
 import {DeviceHost, SpielwerkDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {asInstanceOf, EmptyExec, Lifecycle, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
 import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
@@ -30,7 +31,17 @@ export const SpielwerkDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
     const box = adapter.box
     const storedCode = box.code.getValue()
     const userCode = storedCode.length > 0 ? SpielwerkCompiler.stripHeader(storedCode) : defaultCode
-    const compile = async (code: string) => SpielwerkCompiler.compile(service.audioContext, editing, box, code)
+    const compile = async (code: string) => {
+        const result = await Promises.tryCatch(SpielwerkCompiler.compile(service.audioContext, editing, box, code))
+        if (result.status === "resolved") {
+            errorIcon.classList.add("hidden")
+            errorIcon.title = ""
+        } else {
+            errorIcon.classList.remove("hidden")
+            errorIcon.title = String(result.error)
+            throw result.error
+        }
+    }
     if (storedCode.length > 0) {
         SpielwerkCompiler.load(service.audioContext, box).finally(EmptyExec)
     } else {
@@ -69,8 +80,15 @@ export const SpielwerkDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                     marginTop: "1em"
                 }}><Icon symbol={IconSymbol.Code}/></Button>
     )
+    const errorIcon: HTMLElement = (
+        <div className="error hidden"><Icon symbol={IconSymbol.Bug}/></div>
+    )
     const set = UUID.newSet<{ uuid: UUID.Bytes, lifecycle: Terminable }>(({uuid}) => uuid)
     lifecycle.ownAll(
+        service.engine.subscribeDeviceMessage(UUID.toString(adapter.uuid), message => {
+            errorIcon.classList.remove("hidden")
+            errorIcon.title = message
+        }),
         {
             terminate: () => {
                 const isActive = service.activeCodeEditor
@@ -113,7 +131,10 @@ export const SpielwerkDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                       populateControls={() => (
                           <div className={className}>
                               {knobs}
-                              {toggleEditorButton}
+                              <div className="controls">
+                                  {toggleEditorButton}
+                                  {errorIcon}
+                              </div>
                           </div>
                       )}
                       populateMeter={() => null}

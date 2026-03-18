@@ -80,22 +80,22 @@ const reconcileParameters = (deviceBox: SpielwerkDeviceBox, declared: ReadonlyAr
     }
 }
 
+const wrapCode = (uuid: string, update: number, userCode: string): string => `
+    if (typeof globalThis.openDAW === "undefined") { globalThis.openDAW = {} }
+    if (typeof globalThis.openDAW.spielwerkProcessors === "undefined") { globalThis.openDAW.spielwerkProcessors = {} }
+    globalThis.openDAW.spielwerkProcessors["${uuid}"] = {
+        update: ${update},
+        create: (function spielwerk() {
+            ${userCode}
+            return Processor
+        })()
+    }
+`
+
+const validateCode = (wrappedCode: string): void => {new Function(wrappedCode)}
+
 const registerWorklet = async (audioContext: BaseAudioContext,
-                               uuid: string,
-                               update: number,
-                               userCode: string): Promise<void> => {
-    const wrappedCode = `
-        if (typeof globalThis.openDAW === "undefined") { globalThis.openDAW = {} }
-        if (typeof globalThis.openDAW.spielwerkProcessors === "undefined") { globalThis.openDAW.spielwerkProcessors = {} }
-        globalThis.openDAW.spielwerkProcessors["${uuid}"] = {
-            update: ${update},
-            create: (function spielwerk() {
-                ${userCode}
-                return Processor
-            })()
-        }
-    `
-    new Function(wrappedCode)
+                               wrappedCode: string): Promise<void> => {
     const blob = new Blob([wrappedCode], {type: "application/javascript"})
     const blobUrl = URL.createObjectURL(blob)
     try {
@@ -111,7 +111,9 @@ export namespace SpielwerkCompiler {
         const {userCode, update} = parseHeader(deviceBox.code.getValue())
         if (update === 0) {return}
         const uuid = UUID.toString(deviceBox.address.uuid)
-        return registerWorklet(audioContext, uuid, update, userCode)
+        const wrappedCode = wrapCode(uuid, update, userCode)
+        validateCode(wrappedCode)
+        return registerWorklet(audioContext, wrappedCode)
     }
     export const compile = async (audioContext: BaseAudioContext,
                                   editing: Editing,
@@ -123,6 +125,8 @@ export namespace SpielwerkCompiler {
         const newUpdate = currentUpdate + 1
         const uuid = UUID.toString(deviceBox.address.uuid)
         const params = parseParams(userCode)
+        const wrappedCode = wrapCode(uuid, newUpdate, userCode)
+        validateCode(wrappedCode)
         const modifier = () => {
             deviceBox.code.setValue(createHeader(newUpdate) + userCode)
             reconcileParameters(deviceBox, params)
@@ -132,6 +136,6 @@ export namespace SpielwerkCompiler {
         } else {
             editing.modify(modifier)
         }
-        return registerWorklet(audioContext, uuid, newUpdate, userCode)
+        return registerWorklet(audioContext, wrappedCode)
     }
 }
