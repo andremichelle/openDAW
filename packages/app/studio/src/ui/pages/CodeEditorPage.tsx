@@ -97,7 +97,8 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                         wordBasedSuggestions: "off", // Important! Use only TS suggestions
                         model: model,
                         theme: "vs-dark",
-                        automaticLayout: true
+                        automaticLayout: true,
+                        stickyScroll: {enabled: false}
                     })
                     const allowed = ["c", "v", "x", "a", "z", "y"]
                     lifecycle.ownAll(

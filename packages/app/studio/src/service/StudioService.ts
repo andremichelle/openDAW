@@ -70,7 +70,7 @@ import {Surface} from "@/ui/surface/Surface"
 import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
 import {Mixdowns} from "@/service/Mixdowns"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
-import {WerkstattEditorState} from "@/ui/werkstatt-editor/WerkstattEditorState"
+import {CodeEditorState} from "@/ui/werkstatt-editor/CodeEditorState"
 
 /**
  * I am just piling stuff after stuff in here to boot the environment.
@@ -116,7 +116,7 @@ export class StudioService implements ProjectEnv {
     readonly #soundfontService: SoundfontService
 
     #shadertoyState: Option<ShadertoyState> = Option.None
-    readonly #activeCodeEditor: MutableObservableOption<WerkstattEditorState> = new MutableObservableOption()
+    readonly #activeCodeEditor: MutableObservableOption<CodeEditorState> = new MutableObservableOption()
 
     #factoryFooterLabel: Option<Provider<FooterLabel>> = Option.None
 
@@ -380,9 +380,9 @@ export class StudioService implements ProjectEnv {
     factoryFooterLabel(): Option<Provider<FooterLabel>> {return this.#factoryFooterLabel}
 
     get optShadertoyState(): Option<ShadertoyState> {return this.#shadertoyState}
-    get activeCodeEditor(): MutableObservableOption<WerkstattEditorState> {return this.#activeCodeEditor}
+    get activeCodeEditor(): MutableObservableOption<CodeEditorState> {return this.#activeCodeEditor}
 
-    openWerkstattEditor(state: WerkstattEditorState): void {
+    openCodeEditor(state: CodeEditorState): void {
         const previousScreen = this.layout.screen.getValue() === "code"
             ? this.#activeCodeEditor.map(existing => existing.previousScreen).unwrapOrNull() ?? state.previousScreen
             : state.previousScreen

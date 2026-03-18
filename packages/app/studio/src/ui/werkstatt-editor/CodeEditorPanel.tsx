@@ -1,4 +1,4 @@
-import css from "./WerkstattEditorPanel.sass?inline"
+import css from "./CodeEditorPanel.sass?inline"
 import defaultCode from "../devices/audio-effects/werkstatt-default.txt?raw"
 import {isDefined, Lifecycle, Nullable} from "@opendaw/lib-std"
 import {Await, createElement} from "@opendaw/lib-jsx"
@@ -11,14 +11,14 @@ import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
 import {CodeEditorHandler} from "./CodeEditorHandler"
 
-const className = Html.adoptStyleSheet(css, "WerkstattEditorPanel")
+const className = Html.adoptStyleSheet(css, "CodeEditorPanel")
 
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
 }
 
-export const WerkstattEditorPanel = ({lifecycle, service}: Construct) => {
+export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
     const statusLabel: HTMLDivElement = (<div className="status idle">Idle</div>)
     const state = service.activeCodeEditor.unwrapOrNull()
     const handler: Nullable<CodeEditorHandler> = isDefined(state) ? state.handler : null
@@ -63,7 +63,8 @@ export const WerkstattEditorPanel = ({lifecycle, service}: Construct) => {
                         wordBasedSuggestions: "off",
                         model: model,
                         theme: "vs-dark",
-                        automaticLayout: true
+                        automaticLayout: true,
+                        stickyScroll: {enabled: false}
                     })
                     const compileCode = async () => {
                         if (!isDefined(handler)) {

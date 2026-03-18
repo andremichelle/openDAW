@@ -41,7 +41,7 @@ export const SpielwerkDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
         if (isActive) {
             service.closeCodeEditor()
         } else {
-            service.openWerkstattEditor({
+            service.openCodeEditor({
                 handler: {
                     uuid: adapter.uuid,
                     name: adapter.labelField,
