@@ -215,6 +215,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                     },
                     {
                         type: "page",
+                        label: "Spielwerk",
+                        path: "/manuals/devices/midi/spielwerk",
+                        icon: EffectFactories.MidiNamed.Spielwerk.defaultIcon
+                    },
+                    {
+                        type: "page",
                         label: "Zeitgeist",
                         path: "/manuals/devices/midi/zeitgeist",
                         icon: EffectFactories.Zeitgeist.defaultIcon
