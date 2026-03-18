@@ -230,7 +230,7 @@ export namespace EffectFactories {
     }
 
     export const Reverb: EffectFactory = {
-        defaultName: "Cheap Reverb",
+        defaultName: "Free Reverb",
         defaultIcon: IconSymbol.Cube,
         description: "Simulates space and depth with reflections",
         manualPage: DeviceManualUrls.Reverb,
@@ -426,16 +426,16 @@ export namespace EffectFactories {
     export const AudioNamed = {
         Compressor,
         Crusher,
-        DattorroReverb,
+        DattorroReverb,  // Dattorro Reverb
         Delay,
         Fold,
+        Reverb,          // Free Reverb
         Gate,
         Maximizer,
-        NeuralAmp,
-        Reverb,
         Revamp,
-        StereoTool,
+        StereoTool,      // Stereo Tool
         Tidal,
+        NeuralAmp,       // Tone3000
         Waveshaper,
         Werkstatt
     }

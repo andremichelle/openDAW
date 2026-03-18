@@ -65,12 +65,6 @@ export const Manuals: ReadonlyArray<Manual> = [
                 files: [
                     {
                         type: "page",
-                        label: "Cheap Reverb",
-                        path: "/manuals/devices/audio/reverb",
-                        icon: EffectFactories.Reverb.defaultIcon
-                    },
-                    {
-                        type: "page",
                         label: "Compressor",
                         path: "/manuals/devices/audio/compressor",
                         icon: EffectFactories.Compressor.defaultIcon
@@ -101,6 +95,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                     },
                     {
                         type: "page",
+                        label: "Free Reverb",
+                        path: "/manuals/devices/audio/reverb",
+                        icon: EffectFactories.Reverb.defaultIcon
+                    },
+                    {
+                        type: "page",
                         label: "Gate",
                         path: "/manuals/devices/audio/gate",
                         icon: EffectFactories.Gate.defaultIcon
@@ -110,12 +110,6 @@ export const Manuals: ReadonlyArray<Manual> = [
                         label: "Maximizer",
                         path: "/manuals/devices/audio/maximizer",
                         icon: EffectFactories.Maximizer.defaultIcon
-                    },
-                    {
-                        type: "page",
-                        label: "Neural Amp",
-                        path: "/manuals/devices/audio/neural-amp",
-                        icon: EffectFactories.AudioNamed.NeuralAmp.defaultIcon
                     },
                     {
                         type: "page",
@@ -134,6 +128,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                         label: "Tidal",
                         path: "/manuals/devices/audio/tidal",
                         icon: EffectFactories.Tidal.defaultIcon
+                    },
+                    {
+                        type: "page",
+                        label: "Tone3000",
+                        path: "/manuals/devices/audio/neural-amp",
+                        icon: EffectFactories.AudioNamed.NeuralAmp.defaultIcon
                     },
                     {
                         type: "page",
