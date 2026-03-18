@@ -120,6 +120,10 @@ class Processor {
         // optional — called on transport jump (seek, loop restart)
         // use to clear accumulated state like held note arrays
     }
+    noteOff(pitch) {
+        // optional — called when an upstream note stops (key release, note end)
+        // use to remove notes from tracked state by pitch
+    }
 }
 ```
 
@@ -326,10 +330,8 @@ class Processor {
     reset() {
         this.held = []
     }
-    activeAt(position) {
-        return this.held
-            .filter(note => note.position <= position && position < note.position + note.duration)
-            .sort((noteA, noteB) => noteA.pitch - noteB.pitch)
+    noteOff(pitch) {
+        this.held = this.held.filter(note => note.pitch !== pitch)
     }
     * processNotes(block, notes) {
         for (const note of notes) {
@@ -340,13 +342,18 @@ class Processor {
         let index = Math.ceil(block.from / this.rate)
         let position = index * this.rate
         while (position < block.to) {
-            const stack = this.activeAt(position)
+            const stack = this.#activeAt(position)
             if (stack.length > 0) {
                 const source = stack[index % stack.length]
                 yield { position, duration, pitch: source.pitch, velocity: source.velocity, cent: source.cent }
             }
             position = ++index * this.rate
         }
+    }
+    #activeAt(position) {
+        return this.held
+            .filter(note => note.position <= position && position < note.position + note.duration)
+            .sort((noteA, noteB) => noteA.pitch - noteB.pitch)
     }
 }
 ```
@@ -367,6 +374,7 @@ class Processor {
     * processNotes(block, notes) { }   // required, generator function
     paramChanged(label, value) { }     // optional
     reset() { }                        // optional, called on transport jump
+    noteOff(pitch) { }                 // optional, called when upstream note stops
 }
 
 ## processNotes(block, notes)
@@ -420,9 +428,13 @@ Examples:
 // @param rate
 
 ## reset()
-Optional. Called when the transport jumps (seek, loop restart — discontinuous flag).
-Use to clear accumulated state like held note arrays. If not implemented, the host
-still clears its own internal state (retainer, scheduler), but YOUR state persists.
+Optional. Called when the transport jumps (seek, loop restart) or transitions from
+playing to stopped. Use to clear accumulated state like held note arrays.
+
+## noteOff(pitch)
+Optional. Called when an upstream note stops (key release, region note ending).
+Use to remove notes from tracked state by pitch. Essential for generators that
+maintain a held-notes array.
 
 ## State
 The Processor instance persists across blocks. Use class fields to store state

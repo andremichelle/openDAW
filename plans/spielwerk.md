@@ -380,10 +380,8 @@ class Processor {
     reset() {
         this.held = []
     }
-    activeAt(position) {
-        return this.held
-            .filter(note => note.position <= position && position < note.position + note.duration)
-            .sort((noteA, noteB) => noteA.pitch - noteB.pitch)
+    noteOff(pitch) {
+        this.held = this.held.filter(note => note.pitch !== pitch)
     }
     * processNotes(block, notes) {
         for (const note of notes) {
@@ -394,7 +392,7 @@ class Processor {
         let index = Math.ceil(block.from / this.rate)
         let position = index * this.rate
         while (position < block.to) {
-            const stack = this.activeAt(position)
+            const stack = this.#activeAt(position)
             if (stack.length > 0) {
                 const count = stack.length
                 const amount = count * this.octaves
@@ -424,6 +422,11 @@ class Processor {
             }
             position = ++index * this.rate
         }
+    }
+    #activeAt(position) {
+        return this.held
+            .filter(note => note.position <= position && position < note.position + note.duration)
+            .sort((noteA, noteB) => noteA.pitch - noteB.pitch)
     }
 }
 ```

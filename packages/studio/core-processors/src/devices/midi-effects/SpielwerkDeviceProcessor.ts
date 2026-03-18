@@ -62,6 +62,7 @@ interface UserProcessor {
     processNotes(block: UserBlock, notes: IterableIterator<UserNote>): IterableIterator<UserNote>
     paramChanged?(label: string, value: number): void
     reset?(): void
+    noteOff?(pitch: byte): void
 }
 
 const validateNote = (note: any, from: ppqn): Nullable<string> => {
@@ -167,7 +168,6 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
             const source = this.#source.unwrap()
             const proc = this.#userProcessor.unwrap()
             const starts: Array<UserNote> = []
-            let hasStops = false
             for (const event of source.processNotes(from, to, flags)) {
                 if (NoteLifecycleEvent.isStart(event)) {
                     starts.push({
@@ -177,16 +177,9 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
                         velocity: event.velocity,
                         cent: event.cent
                     })
-                } else {
-                    hasStops = true
+                } else if (isDefined(proc.noteOff)) {
+                    proc.noteOff(event.pitch)
                 }
-            }
-            if (hasStops && !playing) {
-                for (const event of this.#retainer.releaseAll()) {
-                    yield NoteLifecycleEvent.stop(event, from)
-                }
-                Arrays.clear(this.#scheduled)
-                proc.reset?.()
             }
             if (Bits.every(flags, BlockFlag.transporting)) {
                 for (let i = this.#scheduled.length - 1; i >= 0; i--) {
