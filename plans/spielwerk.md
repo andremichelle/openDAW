@@ -16,7 +16,7 @@ Every `MidiEffectProcessor` must implement both `processNotes()` (block-by-block
 
 ### Solution: The Host Owns the Retainer
 
-The user only writes `processNotes`. The host intercepts every yielded note, stores it in a retainer, and answers `iterateActiveNotesAt` from the retainer. The user never knows this method exists.
+The user only writes `process`. The host intercepts every yielded note, stores it in a retainer, and answers `iterateActiveNotesAt` from the retainer. The user never knows this method exists.
 
 This works universally — for transformers (1:1), generators (1:N), and filters (1:0).
 
@@ -27,23 +27,25 @@ This works universally — for transformers (1:1), generators (1:N), and filters
 ```typescript
 class Processor {
     paramChanged?(name: string, value: number): void
-    reset?(): void  // called on transport jump (seek, loop restart)
+    reset?(): void
 
-    // Called per block. Receives upstream note starts, yields output notes.
-    // Each yielded note must have: { position, duration, pitch, velocity, cent }
-    * processNotes(block, notes) {
-        for (const note of notes) {
-            yield note
+    * process(block, events) {
+        for (const event of events) {
+            if (event.gate) {
+                yield event
+            }
         }
     }
 }
 ```
 
-- `block` — the engine `Block` object passed directly (provides `from`, `to`, `bpm`, `s0`, `s1`, `flags`, etc.). Sample indices are irrelevant for MIDI but passing the Block keeps the API simple.
-- `notes` — an iterator of upstream note starts in `[block.from, block.to)`. Each note is `{ position, duration, pitch, velocity, cent }`. Stop events are hidden from the user.
-- The user yields zero or more notes per input note. Each must have `position`, `duration`, `pitch`, `velocity`, `cent`. Position must be `>= block.from`. Notes with position in `[from, to)` are emitted immediately. Notes with position `>= to` are held in an internal scheduler and emitted in the appropriate future block.
+- `block` — the engine `Block` object passed directly (provides `from`, `to`, `bpm`, `s0`, `s1`, `flags`, etc.).
+- `events` — a unified iterator of note-on and note-off events in `[block.from, block.to)`, ordered by position.
+  - Note-on: `{ gate: true, id, position, duration, pitch, velocity, cent }`
+  - Note-off: `{ gate: false, id, position, pitch }`
+- The user yields note-ons: `{ position, duration, pitch, velocity, cent }`. Position must be `>= block.from`. Notes with position in `[from, to)` are emitted immediately. Notes with position `>= to` are held in an internal scheduler and emitted in the appropriate future block.
 - `paramChanged` — optional, same as audio Werkstatt. Receives mapped parameter values from `// @param` declarations.
-- `reset` — optional. Called when the transport jumps (discontinuous flag: seek, loop restart). Use to clear accumulated state like held note arrays.
+- `reset` — optional. Called on transport jump (discontinuous) and play→pause transition. Use to clear accumulated state like held note arrays.
 
 ---
 
@@ -312,13 +314,15 @@ class Processor {
         if (name === "offset") this.offset = value
         if (name === "mix") this.mix = value
     }
-    * processNotes(block, notes) {
-        for (const note of notes) {
-            const magnet = note.velocity + (this.target - note.velocity) * this.strength
-            const random = (Math.random() * 2 - 1) * this.randomAmount
-            const wet = Math.max(0, Math.min(1, magnet + random + this.offset))
-            const velocity = note.velocity * (1 - this.mix) + wet * this.mix
-            yield { ...note, velocity }
+    * process(block, events) {
+        for (const event of events) {
+            if (event.gate) {
+                const magnet = event.velocity + (this.target - event.velocity) * this.strength
+                const random = (Math.random() * 2 - 1) * this.randomAmount
+                const wet = Math.max(0, Math.min(1, magnet + random + this.offset))
+                const velocity = event.velocity * (1 - this.mix) + wet * this.mix
+                yield { ...event, velocity }
+            }
         }
     }
 }
@@ -340,12 +344,14 @@ class Processor {
         if (name === "semiTones") this.semiTones = value
         if (name === "cent") this.cent = value
     }
-    * processNotes(block, notes) {
-        for (const note of notes) {
-            yield {
-                ...note,
-                pitch: note.pitch + this.octaves * 12 + this.semiTones,
-                cent: note.cent + this.cent
+    * process(block, events) {
+        for (const event of events) {
+            if (event.gate) {
+                yield {
+                    ...event,
+                    pitch: event.pitch + this.octaves * 12 + this.semiTones,
+                    cent: event.cent + this.cent
+                }
             }
         }
     }
@@ -380,12 +386,13 @@ class Processor {
     reset() {
         this.held = []
     }
-    noteOff(pitch) {
-        this.held = this.held.filter(note => note.pitch !== pitch)
-    }
-    * processNotes(block, notes) {
-        for (const note of notes) {
-            this.held.push(note)
+    * process(block, events) {
+        for (const event of events) {
+            if (event.gate) {
+                this.held.push(event)
+            } else {
+                this.held = this.held.filter(note => note.id !== event.id)
+            }
         }
         this.held = this.held.filter(note => note.position + note.duration > block.from)
         const duration = Math.max(1, Math.floor(this.rate * this.gate))
@@ -446,10 +453,12 @@ class Processor {
     paramChanged(name, value) {
         if (name === "mode") this.mode = value
     }
-    * processNotes(block, notes) {
-        for (const note of notes) {
-            for (const interval of this.intervals[this.mode]) {
-                yield { ...note, pitch: note.pitch + interval }
+    * process(block, events) {
+        for (const event of events) {
+            if (event.gate) {
+                for (const interval of this.intervals[this.mode]) {
+                    yield { ...event, pitch: event.pitch + interval }
+                }
             }
         }
     }
@@ -469,12 +478,14 @@ class Processor {
         if (name === "timing") this.timing = value
         if (name === "velRange") this.velRange = value
     }
-    * processNotes(block, notes) {
-        for (const note of notes) {
-            yield {
-                ...note,
-                position: note.position + Math.random() * this.timing,
-                velocity: Math.max(0, Math.min(1, note.velocity + (Math.random() - 0.5) * this.velRange))
+    * process(block, events) {
+        for (const event of events) {
+            if (event.gate) {
+                yield {
+                    ...event,
+                    position: event.position + Math.random() * this.timing,
+                    velocity: Math.max(0, Math.min(1, event.velocity + (Math.random() - 0.5) * this.velRange))
+                }
             }
         }
     }
@@ -491,10 +502,10 @@ class Processor {
     paramChanged(name, value) {
         if (name === "chance") this.chance = value
     }
-    * processNotes(block, notes) {
-        for (const note of notes) {
-            if (Math.random() < this.chance) {
-                yield note
+    * process(block, events) {
+        for (const event of events) {
+            if (event.gate && Math.random() < this.chance) {
+                yield event
             }
         }
     }
@@ -517,13 +528,15 @@ class Processor {
         if (name === "delay") this.delay = value
         if (name === "decay") this.decay = value
     }
-    * processNotes(block, notes) {
-        for (const note of notes) {
-            for (let i = 0; i < this.repeats; i++) {
-                yield {
-                    ...note,
-                    position: note.position + i * this.delay,
-                    velocity: note.velocity * Math.pow(this.decay, i)
+    * process(block, events) {
+        for (const event of events) {
+            if (event.gate) {
+                for (let i = 0; i < this.repeats; i++) {
+                    yield {
+                        ...event,
+                        position: event.position + i * this.delay,
+                        velocity: event.velocity * Math.pow(this.decay, i)
+                    }
                 }
             }
         }
@@ -546,10 +559,10 @@ class Processor {
         if (name === "low") this.low = value
         if (name === "high") this.high = value
     }
-    * processNotes(block, notes) {
-        for (const note of notes) {
-            if (note.pitch >= this.low && note.pitch <= this.high) {
-                yield note
+    * process(block, events) {
+        for (const event of events) {
+            if (event.gate && event.pitch >= this.low && event.pitch <= this.high) {
+                yield event
             }
         }
     }
@@ -603,13 +616,7 @@ Reuses `CodeEditor` component and `DeviceEditor` shell. Error display via `engin
 
 ## Open Questions
 
-### 1. Source-to-Output Tracking for 1:N Generators
-
-For 1:1 transforms, the `sourceToOutput` mapping is straightforward — same iteration order pairs input to output. For generators that yield multiple notes per input (chord generator), we need to track which yields came from which input note.
-
-Approach: wrap the user's input iterator so the host knows when the user consumes each input note. All output notes yielded between consuming input N and input N+1 are associated with input N's id. This lets the host release all chord notes when the original note stops.
-
-### 2. Shared Compiler Infrastructure
+### 1. Shared Compiler Infrastructure
 
 Extract `// @param` parsing and box reconciliation from audio Werkstatt into a shared module so both audio and MIDI Werkstatt reuse it.
 

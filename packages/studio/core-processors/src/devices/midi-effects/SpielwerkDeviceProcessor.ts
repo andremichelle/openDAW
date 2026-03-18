@@ -41,7 +41,11 @@ interface ScheduledNote {
     readonly cent: number
 }
 
-interface UserNote {
+type UserEvent =
+    | {readonly gate: true, readonly id: int, readonly position: ppqn, readonly duration: ppqn, readonly pitch: byte, readonly velocity: float, readonly cent: number}
+    | {readonly gate: false, readonly id: int, readonly position: ppqn, readonly pitch: byte}
+
+type UserOutput = {
     readonly position: ppqn
     readonly duration: ppqn
     readonly pitch: byte
@@ -59,14 +63,13 @@ interface UserBlock {
 }
 
 interface UserProcessor {
-    processNotes(block: UserBlock, notes: IterableIterator<UserNote>): IterableIterator<UserNote>
+    process(block: UserBlock, events: IterableIterator<UserEvent>): IterableIterator<UserOutput>
     paramChanged?(label: string, value: number): void
     reset?(): void
-    noteOff?(pitch: byte): void
 }
 
 const validateNote = (note: any, from: ppqn): Nullable<string> => {
-    if (!isDefined(note)) {return "processNotes yielded undefined"}
+    if (!isDefined(note)) {return "process yielded undefined"}
     if (typeof note.pitch !== "number" || note.pitch !== note.pitch) {return `Invalid pitch: ${note.pitch}`}
     if (note.pitch < 0 || note.pitch > 127) {return `Pitch out of range: ${note.pitch} (must be 0–127)`}
     if (typeof note.velocity !== "number" || note.velocity !== note.velocity) {return `Invalid velocity: ${note.velocity}`}
@@ -94,7 +97,6 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
 
     constructor(context: EngineContext, adapter: SpielwerkDeviceBoxAdapter) {
         super(context)
-
         this.#adapter = adapter
         this.#engineToClient = context.engineToClient
         this.#retainer = new EventSpanRetainer<Id<NoteEvent>>()
@@ -167,18 +169,25 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
         if (this.#source.nonEmpty() && this.#userProcessor.nonEmpty() && !this.#silenced) {
             const source = this.#source.unwrap()
             const proc = this.#userProcessor.unwrap()
-            const starts: Array<UserNote> = []
+            const events: Array<UserEvent> = []
             for (const event of source.processNotes(from, to, flags)) {
                 if (NoteLifecycleEvent.isStart(event)) {
-                    starts.push({
+                    events.push({
+                        gate: true,
+                        id: event.id,
                         position: event.position,
                         duration: event.duration,
                         pitch: event.pitch,
                         velocity: event.velocity,
                         cent: event.cent
                     })
-                } else if (isDefined(proc.noteOff)) {
-                    proc.noteOff(event.pitch)
+                } else {
+                    events.push({
+                        gate: false,
+                        id: event.id,
+                        position: event.position,
+                        pitch: event.pitch
+                    })
                 }
             }
             if (Bits.every(flags, BlockFlag.transporting)) {
@@ -193,7 +202,7 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
             const userBlock: UserBlock = {from, to, bpm: 0, s0: 0, s1: 0, flags}
             try {
                 let noteCount: int = 0
-                for (const yielded of proc.processNotes(userBlock, starts[Symbol.iterator]())) {
+                for (const yielded of proc.process(userBlock, events[Symbol.iterator]())) {
                     if (++noteCount > MAX_NOTES_PER_BLOCK) {
                         this.#silence(`Note flood: exceeded ${MAX_NOTES_PER_BLOCK} notes per block`)
                         return
@@ -299,5 +308,4 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
         this.#retainer.addAndRetain({...lifecycle})
         yield lifecycle
     }
-
 }
