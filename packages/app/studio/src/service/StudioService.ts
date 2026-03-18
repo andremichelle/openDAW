@@ -396,7 +396,7 @@ export class StudioService implements ProjectEnv {
         const previousScreen = this.#activeCodeEditor.map(state => state.previousScreen).unwrapOrNull()
         this.#activeCodeEditor.clear()
         if (this.layout.screen.getValue() === "code") {
-            queueMicrotask(() => this.switchScreen(previousScreen ?? "default"))
+            this.layout.screen.setValue(previousScreen ?? "default")
         }
     }
 
