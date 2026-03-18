@@ -10,6 +10,7 @@ import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {EffectFactories} from "@opendaw/studio-core"
 import {WerkstattCompiler} from "./WerkstattCompiler"
+import {WerkstattExamples} from "./werkstatt-examples"
 import {WerkstattParameterBox} from "@opendaw/studio-boxes"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder"
 import {Button} from "@/ui/components/Button"
@@ -54,7 +55,8 @@ export const WerkstattDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                         box.code.subscribe(owner => observer(WerkstattCompiler.stripHeader(owner.getValue())))
                 },
                 initialCode: WerkstattCompiler.stripHeader(box.code.getValue()) || defaultCode,
-                previousScreen: service.layout.screen.getValue()
+                previousScreen: service.layout.screen.getValue(),
+                examples: WerkstattExamples
             })
         }
     }

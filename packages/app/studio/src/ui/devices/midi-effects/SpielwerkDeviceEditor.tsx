@@ -8,6 +8,7 @@ import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {SpielwerkCompiler} from "./SpielwerkCompiler"
+import {SpielwerkExamples} from "./spielwerk-examples"
 import {WerkstattParameterBox} from "@opendaw/studio-boxes"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder"
 import {Button} from "@/ui/components/Button"
@@ -52,7 +53,8 @@ export const SpielwerkDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                         box.code.subscribe(owner => observer(SpielwerkCompiler.stripHeader(owner.getValue())))
                 },
                 initialCode: SpielwerkCompiler.stripHeader(box.code.getValue()) || defaultCode,
-                previousScreen: service.layout.screen.getValue()
+                previousScreen: service.layout.screen.getValue(),
+                examples: SpielwerkExamples
             })
         }
     }

@@ -200,13 +200,11 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
                     })
                 }
             }
-            if (Bits.every(flags, BlockFlag.transporting)) {
-                for (let i = this.#scheduled.length - 1; i >= 0; i--) {
-                    const note = this.#scheduled[i]
-                    if (note.position >= from && note.position < to) {
-                        this.#scheduled.splice(i, 1)
-                        yield* this.#emitNote(note)
-                    }
+            for (let i = this.#scheduled.length - 1; i >= 0; i--) {
+                const note = this.#scheduled[i]
+                if (note.position >= from && note.position < to) {
+                    this.#scheduled.splice(i, 1)
+                    yield* this.#emitNote(note)
                 }
             }
             let currentSourceId: int = -1

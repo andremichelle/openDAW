@@ -4,12 +4,15 @@ import {isDefined, Lifecycle, Nullable} from "@opendaw/lib-std"
 import {Await, createElement} from "@opendaw/lib-jsx"
 import {Events, Html, Keyboard, Shortcut} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {MenuItem} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
+import {MenuButton} from "@/ui/components/MenuButton"
 import {CodeEditorHandler} from "./CodeEditorHandler"
+import {CodeEditorExample} from "./CodeEditorState"
 
 const className = Html.adoptStyleSheet(css, "CodeEditorPanel")
 
@@ -23,6 +26,7 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
     const state = service.activeCodeEditor.unwrapOrNull()
     const handler: Nullable<CodeEditorHandler> = isDefined(state) ? state.handler : null
     const initialCode = isDefined(state) ? state.initialCode : defaultCode
+    const examples: ReadonlyArray<CodeEditorExample> = isDefined(state) ? state.examples : []
     const setStatus = (text: string, type: "idle" | "success" | "error") => {
         statusLabel.textContent = text
         statusLabel.className = `status ${type}`
@@ -121,6 +125,19 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                                         appearance={{tooltip: `Compile (${Shortcut.of("Enter", {alt: true}).format()})`}}>
                                     <span>Compile</span> <Icon symbol={IconSymbol.Play}/>
                                 </Button>
+                                {examples.length > 0 && (
+                                    <MenuButton root={MenuItem.root()
+                                        .setRuntimeChildrenProcedure(parent => parent
+                                            .addMenuItem(...examples
+                                                .map(example => MenuItem.default({label: example.name})
+                                                    .setTriggerProcedure(() => {
+                                                        editor.setValue(example.code)
+                                                        compileCode().finally()
+                                                    }))))}
+                                                appearance={{tinyTriangle: true, color: Colors.dark}}>
+                                        <span>Examples</span>
+                                    </MenuButton>
+                                )}
                                 <Button lifecycle={lifecycle}
                                         onClick={close}
                                         appearance={{tooltip: "Close editor"}}>

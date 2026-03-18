@@ -3,7 +3,6 @@ import {SpielwerkDeviceBox, WerkstattParameterBox} from "@opendaw/studio-boxes"
 
 const COMPILER_VERSION = 1
 const HEADER_PATTERN = /^\/\/ @spielwerk (\w+) (\d+) (\d+)\n/
-const PARAM_PATTERN = /^\/\/ @param (\w+)(?: ([.\d]+))?$/gm
 
 interface ParamDeclaration {
     label: string
@@ -23,14 +22,20 @@ const parseHeader = (source: string): { userCode: string, update: number } => {
 
 const createHeader = (update: number): string => `// @spielwerk js ${COMPILER_VERSION} ${update}\n`
 
+const PARAM_LINE = /^\/\/ @param .+$/gm
+
 const parseParams = (code: string): ReadonlyArray<ParamDeclaration> => {
     const params: Array<ParamDeclaration> = []
     let match: Nullable<RegExpExecArray>
-    PARAM_PATTERN.lastIndex = 0
-    while ((match = PARAM_PATTERN.exec(code)) !== null) {
+    PARAM_LINE.lastIndex = 0
+    while ((match = PARAM_LINE.exec(code)) !== null) {
+        const valid = match[0].match(/^\/\/ @param (\w+)(?: ([.\d]+))?$/)
+        if (valid === null) {
+            throw new Error(`Malformed @param: '${match[0]}' — expected: // @param <name> [defaultValue]`)
+        }
         params.push({
-            label: match[1],
-            defaultValue: isDefined(match[2]) ? parseFloat(match[2]) : 0.0
+            label: valid[1],
+            defaultValue: isDefined(valid[2]) ? parseFloat(valid[2]) : 0.0
         })
     }
     return params
