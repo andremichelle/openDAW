@@ -46,6 +46,7 @@ type UserEvent =
     | {readonly gate: false, readonly id: int, readonly position: ppqn, readonly pitch: byte}
 
 type UserOutput = {
+    readonly id?: int
     readonly position: ppqn
     readonly duration: ppqn
     readonly pitch: byte
@@ -63,7 +64,7 @@ interface UserBlock {
 }
 
 interface UserProcessor {
-    process(block: UserBlock, events: IterableIterator<UserEvent>): IterableIterator<UserOutput>
+    process(block: UserBlock, events: Iterable<UserEvent>): IterableIterator<UserOutput>
     paramChanged?(label: string, value: number): void
     reset?(): void
 }
@@ -182,6 +183,9 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
                         cent: event.cent
                     })
                 } else {
+                    for (const released of this.#retainer.release(note => note.id === event.id)) {
+                        yield NoteLifecycleEvent.stop(released, event.position)
+                    }
                     events.push({
                         gate: false,
                         id: event.id,
@@ -202,7 +206,7 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
             const userBlock: UserBlock = {from, to, bpm: 0, s0: 0, s1: 0, flags}
             try {
                 let noteCount: int = 0
-                for (const yielded of proc.process(userBlock, events[Symbol.iterator]())) {
+                for (const yielded of proc.process(userBlock, events)) {
                     if (++noteCount > MAX_NOTES_PER_BLOCK) {
                         this.#silence(`Note flood: exceeded ${MAX_NOTES_PER_BLOCK} notes per block`)
                         return
@@ -225,7 +229,7 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
                             cent: yielded.cent ?? 0
                         })
                     } else {
-                        yield* this.#emitNote(yielded)
+                        yield* this.#emitNote(yielded, yielded.id)
                     }
                 }
             } catch (err) {
@@ -303,9 +307,10 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
         this.#reportError(message)
     }
 
-    * #emitNote(note: ScheduledNote): IterableIterator<NoteLifecycleEvent> {
+    * #emitNote(note: ScheduledNote, sourceId?: int): IterableIterator<NoteLifecycleEvent> {
         const lifecycle = NoteLifecycleEvent.start(note.position, note.duration, note.pitch, note.velocity, note.cent)
-        this.#retainer.addAndRetain({...lifecycle})
-        yield lifecycle
+        const entry = isDefined(sourceId) ? {...lifecycle, id: sourceId} : {...lifecycle}
+        this.#retainer.addAndRetain(entry)
+        yield entry
     }
 }

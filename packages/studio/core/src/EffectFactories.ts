@@ -330,7 +330,7 @@ export namespace EffectFactories {
     export const NeuralAmp: EffectFactory = {
         defaultName: "Tone3000",
         defaultIcon: IconSymbol.Tone3000,
-        description: "Neural network-based amp modeling using NAM models",
+        description: "Access thousands of amps, pedals, and cabs captured with Neural Amp Modeler.",
         manualPage: DeviceManualUrls.NeuralAmp,
         separatorBefore: false,
         external: true,
