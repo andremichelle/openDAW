@@ -1,6 +1,19 @@
-import {DefaultObservableValue, Errors, int, isDefined, Nullable, Option, panic, SyncStream, Terminable, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
+import {
+    DefaultObservableValue,
+    Errors,
+    int,
+    isDefined,
+    Nullable,
+    Option,
+    panic,
+    SyncStream,
+    Terminable,
+    Terminator,
+    TimeSpan,
+    UUID
+} from "@opendaw/lib-std"
 import {AudioData, ppqn} from "@opendaw/lib-dsp"
-import {WerkstattDeviceBox} from "@opendaw/studio-boxes"
+import {SpielwerkDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
 import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
 import {AnimationFrame} from "@opendaw/lib-dom"
 import {
@@ -144,32 +157,43 @@ export class OfflineEngineRenderer {
             exportConfiguration: optExportConfiguration.unwrapOrUndefined()
         })
 
-        const HEADER_PATTERN = /^\/\/ @werkstatt (\w+) (\d+) (\d+)\n/
+        const loadScriptDevice = async (
+            code: string,
+            headerPattern: RegExp,
+            registryName: string,
+            functionName: string,
+            uuid: string
+        ): Promise<void> => {
+            const match = code.match(headerPattern)
+            if (match === null) {return}
+            const userCode = code.slice(match[0].length)
+            const update = parseInt(match[3])
+            await protocol.addModule(`
+                if (typeof globalThis.openDAW === "undefined") { globalThis.openDAW = {} }
+                if (typeof globalThis.openDAW.${registryName} === "undefined") { globalThis.openDAW.${registryName} = {} }
+                globalThis.openDAW.${registryName}["${uuid}"] = {
+                    update: ${update},
+                    create: (function ${functionName}() {
+                        ${userCode}
+                        return Processor
+                    })()
+                }
+            `)
+        }
         for (const box of source.boxGraph.boxes()) {
             if (box instanceof WerkstattDeviceBox) {
-                const code = box.code.getValue()
-                const match = code.match(HEADER_PATTERN)
-                if (match !== null) {
-                    const userCode = code.slice(match[0].length)
-                    const update = parseInt(match[3])
-                    const uuid = UUID.toString(box.address.uuid)
-                    await protocol.addModule(`
-                        if (typeof globalThis.openDAW === "undefined") { globalThis.openDAW = {} }
-                        if (typeof globalThis.openDAW.werkstattProcessors === "undefined") { globalThis.openDAW.werkstattProcessors = {} }
-                        globalThis.openDAW.werkstattProcessors["${uuid}"] = {
-                            update: ${update},
-                            create: (function werkstatt() {
-                                ${userCode}
-                                return Processor
-                            })()
-                        }
-                    `)
-                }
+                await loadScriptDevice(box.code.getValue(),
+                    /^\/\/ @werkstatt (\w+) (\d+) (\d+)\n/,
+                    "werkstattProcessors", "werkstatt",
+                    UUID.toString(box.address.uuid))
+            } else if (box instanceof SpielwerkDeviceBox) {
+                await loadScriptDevice(box.code.getValue(),
+                    /^\/\/ @spielwerk (\w+) (\d+) (\d+)\n/,
+                    "spielwerkProcessors", "spielwerk",
+                    UUID.toString(box.address.uuid))
             }
         }
-
         engineCommands.setupMIDI(port, sab)
-
         return new OfflineEngineRenderer(
             worker,
             protocol,
