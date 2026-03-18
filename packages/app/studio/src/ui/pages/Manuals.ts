@@ -209,15 +209,15 @@ export const Manuals: ReadonlyArray<Manual> = [
                     },
                     {
                         type: "page",
-                        label: "Velocity",
-                        path: "/manuals/devices/midi/velocity",
-                        icon: EffectFactories.Velocity.defaultIcon
-                    },
-                    {
-                        type: "page",
                         label: "Spielwerk",
                         path: "/manuals/devices/midi/spielwerk",
                         icon: EffectFactories.MidiNamed.Spielwerk.defaultIcon
+                    },
+                    {
+                        type: "page",
+                        label: "Velocity",
+                        path: "/manuals/devices/midi/velocity",
+                        icon: EffectFactories.Velocity.defaultIcon
                     },
                     {
                         type: "page",

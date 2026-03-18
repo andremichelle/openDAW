@@ -418,25 +418,25 @@ export namespace EffectFactories {
     export const MidiNamed = {
         Arpeggio,
         Pitch,
+        Spielwerk,
         Velocity,
-        Zeitgeist,
-        Spielwerk
+        Zeitgeist
     }
 
     export const AudioNamed = {
-        StereoTool,
         Compressor,
-        Gate,
-        Delay,
-        Reverb,
-        DattorroReverb,
-        Revamp,
         Crusher,
+        DattorroReverb,
+        Delay,
         Fold,
-        Waveshaper,
-        Tidal,
-        NeuralAmp,
+        Gate,
         Maximizer,
+        NeuralAmp,
+        Reverb,
+        Revamp,
+        StereoTool,
+        Tidal,
+        Waveshaper,
         Werkstatt
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> =
