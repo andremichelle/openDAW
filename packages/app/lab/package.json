@@ -5,7 +5,7 @@
   "type": "module",
   "license": "LGPL-3.0-or-later",
   "scripts": {
-    "dev": "vite --clearScreen false",
+    "dev": "CI=true vite --clearScreen false",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint \"src/**/*.ts\""

@@ -24,12 +24,12 @@ export class SpielwerkDeviceBoxAdapter implements MidiEffectDeviceAdapter {
         this.#context = context
         this.#box = box
         this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
-        const declarations = parseParams(box.code.getValue())
         this.#terminator.own(
             box.parameters.pointerHub.catchupAndSubscribe({
                 onAdded: (({box: parameterBox}) => {
                     const paramBox = asInstanceOf(parameterBox, WerkstattParameterBox)
                     const label = paramBox.label.getValue()
+                    const declarations = parseParams(box.code.getValue())
                     const declaration = declarations.find(decl => decl.label === label)
                     const {valueMapping, stringMapping} = isDefined(declaration)
                         ? resolveParamMappings(declaration)
