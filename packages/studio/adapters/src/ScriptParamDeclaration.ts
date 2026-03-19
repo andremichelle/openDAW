@@ -41,8 +41,22 @@ const parseSingleParam = (line: string): ParamDeclaration => {
     if (tokens.length === 3 && tokens[2] === "bool") {
         return {label, defaultValue: defaultValue >= 0.5 ? 1 : 0, min: 0, max: 1, mapping: "bool", unit: ""}
     }
+    if (tokens.length === 4) {
+        const min = parseFloat(tokens[2])
+        const max = parseFloat(tokens[3])
+        if (isNaN(min) || isNaN(max)) {
+            throw new Error(`Malformed @param: '${line}' — min/max must be numbers`)
+        }
+        if (max - min < -FLOAT_TOLERANCE) {
+            throw new Error(`Malformed @param: '${line}' — min (${min}) must be less than max (${max})`)
+        }
+        if (defaultValue < min - FLOAT_TOLERANCE || defaultValue > max + FLOAT_TOLERANCE) {
+            throw new Error(`Malformed @param: '${line}' — default (${defaultValue}) must be within [${min}, ${max}]`)
+        }
+        return {label, defaultValue, min, max, mapping: "linear", unit: ""}
+    }
     if (tokens.length < 5) {
-        throw new Error(`Malformed @param: '${line}' — expected: // @param <name> <default> <min> <max> <type> [unit]`)
+        throw new Error(`Malformed @param: '${line}' — expected: // @param <name> <default> <min> <max> [type] [unit]`)
     }
     const min = parseFloat(tokens[2])
     const max = parseFloat(tokens[3])
