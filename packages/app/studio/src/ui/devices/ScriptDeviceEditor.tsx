@@ -1,10 +1,11 @@
 import css from "./ScriptDeviceEditor.sass?inline"
-import {DeviceHost, EffectDeviceBoxAdapter, ParameterAdapterSet} from "@opendaw/studio-adapters"
-import {asInstanceOf, EmptyExec, Lifecycle, Nullable, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {DeviceHost, EffectDeviceBoxAdapter, parseParams, ParameterAdapterSet} from "@opendaw/studio-adapters"
+import {asInstanceOf, Editing, EmptyExec, isDefined, Lifecycle, MutableObservableValue, Nullable, ObservableValue, Observer, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
 import {Promises} from "@opendaw/lib-runtime"
 import {createElement} from "@opendaw/lib-jsx"
 import {Field, StringField} from "@opendaw/lib-box"
-import {IconSymbol, Pointers} from "@opendaw/studio-enums"
+import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {Html} from "@opendaw/lib-dom"
@@ -12,11 +13,27 @@ import {StudioService} from "@/service/StudioService"
 import {WerkstattParameterBox} from "@opendaw/studio-boxes"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder"
 import {Button} from "@/ui/components/Button"
+import {Checkbox} from "@/ui/components/Checkbox"
+import {ControlIndicator} from "@/ui/components/ControlIndicator"
 import {Icon} from "@/ui/components/Icon"
+import {Column} from "@/ui/devices/Column"
+import {LKR} from "@/ui/devices/constants"
 import {CodeEditorExample} from "@/ui/werkstatt-editor/CodeEditorState"
 import {createScriptCompiler, ScriptCompilerConfig} from "@/ui/werkstatt-editor/ScriptCompiler"
 
 const className = Html.adoptStyleSheet(css, "ScriptDeviceEditor")
+
+const boolModel = (editing: Editing, parameter: AutomatableParameterFieldAdapter<number>): MutableObservableValue<boolean> =>
+    new class implements MutableObservableValue<boolean> {
+        getValue(): boolean {return parameter.getControlledValue() >= 0.5}
+        setValue(value: boolean) {editing.modify(() => parameter.setValue(value ? 1 : 0))}
+        subscribe(observer: Observer<ObservableValue<boolean>>): Subscription {
+            return parameter.subscribe(() => observer(this))
+        }
+        catchupAndSubscribe(observer: Observer<ObservableValue<boolean>>): Subscription {
+            return parameter.catchupAndSubscribe(() => observer(this))
+        }
+    }
 
 type ScriptDeviceBox = {
     readonly code: StringField
@@ -128,14 +145,35 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
             onAdded: ({box: paramBox}) => {
                 const werkstattParam = asInstanceOf(paramBox, WerkstattParameterBox)
                 const parameter = adapter.parameters.parameterAt(werkstattParam.value.address)
+                const label = werkstattParam.label.getValue()
+                const declarations = parseParams(box.code.getValue())
+                const declaration = declarations.find(decl => decl.label === label)
+                const isBool = isDefined(declaration) && declaration.mapping === "bool"
                 const terminator = new Terminator()
-                const element: HTMLElement = ControlBuilder.createKnob({
-                    lifecycle: terminator,
-                    editing,
-                    midiLearning,
-                    adapter,
-                    parameter
-                })
+                const element: HTMLElement = isBool
+                    ? (<Column ems={LKR} color={Colors.cream}>
+                        <h5>{label}</h5>
+                        <ControlIndicator lifecycle={terminator} parameter={parameter}>
+                            <Checkbox lifecycle={terminator}
+                                      model={boolModel(editing, parameter)}
+                                      style={{marginTop: "0.25em"}}
+                                      appearance={{
+                                          color: Colors.cream,
+                                          activeColor: Colors.blue,
+                                          framed: true,
+                                          cursor: "pointer"
+                                      }}>
+                                <Icon symbol={IconSymbol.Checkbox}/>
+                            </Checkbox>
+                        </ControlIndicator>
+                    </Column>)
+                    : ControlBuilder.createKnob({
+                        lifecycle: terminator,
+                        editing,
+                        midiLearning,
+                        adapter,
+                        parameter
+                    })
                 element.style.order = String(werkstattParam.index.getValue())
                 terminator.own(werkstattParam.index.catchupAndSubscribe(owner =>
                     element.style.order = String(owner.getValue())))
