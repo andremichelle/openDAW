@@ -1,11 +1,17 @@
 import css from "./SignatureTrackBody.sass?inline"
-import {EmptyExec, Lifecycle, Nullable, Option} from "@moises-ai/lib-std"
-import {createElement} from "@moises-ai/lib-jsx"
-import {Dragging, Events, Html} from "@moises-ai/lib-dom"
-import {ppqn} from "@moises-ai/lib-dsp"
-import {Parsing, SignatureEvent, SignatureEventBoxAdapter, SignatureTrackAdapter, TimelineBoxAdapter} from "@moises-ai/studio-adapters"
+import {EmptyExec, Lifecycle, Nullable, Option} from "@opendaw/lib-std"
+import {createElement} from "@opendaw/lib-jsx"
+import {Dragging, Events, Html} from "@opendaw/lib-dom"
+import {ppqn} from "@opendaw/lib-dsp"
+import {
+    Parsing,
+    SignatureEvent,
+    SignatureEventBoxAdapter,
+    SignatureTrackAdapter,
+    TimelineBoxAdapter
+} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
-import {ElementCapturing} from "../../../../../../../../studio/core/src/ui/canvas/capturing.ts"
+import {ElementCapturing} from "@opendaw/studio-core"
 import {SignatureDragPreview, SignatureRenderer} from "@/ui/timeline/tracks/primary/signature/SignatureRenderer"
 import {SignatureContextMenu} from "@/ui/timeline/tracks/primary/signature/SignatureContextMenu"
 import {Surface} from "@/ui/surface/Surface"

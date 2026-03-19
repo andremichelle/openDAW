@@ -1,10 +1,9 @@
 import css from "./ControlGroup.sass?inline"
-import {Html} from "@moises-ai/lib-dom"
-import {Color, int, Lifecycle} from "@moises-ai/lib-std"
-import {createElement, Frag} from "@moises-ai/lib-jsx"
-import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@moises-ai/studio-adapters"
-import {BoxEditing} from "@moises-ai/lib-box"
-import {MIDILearning} from "@moises-ai/studio-core"
+import {Html} from "@opendaw/lib-dom"
+import {Color, Editing, int, Lifecycle} from "@opendaw/lib-std"
+import {createElement, Frag} from "@opendaw/lib-jsx"
+import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {MIDILearning} from "@opendaw/studio-core"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import {ParameterLabel} from "@/ui/components/ParameterLabel"
 
@@ -15,7 +14,7 @@ type Construct = {
     gridUV: { u: int, v: int }
     color: Color
     name: string
-    editing: BoxEditing
+    editing: Editing
     midiLearning: MIDILearning
     deviceAdapter: DeviceBoxAdapter
     parameters: ReadonlyArray<AutomatableParameterFieldAdapter<number>>

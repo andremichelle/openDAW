@@ -1,6 +1,6 @@
-import {ppqn, PPQN, TimeBase} from "@moises-ai/lib-dsp"
-import {ColorCodes, Sample, TrackType} from "@moises-ai/studio-adapters"
-import {int, isDefined, panic, quantizeCeil, UUID} from "@moises-ai/lib-std"
+import {ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
+import {ColorCodes, Sample, TrackType} from "@opendaw/studio-adapters"
+import {int, isDefined, panic, quantizeRound, UUID} from "@opendaw/lib-std"
 import {
     AudioClipBox,
     AudioFileBox,
@@ -9,9 +9,9 @@ import {
     AudioTimeStretchBox,
     TrackBox,
     ValueEventCollectionBox
-} from "@moises-ai/studio-boxes"
-import {TransientPlayMode} from "@moises-ai/studio-enums"
-import {BoxGraph} from "@moises-ai/lib-box"
+} from "@opendaw/studio-boxes"
+import {TransientPlayMode} from "@opendaw/studio-enums"
+import {BoxGraph} from "@opendaw/lib-box"
 import {AudioContentHelpers} from "./AudioContentHelpers"
 import {WarpMarkerTemplate} from "./WarpMarkerTemplate"
 
@@ -25,6 +25,7 @@ export namespace AudioContentFactory {
         warpMarkers?: ReadonlyArray<WarpMarkerTemplate>
         waveformOffset?: number
         gainInDb?: number
+        disableQuantize?: boolean
     }
 
     export type Clip = Props & { index: int }
@@ -43,14 +44,13 @@ export namespace AudioContentFactory {
      * Calculates the duration of an audio region based on sample properties.
      * Returns duration in PPQN for stretched regions, or in seconds for non-stretched.
      */
-    export const calculateDuration = (sample: Sample): ppqn => {
+    export const calculateDuration = (sample: Sample, disableQuantize: boolean = false): ppqn => {
         const {duration: durationInSeconds, bpm} = sample
         if (bpm === 0) {
-            // Non-stretched: duration is in seconds
             return durationInSeconds
         }
-        // Stretched: duration is in PPQN
-        return quantizeCeil(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
+        const pulses = PPQN.secondsToPulses(durationInSeconds, bpm)
+        return disableQuantize ? pulses : quantizeRound(pulses, PPQN.SemiQuaver)
     }
 
     // --- Region Creation --- //
@@ -125,7 +125,8 @@ export namespace AudioContentFactory {
             return panic("Cannot create audio-region on non-audio track")
         }
         const {name, duration: durationInSeconds, bpm} = sample
-        const durationInPPQN = props.duration ?? quantizeCeil(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
+        const pulses = PPQN.secondsToPulses(durationInSeconds, bpm)
+        const durationInPPQN = props.duration ?? (!props.disableQuantize ? quantizeRound(pulses, PPQN.SemiQuaver) : pulses)
         if (isDefined(props.warpMarkers)) {
             AudioContentHelpers.addWarpMarkers(boxGraph, playMode, props.warpMarkers)
         } else {
@@ -155,7 +156,8 @@ export namespace AudioContentFactory {
             return panic("Cannot create audio-region on non-audio track")
         }
         const {name, duration: durationInSeconds, bpm} = sample
-        const durationInPPQN = props.duration ?? quantizeCeil(PPQN.secondsToPulses(durationInSeconds, bpm), PPQN.SemiQuaver)
+        const pulses = PPQN.secondsToPulses(durationInSeconds, bpm)
+        const durationInPPQN = props.duration ?? (!props.disableQuantize ? quantizeRound(pulses, PPQN.SemiQuaver) : pulses)
         if (isDefined(props.warpMarkers)) {
             AudioContentHelpers.addWarpMarkers(boxGraph, playMode, props.warpMarkers)
         } else {

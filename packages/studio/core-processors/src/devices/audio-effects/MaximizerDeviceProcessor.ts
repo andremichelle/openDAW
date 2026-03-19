@@ -105,7 +105,7 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
 
     adapter(): AudioEffectDeviceAdapter {return this.#adapter}
 
-    processAudio(_block: Block, fromIndex: int, toIndex: int): void {
+    processAudio({s0, s1}: Block): void {
         if (this.#source.isEmpty()) {return}
         const source = this.#source.unwrap()
         const srcL = source.getChannel(0)
@@ -117,7 +117,7 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
             const frames = this.#lookAheadFrames
             const buffer0 = buffer[0]
             const buffer1 = buffer[1]
-            for (let i = fromIndex; i < toIndex; i++) {
+            for (let i = s0; i < s1; i++) {
                 const inp0 = srcL[i]
                 const inp1 = srcR[i]
                 const peak = Math.max(Math.abs(inp0), Math.abs(inp1))
@@ -149,7 +149,7 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
                 if (reductionDb < this.#reductionMin) {this.#reductionMin = reductionDb}
             }
         } else {
-            for (let i = fromIndex; i < toIndex; i++) {
+            for (let i = s0; i < s1; i++) {
                 const inp0 = srcL[i]
                 const inp1 = srcR[i]
                 const peak = Math.max(Math.abs(inp0), Math.abs(inp1))
@@ -178,8 +178,8 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
                 if (reductionDb < this.#reductionMin) {this.#reductionMin = reductionDb}
             }
         }
-        this.#inputPeaks.process(srcL, srcR, fromIndex, toIndex)
-        this.#outputPeaks.process(outL, outR, fromIndex, toIndex)
+        this.#inputPeaks.process(srcL, srcR, s0, s1)
+        this.#outputPeaks.process(outL, outR, s0, s1)
         this.#processed = true
     }
 

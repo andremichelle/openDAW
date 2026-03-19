@@ -1,9 +1,8 @@
 import css from "./PropertyEditor.sass?inline"
-import {Lifecycle, Nullable, ObservableValue, Option, Selection, unitValue, ValueAxis} from "@moises-ai/lib-std"
-import {createElement} from "@moises-ai/lib-jsx"
-import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
+import {Editing, Lifecycle, Nullable, ObservableValue, Option, Selection, unitValue, ValueAxis} from "@opendaw/lib-std"
+import {createElement} from "@opendaw/lib-jsx"
+import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {SelectionRectangle} from "@/ui/timeline/SelectionRectangle.tsx"
-import {BoxEditing} from "@moises-ai/lib-box"
 import {createPropertySelectionLocator} from "@/ui/timeline/editors/notes/property/PropertySelectionLocator.ts"
 import {createPropertyCapturing} from "@/ui/timeline/editors/notes/property/PropertyEventCapturing.ts"
 import {createPropertyPainter} from "@/ui/timeline/editors/notes/property/PropertyPainter.ts"
@@ -22,8 +21,8 @@ import {Cursor} from "@/ui/Cursors.ts"
 import {installValueInput} from "@/ui/timeline/editors/ValueInput.ts"
 
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {Dragging, Html, Keyboard, ShortcutManager} from "@moises-ai/lib-dom"
-import {CanvasPainter, ElementCapturing, TimelineRange} from "@moises-ai/studio-core"
+import {Dragging, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
+import {CanvasPainter, ElementCapturing, TimelineRange} from "@opendaw/studio-core"
 import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 
 const className = Html.adoptStyleSheet(css, "PropertyEditor")
@@ -31,7 +30,7 @@ const className = Html.adoptStyleSheet(css, "PropertyEditor")
 type Construct = {
     lifecycle: Lifecycle
     range: TimelineRange
-    editing: BoxEditing
+    editing: Editing
     snapping: Snapping
     selection: Selection<NoteEventBoxAdapter>
     propertyOwner: ObservableValue<PropertyAccessor>
@@ -108,6 +107,7 @@ export const PropertyEditor =
             installEditorAuxBody(canvas, range),
             Html.watchResize(element, () => range.width = element.clientWidth),
             range.subscribe(painter.requestUpdate),
+            snapping.subscribe(painter.requestUpdate),
             reader.subscribeChange(painter.requestUpdate),
             propertyOwner.subscribe(painter.requestUpdate),
             modifyContext.subscribeUpdate(painter.requestUpdate),

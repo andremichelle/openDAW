@@ -2,6 +2,7 @@ import css from "./ValueEditor.sass?inline"
 import {
     EmptyExec,
     Func,
+    isDefined,
     Lifecycle,
     Nullable,
     Option,
@@ -9,15 +10,15 @@ import {
     unitValue,
     ValueAxis,
     ValueMapping
-} from "@moises-ai/lib-std"
+} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService.ts"
-import {ValueEventBoxAdapter} from "@moises-ai/studio-adapters"
-import {ValueEventBox} from "@moises-ai/studio-boxes"
+import {ValueEventBoxAdapter} from "@opendaw/studio-adapters"
+import {ValueEventBox} from "@opendaw/studio-boxes"
 import {RangePadding} from "@/ui/timeline/editors/value/Constants.ts"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {ValueModifier} from "@/ui/timeline/editors/value/ValueModifier.ts"
 import {createValuePainter} from "@/ui/timeline/editors/value/ValuePainter.ts"
-import {Interpolation, ppqn} from "@moises-ai/lib-dsp"
+import {Interpolation, ppqn} from "@opendaw/lib-dsp"
 import {createValueEventCapturing, ValueCaptureTarget} from "@/ui/timeline/editors/value/ValueEventCapturing.ts"
 import {createValueSelectionLocator} from "@/ui/timeline/editors/value/ValueSelectionLocator.ts"
 import {ValuePaintModifier} from "@/ui/timeline/editors/value/ValuePaintModifier.ts"
@@ -27,16 +28,17 @@ import {ValueSlopeModifier} from "@/ui/timeline/editors/value/ValueSlopeModifier
 import {installCursor} from "@/ui/hooks/cursor.ts"
 import {Cursor} from "@/ui/Cursors.ts"
 import {installValueContextMenu} from "@/ui/timeline/editors/value/ValueContextMenu.ts"
-import {createElement} from "@moises-ai/lib-jsx"
+import {createElement} from "@opendaw/lib-jsx"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {installValueInput} from "@/ui/timeline/editors/ValueInput.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {installEditorBody} from "../EditorBody"
 import {ValueContentDurationModifier} from "./ValueContentDurationModifier"
-import {Dragging, Events, Html, ShortcutManager} from "@moises-ai/lib-dom"
+import {Dragging, Events, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {ValueTooltip} from "./ValueTooltip"
 import {ValueEventEditing} from "./ValueEventEditing"
-import {CanvasPainter, ClipboardManager, TimelineRange, ValuesClipboard} from "@moises-ai/studio-core"
+import {createValueMenu} from "./ValueMenu"
+import {CanvasPainter, ClipboardManager, MenuItem, MenuRootData, TimelineRange, ValuesClipboard} from "@opendaw/studio-core"
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 
@@ -50,9 +52,10 @@ type Construct = {
     eventMapping: ValueMapping<number>
     reader: ValueEventOwnerReader
     context: ValueContext
+    editMenu?: MenuItem<MenuRootData>
 }
 
-export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, reader, context}: Construct) => {
+export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, reader, context, editMenu}: Construct) => {
     const {project} = service
     const {editing, engine, boxGraph, boxAdapters} = project
     const eventsField = reader.content.box.events
@@ -66,6 +69,9 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
         onSelected: (adapter: ValueEventBoxAdapter) => adapter.onSelected(),
         onDeselected: (adapter: ValueEventBoxAdapter) => adapter.onDeselected()
     }))
+    if (isDefined(editMenu)) {
+        lifecycle.own(editMenu.attach(createValueMenu({editing, selection, events: reader.content.events})))
+    }
     const canvas: HTMLCanvasElement = <canvas tabIndex={-1}/>
     const valueAxis: ValueAxis = {
         axisToValue: (pixel: number): unitValue =>
@@ -113,7 +119,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 if (dblclck && !event.shiftKey) {
                     if (target === null || target.type === "loop-duration") {
                         const rect = canvas.getBoundingClientRect()
-                        const position = snapping.xToUnitRound(event.clientX - rect.left) - reader.offset
+                        const position = Math.round(range.xToUnit(event.clientX - rect.left) - reader.offset)
                         const clickValue = valueAxis.axisToValue(event.clientY - rect.top)
                         const formatValue = context.currentValue
                         const value: number = Math.abs(valueToPixel(clickValue) - valueToPixel(formatValue))
@@ -121,8 +127,8 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             ? formatValue
                             : context.quantize(clickValue)
                         return editing.modify(() =>
-                            ValueEventEditing.createOrMoveEvent(reader.content, snapping, position, value,
-                                context.floating ? Interpolation.Linear : Interpolation.None))
+                            ValueEventEditing.createOrMoveEvent(reader.content, position, value,
+                                context.floating ? Interpolation.Linear : Interpolation.None), false)
                             .match({
                                 none: () => Option.None,
                                 some: adapter => {
@@ -265,6 +271,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
         }, {permanentUpdates: true}),
         Html.watchResize(canvas, painter.requestUpdate),
         range.subscribe(painter.requestUpdate),
+        snapping.subscribe(painter.requestUpdate),
         reader.subscribeChange(painter.requestUpdate),
         context.anchorModel.subscribe(painter.requestUpdate),
         modifyContext.subscribeUpdate(painter.requestUpdate),

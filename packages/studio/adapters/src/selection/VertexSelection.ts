@@ -2,6 +2,7 @@ import {
     asInstanceOf,
     assert,
     Bijective,
+    Editing,
     int,
     Listeners,
     Option,
@@ -12,10 +13,10 @@ import {
     Subscription,
     Terminator,
     UUID
-} from "@moises-ai/lib-std"
-import {Address, Addressable, BoxEditing, BoxGraph, Field, PointerField} from "@moises-ai/lib-box"
-import {Pointers} from "@moises-ai/studio-enums"
-import {SelectionBox} from "@moises-ai/studio-boxes"
+} from "@opendaw/lib-std"
+import {Address, Addressable, BoxGraph, Field, PointerField} from "@opendaw/lib-box"
+import {Pointers} from "@opendaw/studio-enums"
+import {SelectionBox} from "@opendaw/studio-boxes"
 import {SelectableVertex} from "./SelectableVertex"
 import {SelectionEntry} from "./SelectionEntry"
 import {FilteredSelection} from "./FilteredSelection"
@@ -32,7 +33,7 @@ export class VertexSelection implements Selection<SelectableVertex> {
 
     #target: Option<Field> = Option.None
 
-    constructor(readonly editing: BoxEditing, readonly boxGraph: BoxGraph) {
+    constructor(readonly editing: Editing, readonly boxGraph: BoxGraph) {
         this.#lifeTime = new Terminator()
         this.#entityMap = UUID.newSet(entry => entry.box.address.uuid)
         this.#selectableMap = Address.newSet(entry => entry.selectable.address)
@@ -87,7 +88,8 @@ export class VertexSelection implements Selection<SelectableVertex> {
         }
         if (selectables.length === 0) {return}
         this.editing.modify(() => selectables
-            .forEach(selectable => this.#selectableMap.get(selectable.address).box.delete()), false)
+            .forEach(selectable => this.#selectableMap.opt(selectable.address)
+                .ifSome(entry => entry.box.delete())), false)
     }
 
     deselectAll(): void {

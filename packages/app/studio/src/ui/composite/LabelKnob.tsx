@@ -1,14 +1,13 @@
-import {Lifecycle, unitValue} from "@moises-ai/lib-std"
+import {Editing, Lifecycle, unitValue} from "@opendaw/lib-std"
 import {Knob} from "@/ui/components/Knob.tsx"
 import {ParameterLabel} from "@/ui/components/ParameterLabel.tsx"
-import {createElement} from "@moises-ai/lib-jsx"
-import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@moises-ai/studio-adapters"
-import {BoxEditing} from "@moises-ai/lib-box"
-import {MIDILearning} from "@moises-ai/studio-core"
+import {createElement} from "@opendaw/lib-jsx"
+import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {MIDILearning} from "@opendaw/studio-core"
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     midiDevices: MIDILearning,
     adapter: DeviceBoxAdapter
     parameter: AutomatableParameterFieldAdapter

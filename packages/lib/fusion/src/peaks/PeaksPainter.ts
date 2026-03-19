@@ -13,10 +13,10 @@ export namespace PeaksPainter {
         v1: number // value max (+1)
     }
 
-    export const renderBlocks = (path: CanvasRenderingContext2D,
-                                 peaks: Peaks,
-                                 channelIndex: int,
-                                 {u0, u1, v0, v1, x0, x1, y0, y1}: Layout): void => {
+    export const renderPixelStrips = (path: CanvasRenderingContext2D,
+                                      peaks: Peaks,
+                                      channelIndex: int,
+                                      {u0, u1, v0, v1, x0, x1, y0, y1}: Layout): void => {
         const unitsEachPixel = (u1 - u0) / (x1 - x0)
         const stage = peaks.nearest(unitsEachPixel)
         if (stage === null) {return}

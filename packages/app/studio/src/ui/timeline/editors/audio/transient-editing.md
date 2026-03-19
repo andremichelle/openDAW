@@ -4,7 +4,8 @@ GitHub Issue: https://github.com/andremichelle/opendaw/issues/114
 
 ## Overview
 
-Allow transients to be moved, added, and deleted. Since automatic transient detection can create false or misplaced transients, manual editing is needed.
+Allow transients to be moved, added, and deleted. Since automatic transient detection can create false or misplaced
+transients, manual editing is needed.
 
 ## Implementation Model
 
@@ -22,6 +23,7 @@ Similar to `WarpMarkerEditing.ts` pattern.
 Currently `TransientMarkerUtils.createCapturing` uses warp markers to convert between units (ppqn) and seconds.
 
 Options:
+
 - Replace warp marker-based conversion with `project.tempoMap.ppqnToSeconds()` / `project.tempoMap.secondsToPPQN()`
 - Keep warp marker approach for time-stretch mode, use TempoMap as fallback
 
@@ -30,6 +32,7 @@ Options:
 `TransientMarkerBoxAdapter` currently doesn't implement `Selectable` like `WarpMarkerBoxAdapter` does.
 
 Need to add:
+
 - `isSelected: boolean`
 - `onSelected(): void`
 - `onDeselected(): void`
@@ -46,7 +49,8 @@ Warp markers are owned per `AudioPlayModeBox` (per region).
 
 ### 4. File structure
 
-Create new `TransientMarkerEditing.ts` file (parallel to `WarpMarkerEditing.ts`) and integrate in `TransientMarkerEditor.tsx`.
+Create new `TransientMarkerEditing.ts` file (parallel to `WarpMarkerEditing.ts`) and integrate in
+`TransientMarkerEditor.tsx`.
 
 ## Technical Details
 

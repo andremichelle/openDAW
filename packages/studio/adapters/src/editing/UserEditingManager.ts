@@ -1,6 +1,5 @@
-import {Terminable, Terminator} from "@moises-ai/lib-std"
-import {BoxEditing} from "@moises-ai/lib-box"
-import {UserInterfaceBox} from "@moises-ai/studio-boxes"
+import {Editing, Terminable, Terminator} from "@opendaw/lib-std"
+import {UserInterfaceBox} from "@opendaw/studio-boxes"
 import {UserEditing} from "./UserEditing"
 
 export class UserEditingManager implements Terminable {
@@ -9,7 +8,7 @@ export class UserEditingManager implements Terminable {
     readonly #timeline: UserEditing
     readonly #audioUnit: UserEditing
 
-    constructor(editing: BoxEditing) {
+    constructor(editing: Editing) {
         this.#terminator = new Terminator()
         this.#modularSystem = this.#terminator.own(new UserEditing(editing))
         this.#timeline = this.#terminator.own(new UserEditing(editing))

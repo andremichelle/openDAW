@@ -1,6 +1,6 @@
-import {ByteArrayInput, ByteArrayOutput, int, Option, Optional, Provider} from "@moises-ai/lib-std"
-import {Box, BoxEditing, BoxGraph, IndexedBox} from "@moises-ai/lib-box"
-import {AudioUnitType, Pointers} from "@moises-ai/studio-enums"
+import {ByteArrayInput, ByteArrayOutput, Editing, int, Option, Optional, Provider} from "@opendaw/lib-std"
+import {Box, BoxGraph, IndexedBox} from "@opendaw/lib-box"
+import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
     AudioBusBox,
     AudioUnitBox,
@@ -9,8 +9,8 @@ import {
     CaptureMidiBox,
     MIDIControllerBox,
     RootBox
-} from "@moises-ai/studio-boxes"
-import {AudioUnitBoxAdapter, AudioUnitOrdering, RootBoxAdapter, UserEditing} from "@moises-ai/studio-adapters"
+} from "@opendaw/studio-boxes"
+import {AudioUnitBoxAdapter, AudioUnitOrdering, RootBoxAdapter, UserEditing} from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
 import {ClipboardUtils} from "../ClipboardUtils"
 
@@ -23,7 +23,7 @@ type AudioUnitMetadata = {
 export namespace AudioUnitsClipboard {
     export type Context = {
         readonly getEnabled: Provider<boolean>
-        readonly editing: BoxEditing
+        readonly editing: Editing
         readonly boxGraph: BoxGraph
         readonly rootBoxAdapter: RootBoxAdapter
         readonly audioUnitEditing: UserEditing
@@ -106,8 +106,8 @@ export namespace AudioUnitsClipboard {
                 if (isOutputPaste) {
                     // Split into two transactions to ensure deletion notifications fire
                     // before new boxes are created (avoids "already has input" conflict)
-                    editing.modify(() => clearOutputContent(rootBoxAdapter), false)
-                    editing.modify(() => pasteOutputContent(entry.data, boxGraph, rootBoxAdapter))
+                    editing.modify(() => clearOutputContent(rootBoxAdapter))
+                    editing.append(() => pasteOutputContent(entry.data, boxGraph, rootBoxAdapter))
                 } else {
                     editing.modify(() => {
                         const pastedBox = pasteNewAudioUnit(entry.data, boxGraph, rootBoxAdapter, getEditedAudioUnit())

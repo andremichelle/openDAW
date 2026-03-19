@@ -8,7 +8,11 @@ import {initializeColors} from "@moises-ai/studio-enums"
 if (window.crossOriginIsolated) {
     const now = Date.now()
     initializeColors(document.documentElement)
-    boot({workersUrl, workletsUrl, offlineEngineUrl}).then(() => console.debug(`Booted in ${Math.ceil(Date.now() - now)}ms`))
+    boot({
+        workersUrl,
+        workletsUrl,
+        offlineEngineUrl
+    }).then(() => console.debug(`Booted in ${Math.ceil(Date.now() - now)}ms`))
 } else {
     alert("crossOriginIsolated must be enabled")
 }

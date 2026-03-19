@@ -14,6 +14,7 @@ const IgnoredErrors = [
 ]
 const BrowserInternalPatterns = ["feature named"]
 const MonacoPatterns = ["monaco-editor", "vs/base/common/errors"]
+const ThirdPartyAppPatterns = ["_callback_receiveMIDIMessage", "_callback_addSource"]
 const UrlPattern = /https?:\/\/[^\s)]+/g
 
 export class ErrorHandler {
@@ -55,6 +56,12 @@ export class ErrorHandler {
     #tryIgnore(event: Event): boolean {
         if (event instanceof ErrorEvent && IgnoredErrors.includes(event.message)) {
             console.warn(event.message)
+            event.preventDefault()
+            return true
+        }
+        if (event instanceof ErrorEvent
+            && ThirdPartyAppPatterns.some(pattern => event.message.includes(pattern))) {
+            console.warn(`Third-party app error ignored: ${event.message}`)
             event.preventDefault()
             return true
         }

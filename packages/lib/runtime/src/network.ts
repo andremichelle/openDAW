@@ -25,7 +25,9 @@ export namespace network {
     export const defaultFetch = async (input: RequestInfo | URL, init?: RequestInit,
                                        handler?: Progress.Handler): Promise<Response> => {
         const wrap = isDefined(handler) ? progress(handler) : identity
-        while (true) {
+        const limit = 30
+        let retryCounts = 0
+        while (++retryCounts < limit) {
             try {
                 return wrap(await fetch(input, init))
             } catch (reason) {
@@ -33,15 +35,21 @@ export namespace network {
                 if (navigator.onLine) {
                     await Wait.timeSpan(TimeSpan.seconds(1))
                 } else {
-                    await RuntimeNotifier.info({
+                    const retry = await RuntimeNotifier.approve({
                         headline: "No Internet Connection",
                         message: "You appear to be offline.",
-                        okText: "Retry"
+                        approveText: "Retry",
+                        cancelText: "Cancel"
                     })
-                    await Wait.timeSpan(TimeSpan.seconds(1))
+                    if (retry) {
+                        await Wait.timeSpan(TimeSpan.seconds(1))
+                    } else {
+                        return Promise.reject(reason)
+                    }
                 }
             }
         }
+        return Promise.reject("timeout")
     }
 
     export const progress = (progress: Progress.Handler) => (response: Response): Response => {

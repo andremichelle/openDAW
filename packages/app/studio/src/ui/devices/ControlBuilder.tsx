@@ -1,16 +1,16 @@
-import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@moises-ai/studio-adapters"
+import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {Column} from "@/ui/devices/Column.tsx"
-import {createElement} from "@moises-ai/lib-jsx"
+import {createElement} from "@opendaw/lib-jsx"
 import {LKR} from "@/ui/devices/constants.ts"
 import {ParameterLabelKnob} from "@/ui/devices/ParameterLabelKnob.tsx"
-import {Color, TerminableOwner, ValueGuide} from "@moises-ai/lib-std"
-import {BoxEditing, PrimitiveValues} from "@moises-ai/lib-box"
-import {MIDILearning} from "@moises-ai/studio-core"
-import {Colors} from "@moises-ai/studio-enums"
+import {Color, Editing, TerminableOwner, ValueGuide} from "@opendaw/lib-std"
+import {PrimitiveValues} from "@opendaw/lib-box"
+import {MIDILearning} from "@opendaw/studio-core"
+import {Colors} from "@opendaw/studio-enums"
 
 type Creation<T extends PrimitiveValues> = {
     lifecycle: TerminableOwner
-    editing: BoxEditing
+    editing: Editing
     midiLearning: MIDILearning
     adapter: DeviceBoxAdapter
     parameter: AutomatableParameterFieldAdapter<T>
@@ -23,7 +23,18 @@ type Creation<T extends PrimitiveValues> = {
 
 export namespace ControlBuilder {
     export const createKnob = <T extends PrimitiveValues, >
-    ({lifecycle, editing, midiLearning, adapter, parameter, options, anchor, color, style, disableAutomation}: Creation<T>) => {
+    ({
+         lifecycle,
+         editing,
+         midiLearning,
+         adapter,
+         parameter,
+         options,
+         anchor,
+         color,
+         style,
+         disableAutomation
+     }: Creation<T>) => {
         return (
             <Column ems={LKR} color={color ?? Colors.cream} style={style}>
                 <h5>{parameter.name}</h5>

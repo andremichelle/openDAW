@@ -16,8 +16,6 @@ export type Manual = (
     files: ReadonlyArray<Manual>
 }) & { separatorBefore?: boolean }
 
-const includeNeuralAmp = false
-
 export const Manuals: ReadonlyArray<Manual> = [
     {
         type: "folder",
@@ -67,12 +65,6 @@ export const Manuals: ReadonlyArray<Manual> = [
                 files: [
                     {
                         type: "page",
-                        label: "Cheap Reverb",
-                        path: "/manuals/devices/audio/reverb",
-                        icon: EffectFactories.Reverb.defaultIcon
-                    },
-                    {
-                        type: "page",
                         label: "Compressor",
                         path: "/manuals/devices/audio/compressor",
                         icon: EffectFactories.Compressor.defaultIcon
@@ -103,6 +95,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                     },
                     {
                         type: "page",
+                        label: "Free Reverb",
+                        path: "/manuals/devices/audio/reverb",
+                        icon: EffectFactories.Reverb.defaultIcon
+                    },
+                    {
+                        type: "page",
                         label: "Gate",
                         path: "/manuals/devices/audio/gate",
                         icon: EffectFactories.Gate.defaultIcon
@@ -113,12 +111,6 @@ export const Manuals: ReadonlyArray<Manual> = [
                         path: "/manuals/devices/audio/maximizer",
                         icon: EffectFactories.Maximizer.defaultIcon
                     },
-                    ...(includeNeuralAmp ? [{
-                        type: "page",
-                        label: "Neural Amp",
-                        path: "/manuals/devices/audio/neural-amp",
-                        icon: EffectFactories.AudioNamed.NeuralAmp.defaultIcon
-                    } satisfies Manual] : []),
                     {
                         type: "page",
                         label: "Revamp",
@@ -136,6 +128,24 @@ export const Manuals: ReadonlyArray<Manual> = [
                         label: "Tidal",
                         path: "/manuals/devices/audio/tidal",
                         icon: EffectFactories.Tidal.defaultIcon
+                    },
+                    {
+                        type: "page",
+                        label: "Tone3000",
+                        path: "/manuals/devices/audio/neural-amp",
+                        icon: EffectFactories.AudioNamed.NeuralAmp.defaultIcon
+                    },
+                    {
+                        type: "page",
+                        label: "Waveshaper",
+                        path: "/manuals/devices/audio/waveshaper",
+                        icon: EffectFactories.AudioNamed.Waveshaper.defaultIcon
+                    },
+                    {
+                        type: "page",
+                        label: "Werkstatt",
+                        path: "/manuals/devices/audio/werkstatt",
+                        icon: EffectFactories.AudioNamed.Werkstatt.defaultIcon
                     }
                 ]
             },
@@ -196,6 +206,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                         label: "Pitch",
                         path: "/manuals/devices/midi/pitch",
                         icon: EffectFactories.Pitch.defaultIcon
+                    },
+                    {
+                        type: "page",
+                        label: "Spielwerk",
+                        path: "/manuals/devices/midi/spielwerk",
+                        icon: EffectFactories.MidiNamed.Spielwerk.defaultIcon
                     },
                     {
                         type: "page",

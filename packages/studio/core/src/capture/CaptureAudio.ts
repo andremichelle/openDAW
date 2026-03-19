@@ -103,7 +103,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
 
     async prepareRecording(): Promise<void> {
         const {project} = this.manager
-        const {env: {audioContext, audioWorklets, sampleManager}} = project
+        const {env: {audioContext, audioWorklets, sampleManager, sampleService}} = project
         if (isUndefined(audioContext.outputLatency)) {
             const approved = RuntimeNotifier.approve({
                 headline: "Warning",
@@ -122,6 +122,8 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         }
         const {gainNode, channelCount} = audioChain
         const recordingWorklet = audioWorklets.createRecording(channelCount, RenderQuantum)
+        recordingWorklet.bpm = project.timelineBox.bpm.getValue()
+        recordingWorklet.sampleService = sampleService
         sampleManager.record(recordingWorklet)
         gainNode.connect(recordingWorklet)
         this.#preparedWorklet = recordingWorklet

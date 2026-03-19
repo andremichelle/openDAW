@@ -8,7 +8,6 @@ const globals = globalThis as unknown as WorkletGlobals
 
 type EngineState = {
     readonly processor: AudioWorkletProcessor
-    readonly progressPort: MessagePort
     readonly sampleRate: int
     readonly numberOfChannels: int
     totalFrames: int
@@ -19,7 +18,7 @@ let state: Option<EngineState> = Option.None
 
 Communicator.executor<OfflineEngineProtocol>(
     Messenger.for(self).channel("offline-engine"), {
-        async initialize(enginePort: MessagePort, progressPort: MessagePort, config: OfflineEngineInitializeConfig) {
+        async initialize(enginePort: MessagePort, config: OfflineEngineInitializeConfig) {
             setupWorkletGlobals({sampleRate: config.sampleRate})
             globals.__workletPort__ = enginePort
             await import(config.processorsUrl)
@@ -34,12 +33,14 @@ Communicator.executor<OfflineEngineProtocol>(
                         exportConfiguration: config.exportConfiguration
                     }
                 }),
-                progressPort,
                 sampleRate: config.sampleRate,
                 numberOfChannels: config.numberOfChannels,
                 totalFrames: 0,
                 running: false
             })
+        },
+        async addModule(code: string): Promise<void> {
+            new Function(code)()
         },
         async step(numSamples: int): Promise<Float32Array[]> {
             const engine = state.unwrap()
@@ -99,7 +100,6 @@ Communicator.executor<OfflineEngineProtocol>(
                 if (!keepRunning) {break}
                 if (engine.totalFrames - lastYield >= engine.sampleRate) {
                     lastYield = engine.totalFrames
-                    engine.progressPort.postMessage({frames: engine.totalFrames})
                     await new Promise(resolve => setTimeout(resolve, 0))
                 }
             }

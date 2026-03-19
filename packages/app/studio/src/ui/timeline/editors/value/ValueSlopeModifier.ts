@@ -1,6 +1,7 @@
 import {
     clampUnit,
     Curve,
+    Editing,
     Iterables,
     Notifier,
     Observer,
@@ -9,17 +10,16 @@ import {
     Terminable,
     unitValue,
     ValueAxis
-} from "@moises-ai/lib-std"
-import {BoxEditing} from "@moises-ai/lib-box"
-import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@moises-ai/studio-adapters"
-import {Interpolation, ppqn, ValueEvent} from "@moises-ai/lib-dsp"
+} from "@opendaw/lib-std"
+import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
+import {Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
 import {ValueEventDraft} from "@/ui/timeline/editors/value/ValueEventDraft.ts"
 import {ValueEventOwnerReader} from "../EventOwnerReader"
-import {Dragging} from "@moises-ai/lib-dom"
+import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     valueAxis: ValueAxis
     reference: ValueEventBoxAdapter
@@ -29,7 +29,7 @@ type Construct = Readonly<{
 export class ValueSlopeModifier implements ValueModifier {
     static create(construct: Construct): ValueSlopeModifier {return new ValueSlopeModifier(construct)}
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #reference: ValueEventBoxAdapter
     readonly #successor: ValueEventBoxAdapter

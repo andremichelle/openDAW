@@ -1,6 +1,6 @@
-import {OfflineEngineRenderer, ProjectBundle, ProjectProfile, WavFile} from "@moises-ai/studio-core"
-import {isDefined, Option, panic, Procedure, Progress, TimeSpan} from "@moises-ai/lib-std"
-import {Promises} from "@moises-ai/lib-runtime"
+import {OfflineEngineRenderer, ProjectBundle, ProjectProfile, WavFile} from "@opendaw/studio-core"
+import {DefaultObservableValue, isDefined, Option, panic, Procedure, Progress} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
 
 export namespace PublishMusic {
     export const publishMusic = async (profile: ProjectProfile, progress: Progress.Handler, log: Procedure<string>): Promise<string> => {
@@ -10,14 +10,15 @@ export namespace PublishMusic {
         if (bundleResult.status === "rejected") {
             return panic(bundleResult.error)
         }
-        const renderProgress = (seconds: number) => `Mixdown audio...(${log(TimeSpan.toHHMMSS(seconds))})`
+        log("Mixdown audio...")
+        const renderProgress = new DefaultObservableValue(0.0)
         const mixdownResult = await Promises.tryCatch(OfflineEngineRenderer.start(profile.project, Option.None, renderProgress))
         if (mixdownResult.status === "rejected") {
             return panic(mixdownResult.error)
         }
         log("Loading FFmpeg...")
         const {FFmpegWorker} = await Promises.guardedRetry(() =>
-            import("@moises-ai/studio-core/FFmpegWorker"), (_, count) => count < 10)
+            import("@opendaw/studio-core/FFmpegWorker"), (_, count) => count < 10)
         const ffmpegResult = await Promises.tryCatch(FFmpegWorker.load(ffmpegProgress))
         if (ffmpegResult.status === "rejected") {
             return panic(ffmpegResult.error)

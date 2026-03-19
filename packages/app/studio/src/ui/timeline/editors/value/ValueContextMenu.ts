@@ -1,8 +1,7 @@
-import {Objects, Selection} from "@moises-ai/lib-std"
-import {BoxEditing} from "@moises-ai/lib-box"
-import {Interpolation} from "@moises-ai/lib-dsp"
-import {ContextMenu, ElementCapturing, MenuItem} from "@moises-ai/studio-core"
-import {ValueEventBoxAdapter} from "@moises-ai/studio-adapters"
+import {Editing, Objects, Selection} from "@opendaw/lib-std"
+import {Interpolation} from "@opendaw/lib-dsp"
+import {ContextMenu, ElementCapturing, MenuItem} from "@opendaw/studio-core"
+import {ValueEventBoxAdapter} from "@opendaw/studio-adapters"
 import {ValueCaptureTarget} from "@/ui/timeline/editors/value/ValueEventCapturing"
 import {ValueEventEditing} from "@/ui/timeline/editors/value/ValueEventEditing"
 import {DebugMenus} from "@/ui/menu/debug"
@@ -10,7 +9,7 @@ import {DebugMenus} from "@/ui/menu/debug"
 type Construct = {
     element: Element
     capturing: ElementCapturing<ValueCaptureTarget>
-    editing: BoxEditing
+    editing: Editing
     selection: Selection<ValueEventBoxAdapter>
 }
 

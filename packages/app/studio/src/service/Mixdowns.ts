@@ -1,5 +1,5 @@
-import {DefaultObservableValue, Errors, Option, panic, RuntimeNotifier, TimeSpan} from "@moises-ai/lib-std"
-import {AudioData} from "@moises-ai/lib-dsp"
+import {DefaultObservableValue, Errors, Option, panic, RuntimeNotifier} from "@opendaw/lib-std"
+import {AudioData} from "@opendaw/lib-dsp"
 import {
     ExternalLib,
     FFmpegConverter,
@@ -8,21 +8,22 @@ import {
     ProjectMeta,
     ProjectProfile,
     WavFile
-} from "@moises-ai/studio-core"
-import {Files} from "@moises-ai/lib-dom"
-import {Promises} from "@moises-ai/lib-runtime"
-import {ExportStemsConfiguration} from "@moises-ai/studio-adapters"
+} from "@opendaw/studio-core"
+import {Files} from "@opendaw/lib-dom"
+import {Promises} from "@opendaw/lib-runtime"
+import {ExportStemsConfiguration} from "@opendaw/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs"
 
 export namespace Mixdowns {
     export const exportMixdown = async ({project: source, meta}: ProjectProfile): Promise<void> => {
         const project = source.copy()
         const abortController = new AbortController()
+        const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({
             headline: "Rendering mixdown...",
+            progress,
             cancel: () => abortController.abort()
         })
-        const progress = (seconds: number) => dialog.message = `Progress: ${TimeSpan.toHHMMSS(seconds)}`
         const result = await Promises.tryCatch(OfflineEngineRenderer
             .start(project, Option.None, progress, abortController.signal))
         dialog.terminate()
@@ -68,11 +69,12 @@ export namespace Mixdowns {
                                       config: ExportStemsConfiguration): Promise<void> => {
         const project = source.copy()
         const abortController = new AbortController()
+        const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({
             headline: "Rendering mixdown...",
+            progress,
             cancel: () => abortController.abort()
         })
-        const progress = (seconds: number) => dialog.message = `Progress: ${TimeSpan.toHHMMSS(seconds)}`
         const {status, value, error: renderError} = await Promises.tryCatch(OfflineEngineRenderer
             .start(project, Option.wrap(config), progress, abortController.signal))
         dialog.terminate()
@@ -182,7 +184,7 @@ export namespace Mixdowns {
 
     const loadFFmepg = async (): Promise<FFmpegWorker> => {
         const {FFmpegWorker} = await Promises.guardedRetry(() =>
-            import("@moises-ai/studio-core/FFmpegWorker"), (_, count) => count < 60)
+            import("@opendaw/studio-core/FFmpegWorker"), (_, count) => count < 60)
         const progress = new DefaultObservableValue(0.0)
         const progressDialog = RuntimeNotifier.progress({headline: "Loading FFmpeg...", progress})
         const {status, value, error} = await Promises.tryCatch(FFmpegWorker.load(value => progress.setValue(value)))

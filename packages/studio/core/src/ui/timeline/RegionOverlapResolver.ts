@@ -1,7 +1,6 @@
-import {Exec, int} from "@moises-ai/lib-std"
-import {ppqn} from "@moises-ai/lib-dsp"
-import {BoxEditing} from "@moises-ai/lib-box"
-import {AnyRegionBoxAdapter, BoxAdapters, TrackBoxAdapter} from "@moises-ai/studio-adapters"
+import {Editing, Exec, int} from "@opendaw/lib-std"
+import {ppqn} from "@opendaw/lib-dsp"
+import {AnyRegionBoxAdapter, BoxAdapters, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {RegionModifyStrategies} from "./RegionModifyStrategies"
 import {RegionClipResolver} from "./RegionClipResolver"
 import {RegionKeepExistingResolver} from "./RegionKeepExistingResolver"
@@ -11,11 +10,11 @@ import {ProjectApi} from "../../project"
 import {TrackResolver} from "./TrackResolver"
 
 export class RegionOverlapResolver {
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #projectApi: ProjectApi
     readonly #boxAdapters: BoxAdapters
 
-    constructor(editing: BoxEditing, projectApi: ProjectApi, boxAdapters: BoxAdapters) {
+    constructor(editing: Editing, projectApi: ProjectApi, boxAdapters: BoxAdapters) {
         this.#editing = editing
         this.#projectApi = projectApi
         this.#boxAdapters = boxAdapters

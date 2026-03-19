@@ -1,15 +1,14 @@
 import css from "./ParameterToggleButton.sass?inline"
-import {Events, Html} from "@moises-ai/lib-dom"
-import {Lifecycle} from "@moises-ai/lib-std"
-import {createElement} from "@moises-ai/lib-jsx"
-import {AutomatableParameterFieldAdapter} from "@moises-ai/studio-adapters"
-import {BoxEditing} from "@moises-ai/lib-box"
+import {Events, Html} from "@opendaw/lib-dom"
+import {Editing, Lifecycle} from "@opendaw/lib-std"
+import {createElement} from "@opendaw/lib-jsx"
+import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
 
 const className = Html.adoptStyleSheet(css, "ParameterToggleButton")
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     parameter: AutomatableParameterFieldAdapter<boolean>
 }
 

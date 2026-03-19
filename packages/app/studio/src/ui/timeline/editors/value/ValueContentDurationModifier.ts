@@ -1,14 +1,13 @@
-import {int, Notifier, Observer, Option, Terminable, unitValue} from "@moises-ai/lib-std"
+import {Editing, int, Notifier, Observer, Option, Terminable, unitValue} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {BoxEditing} from "@moises-ai/lib-box"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {Interpolation, ppqn, PPQN, ValueEvent} from "@moises-ai/lib-dsp"
+import {Interpolation, ppqn, PPQN, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
-import {SelectableValueEvent} from "@moises-ai/studio-adapters"
-import {Dragging} from "@moises-ai/lib-dom"
+import {SelectableValueEvent} from "@opendaw/studio-adapters"
+import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     snapping: Snapping
     pointerPulse: ppqn
@@ -20,7 +19,7 @@ export class ValueContentDurationModifier implements ValueModifier {
         return new ValueContentDurationModifier(construct)
     }
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #snapping: Snapping
     readonly #pointerPulse: ppqn
@@ -50,7 +49,7 @@ export class ValueContentDurationModifier implements ValueModifier {
     translateSearch(value: ppqn): ppqn {return value}
     isVisible(_event: SelectableValueEvent): boolean {return true}
     iterator(searchMin: ppqn, searchMax: ppqn): IterableIterator<SelectableValueEvent> {
-        return this.#reference.content.events.iterateRange(searchMin, searchMax)
+        return ValueEvent.iterateWindow(this.#reference.content.events, searchMin, searchMax)
     }
     readContentDuration(region: ValueEventOwnerReader): number {
         return Math.max(region.loopDuration + this.#deltaLoopDuration,

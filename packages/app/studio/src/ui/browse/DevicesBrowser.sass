@@ -52,6 +52,13 @@ component
         flex-direction: column
         row-gap: 0.375em
 
+        > hr
+          border: none
+          background-color: rgba(white, 0.04)
+          margin: 0.25em 0
+          height: 1px
+          width: 100%
+
         > li
           display: flex
           flex-direction: row
@@ -74,6 +81,13 @@ component
             align-items: center
             justify-content: center
             background-color: var(--color)
+
+            &.external
+              background-color: black
+              padding: 7px 1px
+
+              > img
+                height: 100%
 
   > div.manual
     display: flex

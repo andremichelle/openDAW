@@ -65,7 +65,7 @@ export class ChannelStripProcessor extends AudioProcessor implements Processor, 
 
     handleEvent(_event: Event): void {}
 
-    processAudio(_block: Block, fromIndex: int, toIndex: int): void {
+    processAudio({s0, s1}: Block): void {
         if (this.#source.isEmpty()) {return}
         if (this.#updateGain) {
             const mixer = this.context.mixer
@@ -84,7 +84,7 @@ export class ChannelStripProcessor extends AudioProcessor implements Processor, 
         const [outL, outR] = this.#audioOutput.channels()
         const [rawL, rawR] = this.#rawBuffer
         if (this.#gainL.isInterpolating() || this.#gainR.isInterpolating() || this.#outGain.isInterpolating()) {
-            for (let i = fromIndex; i < toIndex; i++) {
+            for (let i = s0; i < s1; i++) {
                 const gain = this.#outGain.moveAndGet()
                 const l = srcL[i] * this.#gainL.moveAndGet()
                 const r = srcR[i] * this.#gainR.moveAndGet()
@@ -97,7 +97,7 @@ export class ChannelStripProcessor extends AudioProcessor implements Processor, 
             const gainL = this.#gainL.get()
             const gainR = this.#gainR.get()
             const outGain = this.#outGain.get()
-            for (let i = fromIndex; i < toIndex; i++) {
+            for (let i = s0; i < s1; i++) {
                 const l = srcL[i] * gainL
                 const r = srcR[i] * gainR
                 rawL[i] = l
@@ -106,7 +106,7 @@ export class ChannelStripProcessor extends AudioProcessor implements Processor, 
                 outR[i] = r * outGain
             }
         }
-        this.#peaks.process(rawL, rawR, fromIndex, toIndex)
+        this.#peaks.process(rawL, rawR, s0, s1)
         this.#processing = true
     }
 

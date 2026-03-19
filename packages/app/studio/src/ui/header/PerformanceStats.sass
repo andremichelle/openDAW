@@ -1,6 +1,6 @@
 component
   display: flex
-  align-items: center
+  align-items: stretch
   column-gap: 1px
   border-radius: 2px
   position: relative
@@ -10,7 +10,6 @@ component
   > div
     background-color: color-mix(in srgb, var(--color-purple), transparent 33%)
     user-select: none
-    align-self: stretch
 
     &.label
       display: flex
@@ -26,4 +25,4 @@ component
       width: 2px
 
   > canvas
-    background-color: color-mix(in srgb, var(--color-purple), transparent 98%)
+    background-color: transparent

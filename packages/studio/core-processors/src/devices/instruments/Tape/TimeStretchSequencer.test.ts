@@ -1,8 +1,10 @@
-import {describe, expect, it, beforeEach} from "vitest"
+import {describe, expect, it, beforeAll, beforeEach} from "vitest"
 import {TimeStretchSequencer} from "./TimeStretchSequencer"
 import {AudioBuffer, AudioData, EventCollection, LoopableRegion, Event, RenderQuantum} from "@moises-ai/lib-dsp"
 import {TransientPlayMode} from "@moises-ai/studio-enums"
 import {Block, BlockFlag} from "../../../processing"
+
+;(globalThis as Record<string, unknown>).sampleRate = 44_100
 
 const testFadingGainBuffer = new Float32Array(RenderQuantum).fill(1.0)
 

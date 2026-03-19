@@ -1,9 +1,9 @@
-import {ByteArrayInput, ByteArrayOutput, Option, Procedure, Provider, Selection} from "@moises-ai/lib-std"
-import {Address, BoxEditing, BoxGraph} from "@moises-ai/lib-box"
-import {ppqn} from "@moises-ai/lib-dsp"
-import {Pointers} from "@moises-ai/studio-enums"
-import {ValueEventBox} from "@moises-ai/studio-boxes"
-import {BoxAdapters, ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@moises-ai/studio-adapters"
+import {ByteArrayInput, ByteArrayOutput, Editing, Option, Procedure, Provider, Selection} from "@opendaw/lib-std"
+import {Address, BoxGraph} from "@opendaw/lib-box"
+import {ppqn} from "@opendaw/lib-dsp"
+import {Pointers} from "@opendaw/studio-enums"
+import {ValueEventBox} from "@opendaw/studio-boxes"
+import {BoxAdapters, ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
 import {ClipboardUtils} from "../ClipboardUtils"
 
@@ -14,7 +14,7 @@ export namespace ValuesClipboard {
         readonly getEnabled: Provider<boolean>
         readonly getPosition: Provider<ppqn>
         readonly setPosition: Procedure<ppqn>
-        readonly editing: BoxEditing
+        readonly editing: Editing
         readonly selection: Selection<ValueEventBoxAdapter>
         readonly collection: ValueEventCollectionBoxAdapter
         readonly targetAddress: Address

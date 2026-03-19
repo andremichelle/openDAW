@@ -3,6 +3,7 @@ import {
     asDefined,
     assert,
     clampUnit,
+    Editing,
     int,
     isNull,
     Notifier,
@@ -15,20 +16,19 @@ import {
     unitValue,
     ValueAxis,
     ValueMapping
-} from "@moises-ai/lib-std"
+} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {BoxEditing} from "@moises-ai/lib-box"
-import {SelectableValueEvent, ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@moises-ai/studio-adapters"
-import {EventCollection, Interpolation, ppqn, ValueEvent} from "@moises-ai/lib-dsp"
+import {SelectableValueEvent, ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
+import {EventCollection, Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
 import {ValueEventDraft} from "./ValueEventDraft.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {Dragging} from "@moises-ai/lib-dom"
+import {Dragging} from "@opendaw/lib-dom"
 
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     context: ValueContext
     selection: Selection<ValueEventBoxAdapter>
@@ -52,7 +52,7 @@ export const SnapValueThresholdInPixels = 8
 export class ValueMoveModifier implements ValueModifier {
     static create(construct: Construct): ValueMoveModifier {return new ValueMoveModifier(construct)}
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #context: ValueContext
     readonly #selection: Selection<ValueEventBoxAdapter>

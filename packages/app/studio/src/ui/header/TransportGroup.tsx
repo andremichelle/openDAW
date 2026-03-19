@@ -89,9 +89,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                     loop.setValue(enabled.getValue())
                     loopLifecycle.ownAll(
                         loop.subscribe(owner => {
-                            if (editing.mustModify()) {
-                                editing.modify(() => enabled.setValue(owner.getValue()))
-                            }
+                            editing.modify(() => enabled.setValue(owner.getValue()))
                         }),
                         enabled.subscribe(owner => loop.setValue(owner.getValue()))
                     )

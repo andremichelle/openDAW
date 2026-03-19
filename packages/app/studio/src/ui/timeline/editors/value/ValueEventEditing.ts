@@ -1,7 +1,6 @@
-import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@moises-ai/studio-adapters"
-import {Interpolation, ppqn, ValueEvent} from "@moises-ai/lib-dsp"
-import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {assert, panic, unitValue} from "@moises-ai/lib-std"
+import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
+import {Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
+import {assert, panic, unitValue} from "@opendaw/lib-std"
 
 export namespace ValueEventEditing {
     export const deleteEvent = (collection: ValueEventCollectionBoxAdapter, event: ValueEventBoxAdapter) => {
@@ -24,57 +23,25 @@ export namespace ValueEventEditing {
         }
     }
     export const createOrMoveEvent = (collection: ValueEventCollectionBoxAdapter,
-                                      snapping: Snapping,
-                                      pointer: ppqn,
+                                      position: ppqn,
                                       value: unitValue,
                                       interpolation: Interpolation = Interpolation.Linear): ValueEventBoxAdapter => {
-        const position: ppqn = snapping.round(pointer)
         const le = collection.events.lowerEqual(position)
         const ge = collection.events.greaterEqual(position)
-        if (null === le || null === ge) { // alone > no interference
-            return collection.createEvent({
-                position: position,
-                index: 0,
-                value,
-                interpolation
-            })
+        if (null === le || null === ge) {
+            return collection.createEvent({position, index: 0, value, interpolation})
         } else if (le === ge) {
-            if (pointer >= position) {
-                if (le.index === 0) {
-                    return collection.createEvent({
-                        position,
-                        index: 1,
-                        value,
-                        interpolation
-                    })
-                } else {
-                    le.box.value.setValue(value)
-                    return le
-                }
-            } else {
-                le.box.index.setValue(1)
-                return collection.createEvent({
-                    position,
-                    index: 0,
-                    value,
-                    interpolation
-                })
-            }
-        } else if (le.position === ge.position) {
-            if (pointer < position) {
-                ge.box.value.setValue(value)
-                return ge
+            if (le.index === 0) {
+                return collection.createEvent({position, index: 1, value, interpolation})
             } else {
                 le.box.value.setValue(value)
                 return le
             }
+        } else if (le.position === ge.position) {
+            le.box.value.setValue(value)
+            return le
         } else {
-            return collection.createEvent({
-                position,
-                index: 0,
-                value,
-                interpolation
-            })
+            return collection.createEvent({position, index: 0, value, interpolation})
         }
     }
 }

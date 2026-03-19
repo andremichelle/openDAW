@@ -46,6 +46,7 @@ export namespace RecordMidi {
         const {loopArea} = timelineBox
         const terminator = new Terminator()
         const activeNotes = new Map<byte, ActiveNote>()
+        const pendingNotes = new Map<byte, byte>()
         const latency = PPQN.secondsToPulses(audioContext.outputLatency ?? 10.0, timelineBox.bpm.getValue())
         let currentTake: Option<TakeData> = Option.None
         let lastPosition: ppqn = 0
@@ -108,6 +109,20 @@ export namespace RecordMidi {
             }
         }
 
+        const flushPendingNotes = (take: TakeData) => {
+            for (const [pitch, velocity] of pendingNotes) {
+                const event = NoteEventBox.create(boxGraph, UUID.generate(), box => {
+                    box.position.setValue(0)
+                    box.duration.setValue(MIN_NOTE_DURATION)
+                    box.pitch.setValue(pitch)
+                    box.velocity.setValue(velocity)
+                    box.events.refer(take.collection.events)
+                })
+                activeNotes.set(pitch, {event, take, creationOffset: positionOffset})
+            }
+            pendingNotes.clear()
+        }
+
         const startNewTake = (position: ppqn) => {
             const previousTrack = currentTake.mapOr(take => take.trackBox, null)
             currentTake = Option.wrap(createTakeRegion(position, previousTrack))
@@ -135,7 +150,9 @@ export namespace RecordMidi {
             if (currentTake.isEmpty()) {
                 editing.modify(() => {
                     const pos = quantizeFloor(currentPosition, beats)
-                    currentTake = Option.wrap(createTakeRegion(pos, null))
+                    const take = createTakeRegion(pos, null)
+                    currentTake = Option.wrap(take)
+                    flushPendingNotes(take)
                 }, false)
             }
             currentTake.ifSome(({regionBox, collection}) => {
@@ -166,7 +183,10 @@ export namespace RecordMidi {
             const writePosition = position.getValue() + latency
             if (NoteSignal.isOn(signal)) {
                 const {pitch, velocity} = signal
-                if (currentTake.isEmpty()) {return}
+                if (currentTake.isEmpty()) {
+                    pendingNotes.set(pitch, velocity)
+                    return
+                }
                 const take = currentTake.unwrap()
                 const {regionBox, collection} = take
                 editing.modify(() => {
@@ -182,7 +202,11 @@ export namespace RecordMidi {
                     activeNotes.set(pitch, {event, take, creationOffset: positionOffset})
                 }, false)
             } else if (NoteSignal.isOff(signal)) {
-                activeNotes.delete(signal.pitch)
+                if (pendingNotes.has(signal.pitch)) {
+                    pendingNotes.delete(signal.pitch)
+                } else {
+                    activeNotes.delete(signal.pitch)
+                }
             }
         }))
         return terminator

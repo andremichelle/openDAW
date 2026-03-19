@@ -1,7 +1,8 @@
 import css from "./VolumeSlider.sass?inline"
-import {createElement} from "@moises-ai/lib-jsx"
+import {createElement} from "@opendaw/lib-jsx"
 import {
     clampUnit,
+    Editing,
     EmptyExec,
     Lifecycle,
     Nullable,
@@ -10,16 +11,15 @@ import {
     Strings,
     Terminator,
     unitValue
-} from "@moises-ai/lib-std"
+} from "@opendaw/lib-std"
 import {ValueDragging} from "@/ui/hooks/dragging.ts"
 import {ValueTooltip} from "@/ui/surface/ValueTooltip.tsx"
-import {BoxEditing} from "@moises-ai/lib-box"
-import {CssUtils, Events, Html} from "@moises-ai/lib-dom"
-import {Colors} from "@moises-ai/studio-enums"
+import {CssUtils, Events, Html} from "@opendaw/lib-dom"
+import {Colors} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
-import {StudioPreferences} from "@moises-ai/studio-core"
-import {Runtime} from "@moises-ai/lib-runtime"
+import {StudioPreferences} from "@opendaw/studio-core"
+import {Runtime} from "@opendaw/lib-runtime"
 
 const className = Html.adoptStyleSheet(css, "vertical-slider")
 
@@ -101,7 +101,7 @@ export const MaximizerVolumeMarkers: ReadonlyArray<VolumeMarker> = [
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     parameter: Parameter<number>
     markers?: ReadonlyArray<VolumeMarker>
 }

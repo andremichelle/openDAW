@@ -101,7 +101,7 @@ export class DelayDeviceProcessor extends AudioProcessor implements AudioEffectD
 
     handleEvent(_event: Event): void {}
 
-    processAudio({bpm, flags}: Block, from: number, to: number): void {
+    processAudio({s0, s1, bpm, flags}: Block): void {
         if (this.#source.isEmpty()) {return}
         const tempoChanged = Bits.some(flags, BlockFlag.bpmChanged)
         if (this.#updatePreDelayTimeL || tempoChanged) {
@@ -131,8 +131,8 @@ export class DelayDeviceProcessor extends AudioProcessor implements AudioEffectD
         const source = this.#source.unwrap()
         const input = source.channels() as StereoMatrix.Channels
         const output = this.#output.channels() as StereoMatrix.Channels
-        this.#delayLines.process(input, output, from, to)
-        this.#peaks.process(output[0], output[1], from, to)
+        this.#delayLines.process(input, output, s0, s1)
+        this.#peaks.process(output[0], output[1], s0, s1)
     }
 
     parameterChanged(parameter: AutomatableParameter): void {

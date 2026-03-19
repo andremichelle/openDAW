@@ -83,7 +83,8 @@ export class YSync<T> implements Terminable {
         const eventHandler: EventHandler = (events, {origin, local}) => {
             const originLabel = typeof origin === "string" ? origin : "WebsocketProvider"
             console.debug(`got ${events.length} ${local ? "local" : "external"} updates from '${originLabel}'`)
-            if (local) {return}
+            const isHistoryReplay = typeof origin === "string" && origin.startsWith("[history]")
+            if (local && !isHistoryReplay) {return}
             this.#boxGraph.beginTransaction()
             for (const event of events) {
                 const path = event.path

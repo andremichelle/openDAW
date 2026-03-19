@@ -1,7 +1,7 @@
-import {ByteArrayInput, ByteArrayOutput, Option, Procedure, Provider, Selection, UUID} from "@moises-ai/lib-std"
-import {Box, BoxEditing, BoxGraph} from "@moises-ai/lib-box"
-import {ppqn} from "@moises-ai/lib-dsp"
-import {Pointers} from "@moises-ai/studio-enums"
+import {ByteArrayInput, ByteArrayOutput, Editing, Option, Procedure, Provider, Selection, UUID} from "@opendaw/lib-std"
+import {Box, BoxGraph} from "@opendaw/lib-box"
+import {ppqn} from "@opendaw/lib-dsp"
+import {Pointers} from "@opendaw/studio-enums"
 import {
     AnyRegionBoxAdapter,
     BoxAdapters,
@@ -9,7 +9,7 @@ import {
     TrackBoxAdapter,
     TrackType,
     UnionBoxTypes
-} from "@moises-ai/studio-adapters"
+} from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
 import {ClipboardUtils} from "../ClipboardUtils"
 import {RegionOverlapResolver} from "../../timeline/RegionOverlapResolver"
@@ -33,7 +33,7 @@ export namespace RegionsClipboard {
         readonly getEnabled: Provider<boolean>
         readonly getPosition: Provider<ppqn>
         readonly setPosition: Procedure<ppqn>
-        readonly editing: BoxEditing
+        readonly editing: Editing
         readonly selection: Selection<AnyRegionBoxAdapter>
         readonly boxGraph: BoxGraph
         readonly boxAdapters: BoxAdapters

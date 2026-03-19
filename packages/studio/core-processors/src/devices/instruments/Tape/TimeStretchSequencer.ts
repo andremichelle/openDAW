@@ -38,8 +38,9 @@ export class TimeStretchSequencer {
         const warpMarkers = config.warpMarkers
         const transientPlayMode = config.transientPlayMode
         const playbackRate = config.playbackRate
-        const {sampleRate, numberOfFrames} = data
-        const fileDurationSeconds = numberOfFrames / sampleRate
+        const {sampleRate: fileSampleRate, numberOfFrames} = data
+        const effectivePlaybackRate = playbackRate * fileSampleRate / sampleRate
+        const fileDurationSeconds = numberOfFrames / fileSampleRate
         if (Bits.some(flags, BlockFlag.discontinuous)) {this.reset()}
         const pn = p1 - p0
         const s0 = block.s0
@@ -72,7 +73,7 @@ export class TimeStretchSequencer {
             const transient = transients.optAt(transientIndexShifted)
             if (isNotNull(transient)) {
                 this.#handleTransientBoundary(
-                    output, data, transients, warpMarkers, transientPlayMode, playbackRate,
+                    output, data, transients, warpMarkers, transientPlayMode, effectivePlaybackRate,
                     waveformOffset, bpm, sampleRate, transientIndexShifted, transient.position
                 )
                 this.#currentTransientIndex = transientIndexShifted
@@ -105,7 +106,7 @@ export class TimeStretchSequencer {
                             outputSamplesUntilNext = secondsUntilNext * sampleRate
                         }
                     }
-                    const audioSamplesNeeded = outputSamplesUntilNext * playbackRate
+                    const audioSamplesNeeded = outputSamplesUntilNext * effectivePlaybackRate
                     const speedRatio = segmentLengthSamples / audioSamplesNeeded
                     const closeToUnity = speedRatio >= 0.99 && speedRatio <= 1.01
                     const needsLooping = !closeToUnity && audioSamplesNeeded > segmentLengthSamples
@@ -113,7 +114,7 @@ export class TimeStretchSequencer {
                         voice.startFadeOut(0)
                         const newVoice = this.#createVoice(
                             output, data, startSamples, endSamples,
-                            playbackRate, 0, sampleRate,
+                            effectivePlaybackRate, 0, sampleRate,
                             transientPlayMode, true, readPos
                         )
                         if (isNotNull(newVoice)) {this.#voices.push(newVoice)}
@@ -121,7 +122,7 @@ export class TimeStretchSequencer {
                     }
                 }
             }
-            const samplesToEnd = (segEnd - readPos) / playbackRate
+            const samplesToEnd = (segEnd - readPos) / effectivePlaybackRate
             if (samplesToEnd < bufferCount) {
                 const fadeOutOffset = Math.max(0, Math.floor(samplesToEnd))
                 voice.startFadeOut(fadeOutOffset)
@@ -160,8 +161,8 @@ export class TimeStretchSequencer {
             const secondsUntilNext = PPQN.pulsesToSeconds(ppqnDelta, bpm)
             outputSamplesUntilNext = secondsUntilNext * sampleRate
         }
-        const driftThreshold = VOICE_FADE_DURATION * sampleRate
-        const lookaheadSamples = VOICE_FADE_DURATION * data.sampleRate * playbackRate
+        const driftThreshold = VOICE_FADE_DURATION * data.sampleRate
+        const lookaheadSamples = VOICE_FADE_DURATION * sampleRate * playbackRate
         let continuedVoice: Nullable<Voice> = null
         for (const voice of this.#voices) {
             if (voice.done()) {continue}
@@ -191,7 +192,7 @@ export class TimeStretchSequencer {
         const speedRatio = segmentLengthSamples / audioSamplesNeeded
         const closeToUnity = speedRatio >= 0.99 && speedRatio <= 1.01
         const needsLooping = !closeToUnity && audioSamplesNeeded > segmentLengthSamples
-        const fadeSamplesInFile = VOICE_FADE_DURATION * data.sampleRate * playbackRate
+        const fadeSamplesInFile = VOICE_FADE_DURATION * sampleRate * playbackRate
         const voiceStartSamples = transientIndex === 0
             ? startSamples
             : Math.max(0, startSamples - fadeSamplesInFile)

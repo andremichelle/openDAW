@@ -1,9 +1,9 @@
-import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
-import {AudioUnitTracks, AutomatableParameterFieldAdapter, TrackType} from "@moises-ai/studio-adapters"
-import {BoxEditing, PrimitiveValues} from "@moises-ai/lib-box"
-import {MIDILearning} from "@moises-ai/studio-core"
+import {ContextMenu, MenuItem, MIDILearning} from "@opendaw/studio-core"
+import {AudioUnitTracks, AutomatableParameterFieldAdapter, TrackType} from "@opendaw/studio-adapters"
+import {PrimitiveValues} from "@opendaw/lib-box"
+import {Editing} from "@opendaw/lib-std"
 
-export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: BoxEditing,
+export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: Editing,
                                                                       midiDevices: MIDILearning,
                                                                       tracks: AudioUnitTracks,
                                                                       parameter: AutomatableParameterFieldAdapter<T>,

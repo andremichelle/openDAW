@@ -1,0 +1,29 @@
+@use "@/mixins"
+
+component
+  display: flex
+  flex-direction: row
+  align-items: stretch
+  align-content: start
+  column-gap: 1em
+  margin-right: 1em
+  @include mixins.Control
+
+  > .controls
+    display: grid
+    grid-template-rows: repeat(3, 3.5em)
+    grid-template-columns: repeat(1, 3.5em)
+    grid-auto-columns: 3.5em
+    grid-auto-flow: column
+    row-gap: 0.25em
+
+  > .editor
+    display: flex
+    flex-direction: column
+    align-items: center
+    row-gap: 1em
+
+    > .error
+      font-size: 16px
+      color: orange
+      cursor: default

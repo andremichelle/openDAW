@@ -186,7 +186,7 @@ export namespace InstrumentFactories {
         }
     }
 
-    export const Named = {Vaporisateur, Playfield, Nano, Tape, Soundfont, MIDIOutput}
+    export const Named = {MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
     export type Keys = keyof typeof Named
 
     const useAudioFile = (boxGraph: BoxGraph, fileUUID: UUID.Bytes, name: string, duration: number) =>

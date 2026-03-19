@@ -1,19 +1,18 @@
 import css from "./ParameterLabelKnob.sass?inline"
-import {Lifecycle, unitValue, ValueGuide} from "@moises-ai/lib-std"
-import {createElement} from "@moises-ai/lib-jsx"
+import {Editing, Lifecycle, unitValue, ValueGuide} from "@opendaw/lib-std"
+import {createElement} from "@opendaw/lib-jsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {LabelKnob} from "@/ui/composite/LabelKnob.tsx"
-import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@moises-ai/studio-adapters"
-import {BoxEditing} from "@moises-ai/lib-box"
+import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {attachParameterContextMenu} from "@/ui/menu/automation.ts"
-import {Html} from "@moises-ai/lib-dom"
-import {MIDILearning} from "@moises-ai/studio-core"
+import {Html} from "@opendaw/lib-dom"
+import {MIDILearning} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "ParameterLabelKnob")
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     midiLearning: MIDILearning
     adapter: DeviceBoxAdapter
     parameter: AutomatableParameterFieldAdapter

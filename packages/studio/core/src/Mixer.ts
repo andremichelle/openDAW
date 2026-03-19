@@ -62,10 +62,11 @@ export class Mixer implements Terminable {
     }
 
     registerChannelStrip({uuid}: AudioUnitBoxAdapter, view: ChannelStripView): Terminable {
-        this.#states.get(uuid).views.push(view)
+        const {views} = this.#states.get(uuid)
+        views.push(view)
         this.#deferUpdate.request()
         return Terminable.create(() => {
-            this.#states.opt(uuid).ifSome(({views}) => Arrays.remove(views, view))
+            Arrays.remove(views, view)
             this.#deferUpdate.request()
         })
     }

@@ -1,9 +1,9 @@
-import {Errors, Notifier, Observer, Option, RuntimeNotifier, Subscription, Terminable, Terminator, UUID} from "@moises-ai/lib-std"
-import {AudioData} from "@moises-ai/lib-dsp"
-import {Promises} from "@moises-ai/lib-runtime"
-import {AudioUnitBoxAdapter, ExportStemsConfiguration} from "@moises-ai/studio-adapters"
+import {DefaultObservableValue, Errors, Notifier, Observer, Option, RuntimeNotifier, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {AudioData} from "@opendaw/lib-dsp"
+import {Promises} from "@opendaw/lib-runtime"
+import {AudioUnitBoxAdapter, ExportStemsConfiguration} from "@opendaw/studio-adapters"
 import {OfflineEngineRenderer} from "./OfflineEngineRenderer"
-import {Address} from "@moises-ai/lib-box"
+import {Address} from "@opendaw/lib-box"
 
 import type {Project} from "./project"
 
@@ -76,15 +76,17 @@ export class AudioUnitFreeze implements Terminable {
         }
         const copiedProject = this.#project.copy()
         const abortController = new AbortController()
+        const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({
             headline: "Freezing AudioUnit...",
+            progress,
             cancel: () => abortController.abort()
         })
         const renderResult = await Promises.tryCatch(
             OfflineEngineRenderer.start(
                 copiedProject,
                 Option.wrap(exportConfiguration),
-                progress => dialog.message = `${Math.round(progress)}s rendered`,
+                progress,
                 abortController.signal,
                 engine.sampleRate
             ))

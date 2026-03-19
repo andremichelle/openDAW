@@ -11,15 +11,16 @@ import {
     tryCatch,
     unitValue,
     UUID
-} from "@moises-ai/lib-std"
-import {NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@moises-ai/studio-boxes"
-import {AudioUnitBoxAdapter, ColorCodes, TrackType} from "@moises-ai/studio-adapters"
-import {PPQN, ppqn} from "@moises-ai/lib-dsp"
+} from "@opendaw/lib-std"
+import {BoxEditing} from "@opendaw/lib-box"
+import {NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
+import {AudioUnitBoxAdapter, ColorCodes, TrackType} from "@opendaw/studio-adapters"
+import {PPQN, ppqn} from "@opendaw/lib-dsp"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
-import {Promises, Wait} from "@moises-ai/lib-runtime"
-import {Files} from "@moises-ai/lib-dom"
-import {Project} from "@moises-ai/studio-core"
-import {ControlType, MidiFile} from "@moises-ai/lib-midi"
+import {Promises, Wait} from "@opendaw/lib-runtime"
+import {Files} from "@opendaw/lib-dom"
+import {Project} from "@opendaw/studio-core"
+import {ControlType, MidiFile} from "@opendaw/lib-midi"
 
 export namespace MidiImport {
     export const toTracks = async (project: Project, audioUnitBoxAdapter: AudioUnitBoxAdapter) => {
@@ -111,7 +112,10 @@ export namespace MidiImport {
             }
         }
         console.time("midi-import")
-        const modificationProcess = editing.beginModification()
+        // TODO Remove the cast by refactoring
+        // use modify and revertPending on error
+        const boxEditing = editing as BoxEditing
+        const modificationProcess = boxEditing.beginModification()
         const {status, error} = await Promises.tryCatch(Wait.complete(generate()))
         console.timeEnd("midi-import")
         if (status === "resolved") {

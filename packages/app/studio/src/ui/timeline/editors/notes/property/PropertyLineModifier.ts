@@ -1,8 +1,7 @@
-import {clamp, Notifier, Observer, Option, Selection, Terminable, unitValue, ValueAxis} from "@moises-ai/lib-std"
-import {BoxEditing} from "@moises-ai/lib-box"
+import {clamp, Editing, Notifier, Observer, Option, Selection, Terminable, unitValue, ValueAxis} from "@opendaw/lib-std"
 import {Line, NoteModifyStrategy, Point} from "../NoteModifyStrategies.ts"
-import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
-import {EventCollection, NoteEvent, ppqn} from "@moises-ai/lib-dsp"
+import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
+import {EventCollection, NoteEvent, ppqn} from "@opendaw/lib-dsp"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {
     NotePropertyCent,
@@ -12,11 +11,11 @@ import {
 } from "@/ui/timeline/editors/notes/property/PropertyAccessor.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {UINoteEvent} from "@/ui/timeline/editors/notes/UINoteEvent.ts"
-import {Dragging} from "@moises-ai/lib-dom"
-import {TimelineRange} from "@moises-ai/studio-core"
+import {Dragging} from "@opendaw/lib-dom"
+import {TimelineRange} from "@opendaw/studio-core"
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     property: PropertyAccessor
     selection: Selection<NoteEventBoxAdapter>
@@ -31,7 +30,7 @@ export class PropertyLineModifier implements NoteModifier, NoteModifyStrategy {
         return new PropertyLineModifier(construct)
     }
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #property: PropertyAccessor
     readonly #selection: Selection<NoteEventBoxAdapter>

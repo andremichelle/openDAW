@@ -1,13 +1,12 @@
-import {int, Notifier, Observer, Option, Selection, Terminable, unitValue} from "@moises-ai/lib-std"
+import {Editing, int, Notifier, Observer, Option, Selection, Terminable, unitValue} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {BoxEditing} from "@moises-ai/lib-box"
 import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
-import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
-import {EventCollection, NoteEvent, ppqn} from "@moises-ai/lib-dsp"
+import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
+import {EventCollection, NoteEvent, ppqn} from "@opendaw/lib-dsp"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {UINoteEvent} from "./UINoteEvent"
-import {Dragging} from "@moises-ai/lib-dom"
+import {Dragging} from "@opendaw/lib-dom"
 
 class SelectedModifyStrategy implements NoteModifyStrategy {
     readonly #tool: NoteDurationModifier
@@ -32,7 +31,7 @@ class SelectedModifyStrategy implements NoteModifyStrategy {
 }
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     selection: Selection<NoteEventBoxAdapter>
     snapping: Snapping
@@ -45,7 +44,7 @@ export class NoteDurationModifier implements NoteModifier {
         return new NoteDurationModifier(construct)
     }
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #selection: Selection<NoteEventBoxAdapter>
     readonly #snapping: Snapping

@@ -124,7 +124,27 @@ export namespace RecordAudio {
             currentTake = Option.wrap(createTakeRegion(position, currentWaveformOffset, previousTrack))
         }
 
-        recordingWorklet.onSaved = uuid => project.trackUserCreatedSample(uuid)
+        recordingWorklet.onSaved = uuid => {
+            project.trackUserCreatedSample(uuid)
+            editing.modify(() => {
+                fileBox.ifSome(oldFileBox => {
+                    editing.modify(() => {
+                        const newFileBox = AudioFileBox.create(boxGraph, uuid, box => {
+                            box.fileName.setValue(oldFileBox.fileName.getValue())
+                            box.startInSeconds.setValue(oldFileBox.startInSeconds.getValue())
+                            box.endInSeconds.setValue(oldFileBox.endInSeconds.getValue())
+                        })
+                        for (const pointer of [...oldFileBox.pointerHub.incoming()]) {
+                            pointer.refer(newFileBox)
+                        }
+                        for (const pointer of [...oldFileBox.transientMarkers.pointerHub.incoming()]) {
+                            pointer.refer(newFileBox.transientMarkers)
+                        }
+                        oldFileBox.delete()
+                    })
+                })
+            })
+        }
         terminator.ownAll(
             Terminable.create(() => {
                 tryCatch(() => sourceNode.disconnect(recordingWorklet))

@@ -1,12 +1,15 @@
-import {int, Terminable} from "@moises-ai/lib-std"
-import {AudioBuffer, ppqn} from "@moises-ai/lib-dsp"
+import {int, MakeMutable, Terminable} from "@opendaw/lib-std"
+import {AudioBuffer, ppqn} from "@opendaw/lib-dsp"
 import {EventBuffer} from "./EventBuffer"
 
 export const enum BlockFlag {
-    transporting = 1 << 0, // is true if the (main) timeline should not advance
-    discontinuous = 1 << 1, // set, if the time has not been advanced naturally (release notes)
-    playing = 1 << 2, // set, if arrangement should generate sound
-    bpmChanged = 1 << 3 // true if the bpm has been changed
+    // state (persistent across chunks within a block)
+    transporting = 1 << 0,
+    playing = 1 << 2,
+    // events (one-shot, cleared after first chunk)
+    discontinuous = 1 << 1,
+    bpmChanged = 1 << 3,
+    eventMask = discontinuous | bpmChanged
 }
 
 export namespace BlockFlags {
@@ -22,17 +25,15 @@ export namespace BlockFlags {
 
 export type Block = Readonly<{
     index: int,
-    // range in ppqn time
     p0: ppqn
     p1: ppqn
-    // range in audio block
     s0: int
     s1: int
-    // bpm in this block
     bpm: number
-    // BlockFlag
     flags: int
 }>
+
+export type MutableBlock = MakeMutable<Block>
 
 export enum ProcessPhase {Before, After}
 

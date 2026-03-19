@@ -1,13 +1,12 @@
 import css from "./PerformanceStats.sass?inline"
-import {AnimationFrame, Html} from "@moises-ai/lib-dom"
-import {Lifecycle, Terminator} from "@moises-ai/lib-std"
-import {StudioPreferences} from "@moises-ai/studio-core"
-import {createElement} from "@moises-ai/lib-jsx"
-import {CanvasPainter} from "../../../../../studio/core/src/ui/canvas/painter"
-import {Colors} from "@moises-ai/studio-enums"
+import {AnimationFrame, Html} from "@opendaw/lib-dom"
+import {Lifecycle, Terminator} from "@opendaw/lib-std"
+import {CanvasPainter, StudioPreferences} from "@opendaw/studio-core"
+import {createElement} from "@opendaw/lib-jsx"
+import {Colors} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
-import {PERF_BUFFER_SIZE} from "@moises-ai/studio-adapters"
-import {RenderQuantum} from "@moises-ai/lib-dsp"
+import {PERF_BUFFER_SIZE} from "@opendaw/studio-adapters"
+import {RenderQuantum} from "@opendaw/lib-dsp"
 
 const className = Html.adoptStyleSheet(css, "PerformanceStats")
 
@@ -43,7 +42,11 @@ export const PerformanceStats = ({lifecycle, service}: Construct) => {
                      animationLifeSpan.terminate()
                      if (show) {
                          const canvas = element.querySelector("canvas")!
-                         const painter = animationLifeSpan.own(new CanvasPainter(canvas, ({context, actualWidth, actualHeight}) => {
+                         const painter = animationLifeSpan.own(new CanvasPainter(canvas, ({
+                                                                                              context,
+                                                                                              actualWidth,
+                                                                                              actualHeight
+                                                                                          }) => {
                              const engine = service.engine
                              const perfBuffer = engine.perfBuffer
                              const perfIndex = engine.perfIndex

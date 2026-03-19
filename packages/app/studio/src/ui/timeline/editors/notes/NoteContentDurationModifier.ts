@@ -1,15 +1,14 @@
-import {int, Notifier, Observer, Option, Terminable} from "@moises-ai/lib-std"
+import {Editing, int, Notifier, Observer, Option, Terminable} from "@opendaw/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {BoxEditing} from "@moises-ai/lib-box"
 import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {ppqn, PPQN} from "@moises-ai/lib-dsp"
+import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {UINoteEvent} from "./UINoteEvent"
-import {Dragging} from "@moises-ai/lib-dom"
+import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     snapping: Snapping
     pointerPulse: ppqn
@@ -21,7 +20,7 @@ export class NoteContentDurationModifier implements NoteModifier {
         return new NoteContentDurationModifier(construct)
     }
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #snapping: Snapping
     readonly #pointerPulse: ppqn

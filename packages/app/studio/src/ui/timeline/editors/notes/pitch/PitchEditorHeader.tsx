@@ -1,27 +1,25 @@
 import css from "./PitchEditorHeader.sass?inline"
-import {int, Lifecycle, Selection} from "@moises-ai/lib-std"
+import {Editing, int, Lifecycle, Selection} from "@opendaw/lib-std"
 import {ScaleSelector} from "@/ui/timeline/editors/notes/pitch/ScaleSelector.tsx"
 import {ScaleConfigurator} from "@/ui/timeline/editors/notes/pitch/ScaleConfigurator.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
-import {MenuItem} from "@moises-ai/studio-core"
-import {MidiKeys} from "@moises-ai/lib-dsp"
+import {MenuItem} from "@opendaw/studio-core"
+import {MidiKeys} from "@opendaw/lib-dsp"
 import {Icon} from "@/ui/components/Icon.tsx"
-import {createElement} from "@moises-ai/lib-jsx"
+import {createElement} from "@opendaw/lib-jsx"
 import {ScaleConfig} from "@/ui/timeline/editors/notes/pitch/ScaleConfig.ts"
-import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
-import {IconSymbol} from "@moises-ai/studio-enums"
+import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {PropertyTable} from "@/ui/timeline/editors/notes/property/PropertyTable.tsx"
-import {BoxEditing} from "@moises-ai/lib-box"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
-import {Html} from "@moises-ai/lib-dom"
-import {Colors} from "@moises-ai/studio-enums"
+import {Html} from "@opendaw/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "PitchEditorHeader")
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     modifyContext: ObservableModifyContext<NoteModifier>
     selection: Selection<NoteEventBoxAdapter>
     scale: ScaleConfig

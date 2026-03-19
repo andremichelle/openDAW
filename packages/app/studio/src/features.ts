@@ -2,6 +2,7 @@ import {requireProperty} from "@moises-ai/lib-std"
 
 export const testFeatures = async (): Promise<void> => {
     requireProperty(Promise, "withResolvers")
+    requireProperty(Array.prototype, "toSorted")
     requireProperty(window, "indexedDB")
     requireProperty(window, "AudioWorkletNode")
     requireProperty(window, "SharedArrayBuffer")

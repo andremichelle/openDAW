@@ -58,6 +58,7 @@ import {
     SignatureEventBox,
     SoundfontDeviceBox,
     SoundfontFileBox,
+    SpielwerkDeviceBox,
     StereoToolDeviceBox,
     TapeDeviceBox,
     TidalDeviceBox,
@@ -73,6 +74,8 @@ import {
     VaporisateurDeviceBox,
     VelocityDeviceBox,
     WarpMarkerBox,
+    WaveshaperDeviceBox,
+    WerkstattDeviceBox,
     ZeitgeistDeviceBox
 } from "@moises-ai/studio-boxes"
 import {AudioUnitBoxAdapter} from "./audio-unit/AudioUnitBoxAdapter"
@@ -109,6 +112,7 @@ import {TapeDeviceBoxAdapter} from "./devices/instruments/TapeDeviceBoxAdapter"
 import {VaporisateurDeviceBoxAdapter} from "./devices/instruments/VaporisateurDeviceBoxAdapter"
 import {ArpeggioDeviceBoxAdapter} from "./devices/midi-effects/ArpeggioDeviceBoxAdapter"
 import {PitchDeviceBoxAdapter} from "./devices/midi-effects/PitchDeviceBoxAdapter"
+import {SpielwerkDeviceBoxAdapter} from "./devices/midi-effects/SpielwerkDeviceBoxAdapter"
 import {NanoDeviceBoxAdapter} from "./devices/instruments/NanoDeviceBoxAdapter"
 import {PlayfieldDeviceBoxAdapter} from "./devices/instruments/PlayfieldDeviceBoxAdapter"
 import {StereoToolDeviceBoxAdapter} from "./devices/audio-effects/StereoToolDeviceBoxAdapter"
@@ -131,6 +135,8 @@ import {VelocityDeviceBoxAdapter} from "./devices/midi-effects/VelocityDeviceBox
 import {TidalDeviceBoxAdapter} from "./devices/audio-effects/TidalDeviceBoxAdapter"
 import {DattorroReverbDeviceBoxAdapter} from "./devices/audio-effects/DattorroReverbDeviceBoxAdapter"
 import {NeuralAmpDeviceBoxAdapter} from "./devices/audio-effects/NeuralAmpDeviceBoxAdapter"
+import {WaveshaperDeviceBoxAdapter} from "./devices/audio-effects/WaveshaperDeviceBoxAdapter"
+import {WerkstattDeviceBoxAdapter} from "./devices/audio-effects/WerkstattDeviceBoxAdapter"
 import {NeuralAmpModelBoxAdapter} from "./nam/NeuralAmpModelBoxAdapter"
 import {AudioPitchStretchBoxAdapter} from "./audio/AudioPitchStretchBoxAdapter"
 import {TransientMarkerBoxAdapter} from "./audio/TransientMarkerBoxAdapter"
@@ -238,6 +244,7 @@ export class BoxAdapters implements Terminable {
             visitRootBox: (box: RootBox): BoxAdapter => new RootBoxAdapter(this.#context, box),
             visitSoundfontDeviceBox: (box: SoundfontDeviceBox) => new SoundfontDeviceBoxAdapter(this.#context, box),
             visitSoundfontFileBox: (box: SoundfontFileBox) => new SoundfontFileBoxAdapter(this.#context, box),
+            visitSpielwerkDeviceBox: (box: SpielwerkDeviceBox) => new SpielwerkDeviceBoxAdapter(this.#context, box),
             visitStereoToolDeviceBox: (box: StereoToolDeviceBox) => new StereoToolDeviceBoxAdapter(this.#context, box),
             visitTapeDeviceBox: (box: TapeDeviceBox) => new TapeDeviceBoxAdapter(this.#context, box),
             visitTimelineBox: (box: TimelineBox) => new TimelineBoxAdapter(this.#context, box),
@@ -249,6 +256,8 @@ export class BoxAdapters implements Terminable {
             visitValueEventCollectionBox: (box: ValueEventCollectionBox): BoxAdapter => new ValueEventCollectionBoxAdapter(this.#context, box),
             visitValueRegionBox: (box: ValueRegionBox) => new ValueRegionBoxAdapter(this.#context, box),
             visitVaporisateurDeviceBox: (box: VaporisateurDeviceBox) => new VaporisateurDeviceBoxAdapter(this.#context, box),
+            visitWaveshaperDeviceBox: (box: WaveshaperDeviceBox) => new WaveshaperDeviceBoxAdapter(this.#context, box),
+            visitWerkstattDeviceBox: (box: WerkstattDeviceBox) => new WerkstattDeviceBoxAdapter(this.#context, box),
             visitVelocityDeviceBox: (box: VelocityDeviceBox) => new VelocityDeviceBoxAdapter(this.#context, box),
             visitZeitgeistDeviceBox: (box: ZeitgeistDeviceBox) => new ZeitgeistDeviceBoxAdapter(this.#context, box)
         }), `Could not find factory for ${unknownBox}`)

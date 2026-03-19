@@ -3,13 +3,13 @@ import {
     ArpeggioDeviceBox,
     AudioBusBox,
     BoxVisitor,
-    MaximizerDeviceBox,
     CompressorDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
     DelayDeviceBox,
     FoldDeviceBox,
     GateDeviceBox,
+    MaximizerDeviceBox,
     MIDIOutputDeviceBox,
     ModularDeviceBox,
     NanoDeviceBox,
@@ -20,6 +20,7 @@ import {
     RevampDeviceBox,
     ReverbDeviceBox,
     SoundfontDeviceBox,
+    SpielwerkDeviceBox,
     StereoToolDeviceBox,
     TapeDeviceBox,
     TidalDeviceBox,
@@ -27,13 +28,14 @@ import {
     UnknownMidiEffectDeviceBox,
     VaporisateurDeviceBox,
     VelocityDeviceBox,
+    WaveshaperDeviceBox,
+    WerkstattDeviceBox,
     ZeitgeistDeviceBox
 } from "@moises-ai/studio-boxes"
 import {ArpeggioDeviceEditor} from "@/ui/devices/midi-effects/ArpeggioDeviceEditor.tsx"
 import {
     ArpeggioDeviceBoxAdapter,
     AudioBusBoxAdapter,
-    MaximizerDeviceBoxAdapter,
     CompressorDeviceBoxAdapter,
     CrusherDeviceBoxAdapter,
     DattorroReverbDeviceBoxAdapter,
@@ -41,6 +43,7 @@ import {
     DeviceHost,
     FoldDeviceBoxAdapter,
     GateDeviceBoxAdapter,
+    MaximizerDeviceBoxAdapter,
     MIDIOutputDeviceBoxAdapter,
     ModularDeviceBoxAdapter,
     NanoDeviceBoxAdapter,
@@ -51,6 +54,7 @@ import {
     RevampDeviceBoxAdapter,
     ReverbDeviceBoxAdapter,
     SoundfontDeviceBoxAdapter,
+    SpielwerkDeviceBoxAdapter,
     StereoToolDeviceBoxAdapter,
     TapeDeviceBoxAdapter,
     TidalDeviceBoxAdapter,
@@ -58,6 +62,8 @@ import {
     UnknownMidiEffectDeviceBoxAdapter,
     VaporisateurDeviceBoxAdapter,
     VelocityDeviceBoxAdapter,
+    WaveshaperDeviceBoxAdapter,
+    WerkstattDeviceBoxAdapter,
     ZeitgeistDeviceBoxAdapter
 } from "@moises-ai/studio-adapters"
 import {DelayDeviceEditor} from "@/ui/devices/audio-effects/DelayDeviceEditor.tsx"
@@ -88,6 +94,9 @@ import {VelocityDeviceEditor} from "@/ui/devices/midi-effects/VelocityDeviceEdit
 import {TidalDeviceEditor} from "@/ui/devices/audio-effects/TidalDeviceEditor"
 import {DattorroReverbDeviceEditor} from "@/ui/devices/audio-effects/DattorroReverbDeviceEditor"
 import {NeuralAmpDeviceEditor} from "@/ui/devices/audio-effects/NeuralAmpDeviceEditor"
+import {WaveshaperDeviceEditor} from "@/ui/devices/audio-effects/WaveshaperDeviceEditor"
+import {SpielwerkDeviceEditor} from "@/ui/devices/midi-effects/SpielwerkDeviceEditor"
+import {WerkstattDeviceEditor} from "@/ui/devices/audio-effects/WerkstattDeviceEditor"
 
 export namespace DeviceEditorFactory {
     export const toMidiEffectDeviceEditor = (service: StudioService, lifecycle: Lifecycle, box: Box, deviceHost: DeviceHost) =>
@@ -121,6 +130,12 @@ export namespace DeviceEditorFactory {
                 <ZeitgeistDeviceEditor lifecycle={lifecycle}
                                        service={service}
                                        adapter={service.project.boxAdapters.adapterFor(box, ZeitgeistDeviceBoxAdapter)}
+                                       deviceHost={deviceHost}/>
+            ),
+            visitSpielwerkDeviceBox: (box: SpielwerkDeviceBox) => (
+                <SpielwerkDeviceEditor lifecycle={lifecycle}
+                                       service={service}
+                                       adapter={service.project.boxAdapters.adapterFor(box, SpielwerkDeviceBoxAdapter)}
                                        deviceHost={deviceHost}/>
             )
         }), `No MidiEffectDeviceEditor found for ${box}`)
@@ -264,6 +279,18 @@ export namespace DeviceEditorFactory {
                 <NeuralAmpDeviceEditor lifecycle={lifecycle}
                                        service={service}
                                        adapter={service.project.boxAdapters.adapterFor(box, NeuralAmpDeviceBoxAdapter)}
+                                       deviceHost={deviceHost}/>
+            ),
+            visitWaveshaperDeviceBox: (box: WaveshaperDeviceBox) => (
+                <WaveshaperDeviceEditor lifecycle={lifecycle}
+                                        service={service}
+                                        adapter={service.project.boxAdapters.adapterFor(box, WaveshaperDeviceBoxAdapter)}
+                                        deviceHost={deviceHost}/>
+            ),
+            visitWerkstattDeviceBox: (box: WerkstattDeviceBox) => (
+                <WerkstattDeviceEditor lifecycle={lifecycle}
+                                       service={service}
+                                       adapter={service.project.boxAdapters.adapterFor(box, WerkstattDeviceBoxAdapter)}
                                        deviceHost={deviceHost}/>
             )
         }), `No AudioEffectDeviceEditor found for ${box}`)

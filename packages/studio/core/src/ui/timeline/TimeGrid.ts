@@ -5,9 +5,19 @@ import {SignatureTrackAdapter} from "@moises-ai/studio-adapters"
 
 export namespace TimeGrid {
     export type Signature = [int, int]
-    export type Options = { minLength?: number }
+    export type Options = { minLength?: number, snapInterval?: ppqn }
     export type Fragment = { bars: int, beats: int, ticks: int, isBar: boolean, isBeat: boolean, pulse: number }
     export type Designer = (fragment: Fragment) => void
+
+    const computeSnapInterval = (snapInterval: ppqn, unitsPerPixel: ppqn, minLength: number): ppqn => {
+        let interval = snapInterval
+        let pixel = interval / unitsPerPixel
+        while (pixel < minLength) {
+            interval *= 2
+            pixel = interval / unitsPerPixel
+        }
+        return interval
+    }
 
     const computeInterval = (nominator: int, denominator: int, unitsPerPixel: ppqn, minLength: number): ppqn => {
         const barPulses = PPQN.fromSignature(nominator, denominator)
@@ -60,7 +70,10 @@ export namespace TimeGrid {
         const minLength = options?.minLength ?? 48
         for (const [prev, next] of Iterables.pairWise(signatureTrack.iterateAll())) {
             const {accumulatedPpqn, accumulatedBars, nominator, denominator} = prev
-            const interval = computeInterval(prev.nominator, prev.denominator, unitsPerPixel, minLength)
+            const snapInterval = options?.snapInterval
+            const interval = isDefined(snapInterval)
+                ? computeSnapInterval(snapInterval, unitsPerPixel, minLength)
+                : computeInterval(prev.nominator, prev.denominator, unitsPerPixel, minLength)
             const barDuration = PPQN.fromSignature(nominator, denominator)
             const p0 = accumulatedPpqn
             const p1 = isDefined(next) ? next.accumulatedPpqn : range.unitMax

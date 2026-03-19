@@ -6,6 +6,7 @@ import {
     Func,
     int,
     isAbsent,
+    MutableObservableOption,
     Notifier,
     Nullable,
     Observer,
@@ -16,6 +17,7 @@ import {
     Subscription,
     Terminable,
     Terminator,
+    tryCatch,
     UUID
 } from "@moises-ai/lib-std"
 import {populateStudioMenu} from "@/service/StudioMenu"
@@ -43,12 +45,12 @@ import {
     AudioWorklets,
     CloudAuthManager,
     DawProjectService,
-    GlobalSoundfontLoaderManager,
     EngineFacade,
     EngineWorklet,
     ExternalLib,
     FilePickerAcceptTypes,
     GlobalSampleLoaderManager,
+    GlobalSoundfontLoaderManager,
     Project,
     ProjectEnv,
     ProjectMeta,
@@ -68,6 +70,7 @@ import {Surface} from "@/ui/surface/Surface"
 import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
 import {Mixdowns} from "@/service/Mixdowns"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
+import {CodeEditorState} from "@/ui/werkstatt-editor/CodeEditorState"
 
 /**
  * I am just piling stuff after stuff in here to boot the environment.
@@ -113,6 +116,7 @@ export class StudioService implements ProjectEnv {
     readonly #soundfontService: SoundfontService
 
     #shadertoyState: Option<ShadertoyState> = Option.None
+    readonly #activeCodeEditor: MutableObservableOption<CodeEditorState> = new MutableObservableOption()
 
     #factoryFooterLabel: Option<Provider<FooterLabel>> = Option.None
 
@@ -125,10 +129,16 @@ export class StudioService implements ProjectEnv {
                 readonly soundfontManager: GlobalSoundfontLoaderManager,
                 readonly cloudAuthManager: CloudAuthManager,
                 readonly buildInfo: BuildInfo) {
-        this.#sampleService = new SampleService(audioContext,
-            sample => this.#signals.notify({type: "import-sample", sample}))
-        this.#soundfontService = new SoundfontService(
-            soundfont => this.#signals.notify({type: "import-soundfont", soundfont}))
+        this.#sampleService = new SampleService(audioContext)
+        this.#sampleService.subscribe(([sample, _]) => this.#signals.notify({
+            type: "import-sample",
+            sample
+        }))
+        this.#soundfontService = new SoundfontService()
+        this.#soundfontService.subscribe(([soundfont, _]) => this.#signals.notify({
+            type: "import-soundfont",
+            soundfont
+        }))
         this.samplePlayback = new SamplePlayback()
         this.#projectProfileService = new ProjectProfileService({
             env: this,
@@ -152,7 +162,7 @@ export class StudioService implements ProjectEnv {
     panicEngine(): void {this.runIfProject(({engine}) => engine.panic())}
 
     async newProject() {
-        if (this.hasProfile && !this.project.editing.isEmpty()) {
+        if (this.hasProfile && !this.project.editing.hasNoChanges()) {
             const approved = await RuntimeNotifier.approve({
                 headline: "Closing Project?",
                 message: "You will lose all progress!"
@@ -169,7 +179,7 @@ export class StudioService implements ProjectEnv {
             this.switchScreen("dashboard")
             return
         }
-        if (this.project.editing.isEmpty()) {
+        if (this.project.editing.hasNoChanges()) {
             this.#projectProfileService.setValue(Option.None)
         } else {
             const approved = await RuntimeNotifier.approve({
@@ -370,6 +380,28 @@ export class StudioService implements ProjectEnv {
     factoryFooterLabel(): Option<Provider<FooterLabel>> {return this.#factoryFooterLabel}
 
     get optShadertoyState(): Option<ShadertoyState> {return this.#shadertoyState}
+    get activeCodeEditor(): MutableObservableOption<CodeEditorState> {return this.#activeCodeEditor}
+
+    openCodeEditor(state: CodeEditorState): void {
+        const previousScreen = this.layout.screen.getValue() === "code"
+            ? this.#activeCodeEditor.map(existing => existing.previousScreen).unwrapOrNull() ?? state.previousScreen
+            : state.previousScreen
+        this.layout.screen.setValue(null)
+        this.#activeCodeEditor.wrap({...state, previousScreen})
+        this.layout.screen.setValue("code")
+        RouteLocation.get().navigateTo("/")
+    }
+
+    closeCodeEditor(): void {
+        const previousScreen = this.#activeCodeEditor.map(state => state.previousScreen).unwrapOrNull()
+        this.#activeCodeEditor.clear()
+        if (this.layout.screen.getValue() === "code") {
+            // Defer the screen switch to avoid cascading UI updates during synchronous
+            // box deletion. Switching the screen triggers DevicePanel re-evaluation which
+            // clears mounts before remaining pointerHub onRemoved events have finished.
+            queueMicrotask(() => this.layout.screen.setValue(previousScreen ?? "default"))
+        }
+    }
 
     resetPeaks(): void {this.#signals.notify({type: "reset-peaks"})}
 
@@ -454,7 +486,17 @@ export class StudioService implements ProjectEnv {
                     }
                 }
                 this.engine.releaseWorklet()
-                this.engine.setWorklet(project.startAudioWorklet(restart, {}))
+                const {status, value: worklet, error} = tryCatch(() => project.startAudioWorklet(restart, {}))
+                if (status === "failure") {
+                    Dialogs.info({
+                        headline: "Audio-Engine Error",
+                        message: `Could not start the audio engine. Your browser may not support all required features. (${Errors.toString(error)})`,
+                        okText: "OK",
+                        cancelable: false
+                    }).finally()
+                    return
+                }
+                this.engine.setWorklet(worklet)
                 lifeTime.ownAll(
                     project,
                     snapping.registerSignatureTrackAdapter(project.timelineBoxAdapter.signatureTrack),

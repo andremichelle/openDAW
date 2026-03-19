@@ -1,47 +1,46 @@
 {
-    "name": "@moises-ai/studio-scripting",
-    "version": "0.0.47",
-    "license": "LGPL-3.0-or-later",
-    "type": "module",
-    "publishConfig": {
-        "registry": "https://npm.pkg.github.com",
-        "access": "public"
+  "name": "@opendaw/studio-scripting",
+  "version": "0.0.52",
+  "license": "LGPL-3.0-or-later",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-        ".": {
-            "types": "./dist/index.d.ts",
-            "default": "./dist/index.js"
-        },
-        "./api.declaration": "./src/api.declaration.d.ts",
-        "./library": "./src/library.d.ts",
-        "./ScriptWorker.js": "./dist/ScriptWorker.js"
-    },
-    "files": [
-        "dist/**/*",
-        "src/script/api.declaration.d.ts",
-        "src/script/library.d.ts",
-        "./dist/ScriptWorker.js"
-    ],
-    "scripts": {
-        "build": "npm run generate-api && tsc",
-        "generate-api": "npx tsx scripts/generate-api.ts",
-        "lint": "eslint \"**/*.ts\"",
-        "test": "echo \"No tests to run\""
-    },
-    "dependencies": {
-        "@moises-ai/lib-box": "*",
-        "@moises-ai/lib-dsp": "*",
-        "@moises-ai/lib-runtime": "*",
-        "@moises-ai/lib-std": "*",
-        "@moises-ai/studio-adapters": "*",
-        "@moises-ai/studio-boxes": "*",
-        "@moises-ai/studio-enums": "*"
-    },
-    "devDependencies": {
-        "@opendaw/eslint-config": "*",
-        "@opendaw/typescript-config": "*"
-    },
-    "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
+    "./api.declaration": "./src/api.declaration.d.ts",
+    "./library": "./src/library.d.ts",
+    "./ScriptWorker.js": "./dist/ScriptWorker.js"
+  },
+  "files": [
+    "dist/**/*",
+    "src/script/api.declaration.d.ts",
+    "src/script/library.d.ts",
+    "./dist/ScriptWorker.js"
+  ],
+  "scripts": {
+    "build": "npm run generate-api && tsc",
+    "generate-api": "npx tsx scripts/generate-api.ts",
+    "lint": "eslint \"**/*.ts\"",
+    "test": "echo \"No tests to run\""
+  },
+  "dependencies": {
+    "@opendaw/lib-box": "^0.0.78",
+    "@opendaw/lib-dsp": "^0.0.77",
+    "@opendaw/lib-runtime": "^0.0.73",
+    "@opendaw/lib-std": "^0.0.72",
+    "@opendaw/studio-adapters": "^0.0.99",
+    "@opendaw/studio-boxes": "^0.0.83",
+    "@opendaw/studio-enums": "^0.0.68"
+  },
+  "devDependencies": {
+    "@opendaw/eslint-config": "^0.0.27",
+    "@opendaw/typescript-config": "^0.0.29"
+  },
+  "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

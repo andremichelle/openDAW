@@ -11,9 +11,9 @@ import {
     Terminator,
     unitValue,
     UUID
-} from "@moises-ai/lib-std"
-import {Address, BooleanField, Int32Field, PointerField, StringField} from "@moises-ai/lib-box"
-import {ppqn, UpdateClockRate} from "@moises-ai/lib-dsp"
+} from "@opendaw/lib-std"
+import {Address, BooleanField, Box, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
+import {ppqn, UpdateClockRate} from "@opendaw/lib-dsp"
 import {BoxAdapter} from "../BoxAdapter"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {TrackClips} from "./TrackClips"
@@ -23,8 +23,8 @@ import {TrackType} from "./TrackType"
 import {AnyClipBoxAdapter, AnyRegionBoxAdapter} from "../UnionAdapterTypes"
 import {ValueClipBoxAdapter} from "./clip/ValueClipBoxAdapter"
 import {ValueRegionBoxAdapter} from "./region/ValueRegionBoxAdapter"
-import {AudioUnitBox, TrackBox} from "@moises-ai/studio-boxes"
-import {Pointers} from "@moises-ai/studio-enums"
+import {AudioUnitBox, TrackBox} from "@opendaw/studio-boxes"
+import {Pointers} from "@opendaw/studio-enums"
 
 export class TrackBoxAdapter implements BoxAdapter {
     readonly #context: BoxAdaptersContext
@@ -85,6 +85,12 @@ export class TrackBoxAdapter implements BoxAdapter {
                     adapter.labelField.setValue(value)
                 }
             })
+            this.#resolveOwnerDeviceBox(box).flatMap(owner => this.#context.boxAdapters.optAdapter(owner))
+                .ifSome(adapter => {
+                    if ("labelField" in adapter && adapter.labelField instanceof StringField) {
+                        adapter.labelField.setValue(value)
+                    }
+                })
         })
     }
 
@@ -98,6 +104,14 @@ export class TrackBoxAdapter implements BoxAdapter {
             const optAdapter = this.#context.boxAdapters.optAdapter(box)
             if (optAdapter.nonEmpty()) {
                 const adapter = optAdapter.unwrap()
+                if ("labelField" in adapter && adapter.labelField instanceof StringField) {
+                    return Option.wrap(adapter.labelField.getValue())
+                }
+            }
+            const ownerAdapter = this.#resolveOwnerDeviceBox(box)
+                .flatMap(owner => this.#context.boxAdapters.optAdapter(owner))
+            if (ownerAdapter.nonEmpty()) {
+                const adapter = ownerAdapter.unwrap()
                 if ("labelField" in adapter && adapter.labelField instanceof StringField) {
                     return Option.wrap(adapter.labelField.getValue())
                 }
@@ -121,11 +135,85 @@ export class TrackBoxAdapter implements BoxAdapter {
                     return adapter.labelField.catchupAndSubscribe(owner => observer(Option.wrap(owner.getValue())))
                 }
             }
+            const ownerAdapter = this.#resolveOwnerDeviceBox(box)
+                .flatMap(owner => this.#context.boxAdapters.optAdapter(owner))
+            if (ownerAdapter.nonEmpty()) {
+                const adapter = ownerAdapter.unwrap()
+                if ("labelField" in adapter && adapter.labelField instanceof StringField) {
+                    return adapter.labelField.catchupAndSubscribe(owner => observer(Option.wrap(owner.getValue())))
+                }
+            }
             observer(Option.wrap(box.name))
             return Terminable.Empty
         }
         observer(Option.None)
         return Terminable.Empty
+    }
+
+    terminate() {this.#terminator.terminate()}
+
+    get audioUnit(): AudioUnitBox {return asInstanceOf(this.#box.tracks.targetVertex.unwrap().box, AudioUnitBox)}
+
+    get target(): PointerField<Pointers.Automation> {return this.#box.target}
+
+    get clips(): TrackClips {return this.#clips}
+    get regions(): TrackRegions {return this.#regions}
+    get enabled(): BooleanField {return this.#box.enabled}
+    get indexField(): Int32Field {return this.#box.index}
+    get type(): TrackType {return this.#box.type.getValue()}
+    get box(): TrackBox {return this.#box}
+    get uuid(): UUID.Bytes {return this.#box.address.uuid}
+    get address(): Address {return this.#box.address}
+    get listIndex(): int {return this.#listIndex.getValue()}
+    set listIndex(value: int) {this.#listIndex.setValue(value)}
+
+    accepts(subject: AnyClipBoxAdapter | AnyRegionBoxAdapter): boolean {
+        switch (subject.type) {
+            case "audio-clip":
+                return this.type === TrackType.Audio
+            case "note-clip":
+                return this.type === TrackType.Notes
+            case "value-clip":
+                return this.type === TrackType.Value
+            case "audio-region":
+                return this.type === TrackType.Audio
+            case "note-region":
+                return this.type === TrackType.Notes
+            case "value-region":
+                return this.type === TrackType.Value
+        }
+    }
+    valueAt(position: ppqn, fallback: unitValue): unitValue {
+        if (!this.enabled.getValue()) {return fallback}
+        let value = fallback
+        const intervals = this.#context.clipSequencing.iterate(this.uuid, position, position + UpdateClockRate)
+        for (const {optClip, sectionFrom} of intervals) {
+            value = optClip.match({
+                none: () => {
+                    const region = this.regions.collection.lowerEqual(position, region => !region.mute)
+                    if (region === null) {
+                        const firstRegion = this.regions.collection.optAt(0)
+                        return isInstanceOf(firstRegion, ValueRegionBoxAdapter) ? firstRegion.incomingValue(fallback) : fallback
+                    } else if (isInstanceOf(region, ValueRegionBoxAdapter)) {
+                        if (position < region.complete) {
+                            return region.valueAt(position, fallback)
+                        } else {
+                            return region.outgoingValue(fallback)
+                        }
+                    }
+                    return fallback
+                },
+                some: clip => {
+                    if (sectionFrom === position) {
+                        if (isInstanceOf(clip, ValueClipBoxAdapter)) {
+                            return clip.valueAt(position, fallback)
+                        }
+                    }
+                    return fallback
+                }
+            })
+        }
+        return value
     }
 
     #catchupAndSubscribeTargetControlName(observer: Observer<Option<string>>): Subscription {
@@ -159,69 +247,12 @@ export class TrackBoxAdapter implements BoxAdapter {
         }
     }
 
-    terminate() {this.#terminator.terminate()}
-
-    get audioUnit(): AudioUnitBox {return asInstanceOf(this.#box.tracks.targetVertex.unwrap().box, AudioUnitBox)}
-    get target(): PointerField<Pointers.Automation> {return this.#box.target}
-    get clips(): TrackClips {return this.#clips}
-    get regions(): TrackRegions {return this.#regions}
-    get enabled(): BooleanField {return this.#box.enabled}
-    get indexField(): Int32Field {return this.#box.index}
-    get type(): TrackType {return this.#box.type.getValue()}
-    get box(): TrackBox {return this.#box}
-    get uuid(): UUID.Bytes {return this.#box.address.uuid}
-    get address(): Address {return this.#box.address}
-
-    get listIndex(): int {return this.#listIndex.getValue()}
-    set listIndex(value: int) {this.#listIndex.setValue(value)}
-
-    accepts(subject: AnyClipBoxAdapter | AnyRegionBoxAdapter): boolean {
-        switch (subject.type) {
-            case "audio-clip":
-                return this.type === TrackType.Audio
-            case "note-clip":
-                return this.type === TrackType.Notes
-            case "value-clip":
-                return this.type === TrackType.Value
-            case "audio-region":
-                return this.type === TrackType.Audio
-            case "note-region":
-                return this.type === TrackType.Notes
-            case "value-region":
-                return this.type === TrackType.Value
+    #resolveOwnerDeviceBox(box: Box): Option<Box> {
+        for (const [pointer] of box.outgoingEdges()) {
+            if (pointer.pointerType === Pointers.Parameter) {
+                return pointer.targetVertex.map(vertex => vertex.box)
+            }
         }
-    }
-
-    valueAt(position: ppqn, fallback: unitValue): unitValue {
-        if (!this.enabled.getValue()) {return fallback}
-        let value = fallback
-        const intervals = this.#context.clipSequencing.iterate(this.uuid, position, position + UpdateClockRate)
-        for (const {optClip, sectionFrom} of intervals) {
-            value = optClip.match({
-                none: () => {
-                    const region = this.regions.collection.lowerEqual(position, region => !region.mute)
-                    if (region === null) {
-                        const firstRegion = this.regions.collection.optAt(0)
-                        return isInstanceOf(firstRegion, ValueRegionBoxAdapter) ? firstRegion.incomingValue(fallback) : fallback
-                    } else if (isInstanceOf(region, ValueRegionBoxAdapter)) {
-                        if (position < region.complete) {
-                            return region.valueAt(position, fallback)
-                        } else {
-                            return region.outgoingValue(fallback)
-                        }
-                    }
-                    return fallback
-                },
-                some: clip => {
-                    if (sectionFrom === position) {
-                        if (isInstanceOf(clip, ValueClipBoxAdapter)) {
-                            return clip.valueAt(position, fallback)
-                        }
-                    }
-                    return fallback
-                }
-            })
-        }
-        return value
+        return Option.None
     }
 }
