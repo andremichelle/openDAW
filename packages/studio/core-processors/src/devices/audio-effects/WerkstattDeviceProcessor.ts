@@ -74,7 +74,7 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
                     this.#silenced = true
                     this.#userProcessor = Option.None
                     this.#output.clear()
-                    this.#tryLoad(newUpdate)
+                    this.#tryLoad()
                 }
             }),
             box.parameters.pointerHub.catchupAndSubscribe({
@@ -96,10 +96,10 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
         this.readAllParameters()
     }
 
-    #tryLoad(update: int): void {
+    #tryLoad(): void {
         const registry = (globalThis as any).openDAW?.werkstattProcessors?.[this.#uuid]
-        if (isDefined(registry) && registry.update === update) {
-            this.#swapProcessor(registry.create, update)
+        if (isDefined(registry)) {
+            this.#swapProcessor(registry.create, registry.update)
         }
     }
 
@@ -167,10 +167,7 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
 
     processAudio(block: Block): void {
         if (this.#silenced) {
-            const expectedUpdate = parseUpdate(this.#adapter.box.code.getValue())
-            if (expectedUpdate > 0 && expectedUpdate !== this.#currentUpdate) {
-                this.#tryLoad(expectedUpdate)
-            }
+            this.#tryLoad()
             if (this.#silenced) {return}
         }
         if (this.#source.isEmpty() || this.#userProcessor.isEmpty()) {return}

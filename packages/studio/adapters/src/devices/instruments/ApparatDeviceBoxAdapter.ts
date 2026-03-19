@@ -1,7 +1,6 @@
 import {asInstanceOf, isDefined, Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
-import {Address, BooleanField, PointerField, StringField} from "@opendaw/lib-box"
+import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {ApparatDeviceBox, WerkstattParameterBox} from "@opendaw/studio-boxes"
-import {Pointers} from "@opendaw/studio-enums"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
@@ -35,13 +34,26 @@ export class ApparatDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
                     const declaration = declarations.find(decl => decl.label === label)
                     const {valueMapping, stringMapping} = isDefined(declaration)
                         ? resolveParamMappings(declaration)
-                        : {valueMapping: ValueMapping.unipolar(), stringMapping: StringMapping.percent({fractionDigits: 1})}
+                        : {
+                            valueMapping: ValueMapping.unipolar(),
+                            stringMapping: StringMapping.percent({fractionDigits: 1})
+                        }
                     this.#parametric.createParameter(paramBox.value, valueMapping, stringMapping, label)
                 }),
                 onRemoved: (({box}) => this.#parametric
                     .removeParameter(asInstanceOf(box, WerkstattParameterBox).value.address))
             })
         )
+        this.#terminator.own(box.code.subscribe(() => {
+            const declarations = parseParams(box.code.getValue())
+            for (const adapter of this.#parametric.parameters()) {
+                const declaration = declarations.find(decl => decl.label === adapter.name)
+                const {valueMapping, stringMapping} = isDefined(declaration)
+                    ? resolveParamMappings(declaration)
+                    : {valueMapping: ValueMapping.unipolar(), stringMapping: StringMapping.percent({fractionDigits: 1})}
+                adapter.updateMappings(valueMapping, stringMapping)
+            }
+        }))
     }
 
     get box(): ApparatDeviceBox {return this.#box}
@@ -62,7 +74,7 @@ export class ApparatDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
-    *labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
+    * labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
         yield {address: this.address, label: this.labelField.getValue(), children: () => Option.None}
     }
 

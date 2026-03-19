@@ -141,6 +141,7 @@ export const createScriptCompiler = (config: ScriptCompilerConfig) => {
     const headerPattern = createHeaderPattern(config.headerTag)
     const createHeader = (update: number): string =>
         `// @${config.headerTag} js ${COMPILER_VERSION} ${update}\n`
+    let maxUpdate = 0
     return {
         stripHeader: (source: string): string => parseHeader(source, headerPattern).userCode,
         load: async (audioContext: BaseAudioContext, deviceBox: ScriptDeviceBox): Promise<void> => {
@@ -158,7 +159,9 @@ export const createScriptCompiler = (config: ScriptCompilerConfig) => {
                         append: boolean = false): Promise<void> => {
             const userCode = parseHeader(source, headerPattern).userCode
             const currentUpdate = parseHeader(deviceBox.code.getValue(), headerPattern).update
-            const newUpdate = currentUpdate + 1
+            maxUpdate = Math.max(maxUpdate, currentUpdate)
+            const newUpdate = maxUpdate + 1
+            maxUpdate = newUpdate
             const uuid = UUID.toString(deviceBox.address.uuid)
             const params = parseParams(userCode)
             const samples = parseSamples(userCode)
