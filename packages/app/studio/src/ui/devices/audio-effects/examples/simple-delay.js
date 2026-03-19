@@ -9,7 +9,7 @@ class Processor {
     delaySamples = sampleRate * 0.5
     feedback = 0.5
     paramChanged(label, value) {
-        if (label === "time") this.delaySamples = value * sampleRate
+        if (label === "time") this.delaySamples = Math.round(value * sampleRate)
         if (label === "feedback") this.feedback = value
     }
     process({src, out}, {s0, s1}) {

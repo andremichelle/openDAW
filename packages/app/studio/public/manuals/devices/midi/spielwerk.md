@@ -41,21 +41,58 @@ The status bar at the bottom shows the current state:
 Declare parameters using `// @param` comments at the top of your code:
 
 ```javascript
-// @param amount 0.5
-// @param chance 1.0
-// @param offset
+// @param chance 0.5 0 1 linear
+// @param repeats 3 1 8 int
+// @param mode 0 0 3 int
+// @param bypass false
 ```
 
-Each `@param` directive creates an automatable knob on the device panel. The syntax is:
+Each `@param` directive creates an automatable knob on the device panel. The full syntax is:
 
 ```
-// @param <label> [default]
+// @param <name> [default] [min max type [unit]]
 ```
 
-- **label** — Parameter name (single word, no spaces). Appears on the knob.
-- **default** — Optional default value between 0.0 and 1.0. Defaults to 0.0 if omitted.
+### Simple (unipolar)
 
-Parameters are reconciled on each compile: new parameters are added, removed parameters are deleted, and existing parameters keep their current value.
+```
+// @param amount           → 0–1, default 0
+// @param amount 0.5       → 0–1, default 0.5
+```
+
+The knob value and `paramChanged` value are in the 0–1 range.
+
+### Mapped
+
+```
+// @param delay 120 24 480 int          → integer 24–480, default 120
+// @param chance 0.5 0 1 linear         → linear 0–1, default 0.5
+// @param decay 0.7 0.1 1.0 linear      → linear 0.1–1.0, default 0.7
+```
+
+The knob displays the mapped value with the unit. `paramChanged` receives the mapped value directly — no manual scaling needed.
+
+### Boolean
+
+```
+// @param bypass false         → Off/On, default Off
+// @param bypass true          → Off/On, default On
+// @param bypass bool          → Off/On, default Off
+```
+
+`paramChanged` receives `0` or `1`.
+
+### Supported mapping types
+
+| Type | Description | paramChanged receives |
+|---|---|---|
+| *(none)* | Unipolar 0–1 | `number` (0–1) |
+| `linear` | Linear scaling between min and max | `number` (min–max) |
+| `exp` | Exponential scaling (for frequency, time) | `number` (min–max) |
+| `int` | Integer snapping between min and max | `number` (integer) |
+| `bool` | On/Off toggle | `number` (0 or 1) |
+
+Parameters are reconciled on each compile: new parameters are added, removed parameters are deleted, and existing parameters keep their current value. Multiple spaces between tokens are allowed for alignment.
 
 ---
 
@@ -237,25 +274,35 @@ Most processors only care about note-on events. Filter with `if (event.gate)` an
 transformed copies. Note-off events are useful for stateful processors like arpeggiators
 that need to track which notes are currently held.
 
+When tracking held notes, always use `event.id` to identify notes — not pitch. Multiple
+notes with the same pitch can be active simultaneously (e.g. overlapping regions, multiple
+MIDI sources). Use id-based filtering for note-off removal:
+  this.held.push(event)                                    // on note-on
+  this.held = this.held.filter(note => note.id !== event.id)  // on note-off
+
 ## paramChanged(label, value)
 Called when a parameter knob changes value.
 - label — string, matches the name from the @param comment
-- value — number between 0.0 and 1.0
+- value — the mapped value (number). For unipolar: 0.0–1.0. For linear/exp: min–max.
+  For int: integer in min–max. For bool: 0 or 1.
 
 ## Declaring parameters
 Parameters are declared as comments at the top of the file:
 
-// @param <name> [default]
+// @param <name> [default] [min max type [unit]]
 
-- name: single word, no spaces
-- default: optional float between 0.0 and 1.0, defaults to 0.0
+Supported types: linear, exp, int, bool.
+If no type is given, the parameter is unipolar (0–1).
+If the default is "true" or "false", the type is bool.
+Multiple spaces between tokens are allowed for alignment.
 
 Each @param creates an automatable knob on the device UI.
 
 Examples:
-// @param amount 0.5
-// @param chance 1.0
-// @param rate
+// @param chance   0.5  0  1    linear
+// @param repeats  3    1  8    int
+// @param mode     0    0  3    int
+// @param bypass   false
 
 ## reset()
 Optional. Called when the transport jumps (seek, loop restart) or transitions from
