@@ -36,17 +36,21 @@ component
     align-items: center
     justify-content: center
     outline: 1px dashed rgba(white, 0.1)
-    margin: 0.375em
+    margin: 0.5em
     position: relative
     cursor: pointer
     pointer-events: all
 
     > svg
-      width: 2em
-      height: 2em
+      width: 1em
+      height: 1em
       pointer-events: none
 
     > span
+      text-align: center
+      width: 75%
+      overflow: hidden
+      text-overflow: ellipsis
       font-size: 0.5em
       pointer-events: none
 
@@ -60,9 +64,13 @@ component
         text-overflow: ellipsis
         overflow: hidden
         position: absolute
-        bottom: -1.5em
+        bottom: -1em
         width: 100%
         text-align: center
+        padding: 1px 2px
+        border-radius: 3px
+        color: black
+        background-color: var(--color-blue)
 
     &.accept
       color: var(--color-black)

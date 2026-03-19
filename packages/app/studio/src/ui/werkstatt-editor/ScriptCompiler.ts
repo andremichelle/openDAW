@@ -2,7 +2,7 @@ import {asInstanceOf, Editing, isDefined, UUID} from "@opendaw/lib-std"
 import {BoxGraph, Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {WerkstattParameterBox, WerkstattSampleBox} from "@opendaw/studio-boxes"
-import {parseParams, parseSamples} from "@opendaw/studio-adapters"
+import {parseDeclarationOrder, parseParams, parseSamples} from "@opendaw/studio-adapters"
 import type {ParamDeclaration, SampleDeclaration} from "@opendaw/studio-adapters"
 
 export interface ScriptDeviceBox {
@@ -35,7 +35,7 @@ const parseHeader = (source: string, pattern: RegExp): {userCode: string, update
     }
 }
 
-const reconcileParameters = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray<ParamDeclaration>): void => {
+const reconcileParameters = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray<ParamDeclaration>, order: Map<string, number>): void => {
     const boxGraph = deviceBox.graph
     const existingPointers = deviceBox.parameters.pointerHub.filter()
     const existingByLabel = new Map<string, WerkstattParameterBox>()
@@ -51,14 +51,14 @@ const reconcileParameters = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray
         }
     }
     seen.clear()
-    for (let index = 0; index < declared.length; index++) {
-        const declaration = declared[index]
+    for (const declaration of declared) {
         if (seen.has(declaration.label)) {continue}
         seen.add(declaration.label)
+        const unifiedIndex = order.get(declaration.label) ?? 0
         const existing = existingByLabel.get(declaration.label)
         const mappedDefault = declaration.defaultValue
         if (isDefined(existing)) {
-            existing.index.setValue(index)
+            existing.index.setValue(unifiedIndex)
             if (Math.abs(existing.defaultValue.getValue() - mappedDefault) > FLOAT_TOLERANCE) {
                 existing.defaultValue.setValue(mappedDefault)
                 existing.value.setValue(mappedDefault)
@@ -67,7 +67,7 @@ const reconcileParameters = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray
             WerkstattParameterBox.create(boxGraph, UUID.generate(), paramBox => {
                 paramBox.owner.refer(deviceBox.parameters)
                 paramBox.label.setValue(declaration.label)
-                paramBox.index.setValue(index)
+                paramBox.index.setValue(unifiedIndex)
                 paramBox.value.setValue(mappedDefault)
                 paramBox.defaultValue.setValue(mappedDefault)
             })
@@ -75,7 +75,7 @@ const reconcileParameters = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray
     }
 }
 
-const reconcileSamples = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray<SampleDeclaration>): void => {
+const reconcileSamples = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray<SampleDeclaration>, order: Map<string, number>): void => {
     const boxGraph = deviceBox.graph
     const existingPointers = deviceBox.samples.pointerHub.filter()
     const existingByLabel = new Map<string, WerkstattSampleBox>()
@@ -91,18 +91,18 @@ const reconcileSamples = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray<Sa
         }
     }
     seen.clear()
-    for (let index = 0; index < declared.length; index++) {
-        const declaration = declared[index]
+    for (const declaration of declared) {
         if (seen.has(declaration.label)) {continue}
         seen.add(declaration.label)
+        const unifiedIndex = order.get(declaration.label) ?? 0
         const existing = existingByLabel.get(declaration.label)
         if (isDefined(existing)) {
-            existing.index.setValue(index)
+            existing.index.setValue(unifiedIndex)
         } else {
             WerkstattSampleBox.create(boxGraph, UUID.generate(), sampleBox => {
                 sampleBox.owner.refer(deviceBox.samples)
                 sampleBox.label.setValue(declaration.label)
-                sampleBox.index.setValue(index)
+                sampleBox.index.setValue(unifiedIndex)
             })
         }
     }
@@ -157,12 +157,13 @@ export const createScriptCompiler = (config: ScriptCompilerConfig) => {
             const uuid = UUID.toString(deviceBox.address.uuid)
             const params = parseParams(userCode)
             const samples = parseSamples(userCode)
+            const order = parseDeclarationOrder(userCode)
             const wrappedCode = wrapCode(config, uuid, newUpdate, userCode)
             validateCode(wrappedCode)
             const modifier = () => {
                 deviceBox.code.setValue(createHeader(newUpdate) + userCode)
-                reconcileParameters(deviceBox, params)
-                reconcileSamples(deviceBox, samples)
+                reconcileParameters(deviceBox, params, order)
+                reconcileSamples(deviceBox, samples, order)
             }
             if (append) {
                 editing.append(modifier)

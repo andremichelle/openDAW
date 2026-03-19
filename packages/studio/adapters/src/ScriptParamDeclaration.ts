@@ -96,6 +96,22 @@ export const parseSamples = (code: string): ReadonlyArray<SampleDeclaration> => 
     return samples
 }
 
+const DECLARATION_LINE = /^\/\/ @(?:param|sample) \S+/gm
+
+export const parseDeclarationOrder = (code: string): Map<string, number> => {
+    const order = new Map<string, number>()
+    let match: Nullable<RegExpExecArray>
+    DECLARATION_LINE.lastIndex = 0
+    let index = 0
+    while ((match = DECLARATION_LINE.exec(code)) !== null) {
+        const label = match[0].replace(/^\/\/ @(?:param|sample)\s+/, "").split(/\s+/)[0]
+        if (!order.has(label)) {
+            order.set(label, index++)
+        }
+    }
+    return order
+}
+
 export const resolveValueMapping = (declaration: ParamDeclaration): ValueMapping<number> => {
     switch (declaration.mapping) {
         case "unipolar": return ValueMapping.unipolar()

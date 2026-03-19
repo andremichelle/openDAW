@@ -1,5 +1,5 @@
 import {Arrays, asInstanceOf, int, isDefined, isNotNull, Nullable, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {ApparatDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {ApparatDeviceBoxAdapter, SampleLoader} from "@opendaw/studio-adapters"
 import {WerkstattParameterBox, WerkstattSampleBox} from "@opendaw/studio-boxes"
 import {AudioBuffer, AudioData, Event, NoteEvent, SimpleLimiter} from "@opendaw/lib-dsp"
 import {EngineContext} from "../../EngineContext"
@@ -53,7 +53,7 @@ export class ApparatDeviceProcessor extends AudioProcessor
     readonly #peakBroadcaster: PeakBroadcaster
     readonly #uuid: string
     readonly #boundParameters: Array<AutomatableParameter<number>>
-    readonly #sampleLoaders: Map<string, {label: string, lifecycle: Terminable}> = new Map()
+    readonly #sampleSlots: Map<string, {loader: Option<SampleLoader>, lifecycle: Terminable}> = new Map()
 
     #userProcessor: Option<UserProcessor> = Option.None
     #currentUpdate: int = -1
@@ -102,29 +102,27 @@ export class ApparatDeviceProcessor extends AudioProcessor
                 onAdded: (({box: sampleBox}) => {
                     const sample = asInstanceOf(sampleBox, WerkstattSampleBox)
                     const label = sample.label.getValue()
-                    const subscription = sample.file.catchupAndSubscribe(pointer => {
-                        pointer.targetVertex.match({
-                            none: () => this.#updateSampleData(label, null),
-                            some: ({box: fileBox}) => {
-                                const fileUUID = fileBox.address.uuid
-                                const loader = context.sampleManager.getOrCreate(fileUUID)
-                                loader.subscribe(state => {
-                                    if (state.type === "loaded") {
-                                        this.#updateSampleData(label, loader.data.unwrap())
-                                    }
-                                })
-                            }
-                        })
+                    const slot: {loader: Option<SampleLoader>, lifecycle: Terminable} = {
+                        loader: Option.None,
+                        lifecycle: Terminable.Empty
+                    }
+                    this.#sampleSlots.set(label, slot)
+                    slot.lifecycle = sample.file.catchupAndSubscribe(pointer => {
+                        const target = pointer.targetVertex.unwrapOrNull()
+                        if (target === null) {
+                            slot.loader = Option.None
+                        } else {
+                            slot.loader = Option.wrap(context.sampleManager.getOrCreate(target.box.address.uuid))
+                        }
                     })
-                    this.#sampleLoaders.set(label, {label, lifecycle: subscription})
                 }),
                 onRemoved: (({box: sampleBox}) => {
                     const sample = asInstanceOf(sampleBox, WerkstattSampleBox)
                     const label = sample.label.getValue()
-                    const entry = this.#sampleLoaders.get(label)
+                    const entry = this.#sampleSlots.get(label)
                     if (isDefined(entry)) {
                         entry.lifecycle.terminate()
-                        this.#sampleLoaders.delete(label)
+                        this.#sampleSlots.delete(label)
                     }
                     this.#updateSampleData(label, null)
                 })
@@ -178,6 +176,7 @@ export class ApparatDeviceProcessor extends AudioProcessor
         }
         if (this.#userProcessor.isEmpty()) {return}
         const proc = this.#userProcessor.unwrap()
+        this.#pollSamples(proc)
         const outL = this.#audioOutput.getChannel(0)
         const outR = this.#audioOutput.getChannel(1)
         outL.fill(0.0, block.s0, block.s1)
@@ -225,14 +224,14 @@ export class ApparatDeviceProcessor extends AudioProcessor
         try {
             const proc = new ProcessorClass() as UserProcessor
             proc.samples = {}
-            for (const [label] of this.#sampleLoaders) {
+            for (const [label] of this.#sampleSlots) {
                 proc.samples[label] = null
             }
             this.#userProcessor = Option.wrap(proc)
             this.#currentUpdate = update
             this.#silenced = false
             this.#pushAllParameters()
-            this.#pushAllSamples()
+            this.#pollSamples(proc)
         } catch (error) {
             this.#silence(`Failed to instantiate Processor: ${error}`)
         }
@@ -249,13 +248,15 @@ export class ApparatDeviceProcessor extends AudioProcessor
         })
     }
 
-    #pushAllSamples(): void {
-        this.#userProcessor.ifSome(proc => {
-            for (const [label] of this.#sampleLoaders) {
-                const existing = proc.samples[label]
-                if (isDefined(existing)) {continue}
-            }
-        })
+    #pollSamples(proc: UserProcessor): void {
+        for (const [label, slot] of this.#sampleSlots) {
+            slot.loader.ifSome(loader => {
+                const data = loader.data.unwrapOrNull()
+                if (proc.samples[label] !== data) {
+                    proc.samples[label] = data
+                }
+            })
+        }
     }
 
     #updateSampleData(label: string, data: Nullable<AudioData>): void {

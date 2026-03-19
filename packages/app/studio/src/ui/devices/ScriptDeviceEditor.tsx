@@ -198,8 +198,17 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
                         <span>{label}</span>
                     </div>
                 )
-                const sampleSelector = new SampleSelector(service,
-                    SampleSelectStrategy.forPointerField(sample.file))
+                const sampleSelector = new SampleSelector(service, {
+                    hasSample: () => sample.file.nonEmpty(),
+                    replace: (replacement) => replacement.match({
+                        none: () => sample.file.targetVertex.ifSome(({box: fileBox}) => {
+                            const mustDelete = fileBox.pointerHub.size() === 1
+                            sample.file.defer()
+                            if (mustDelete) {fileBox.delete()}
+                        }),
+                        some: () => SampleSelectStrategy.changePointer(sample.file, replacement)
+                    })
+                })
                 terminator.ownAll(
                     sample.file.catchupAndSubscribe(pointer => pointer.targetVertex.match({
                         none: () => dropZone.removeAttribute("sample"),
