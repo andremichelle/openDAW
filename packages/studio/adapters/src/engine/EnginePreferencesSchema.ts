@@ -29,11 +29,13 @@ export const EngineSettingsSchema = z.object({
     recording: z.object({
         countInBars: z.union(_RecordingCountInBars.map(value => z.literal(value))),
         allowTakes: z.boolean(),
+        automationEnabled: z.boolean(),
         olderTakeAction: z.union(_OlderTakeActionOptions.map(value => z.literal(value))),
         olderTakeScope: z.union(_OlderTakeScopeOptions.map(value => z.literal(value)))
     }).default({
         countInBars: 1,
         allowTakes: true,
+        automationEnabled: true,
         olderTakeAction: "mute-region",
         olderTakeScope: "previous-only"
     })

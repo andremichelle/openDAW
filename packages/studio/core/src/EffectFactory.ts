@@ -6,6 +6,7 @@ import {EffectBox} from "./EffectBox"
 
 export interface EffectFactory extends DeviceFactory {
     readonly separatorBefore: boolean
+    readonly external: boolean
     readonly type: "audio" | "midi"
 
     create(project: Project, host: Field<EffectPointerType>, index: int): EffectBox

@@ -211,7 +211,6 @@ export class RegionClipResolver {
             switch (type) {
                 case "delete":
                     region.box.delete()
-                    console.debug("[ClipResolver.exec] delete", before)
                     break
                 case "start":
                     if (UnionAdapterTypes.isLoopableRegion(region)) {
@@ -222,7 +221,6 @@ export class RegionClipResolver {
                         region.position = region.position + delta
                         region.duration = oldDuration - delta
                         region.loopOffset = mod(oldLoopOffset + delta, oldLoopDuration)
-                        console.debug("[ClipResolver.exec] start", {before, after: {p: region.position, d: region.duration, c: region.complete}})
                     } else {
                         return panic("Not yet implemented")
                     }
@@ -230,22 +228,14 @@ export class RegionClipResolver {
                 case "complete":
                     if (UnionAdapterTypes.isLoopableRegion(region)) {
                         region.duration = task.position - task.region.position
-                        console.debug("[ClipResolver.exec] complete", {before, after: {p: region.position, d: region.duration, c: region.complete}})
                     } else {
                         return panic("Not yet implemented")
                     }
                     break
                 case "separate":
-                    console.debug("[ClipResolver.exec] separate", {before, begin: task.begin, end: task.end})
                     RegionEditing.clip(region, task.begin, task.end)
                     break
             }
-        })
-        console.debug("[ClipResolver.exec] done", {
-            trackIndex: this.#ground.listIndex,
-            result: this.#ground.regions.collection.asArray().map(region => ({
-                p: region.position, d: region.duration, c: region.complete, sel: region.isSelected
-            }))
         })
     }
 }

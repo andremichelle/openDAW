@@ -1,6 +1,7 @@
 import {
     byte,
     clamp,
+    Editing,
     int,
     Notifier,
     Observer,
@@ -11,7 +12,6 @@ import {
     unitValue
 } from "@moises-ai/lib-std"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {BoxEditing} from "@moises-ai/lib-box"
 import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
 import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
 import {EventCollection, NoteEvent, ppqn} from "@moises-ai/lib-dsp"
@@ -39,7 +39,7 @@ class SelectedModifyStrategy implements NoteModifyStrategy {
 }
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     selection: Selection<NoteEventBoxAdapter>
     positioner: PitchPositioner
@@ -52,7 +52,7 @@ type Construct = Readonly<{
 export class NoteMoveModifier implements NoteModifier {
     static create(construct: Construct): NoteMoveModifier {return new NoteMoveModifier(construct)}
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #selection: Selection<NoteEventBoxAdapter>
     readonly #positioner: PitchPositioner
@@ -70,7 +70,16 @@ export class NoteMoveModifier implements NoteModifier {
     #deltaPitch: int
     #deltaPosition: ppqn
 
-    private constructor({editing, element, selection, positioner, snapping, pointerPulse, pointerPitch, reference}: Construct) {
+    private constructor({
+                            editing,
+                            element,
+                            selection,
+                            positioner,
+                            snapping,
+                            pointerPulse,
+                            pointerPitch,
+                            reference
+                        }: Construct) {
         this.#editing = editing
         this.#element = element
         this.#selection = selection

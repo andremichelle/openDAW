@@ -1,5 +1,5 @@
-import {ByteArrayInput, ByteArrayOutput, Option, Procedure, Provider, Selection} from "@moises-ai/lib-std"
-import {Address, BoxEditing, BoxGraph} from "@moises-ai/lib-box"
+import {ByteArrayInput, ByteArrayOutput, Editing, Option, Procedure, Provider, Selection} from "@moises-ai/lib-std"
+import {Address, BoxGraph} from "@moises-ai/lib-box"
 import {ppqn} from "@moises-ai/lib-dsp"
 import {Pointers} from "@moises-ai/studio-enums"
 import {ValueEventBox} from "@moises-ai/studio-boxes"
@@ -14,7 +14,7 @@ export namespace ValuesClipboard {
         readonly getEnabled: Provider<boolean>
         readonly getPosition: Provider<ppqn>
         readonly setPosition: Procedure<ppqn>
-        readonly editing: BoxEditing
+        readonly editing: Editing
         readonly selection: Selection<ValueEventBoxAdapter>
         readonly collection: ValueEventCollectionBoxAdapter
         readonly targetAddress: Address

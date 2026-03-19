@@ -1,5 +1,4 @@
-import {Objects, Selection} from "@moises-ai/lib-std"
-import {BoxEditing} from "@moises-ai/lib-box"
+import {Editing, Objects, Selection} from "@moises-ai/lib-std"
 import {Interpolation} from "@moises-ai/lib-dsp"
 import {ContextMenu, ElementCapturing, MenuItem} from "@moises-ai/studio-core"
 import {ValueEventBoxAdapter} from "@moises-ai/studio-adapters"
@@ -10,7 +9,7 @@ import {DebugMenus} from "@/ui/menu/debug"
 type Construct = {
     element: Element
     capturing: ElementCapturing<ValueCaptureTarget>
-    editing: BoxEditing
+    editing: Editing
     selection: Selection<ValueEventBoxAdapter>
 }
 

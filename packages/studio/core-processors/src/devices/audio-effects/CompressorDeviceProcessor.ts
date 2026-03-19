@@ -184,7 +184,7 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
 
     handleEvent(_event: Event): void {}
 
-    processAudio(_block: Block, from: int, to: int): void {
+    processAudio({s0, s1}: Block): void {
         if (this.#source.isEmpty()) return
         const source = this.#source.unwrap()
 
@@ -193,14 +193,14 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
         const outL = this.#output.getChannel(0)
         const outR = this.#output.getChannel(1)
 
-        for (let i = from; i < to; i++) {
+        for (let i = s0; i < s1; i++) {
             const g = this.#smoothInputGain.moveAndGet()
             outL[i] = srcL[i] * g
             outR[i] = srcR[i] * g
         }
 
         // Clear sidechain signal buffer
-        this.#sidechainSignal.fill(0.0, from, to)
+        this.#sidechainSignal.fill(0.0, s0, s1)
 
         // Get max L/R amplitude values for envelope follower
         // Use external side-chain buffer if connected, otherwise use input signal
@@ -208,17 +208,17 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
             const sc = this.#sideChain.unwrap()
             const scL = sc.getChannel(0)
             const scR = sc.getChannel(1)
-            for (let i = from; i < to; i++) {
+            for (let i = s0; i < s1; i++) {
                 this.#sidechainSignal[i] = Math.max(Math.abs(scL[i]), Math.abs(scR[i]))
             }
         } else {
-            for (let i = from; i < to; i++) {
+            for (let i = s0; i < s1; i++) {
                 this.#sidechainSignal[i] = Math.max(Math.abs(outL[i]), Math.abs(outR[i]))
             }
         }
 
         // Track detection signal peak for editor curve display
-        for (let i = from; i < to; i++) {
+        for (let i = s0; i < s1; i++) {
             const peak = this.#sidechainSignal[i]
             if (this.#inpMax <= peak) {
                 this.#inpMax = peak
@@ -228,49 +228,49 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
         }
 
         // Calculate crest factor on max amplitude values
-        this.#ballistics.processCrestFactor(this.#sidechainSignal, from, to)
+        this.#ballistics.processCrestFactor(this.#sidechainSignal, s0, s1)
 
         // Compute attenuation - converts sidechain from linear to logarithmic
-        this.#gainComputer.applyCompressionToBuffer(this.#sidechainSignal, from, to)
+        this.#gainComputer.applyCompressionToBuffer(this.#sidechainSignal, s0, s1)
 
         // Smooth attenuation - still logarithmic
-        this.#ballistics.applyBallistics(this.#sidechainSignal, from, to)
+        this.#ballistics.applyBallistics(this.#sidechainSignal, s0, s1)
 
-        this.#redMin = this.#sidechainSignal[to - 1]
+        this.#redMin = this.#sidechainSignal[s1 - 1]
 
         // Calculate auto makeup
-        this.#autoMakeup = this.#calculateAutoMakeup(this.#sidechainSignal, from, to)
+        this.#autoMakeup = this.#calculateAutoMakeup(this.#sidechainSignal, s0, s1)
 
         // Do lookahead if enabled
         if (this.#lookahead) {
             // Delay input buffer
-            this.#delay.process(this.#output, from, to)
+            this.#delay.process(this.#output, s0, s1)
 
             // Process sidechain (delay + gain reduction fade in)
-            this.#lookaheadProcessor.process(this.#sidechainSignal, from, to)
+            this.#lookaheadProcessor.process(this.#sidechainSignal, s0, s1)
         }
 
         // Add makeup gain and convert sidechain to a linear domain
-        for (let i = from; i < to; i++) {
+        for (let i = s0; i < s1; i++) {
             this.#sidechainSignal[i] = decibelsToGain(
                 this.#sidechainSignal[i] + this.#makeup + this.#autoMakeup
             )
         }
 
         // Copy buffer to the original signal for dry/wet mixing
-        for (let i = from; i < to; i++) {
+        for (let i = s0; i < s1; i++) {
             this.#originalSignal[0][i] = outL[i]
             this.#originalSignal[1][i] = outR[i]
         }
 
         // Multiply attenuation with buffer - apply compression
-        for (let i = from; i < to; i++) {
+        for (let i = s0; i < s1; i++) {
             outL[i] *= this.#sidechainSignal[i]
             outR[i] *= this.#sidechainSignal[i]
         }
 
         // Mix dry and wet signal
-        for (let i = from; i < to; i++) {
+        for (let i = s0; i < s1; i++) {
             const l = outL[i] * this.#mix + this.#originalSignal[0][i] * (1.0 - this.#mix)
             const r = outR[i] * this.#mix + this.#originalSignal[1][i] * (1.0 - this.#mix)
             const peak = Math.max(Math.abs(l), Math.abs(r))
@@ -283,7 +283,7 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
             outR[i] = r
         }
 
-        this.#peaks.process(outL, outR, from, to)
+        this.#peaks.process(outL, outR, s0, s1)
         this.#processing = true
     }
 

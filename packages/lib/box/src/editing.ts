@@ -100,7 +100,7 @@ export class BoxEditing implements Editing {
         return this.#historyIndex !== this.#savedHistoryIndex
     }
 
-    isEmpty(): boolean {return this.#marked.length === 0 && this.#pending.length === 0}
+    hasNoChanges(): boolean {return this.#marked.length === 0 && this.#pending.length === 0}
 
     clear(): void {
         assert(!this.#modifying, "Already modifying")
@@ -142,24 +142,10 @@ export class BoxEditing implements Editing {
         return this.#pending.length <= 0
     }
 
-    // TODO This method exists to handle bidirectional sync between UI state and Box state.
-    //  Problem: When a Box field changes (e.g., during undo/redo), reactive subscriptions may fire
-    //  and attempt to call modify() to sync the UI state back to the Box. But since undo/redo
-    //  already has a transaction open (via Modification.inverse/forward calling beginTransaction
-    //  directly), calling modify() would fail with "Transaction already in progress".
-    //  Current workaround: Callers check mustModify() before calling modify(). If false (transaction
-    //  already open), they either skip the call or call setValue directly without recording history.
-    //  See: EditWrapper.forValue, EditWrapper.forAutomatableParameter, TransportGroup loop sync.
-    //  Better solution: Consider having Modification.inverse/forward use the same #modifying flag
-    //  as modify(), or introduce a unified "modification context" that both undo/redo and user
-    //  actions share. This would allow modify() to detect it's being called reactively during
-    //  undo/redo and handle it internally, rather than requiring all callers to guard with mustModify().
-    mustModify(): boolean {return !this.#graph.inTransaction()}
-
     modify<R>(modifier: SyncProvider<Maybe<R>>, mark: boolean = true): Option<R> {
         assert(!this.#inProcess, "Cannot call modify while a modification process is running")
-        if (this.#modifying) {
-            // Nested modify call - just execute without separate recording
+        if (this.#modifying || this.#graph.inTransaction()) {
+            // Nested modify call or reactive call during undo/redo — just execute without separate recording
             this.#notifier.notify()
             return Option.wrap(modifier())
         }
@@ -180,6 +166,52 @@ export class BoxEditing implements Editing {
         this.#modifying = false
         this.#graph.edges().validateRequirements()
         if (mark) {this.mark()}
+        this.#notifier.notify()
+        return Option.wrap(result)
+    }
+
+    append<R>(modifier: SyncProvider<Maybe<R>>): Option<R> {
+        assert(!this.#inProcess, "Cannot call append while a modification process is running")
+        if (this.#modifying || this.#graph.inTransaction()) {
+            this.#notifier.notify()
+            return Option.wrap(modifier())
+        }
+        if (this.#pending.length > 0) {
+            if (this.#historyIndex > 0) {
+                this.#marked[this.#historyIndex - 1] =
+                    [...this.#marked[this.#historyIndex - 1], ...this.#pending.splice(0)]
+            } else {
+                this.mark()
+            }
+        }
+        this.#modifying = true
+        const updates: Array<Update> = []
+        const subscription = this.#graph.subscribeToAllUpdates({
+            onUpdate: (update: Update) => updates.push(update)
+        })
+        this.#graph.beginTransaction()
+        const result = modifier()
+        this.#graph.endTransaction()
+        subscription.terminate()
+        const optimized = optimizeUpdates(updates)
+        if (optimized.length > 0) {
+            const modification = new Modification(optimized)
+            if (this.#historyIndex > 0) {
+                if (this.#marked.length > this.#historyIndex) {
+                    if (this.#savedHistoryIndex > this.#historyIndex) {
+                        this.#savedHistoryIndex = -1
+                    }
+                    this.#marked.splice(this.#historyIndex)
+                }
+                this.#marked[this.#historyIndex - 1] =
+                    [...this.#marked[this.#historyIndex - 1], modification]
+            } else {
+                this.#marked.push([modification])
+                this.#historyIndex = this.#marked.length
+            }
+        }
+        this.#modifying = false
+        this.#graph.edges().validateRequirements()
         this.#notifier.notify()
         return Option.wrap(result)
     }
@@ -232,7 +264,7 @@ export class BoxEditing implements Editing {
         this.#historyIndex = this.#marked.length
     }
 
-    clearPending(): void {
+    revertPending(): void {
         if (this.#pending.length === 0) {return}
         this.#pending.reverse().forEach(modification => modification.inverse(this.#graph))
         this.#pending.length = 0

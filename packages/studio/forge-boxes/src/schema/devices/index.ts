@@ -25,6 +25,10 @@ import {TidalDeviceBox} from "./audio-effects/TidalDeviceBox"
 import {DattorroReverbDeviceBox} from "./audio-effects/DattorroReverbDeviceBox"
 import {GateDeviceBox} from "./audio-effects/GateDeviceBox"
 import {NeuralAmpDeviceBox} from "./audio-effects/NeuralAmpDeviceBox"
+import {WaveshaperDeviceBox} from "./audio-effects/WaveshaperDeviceBox"
+import {WerkstattDeviceBox} from "./audio-effects/WerkstattDeviceBox"
+import {WerkstattParameterBox} from "./audio-effects/WerkstattParameterBox"
+import {SpielwerkDeviceBox} from "./midi-effects/SpielwerkDeviceBox"
 
 export const DeviceDefinitions = [
     UnknownAudioEffectDevice,
@@ -55,5 +59,9 @@ export const DeviceDefinitions = [
     ArpeggioDeviceBox,
     PitchDeviceBox,
     ZeitgeistDeviceBox,
-    NeuralAmpDeviceBox
+    NeuralAmpDeviceBox,
+    WaveshaperDeviceBox,
+    WerkstattDeviceBox,
+    WerkstattParameterBox,
+    SpielwerkDeviceBox
 ]

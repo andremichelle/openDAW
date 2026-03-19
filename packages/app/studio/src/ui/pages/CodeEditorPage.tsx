@@ -9,7 +9,7 @@ import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {Option, panic, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
 import {ScriptHost} from "@moises-ai/studio-scripting"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {MenuItem} from "@moises-ai/studio-core"
+import {MenuItem, Project, WavFile} from "@moises-ai/studio-core"
 import scriptWorkerUrl from "@moises-ai/studio-scripting/ScriptWorker.js?worker&url"
 import ScriptSimple from "./code-editor/examples/simple.ts?raw"
 import ScriptRetro from "./code-editor/examples/retro.ts?raw"
@@ -20,7 +20,6 @@ import {Promises} from "@moises-ai/lib-runtime"
 import {ProjectSkeleton, Sample} from "@moises-ai/studio-adapters"
 import {BoxGraph} from "@moises-ai/lib-box"
 import {BoxIO} from "@moises-ai/studio-boxes"
-import {Project, WavFile} from "@moises-ai/studio-core"
 import {AudioData} from "@moises-ai/lib-dsp"
 
 const truncateImports = (script: string) => script.substring(script.indexOf("//"))
@@ -98,7 +97,8 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                         wordBasedSuggestions: "off", // Important! Use only TS suggestions
                         model: model,
                         theme: "vs-dark",
-                        automaticLayout: true
+                        automaticLayout: true,
+                        stickyScroll: {enabled: false}
                     })
                     const allowed = ["c", "v", "x", "a", "z", "y"]
                     lifecycle.ownAll(

@@ -4,10 +4,12 @@ import {
     Errors,
     isInstanceOf,
     isNotUndefined,
+    Notifier,
+    Observer,
     panic,
-    Procedure,
     Progress,
     RuntimeNotifier,
+    Subscription,
     UUID
 } from "@moises-ai/lib-std"
 import {Files} from "@moises-ai/lib-dom"
@@ -20,18 +22,22 @@ export namespace AssetService {
     export type ImportArgs = {
         uuid?: UUID.Bytes
         name?: string,
+        bpm?: number,
         arrayBuffer: ArrayBuffer,
-        progressHandler?: Progress.Handler
+        progressHandler?: Progress.Handler,
+        origin?: "import" | "recording"
     }
 }
 
-export abstract class AssetService<T extends Sample | Soundfont> {
+export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
     protected abstract readonly nameSingular: string
     protected abstract readonly namePlural: string
     protected abstract readonly boxType: Class<AudioFileBox | SoundfontFileBox>
     protected abstract readonly filePickerOptions: FilePickerOptions
 
-    protected constructor(protected readonly onUpdate: Procedure<T>) {}
+    protected readonly notifier: Notifier<[T, RAW]> = new Notifier<[T, RAW]>()
+
+    subscribe(observer: Observer<[T, RAW]>): Subscription {return this.notifier.subscribe(observer)}
 
     async browse(multiple: boolean): Promise<ReadonlyArray<T>> {
         return this.browseFiles(multiple, this.filePickerOptions)

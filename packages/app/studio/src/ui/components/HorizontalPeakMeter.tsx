@@ -2,7 +2,7 @@ import css from "./HorizontalMeter.sass?inline"
 import {AnimationFrame, Html} from "@moises-ai/lib-dom"
 import {Arrays, Lifecycle, ValueMapping} from "@moises-ai/lib-std"
 import {createElement} from "@moises-ai/lib-jsx"
-import {CanvasPainter} from "../../../../../studio/core/src/ui/canvas/painter"
+import {CanvasPainter} from "@moises-ai/studio-core"
 import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "PeakVolumeSlider")

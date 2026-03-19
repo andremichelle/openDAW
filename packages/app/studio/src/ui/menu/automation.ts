@@ -1,9 +1,9 @@
-import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
+import {ContextMenu, MenuItem, MIDILearning} from "@moises-ai/studio-core"
 import {AudioUnitTracks, AutomatableParameterFieldAdapter, TrackType} from "@moises-ai/studio-adapters"
-import {BoxEditing, PrimitiveValues} from "@moises-ai/lib-box"
-import {MIDILearning} from "@moises-ai/studio-core"
+import {PrimitiveValues} from "@moises-ai/lib-box"
+import {Editing} from "@moises-ai/lib-std"
 
-export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: BoxEditing,
+export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: Editing,
                                                                       midiDevices: MIDILearning,
                                                                       tracks: AudioUnitTracks,
                                                                       parameter: AutomatableParameterFieldAdapter<T>,

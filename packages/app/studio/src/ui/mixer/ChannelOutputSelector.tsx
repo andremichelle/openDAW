@@ -5,10 +5,9 @@ import {AudioUnitType, Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {createElement, DomElement, Frag} from "@moises-ai/lib-jsx"
 import {IconCartridge} from "@/ui/components/Icon.tsx"
 import {Html} from "@moises-ai/lib-dom"
-import {MenuItem} from "@moises-ai/studio-core"
+import {MenuItem, Project} from "@moises-ai/studio-core"
 import {showNewAudioBusOrAuxDialog} from "@/ui/dialogs"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {Project} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "OutputSelector")
 

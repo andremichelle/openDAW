@@ -12,6 +12,13 @@ const toSeconds = (property: ValueOwner<ppqn>, bpm: number): seconds =>
     PPQN.pulsesToSeconds(property.getValue(), bpm)
 
 export const migrateAudioRegionBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box: AudioRegionBox, bpm: number): void => {
+    if (box.file.targetVertex.isEmpty()) {
+        console.debug("Migrate 'AudioRegionBox' remove region without AudioFileBox")
+        boxGraph.beginTransaction()
+        box.delete()
+        boxGraph.endTransaction()
+        return
+    }
     const {duration, loopOffset, loopDuration, playback} = box
     if (isIntEncodedAsFloat(duration.getValue())
         || isIntEncodedAsFloat(loopOffset.getValue())

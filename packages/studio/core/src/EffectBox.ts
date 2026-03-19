@@ -17,11 +17,16 @@ import {
     UnknownAudioEffectDeviceBox,
     UnknownMidiEffectDeviceBox,
     VelocityDeviceBox,
+    WaveshaperDeviceBox,
+    SpielwerkDeviceBox,
+    WerkstattDeviceBox,
     ZeitgeistDeviceBox
 } from "@moises-ai/studio-boxes"
 
 export type EffectBox =
     | ArpeggioDeviceBox | PitchDeviceBox | VelocityDeviceBox | ZeitgeistDeviceBox | UnknownMidiEffectDeviceBox
+    | SpielwerkDeviceBox
     | MaximizerDeviceBox | DelayDeviceBox | ReverbDeviceBox | RevampDeviceBox | StereoToolDeviceBox | TidalDeviceBox
     | ModularDeviceBox | UnknownAudioEffectDeviceBox | CompressorDeviceBox | GateDeviceBox
-    | CrusherDeviceBox | FoldDeviceBox | DattorroReverbDeviceBox | NeuralAmpDeviceBox
+    | CrusherDeviceBox | FoldDeviceBox | DattorroReverbDeviceBox | NeuralAmpDeviceBox | WaveshaperDeviceBox
+    | WerkstattDeviceBox

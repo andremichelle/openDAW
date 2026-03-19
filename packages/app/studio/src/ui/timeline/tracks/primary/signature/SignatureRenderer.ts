@@ -1,8 +1,7 @@
 import {SignatureEvent, SignatureTrackAdapter} from "@moises-ai/studio-adapters"
 import {isDefined, Nullable} from "@moises-ai/lib-std"
-import {CanvasPainter} from "../../../../../../../../studio/core/src/ui/canvas/painter"
+import {CanvasPainter, TimelineRange} from "@moises-ai/studio-core"
 import {Context2d} from "@moises-ai/lib-dom"
-import {TimelineRange} from "@moises-ai/studio-core"
 import {Colors} from "@moises-ai/studio-enums"
 import {ppqn} from "@moises-ai/lib-dsp"
 

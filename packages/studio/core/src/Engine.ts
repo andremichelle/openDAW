@@ -1,4 +1,4 @@
-import {int, Nullable, ObservableValue, Observer, Subscription, Terminable, UUID} from "@moises-ai/lib-std"
+import {int, Nullable, ObservableValue, Observer, Procedure, Subscription, Terminable, UUID} from "@moises-ai/lib-std"
 import {AudioData, bpm, ppqn} from "@moises-ai/lib-dsp"
 import {ClipNotification, EnginePreferences, NoteSignal} from "@moises-ai/studio-adapters"
 import {Project} from "./project"
@@ -25,6 +25,7 @@ export interface Engine extends Terminable {
     scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void
     scheduleClipStop(trackIds: ReadonlyArray<UUID.Bytes>): void
     subscribeClipNotification(observer: Observer<ClipNotification>): Subscription
+    subscribeDeviceMessage(uuid: string, listener: Procedure<string>): Subscription
     registerMonitoringSource(uuid: UUID.Bytes, node: AudioNode, numChannels: 1 | 2): void
     unregisterMonitoringSource(uuid: UUID.Bytes): void
 

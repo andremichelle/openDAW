@@ -1,5 +1,5 @@
 import {float, Func, int, Objects} from "@moises-ai/lib-std"
-import {Constraints, FieldKey, PointerRules, PointerTypes} from "@moises-ai/lib-box"
+import {Constraints, FieldKey, PointerRules, PointerTypes, ResourceType} from "@moises-ai/lib-box"
 
 export const reserved = Object.freeze({type: "reserved", name: ""} as const)
 
@@ -32,10 +32,7 @@ export type ClassSchema<E extends PointerTypes> = {
     name: string
     fields: FieldRecord<E>
 }
-// Resources act as leaves when collecting dependencies (their own dependencies are not followed).
-// "preserved": UUID is preserved during copy/paste (for content-addressable storage like audio files)
-// "internal": UUID is regenerated during copy/paste
-export type ResourceType = "preserved" | "internal"
+export type {ResourceType}
 
 export type BoxSchema<E extends PointerTypes> = Referencable<E> & {
     type: "box"

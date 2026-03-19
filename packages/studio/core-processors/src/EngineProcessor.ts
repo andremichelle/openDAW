@@ -9,7 +9,6 @@ import {
     Observer,
     Option,
     panic,
-    quantizeFloor,
     SortedSet,
     Subscription,
     SyncStream,
@@ -120,7 +119,15 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
     #perfWriteIndex: number = 0
 
-    constructor({processorOptions: {syncStreamBuffer, controlFlagsBuffer, hrClockBuffer, project, exportConfiguration}}: {
+    constructor({
+                    processorOptions: {
+                        syncStreamBuffer,
+                        controlFlagsBuffer,
+                        hrClockBuffer,
+                        project,
+                        exportConfiguration
+                    }
+                }: {
         processorOptions: EngineProcessorAttachment
     } & AudioNodeOptions) {
         super()
@@ -139,6 +146,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
             dispatcher => new class implements EngineToClient {
                 log(message: string): void {dispatcher.dispatchAndForget(this.log, message)}
                 error(error: unknown): void {dispatcher.dispatchAndForget(this.error, error)}
+                deviceMessage(uuid: string, message: string): void {dispatcher.dispatchAndForget(this.deviceMessage, uuid, message)}
                 fetchAudio(uuid: UUID.Bytes): Promise<AudioData> {
                     return dispatcher.dispatchAndReturn(this.fetchAudio, uuid)
                 }
@@ -499,7 +507,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
             const position = this.#timeInfo.position
             const [nominator, denominator] = this.#timelineBoxAdapter.signature
             const countInOffset = PPQN.fromSignature(this.#preferences.settings.recording.countInBars * nominator, denominator)
-            this.#recordingStartTime = quantizeFloor(position, PPQN.fromSignature(nominator, denominator))
+            this.#recordingStartTime = position
             this.#timeInfo.isCountingIn = true
             this.#timeInfo.metronomeEnabled = true
             this.#timeInfo.transporting = true

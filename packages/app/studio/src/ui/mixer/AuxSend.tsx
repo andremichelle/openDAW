@@ -1,5 +1,5 @@
 import css from "./AuxSend.sass?inline"
-import {DefaultObservableValue, Lifecycle} from "@moises-ai/lib-std"
+import {DefaultObservableValue, Editing, Lifecycle} from "@moises-ai/lib-std"
 import {createElement, DomElement, Inject} from "@moises-ai/lib-jsx"
 import {AuxSendBoxAdapter} from "@moises-ai/studio-adapters"
 import {Colors, IconSymbol} from "@moises-ai/studio-enums"
@@ -9,14 +9,13 @@ import {MenuItem} from "@moises-ai/studio-core"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {IconCartridge} from "@/ui/components/Icon.tsx"
 import {SnapCenter} from "@/ui/configs.ts"
-import {BoxEditing} from "@moises-ai/lib-box"
 import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "AuxSend")
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     adapter: AuxSendBoxAdapter
 }
 

@@ -5,12 +5,11 @@ import {Events, Files} from "@moises-ai/lib-dom"
 import {Promises} from "@moises-ai/lib-runtime"
 import {StudioService} from "@/service/StudioService"
 import {AnyDragData} from "@/ui/AnyDragData"
-import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
+import {ContextMenu, FilePickerAcceptTypes, MenuItem} from "@moises-ai/studio-core"
 import {PointerField} from "@moises-ai/lib-box"
 import {Pointers} from "@moises-ai/studio-enums"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {Sample} from "@moises-ai/studio-adapters"
-import {FilePickerAcceptTypes} from "@moises-ai/studio-core"
 
 export interface SampleSelectStrategy {
     hasSample(): boolean

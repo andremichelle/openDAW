@@ -1,5 +1,5 @@
-import {ByteArrayInput, ByteArrayOutput, Option, Procedure, Provider, Selection} from "@moises-ai/lib-std"
-import {Address, Box, BoxEditing, BoxGraph} from "@moises-ai/lib-box"
+import {ByteArrayInput, ByteArrayOutput, Editing, Option, Procedure, Provider, Selection} from "@moises-ai/lib-std"
+import {Address, Box, BoxGraph} from "@moises-ai/lib-box"
 import {ppqn} from "@moises-ai/lib-dsp"
 import {Pointers} from "@moises-ai/studio-enums"
 import {NoteEventBox} from "@moises-ai/studio-boxes"
@@ -14,7 +14,7 @@ export namespace NotesClipboard {
         readonly getEnabled: Provider<boolean>
         readonly getPosition: Provider<ppqn>
         readonly setPosition: Procedure<ppqn>
-        readonly editing: BoxEditing
+        readonly editing: Editing
         readonly selection: Selection<NoteEventBoxAdapter>
         readonly targetAddress: Address
         readonly boxGraph: BoxGraph

@@ -4,13 +4,12 @@ import {AudioBusFactory, AudioUnitBoxAdapter, AuxSendBoxAdapter} from "@moises-a
 import {AudioUnitType, Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {AuxSend} from "@/ui/mixer/AuxSend.tsx"
 import {createElement} from "@moises-ai/lib-jsx"
-import {MenuItem} from "@moises-ai/studio-core"
+import {MenuItem, Project} from "@moises-ai/studio-core"
 import {AuxSendBox} from "@moises-ai/studio-boxes"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Icon} from "../components/Icon"
 import {showNewAudioBusOrAuxDialog} from "@/ui/dialogs.tsx"
 import {Html} from "@moises-ai/lib-dom"
-import {Project} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "AuxSendGroup")
 

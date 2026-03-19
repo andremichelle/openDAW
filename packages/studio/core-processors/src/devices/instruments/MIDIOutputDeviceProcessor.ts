@@ -106,7 +106,7 @@ export class MIDIOutputDeviceProcessor extends AudioProcessor implements Instrum
     get adapter(): MIDIOutputDeviceBoxAdapter {return this.#adapter}
 
     handleEvent(_event: Event): void {}
-    processAudio(_block: Block, _fromIndex: int, _toIndex: int): void {}
+    processAudio(_block: Block): void {}
 
     parameterChanged(parameter: AutomatableParameter, relativeBlockTime: number = 0.0): void {
         const {box: {channel, device}} = this.#adapter

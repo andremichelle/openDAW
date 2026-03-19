@@ -1,6 +1,6 @@
 {
     "name": "@moises-ai/lib-xml",
-    "version": "0.0.56",
+    "version": "0.0.58",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",

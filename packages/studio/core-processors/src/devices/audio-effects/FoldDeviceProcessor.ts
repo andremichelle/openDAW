@@ -87,11 +87,11 @@ export class FoldDeviceProcessor extends AudioProcessor implements AudioEffectDe
 
     adapter(): AudioEffectDeviceAdapter {return this.#adapter}
 
-    processAudio(_block: Block, fromIndex: int, toIndex: int): void {
+    processAudio({s0, s1}: Block): void {
         if (this.#source.isEmpty()) {return}
 
-        this.#resampler.upsample(this.#source.unwrap().channels() as StereoMatrix.Channels, this.#buffer, fromIndex, toIndex)
-        const oversampledLength = (toIndex - fromIndex) * this.#oversamplingFactor
+        this.#resampler.upsample(this.#source.unwrap().channels() as StereoMatrix.Channels, this.#buffer, s0, s1)
+        const oversampledLength = (s1 - s0) * this.#oversamplingFactor
         const [oversampledL, oversampledR] = this.#buffer
 
         for (let i = 0; i < oversampledLength; i++) {
@@ -100,10 +100,10 @@ export class FoldDeviceProcessor extends AudioProcessor implements AudioEffectDe
             oversampledL[i] = wavefold(oversampledL[i] * amount) * gain
             oversampledR[i] = wavefold(oversampledR[i] * amount) * gain
         }
-        this.#resampler.downsample(this.#buffer, this.#output.channels() as StereoMatrix.Channels, fromIndex, toIndex)
+        this.#resampler.downsample(this.#buffer, this.#output.channels() as StereoMatrix.Channels, s0, s1)
 
         this.#peaks.process(
-            this.#output.getChannel(0), this.#output.getChannel(1), fromIndex, toIndex)
+            this.#output.getChannel(0), this.#output.getChannel(1), s0, s1)
         this.#processed = true
     }
 

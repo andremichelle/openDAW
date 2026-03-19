@@ -1,17 +1,16 @@
 import css from "./DeviceParameters.sass?inline"
 import {Html} from "@moises-ai/lib-dom"
-import {clamp, int, Lifecycle, ParseResult, StringResult} from "@moises-ai/lib-std"
+import {clamp, Editing, int, Lifecycle, ParseResult, StringResult} from "@moises-ai/lib-std"
 import {createElement, Frag} from "@moises-ai/lib-jsx"
 import {NumberInput} from "@/ui/components/NumberInput"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
-import {BoxEditing} from "@moises-ai/lib-box"
 import {MIDIOutputDeviceBox} from "@moises-ai/studio-boxes"
 
 const className = Html.adoptStyleSheet(css, "DeviceParameters")
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     box: MIDIOutputDeviceBox
 }
 

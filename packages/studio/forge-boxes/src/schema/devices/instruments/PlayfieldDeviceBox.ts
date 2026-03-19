@@ -32,11 +32,11 @@ export const PlayfieldSampleBox: BoxSchema<Pointers> = {
             21: {type: "string", name: "icon"},
             22: {type: "boolean", name: "enabled", value: true},
             23: {type: "boolean", name: "minimized", value: false},
-            40: {type: "boolean", name: "mute"},
-            41: {type: "boolean", name: "solo"},
-            42: {type: "boolean", name: "exclude"},
-            43: {type: "boolean", name: "polyphone"},
-            44: {type: "int32", name: "gate", value: 0, constraints: {length: 3}, unit: ""}, // Off, On, Loop
+            40: {type: "boolean", name: "mute", pointerRules: ParameterPointerRules},
+            41: {type: "boolean", name: "solo", pointerRules: ParameterPointerRules},
+            42: {type: "boolean", name: "exclude", pointerRules: ParameterPointerRules},
+            43: {type: "boolean", name: "polyphone", pointerRules: ParameterPointerRules},
+            44: {type: "int32", name: "gate", value: 0, constraints: {length: 3}, unit: "", pointerRules: ParameterPointerRules}, // Off, On, Loop
             45: {
                 type: "float32", name: "pitch", pointerRules: ParameterPointerRules,
                 constraints: {min: -1200, max: 1200, scaling: "linear"}, unit: "ct"

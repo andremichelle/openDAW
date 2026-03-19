@@ -1,16 +1,15 @@
 import {AudioDevices, Capture, CaptureAudio, CaptureMidi, MenuItem, MidiDevices, Recording} from "@moises-ai/studio-core"
-import {Arrays, int, isInstanceOf, Option} from "@moises-ai/lib-std"
+import {Arrays, Editing, int, isInstanceOf, Option} from "@moises-ai/lib-std"
 import {CaptureAudioBox} from "@moises-ai/studio-boxes"
 import {IconSymbol} from "@moises-ai/studio-enums"
 import {AudioUnitBoxAdapter, TrackBoxAdapter} from "@moises-ai/studio-adapters"
-import {BoxEditing} from "@moises-ai/lib-box"
 import {StudioService} from "@/service/StudioService"
 
 export namespace MenuCapture {
     export const createItem = (service: StudioService,
                                audioUnitBoxAdapter: AudioUnitBoxAdapter,
                                trackBoxAdapter: TrackBoxAdapter,
-                               editing: BoxEditing,
+                               editing: Editing,
                                captureOption: Option<Capture>) => MenuItem.default({
         label: audioUnitBoxAdapter.captureBox
             .mapOr(box => isInstanceOf(box, CaptureAudioBox) ? "Capture Audio" : "Capture MIDI", ""),

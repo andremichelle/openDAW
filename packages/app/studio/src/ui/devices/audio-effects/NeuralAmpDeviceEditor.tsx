@@ -1,11 +1,11 @@
 import css from "./NeuralAmpDeviceEditor.sass?inline"
 import {DeviceHost, NeuralAmpDeviceBoxAdapter} from "@moises-ai/studio-adapters"
-import {isDefined, Lifecycle, UUID} from "@moises-ai/lib-std"
+import {DefaultObservableValue, isDefined, Lifecycle, Nullable} from "@moises-ai/lib-std"
 import {createElement} from "@moises-ai/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
-import {Files, Html} from "@moises-ai/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {StudioService} from "@/service/StudioService"
@@ -16,7 +16,8 @@ import {createSpectrumRenderer} from "./NeuralAmp/SpectrumRenderer"
 import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {Icon} from "@/ui/components/Icon"
 import {Button} from "@/ui/components/Button"
-import {NeuralAmpModelBox} from "@moises-ai/studio-boxes"
+import {NamLocal} from "@/ui/devices/audio-effects/NeuralAmp/NamLocal"
+import {NamTone3000} from "@/ui/devices/audio-effects/NeuralAmp/NamTone3000"
 
 const className = Html.adoptStyleSheet(css, "NeuralAmpDeviceEditor")
 
@@ -31,55 +32,27 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
     const {project} = service
     const {boxGraph, editing, midiLearning} = project
     const {inputGain, outputGain, mix} = adapter.namedParameter
-    let modelNameEl: HTMLSpanElement
-    let currentModel: NamModel | null = null
-    const updateModelName = () => {
+    const model = new DefaultObservableValue<Nullable<NamModel>>(null)
+    const updateModel = () => {
         const modelJson = adapter.getModelJson()
         if (modelJson.length === 0) {
-            modelNameEl.textContent = "No model loaded"
-            modelNameEl.className = "name empty"
-            currentModel = null
+            model.setValue(null)
         } else {
             try {
-                currentModel = NamModel.parse(modelJson)
-                modelNameEl.textContent = currentModel.metadata?.name ?? "Unknown Model"
-                modelNameEl.className = "name"
+                model.setValue(NamModel.parse(modelJson))
             } catch {
-                modelNameEl.textContent = "Invalid model"
-                modelNameEl.className = "name error"
-                currentModel = null
+                model.setValue(null)
             }
         }
     }
-    const browseModel = async () => {
-        try {
-            const files = await Files.open({
-                types: [{description: "NAM Model", accept: {"application/json": [".nam"]}}],
-                multiple: false
-            })
-            if (files.length > 0) {
-                const file = files[0]
-                const text = await file.text()
-                const jsonBuffer = new TextEncoder().encode(text)
-                const uuid = await UUID.sha256(jsonBuffer.buffer as ArrayBuffer)
-                editing.modify(() => {
-                    const modelBox = boxGraph.findBox<NeuralAmpModelBox>(uuid).unwrapOrElse(() =>
-                        NeuralAmpModelBox.create(boxGraph, uuid, box => {
-                            box.label.setValue(file.name.replace(/\.nam$/i, ""))
-                            box.model.setValue(text)
-                        }))
-                    adapter.box.model.refer(modelBox)
-                })
-            }
-        } catch (error) {
-            if (error instanceof DOMException && error.name === "AbortError") {return}
-            console.error("Failed to load NAM model:", error)
-        }
-    }
+    lifecycle.own(model)
+    lifecycle.own(adapter.modelField.subscribe(() => updateModel()))
+    updateModel()
+    const browseApi = NamTone3000.browse(boxGraph, editing, adapter)
+    const browseLocal = NamLocal.browse(boxGraph, editing, adapter)
     const showModelInfo = () => {
-        if (isDefined(currentModel)) {
-            showNamModelDialog(currentModel)
-        }
+        const current = model.getValue()
+        if (isDefined(current)) {showNamModelDialog(current)}
     }
     return (
         <DeviceEditor lifecycle={lifecycle}
@@ -95,31 +68,59 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                       }}/>
                               <div className="model-row">
                                   <Button lifecycle={lifecycle}
-                                          onClick={browseModel}
+                                          onClick={browseApi}
+                                          appearance={{
+                                              framed: true,
+                                              landscape: false,
+                                              cursor: "pointer",
+                                              color: Colors.shadow,
+                                              activeColor: Colors.white,
+                                              tooltip: "Browse tone3000.com"
+                                          }}
+                                          className="tone3000-button">
+                                      <img src="images/tone3000.svg" alt="tone3000 logo"/>
+                                  </Button>
+                                  <Button lifecycle={lifecycle}
+                                          onClick={browseLocal}
                                           appearance={{
                                               framed: true,
                                               cursor: "pointer",
-                                              color: Colors.blue,
-                                              activeColor: Colors.white
-                                          }}
-                                          className="browse-button">
+                                              color: Colors.shadow,
+                                              activeColor: Colors.white,
+                                              tooltip: "Browse local hard-drive"
+                                          }}>
                                       <Icon symbol={IconSymbol.Browse}/>
-                                      <span className="name empty"
-                                            onInit={(element: HTMLSpanElement) => {
-                                                modelNameEl = element
-                                                updateModelName()
-                                                lifecycle.own(adapter.modelField.subscribe(() => updateModelName()))
-                                            }}/>
                                   </Button>
+                                  <span onInit={(element: HTMLSpanElement) => {
+                                      lifecycle.own(model.catchupAndSubscribe(observable => {
+                                          const current = observable.getValue()
+                                          if (isDefined(current)) {
+                                              element.textContent = current.metadata?.name ?? "Unknown Model"
+                                              element.className = "name"
+                                          } else {
+                                              element.textContent = "No model loaded"
+                                              element.className = "name empty"
+                                          }
+                                      }))
+                                  }}/>
                                   <Button lifecycle={lifecycle}
                                           onClick={showModelInfo}
+                                          onInit={(element: HTMLElement) => {
+                                              const updateColor = () => {
+                                                  element.parentElement!.style.setProperty("--color",
+                                                      isDefined(model.getValue())
+                                                          ? Colors.blue.toString()
+                                                          : Colors.shadow.toString())
+                                              }
+                                              lifecycle.own(model.subscribe(() => updateColor()))
+                                              queueMicrotask(updateColor)
+                                          }}
                                           appearance={{
                                               framed: true,
                                               cursor: "pointer",
                                               color: Colors.shadow,
                                               activeColor: Colors.white
-                                          }}
-                                          className="icon-button">
+                                          }}>
                                       <Icon symbol={IconSymbol.Info}/>
                                   </Button>
                               </div>
@@ -150,6 +151,6 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
                       )}
-                      icon={IconSymbol.NeuralAmp}/>
+                      icon={IconSymbol.Tone3000}/>
     )
 }

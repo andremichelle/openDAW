@@ -12,5 +12,6 @@ export enum PanelType {
     ProjectInfo,
     ShadertoyPreview,
     ShadertoyEditor,
+    CodeEditor,
     EmptyFlexSpace
 }

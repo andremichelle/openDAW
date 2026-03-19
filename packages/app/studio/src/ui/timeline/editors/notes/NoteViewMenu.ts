@@ -1,8 +1,7 @@
-import {MenuCollector, MenuItem} from "@moises-ai/studio-core"
+import {MenuCollector, MenuItem, TimelineRange} from "@moises-ai/studio-core"
 import {Procedure} from "@moises-ai/lib-std"
 import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
 import {EventCollection} from "@moises-ai/lib-dsp"
-import {TimelineRange} from "@moises-ai/studio-core"
 import {PitchPositioner} from "@/ui/timeline/editors/notes/pitch/PitchPositioner.ts"
 
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"

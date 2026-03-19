@@ -1,5 +1,5 @@
 import {Errors, Option, panic, RuntimeNotifier, TimeSpan, UUID} from "@moises-ai/lib-std"
-import {BoxGraph} from "@moises-ai/lib-box"
+import {BoxEditing, BoxGraph} from "@moises-ai/lib-box"
 import {Promises} from "@moises-ai/lib-runtime"
 import {BoxIO, UserInterfaceBox} from "@moises-ai/studio-boxes"
 import {ProjectSkeleton} from "@moises-ai/studio-adapters"
@@ -48,7 +48,9 @@ export namespace YService {
                 conflict: () => project.invalid()
             })
             project.own(sync)
-            project.editing.disable()
+            // TODO Remove this cast at some point
+            const editing = project.editing as BoxEditing
+            editing.disable()
             return project
         } else {
             if (optProject.nonEmpty()) {
@@ -75,7 +77,8 @@ export namespace YService {
             boxGraph.endTransaction()
             project.follow(userInterfaceBox)
             project.own(sync)
-            project.editing.disable()
+            const editing = project.editing as BoxEditing
+            editing.disable()
             return project
         }
     }

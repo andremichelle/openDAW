@@ -1,15 +1,15 @@
-import {Notifier, Observer, Option, Subscription, Terminable} from "@moises-ai/lib-std"
-import {BoxEditing, PointerField, Vertex} from "@moises-ai/lib-box"
+import {Editing, Notifier, Observer, Option, Subscription, Terminable} from "@moises-ai/lib-std"
+import {PointerField, Vertex} from "@moises-ai/lib-box"
 import {Pointers} from "@moises-ai/studio-enums"
 
 export class UserEditing implements Terminable {
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #notifier: Notifier<Option<Vertex>>
 
     #subscription: Option<Subscription> = Option.None
     #pointer: Option<PointerField<Pointers.Editing>> = Option.None
 
-    constructor(editing: BoxEditing) {
+    constructor(editing: Editing) {
         this.#editing = editing
         this.#notifier = new Notifier()
     }

@@ -3,7 +3,7 @@ import {int, isDefined, Lifecycle, Nullable, Option, UUID} from "@moises-ai/lib-
 import {StudioService} from "@/service/StudioService.ts"
 import {MarkerBoxAdapter, MarkerTrackAdapter, TimelineBoxAdapter} from "@moises-ai/studio-adapters"
 import {createElement} from "@moises-ai/lib-jsx"
-import {ElementCapturing} from "../../../../../../../../studio/core/src/ui/canvas/capturing.ts"
+import {ElementCapturing} from "@moises-ai/studio-core"
 import {MarkerBox} from "@moises-ai/studio-boxes"
 import {MarkerRenderer} from "@/ui/timeline/tracks/primary/marker/MarkerRenderer"
 import {MarkerContextMenu} from "@/ui/timeline/tracks/primary/marker/MarkerContextMenu"

@@ -28,56 +28,59 @@ const visible = new DefaultObservableValue(true)
 export const ShadertoyPreview = ({lifecycle, service}: Construct) => {
     return (
         <div className={className} onInit={element => {
-            replaceChildren(element, (
-                <Frag>
-                    <ShadertoyLogo onInit={element => {
-                        lifecycle.own(Events.subscribe(element, "click", () => visible.setValue(!visible.getValue())))
-                    }}/>
-                    <canvas onInit={canvas => {
-                        const gl = canvas.getContext("webgl2")
-                        if (isAbsent(gl)) {
-                            element.setAttribute("data-status", "WebGL2 not supported")
-                            return
-                        }
-                        const runner = new ShadertoyRunner(service.optShadertoyState.unwrap("no state"), gl)
-                        const shaderLifecycle = lifecycle.own(new Terminator())
-                        lifecycle.ownAll(
-                            visible.catchupAndSubscribe(owner => canvas.classList.toggle("hidden", !owner.getValue())),
-                            service.project.rootBox.shadertoy.catchupAndSubscribe(({targetVertex}) => {
-                                shaderLifecycle.terminate()
-                                targetVertex.match({
-                                    none: () => {
-                                        element.classList.add("hidden")
-                                        return Terminable.Empty
-                                    },
-                                    some: (box) => {
-                                        element.classList.remove("hidden")
-                                        const {shaderCode, highres} = asInstanceOf(box, ShadertoyBox)
-                                        return shaderCode.catchupAndSubscribe(code => {
-                                            const {status, error} = tryCatch(() => runner.compile(code.getValue()))
-                                            if (status === "failure") {
-                                                element.setAttribute("data-status", String(error))
-                                                return
-                                            }
-                                            element.removeAttribute("data-status")
-                                            shaderLifecycle.ownAll(setupShadertoyRunner(runner, canvas, highres))
-                                        })
-                                    }
+            const shaderLifecycle = lifecycle.own(new Terminator())
+            lifecycle.own(
+                service.project.rootBox.shadertoy.catchupAndSubscribe(({targetVertex}) => {
+                    shaderLifecycle.terminate()
+                    targetVertex.match({
+                        none: () => {
+                            element.classList.add("hidden")
+                            return Terminable.Empty
+                        },
+                        some: (box) => {
+                            element.classList.remove("hidden")
+                            const canvas: HTMLCanvasElement = (<canvas/>)
+                            replaceChildren(element, (
+                                <Frag>
+                                    <ShadertoyLogo onInit={logo => {
+                                        shaderLifecycle.own(Events.subscribe(logo, "click",
+                                            () => visible.setValue(!visible.getValue())))
+                                    }}/>
+                                    {canvas}
+                                </Frag>
+                            ))
+                            const gl = canvas.getContext("webgl2")
+                            if (isAbsent(gl)) {
+                                element.setAttribute("data-status", "WebGL2 not supported")
+                                return Terminable.Empty
+                            }
+                            const runner = new ShadertoyRunner(service.optShadertoyState.unwrap("no state"), gl)
+                            shaderLifecycle.ownAll(
+                                visible.catchupAndSubscribe(owner => canvas.classList.toggle("hidden", !owner.getValue())),
+                                Events.subscribe(canvas, "click", async () => {
+                                    try {
+                                        if (document.fullscreenElement) {
+                                            await document.exitFullscreen()
+                                        } else {
+                                            await canvas.requestFullscreen()
+                                        }
+                                    } catch { /* ignore fullscreen errors (often caused by extensions) */ }
                                 })
-                            }),
-                            Events.subscribe(canvas, "click", async () => {
-                                try {
-                                    if (document.fullscreenElement) {
-                                        await document.exitFullscreen()
-                                    } else {
-                                        await canvas.requestFullscreen()
-                                    }
-                                } catch { /* ignore fullscreen errors (often caused by extensions) */ }
+                            )
+                            const {shaderCode, highres} = asInstanceOf(box, ShadertoyBox)
+                            return shaderCode.catchupAndSubscribe(code => {
+                                const {status, error} = tryCatch(() => runner.compile(code.getValue()))
+                                if (status === "failure") {
+                                    element.setAttribute("data-status", String(error))
+                                    return
+                                }
+                                element.removeAttribute("data-status")
+                                shaderLifecycle.ownAll(setupShadertoyRunner(runner, canvas, highres))
                             })
-                        )
-                    }}/>
-                </Frag>
-            ))
+                        }
+                    })
+                })
+            )
         }}>
         </div>
     )

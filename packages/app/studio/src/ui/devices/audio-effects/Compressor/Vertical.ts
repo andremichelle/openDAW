@@ -1,4 +1,4 @@
-import {LinearScale} from "../../../../../../../studio/core/src/ui/canvas/scale"
+import {LinearScale} from "@moises-ai/studio-core"
 
 const height = 157
 const padding = 10

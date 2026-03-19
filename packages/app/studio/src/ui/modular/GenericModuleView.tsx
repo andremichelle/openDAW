@@ -18,8 +18,7 @@ import {ParameterLabel} from "@/ui/components/ParameterLabel.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {DeviceInterfaceKnobBox} from "@moises-ai/studio-boxes"
 import {Events, Html} from "@moises-ai/lib-dom"
-import {Colors} from "@moises-ai/studio-enums"
-import {IconSymbol} from "@moises-ai/studio-enums"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "GenericModuleView")
 

@@ -81,7 +81,7 @@ export class TidalDeviceProcessor extends AudioProcessor implements AudioEffectD
     index(): int {return this.#adapter.indexField.getValue()}
     adapter(): TidalDeviceBoxAdapter {return this.#adapter}
 
-    processAudio({p0, bpm, flags}: Block, fromIndex: int, toIndex: int): void {
+    processAudio({p0, s0, s1, bpm, flags}: Block): void {
         if (this.#source.isEmpty()) {return}
         const input = this.#source.unwrap()
         const [inpL, inpR] = input.channels()
@@ -96,7 +96,7 @@ export class TidalDeviceProcessor extends AudioProcessor implements AudioEffectD
         const rateInvPulses = 1.0 / ratePulses
         const offset0 = this.#pOffset.getValue() / 360.0
         const offset1 = offset0 + this.#pChannelOffset.getValue() / 360.0
-        for (let i = fromIndex; i < toIndex; i++) {
+        for (let i = s0; i < s1; i++) {
             const phaseL = (p0 + i * delta) * rateInvPulses + offset0
             const phaseR = (p0 + i * delta) * rateInvPulses + offset1
             outL[i] = inpL[i] * this.#smoothGainL.process(this.#computer.compute(phaseL - Math.floor(phaseL)))
@@ -104,7 +104,7 @@ export class TidalDeviceProcessor extends AudioProcessor implements AudioEffectD
         }
         this.#peaks.process(outL, outR)
         if (Bits.every(flags, BlockFlag.transporting | BlockFlag.playing)) {
-            this.#phase = (p0 + (toIndex - fromIndex) * delta) * rateInvPulses
+            this.#phase = (p0 + (s1 - s0) * delta) * rateInvPulses
         }
     }
 

@@ -1,4 +1,4 @@
-import {ElementCapturing} from "../../../../../../../../studio/core/src/ui/canvas/capturing"
+import {ElementCapturing} from "@moises-ai/studio-core"
 import {BinarySearch, int, Nullable, NumberComparator} from "@moises-ai/lib-std"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager"

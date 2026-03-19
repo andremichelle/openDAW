@@ -2,6 +2,7 @@ import css from "./ValueEditor.sass?inline"
 import {
     EmptyExec,
     Func,
+    isDefined,
     Lifecycle,
     Nullable,
     Option,
@@ -36,7 +37,8 @@ import {ValueContentDurationModifier} from "./ValueContentDurationModifier"
 import {Dragging, Events, Html, ShortcutManager} from "@moises-ai/lib-dom"
 import {ValueTooltip} from "./ValueTooltip"
 import {ValueEventEditing} from "./ValueEventEditing"
-import {CanvasPainter, ClipboardManager, TimelineRange, ValuesClipboard} from "@moises-ai/studio-core"
+import {createValueMenu} from "./ValueMenu"
+import {CanvasPainter, ClipboardManager, MenuItem, MenuRootData, TimelineRange, ValuesClipboard} from "@moises-ai/studio-core"
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 
@@ -50,9 +52,10 @@ type Construct = {
     eventMapping: ValueMapping<number>
     reader: ValueEventOwnerReader
     context: ValueContext
+    editMenu?: MenuItem<MenuRootData>
 }
 
-export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, reader, context}: Construct) => {
+export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, reader, context, editMenu}: Construct) => {
     const {project} = service
     const {editing, engine, boxGraph, boxAdapters} = project
     const eventsField = reader.content.box.events
@@ -66,6 +69,9 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
         onSelected: (adapter: ValueEventBoxAdapter) => adapter.onSelected(),
         onDeselected: (adapter: ValueEventBoxAdapter) => adapter.onDeselected()
     }))
+    if (isDefined(editMenu)) {
+        lifecycle.own(editMenu.attach(createValueMenu({editing, selection, events: reader.content.events})))
+    }
     const canvas: HTMLCanvasElement = <canvas tabIndex={-1}/>
     const valueAxis: ValueAxis = {
         axisToValue: (pixel: number): unitValue =>
@@ -113,7 +119,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 if (dblclck && !event.shiftKey) {
                     if (target === null || target.type === "loop-duration") {
                         const rect = canvas.getBoundingClientRect()
-                        const position = snapping.xToUnitRound(event.clientX - rect.left) - reader.offset
+                        const position = Math.round(range.xToUnit(event.clientX - rect.left) - reader.offset)
                         const clickValue = valueAxis.axisToValue(event.clientY - rect.top)
                         const formatValue = context.currentValue
                         const value: number = Math.abs(valueToPixel(clickValue) - valueToPixel(formatValue))
@@ -121,8 +127,8 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             ? formatValue
                             : context.quantize(clickValue)
                         return editing.modify(() =>
-                            ValueEventEditing.createOrMoveEvent(reader.content, snapping, position, value,
-                                context.floating ? Interpolation.Linear : Interpolation.None))
+                            ValueEventEditing.createOrMoveEvent(reader.content, position, value,
+                                context.floating ? Interpolation.Linear : Interpolation.None), false)
                             .match({
                                 none: () => Option.None,
                                 some: adapter => {
@@ -265,6 +271,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
         }, {permanentUpdates: true}),
         Html.watchResize(canvas, painter.requestUpdate),
         range.subscribe(painter.requestUpdate),
+        snapping.subscribe(painter.requestUpdate),
         reader.subscribeChange(painter.requestUpdate),
         context.anchorModel.subscribe(painter.requestUpdate),
         modifyContext.subscribeUpdate(painter.requestUpdate),

@@ -1,15 +1,9 @@
-import {int} from "@moises-ai/lib-std"
+import {int, UUID} from "@moises-ai/lib-std"
 import {AudioBuffer, AudioData} from "@moises-ai/lib-dsp"
 import {VoiceState} from "./VoiceState"
 
-/**
- * PitchVoice is used for pitch-stretch mode (warp marker based).
- * It does NOT implement the Voice interface as it's managed differently
- * by the TapeDeviceProcessor (not via TimeStretchSequencer).
- *
- * Uses fadeDirection to track fading in (+1) vs fading out (-1).
- */
 export class PitchVoice {
+    readonly sourceUuid: UUID.Bytes
     readonly #output: AudioBuffer
     readonly #data: AudioData
     readonly #fadeLength: number
@@ -22,8 +16,9 @@ export class PitchVoice {
     #blockOffset: int
     #fadeOutBlockOffset: int = 0
 
-    constructor(output: AudioBuffer, data: AudioData, fadeLength: number, playbackRate: number,
+    constructor(sourceUuid: UUID.Bytes, output: AudioBuffer, data: AudioData, fadeLength: number, playbackRate: number,
                 offset: number = 0.0, blockOffset: int = 0) {
+        this.sourceUuid = sourceUuid
         this.#output = output
         this.#data = data
         this.#fadeLength = fadeLength

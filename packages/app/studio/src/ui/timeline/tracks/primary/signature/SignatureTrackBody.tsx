@@ -3,9 +3,15 @@ import {EmptyExec, Lifecycle, Nullable, Option} from "@moises-ai/lib-std"
 import {createElement} from "@moises-ai/lib-jsx"
 import {Dragging, Events, Html} from "@moises-ai/lib-dom"
 import {ppqn} from "@moises-ai/lib-dsp"
-import {Parsing, SignatureEvent, SignatureEventBoxAdapter, SignatureTrackAdapter, TimelineBoxAdapter} from "@moises-ai/studio-adapters"
+import {
+    Parsing,
+    SignatureEvent,
+    SignatureEventBoxAdapter,
+    SignatureTrackAdapter,
+    TimelineBoxAdapter
+} from "@moises-ai/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
-import {ElementCapturing} from "../../../../../../../../studio/core/src/ui/canvas/capturing.ts"
+import {ElementCapturing} from "@moises-ai/studio-core"
 import {SignatureDragPreview, SignatureRenderer} from "@/ui/timeline/tracks/primary/signature/SignatureRenderer"
 import {SignatureContextMenu} from "@/ui/timeline/tracks/primary/signature/SignatureContextMenu"
 import {Surface} from "@/ui/surface/Surface"

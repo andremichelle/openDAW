@@ -9,7 +9,10 @@ export namespace NotesRenderer {
                            {top, bottom}: RegionBound,
                            contentColor: string,
                            {rawStart, regionStart, resultStart, resultEnd}: LoopableRegion.LoopCycle) => {
-        const height = bottom - top
+        const dpr = devicePixelRatio
+        const actualTop = top * dpr
+        const actualBottom = bottom * dpr
+        const height = actualBottom - actualTop
         context.fillStyle = contentColor
         const padding = 8
         const noteHeight = 5
@@ -19,9 +22,9 @@ export namespace NotesRenderer {
             const position = rawStart + note.position
             if (position < regionStart) {continue}
             const complete = Math.min(rawStart + note.complete, resultEnd)
-            const x0 = Math.floor(range.unitToX(position) * devicePixelRatio)
-            const x1 = Math.floor(range.unitToX(complete) * devicePixelRatio)
-            const y = top + padding + Math.floor(note.normalizedPitch() * (height - (padding * 2 + noteHeight)))
+            const x0 = Math.floor(range.unitToX(position) * dpr)
+            const x1 = Math.floor(range.unitToX(complete) * dpr)
+            const y = actualTop + padding + Math.floor(note.normalizedPitch() * (height - (padding * 2 + noteHeight)))
             context.fillRect(x0, y, Math.max(1, x1 - x0), noteHeight)
         }
     }

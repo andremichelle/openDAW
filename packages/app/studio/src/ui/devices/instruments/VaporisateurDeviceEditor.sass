@@ -16,14 +16,35 @@ component
     height: calc(50% - 4px)
     position: absolute
     pointer-events: none
-    border-radius: 3px
-    outline: 0.5px solid hsla(200, 40%, 70%, 0.12)
-    outline-offset: 1px
+    border-radius: 2px
+    //outline: 1px color-mix(in srgb, var(--color) 10%, transparent) solid
+    background: color-mix(in srgb, var(--color) 7%, transparent)
     z-index: 0
 
     &.unisono-section
       grid-row: 1 / 1
       grid-column: 5 / -1
+      --color: var(--color-orange)
+
+    &.oscillator-section
+      grid-row: 2 / 2
+      grid-column: 3 / -2
+      --color: var(--color-blue)
+
+    &.filter-section
+      grid-row: 3 / 3
+      grid-column: 3 / -1
+      --color: var(--color-green)
+
+    &.lfo-section
+      grid-row: 4 / 4
+      grid-column: 3 / -1
+      --color: var(--color-purple)
+
+    &.env-section
+      grid-row: 5 / 5
+      grid-column: 3 / -2
+      --color: var(--color-yellow)
 
   > div
     > *:first-child

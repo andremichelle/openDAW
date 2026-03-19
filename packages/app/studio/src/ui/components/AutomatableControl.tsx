@@ -1,9 +1,8 @@
 import css from "./AutomatableControl.sass?inline"
-import {ControlSource, Lifecycle} from "@moises-ai/lib-std"
+import {ControlSource, Editing, Lifecycle} from "@moises-ai/lib-std"
 import {createElement} from "@moises-ai/lib-jsx"
 import {attachParameterContextMenu} from "@/ui/menu/automation.ts"
 import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@moises-ai/studio-adapters"
-import {BoxEditing} from "@moises-ai/lib-box"
 import {Html} from "@moises-ai/lib-dom"
 import {MIDILearning} from "@moises-ai/studio-core"
 
@@ -11,7 +10,7 @@ const className = Html.adoptStyleSheet(css, "AutomatableControl")
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     midiLearning: MIDILearning
     adapter: DeviceBoxAdapter
     parameter: AutomatableParameterFieldAdapter

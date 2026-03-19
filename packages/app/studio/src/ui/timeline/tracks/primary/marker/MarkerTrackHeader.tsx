@@ -5,15 +5,14 @@ import {Checkbox} from "@/ui/components/Checkbox"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 import {Icon} from "@/ui/components/Icon"
 import {IconSymbol} from "@moises-ai/studio-enums"
-import {Lifecycle} from "@moises-ai/lib-std"
-import {BoxEditing} from "@moises-ai/lib-box"
+import {Editing, Lifecycle} from "@moises-ai/lib-std"
 import {TimelineBox} from "@moises-ai/studio-boxes"
 
 const className = Html.adoptStyleSheet(css, "MarkerTrackHeader")
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     timelineBox: TimelineBox
 }
 

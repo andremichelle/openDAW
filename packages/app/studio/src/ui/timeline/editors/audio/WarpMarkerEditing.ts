@@ -4,7 +4,7 @@ import {
     TransientMarkerBoxAdapter,
     WarpMarkerBoxAdapter
 } from "@moises-ai/studio-adapters"
-import {ContextMenu, Project, TimelineRange} from "@moises-ai/studio-core"
+import {ContextMenu, MenuItem, Project, TimelineRange} from "@moises-ai/studio-core"
 import {AudioEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader"
 import {WarpMarkerBox} from "@moises-ai/studio-boxes"
 import {
@@ -19,7 +19,6 @@ import {
     Terminator,
     UUID
 } from "@moises-ai/lib-std"
-import {MenuItem} from "@moises-ai/studio-core"
 import {DebugMenus} from "@/ui/menu/debug"
 import {WarpMarkerUtils} from "@/ui/timeline/editors/audio/WarpMarkerUtils"
 import {Dragging, Events, Keyboard} from "@moises-ai/lib-dom"

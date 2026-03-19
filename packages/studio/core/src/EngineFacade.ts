@@ -5,6 +5,7 @@ import {
     ObservableValue,
     Observer,
     Option,
+    Procedure,
     Subscription,
     Terminator,
     UUID
@@ -130,6 +131,9 @@ export class EngineFacade implements Engine {
     }
     scheduleClipStop(trackIds: ReadonlyArray<UUID.Bytes>): void {
         this.#worklet.unwrap("No worklet to scheduleClipStop").scheduleClipStop(trackIds)
+    }
+    subscribeDeviceMessage(uuid: string, listener: Procedure<string>): Subscription {
+        return this.#worklet.unwrap("No worklet to subscribeDeviceMessage").subscribeDeviceMessage(uuid, listener)
     }
     registerMonitoringSource(uuid: UUID.Bytes, node: AudioNode, numChannels: 1 | 2): void {
         this.#worklet.ifSome(worklet => worklet.registerMonitoringSource(uuid, node, numChannels))

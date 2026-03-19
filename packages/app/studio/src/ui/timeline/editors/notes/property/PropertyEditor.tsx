@@ -1,9 +1,8 @@
 import css from "./PropertyEditor.sass?inline"
-import {Lifecycle, Nullable, ObservableValue, Option, Selection, unitValue, ValueAxis} from "@moises-ai/lib-std"
+import {Editing, Lifecycle, Nullable, ObservableValue, Option, Selection, unitValue, ValueAxis} from "@moises-ai/lib-std"
 import {createElement} from "@moises-ai/lib-jsx"
 import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
 import {SelectionRectangle} from "@/ui/timeline/SelectionRectangle.tsx"
-import {BoxEditing} from "@moises-ai/lib-box"
 import {createPropertySelectionLocator} from "@/ui/timeline/editors/notes/property/PropertySelectionLocator.ts"
 import {createPropertyCapturing} from "@/ui/timeline/editors/notes/property/PropertyEventCapturing.ts"
 import {createPropertyPainter} from "@/ui/timeline/editors/notes/property/PropertyPainter.ts"
@@ -31,7 +30,7 @@ const className = Html.adoptStyleSheet(css, "PropertyEditor")
 type Construct = {
     lifecycle: Lifecycle
     range: TimelineRange
-    editing: BoxEditing
+    editing: Editing
     snapping: Snapping
     selection: Selection<NoteEventBoxAdapter>
     propertyOwner: ObservableValue<PropertyAccessor>
@@ -108,6 +107,7 @@ export const PropertyEditor =
             installEditorAuxBody(canvas, range),
             Html.watchResize(element, () => range.width = element.clientWidth),
             range.subscribe(painter.requestUpdate),
+            snapping.subscribe(painter.requestUpdate),
             reader.subscribeChange(painter.requestUpdate),
             propertyOwner.subscribe(painter.requestUpdate),
             modifyContext.subscribeUpdate(painter.requestUpdate),

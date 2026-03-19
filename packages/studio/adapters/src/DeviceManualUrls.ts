@@ -5,6 +5,7 @@ export namespace DeviceManualUrls {
     // MIDI Effects
     export const Arpeggio = "manuals/devices/midi/arpeggio"
     export const Pitch = "manuals/devices/midi/pitch"
+    export const Spielwerk = "manuals/devices/midi/spielwerk"
     export const Velocity = "manuals/devices/midi/velocity"
     export const Zeitgeist = "manuals/devices/midi/zeitgeist"
 
@@ -22,6 +23,8 @@ export namespace DeviceManualUrls {
     export const Revamp = "manuals/devices/audio/revamp"
     export const Modular = "manuals/devices/audio/modular"
     export const NeuralAmp = "manuals/devices/audio/neural-amp"
+    export const Waveshaper = "manuals/devices/audio/waveshaper"
+    export const Werkstatt = "manuals/devices/audio/werkstatt"
 
     // Instruments
     export const Tape = "manuals/devices/instruments/tape"

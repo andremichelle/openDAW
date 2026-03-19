@@ -12,6 +12,7 @@ import {
     unitValue,
     UUID
 } from "@moises-ai/lib-std"
+import {BoxEditing} from "@moises-ai/lib-box"
 import {NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@moises-ai/studio-boxes"
 import {AudioUnitBoxAdapter, ColorCodes, TrackType} from "@moises-ai/studio-adapters"
 import {PPQN, ppqn} from "@moises-ai/lib-dsp"
@@ -111,7 +112,10 @@ export namespace MidiImport {
             }
         }
         console.time("midi-import")
-        const modificationProcess = editing.beginModification()
+        // TODO Remove the cast by refactoring
+        // use modify and revertPending on error
+        const boxEditing = editing as BoxEditing
+        const modificationProcess = boxEditing.beginModification()
         const {status, error} = await Promises.tryCatch(Wait.complete(generate()))
         console.timeEnd("midi-import")
         if (status === "resolved") {

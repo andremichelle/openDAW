@@ -92,11 +92,11 @@ export class DattorroReverbDeviceProcessor extends AudioProcessor implements Aud
 
     handleEvent(_event: Event): void {}
 
-    processAudio(_block: Block, from: number, to: number): void {
+    processAudio({s0, s1}: Block): void {
         if (this.#source.isEmpty()) {return}
         const source = this.#source.unwrap()
-        this.#dsp.process(source.channels() as StereoMatrix.Channels, this.#output.channels() as StereoMatrix.Channels, from, to)
-        this.#peaks.process(this.#output.getChannel(0), this.#output.getChannel(1), from, to)
+        this.#dsp.process(source.channels() as StereoMatrix.Channels, this.#output.channels() as StereoMatrix.Channels, s0, s1)
+        this.#peaks.process(this.#output.getChannel(0), this.#output.getChannel(1), s0, s1)
     }
 
     parameterChanged(parameter: AutomatableParameter): void {

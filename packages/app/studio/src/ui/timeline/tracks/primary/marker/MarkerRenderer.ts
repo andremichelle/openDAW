@@ -1,8 +1,7 @@
 import {MarkerBoxAdapter, MarkerTrackAdapter} from "@moises-ai/studio-adapters"
 import {DefaultObservableValue, int, isDefined, Nullable, UUID} from "@moises-ai/lib-std"
-import {CanvasPainter} from "../../../../../../../../studio/core/src/ui/canvas/painter"
+import {CanvasPainter, TimelineRange} from "@moises-ai/studio-core"
 import {Context2d} from "@moises-ai/lib-dom"
-import {TimelineRange} from "@moises-ai/studio-core"
 
 export namespace MarkerRenderer {
     export const createTrackRenderer = (canvas: HTMLCanvasElement,

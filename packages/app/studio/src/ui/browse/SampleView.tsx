@@ -7,12 +7,11 @@ import {Sample} from "@moises-ai/studio-adapters"
 import {IconSymbol} from "@moises-ai/studio-enums"
 import {AssetLocation} from "@/ui/browse/AssetLocation"
 import {SampleDialogs} from "@/ui/browse/SampleDialogs"
-import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
+import {ContextMenu, MenuItem, SampleStorage} from "@moises-ai/studio-core"
 import {SampleSelection} from "@/ui/browse/SampleSelection"
 import {Html} from "@moises-ai/lib-dom"
 import {Promises} from "@moises-ai/lib-runtime"
 import {DragAndDrop} from "@/ui/DragAndDrop"
-import {SampleStorage} from "@moises-ai/studio-core"
 import {StudioService} from "@/service/StudioService"
 
 const className = Html.adoptStyleSheet(css, "Sample")

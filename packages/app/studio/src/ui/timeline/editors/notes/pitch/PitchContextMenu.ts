@@ -1,6 +1,5 @@
 import {ContextMenu, ElementCapturing} from "@moises-ai/studio-core"
-import {BoxEditing} from "@moises-ai/lib-box"
-import {MutableObservableValue, Selection} from "@moises-ai/lib-std"
+import {Editing, MutableObservableValue, Selection} from "@moises-ai/lib-std"
 import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
 import {PitchCaptureTarget} from "@/ui/timeline/editors/notes/pitch/PitchEventCapturing.ts"
 import {createPitchMenu} from "@/ui/timeline/editors/notes/pitch/PitchMenu.ts"
@@ -11,7 +10,7 @@ type Construct = {
     element: Element
     capturing: ElementCapturing<PitchCaptureTarget>
     snapping: Snapping
-    editing: BoxEditing
+    editing: Editing
     selection: Selection<NoteEventBoxAdapter>
     events: EventCollection<NoteEventBoxAdapter>
     stepRecording: MutableObservableValue<boolean>

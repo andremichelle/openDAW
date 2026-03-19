@@ -3,6 +3,7 @@ import {Events, Html, Keyboard} from "@moises-ai/lib-dom"
 import {
     asDefined,
     DefaultObservableValue,
+    Editing,
     int,
     Lifecycle,
     MutableObservableValue,
@@ -15,12 +16,10 @@ import {StudioService} from "@/service/StudioService.ts"
 import {NoteLifeCycle, PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter} from "@moises-ai/studio-adapters"
 import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {SampleSelector} from "@/ui/devices/SampleSelector"
-import {CanvasPainter} from "../../../../../../../studio/core/src/ui/canvas/painter"
+import {CanvasPainter, ContextMenu, MenuItem} from "@moises-ai/studio-core"
 import {SlotUtils} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotUtils"
 import {Icon} from "@/ui/components/Icon"
 import {Checkbox} from "@/ui/components/Checkbox"
-import {BoxEditing} from "@moises-ai/lib-box"
-import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {SlotDragAndDrop} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotDragAndDrop"
 import {NoteLabel} from "@/ui/devices/instruments/PlayfieldDeviceEditor/NoteLabel"
@@ -213,7 +212,7 @@ const connectBoolean = (value: MutableObservableValue<boolean>,
     )
 }
 
-const resetBooleanItem = (editing: BoxEditing,
+const resetBooleanItem = (editing: Editing,
                           adapter: PlayfieldDeviceBoxAdapter,
                           key: Extract<keyof PlayfieldSampleBoxAdapter["namedParameter"], "mute" | "solo" | "exclude">,
                           label: string) =>

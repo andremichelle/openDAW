@@ -38,11 +38,7 @@ export const TimeStretchEditor = ({lifecycle, project, reader}: Construct) => {
                                     .catchupAndSubscribe(() => observableCents.setValue(adapter.cents)),
                                 observableCents.subscribe(owner => {
                                     const value = owner.getValue()
-                                    if (editing.mustModify()) {
-                                        editing.modify(() => adapter.cents = value)
-                                    } else {
-                                        adapter.cents = value
-                                    }
+                                    editing.modify(() => adapter.cents = value)
                                 })
                             )
                         }
@@ -59,11 +55,7 @@ export const TimeStretchEditor = ({lifecycle, project, reader}: Construct) => {
                 transientPlayModeEnumValue.subscribe(owner => audioContent.asPlayModeTimeStretch
                     .ifSome(adapter => {
                         const value = owner.getValue() ?? TransientPlayMode.Once
-                        if (editing.mustModify()) {
-                            editing.modify(() => adapter.box.transientPlayMode.setValue(value))
-                        } else {
-                            adapter.box.transientPlayMode.setValue(value)
-                        }
+                        editing.modify(() => adapter.box.transientPlayMode.setValue(value))
                     }))
             )
         }}>

@@ -18,6 +18,7 @@ import {
     RevampDeviceBox,
     ReverbDeviceBox,
     SoundfontDeviceBox,
+    SpielwerkDeviceBox,
     StereoToolDeviceBox,
     TapeDeviceBox,
     TidalDeviceBox,
@@ -25,6 +26,8 @@ import {
     UnknownMidiEffectDeviceBox,
     VaporisateurDeviceBox,
     VelocityDeviceBox,
+    WaveshaperDeviceBox,
+    WerkstattDeviceBox,
     ZeitgeistDeviceBox
 } from "@moises-ai/studio-boxes"
 import {DelayDeviceProcessor} from "./devices/audio-effects/DelayDeviceProcessor"
@@ -47,6 +50,7 @@ import {
     RevampDeviceBoxAdapter,
     ReverbDeviceBoxAdapter,
     SoundfontDeviceBoxAdapter,
+    SpielwerkDeviceBoxAdapter,
     StereoToolDeviceBoxAdapter,
     TapeDeviceBoxAdapter,
     TidalDeviceBoxAdapter,
@@ -54,6 +58,8 @@ import {
     UnknownMidiEffectDeviceBoxAdapter,
     VaporisateurDeviceBoxAdapter,
     VelocityDeviceBoxAdapter,
+    WaveshaperDeviceBoxAdapter,
+    WerkstattDeviceBoxAdapter,
     ZeitgeistDeviceBoxAdapter
 } from "@moises-ai/studio-adapters"
 import {NopDeviceProcessor} from "./devices/audio-effects/NopDeviceProcessor"
@@ -86,6 +92,9 @@ import {VelocityDeviceProcessor} from "./devices/midi-effects/VelocityDeviceProc
 import {TidalDeviceProcessor} from "./devices/audio-effects/TidalDeviceProcessor"
 import {DattorroReverbDeviceProcessor} from "./devices/audio-effects/DattorroReverbDeviceProcessor"
 import {NeuralAmpDeviceProcessor} from "./devices/audio-effects/NeuralAmpDeviceProcessor"
+import {WaveshaperDeviceProcessor} from "./devices/audio-effects/WaveshaperDeviceProcessor"
+import {WerkstattDeviceProcessor} from "./devices/audio-effects/WerkstattDeviceProcessor"
+import {SpielwerkDeviceProcessor} from "./devices/midi-effects/SpielwerkDeviceProcessor"
 
 export namespace InstrumentDeviceProcessorFactory {
     export const create = (context: EngineContext,
@@ -121,7 +130,9 @@ export namespace MidiEffectDeviceProcessorFactory {
             visitVelocityDeviceBox: (box: VelocityDeviceBox): MidiEffectProcessor =>
                 new VelocityDeviceProcessor(context, context.boxAdapters.adapterFor(box, VelocityDeviceBoxAdapter)),
             visitZeitgeistDeviceBox: (box: ZeitgeistDeviceBox): MidiEffectProcessor =>
-                new ZeitgeistDeviceProcessor(context, context.boxAdapters.adapterFor(box, ZeitgeistDeviceBoxAdapter))
+                new ZeitgeistDeviceProcessor(context, context.boxAdapters.adapterFor(box, ZeitgeistDeviceBoxAdapter)),
+            visitSpielwerkDeviceBox: (box: SpielwerkDeviceBox): MidiEffectProcessor =>
+                new SpielwerkDeviceProcessor(context, context.boxAdapters.adapterFor(box, SpielwerkDeviceBoxAdapter))
         }), `Could not create midi-effect for'${box.name}'`)
 }
 
@@ -156,6 +167,10 @@ export namespace AudioEffectDeviceProcessorFactory {
             visitModularDeviceBox: (box: ModularDeviceBox): AudioEffectDeviceProcessor =>
                 new NopDeviceProcessor(context, context.boxAdapters.adapterFor(box, ModularDeviceBoxAdapter)),
             visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox): AudioEffectDeviceProcessor =>
-                new NeuralAmpDeviceProcessor(context, context.boxAdapters.adapterFor(box, NeuralAmpDeviceBoxAdapter))
+                new NeuralAmpDeviceProcessor(context, context.boxAdapters.adapterFor(box, NeuralAmpDeviceBoxAdapter)),
+            visitWaveshaperDeviceBox: (box: WaveshaperDeviceBox): AudioEffectDeviceProcessor =>
+                new WaveshaperDeviceProcessor(context, context.boxAdapters.adapterFor(box, WaveshaperDeviceBoxAdapter)),
+            visitWerkstattDeviceBox: (box: WerkstattDeviceBox): AudioEffectDeviceProcessor =>
+                new WerkstattDeviceProcessor(context, context.boxAdapters.adapterFor(box, WerkstattDeviceBoxAdapter))
         }), `Could not create audio-effect for'${box.name}'`)
 }

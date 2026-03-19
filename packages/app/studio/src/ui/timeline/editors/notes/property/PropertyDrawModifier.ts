@@ -1,5 +1,4 @@
-import {clamp, Notifier, Observer, Option, Selection, Terminable, unitValue, ValueAxis} from "@moises-ai/lib-std"
-import {BoxEditing} from "@moises-ai/lib-box"
+import {clamp, Editing, Notifier, Observer, Option, Selection, Terminable, unitValue, ValueAxis} from "@moises-ai/lib-std"
 import {Line, NoteModifyStrategy} from "../NoteModifyStrategies.ts"
 import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
 import {EventCollection, NoteEvent, ppqn} from "@moises-ai/lib-dsp"
@@ -17,7 +16,7 @@ import {UINoteEvent} from "@/ui/timeline/editors/notes/UINoteEvent.ts"
 import {Dragging} from "@moises-ai/lib-dom"
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     property: PropertyAccessor
     selection: Selection<NoteEventBoxAdapter>
@@ -31,7 +30,7 @@ export class PropertyDrawModifier implements NoteModifier, NoteModifyStrategy {
         return new PropertyDrawModifier(construct)
     }
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #property: PropertyAccessor
     readonly #selection: Selection<NoteEventBoxAdapter>

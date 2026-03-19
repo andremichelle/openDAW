@@ -1,7 +1,7 @@
 import css from "./SidechainButton.sass?inline"
 import {createElement} from "@moises-ai/lib-jsx"
-import {Option} from "@moises-ai/lib-std"
-import {Address, BoxEditing, PointerField} from "@moises-ai/lib-box"
+import {Editing, Option} from "@moises-ai/lib-std"
+import {Address, PointerField} from "@moises-ai/lib-box"
 import {Html} from "@moises-ai/lib-dom"
 import {Colors, IconSymbol, Pointers} from "@moises-ai/studio-enums"
 import {LabeledAudioOutput, RootBoxAdapter} from "@moises-ai/studio-adapters"
@@ -11,7 +11,7 @@ import {MenuButton} from "@/ui/components/MenuButton"
 const className = Html.adoptStyleSheet(css, "SidechainButton")
 
 type Construct = {
-    editing: BoxEditing
+    editing: Editing
     rootBoxAdapter: RootBoxAdapter
     sideChain: PointerField<Pointers.SideChain>
 }

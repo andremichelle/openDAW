@@ -1,8 +1,8 @@
 import css from "./LoopAreaEditor.sass?inline"
-import {asDefined, Lifecycle, Nullable, Option} from "@moises-ai/lib-std"
+import {asDefined, Editing, Lifecycle, Nullable, Option} from "@moises-ai/lib-std"
 import {CssUtils, deferNextFrame, Dragging, Events, Html} from "@moises-ai/lib-dom"
 import {createElement} from "@moises-ai/lib-jsx"
-import {BoxEditing, Propagation} from "@moises-ai/lib-box"
+import {Propagation} from "@moises-ai/lib-box"
 import {installCursor} from "@/ui/hooks/cursor.ts"
 import {ElementCapturing, TimelineRange} from "@moises-ai/studio-core"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
@@ -21,7 +21,7 @@ type Target = keyof typeof CursorMap
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     range: TimelineRange
     snapping: Snapping
     loopArea: LoopArea

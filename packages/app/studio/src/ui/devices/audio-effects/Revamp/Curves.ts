@@ -1,5 +1,5 @@
 import {Color, Notifier, Nullable, Observer, Subscription, Terminable} from "@moises-ai/lib-std"
-import {CanvasUnitPainter} from "../../../../../../../studio/core/src/ui/canvas/painter.ts"
+import {CanvasUnitPainter} from "@moises-ai/studio-core"
 import {
     AutomatableParameterFieldAdapter,
     BellParameters,

@@ -4,9 +4,8 @@ import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {createElement, Inject} from "@moises-ai/lib-jsx"
-import {IconSymbol} from "@moises-ai/studio-enums"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {Html} from "@moises-ai/lib-dom"
-import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "SnapSelector")
 

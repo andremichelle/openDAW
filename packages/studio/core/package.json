@@ -1,6 +1,6 @@
 {
     "name": "@moises-ai/studio-core",
-    "version": "0.0.117",
+    "version": "0.0.126",
     "license": "LGPL-3.0-or-later",
     "publishConfig": {
         "registry": "https://npm.pkg.github.com",

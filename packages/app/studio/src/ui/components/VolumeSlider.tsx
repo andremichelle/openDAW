@@ -2,6 +2,7 @@ import css from "./VolumeSlider.sass?inline"
 import {createElement} from "@moises-ai/lib-jsx"
 import {
     clampUnit,
+    Editing,
     EmptyExec,
     Lifecycle,
     Nullable,
@@ -13,7 +14,6 @@ import {
 } from "@moises-ai/lib-std"
 import {ValueDragging} from "@/ui/hooks/dragging.ts"
 import {ValueTooltip} from "@/ui/surface/ValueTooltip.tsx"
-import {BoxEditing} from "@moises-ai/lib-box"
 import {CssUtils, Events, Html} from "@moises-ai/lib-dom"
 import {Colors} from "@moises-ai/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
@@ -101,7 +101,7 @@ export const MaximizerVolumeMarkers: ReadonlyArray<VolumeMarker> = [
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: BoxEditing
+    editing: Editing
     parameter: Parameter<number>
     markers?: ReadonlyArray<VolumeMarker>
 }

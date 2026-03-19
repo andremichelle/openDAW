@@ -143,6 +143,21 @@ describe("editing", () => {
         expect(scene.graph.findBox(survivingBox!.address.uuid).nonEmpty()).true
     })
 
+    it("should append changes to the last committed history step", (scene: TestScene) => {
+        const barBox = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        const barUuid = barBox.address.uuid
+        expect(scene.graph.findBox(barUuid).nonEmpty()).true
+        expect(barBox.bool.getValue()).false
+        scene.editing.append(() => barBox.bool.setValue(true))
+        expect(barBox.bool.getValue()).true
+        expect(scene.editing.canUndo()).true
+        scene.editing.undo()
+        expect(scene.graph.findBox(barUuid).nonEmpty()).false
+        scene.editing.redo()
+        expect(scene.graph.findBox(barUuid).nonEmpty()).true
+        expect((scene.graph.findBox(barUuid).unwrap().box as BarBox).bool.getValue()).true
+    })
+
     it("should handle box with pointer created and deleted in same transaction", (scene: TestScene) => {
         // Create a target box first (this one persists)
         const targetBox = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()

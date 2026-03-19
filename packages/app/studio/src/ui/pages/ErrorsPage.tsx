@@ -23,8 +23,8 @@ export const ErrorsPage: PageFactory<StudioService> = ({lifecycle}: PageContext<
             <p>This page shows all errors reported from users running openDAW in production, helping us identify and fix
                 issues.</p>
             <h5>Report any issues <a href="https://github.com/andremichelle/opendaw/issues/"
-                                    target="github"
-                                    style={{color: Colors.blue}}
+                                     target="github"
+                                     style={{color: Colors.blue}}
             >here</a>.</h5>
             <code onInit={async element => {
                 element.textContent = "loading status..."

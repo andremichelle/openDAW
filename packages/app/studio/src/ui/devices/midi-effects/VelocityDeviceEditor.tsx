@@ -8,9 +8,8 @@ import {ControlBuilder} from "@/ui/devices/ControlBuilder.tsx"
 import {DeviceMidiMeter} from "@/ui/devices/panel/DeviceMidiMeter.tsx"
 import {Html} from "@moises-ai/lib-dom"
 import {StudioService} from "@/service/StudioService"
-import {EffectFactories} from "@moises-ai/studio-core"
+import {CanvasPainter, EffectFactories} from "@moises-ai/studio-core"
 import {Icon} from "@/ui/components/Icon"
-import {CanvasPainter} from "../../../../../../studio/core/src/ui/canvas/painter"
 import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "VelocityDeviceEditor")

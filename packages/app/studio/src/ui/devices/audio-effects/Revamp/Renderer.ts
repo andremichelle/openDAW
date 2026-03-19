@@ -1,15 +1,7 @@
-import {CanvasUnitPainter} from "../../../../../../../studio/core/src/ui/canvas/painter.ts"
+import {CanvasUnitPainter, Scale} from "@moises-ai/studio-core"
 import {int, linear, Nullable, Terminable} from "@moises-ai/lib-std"
 import {RevampDeviceBoxAdapter} from "@moises-ai/studio-adapters"
-import {Scale} from "../../../../../../../studio/core/src/ui/canvas/scale.ts"
-import {
-    Bell,
-    CurveRenderer,
-    HighPass,
-    HighShelf,
-    LowPass,
-    LowShelf
-} from "@/ui/devices/audio-effects/Revamp/Curves.ts"
+import {Bell, CurveRenderer, HighPass, HighShelf, LowPass, LowShelf} from "@/ui/devices/audio-effects/Revamp/Curves.ts"
 import {ColorSets, curveSampleRate} from "./constants.ts"
 import {gainToDb} from "@moises-ai/lib-dsp"
 

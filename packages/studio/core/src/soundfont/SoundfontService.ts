@@ -1,4 +1,4 @@
-import {Arrays, Class, Option, panic, Procedure, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
+import {Arrays, Class, Option, panic, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
 import {Box} from "@moises-ai/lib-box"
 import {Wait} from "@moises-ai/lib-runtime"
 import {SoundfontFileBox} from "@moises-ai/studio-boxes"
@@ -9,7 +9,7 @@ import {OpenSoundfontAPI} from "./OpenSoundfontAPI"
 import {AssetService} from "../AssetService"
 import {ExternalLib} from "../ExternalLib"
 
-export class SoundfontService extends AssetService<Soundfont> {
+export class SoundfontService extends AssetService<Soundfont, void> {
     protected readonly namePlural: string = "Soundfonts"
     protected readonly nameSingular: string = "Soundfont"
     protected readonly boxType: Class<Box> = SoundfontFileBox
@@ -18,9 +18,8 @@ export class SoundfontService extends AssetService<Soundfont> {
     #local: Option<Array<Soundfont>> = Option.None
     #remote: Option<ReadonlyArray<Soundfont>> = Option.None
 
-    constructor(onUpdate: Procedure<Soundfont>) {
-        super(onUpdate)
-
+    constructor() {
+        super()
         Promise.all([
             SoundfontStorage.get().list(),
             OpenSoundfontAPI.get().all()
@@ -72,7 +71,7 @@ export class SoundfontService extends AssetService<Soundfont> {
         if (!list.some(other => other.uuid === soundfont.uuid)) {
             list.push(soundfont)
         }
-        this.onUpdate(soundfont)
+        this.notifier.notify([soundfont, undefined])
         updater.terminate()
         return soundfont
     }

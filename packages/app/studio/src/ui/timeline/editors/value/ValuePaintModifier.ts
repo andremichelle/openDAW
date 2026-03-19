@@ -1,6 +1,7 @@
 import {
     Arrays,
     BinarySearch,
+    Editing,
     int,
     Notifier,
     NumberComparator,
@@ -12,7 +13,6 @@ import {
     unitValue,
     ValueAxis
 } from "@moises-ai/lib-std"
-import {BoxEditing} from "@moises-ai/lib-box"
 import {SelectableValueEvent, ValueEventBoxAdapter} from "@moises-ai/studio-adapters"
 import {Interpolation, ppqn, ValueEvent} from "@moises-ai/lib-dsp"
 import {ValueModifier} from "./ValueModifier"
@@ -22,7 +22,7 @@ import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {Dragging} from "@moises-ai/lib-dom"
 
 type Construct = Readonly<{
-    editing: BoxEditing
+    editing: Editing
     element: Element
     reader: ValueEventOwnerReader
     selection: Selection<ValueEventBoxAdapter>
@@ -35,7 +35,7 @@ type Stroke = { position: ppqn, value: unitValue }
 export class ValuePaintModifier implements ValueModifier {
     static create(construct: Construct): ValuePaintModifier {return new ValuePaintModifier(construct)}
 
-    readonly #editing: BoxEditing
+    readonly #editing: Editing
     readonly #element: Element
     readonly #reader: ValueEventOwnerReader
     readonly #selection: Selection<ValueEventBoxAdapter>
