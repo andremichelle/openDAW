@@ -1,4 +1,4 @@
-import {asInstanceOf, Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {asInstanceOf, isDefined, Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {WerkstattDeviceBox, WerkstattParameterBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
@@ -8,6 +8,7 @@ import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
+import {parseParams, resolveParamMappings} from "../../ScriptParamDeclaration"
 
 export class WerkstattDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly #terminator = new Terminator()
@@ -24,13 +25,18 @@ export class WerkstattDeviceBoxAdapter implements AudioEffectDeviceAdapter {
         this.#context = context
         this.#box = box
         this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
+        const declarations = parseParams(box.code.getValue())
         this.#terminator.own(
             box.parameters.pointerHub.catchupAndSubscribe({
-                onAdded: (({box}) => this.#parametric
-                    .createParameter(
-                        asInstanceOf(box, WerkstattParameterBox).value,
-                        ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 1}),
-                        asInstanceOf(box, WerkstattParameterBox).label.getValue())),
+                onAdded: (({box: parameterBox}) => {
+                    const paramBox = asInstanceOf(parameterBox, WerkstattParameterBox)
+                    const label = paramBox.label.getValue()
+                    const declaration = declarations.find(decl => decl.label === label)
+                    const {valueMapping, stringMapping} = isDefined(declaration)
+                        ? resolveParamMappings(declaration)
+                        : {valueMapping: ValueMapping.unipolar(), stringMapping: StringMapping.percent({fractionDigits: 1})}
+                    this.#parametric.createParameter(paramBox.value, valueMapping, stringMapping, label)
+                }),
                 onRemoved: (({box}) => this.#parametric
                     .removeParameter(asInstanceOf(box, WerkstattParameterBox).value.address))
             })

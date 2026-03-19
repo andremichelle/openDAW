@@ -1,18 +1,15 @@
-import {asInstanceOf, Editing, isDefined, Nullable, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, Editing, isDefined, UUID} from "@opendaw/lib-std"
 import {BoxGraph, Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {WerkstattParameterBox} from "@opendaw/studio-boxes"
+import {parseParams} from "@opendaw/studio-adapters"
+import type {ParamDeclaration} from "@opendaw/studio-adapters"
 
 export interface ScriptDeviceBox {
     readonly graph: BoxGraph
     readonly address: {readonly uuid: UUID.Bytes}
     readonly code: StringField
     readonly parameters: Field<Pointers.Parameter>
-}
-
-interface ParamDeclaration {
-    label: string
-    defaultValue: number
 }
 
 export type ScriptCompilerConfig = {
@@ -22,7 +19,7 @@ export type ScriptCompilerConfig = {
 }
 
 const COMPILER_VERSION = 1
-const PARAM_LINE = /^\/\/ @param .+$/gm
+const FLOAT_TOLERANCE = 1e-6
 
 const createHeaderPattern = (tag: string): RegExp => new RegExp(`^// @${tag} (\\w+) (\\d+) (\\d+)\n`)
 
@@ -35,23 +32,6 @@ const parseHeader = (source: string, pattern: RegExp): {userCode: string, update
         userCode: source,
         update: 0
     }
-}
-
-const parseParams = (code: string): ReadonlyArray<ParamDeclaration> => {
-    const params: Array<ParamDeclaration> = []
-    let match: Nullable<RegExpExecArray>
-    PARAM_LINE.lastIndex = 0
-    while ((match = PARAM_LINE.exec(code)) !== null) {
-        const valid = match[0].match(/^\/\/ @param (\w+)(?: ([.\d]+))?$/)
-        if (valid === null) {
-            throw new Error(`Malformed @param: '${match[0]}' — expected: // @param <name> [defaultValue]`)
-        }
-        params.push({
-            label: valid[1],
-            defaultValue: isDefined(valid[2]) ? parseFloat(valid[2]) : 0.0
-        })
-    }
-    return params
 }
 
 const reconcileParameters = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray<ParamDeclaration>): void => {
@@ -71,23 +51,24 @@ const reconcileParameters = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray
     }
     seen.clear()
     for (let index = 0; index < declared.length; index++) {
-        const {label, defaultValue} = declared[index]
-        if (seen.has(label)) {continue}
-        seen.add(label)
-        const existing = existingByLabel.get(label)
+        const declaration = declared[index]
+        if (seen.has(declaration.label)) {continue}
+        seen.add(declaration.label)
+        const existing = existingByLabel.get(declaration.label)
+        const mappedDefault = declaration.defaultValue
         if (isDefined(existing)) {
             existing.index.setValue(index)
-            if (existing.defaultValue.getValue() !== defaultValue) {
-                existing.defaultValue.setValue(defaultValue)
-                existing.value.setValue(defaultValue)
+            if (Math.abs(existing.defaultValue.getValue() - mappedDefault) > FLOAT_TOLERANCE) {
+                existing.defaultValue.setValue(mappedDefault)
+                existing.value.setValue(mappedDefault)
             }
         } else {
             WerkstattParameterBox.create(boxGraph, UUID.generate(), paramBox => {
                 paramBox.owner.refer(deviceBox.parameters)
-                paramBox.label.setValue(label)
+                paramBox.label.setValue(declaration.label)
                 paramBox.index.setValue(index)
-                paramBox.value.setValue(defaultValue)
-                paramBox.defaultValue.setValue(defaultValue)
+                paramBox.value.setValue(mappedDefault)
+                paramBox.defaultValue.setValue(mappedDefault)
             })
         }
     }

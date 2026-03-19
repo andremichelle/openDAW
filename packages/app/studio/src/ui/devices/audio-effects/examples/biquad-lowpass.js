@@ -1,6 +1,6 @@
 // Biquad Lowpass
-// @param cutoff 0.5
-// @param resonance 0.5
+// @param cutoff 1000 20 20000 exp Hz
+// @param resonance 0.707 0.1 10 linear
 
 class Processor {
     x1L = 0; x2L = 0; y1L = 0; y2L = 0
@@ -8,8 +8,8 @@ class Processor {
     b0 = 0; b1 = 0; b2 = 0; a1 = 0; a2 = 0
     cutoff = 1000; resonance = 0.707
     paramChanged(label, value) {
-        if (label === "cutoff") this.cutoff = 20 + value * 19980
-        if (label === "resonance") this.resonance = 0.1 + value * 9.9
+        if (label === "cutoff") this.cutoff = value
+        if (label === "resonance") this.resonance = value
         this.recalcCoefficients(this.cutoff, this.resonance)
     }
     recalcCoefficients(cutoff, resonance) {

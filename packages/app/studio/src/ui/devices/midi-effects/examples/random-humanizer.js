@@ -1,13 +1,13 @@
 // Random Humanizer
-// @param timing 0.2
-// @param velRange 0.33
+// @param timing 10 0 50 linear
+// @param velRange 0.1 0 0.3 linear
 
 class Processor {
     timing = 10
     velRange = 0.1
     paramChanged(name, value) {
-        if (name === "timing") this.timing = value * 50
-        if (name === "velRange") this.velRange = value * 0.3
+        if (name === "timing") this.timing = value
+        if (name === "velRange") this.velRange = value
     }
     * process(block, events) {
         for (const event of events) {

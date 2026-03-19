@@ -1,5 +1,5 @@
 // Ring Modulator
-// @param frequency 440
+// @param frequency 440 20 2000 exp Hz
 
 class Processor {
     phase = 0

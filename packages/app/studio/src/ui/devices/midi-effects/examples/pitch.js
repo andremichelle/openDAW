@@ -1,16 +1,16 @@
 // Pitch
-// @param octaves 0.5
-// @param semiTones 0.5
-// @param cent 0.5
+// @param octaves 0 -4 4 int
+// @param semiTones 0 -12 12 int
+// @param cent 0 -100 100 linear
 
 class Processor {
     octaves = 0
     semiTones = 0
     cent = 0
     paramChanged(name, value) {
-        if (name === "octaves") this.octaves = Math.round(value * 8 - 4)
-        if (name === "semiTones") this.semiTones = Math.round(value * 24 - 12)
-        if (name === "cent") this.cent = value * 200 - 100
+        if (name === "octaves") this.octaves = value
+        if (name === "semiTones") this.semiTones = value
+        if (name === "cent") this.cent = value
     }
     * process(block, events) {
         for (const event of events) {

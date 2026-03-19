@@ -1,5 +1,5 @@
 // Probability Gate
-// @param chance 0.5
+// @param chance 0.5 0 1 linear
 
 class Processor {
     chance = 0.5

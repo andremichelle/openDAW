@@ -1,6 +1,6 @@
 // Simple Delay
-// @param time 0.5
-// @param feedback 0.5
+// @param time 0.5 0.001 2.0 exp s
+// @param feedback 0.5 0 0.95 linear
 
 class Processor {
     bufferL = new Float32Array(sampleRate * 2)

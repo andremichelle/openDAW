@@ -1,8 +1,8 @@
 // Echo / Note Delay
-// @param repeats 0.3
-// @param delay 0.25
-// @param decay 0.7
-// @param duration 0.25
+// @param repeats 3 1 8 int
+// @param delay 120 24 480 int
+// @param decay 0.7 0.1 1.0 linear
+// @param duration 120 24 480 int
 
 class Processor {
     repeats = 3
@@ -10,10 +10,10 @@ class Processor {
     decay = 0.7
     duration = 120
     paramChanged(name, value) {
-        if (name === "repeats") this.repeats = Math.round(1 + value * 7)
-        if (name === "delay") this.delay = Math.round(24 + value * 456)
-        if (name === "decay") this.decay = 0.1 + value * 0.9
-        if (name === "duration") this.duration = Math.round(24 + value * 456)
+        if (name === "repeats") this.repeats = value
+        if (name === "delay") this.delay = value
+        if (name === "decay") this.decay = value
+        if (name === "duration") this.duration = value
     }
     * process(block, events) {
         for (const event of events) {
