@@ -17,6 +17,7 @@ Adds `@sample` declarations for loading audio files into the worklet, enabling s
 - **Reset**: On transport stop/discontinuity, the host sends `noteOff` for all active notes, then calls `reset()`. The user MUST kill all voices in `reset()` — no tails, no release phases. This must be clearly documented in the manual and AI prompt.
 - **Samples**: `// @sample name` declarations. File picker (drag-and-drop + click-to-browse) on the device panel. Data available as `this.samples.name` in the processor. Returns `null` until loaded.
 - **Name**: Apparat (German for "apparatus"). Continues the naming: Werkstatt, Spielwerk, Apparat.
+- **Icon**: `IconSymbol.Code` — same as Werkstatt and Spielwerk.
 
 ---
 
@@ -152,6 +153,11 @@ export const WerkstattSampleBox = {
 ```
 
 Reuses `WerkstattParameterBox` for parameters (same as Werkstatt/Spielwerk).
+
+**WerkstattDeviceBox extension**: Add `samples` field at key **12** (preserving existing keys 10=code, 11=parameters). Same field added to `SpielwerkDeviceBox` and `ApparatDeviceBox`:
+```typescript
+12: {type: "field", name: "samples", pointerRules: {accepts: [Pointers.Sample], mandatory: false}}
+```
 
 ### Adapter
 
