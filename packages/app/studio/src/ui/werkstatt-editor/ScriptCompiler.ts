@@ -87,6 +87,11 @@ const reconcileSamples = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray<Sa
     for (const {label} of declared) {seen.add(label)}
     for (const [label, sampleBox] of existingByLabel) {
         if (!seen.has(label)) {
+            sampleBox.file.targetVertex.ifSome(({box: fileBox}) => {
+                const mustDelete = fileBox.pointerHub.size() === 1
+                sampleBox.file.defer()
+                if (mustDelete) {fileBox.delete()}
+            })
             sampleBox.delete()
         }
     }

@@ -237,7 +237,7 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
                     element.style.order = String(owner.getValue())))
                 controls.appendChild(element)
                 set.add({uuid: sampleBox.address.uuid, lifecycle: terminator})
-                terminator.own({terminate: () => dropZone.remove()})
+                terminator.own({terminate: () => element.remove()})
             },
             onRemoved: ({box: {address: {uuid}}}) =>
                 set.removeByKey(uuid).lifecycle.terminate()
