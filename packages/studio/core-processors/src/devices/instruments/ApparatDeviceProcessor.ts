@@ -82,7 +82,7 @@ export class ApparatDeviceProcessor extends AudioProcessor
                     this.#silenced = true
                     this.#userProcessor = Option.None
                     this.#audioOutput.clear()
-                    this.#tryLoad()
+                    this.#tryLoad(newUpdate)
                 }
             }),
             box.parameters.pointerHub.catchupAndSubscribe({
@@ -168,7 +168,10 @@ export class ApparatDeviceProcessor extends AudioProcessor
     processAudio(block: Block): void {
         if (!this.#enabled) {return}
         if (this.#silenced) {
-            this.#tryLoad()
+            const expectedUpdate = parseUpdate(this.#adapter.box.code.getValue())
+            if (expectedUpdate > 0 && expectedUpdate !== this.#currentUpdate) {
+                this.#tryLoad(expectedUpdate)
+            }
             if (this.#silenced) {return}
         }
         if (this.#userProcessor.isEmpty()) {return}
@@ -210,10 +213,10 @@ export class ApparatDeviceProcessor extends AudioProcessor
 
     processEvents(_block: Block): void {}
 
-    #tryLoad(): void {
+    #tryLoad(expectedUpdate: int): void {
         const registry = (globalThis as any).openDAW?.apparatProcessors?.[this.#uuid]
-        if (isDefined(registry)) {
-            this.#swapProcessor(registry.create, registry.update)
+        if (isDefined(registry) && registry.update === expectedUpdate) {
+            this.#swapProcessor(registry.create, expectedUpdate)
         }
     }
 
