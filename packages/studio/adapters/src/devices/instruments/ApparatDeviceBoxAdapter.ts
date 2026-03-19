@@ -16,7 +16,7 @@ export class ApparatDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     readonly type = "instrument"
     readonly accepts = "midi"
-    readonly manualUrl = ""
+    readonly manualUrl = DeviceManualUrls.Apparat
 
     readonly #context: BoxAdaptersContext
     readonly #box: ApparatDeviceBox

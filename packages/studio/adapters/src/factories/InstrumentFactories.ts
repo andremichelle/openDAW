@@ -191,7 +191,7 @@ export namespace InstrumentFactories {
         defaultName: "Apparat",
         defaultIcon: IconSymbol.Code,
         description: "User-scripted instrument",
-        manualPage: "",
+        manualPage: DeviceManualUrls.Apparat,
         trackType: TrackType.Notes,
         create: (boxGraph: BoxGraph,
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
