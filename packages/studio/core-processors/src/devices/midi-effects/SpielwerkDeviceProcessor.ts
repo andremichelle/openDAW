@@ -113,7 +113,7 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
                 if (newUpdate > 0 && newUpdate !== this.#currentUpdate) {
                     this.#silenced = true
                     this.#userProcessor = Option.None
-                    this.#tryLoad()
+                    this.#tryLoad(newUpdate)
                 }
             }),
             box.parameters.pointerHub.catchupAndSubscribe({
@@ -165,7 +165,10 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
         }
         this.#wasPlaying = playing
         if (this.#silenced) {
-            this.#tryLoad()
+            const expectedUpdate = parseUpdate(this.#adapter.box.code.getValue())
+            if (expectedUpdate > 0 && expectedUpdate !== this.#currentUpdate) {
+                this.#tryLoad(expectedUpdate)
+            }
         }
         if (this.#source.nonEmpty() && this.#userProcessor.nonEmpty() && !this.#silenced) {
             const source = this.#source.unwrap()
@@ -287,10 +290,10 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
     index(): number {return this.#adapter.indexField.getValue()}
     adapter(): SpielwerkDeviceBoxAdapter {return this.#adapter}
 
-    #tryLoad(): void {
+    #tryLoad(expectedUpdate: int): void {
         const registry = (globalThis as any).openDAW?.spielwerkProcessors?.[this.#uuid]
-        if (isDefined(registry)) {
-            this.#swapProcessor(registry.create, registry.update)
+        if (isDefined(registry) && registry.update === expectedUpdate) {
+            this.#swapProcessor(registry.create, expectedUpdate)
         }
     }
 
