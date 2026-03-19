@@ -1,5 +1,5 @@
-import {Event, PPQN} from "@opendaw/lib-dsp"
-import {assert, Maybe, panic} from "@opendaw/lib-std"
+import {Event, PPQN} from "@moises-ai/lib-dsp"
+import {assert, Maybe, panic} from "@moises-ai/lib-std"
 import {Block, BlockFlag, MutableBlock, ProcessInfo} from "./processing"
 import {AbstractProcessor} from "./AbstractProcessor"
 import {UpdateEvent} from "./UpdateClock"

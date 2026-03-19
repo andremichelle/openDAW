@@ -1,5 +1,5 @@
 import {BoxSchema} from "@opendaw/lib-box-forge"
-import {Pointers} from "@opendaw/studio-enums"
+import {Pointers} from "@moises-ai/studio-enums"
 import {DeviceFactory} from "../../std/DeviceFactory"
 
 export const WerkstattDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffect("WerkstattDeviceBox", {

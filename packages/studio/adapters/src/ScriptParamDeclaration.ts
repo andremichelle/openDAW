@@ -1,4 +1,4 @@
-import {isDefined, Nullable, StringMapping, ValueMapping} from "@opendaw/lib-std"
+import {isDefined, Nullable, StringMapping, ValueMapping} from "@moises-ai/lib-std"
 
 export type ParamMapping = "unipolar" | "linear" | "exp" | "int" | "bool"
 

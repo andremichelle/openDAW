@@ -9,10 +9,10 @@ import {
     Terminable,
     Terminator,
     UUID
-} from "@opendaw/lib-std"
-import {AudioData} from "@opendaw/lib-dsp"
-import {Peaks} from "@opendaw/lib-fusion"
-import {mergeChunkPlanes, RingBuffer, SampleLoader, SampleLoaderState} from "@opendaw/studio-adapters"
+} from "@moises-ai/lib-std"
+import {AudioData} from "@moises-ai/lib-dsp"
+import {Peaks} from "@moises-ai/lib-fusion"
+import {mergeChunkPlanes, RingBuffer, SampleLoader, SampleLoaderState} from "@moises-ai/studio-adapters"
 import {RenderQuantum} from "./RenderQuantum"
 import {PeaksWriter} from "./PeaksWriter"
 import {SampleService} from "./samples"

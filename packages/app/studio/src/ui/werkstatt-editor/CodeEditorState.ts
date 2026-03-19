@@ -1,4 +1,4 @@
-import {Nullable} from "@opendaw/lib-std"
+import {Nullable} from "@moises-ai/lib-std"
 import {CodeEditorHandler} from "./CodeEditorHandler"
 import {Workspace} from "@/ui/workspace/Workspace"
 

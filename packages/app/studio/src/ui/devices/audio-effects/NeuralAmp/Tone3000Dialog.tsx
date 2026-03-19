@@ -1,6 +1,6 @@
 import css from "./Tone3000Dialog.sass?inline"
-import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
 import {Dialogs} from "@/ui/components/dialogs"
 
 const className = Html.adoptStyleSheet(css, "Tone3000Dialog")

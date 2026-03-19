@@ -1,6 +1,6 @@
-import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
-import {Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
-import {assert, panic, unitValue} from "@opendaw/lib-std"
+import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@moises-ai/studio-adapters"
+import {Interpolation, ppqn, ValueEvent} from "@moises-ai/lib-dsp"
+import {assert, panic, unitValue} from "@moises-ai/lib-std"
 
 export namespace ValueEventEditing {
     export const deleteEvent = (collection: ValueEventCollectionBoxAdapter, event: ValueEventBoxAdapter) => {

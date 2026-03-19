@@ -9,9 +9,9 @@ import {
     Optional,
     Provider,
     RuntimeNotifier
-} from "@opendaw/lib-std"
-import {Box, BoxGraph} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
+} from "@moises-ai/lib-std"
+import {Box, BoxGraph} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
 import {
     AudioEffectDeviceAdapter,
     BoxAdapters,
@@ -23,7 +23,7 @@ import {
     FilteredSelection,
     InstrumentDeviceBoxAdapter,
     MidiEffectDeviceAdapter
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
 import {ClipboardUtils} from "../ClipboardUtils"
 

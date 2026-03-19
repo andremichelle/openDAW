@@ -1,4 +1,4 @@
-import {MutableObservableValue, Procedure, Subscription, UUID} from "@opendaw/lib-std"
+import {MutableObservableValue, Procedure, Subscription, UUID} from "@moises-ai/lib-std"
 
 export interface CodeEditorHandler {
     readonly uuid: UUID.Bytes

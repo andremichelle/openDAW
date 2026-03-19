@@ -1,9 +1,9 @@
-import {CanvasUnitPainter, Scale} from "@opendaw/studio-core"
-import {int, linear, Nullable, Terminable} from "@opendaw/lib-std"
-import {RevampDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {CanvasUnitPainter, Scale} from "@moises-ai/studio-core"
+import {int, linear, Nullable, Terminable} from "@moises-ai/lib-std"
+import {RevampDeviceBoxAdapter} from "@moises-ai/studio-adapters"
 import {Bell, CurveRenderer, HighPass, HighShelf, LowPass, LowShelf} from "@/ui/devices/audio-effects/Revamp/Curves.ts"
 import {ColorSets, curveSampleRate} from "./constants.ts"
-import {gainToDb} from "@opendaw/lib-dsp"
+import {gainToDb} from "@moises-ai/lib-dsp"
 
 export const plotSpectrum = (context: CanvasRenderingContext2D,
                              xAxis: Scale,

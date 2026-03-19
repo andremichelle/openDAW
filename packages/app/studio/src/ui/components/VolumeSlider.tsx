@@ -1,5 +1,5 @@
 import css from "./VolumeSlider.sass?inline"
-import {createElement} from "@opendaw/lib-jsx"
+import {createElement} from "@moises-ai/lib-jsx"
 import {
     clampUnit,
     Editing,
@@ -11,15 +11,15 @@ import {
     Strings,
     Terminator,
     unitValue
-} from "@opendaw/lib-std"
+} from "@moises-ai/lib-std"
 import {ValueDragging} from "@/ui/hooks/dragging.ts"
 import {ValueTooltip} from "@/ui/surface/ValueTooltip.tsx"
-import {CssUtils, Events, Html} from "@opendaw/lib-dom"
-import {Colors} from "@opendaw/studio-enums"
+import {CssUtils, Events, Html} from "@moises-ai/lib-dom"
+import {Colors} from "@moises-ai/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
-import {StudioPreferences} from "@opendaw/studio-core"
-import {Runtime} from "@opendaw/lib-runtime"
+import {StudioPreferences} from "@moises-ai/studio-core"
+import {Runtime} from "@moises-ai/lib-runtime"
 
 const className = Html.adoptStyleSheet(css, "vertical-slider")
 

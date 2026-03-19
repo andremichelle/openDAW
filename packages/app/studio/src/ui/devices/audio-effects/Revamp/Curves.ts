@@ -1,14 +1,14 @@
-import {Color, Notifier, Nullable, Observer, Subscription, Terminable} from "@opendaw/lib-std"
-import {CanvasUnitPainter} from "@opendaw/studio-core"
+import {Color, Notifier, Nullable, Observer, Subscription, Terminable} from "@moises-ai/lib-std"
+import {CanvasUnitPainter} from "@moises-ai/studio-core"
 import {
     AutomatableParameterFieldAdapter,
     BellParameters,
     Parameters,
     PassParameters,
     ShelfParameters
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {biquad} from "@/ui/devices/audio-effects/Revamp/constants.ts"
-import {gainToDb} from "@opendaw/lib-dsp"
+import {gainToDb} from "@moises-ai/lib-dsp"
 
 export type ColorSet = {
     full: Color

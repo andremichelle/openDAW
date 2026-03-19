@@ -1,11 +1,11 @@
-import {int, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioEffectDeviceAdapter, WaveshaperDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {int, Option, Terminable, UUID} from "@moises-ai/lib-std"
+import {AudioEffectDeviceAdapter, WaveshaperDeviceBoxAdapter} from "@moises-ai/studio-adapters"
 import {EngineContext} from "../../EngineContext"
 import {Block, Processor} from "../../processing"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
 import {AutomatableParameter} from "../../AutomatableParameter"
 import {AudioEffectDeviceProcessor} from "../../AudioEffectDeviceProcessor"
-import {AudioBuffer, dbToGain, Ramp, Waveshaper} from "@opendaw/lib-dsp"
+import {AudioBuffer, dbToGain, Ramp, Waveshaper} from "@moises-ai/lib-dsp"
 import {AudioProcessor} from "../../AudioProcessor"
 
 export class WaveshaperDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {

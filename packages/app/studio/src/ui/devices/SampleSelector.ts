@@ -1,15 +1,15 @@
-import {AudioFileBox} from "@opendaw/studio-boxes"
-import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {AudioFileBox} from "@moises-ai/studio-boxes"
+import {isDefined, Option, Terminable, UUID} from "@moises-ai/lib-std"
 import {Dialogs} from "@/ui/components/dialogs"
-import {Events, Files} from "@opendaw/lib-dom"
-import {Promises} from "@opendaw/lib-runtime"
+import {Events, Files} from "@moises-ai/lib-dom"
+import {Promises} from "@moises-ai/lib-runtime"
 import {StudioService} from "@/service/StudioService"
 import {AnyDragData} from "@/ui/AnyDragData"
-import {ContextMenu, FilePickerAcceptTypes, MenuItem} from "@opendaw/studio-core"
-import {PointerField} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
+import {ContextMenu, FilePickerAcceptTypes, MenuItem} from "@moises-ai/studio-core"
+import {PointerField} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
 import {DragAndDrop} from "@/ui/DragAndDrop"
-import {Sample} from "@opendaw/studio-adapters"
+import {Sample} from "@moises-ai/studio-adapters"
 
 export interface SampleSelectStrategy {
     hasSample(): boolean

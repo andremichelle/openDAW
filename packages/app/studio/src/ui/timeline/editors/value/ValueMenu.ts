@@ -1,7 +1,7 @@
-import {asDefined, Editing, int, Procedure, Selection} from "@opendaw/lib-std"
-import {ValueEventBoxAdapter} from "@opendaw/studio-adapters"
-import {EventCollection, ppqn} from "@opendaw/lib-dsp"
-import {MenuCollector, MenuItem} from "@opendaw/studio-core"
+import {asDefined, Editing, int, Procedure, Selection} from "@moises-ai/lib-std"
+import {ValueEventBoxAdapter} from "@moises-ai/studio-adapters"
+import {EventCollection, ppqn} from "@moises-ai/lib-dsp"
+import {MenuCollector, MenuItem} from "@moises-ai/studio-core"
 
 export const createValueMenu = ({editing, selection, events}: {
     editing: Editing

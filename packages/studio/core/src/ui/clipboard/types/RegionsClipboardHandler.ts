@@ -1,7 +1,7 @@
-import {ByteArrayInput, ByteArrayOutput, Editing, Option, Procedure, Provider, Selection, UUID} from "@opendaw/lib-std"
-import {Box, BoxGraph} from "@opendaw/lib-box"
-import {ppqn} from "@opendaw/lib-dsp"
-import {Pointers} from "@opendaw/studio-enums"
+import {ByteArrayInput, ByteArrayOutput, Editing, Option, Procedure, Provider, Selection, UUID} from "@moises-ai/lib-std"
+import {Box, BoxGraph} from "@moises-ai/lib-box"
+import {ppqn} from "@moises-ai/lib-dsp"
+import {Pointers} from "@moises-ai/studio-enums"
 import {
     AnyRegionBoxAdapter,
     BoxAdapters,
@@ -9,7 +9,7 @@ import {
     TrackBoxAdapter,
     TrackType,
     UnionBoxTypes
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
 import {ClipboardUtils} from "../ClipboardUtils"
 import {RegionOverlapResolver} from "../../timeline/RegionOverlapResolver"

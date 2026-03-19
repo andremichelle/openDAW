@@ -1,8 +1,8 @@
 import {Dialog} from "@/ui/components/Dialog"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
-import {Promises} from "@opendaw/lib-runtime"
-import {createElement} from "@opendaw/lib-jsx"
+import {Promises} from "@moises-ai/lib-runtime"
+import {createElement} from "@moises-ai/lib-jsx"
 
 export const showStoragePersistDialog = (): Promise<void> => {
     const {resolve, promise} = Promise.withResolvers<void>()

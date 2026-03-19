@@ -1,7 +1,7 @@
 import css from "./PropertyEditor.sass?inline"
-import {Editing, Lifecycle, Nullable, ObservableValue, Option, Selection, unitValue, ValueAxis} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
+import {Editing, Lifecycle, Nullable, ObservableValue, Option, Selection, unitValue, ValueAxis} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {NoteEventBoxAdapter} from "@moises-ai/studio-adapters"
 import {SelectionRectangle} from "@/ui/timeline/SelectionRectangle.tsx"
 import {createPropertySelectionLocator} from "@/ui/timeline/editors/notes/property/PropertySelectionLocator.ts"
 import {createPropertyCapturing} from "@/ui/timeline/editors/notes/property/PropertyEventCapturing.ts"
@@ -21,8 +21,8 @@ import {Cursor} from "@/ui/Cursors.ts"
 import {installValueInput} from "@/ui/timeline/editors/ValueInput.ts"
 
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {Dragging, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
-import {CanvasPainter, ElementCapturing, TimelineRange} from "@opendaw/studio-core"
+import {Dragging, Html, Keyboard, ShortcutManager} from "@moises-ai/lib-dom"
+import {CanvasPainter, ElementCapturing, TimelineRange} from "@moises-ai/studio-core"
 import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 
 const className = Html.adoptStyleSheet(css, "PropertyEditor")

@@ -1,5 +1,5 @@
-import {int, UUID} from "@opendaw/lib-std"
-import {AudioBuffer, AudioData} from "@opendaw/lib-dsp"
+import {int, UUID} from "@moises-ai/lib-std"
+import {AudioBuffer, AudioData} from "@moises-ai/lib-dsp"
 import {VoiceState} from "./VoiceState"
 
 export class PitchVoice {

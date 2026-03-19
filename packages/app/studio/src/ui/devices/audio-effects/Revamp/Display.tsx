@@ -1,8 +1,8 @@
-import {Terminable} from "@opendaw/lib-std"
-import {Scale} from "@opendaw/studio-core"
-import {createElement} from "@opendaw/lib-jsx"
+import {Terminable} from "@moises-ai/lib-std"
+import {Scale} from "@moises-ai/studio-core"
+import {createElement} from "@moises-ai/lib-jsx"
 import {horizontalUnits, verticalUnits} from "./constants.ts"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 
 export const createDisplay = (xAxis: Scale, yAxis: Scale, svg: SVGSVGElement): Terminable => {
     return Html.watchResize(svg, () => {

@@ -13,10 +13,10 @@ import {
     SetMultimap,
     Terminable,
     UUID
-} from "@opendaw/lib-std"
-import {EngineToClient, SpielwerkDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {WerkstattParameterBox} from "@opendaw/studio-boxes"
-import {Event, EventSpanRetainer, NoteEvent, ppqn} from "@opendaw/lib-dsp"
+} from "@moises-ai/lib-std"
+import {EngineToClient, SpielwerkDeviceBoxAdapter} from "@moises-ai/studio-adapters"
+import {WerkstattParameterBox} from "@moises-ai/studio-boxes"
+import {Event, EventSpanRetainer, NoteEvent, ppqn} from "@moises-ai/lib-dsp"
 import {EngineContext} from "../../EngineContext"
 import {EventProcessor} from "../../EventProcessor"
 import {Block, BlockFlag, Processor} from "../../processing"

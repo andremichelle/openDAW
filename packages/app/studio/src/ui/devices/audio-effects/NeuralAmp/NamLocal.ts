@@ -1,8 +1,8 @@
-import {Files} from "@opendaw/lib-dom"
-import {Editing, UUID} from "@opendaw/lib-std"
-import {NeuralAmpModelBox} from "@opendaw/studio-boxes"
-import {BoxGraph} from "@opendaw/lib-box"
-import {NeuralAmpDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {Files} from "@moises-ai/lib-dom"
+import {Editing, UUID} from "@moises-ai/lib-std"
+import {NeuralAmpModelBox} from "@moises-ai/studio-boxes"
+import {BoxGraph} from "@moises-ai/lib-box"
+import {NeuralAmpDeviceBoxAdapter} from "@moises-ai/studio-adapters"
 
 export namespace NamLocal {
     export const browse = (boxGraph: BoxGraph, editing: Editing, adapter: NeuralAmpDeviceBoxAdapter) => async () => {

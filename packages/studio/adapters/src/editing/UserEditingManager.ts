@@ -1,5 +1,5 @@
-import {Editing, Terminable, Terminator} from "@opendaw/lib-std"
-import {UserInterfaceBox} from "@opendaw/studio-boxes"
+import {Editing, Terminable, Terminator} from "@moises-ai/lib-std"
+import {UserInterfaceBox} from "@moises-ai/studio-boxes"
 import {UserEditing} from "./UserEditing"
 
 export class UserEditingManager implements Terminable {

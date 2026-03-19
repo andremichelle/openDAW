@@ -1,8 +1,8 @@
-import {ElementCapturing} from "@opendaw/studio-core"
-import {BinarySearch, int, Nullable, NumberComparator} from "@opendaw/lib-std"
+import {ElementCapturing} from "@moises-ai/studio-core"
+import {BinarySearch, int, Nullable, NumberComparator} from "@moises-ai/lib-std"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager"
-import {TrackBoxAdapter} from "@opendaw/studio-adapters"
+import {TrackBoxAdapter} from "@moises-ai/studio-adapters"
 
 export namespace HeaderCapturing {
     export type Target = { type: "track", adapter: TrackBoxAdapter } | { type: "insert", index: int }

@@ -1,5 +1,5 @@
 import css from "./BusySlot.sass?inline"
-import {Events, Html, Keyboard} from "@opendaw/lib-dom"
+import {Events, Html, Keyboard} from "@moises-ai/lib-dom"
 import {
     asDefined,
     DefaultObservableValue,
@@ -10,13 +10,13 @@ import {
     ObservableValue,
     Option,
     Terminable
-} from "@opendaw/lib-std"
-import {createElement, DomElement} from "@opendaw/lib-jsx"
+} from "@moises-ai/lib-std"
+import {createElement, DomElement} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {NoteLifeCycle, PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter} from "@opendaw/studio-adapters"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {NoteLifeCycle, PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter} from "@moises-ai/studio-adapters"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {SampleSelector} from "@/ui/devices/SampleSelector"
-import {CanvasPainter, ContextMenu, MenuItem} from "@opendaw/studio-core"
+import {CanvasPainter, ContextMenu, MenuItem} from "@moises-ai/studio-core"
 import {SlotUtils} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotUtils"
 import {Icon} from "@/ui/components/Icon"
 import {Checkbox} from "@/ui/components/Checkbox"

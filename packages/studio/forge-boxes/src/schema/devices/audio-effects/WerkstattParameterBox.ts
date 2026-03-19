@@ -1,5 +1,5 @@
 import {BoxSchema} from "@opendaw/lib-box-forge"
-import {Pointers} from "@opendaw/studio-enums"
+import {Pointers} from "@moises-ai/studio-enums"
 import {ParameterPointerRules} from "../../std/Defaults"
 
 export const WerkstattParameterBox: BoxSchema<Pointers> = {

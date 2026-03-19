@@ -1,5 +1,5 @@
-import {float, Func, int, Objects} from "@opendaw/lib-std"
-import {Constraints, FieldKey, PointerRules, PointerTypes, ResourceType} from "@opendaw/lib-box"
+import {float, Func, int, Objects} from "@moises-ai/lib-std"
+import {Constraints, FieldKey, PointerRules, PointerTypes, ResourceType} from "@moises-ai/lib-box"
 
 export const reserved = Object.freeze({type: "reserved", name: ""} as const)
 
@@ -66,7 +66,7 @@ export type Int32FieldSchema<E extends PointerTypes> = Referencable<E> & {
 /**
  * constraints:
  *  decibel referes to default decible mapping decibel(-72.0, -12.0, 0.0)
- *  @see @opendaw/lib-std/src/value-mapping.ts
+ *  @see @moises-ai/lib-std/src/value-mapping.ts
  */
 export type Float32FieldSchema<E extends PointerTypes> = Referencable<E> & {
     type: "float32"

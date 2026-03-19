@@ -1,9 +1,9 @@
-import {asInstanceOf, Editing, isDefined, UUID} from "@opendaw/lib-std"
-import {BoxGraph, Field, StringField} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
-import {WerkstattParameterBox} from "@opendaw/studio-boxes"
-import {parseParams} from "@opendaw/studio-adapters"
-import type {ParamDeclaration} from "@opendaw/studio-adapters"
+import {asInstanceOf, Editing, isDefined, UUID} from "@moises-ai/lib-std"
+import {BoxGraph, Field, StringField} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
+import {WerkstattParameterBox} from "@moises-ai/studio-boxes"
+import {parseParams} from "@moises-ai/studio-adapters"
+import type {ParamDeclaration} from "@moises-ai/studio-adapters"
 
 export interface ScriptDeviceBox {
     readonly graph: BoxGraph

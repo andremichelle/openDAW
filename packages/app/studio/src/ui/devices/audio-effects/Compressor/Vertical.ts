@@ -1,4 +1,4 @@
-import {LinearScale} from "@opendaw/studio-core"
+import {LinearScale} from "@moises-ai/studio-core"
 
 const height = 157
 const padding = 10

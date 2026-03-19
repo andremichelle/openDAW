@@ -1,11 +1,11 @@
 import css from "./SnapSelector.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Lifecycle} from "@moises-ai/lib-std"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
-import {createElement, Inject} from "@opendaw/lib-jsx"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {Html} from "@opendaw/lib-dom"
+import {createElement, Inject} from "@moises-ai/lib-jsx"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "SnapSelector")
 

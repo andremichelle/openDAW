@@ -1,5 +1,5 @@
-import {dbToGain} from "@opendaw/lib-dsp"
-import {Peaks} from "@opendaw/lib-fusion"
+import {dbToGain} from "@moises-ai/lib-dsp"
+import {Peaks} from "@moises-ai/lib-fusion"
 import {AudioRenderer} from "./audio"
 
 export const RiffleStrategy: AudioRenderer.Strategy = {

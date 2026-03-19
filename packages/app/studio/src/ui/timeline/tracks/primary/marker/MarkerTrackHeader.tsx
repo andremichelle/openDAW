@@ -1,12 +1,12 @@
 import css from "./MarkerTrackHeader.sass?inline"
-import {Html} from "@opendaw/lib-dom"
-import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {createElement} from "@moises-ai/lib-jsx"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 import {Icon} from "@/ui/components/Icon"
-import {IconSymbol} from "@opendaw/studio-enums"
-import {Editing, Lifecycle} from "@opendaw/lib-std"
-import {TimelineBox} from "@opendaw/studio-boxes"
+import {IconSymbol} from "@moises-ai/studio-enums"
+import {Editing, Lifecycle} from "@moises-ai/lib-std"
+import {TimelineBox} from "@moises-ai/studio-boxes"
 
 const className = Html.adoptStyleSheet(css, "MarkerTrackHeader")
 

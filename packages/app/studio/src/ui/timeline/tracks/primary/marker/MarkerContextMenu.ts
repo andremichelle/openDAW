@@ -1,8 +1,8 @@
-import {ContextMenu, ElementCapturing, MenuItem, TimelineRange} from "@opendaw/studio-core"
+import {ContextMenu, ElementCapturing, MenuItem, TimelineRange} from "@moises-ai/studio-core"
 import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
-import {MarkerBoxAdapter} from "@opendaw/studio-adapters"
-import {Arrays, Editing, EmptyExec} from "@opendaw/lib-std"
+import {MarkerBoxAdapter} from "@moises-ai/studio-adapters"
+import {Arrays, Editing, EmptyExec} from "@moises-ai/lib-std"
 import {DebugMenus} from "@/ui/menu/debug"
 import {Markers} from "@/ui/timeline/tracks/primary/marker/Markers"
 
