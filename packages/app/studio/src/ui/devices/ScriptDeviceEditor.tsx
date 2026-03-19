@@ -192,10 +192,10 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
                 const sample = asInstanceOf(sampleBox, WerkstattSampleBox)
                 const label = sample.label.getValue()
                 const terminator = new Terminator()
+                const fileNameLabel: HTMLSpanElement = (<span className="sample-name"/>)
                 const dropZone: HTMLElement = (
                     <div className="sample-drop">
                         <Icon symbol={IconSymbol.Waveform}/>
-                        <span>{label}</span>
                     </div>
                 )
                 const sampleSelector = new SampleSelector(service, {
@@ -211,18 +211,31 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
                 })
                 terminator.ownAll(
                     sample.file.catchupAndSubscribe(pointer => pointer.targetVertex.match({
-                        none: () => dropZone.removeAttribute("sample"),
-                        some: ({box: fileBox}) =>
-                            dropZone.setAttribute("sample", asInstanceOf(fileBox, AudioFileBox).fileName.getValue())
+                        none: () => {
+                            dropZone.removeAttribute("sample")
+                            fileNameLabel.textContent = ""
+                        },
+                        some: ({box: fileBox}) => {
+                            const name = asInstanceOf(fileBox, AudioFileBox).fileName.getValue()
+                            dropZone.setAttribute("sample", name)
+                            fileNameLabel.textContent = name
+                        }
                     })),
                     sampleSelector.configureBrowseClick(dropZone),
                     sampleSelector.configureContextMenu(dropZone),
                     sampleSelector.configureDrop(dropZone)
                 )
-                dropZone.style.order = String(sample.index.getValue())
+                const element: HTMLElement = (
+                    <Column ems={LKR} color={Colors.cream}>
+                        <h5>{label}</h5>
+                        {dropZone}
+                        {fileNameLabel}
+                    </Column>
+                )
+                element.style.order = String(sample.index.getValue())
                 terminator.own(sample.index.catchupAndSubscribe(owner =>
-                    dropZone.style.order = String(owner.getValue())))
-                controls.appendChild(dropZone)
+                    element.style.order = String(owner.getValue())))
+                controls.appendChild(element)
                 set.add({uuid: sampleBox.address.uuid, lifecycle: terminator})
                 terminator.own({terminate: () => dropZone.remove()})
             },
