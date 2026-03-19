@@ -1,4 +1,5 @@
 import {
+    ApparatDeviceBox,
     AudioFileBox,
     BoxIO,
     MIDIOutputDeviceBox,
@@ -186,7 +187,25 @@ export namespace InstrumentFactories {
         }
     }
 
-    export const Named = {MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
+    export const Apparat: InstrumentFactory<void, ApparatDeviceBox> = {
+        defaultName: "Apparat",
+        defaultIcon: IconSymbol.Code,
+        description: "User-scripted instrument",
+        manualPage: "",
+        trackType: TrackType.Notes,
+        create: (boxGraph: BoxGraph,
+                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
+                 name: string,
+                 icon: IconSymbol,
+                 _attachment?: void): ApparatDeviceBox =>
+            ApparatDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                box.host.refer(host)
+            })
+    }
+
+    export const Named = {Apparat, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
     export type Keys = keyof typeof Named
 
     const useAudioFile = (boxGraph: BoxGraph, fileUUID: UUID.Bytes, name: string, duration: number) =>

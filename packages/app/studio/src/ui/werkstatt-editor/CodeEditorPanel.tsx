@@ -1,5 +1,5 @@
 import css from "./CodeEditorPanel.sass?inline"
-import defaultCode from "../devices/audio-effects/werkstatt-default.txt?raw"
+import defaultCode from "../devices/audio-effects/werkstatt-default.js?raw"
 import {isDefined, Lifecycle, Nullable} from "@opendaw/lib-std"
 import {Await, createElement} from "@opendaw/lib-jsx"
 import {Events, Html, Keyboard, Shortcut} from "@opendaw/lib-dom"

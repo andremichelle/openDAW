@@ -13,7 +13,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {AudioData, ppqn} from "@opendaw/lib-dsp"
-import {SpielwerkDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
+import {ApparatDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
 import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
 import {AnimationFrame} from "@opendaw/lib-dom"
 import {
@@ -190,6 +190,11 @@ export class OfflineEngineRenderer {
                 await loadScriptDevice(box.code.getValue(),
                     /^\/\/ @spielwerk (\w+) (\d+) (\d+)\n/,
                     "spielwerkProcessors", "spielwerk",
+                    UUID.toString(box.address.uuid))
+            } else if (box instanceof ApparatDeviceBox) {
+                await loadScriptDevice(box.code.getValue(),
+                    /^\/\/ @apparat (\w+) (\d+) (\d+)\n/,
+                    "apparatProcessors", "apparat",
                     UUID.toString(box.address.uuid))
             }
         }

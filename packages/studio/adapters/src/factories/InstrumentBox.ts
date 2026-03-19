@@ -1,4 +1,5 @@
 import {
+    ApparatDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
     PlayfieldDeviceBox,
@@ -8,6 +9,7 @@ import {
 } from "@opendaw/studio-boxes"
 
 export type InstrumentBox =
+    | ApparatDeviceBox
     | TapeDeviceBox
     | VaporisateurDeviceBox
     | NanoDeviceBox

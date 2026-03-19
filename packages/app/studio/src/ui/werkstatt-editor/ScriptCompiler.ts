@@ -1,15 +1,16 @@
 import {asInstanceOf, Editing, isDefined, UUID} from "@opendaw/lib-std"
 import {BoxGraph, Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {WerkstattParameterBox} from "@opendaw/studio-boxes"
-import {parseParams} from "@opendaw/studio-adapters"
-import type {ParamDeclaration} from "@opendaw/studio-adapters"
+import {WerkstattParameterBox, WerkstattSampleBox} from "@opendaw/studio-boxes"
+import {parseParams, parseSamples} from "@opendaw/studio-adapters"
+import type {ParamDeclaration, SampleDeclaration} from "@opendaw/studio-adapters"
 
 export interface ScriptDeviceBox {
     readonly graph: BoxGraph
     readonly address: {readonly uuid: UUID.Bytes}
     readonly code: StringField
     readonly parameters: Field<Pointers.Parameter>
+    readonly samples: Field<Pointers.Sample>
 }
 
 export type ScriptCompilerConfig = {
@@ -74,6 +75,39 @@ const reconcileParameters = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray
     }
 }
 
+const reconcileSamples = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray<SampleDeclaration>): void => {
+    const boxGraph = deviceBox.graph
+    const existingPointers = deviceBox.samples.pointerHub.filter()
+    const existingByLabel = new Map<string, WerkstattSampleBox>()
+    for (const pointer of existingPointers) {
+        const sampleBox = asInstanceOf(pointer.box, WerkstattSampleBox)
+        existingByLabel.set(sampleBox.label.getValue(), sampleBox)
+    }
+    const seen = new Set<string>()
+    for (const {label} of declared) {seen.add(label)}
+    for (const [label, sampleBox] of existingByLabel) {
+        if (!seen.has(label)) {
+            sampleBox.delete()
+        }
+    }
+    seen.clear()
+    for (let index = 0; index < declared.length; index++) {
+        const declaration = declared[index]
+        if (seen.has(declaration.label)) {continue}
+        seen.add(declaration.label)
+        const existing = existingByLabel.get(declaration.label)
+        if (isDefined(existing)) {
+            existing.index.setValue(index)
+        } else {
+            WerkstattSampleBox.create(boxGraph, UUID.generate(), sampleBox => {
+                sampleBox.owner.refer(deviceBox.samples)
+                sampleBox.label.setValue(declaration.label)
+                sampleBox.index.setValue(index)
+            })
+        }
+    }
+}
+
 const wrapCode = (config: ScriptCompilerConfig, uuid: string, update: number, userCode: string): string => `
     if (typeof globalThis.openDAW === "undefined") { globalThis.openDAW = {} }
     if (typeof globalThis.openDAW.${config.registryName} === "undefined") { globalThis.openDAW.${config.registryName} = {} }
@@ -122,11 +156,13 @@ export const createScriptCompiler = (config: ScriptCompilerConfig) => {
             const newUpdate = currentUpdate + 1
             const uuid = UUID.toString(deviceBox.address.uuid)
             const params = parseParams(userCode)
+            const samples = parseSamples(userCode)
             const wrappedCode = wrapCode(config, uuid, newUpdate, userCode)
             validateCode(wrappedCode)
             const modifier = () => {
                 deviceBox.code.setValue(createHeader(newUpdate) + userCode)
                 reconcileParameters(deviceBox, params)
+                reconcileSamples(deviceBox, samples)
             }
             if (append) {
                 editing.append(modifier)

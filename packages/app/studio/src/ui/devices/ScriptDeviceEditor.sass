@@ -27,3 +27,43 @@ component
       font-size: 16px
       color: orange
       cursor: default
+
+  div.sample-drop
+    border-radius: 50%
+    color: var(--color-shadow)
+    display: flex
+    flex-direction: column
+    align-items: center
+    justify-content: center
+    outline: 1px dashed rgba(white, 0.1)
+    margin: 0.375em
+    position: relative
+    cursor: pointer
+    pointer-events: all
+
+    > svg
+      width: 2em
+      height: 2em
+      pointer-events: none
+
+    > span
+      font-size: 0.5em
+      pointer-events: none
+
+    &[sample]
+      color: var(--color-blue)
+
+      &:after
+        content: attr(sample)
+        font-size: 0.5em
+        white-space: nowrap
+        text-overflow: ellipsis
+        overflow: hidden
+        position: absolute
+        bottom: -1.5em
+        width: 100%
+        text-align: center
+
+    &.accept
+      color: var(--color-black)
+      background-color: var(--color-blue)

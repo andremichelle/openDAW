@@ -73,6 +73,29 @@ export const parseParams = (code: string): ReadonlyArray<ParamDeclaration> => {
     return params
 }
 
+export interface SampleDeclaration {
+    readonly label: string
+}
+
+const SAMPLE_LINE = /^\/\/ @sample .+$/gm
+
+export const parseSamples = (code: string): ReadonlyArray<SampleDeclaration> => {
+    const samples: Array<SampleDeclaration> = []
+    let match: Nullable<RegExpExecArray>
+    SAMPLE_LINE.lastIndex = 0
+    while ((match = SAMPLE_LINE.exec(code)) !== null) {
+        const tokens = match[0].replace(/^\/\/ @sample\s+/, "").split(/\s+/)
+        if (tokens.length === 0 || tokens[0].length === 0) {
+            throw new Error(`Malformed @sample: '${match[0]}' — expected: // @sample <name>`)
+        }
+        if (tokens.length > 1) {
+            throw new Error(`Malformed @sample: '${match[0]}' — expected: // @sample <name>`)
+        }
+        samples.push({label: tokens[0]})
+    }
+    return samples
+}
+
 export const resolveValueMapping = (declaration: ParamDeclaration): ValueMapping<number> => {
     switch (declaration.mapping) {
         case "unipolar": return ValueMapping.unipolar()
