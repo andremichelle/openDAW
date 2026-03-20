@@ -59,10 +59,8 @@ const reconcileParameters = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray
         const mappedDefault = declaration.defaultValue
         if (isDefined(existing)) {
             existing.index.setValue(unifiedIndex)
-            if (Math.abs(existing.defaultValue.getValue() - mappedDefault) > FLOAT_TOLERANCE) {
-                existing.defaultValue.setValue(mappedDefault)
-                existing.value.setValue(mappedDefault)
-            }
+            existing.defaultValue.setValue(mappedDefault)
+            existing.value.setValue(mappedDefault)
         } else {
             WerkstattParameterBox.create(boxGraph, UUID.generate(), paramBox => {
                 paramBox.owner.refer(deviceBox.parameters)
