@@ -1,4 +1,4 @@
-import {asInstanceOf, isDefined, Nullable, StringMapping, Terminable, ValueMapping} from "@opendaw/lib-std"
+import {asInstanceOf, isDefined, Notifier, Nullable, Observable, StringMapping, Terminable, ValueMapping} from "@opendaw/lib-std"
 import {Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {WerkstattParameterBox} from "@opendaw/studio-boxes"
@@ -182,11 +182,17 @@ export namespace ScriptParamDeclaration {
         stringMapping: resolveStringMapping(declaration)
     })
 
+    export type ScriptParamsBinding = {
+        readonly terminable: Terminable
+        readonly codeChanged: Observable<void>
+    }
+
     export const subscribeScriptParams = (parametric: ParameterAdapterSet,
                                           codeField: StringField,
-                                          parametersField: Field<Pointers.Parameter>): Terminable => {
+                                          parametersField: Field<Pointers.Parameter>): ScriptParamsBinding => {
         const cachedDeclarations = new Map<string, ParamDeclaration>()
-        return Terminable.many(
+        const codeChangedNotifier = new Notifier<void>()
+        const terminable = Terminable.many(
             parametersField.pointerHub.catchupAndSubscribe({
                 onAdded: (({box: parameterBox}) => {
                     const paramBox = asInstanceOf(parameterBox, WerkstattParameterBox)
@@ -219,7 +225,10 @@ export namespace ScriptParamDeclaration {
                     adapter.updateMappings(valueMapping, stringMapping)
                     cachedDeclarations.set(adapter.name, newDeclaration)
                 }
-            })
+                codeChangedNotifier.notify()
+            }),
+            codeChangedNotifier
         )
+        return {terminable, codeChanged: codeChangedNotifier}
     }
 }

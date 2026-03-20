@@ -1,6 +1,6 @@
 import css from "./ScriptDeviceEditor.sass?inline"
 import {DeviceBoxAdapter, DeviceHost, ParameterAdapterSet, ScriptCompiler, ScriptParamDeclaration} from "@opendaw/studio-adapters"
-import {asInstanceOf, Editing, EmptyExec, isDefined, Lifecycle, MutableObservableValue, Nullable, ObservableValue, Observer, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, Editing, EmptyExec, isDefined, Lifecycle, MutableObservableValue, Nullable, Observable, ObservableValue, Observer, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
 import {Promises} from "@opendaw/lib-runtime"
 import {createElement} from "@opendaw/lib-jsx"
@@ -37,6 +37,7 @@ const boolModel = (editing: Editing, parameter: AutomatableParameterFieldAdapter
 type ScriptAdapter = DeviceBoxAdapter & {
     readonly box: ScriptCompiler.DeviceBox
     readonly parameters: ParameterAdapterSet
+    readonly codeChanged: Observable<void>
 }
 
 export type ScriptDeviceEditorConfig = {
@@ -67,15 +68,21 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
     const box = adapter.box
     const storedCode = box.code.getValue()
     const userCode = storedCode.length > 0 ? compiler.stripHeader(storedCode) : config.defaultCode
+    let compiling = false
     const compile = async (code: string) => {
-        const result = await Promises.tryCatch(compiler.compile(service.audioContext, editing, box, code))
-        if (result.status === "resolved") {
-            errorIcon.classList.add("hidden")
-            errorIcon.title = ""
-        } else {
-            errorIcon.classList.remove("hidden")
-            errorIcon.title = String(result.error)
-            throw result.error
+        compiling = true
+        try {
+            const result = await Promises.tryCatch(compiler.compile(service.audioContext, editing, box, code))
+            if (result.status === "resolved") {
+                errorIcon.classList.add("hidden")
+                errorIcon.title = ""
+            } else {
+                errorIcon.classList.remove("hidden")
+                errorIcon.title = String(result.error)
+                throw result.error
+            }
+        } finally {
+            compiling = false
         }
     }
     if (storedCode.length > 0) {
@@ -132,6 +139,9 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
                 if (isActive) {service.closeCodeEditor()}
             }
         },
+        adapter.codeChanged.subscribe(() => {
+            if (!compiling) {compiler.load(service.audioContext, box).finally(EmptyExec)}
+        }),
         service.activeCodeEditor.catchupAndSubscribe(option => {
             const isActive = option.map(state => UUID.equals(state.handler.uuid, adapter.uuid)).unwrapOrElse(false)
             toggleEditorButton.classList.toggle("active", isActive)

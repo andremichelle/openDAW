@@ -1,4 +1,4 @@
-import {Option, Terminator, UUID} from "@opendaw/lib-std"
+import {Observable, Option, Terminator, UUID} from "@opendaw/lib-std"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {ApparatDeviceBox} from "@opendaw/studio-boxes"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
@@ -20,12 +20,15 @@ export class ApparatDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly #context: BoxAdaptersContext
     readonly #box: ApparatDeviceBox
     readonly #parametric: ParameterAdapterSet
+    readonly #codeChanged: Observable<void>
 
     constructor(context: BoxAdaptersContext, box: ApparatDeviceBox) {
         this.#context = context
         this.#box = box
         this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
-        this.#terminator.own(ScriptParamDeclaration.subscribeScriptParams(this.#parametric, box.code, box.parameters))
+        const {terminable, codeChanged} = ScriptParamDeclaration.subscribeScriptParams(this.#parametric, box.code, box.parameters)
+        this.#terminator.own(terminable)
+        this.#codeChanged = codeChanged
     }
 
     get box(): ApparatDeviceBox {return this.#box}
@@ -38,6 +41,7 @@ export class ApparatDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     get minimizedField(): BooleanField {return this.#box.minimized}
     get acceptsMidiEvents(): boolean {return true}
     get parameters(): ParameterAdapterSet {return this.#parametric}
+    get codeChanged(): Observable<void> {return this.#codeChanged}
 
     deviceHost(): DeviceHost {
         return this.#context.boxAdapters

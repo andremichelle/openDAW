@@ -1,4 +1,4 @@
-import {Option, Terminator, UUID} from "@opendaw/lib-std"
+import {Observable, Option, Terminator, UUID} from "@opendaw/lib-std"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {WerkstattDeviceBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
@@ -20,12 +20,15 @@ export class WerkstattDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly #context: BoxAdaptersContext
     readonly #box: WerkstattDeviceBox
     readonly #parametric: ParameterAdapterSet
+    readonly #codeChanged: Observable<void>
 
     constructor(context: BoxAdaptersContext, box: WerkstattDeviceBox) {
         this.#context = context
         this.#box = box
         this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
-        this.#terminator.own(ScriptParamDeclaration.subscribeScriptParams(this.#parametric, box.code, box.parameters))
+        const {terminable, codeChanged} = ScriptParamDeclaration.subscribeScriptParams(this.#parametric, box.code, box.parameters)
+        this.#terminator.own(terminable)
+        this.#codeChanged = codeChanged
     }
 
     get box(): WerkstattDeviceBox {return this.#box}
@@ -37,6 +40,7 @@ export class WerkstattDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     get minimizedField(): BooleanField {return this.#box.minimized}
     get host(): PointerField<Pointers.AudioEffectHost> {return this.#box.host}
     get parameters(): ParameterAdapterSet {return this.#parametric}
+    get codeChanged(): Observable<void> {return this.#codeChanged}
 
     deviceHost(): DeviceHost {
         return this.#context.boxAdapters
