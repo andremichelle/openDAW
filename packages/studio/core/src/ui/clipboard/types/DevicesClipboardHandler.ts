@@ -4,14 +4,17 @@ import {
     Editing,
     int,
     isDefined,
+    isInstanceOf,
     isNotNull,
     Option,
     Optional,
     Provider,
-    RuntimeNotifier
+    RuntimeNotifier,
+    UUID
 } from "@opendaw/lib-std"
 import {Box, BoxGraph} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
+import {TrackBox} from "@opendaw/studio-boxes"
 import {
     AudioEffectDeviceAdapter,
     BoxAdapters,
@@ -113,15 +116,17 @@ export namespace DevicesClipboard {
                 ...audioEffects.map(adapter => adapter.box)
             ]
             const dependencies = deviceBoxes.flatMap(box => {
-                const preserved = Array.from(boxGraph.dependenciesOf(box, {
-                    alwaysFollowMandatory: true,
-                    excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
-                }).boxes).filter(dep => dep.resource === "preserved")
                 const ownedChildren = box.incomingEdges()
                     .filter(pointer => pointer.mandatory && !pointer.box.ephemeral
-                        && !DeviceBoxUtils.isDeviceBox(pointer.box) && !isDefined(pointer.box.resource))
+                        && !isInstanceOf(pointer.box, TrackBox)
+                        && !isDefined(pointer.box.resource))
                     .map(pointer => pointer.box)
-                return [...preserved, ...ownedChildren]
+                const preserved = [box, ...ownedChildren].flatMap(root =>
+                    Array.from(boxGraph.dependenciesOf(root, {
+                        alwaysFollowMandatory: true,
+                        excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
+                    }).boxes).filter(dep => dep.resource === "preserved"))
+                return [...ownedChildren, ...preserved]
             })
             const allBoxes = [...deviceBoxes, ...dependencies]
             const instrumentContent = isNotNull(instrument)
@@ -192,6 +197,17 @@ export namespace DevicesClipboard {
                 editing.modify(() => {
                     selection.deselectAll()
                     if (replaceInstrument && isDefined(selectedInstrument)) {
+                        const oldUuid = selectedInstrument.box.address.uuid
+                        const tracksField = host.audioUnitBoxAdapter().tracksField
+                        for (const pointer of tracksField.pointerHub.filter(Pointers.TrackCollection)) {
+                            if (isInstanceOf(pointer.box, TrackBox)) {
+                                pointer.box.target.targetVertex.ifSome(targetVertex => {
+                                    if (UUID.equals(targetVertex.box.address.uuid, oldUuid)) {
+                                        pointer.box.delete()
+                                    }
+                                })
+                            }
+                        }
                         selectedInstrument.box.delete()
                     }
                     for (const adapter of host.midiEffects.adapters()) {
@@ -219,6 +235,9 @@ export namespace DevicesClipboard {
                                 }
                                 if (pointer.pointerType === Pointers.AudioEffectHost) {
                                     return Option.wrap(host.audioEffectsField.address)
+                                }
+                                if (pointer.pointerType === Pointers.TrackCollection && replaceInstrument) {
+                                    return Option.wrap(host.audioUnitBoxAdapter().tracksField.address)
                                 }
                                 return Option.None
                             },
