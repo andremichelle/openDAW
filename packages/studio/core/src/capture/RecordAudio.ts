@@ -152,7 +152,10 @@ export namespace RecordAudio {
             Terminable.create(() => {
                 tryCatch(() => sourceNode.disconnect(recordingWorklet))
                 if (recordingWorklet.numberOfFrames === 0 || fileBox.isEmpty()) {
-                    console.debug("[RecordAudio] abort", {numberOfFrames: recordingWorklet.numberOfFrames, hasFile: fileBox.nonEmpty()})
+                    console.debug("[RecordAudio] abort", {
+                        numberOfFrames: recordingWorklet.numberOfFrames,
+                        hasFile: fileBox.nonEmpty()
+                    })
                     sampleManager.remove(originalUuid)
                     recordingWorklet.terminate()
                 } else {
@@ -161,9 +164,13 @@ export namespace RecordAudio {
                         const duration = regionBox.duration.getValue()
                         if (duration <= 0) {
                             console.debug("[RecordAudio] stop: deleting zero-duration region", {takeNumber})
-                            editing.modify(() => regionBox.delete())
+                            editing.modify(() => regionBox.delete(), false)
                         } else {
-                            console.debug("[RecordAudio] stop", {takeNumber, duration, numberOfFrames: recordingWorklet.numberOfFrames})
+                            console.debug("[RecordAudio] stop", {
+                                takeNumber,
+                                duration,
+                                numberOfFrames: recordingWorklet.numberOfFrames
+                            })
                             recordingWorklet.limit(Math.ceil((currentWaveformOffset + duration) * sampleRate))
                         }
                     })
