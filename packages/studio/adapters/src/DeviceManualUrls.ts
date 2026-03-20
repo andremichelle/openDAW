@@ -27,6 +27,7 @@ export namespace DeviceManualUrls {
     export const Werkstatt = "manuals/devices/audio/werkstatt"
 
     // Instruments
+    export const Apparat = "manuals/devices/instruments/apparat"
     export const Tape = "manuals/devices/instruments/tape"
     export const Nano = "manuals/devices/instruments/nano"
     export const Playfield = "manuals/devices/instruments/playfield"

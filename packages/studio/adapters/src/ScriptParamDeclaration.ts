@@ -41,8 +41,22 @@ const parseSingleParam = (line: string): ParamDeclaration => {
     if (tokens.length === 3 && tokens[2] === "bool") {
         return {label, defaultValue: defaultValue >= 0.5 ? 1 : 0, min: 0, max: 1, mapping: "bool", unit: ""}
     }
+    if (tokens.length === 4) {
+        const min = parseFloat(tokens[2])
+        const max = parseFloat(tokens[3])
+        if (isNaN(min) || isNaN(max)) {
+            throw new Error(`Malformed @param: '${line}' — min/max must be numbers`)
+        }
+        if (max - min < -FLOAT_TOLERANCE) {
+            throw new Error(`Malformed @param: '${line}' — min (${min}) must be less than max (${max})`)
+        }
+        if (defaultValue < min - FLOAT_TOLERANCE || defaultValue > max + FLOAT_TOLERANCE) {
+            throw new Error(`Malformed @param: '${line}' — default (${defaultValue}) must be within [${min}, ${max}]`)
+        }
+        return {label, defaultValue, min, max, mapping: "linear", unit: ""}
+    }
     if (tokens.length < 5) {
-        throw new Error(`Malformed @param: '${line}' — expected: // @param <name> <default> <min> <max> <type> [unit]`)
+        throw new Error(`Malformed @param: '${line}' — expected: // @param <name> <default> <min> <max> [type] [unit]`)
     }
     const min = parseFloat(tokens[2])
     const max = parseFloat(tokens[3])
@@ -71,6 +85,45 @@ export const parseParams = (code: string): ReadonlyArray<ParamDeclaration> => {
         params.push(parseSingleParam(match[0]))
     }
     return params
+}
+
+export interface SampleDeclaration {
+    readonly label: string
+}
+
+const SAMPLE_LINE = /^\/\/ @sample .+$/gm
+
+export const parseSamples = (code: string): ReadonlyArray<SampleDeclaration> => {
+    const samples: Array<SampleDeclaration> = []
+    let match: Nullable<RegExpExecArray>
+    SAMPLE_LINE.lastIndex = 0
+    while ((match = SAMPLE_LINE.exec(code)) !== null) {
+        const tokens = match[0].replace(/^\/\/ @sample\s+/, "").split(/\s+/)
+        if (tokens.length === 0 || tokens[0].length === 0) {
+            throw new Error(`Malformed @sample: '${match[0]}' — expected: // @sample <name>`)
+        }
+        if (tokens.length > 1) {
+            throw new Error(`Malformed @sample: '${match[0]}' — expected: // @sample <name>`)
+        }
+        samples.push({label: tokens[0]})
+    }
+    return samples
+}
+
+const DECLARATION_LINE = /^\/\/ @(?:param|sample) \S+/gm
+
+export const parseDeclarationOrder = (code: string): Map<string, number> => {
+    const order = new Map<string, number>()
+    let match: Nullable<RegExpExecArray>
+    DECLARATION_LINE.lastIndex = 0
+    let index = 0
+    while ((match = DECLARATION_LINE.exec(code)) !== null) {
+        const label = match[0].replace(/^\/\/ @(?:param|sample)\s+/, "").split(/\s+/)[0]
+        if (!order.has(label)) {
+            order.set(label, index++)
+        }
+    }
+    return order
 }
 
 export const resolveValueMapping = (declaration: ParamDeclaration): ValueMapping<number> => {

@@ -41,6 +41,16 @@ export class WerkstattDeviceBoxAdapter implements AudioEffectDeviceAdapter {
                     .removeParameter(asInstanceOf(box, WerkstattParameterBox).value.address))
             })
         )
+        this.#terminator.own(box.code.subscribe(() => {
+            const declarations = parseParams(box.code.getValue())
+            for (const adapter of this.#parametric.parameters()) {
+                const declaration = declarations.find(decl => decl.label === adapter.name)
+                const {valueMapping, stringMapping} = isDefined(declaration)
+                    ? resolveParamMappings(declaration)
+                    : {valueMapping: ValueMapping.unipolar(), stringMapping: StringMapping.percent({fractionDigits: 1})}
+                adapter.updateMappings(valueMapping, stringMapping)
+            }
+        }))
     }
 
     get box(): WerkstattDeviceBox {return this.#box}

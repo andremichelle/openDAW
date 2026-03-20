@@ -1,26 +1,27 @@
-import {asInstanceOf, isDefined, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
-import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
-import {SpielwerkDeviceBox, WerkstattParameterBox} from "@opendaw/studio-boxes"
-import {Pointers} from "@opendaw/studio-enums"
-import {DeviceHost, Devices, MidiEffectDeviceAdapter} from "../../DeviceAdapter"
+import {asInstanceOf, isDefined, Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {Address, BooleanField, StringField} from "@opendaw/lib-box"
+import {ApparatDeviceBox, WerkstattParameterBox} from "@opendaw/studio-boxes"
+import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
+import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {DeviceManualUrls} from "../../DeviceManualUrls"
-import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
+import {TrackType} from "../../timeline/TrackType"
+import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {parseParams, resolveParamMappings} from "../../ScriptParamDeclaration"
 
-export class SpielwerkDeviceBoxAdapter implements MidiEffectDeviceAdapter {
+export class ApparatDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly #terminator = new Terminator()
 
-    readonly type = "midi-effect"
+    readonly type = "instrument"
     readonly accepts = "midi"
-    readonly manualUrl = DeviceManualUrls.Spielwerk
+    readonly manualUrl = DeviceManualUrls.Apparat
 
     readonly #context: BoxAdaptersContext
-    readonly #box: SpielwerkDeviceBox
+    readonly #box: ApparatDeviceBox
     readonly #parametric: ParameterAdapterSet
 
-    constructor(context: BoxAdaptersContext, box: SpielwerkDeviceBox) {
+    constructor(context: BoxAdaptersContext, box: ApparatDeviceBox) {
         this.#context = context
         this.#box = box
         this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
@@ -33,7 +34,10 @@ export class SpielwerkDeviceBoxAdapter implements MidiEffectDeviceAdapter {
                     const declaration = declarations.find(decl => decl.label === label)
                     const {valueMapping, stringMapping} = isDefined(declaration)
                         ? resolveParamMappings(declaration)
-                        : {valueMapping: ValueMapping.unipolar(), stringMapping: StringMapping.percent({fractionDigits: 1})}
+                        : {
+                            valueMapping: ValueMapping.unipolar(),
+                            stringMapping: StringMapping.percent({fractionDigits: 1})
+                        }
                     this.#parametric.createParameter(paramBox.value, valueMapping, stringMapping, label)
                 }),
                 onRemoved: (({box}) => this.#parametric
@@ -52,14 +56,15 @@ export class SpielwerkDeviceBoxAdapter implements MidiEffectDeviceAdapter {
         }))
     }
 
-    get box(): SpielwerkDeviceBox {return this.#box}
+    get box(): ApparatDeviceBox {return this.#box}
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
-    get indexField(): Int32Field {return this.#box.index}
     get labelField(): StringField {return this.#box.label}
+    get iconField(): StringField {return this.#box.icon}
+    get defaultTrackType(): TrackType {return TrackType.Notes}
     get enabledField(): BooleanField {return this.#box.enabled}
     get minimizedField(): BooleanField {return this.#box.minimized}
-    get host(): PointerField<Pointers.MIDIEffectHost> {return this.#box.host}
+    get acceptsMidiEvents(): boolean {return true}
     get parameters(): ParameterAdapterSet {return this.#parametric}
 
     deviceHost(): DeviceHost {
@@ -68,6 +73,10 @@ export class SpielwerkDeviceBoxAdapter implements MidiEffectDeviceAdapter {
     }
 
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
+
+    * labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
+        yield {address: this.address, label: this.labelField.getValue(), children: () => Option.None}
+    }
 
     terminate(): void {this.#terminator.terminate()}
 }

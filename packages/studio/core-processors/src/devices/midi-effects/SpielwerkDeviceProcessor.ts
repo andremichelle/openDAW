@@ -290,10 +290,10 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
     index(): number {return this.#adapter.indexField.getValue()}
     adapter(): SpielwerkDeviceBoxAdapter {return this.#adapter}
 
-    #tryLoad(update: int): void {
+    #tryLoad(expectedUpdate: int): void {
         const registry = (globalThis as any).openDAW?.spielwerkProcessors?.[this.#uuid]
-        if (isDefined(registry) && registry.update === update) {
-            this.#swapProcessor(registry.create, update)
+        if (isDefined(registry) && registry.update === expectedUpdate) {
+            this.#swapProcessor(registry.create, expectedUpdate)
         }
     }
 

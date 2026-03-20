@@ -34,14 +34,15 @@ const ExternalControlTypes = [
 export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> implements Parameter<T>, Terminable {
     readonly #context: BoxAdaptersContext
     readonly #field: PrimitiveField<T, Pointers.Automation>
-    readonly #valueMapping: ValueMapping<T>
-    readonly #stringMapping: StringMapping<T>
     readonly #name: string
     readonly #anchor: unitValue
 
     readonly #terminator: Terminator = new Terminator()
     readonly #valueChangeNotifier: Notifier<this>
     readonly #controlSource: Listeners<ControlSourceListener>
+
+    #valueMapping: ValueMapping<T>
+    #stringMapping: StringMapping<T>
 
     #trackBoxAdapter: Option<TrackBoxAdapter> = Option.None
     #automationHandle: Option<Terminable> = Option.None
@@ -130,6 +131,12 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     get type(): PrimitiveType {return this.#field.type}
     get address(): Address {return this.#field.address}
     get track(): Option<TrackBoxAdapter> {return this.#trackBoxAdapter}
+
+    updateMappings(valueMapping: ValueMapping<T>, stringMapping: StringMapping<T>): void {
+        this.#valueMapping = valueMapping
+        this.#stringMapping = stringMapping
+        this.#valueChangeNotifier.notify(this)
+    }
 
     valueAt(position: ppqn): T {
         const optTrack = this.#trackBoxAdapter

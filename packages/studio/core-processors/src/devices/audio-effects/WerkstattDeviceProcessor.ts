@@ -96,10 +96,10 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
         this.readAllParameters()
     }
 
-    #tryLoad(update: int): void {
+    #tryLoad(expectedUpdate: int): void {
         const registry = (globalThis as any).openDAW?.werkstattProcessors?.[this.#uuid]
-        if (isDefined(registry) && registry.update === update) {
-            this.#swapProcessor(registry.create, update)
+        if (isDefined(registry) && registry.update === expectedUpdate) {
+            this.#swapProcessor(registry.create, expectedUpdate)
         }
     }
 
