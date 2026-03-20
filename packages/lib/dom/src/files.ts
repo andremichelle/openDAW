@@ -14,12 +14,13 @@ export namespace Files {
                     message: String(error)
                 }).then(() => Promise.reject(error))
             }
-            const {status: writeStatus, error: writeError} = await Promises.tryCatch(async () => {
+            const writeFile = async (): Promise<void> => {
                 const writable = await handle.createWritable()
                 await writable.truncate(0)
                 await writable.write(arrayBuffer)
                 await writable.close()
-            })
+            }
+            const {status: writeStatus, error: writeError} = await Promises.tryCatch(writeFile())
             if (writeStatus === "rejected") {
                 await RuntimeNotifier.info({
                     headline: "Could not save file",
