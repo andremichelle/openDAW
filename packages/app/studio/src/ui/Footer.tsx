@@ -136,7 +136,7 @@ export const Footer = ({lifecycle, service}: Construct) => {
                  }}/>
             <article title="Users"
                      onInit={element => {
-                         const counter = new UserCounter("https://api.opendaw.studio/users/user-counter.php")
+                         const counter = new UserCounter(`${import.meta.env.VITE_API_ROOT || "https://api.opendaw.studio"}/users/user-counter.php`)
                          counter.subscribe(count => element.textContent = String(count))
                      }}>#
             </article>

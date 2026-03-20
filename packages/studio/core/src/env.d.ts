@@ -6,6 +6,9 @@ interface ImportMetaEnv {
     readonly VITE_VJS_USE_LOCAL_SERVER: string
     readonly VITE_VJS_LOCAL_SERVER_URL: string
     readonly VITE_VJS_ONLINE_SERVER_URL: string
+    readonly VITE_SELFHOSTED_STORAGE_URL: string
+    readonly VITE_API_ROOT: string
+    readonly VITE_ASSETS_ROOT: string
 }
 
 interface ImportMeta {
@@ -19,5 +22,8 @@ declare namespace NodeJS {
         readonly VITE_VJS_USE_LOCAL_SERVER: string
         readonly VITE_VJS_LOCAL_SERVER_URL: string
         readonly VITE_VJS_ONLINE_SERVER_URL: string
+        readonly VITE_SELFHOSTED_STORAGE_URL: string
+        readonly VITE_API_ROOT: string
+        readonly VITE_ASSETS_ROOT: string
     }
 }

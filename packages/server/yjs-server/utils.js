@@ -22,11 +22,27 @@ const wsReadyStateClosed = 3 // eslint-disable-line
 
 // disable gc when using snapshots!
 const gcEnabled = process.env.GC !== 'false' && process.env.GC !== '0'
-// const persistenceDir = process.env.YPERSISTENCE
+const persistenceDir = process.env.YPERSISTENCE
 /**
  * @type {{bindState: function(string,WSSharedDoc):void, writeState:function(string,WSSharedDoc):Promise<any>, provider: any}|null}
  */
 let persistence = null
+if (persistenceDir) {
+    console.log('Persisting documents to', persistenceDir)
+    const {LeveldbPersistence} = await import('y-leveldb')
+    const ldb = new LeveldbPersistence(persistenceDir)
+    persistence = {
+        provider: ldb,
+        bindState: async (docName, ydoc) => {
+            const persistedYdoc = await ldb.getYDoc(docName)
+            const newUpdates = Y.encodeStateAsUpdate(ydoc)
+            ldb.storeUpdate(docName, newUpdates)
+            Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(persistedYdoc))
+            ydoc.on('update', update => { ldb.storeUpdate(docName, update) })
+        },
+        writeState: async (_docName, _ydoc) => {}
+    }
+}
 
 /**
  * @param {{bindState: function(string,WSSharedDoc):void,
@@ -237,13 +253,15 @@ const pingTimeout = 30000
 export const setupWSConnection = (conn, req, {docName = (req.url || '').slice(1).split('?')[0], gc = true} = {}) => {
     console.log("Incoming WS from origin:", req.headers.origin)
 
-    // ✅ Allow only specific origins
     const allowedOrigins = [
         'https://opendaw.studio',
         'https://live.opendaw.studio',
         'https://localhost:8080',
         'https://inspector.yjs.dev'
     ]
+    if (process.env.ALLOWED_ORIGINS) {
+        process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).forEach(o => allowedOrigins.push(o))
+    }
     const origin = req.headers.origin
     if (origin && !allowedOrigins.includes(origin)) {
         console.warn('Rejected WS connection from origin:', origin)

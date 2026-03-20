@@ -1,0 +1,47 @@
+services:
+  studio:
+    build:
+      context: .
+      dockerfile: docker/studio.Dockerfile
+      args:
+        VITE_VJS_ONLINE_SERVER_URL: wss://live.opendaw.wheneverbaby.ca
+        VITE_SELFHOSTED_STORAGE_URL: https://storage.opendaw.wheneverbaby.ca
+        VITE_API_ROOT: https://api.opendaw.wheneverbaby.ca
+        VITE_ASSETS_ROOT: https://assets.opendaw.wheneverbaby.ca
+    ports:
+      - "9090:80"
+    restart: unless-stopped
+
+  yjs-server:
+    build:
+      context: .
+      dockerfile: docker/yjs.Dockerfile
+    ports:
+      - "3748:1234"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "1234"
+      DISABLE_TLS: "true"
+      ALLOWED_ORIGINS: "https://opendaw.wheneverbaby.ca"
+      YPERSISTENCE: "/data"
+    volumes:
+      - yjs-data:/data
+    restart: unless-stopped
+
+  storage-server:
+    build:
+      context: .
+      dockerfile: docker/storage.Dockerfile
+    ports:
+      - "3473:3000"
+    environment:
+      PORT: "3000"
+      STORAGE_DIR: "/data"
+      ALLOWED_ORIGINS: "https://opendaw.wheneverbaby.ca"
+    volumes:
+      - storage-data:/data
+    restart: unless-stopped
+
+volumes:
+  yjs-data:
+  storage-data:

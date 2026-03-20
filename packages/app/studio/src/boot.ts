@@ -83,7 +83,8 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
     })
     const cloudAuthManager = CloudAuthManager.create({
         Dropbox: "jtehjzxaxf3bf1l",
-        GoogleDrive: "628747153367-gt1oqcn3trr9l9a7jhigja6l1t3f1oik.apps.googleusercontent.com"
+        GoogleDrive: "628747153367-gt1oqcn3trr9l9a7jhigja6l1t3f1oik.apps.googleusercontent.com",
+        SelfHostedStorageUrl: import.meta.env.VITE_SELFHOSTED_STORAGE_URL || ""
     })
     const service: StudioService = new StudioService(context, audioWorklets.value, audioDevices,
         sampleManager, soundfontManager, cloudAuthManager, buildInfo)
