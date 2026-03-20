@@ -36,6 +36,7 @@ export namespace RecordAudio {
     export const start = (
         {recordingWorklet, sourceNode, sampleManager, project, capture, outputLatency}: RecordAudioContext)
         : Terminable => {
+        console.debug("[RecordAudio] start", {outputLatency})
         const terminator = new Terminator()
         const beats = PPQN.fromSignature(1, project.timelineBox.signature.denominator.getValue())
         const {editing, engine, boxGraph, timelineBox} = project
@@ -63,6 +64,7 @@ export namespace RecordAudio {
 
         const createTakeRegion = (position: ppqn, waveformOffset: number, excludeTrack: Nullable<TrackBox>): TakeData => {
             takeNumber++
+            console.debug("[RecordAudio] createTakeRegion", {takeNumber, position, waveformOffset})
             const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Audio, excludeTrack)
             const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
             const regionBox = AudioRegionBox.create(boxGraph, UUID.generate(), box => {
@@ -81,6 +83,7 @@ export namespace RecordAudio {
         }
 
         const finalizeTake = (take: TakeData, durationInSeconds: number) => {
+            console.debug("[RecordAudio] finalizeTake", {durationInSeconds})
             const {trackBox, regionBox} = take
             if (regionBox.isAttached()) {
                 regionBox.duration.setValue(durationInSeconds)
@@ -149,12 +152,20 @@ export namespace RecordAudio {
             Terminable.create(() => {
                 tryCatch(() => sourceNode.disconnect(recordingWorklet))
                 if (recordingWorklet.numberOfFrames === 0 || fileBox.isEmpty()) {
-                    console.debug("Abort recording audio.")
+                    console.debug("[RecordAudio] abort", {numberOfFrames: recordingWorklet.numberOfFrames, hasFile: fileBox.nonEmpty()})
                     sampleManager.remove(originalUuid)
                     recordingWorklet.terminate()
                 } else {
-                    currentTake.ifSome(({regionBox: {duration}}) => {
-                        recordingWorklet.limit(Math.ceil((currentWaveformOffset + duration.getValue()) * sampleRate))
+                    // fixes #840: short recordings (e.g. count-in) can leave zero-duration regions
+                    currentTake.ifSome(({regionBox}) => {
+                        const duration = regionBox.duration.getValue()
+                        if (duration <= 0) {
+                            console.debug("[RecordAudio] stop: deleting zero-duration region", {takeNumber})
+                            editing.modify(() => regionBox.delete())
+                        } else {
+                            console.debug("[RecordAudio] stop", {takeNumber, duration, numberOfFrames: recordingWorklet.numberOfFrames})
+                            recordingWorklet.limit(Math.ceil((currentWaveformOffset + duration) * sampleRate))
+                        }
                     })
                     fileBox.ifSome(({endInSeconds}) => endInSeconds.setValue(recordingWorklet.numberOfFrames / sampleRate))
                 }
