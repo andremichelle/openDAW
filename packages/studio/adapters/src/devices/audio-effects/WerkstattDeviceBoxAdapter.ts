@@ -8,7 +8,7 @@ import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
-import {subscribeScriptParams} from "../../ScriptParamDeclaration"
+import {ScriptParamDeclaration} from "../../ScriptParamDeclaration"
 
 export class WerkstattDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly #terminator = new Terminator()
@@ -25,7 +25,7 @@ export class WerkstattDeviceBoxAdapter implements AudioEffectDeviceAdapter {
         this.#context = context
         this.#box = box
         this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
-        subscribeScriptParams(this.#parametric, box.code, box.parameters, this.#terminator)
+        this.#terminator.own(ScriptParamDeclaration.subscribeScriptParams(this.#parametric, box.code, box.parameters))
     }
 
     get box(): WerkstattDeviceBox {return this.#box}

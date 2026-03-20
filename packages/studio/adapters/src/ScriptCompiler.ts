@@ -2,29 +2,14 @@ import {asInstanceOf, Editing, isDefined, UUID} from "@opendaw/lib-std"
 import {BoxGraph, Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {WerkstattParameterBox, WerkstattSampleBox} from "@opendaw/studio-boxes"
-import type {ParamDeclaration, SampleDeclaration} from "@opendaw/studio-adapters"
-import {parseDeclarationOrder, parseParams, parseSamples} from "@opendaw/studio-adapters"
-
-export interface ScriptDeviceBox {
-    readonly graph: BoxGraph
-    readonly address: { readonly uuid: UUID.Bytes }
-    readonly code: StringField
-    readonly parameters: Field<Pointers.Parameter>
-    readonly samples: Field<Pointers.Sample>
-}
-
-export type ScriptCompilerConfig = {
-    readonly headerTag: string
-    readonly registryName: string
-    readonly functionName: string
-}
+import {ParamDeclaration, SampleDeclaration, ScriptParamDeclaration} from "./ScriptParamDeclaration"
 
 const COMPILER_VERSION = 1
 const FLOAT_TOLERANCE = 1e-6
 
 const createHeaderPattern = (tag: string): RegExp => new RegExp(`^// @${tag} (\\w+) (\\d+) (\\d+)\n`)
 
-const parseHeader = (source: string, pattern: RegExp): { userCode: string, update: number } => {
+const parseHeader = (source: string, pattern: RegExp): {userCode: string, update: number} => {
     const match = source.match(pattern)
     return match !== null ? {
         userCode: source.slice(match[0].length),
@@ -35,7 +20,7 @@ const parseHeader = (source: string, pattern: RegExp): { userCode: string, updat
     }
 }
 
-const reconcileParameters = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray<ParamDeclaration>, order: Map<string, number>): void => {
+const reconcileParameters = (deviceBox: ScriptCompiler.DeviceBox, declared: ReadonlyArray<ParamDeclaration>, order: Map<string, number>): void => {
     const boxGraph = deviceBox.graph
     const existingPointers = deviceBox.parameters.pointerHub.filter()
     const existingByLabel = new Map<string, WerkstattParameterBox>()
@@ -77,7 +62,7 @@ const reconcileParameters = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray
     }
 }
 
-const reconcileSamples = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray<SampleDeclaration>, order: Map<string, number>): void => {
+const reconcileSamples = (deviceBox: ScriptCompiler.DeviceBox, declared: ReadonlyArray<SampleDeclaration>, order: Map<string, number>): void => {
     const boxGraph = deviceBox.graph
     const existingPointers = deviceBox.samples.pointerHub.filter()
     const existingByLabel = new Map<string, WerkstattSampleBox>()
@@ -104,7 +89,9 @@ const reconcileSamples = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray<Sa
         const unifiedIndex = order.get(declaration.label) ?? 0
         const existing = existingByLabel.get(declaration.label)
         if (isDefined(existing)) {
-            existing.index.setValue(unifiedIndex)
+            if (existing.index.getValue() !== unifiedIndex) {
+                existing.index.setValue(unifiedIndex)
+            }
         } else {
             WerkstattSampleBox.create(boxGraph, UUID.generate(), sampleBox => {
                 sampleBox.owner.refer(deviceBox.samples)
@@ -115,7 +102,7 @@ const reconcileSamples = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray<Sa
     }
 }
 
-const wrapCode = (config: ScriptCompilerConfig, uuid: string, update: number, userCode: string): string => `
+const wrapCode = (config: ScriptCompiler.Config, uuid: string, update: number, userCode: string): string => `
     if (typeof globalThis.openDAW === "undefined") { globalThis.openDAW = {} }
     if (typeof globalThis.openDAW.${config.registryName} === "undefined") { globalThis.openDAW.${config.registryName} = {} }
     globalThis.openDAW.${config.registryName}["${uuid}"] = {
@@ -139,48 +126,64 @@ const registerWorklet = async (audioContext: BaseAudioContext, wrappedCode: stri
     }
 }
 
-export const createScriptCompiler = (config: ScriptCompilerConfig) => {
-    const headerPattern = createHeaderPattern(config.headerTag)
-    const createHeader = (update: number): string =>
-        `// @${config.headerTag} js ${COMPILER_VERSION} ${update}\n`
-    let maxUpdate = 0
-    return {
-        stripHeader: (source: string): string => parseHeader(source, headerPattern).userCode,
-        load: async (audioContext: BaseAudioContext, deviceBox: ScriptDeviceBox): Promise<void> => {
-            const {userCode, update} = parseHeader(deviceBox.code.getValue(), headerPattern)
-            if (update === 0) {return}
-            const uuid = UUID.toString(deviceBox.address.uuid)
-            const wrappedCode = wrapCode(config, uuid, update, userCode)
-            validateCode(wrappedCode)
-            return registerWorklet(audioContext, wrappedCode)
-        },
-        compile: async (audioContext: BaseAudioContext,
-                        editing: Editing,
-                        deviceBox: ScriptDeviceBox,
-                        source: string,
-                        append: boolean = false): Promise<void> => {
-            const userCode = parseHeader(source, headerPattern).userCode
-            const currentUpdate = parseHeader(deviceBox.code.getValue(), headerPattern).update
-            maxUpdate = Math.max(maxUpdate, currentUpdate)
-            const newUpdate = maxUpdate + 1
-            maxUpdate = newUpdate
-            const uuid = UUID.toString(deviceBox.address.uuid)
-            const params = parseParams(userCode)
-            const samples = parseSamples(userCode)
-            const order = parseDeclarationOrder(userCode)
-            const wrappedCode = wrapCode(config, uuid, newUpdate, userCode)
-            validateCode(wrappedCode)
-            const modifier = () => {
-                deviceBox.code.setValue(createHeader(newUpdate) + userCode)
-                reconcileParameters(deviceBox, params, order)
-                reconcileSamples(deviceBox, samples, order)
+export namespace ScriptCompiler {
+    export interface DeviceBox {
+        readonly graph: BoxGraph
+        readonly address: {readonly uuid: UUID.Bytes}
+        readonly code: StringField
+        readonly parameters: Field<Pointers.Parameter>
+        readonly samples: Field<Pointers.Sample>
+    }
+
+    export type Config = {
+        readonly headerTag: string
+        readonly registryName: string
+        readonly functionName: string
+    }
+
+    export const create = (config: Config) => {
+        const headerPattern = createHeaderPattern(config.headerTag)
+        const createHeader = (update: number): string =>
+            `// @${config.headerTag} js ${COMPILER_VERSION} ${update}\n`
+        let maxUpdate = 0
+        return {
+            stripHeader: (source: string): string => parseHeader(source, headerPattern).userCode,
+            load: async (audioContext: BaseAudioContext, deviceBox: DeviceBox): Promise<void> => {
+                const {userCode, update} = parseHeader(deviceBox.code.getValue(), headerPattern)
+                if (update === 0) {return}
+                const uuid = UUID.toString(deviceBox.address.uuid)
+                const wrappedCode = wrapCode(config, uuid, update, userCode)
+                validateCode(wrappedCode)
+                return registerWorklet(audioContext, wrappedCode)
+            },
+            compile: async (audioContext: BaseAudioContext,
+                            editing: Editing,
+                            deviceBox: DeviceBox,
+                            source: string,
+                            append: boolean = false): Promise<void> => {
+                const userCode = parseHeader(source, headerPattern).userCode
+                const currentUpdate = parseHeader(deviceBox.code.getValue(), headerPattern).update
+                maxUpdate = Math.max(maxUpdate, currentUpdate)
+                const newUpdate = maxUpdate + 1
+                maxUpdate = newUpdate
+                const uuid = UUID.toString(deviceBox.address.uuid)
+                const params = ScriptParamDeclaration.parseParams(userCode)
+                const samples = ScriptParamDeclaration.parseSamples(userCode)
+                const order = ScriptParamDeclaration.parseDeclarationOrder(userCode)
+                const wrappedCode = wrapCode(config, uuid, newUpdate, userCode)
+                validateCode(wrappedCode)
+                const modifier = () => {
+                    deviceBox.code.setValue(createHeader(newUpdate) + userCode)
+                    reconcileParameters(deviceBox, params, order)
+                    reconcileSamples(deviceBox, samples, order)
+                }
+                if (append) {
+                    editing.append(modifier)
+                } else {
+                    editing.modify(modifier)
+                }
+                return registerWorklet(audioContext, wrappedCode)
             }
-            if (append) {
-                editing.append(modifier)
-            } else {
-                editing.modify(modifier)
-            }
-            return registerWorklet(audioContext, wrappedCode)
         }
     }
 }

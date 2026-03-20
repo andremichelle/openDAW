@@ -7,7 +7,7 @@ import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
-import {subscribeScriptParams} from "../../ScriptParamDeclaration"
+import {ScriptParamDeclaration} from "../../ScriptParamDeclaration"
 
 export class SpielwerkDeviceBoxAdapter implements MidiEffectDeviceAdapter {
     readonly #terminator = new Terminator()
@@ -24,7 +24,7 @@ export class SpielwerkDeviceBoxAdapter implements MidiEffectDeviceAdapter {
         this.#context = context
         this.#box = box
         this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
-        subscribeScriptParams(this.#parametric, box.code, box.parameters, this.#terminator)
+        this.#terminator.own(ScriptParamDeclaration.subscribeScriptParams(this.#parametric, box.code, box.parameters))
     }
 
     get box(): SpielwerkDeviceBox {return this.#box}

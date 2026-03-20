@@ -8,7 +8,7 @@ import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
-import {subscribeScriptParams} from "../../ScriptParamDeclaration"
+import {ScriptParamDeclaration} from "../../ScriptParamDeclaration"
 
 export class ApparatDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly #terminator = new Terminator()
@@ -25,7 +25,7 @@ export class ApparatDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         this.#context = context
         this.#box = box
         this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
-        subscribeScriptParams(this.#parametric, box.code, box.parameters, this.#terminator)
+        this.#terminator.own(ScriptParamDeclaration.subscribeScriptParams(this.#parametric, box.code, box.parameters))
     }
 
     get box(): ApparatDeviceBox {return this.#box}
