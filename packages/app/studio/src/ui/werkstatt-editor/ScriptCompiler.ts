@@ -20,6 +20,7 @@ export type ScriptCompilerConfig = {
 }
 
 const COMPILER_VERSION = 1
+const FLOAT_TOLERANCE = 1e-6
 
 const createHeaderPattern = (tag: string): RegExp => new RegExp(`^// @${tag} (\\w+) (\\d+) (\\d+)\n`)
 
@@ -57,9 +58,13 @@ const reconcileParameters = (deviceBox: ScriptDeviceBox, declared: ReadonlyArray
         const existing = existingByLabel.get(declaration.label)
         const mappedDefault = declaration.defaultValue
         if (isDefined(existing)) {
-            existing.index.setValue(unifiedIndex)
-            existing.defaultValue.setValue(mappedDefault)
-            existing.value.setValue(mappedDefault)
+            if (existing.index.getValue() !== unifiedIndex) {
+                existing.index.setValue(unifiedIndex)
+            }
+            if (Math.abs(existing.defaultValue.getValue() - mappedDefault) > FLOAT_TOLERANCE) {
+                existing.defaultValue.setValue(mappedDefault)
+                existing.value.setValue(mappedDefault)
+            }
         } else {
             WerkstattParameterBox.create(boxGraph, UUID.generate(), paramBox => {
                 paramBox.owner.refer(deviceBox.parameters)

@@ -1,4 +1,7 @@
-import {isDefined, Nullable, StringMapping, ValueMapping} from "@opendaw/lib-std"
+import {asInstanceOf, isDefined, Nullable, ObservableValue, Observer, StringMapping, Subscription, TerminableOwner, ValueMapping} from "@opendaw/lib-std"
+import {PointerListener, PointerTypes} from "@opendaw/lib-box"
+import {WerkstattParameterBox} from "@opendaw/studio-boxes"
+import {ParameterAdapterSet} from "./ParameterAdapterSet"
 
 export type ParamMapping = "unipolar" | "linear" | "exp" | "int" | "bool"
 
@@ -163,3 +166,47 @@ export const resolveParamMappings = (declaration: ParamDeclaration): {
     valueMapping: resolveValueMapping(declaration),
     stringMapping: resolveStringMapping(declaration)
 })
+
+const declarationEquals = (a: ParamDeclaration, b: ParamDeclaration): boolean =>
+    a.mapping === b.mapping && a.min === b.min && a.max === b.max && a.unit === b.unit
+
+export const subscribeScriptParams = (
+    parametric: ParameterAdapterSet,
+    codeField: {getValue(): string, subscribe(observer: Observer<ObservableValue<string>>): Subscription},
+    parametersHub: {pointerHub: {catchupAndSubscribe(listener: PointerListener, ...filter: ReadonlyArray<PointerTypes>): Subscription}},
+    terminator: TerminableOwner
+): void => {
+    const cachedDeclarations = new Map<string, ParamDeclaration>()
+    terminator.own(
+        parametersHub.pointerHub.catchupAndSubscribe({
+            onAdded: (({box: parameterBox}) => {
+                const paramBox = asInstanceOf(parameterBox, WerkstattParameterBox)
+                const label = paramBox.label.getValue()
+                const declarations = parseParams(codeField.getValue())
+                const declaration = declarations.find(decl => decl.label === label)
+                const {valueMapping, stringMapping} = isDefined(declaration)
+                    ? resolveParamMappings(declaration)
+                    : {valueMapping: ValueMapping.unipolar(), stringMapping: StringMapping.percent({fractionDigits: 1})}
+                parametric.createParameter(paramBox.value, valueMapping, stringMapping, label)
+                if (isDefined(declaration)) {cachedDeclarations.set(label, declaration)}
+            }),
+            onRemoved: (({box}) => {
+                const paramBox = asInstanceOf(box, WerkstattParameterBox)
+                cachedDeclarations.delete(paramBox.label.getValue())
+                parametric.removeParameter(paramBox.value.address)
+            })
+        })
+    )
+    terminator.own(codeField.subscribe(() => {
+        const declarations = parseParams(codeField.getValue())
+        for (const adapter of parametric.parameters()) {
+            const newDeclaration = declarations.find(decl => decl.label === adapter.name)
+            if (!isDefined(newDeclaration)) {continue}
+            const oldDeclaration = cachedDeclarations.get(adapter.name)
+            if (isDefined(oldDeclaration) && declarationEquals(oldDeclaration, newDeclaration)) {continue}
+            const {valueMapping, stringMapping} = resolveParamMappings(newDeclaration)
+            adapter.updateMappings(valueMapping, stringMapping)
+            cachedDeclarations.set(adapter.name, newDeclaration)
+        }
+    }))
+}

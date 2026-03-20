@@ -1,6 +1,6 @@
-import {asInstanceOf, isDefined, Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {Option, Terminator, UUID} from "@opendaw/lib-std"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
-import {ApparatDeviceBox, WerkstattParameterBox} from "@opendaw/studio-boxes"
+import {ApparatDeviceBox} from "@opendaw/studio-boxes"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
@@ -8,7 +8,7 @@ import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
-import {parseParams, resolveParamMappings} from "../../ScriptParamDeclaration"
+import {subscribeScriptParams} from "../../ScriptParamDeclaration"
 
 export class ApparatDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly #terminator = new Terminator()
@@ -25,35 +25,7 @@ export class ApparatDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         this.#context = context
         this.#box = box
         this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
-        this.#terminator.own(
-            box.parameters.pointerHub.catchupAndSubscribe({
-                onAdded: (({box: parameterBox}) => {
-                    const paramBox = asInstanceOf(parameterBox, WerkstattParameterBox)
-                    const label = paramBox.label.getValue()
-                    const declarations = parseParams(box.code.getValue())
-                    const declaration = declarations.find(decl => decl.label === label)
-                    const {valueMapping, stringMapping} = isDefined(declaration)
-                        ? resolveParamMappings(declaration)
-                        : {
-                            valueMapping: ValueMapping.unipolar(),
-                            stringMapping: StringMapping.percent({fractionDigits: 1})
-                        }
-                    this.#parametric.createParameter(paramBox.value, valueMapping, stringMapping, label)
-                }),
-                onRemoved: (({box}) => this.#parametric
-                    .removeParameter(asInstanceOf(box, WerkstattParameterBox).value.address))
-            })
-        )
-        this.#terminator.own(box.code.subscribe(() => {
-            const declarations = parseParams(box.code.getValue())
-            for (const adapter of this.#parametric.parameters()) {
-                const declaration = declarations.find(decl => decl.label === adapter.name)
-                const {valueMapping, stringMapping} = isDefined(declaration)
-                    ? resolveParamMappings(declaration)
-                    : {valueMapping: ValueMapping.unipolar(), stringMapping: StringMapping.percent({fractionDigits: 1})}
-                adapter.updateMappings(valueMapping, stringMapping)
-            }
-        }))
+        subscribeScriptParams(this.#parametric, box.code, box.parameters, this.#terminator)
     }
 
     get box(): ApparatDeviceBox {return this.#box}
