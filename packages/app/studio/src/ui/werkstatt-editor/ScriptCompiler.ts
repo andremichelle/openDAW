@@ -2,12 +2,12 @@ import {asInstanceOf, Editing, isDefined, UUID} from "@opendaw/lib-std"
 import {BoxGraph, Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {WerkstattParameterBox, WerkstattSampleBox} from "@opendaw/studio-boxes"
-import {parseDeclarationOrder, parseParams, parseSamples} from "@opendaw/studio-adapters"
 import type {ParamDeclaration, SampleDeclaration} from "@opendaw/studio-adapters"
+import {parseDeclarationOrder, parseParams, parseSamples} from "@opendaw/studio-adapters"
 
 export interface ScriptDeviceBox {
     readonly graph: BoxGraph
-    readonly address: {readonly uuid: UUID.Bytes}
+    readonly address: { readonly uuid: UUID.Bytes }
     readonly code: StringField
     readonly parameters: Field<Pointers.Parameter>
     readonly samples: Field<Pointers.Sample>
@@ -20,11 +20,10 @@ export type ScriptCompilerConfig = {
 }
 
 const COMPILER_VERSION = 1
-const FLOAT_TOLERANCE = 1e-6
 
 const createHeaderPattern = (tag: string): RegExp => new RegExp(`^// @${tag} (\\w+) (\\d+) (\\d+)\n`)
 
-const parseHeader = (source: string, pattern: RegExp): {userCode: string, update: number} => {
+const parseHeader = (source: string, pattern: RegExp): { userCode: string, update: number } => {
     const match = source.match(pattern)
     return match !== null ? {
         userCode: source.slice(match[0].length),
