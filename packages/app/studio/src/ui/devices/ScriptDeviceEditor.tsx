@@ -123,12 +123,18 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
                     marginTop: "1em"
                 }}><Icon symbol={IconSymbol.Code}/></Button>
     )
+    let lastErrorMessage = ""
     const errorIcon: HTMLElement = (
-        <div className="error hidden"><Icon symbol={IconSymbol.Bug}/></div>
+        <div className="error hidden"
+             style={{cursor: "pointer"}}
+             onclick={() => navigator.clipboard.writeText(lastErrorMessage)}>
+            <Icon symbol={IconSymbol.Bug}/>
+        </div>
     )
     const set = UUID.newSet<{ uuid: UUID.Bytes, lifecycle: Terminable }>(({uuid}) => uuid)
     lifecycle.ownAll(
         service.engine.subscribeDeviceMessage(UUID.toString(adapter.uuid), message => {
+            lastErrorMessage = message
             errorIcon.classList.remove("hidden")
             errorIcon.title = message
         }),
