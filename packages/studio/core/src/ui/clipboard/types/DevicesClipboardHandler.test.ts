@@ -1,6 +1,6 @@
 import {describe, expect, it, beforeEach} from "vitest"
 import {isDefined, isInstanceOf, Option, UUID} from "@opendaw/lib-std"
-import {Box, BoxEditing, BoxGraph, Field} from "@opendaw/lib-box"
+import {Box, BoxEditing, BoxGraph, Field, type Vertex} from "@opendaw/lib-box"
 import {
     ApparatDeviceBox,
     AudioFileBox,
@@ -12,6 +12,7 @@ import {
     PlayfieldSampleBox,
     TapeDeviceBox,
     TrackBox,
+    VaporisateurDeviceBox,
     ValueEventCollectionBox,
     ValueRegionBox,
     WerkstattParameterBox,
@@ -66,6 +67,33 @@ describe("DevicesClipboardHandler", () => {
         })
         boxGraph.endTransaction()
         return device
+    }
+
+    const addVaporisateur = (skeleton: ProjectSkeleton, audioUnit: AudioUnitBox, label: string): VaporisateurDeviceBox => {
+        const {boxGraph} = skeleton
+        let device!: VaporisateurDeviceBox
+        boxGraph.beginTransaction()
+        device = VaporisateurDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.label.setValue(label)
+            box.host.refer(audioUnit.input)
+        })
+        boxGraph.endTransaction()
+        return device
+    }
+
+    const addAutomationTrack = (skeleton: ProjectSkeleton, audioUnit: AudioUnitBox,
+                                automationTarget: Vertex, index: number): TrackBox => {
+        const {boxGraph} = skeleton
+        let trackBox!: TrackBox
+        boxGraph.beginTransaction()
+        trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
+            box.type.setValue(TrackType.Value)
+            box.tracks.refer(audioUnit.tracks)
+            box.target.refer(automationTarget)
+            box.index.setValue(index)
+        })
+        boxGraph.endTransaction()
+        return trackBox
     }
 
     const addPlayfieldInstrument = (skeleton: ProjectSkeleton, audioUnit: AudioUnitBox, label: string): PlayfieldDeviceBox => {
@@ -202,10 +230,10 @@ describe("DevicesClipboardHandler", () => {
     }
 
     // Mirrors the exact dependency collection logic from DevicesClipboardHandler.copyDevices
-    const collectDeviceDependencies = (deviceBox: Box, boxGraph: BoxGraph): Box[] => {
+    const collectDeviceDependencies = (deviceBox: Box, boxGraph: BoxGraph,
+                                       audioUnit?: AudioUnitBox): Box[] => {
         const ownedChildren = deviceBox.incomingEdges()
             .filter(pointer => pointer.mandatory && !pointer.box.ephemeral
-                && !isInstanceOf(pointer.box, TrackBox)
                 && !isDefined(pointer.box.resource))
             .map(pointer => pointer.box)
         const preserved = [deviceBox, ...ownedChildren].flatMap(root =>
@@ -213,8 +241,29 @@ describe("DevicesClipboardHandler", () => {
                 alwaysFollowMandatory: true,
                 excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
             }).boxes).filter(dep => dep.resource === "preserved"))
+        const trackContent: Box[] = []
+        if (audioUnit !== undefined) {
+            const trackPointers = audioUnit.tracks.pointerHub.incoming()
+            const tracks = trackPointers
+                .filter(pointer => isInstanceOf(pointer.box, TrackBox))
+                .map(pointer => pointer.box as TrackBox)
+            for (const track of tracks) {
+                trackContent.push(track)
+                const regionPointers = track.regions.pointerHub.incoming()
+                for (const regionPointer of regionPointers) {
+                    trackContent.push(regionPointer.box)
+                    const regionDeps = Array.from(boxGraph.dependenciesOf(regionPointer.box, {
+                        alwaysFollowMandatory: true,
+                        excludeBox: (dep: Box) => dep.ephemeral
+                            || isInstanceOf(dep, TrackBox)
+                            || DeviceBoxUtils.isDeviceBox(dep)
+                    }).boxes)
+                    trackContent.push(...regionDeps)
+                }
+            }
+        }
         const seen = new Set<string>()
-        return [...ownedChildren, ...preserved].filter(box => {
+        return [...ownedChildren, ...preserved, ...trackContent].filter(box => {
             const uuid = UUID.toString(box.address.uuid)
             if (seen.has(uuid)) return false
             seen.add(uuid)
@@ -236,10 +285,13 @@ describe("DevicesClipboardHandler", () => {
             if (pointer.pointerType === Pointers.TrackCollection && replaceInstrument) {
                 return Option.wrap(targetAudioUnit.tracks.address)
             }
+            if (pointer.pointerType === Pointers.Automation && replaceInstrument) {
+                return Option.wrap(targetAudioUnit.address)
+            }
             return Option.None
         },
         excludeBox: (box: Box) =>
-            DeviceBoxUtils.isInstrumentDeviceBox(box) && !replaceInstrument
+            !replaceInstrument && (DeviceBoxUtils.isInstrumentDeviceBox(box) || isInstanceOf(box, TrackBox))
     })
 
     // ─────────────────────────────────────────────────────────
@@ -455,6 +507,480 @@ describe("DevicesClipboardHandler", () => {
             const deps = collectDeviceDependencies(playfield, source.boxGraph)
             const allBoxes: Box[] = [playfield, ...deps]
             expect(allBoxes.length).toBe(1 + 3 + 3)
+        })
+    })
+
+    // ─────────────────────────────────────────────────────────
+    // Track re-indexing after instrument replacement
+    // ─────────────────────────────────────────────────────────
+
+    describe("track re-indexing after instrument replacement", () => {
+        const reindexSurvivingTracks = (audioUnit: AudioUnitBox): void => {
+            const surviving = audioUnit.tracks.pointerHub.filter(Pointers.TrackCollection)
+                .filter(pointer => isInstanceOf(pointer.box, TrackBox))
+                .map(pointer => pointer.box as TrackBox)
+                .sort((trackA, trackB) => trackA.index.getValue() - trackB.index.getValue())
+            surviving.forEach((track, idx) => track.index.setValue(idx))
+        }
+        const getTrackIndices = (audioUnit: AudioUnitBox): number[] =>
+            audioUnit.tracks.pointerHub.filter(Pointers.TrackCollection)
+                .filter(pointer => isInstanceOf(pointer.box, TrackBox))
+                .map(pointer => (pointer.box as TrackBox).index.getValue())
+                .sort()
+        it("leaves gap when middle track is deleted without re-indexing", () => {
+            const audioUnit = createAudioUnit(source)
+            addTapeInstrument(source, audioUnit, "Test")
+            addTrack(source, audioUnit, TrackType.Notes, 0)
+            const middle = addTrack(source, audioUnit, TrackType.Notes, 1)
+            addTrack(source, audioUnit, TrackType.Notes, 2)
+            source.boxGraph.beginTransaction()
+            middle.delete()
+            source.boxGraph.endTransaction()
+            expect(getTrackIndices(audioUnit)).toEqual([0, 2])
+        })
+        it("re-indexes to contiguous after middle track deletion", () => {
+            const audioUnit = createAudioUnit(source)
+            addTapeInstrument(source, audioUnit, "Test")
+            const track0 = addTrack(source, audioUnit, TrackType.Notes, 0)
+            const track1 = addTrack(source, audioUnit, TrackType.Notes, 1)
+            const track2 = addTrack(source, audioUnit, TrackType.Notes, 2)
+            source.boxGraph.beginTransaction()
+            track1.delete()
+            reindexSurvivingTracks(audioUnit)
+            source.boxGraph.endTransaction()
+            expect(getTrackIndices(audioUnit)).toEqual([0, 1])
+            expect(track0.index.getValue()).toBe(0)
+            expect(track2.index.getValue()).toBe(1)
+        })
+        it("re-indexes after deleting multiple non-adjacent tracks", () => {
+            const audioUnit = createAudioUnit(source)
+            addTapeInstrument(source, audioUnit, "Test")
+            const track0 = addTrack(source, audioUnit, TrackType.Notes, 0)
+            const track1 = addTrack(source, audioUnit, TrackType.Notes, 1)
+            const track2 = addTrack(source, audioUnit, TrackType.Notes, 2)
+            const track3 = addTrack(source, audioUnit, TrackType.Notes, 3)
+            source.boxGraph.beginTransaction()
+            track1.delete()
+            track3.delete()
+            reindexSurvivingTracks(audioUnit)
+            source.boxGraph.endTransaction()
+            expect(getTrackIndices(audioUnit)).toEqual([0, 1])
+            expect(track0.index.getValue()).toBe(0)
+            expect(track2.index.getValue()).toBe(1)
+        })
+        it("no-op when no tracks are deleted", () => {
+            const audioUnit = createAudioUnit(source)
+            addTapeInstrument(source, audioUnit, "Test")
+            addTrack(source, audioUnit, TrackType.Notes, 0)
+            addTrack(source, audioUnit, TrackType.Notes, 1)
+            source.boxGraph.beginTransaction()
+            reindexSurvivingTracks(audioUnit)
+            source.boxGraph.endTransaction()
+            expect(getTrackIndices(audioUnit)).toEqual([0, 1])
+        })
+        it("handles all tracks deleted", () => {
+            const audioUnit = createAudioUnit(source)
+            addTapeInstrument(source, audioUnit, "Test")
+            const track0 = addTrack(source, audioUnit, TrackType.Notes, 0)
+            const track1 = addTrack(source, audioUnit, TrackType.Notes, 1)
+            source.boxGraph.beginTransaction()
+            track0.delete()
+            track1.delete()
+            reindexSurvivingTracks(audioUnit)
+            source.boxGraph.endTransaction()
+            expect(getTrackIndices(audioUnit)).toEqual([])
+        })
+        it("re-indexes after deleting first track", () => {
+            const audioUnit = createAudioUnit(source)
+            addTapeInstrument(source, audioUnit, "Test")
+            const track0 = addTrack(source, audioUnit, TrackType.Notes, 0)
+            const track1 = addTrack(source, audioUnit, TrackType.Notes, 1)
+            const track2 = addTrack(source, audioUnit, TrackType.Notes, 2)
+            source.boxGraph.beginTransaction()
+            track0.delete()
+            reindexSurvivingTracks(audioUnit)
+            source.boxGraph.endTransaction()
+            expect(getTrackIndices(audioUnit)).toEqual([0, 1])
+            expect(track1.index.getValue()).toBe(0)
+            expect(track2.index.getValue()).toBe(1)
+        })
+    })
+
+    // ─────────────────────────────────────────────────────────
+    // Full instrument copy: tracks + regions + events
+    // ─────────────────────────────────────────────────────────
+
+    describe("full instrument copy: tracks, regions, events", () => {
+        it("collects automation track targeting instrument as ownedChild", () => {
+            const audioUnit = createAudioUnit(source)
+            const vaporisateur = addVaporisateur(source, audioUnit, "Vapo")
+            addAutomationTrack(source, audioUnit, vaporisateur.cutoff, 0)
+            const deps = collectDeviceDependencies(vaporisateur, source.boxGraph, audioUnit)
+            expect(deps.filter(box => isInstanceOf(box, TrackBox)).length).toBe(1)
+        })
+        it("collects multiple automation tracks targeting different parameters", () => {
+            const audioUnit = createAudioUnit(source)
+            const vaporisateur = addVaporisateur(source, audioUnit, "Vapo")
+            addAutomationTrack(source, audioUnit, vaporisateur.cutoff, 0)
+            addAutomationTrack(source, audioUnit, vaporisateur.resonance, 1)
+            const deps = collectDeviceDependencies(vaporisateur, source.boxGraph, audioUnit)
+            expect(deps.filter(box => isInstanceOf(box, TrackBox)).length).toBe(2)
+        })
+        it("collects note track (targets AudioUnitBox)", () => {
+            const audioUnit = createAudioUnit(source)
+            const vaporisateur = addVaporisateur(source, audioUnit, "Vapo")
+            addTrack(source, audioUnit, TrackType.Notes, 0)
+            const deps = collectDeviceDependencies(vaporisateur, source.boxGraph, audioUnit)
+            expect(deps.filter(box => isInstanceOf(box, TrackBox)).length).toBe(1)
+        })
+        it("collects note track with its regions and event collections", () => {
+            const audioUnit = createAudioUnit(source)
+            const vaporisateur = addVaporisateur(source, audioUnit, "Vapo")
+            const noteTrack = addTrack(source, audioUnit, TrackType.Notes, 0)
+            addNoteRegion(source, noteTrack, 0, 480)
+            addNoteRegion(source, noteTrack, 480, 480)
+            const deps = collectDeviceDependencies(vaporisateur, source.boxGraph, audioUnit)
+            const allBoxes: Box[] = [vaporisateur, ...deps]
+            expect(allBoxes.filter(box => isInstanceOf(box, TrackBox)).length).toBe(1)
+            expect(allBoxes.filter(box => isInstanceOf(box, NoteRegionBox)).length).toBe(2)
+            expect(allBoxes.filter(box => isInstanceOf(box, NoteEventCollectionBox)).length).toBe(2)
+        })
+        it("collects automation track with its value regions and event collections", () => {
+            const audioUnit = createAudioUnit(source)
+            const vaporisateur = addVaporisateur(source, audioUnit, "Vapo")
+            const autoTrack = addAutomationTrack(source, audioUnit, vaporisateur.cutoff, 0)
+            addValueRegion(source, autoTrack, 0, 960)
+            addValueRegion(source, autoTrack, 960, 960)
+            const deps = collectDeviceDependencies(vaporisateur, source.boxGraph, audioUnit)
+            const allBoxes: Box[] = [vaporisateur, ...deps]
+            expect(allBoxes.filter(box => isInstanceOf(box, TrackBox)).length).toBe(1)
+            expect(allBoxes.filter(box => isInstanceOf(box, ValueRegionBox)).length).toBe(2)
+            expect(allBoxes.filter(box => isInstanceOf(box, ValueEventCollectionBox)).length).toBe(2)
+        })
+        it("collects both note track and automation track", () => {
+            const audioUnit = createAudioUnit(source)
+            const vaporisateur = addVaporisateur(source, audioUnit, "Vapo")
+            addTrack(source, audioUnit, TrackType.Notes, 0)
+            addAutomationTrack(source, audioUnit, vaporisateur.cutoff, 1)
+            const deps = collectDeviceDependencies(vaporisateur, source.boxGraph, audioUnit)
+            expect(deps.filter(box => isInstanceOf(box, TrackBox)).length).toBe(2)
+        })
+        it("collects complete instrument with 2 tracks, 4 regions, 4 event collections", () => {
+            const audioUnit = createAudioUnit(source)
+            const vaporisateur = addVaporisateur(source, audioUnit, "Vapo")
+            const noteTrack = addTrack(source, audioUnit, TrackType.Notes, 0)
+            addNoteRegion(source, noteTrack, 0, 480)
+            addNoteRegion(source, noteTrack, 480, 480)
+            const autoTrack = addAutomationTrack(source, audioUnit, vaporisateur.cutoff, 1)
+            addValueRegion(source, autoTrack, 0, 960)
+            addValueRegion(source, autoTrack, 960, 960)
+            const deps = collectDeviceDependencies(vaporisateur, source.boxGraph, audioUnit)
+            const allBoxes: Box[] = [vaporisateur, ...deps]
+            expect(allBoxes.filter(box => isInstanceOf(box, VaporisateurDeviceBox)).length).toBe(1)
+            expect(allBoxes.filter(box => isInstanceOf(box, TrackBox)).length).toBe(2)
+            expect(allBoxes.filter(box => isInstanceOf(box, NoteRegionBox)).length).toBe(2)
+            expect(allBoxes.filter(box => isInstanceOf(box, NoteEventCollectionBox)).length).toBe(2)
+            expect(allBoxes.filter(box => isInstanceOf(box, ValueRegionBox)).length).toBe(2)
+            expect(allBoxes.filter(box => isInstanceOf(box, ValueEventCollectionBox)).length).toBe(2)
+        })
+    })
+
+    // ─────────────────────────────────────────────────────────
+    // Paste replace: automation track override (no duplicates)
+    // ─────────────────────────────────────────────────────────
+
+    describe("paste replace automation override", () => {
+        it("paste-replace creates new automation track from clipboard", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceVapo = addVaporisateur(source, sourceAU, "Source Vapo")
+            addAutomationTrack(source, sourceAU, sourceVapo.cutoff, 0)
+            const deps = collectDeviceDependencies(sourceVapo, source.boxGraph, sourceAU)
+            const allSourceBoxes: Box[] = [sourceVapo, ...deps]
+            const data = ClipboardUtils.serializeBoxes(allSourceBoxes)
+            const targetAU = createAudioUnit(target)
+            target.boxGraph.beginTransaction()
+            const boxes = ClipboardUtils.deserializeBoxes(data, target.boxGraph,
+                makePasteMapper(targetAU, true))
+            target.boxGraph.endTransaction()
+            const pastedTracks = boxes.filter(box => isInstanceOf(box, TrackBox))
+            expect(pastedTracks.length).toBe(1)
+            const pastedInstruments = boxes.filter(box => isInstanceOf(box, VaporisateurDeviceBox))
+            expect(pastedInstruments.length).toBe(1)
+        })
+        it("excludes automation tracks when replaceInstrument is false", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceVapo = addVaporisateur(source, sourceAU, "Source Vapo")
+            addAutomationTrack(source, sourceAU, sourceVapo.cutoff, 0)
+            const deps = collectDeviceDependencies(sourceVapo, source.boxGraph, sourceAU)
+            const allSourceBoxes: Box[] = [sourceVapo, ...deps]
+            const data = ClipboardUtils.serializeBoxes(allSourceBoxes)
+            const targetAU = createAudioUnit(target)
+            addVaporisateur(target, targetAU, "Existing Vapo")
+            target.boxGraph.beginTransaction()
+            const boxes = ClipboardUtils.deserializeBoxes(data, target.boxGraph,
+                makePasteMapper(targetAU, false))
+            target.boxGraph.endTransaction()
+            const pastedTracks = boxes.filter(box => isInstanceOf(box, TrackBox))
+            expect(pastedTracks.length).toBe(0)
+            const pastedInstruments = boxes.filter(box => isInstanceOf(box, VaporisateurDeviceBox))
+            expect(pastedInstruments.length).toBe(0)
+        })
+        it("parameter cannot have two automation tracks after paste-replace", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceVapo = addVaporisateur(source, sourceAU, "Source Vapo")
+            addAutomationTrack(source, sourceAU, sourceVapo.cutoff, 0)
+            const deps = collectDeviceDependencies(sourceVapo, source.boxGraph, sourceAU)
+            const data = ClipboardUtils.serializeBoxes([sourceVapo, ...deps])
+            const targetAU = createAudioUnit(target)
+            const targetVapo = addVaporisateur(target, targetAU, "Target Vapo")
+            addAutomationTrack(target, targetAU, targetVapo.cutoff, 0)
+            const oldTrackCount = targetAU.tracks.pointerHub.filter(Pointers.TrackCollection)
+                .filter(pointer => isInstanceOf(pointer.box, TrackBox)).length
+            expect(oldTrackCount).toBe(1)
+            target.boxGraph.beginTransaction()
+            const oldUuid = targetVapo.address.uuid
+            for (const pointer of targetAU.tracks.pointerHub.filter(Pointers.TrackCollection)) {
+                if (isInstanceOf(pointer.box, TrackBox)) {
+                    pointer.box.target.targetVertex.ifSome(targetVertex => {
+                        if (UUID.equals(targetVertex.box.address.uuid, oldUuid)) {
+                            pointer.box.delete()
+                        }
+                    })
+                }
+            }
+            targetVapo.delete()
+            const boxes = ClipboardUtils.deserializeBoxes(data, target.boxGraph,
+                makePasteMapper(targetAU, true))
+            target.boxGraph.endTransaction()
+            const newTracks = boxes.filter(box => isInstanceOf(box, TrackBox))
+            expect(newTracks.length).toBe(1)
+            const allTracks = targetAU.tracks.pointerHub.filter(Pointers.TrackCollection)
+                .filter(pointer => isInstanceOf(pointer.box, TrackBox))
+            expect(allTracks.length).toBe(1)
+        })
+    })
+
+    // ─────────────────────────────────────────────────────────
+    // Paste note track target remapping (Pointers.Automation)
+    // ─────────────────────────────────────────────────────────
+
+    describe("paste note track target remapping", () => {
+        it("remaps note track target (Pointers.Automation) to target AudioUnitBox", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceVapo = addVaporisateur(source, sourceAU, "Source")
+            addTrack(source, sourceAU, TrackType.Notes, 0)
+            const deps = collectDeviceDependencies(sourceVapo, source.boxGraph, sourceAU)
+            const data = ClipboardUtils.serializeBoxes([sourceVapo, ...deps])
+            const targetAU = createAudioUnit(target)
+            const editing = new BoxEditing(target.boxGraph)
+            editing.modify(() => {
+                ClipboardUtils.deserializeBoxes(data, target.boxGraph,
+                    makePasteMapper(targetAU, true))
+            })
+            const pastedTracks = targetAU.tracks.pointerHub.incoming()
+                .filter(pointer => isInstanceOf(pointer.box, TrackBox))
+            expect(pastedTracks.length).toBe(1)
+        })
+        it("remaps note track + automation track targets on paste-replace", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceVapo = addVaporisateur(source, sourceAU, "Source")
+            addTrack(source, sourceAU, TrackType.Notes, 0)
+            addAutomationTrack(source, sourceAU, sourceVapo.cutoff, 1)
+            const deps = collectDeviceDependencies(sourceVapo, source.boxGraph, sourceAU)
+            const data = ClipboardUtils.serializeBoxes([sourceVapo, ...deps])
+            const targetAU = createAudioUnit(target)
+            const editing = new BoxEditing(target.boxGraph)
+            editing.modify(() => {
+                ClipboardUtils.deserializeBoxes(data, target.boxGraph,
+                    makePasteMapper(targetAU, true))
+            })
+            const pastedTracks = targetAU.tracks.pointerHub.incoming()
+                .filter(pointer => isInstanceOf(pointer.box, TrackBox))
+            expect(pastedTracks.length).toBe(2)
+        })
+        it("note track with regions pastes without crash via BoxEditing.modify", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceVapo = addVaporisateur(source, sourceAU, "Source")
+            const noteTrack = addTrack(source, sourceAU, TrackType.Notes, 0)
+            addNoteRegion(source, noteTrack, 0, 480)
+            addNoteRegion(source, noteTrack, 480, 480)
+            addAutomationTrack(source, sourceAU, sourceVapo.cutoff, 1)
+            const deps = collectDeviceDependencies(sourceVapo, source.boxGraph, sourceAU)
+            const data = ClipboardUtils.serializeBoxes([sourceVapo, ...deps])
+            const targetAU = createAudioUnit(target)
+            const editing = new BoxEditing(target.boxGraph)
+            expect(() => {
+                editing.modify(() => {
+                    ClipboardUtils.deserializeBoxes(data, target.boxGraph,
+                        makePasteMapper(targetAU, true))
+                })
+            }).not.toThrow()
+        })
+    })
+
+    // ─────────────────────────────────────────────────────────
+    // Paste into target without selected instrument
+    // ─────────────────────────────────────────────────────────
+
+    describe("paste without selected instrument", () => {
+        it("pastes instrument when no instrument is selected (replaceInstrument false)", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceVapo = addVaporisateur(source, sourceAU, "Source")
+            addTrack(source, sourceAU, TrackType.Notes, 0)
+            const deps = collectDeviceDependencies(sourceVapo, source.boxGraph, sourceAU)
+            const data = ClipboardUtils.serializeBoxes([sourceVapo, ...deps])
+            const targetAU = createAudioUnit(target)
+            target.boxGraph.beginTransaction()
+            const boxes = ClipboardUtils.deserializeBoxes(data, target.boxGraph, {
+                mapPointer: pointer => {
+                    if (pointer.pointerType === Pointers.InstrumentHost) {
+                        return Option.wrap(targetAU.input.address)
+                    }
+                    if (pointer.pointerType === Pointers.TrackCollection) {
+                        return Option.wrap(targetAU.tracks.address)
+                    }
+                    if (pointer.pointerType === Pointers.Automation) {
+                        return Option.wrap(targetAU.address)
+                    }
+                    return Option.None
+                },
+                excludeBox: () => false
+            })
+            target.boxGraph.endTransaction()
+            expect(boxes.filter(box => isInstanceOf(box, VaporisateurDeviceBox)).length).toBe(1)
+            expect(boxes.filter(box => isInstanceOf(box, TrackBox)).length).toBe(1)
+        })
+    })
+
+    // ─────────────────────────────────────────────────────────
+    // End-to-end paste-replace track index integrity
+    // ─────────────────────────────────────────────────────────
+
+    describe("paste-replace track index integrity", () => {
+        const getTrackIndices = (audioUnit: AudioUnitBox): number[] =>
+            audioUnit.tracks.pointerHub.filter(Pointers.TrackCollection)
+                .filter(pointer => isInstanceOf(pointer.box, TrackBox))
+                .map(pointer => (pointer.box as TrackBox).index.getValue())
+                .sort()
+        const simulatePasteReplace = (
+            sourceInstrument: Box,
+            sourceAudioUnit: AudioUnitBox,
+            sourceBoxGraph: BoxGraph,
+            targetAudioUnit: AudioUnitBox,
+            targetInstrument: Box,
+            targetBoxGraph: BoxGraph
+        ): ReadonlyArray<Box> => {
+            const deps = collectDeviceDependencies(sourceInstrument, sourceBoxGraph, sourceAudioUnit)
+            const data = ClipboardUtils.serializeBoxes([sourceInstrument, ...deps])
+            targetBoxGraph.beginTransaction()
+            for (const pointer of targetAudioUnit.tracks.pointerHub.filter(Pointers.TrackCollection)) {
+                if (isInstanceOf(pointer.box, TrackBox)) {
+                    pointer.box.delete()
+                }
+            }
+            targetInstrument.delete()
+            const boxes = ClipboardUtils.deserializeBoxes(data, targetBoxGraph,
+                makePasteMapper(targetAudioUnit, true))
+            const allTracks = targetAudioUnit.tracks.pointerHub.filter(Pointers.TrackCollection)
+                .filter(pointer => isInstanceOf(pointer.box, TrackBox))
+                .map(pointer => pointer.box as TrackBox)
+                .sort((trackA, trackB) => trackA.index.getValue() - trackB.index.getValue())
+            allTracks.forEach((track, idx) => track.index.setValue(idx))
+            targetBoxGraph.endTransaction()
+            return boxes
+        }
+        it("replaces all target tracks with source tracks", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceVapo = addVaporisateur(source, sourceAU, "Source")
+            addTrack(source, sourceAU, TrackType.Notes, 0)
+            addAutomationTrack(source, sourceAU, sourceVapo.cutoff, 5)
+            const targetAU = createAudioUnit(target)
+            addTrack(target, targetAU, TrackType.Notes, 0)
+            const targetVapo = addVaporisateur(target, targetAU, "Target")
+            addAutomationTrack(target, targetAU, targetVapo.cutoff, 1)
+            simulatePasteReplace(sourceVapo, sourceAU, source.boxGraph, targetAU, targetVapo, target.boxGraph)
+            const indices = getTrackIndices(targetAU)
+            expect(indices).toEqual([0, 1])
+        })
+        it("replaces all target tracks even when source has more tracks", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceVapo = addVaporisateur(source, sourceAU, "Source")
+            addTrack(source, sourceAU, TrackType.Notes, 0)
+            addAutomationTrack(source, sourceAU, sourceVapo.cutoff, 10)
+            addAutomationTrack(source, sourceAU, sourceVapo.resonance, 20)
+            const targetAU = createAudioUnit(target)
+            addTrack(target, targetAU, TrackType.Notes, 0)
+            addTrack(target, targetAU, TrackType.Notes, 1)
+            const targetVapo = addVaporisateur(target, targetAU, "Target")
+            addAutomationTrack(target, targetAU, targetVapo.cutoff, 2)
+            simulatePasteReplace(sourceVapo, sourceAU, source.boxGraph, targetAU, targetVapo, target.boxGraph)
+            const indices = getTrackIndices(targetAU)
+            expect(indices).toEqual([0, 1, 2])
+        })
+        it("paste-replace with no existing tracks produces contiguous from 0", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceVapo = addVaporisateur(source, sourceAU, "Source")
+            addAutomationTrack(source, sourceAU, sourceVapo.cutoff, 7)
+            const targetAU = createAudioUnit(target)
+            const targetVapo = addVaporisateur(target, targetAU, "Target")
+            simulatePasteReplace(sourceVapo, sourceAU, source.boxGraph, targetAU, targetVapo, target.boxGraph)
+            const indices = getTrackIndices(targetAU)
+            expect(indices).toEqual([0])
+        })
+        it("paste-replace onto self preserves note track and replaces automation", () => {
+            const audioUnit = createAudioUnit(source)
+            const vapo = addVaporisateur(source, audioUnit, "Vapo")
+            addTrack(source, audioUnit, TrackType.Notes, 0)
+            addAutomationTrack(source, audioUnit, vapo.cutoff, 1)
+            const deps = collectDeviceDependencies(vapo, source.boxGraph, audioUnit)
+            const data = ClipboardUtils.serializeBoxes([vapo, ...deps])
+            source.boxGraph.beginTransaction()
+            for (const pointer of audioUnit.tracks.pointerHub.filter(Pointers.TrackCollection)) {
+                if (isInstanceOf(pointer.box, TrackBox)) {
+                    pointer.box.delete()
+                }
+            }
+            vapo.delete()
+            ClipboardUtils.deserializeBoxes(data, source.boxGraph,
+                makePasteMapper(audioUnit, true))
+            const allTracks = audioUnit.tracks.pointerHub.filter(Pointers.TrackCollection)
+                .filter(pointer => isInstanceOf(pointer.box, TrackBox))
+                .map(pointer => pointer.box as TrackBox)
+                .sort((trackA, trackB) => trackA.index.getValue() - trackB.index.getValue())
+            allTracks.forEach((track, idx) => track.index.setValue(idx))
+            source.boxGraph.endTransaction()
+            const indices = getTrackIndices(audioUnit)
+            expect(indices).toEqual([0, 1])
+            const trackCount = audioUnit.tracks.pointerHub.filter(Pointers.TrackCollection)
+                .filter(pointer => isInstanceOf(pointer.box, TrackBox)).length
+            expect(trackCount).toBe(2)
+            const instrumentCount = audioUnit.input.pointerHub.incoming().length
+            expect(instrumentCount).toBe(1)
+        })
+        it("no index gaps when source track had high index", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceVapo = addVaporisateur(source, sourceAU, "Source")
+            addTrack(source, sourceAU, TrackType.Notes, 0)
+            addAutomationTrack(source, sourceAU, sourceVapo.cutoff, 99)
+            const targetAU = createAudioUnit(target)
+            const targetVapo = addVaporisateur(target, targetAU, "Target")
+            simulatePasteReplace(sourceVapo, sourceAU, source.boxGraph, targetAU, targetVapo, target.boxGraph)
+            const indices = getTrackIndices(targetAU)
+            expect(indices).toEqual([0, 1])
+        })
+        it("no duplicate indices after paste-replace", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceVapo = addVaporisateur(source, sourceAU, "Source")
+            addTrack(source, sourceAU, TrackType.Notes, 0)
+            addAutomationTrack(source, sourceAU, sourceVapo.cutoff, 0)
+            const targetAU = createAudioUnit(target)
+            addTrack(target, targetAU, TrackType.Notes, 0)
+            const targetVapo = addVaporisateur(target, targetAU, "Target")
+            simulatePasteReplace(sourceVapo, sourceAU, source.boxGraph, targetAU, targetVapo, target.boxGraph)
+            const indices = getTrackIndices(targetAU)
+            expect(indices).toEqual([0, 1])
+            const uniqueIndices = new Set(indices)
+            expect(uniqueIndices.size).toBe(indices.length)
         })
     })
 
