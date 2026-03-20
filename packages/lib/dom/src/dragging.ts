@@ -1,4 +1,4 @@
-import {EmptyExec, Func, int, isDefined, Option, safeRead, Terminable, Terminator} from "@opendaw/lib-std"
+import {EmptyExec, Exec, Func, int, isDefined, Option, safeRead, Terminable, Terminator} from "@opendaw/lib-std"
 import {Browser} from "./browser"
 import {AnimationFrame} from "./frames"
 import {Events, PointerCaptureTarget} from "./events"
@@ -35,9 +35,15 @@ export namespace Dragging {
                                                            factory: Func<PointerEvent, Option<Process>>,
                                                            options?: ProcessOptions): Terminable => {
         const processCycle = new Terminator()
+        // Cancel any active drag when a new one starts. On some platforms (e.g. ChromeOS),
+        // isPrimary may be true for multiple simultaneous touch points, bypassing the
+        // multi-touch guard above. Without this, listeners from the previous drag accumulate
+        // and can reference stale state.
+        let cancelActive: Exec = EmptyExec
         return Terminable.many(processCycle, Events.subscribe(target, "pointerdown", (event: PointerEvent) => {
             if (options?.multiTouch !== true && !event.isPrimary) {return}
             if (event.buttons !== 1 || (Browser.isMacOS() && event.ctrlKey)) {return}
+            cancelActive()
             const option: Option<Process> = factory(event)
             if (option.isEmpty()) {return}
             const process: Process = option.unwrap()
@@ -116,6 +122,7 @@ export namespace Dragging {
                 }))
             }
             const cancel = () => {
+                cancelActive = EmptyExec
                 if (pointerLockActive && targetElement !== null && document.pointerLockElement === targetElement) {
                     document.exitPointerLock()
                 }
@@ -123,10 +130,12 @@ export namespace Dragging {
                 process.finally?.call(process)
                 processCycle.terminate()
             }
+            cancelActive = cancel
             const owner = safeRead(target, "ownerDocument", "defaultView") as WindowProxy ?? self
             processCycle.ownAll(
                 Events.subscribe(target, "pointerup", (event: PointerEvent) => {
                     if (event.pointerId === pointerId) {
+                        cancelActive = EmptyExec
                         if (pointerLockActive && targetElement !== null && document.pointerLockElement === targetElement) {
                             document.exitPointerLock()
                         }
