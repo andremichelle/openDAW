@@ -84,6 +84,11 @@ export class ErrorHandler {
         }
         if (!(event instanceof PromiseRejectionEvent)) {return false}
         const {reason} = event
+        if (reason instanceof Error && IgnoredErrors.some(ignored => reason.message.includes(ignored))) {
+            console.warn(reason.message)
+            event.preventDefault()
+            return true
+        }
         if (Errors.isAbort(reason)) {
             console.debug(`Abort '${reason.message}'`)
             event.preventDefault()
