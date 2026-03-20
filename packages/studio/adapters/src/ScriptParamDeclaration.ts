@@ -100,7 +100,12 @@ const parseSingleParam = (line: string): ParamDeclaration => {
 const declarationEquals = (a: ParamDeclaration, b: ParamDeclaration): boolean =>
     a.mapping === b.mapping && a.min === b.min && a.max === b.max && a.unit === b.unit
 
+const declarationFullEquals = (a: ParamDeclaration, b: ParamDeclaration): boolean =>
+    declarationEquals(a, b) && Math.abs(a.defaultValue - b.defaultValue) < 1e-6
+
 export namespace ScriptParamDeclaration {
+    export const isEqual = declarationFullEquals
+
     export const parseParams = (code: string): ReadonlyArray<ParamDeclaration> => {
         const params: Array<ParamDeclaration> = []
         let match: Nullable<RegExpExecArray>

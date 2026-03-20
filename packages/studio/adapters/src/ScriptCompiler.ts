@@ -20,8 +20,11 @@ const parseHeader = (source: string, pattern: RegExp): {userCode: string, update
     }
 }
 
+const cachedParamDeclarations = new WeakMap<ScriptCompiler.DeviceBox, Map<string, ParamDeclaration>>()
+
 const reconcileParameters = (deviceBox: ScriptCompiler.DeviceBox, declared: ReadonlyArray<ParamDeclaration>, order: Map<string, number>): void => {
     const boxGraph = deviceBox.graph
+    const previousDeclarations = cachedParamDeclarations.get(deviceBox) ?? new Map<string, ParamDeclaration>()
     const existingPointers = deviceBox.parameters.pointerHub.filter()
     const existingByLabel = new Map<string, WerkstattParameterBox>()
     for (const pointer of existingPointers) {
@@ -36,30 +39,35 @@ const reconcileParameters = (deviceBox: ScriptCompiler.DeviceBox, declared: Read
         }
     }
     seen.clear()
+    const newDeclarations = new Map<string, ParamDeclaration>()
     for (const declaration of declared) {
         if (seen.has(declaration.label)) {continue}
         seen.add(declaration.label)
         const unifiedIndex = order.get(declaration.label) ?? 0
         const existing = existingByLabel.get(declaration.label)
-        const mappedDefault = declaration.defaultValue
-        if (isDefined(existing)) {
-            if (existing.index.getValue() !== unifiedIndex) {
-                existing.index.setValue(unifiedIndex)
-            }
-            if (Math.abs(existing.defaultValue.getValue() - mappedDefault) > FLOAT_TOLERANCE) {
-                existing.defaultValue.setValue(mappedDefault)
-                existing.value.setValue(mappedDefault)
+        const previous = previousDeclarations.get(declaration.label)
+        const declarationChanged = !isDefined(previous) || !ScriptParamDeclaration.isEqual(previous, declaration)
+        if (isDefined(existing) && declarationChanged) {
+            existing.delete()
+            existingByLabel.delete(declaration.label)
+        }
+        const current = existingByLabel.get(declaration.label)
+        if (isDefined(current)) {
+            if (current.index.getValue() !== unifiedIndex) {
+                current.index.setValue(unifiedIndex)
             }
         } else {
             WerkstattParameterBox.create(boxGraph, UUID.generate(), paramBox => {
                 paramBox.owner.refer(deviceBox.parameters)
                 paramBox.label.setValue(declaration.label)
                 paramBox.index.setValue(unifiedIndex)
-                paramBox.value.setValue(mappedDefault)
-                paramBox.defaultValue.setValue(mappedDefault)
+                paramBox.value.setValue(declaration.defaultValue)
+                paramBox.defaultValue.setValue(declaration.defaultValue)
             })
         }
+        newDeclarations.set(declaration.label, declaration)
     }
+    cachedParamDeclarations.set(deviceBox, newDeclarations)
 }
 
 const reconcileSamples = (deviceBox: ScriptCompiler.DeviceBox, declared: ReadonlyArray<SampleDeclaration>, order: Map<string, number>): void => {

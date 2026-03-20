@@ -1,18 +1,18 @@
 // TB-303 Bass Line
-// @param waveform   0     0     1      int
-// @param tuning     0     -5    5      linear  st
-// @param cutoff     500   80    5000   exp     Hz
-// @param resonance  0.5   0     1      linear
+// @param waveform   false
+// @param tuning     0     -12   12     linear  st
+// @param cutoff     100   20    300    exp     Hz
+// @param resonance  0.7   0     1      linear
 // @param envmod     0.5   0     1      linear
 // @param decay      400   200   2000   exp     ms
-// @param accent     0.5   0     1      linear
+// @param accent     1.0   0     1      linear
 // @param volume     0.7   0     1      linear
 
 class Processor {
     waveform = 0
     tuning = 0
-    cutoffHz = 500
-    resonance = 0.5
+    cutoffHz = 300
+    resonance = 0.7
     envmod = 0.5
     decayMs = 400
     accentAmount = 0.5
@@ -104,8 +104,8 @@ class Processor {
         const slideAlpha = 1 - Math.exp(-1 / (0.012 * sr))
         const accChargeAlpha = 1 - Math.exp(-1 / (0.147 * sr))
         const accDischargeMul = Math.exp(-1 / (0.1 * sr))
-        const resoSkewed = (1 - Math.exp(-3 * this.resonance)) / 0.950212931632136
-        const kFeedback = resoSkewed * 17
+        const resoSkewed = this.resonance * this.resonance
+        const kFeedback = resoSkewed * 28
         const gNorm = kFeedback / 17
         let gComp = (gNorm - 1) * resoSkewed + 1
         gComp *= (1 + resoSkewed)
@@ -163,7 +163,10 @@ class Processor {
                 this.accentCap *= accDischargeMul
             }
             let targetCutoff = this.cutoffHz * Math.pow(2, envDepth * (this.megEnv - envOffset))
-            targetCutoff *= Math.pow(2, this.accentCap * 3)
+            if (this.isAccented) {
+                targetCutoff *= Math.pow(2, this.accentAmount * this.megEnv * 2.0)
+            }
+            targetCutoff *= Math.pow(2, this.accentCap * 1.5)
             if (targetCutoff < 20) targetCutoff = 20
             if (targetCutoff > sr * 0.45) targetCutoff = sr * 0.45
             this.cutoffSmoothed += (targetCutoff - this.cutoffSmoothed) * cutoffAlpha
@@ -193,9 +196,11 @@ class Processor {
             }
             this.vcaDecay *= this.vcaDecayCoeff
             let amp = this.vcaGate * this.vcaDecay
-            amp += 0.3 * this.megEnv * this.vcaGate
-            if (this.isAccented) {
-                amp += this.accentAmount * 1.5 * this.megEnv * this.vcaGate
+            if (this.gate) {
+                amp += 0.45 * this.megEnv
+                if (this.isAccented) {
+                    amp += this.accentAmount * 4.0 * this.megEnv
+                }
             }
             this.ampSmoothed += (amp - this.ampSmoothed) * ampAlpha
             const sample = Math.tanh(filtered * this.ampSmoothed * 0.7) * this.volume
