@@ -14,10 +14,19 @@ export namespace Files {
                     message: String(error)
                 }).then(() => Promise.reject(error))
             }
-            const writable = await handle.createWritable()
-            await writable.truncate(0)
-            await writable.write(arrayBuffer)
-            await writable.close()
+            const {status: writeStatus, error: writeError} = await Promises.tryCatch(async () => {
+                const writable = await handle.createWritable()
+                await writable.truncate(0)
+                await writable.write(arrayBuffer)
+                await writable.close()
+            })
+            if (writeStatus === "rejected") {
+                await RuntimeNotifier.info({
+                    headline: "Could not save file",
+                    message: String(writeError)
+                })
+                return Promise.reject(writeError)
+            }
             return handle.name ?? "unknown"
         } else {
             return saveBlobFallback(arrayBuffer, options)
