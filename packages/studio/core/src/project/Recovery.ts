@@ -20,7 +20,7 @@ export class Recovery {
             Workers.Opfs.read(`${Recovery.#RESTORE_FILE_PATH}/uuid`)
                 .then(x => UUID.validateBytes(x)),
             Workers.Opfs.read(`${Recovery.#RESTORE_FILE_PATH}/project.od`)
-                .then(x => Project.load(this.#env, x.buffer as ArrayBuffer)),
+                .then(x => Project.loadAnyVersion(this.#env, x.buffer as ArrayBuffer)),
             Workers.Opfs.read(`${Recovery.#RESTORE_FILE_PATH}/meta.json`)
                 .then(x => JSON.parse(new TextDecoder().decode(x.buffer as ArrayBuffer)) as ProjectMeta),
             Workers.Opfs.read(`${Recovery.#RESTORE_FILE_PATH}/saved`)
