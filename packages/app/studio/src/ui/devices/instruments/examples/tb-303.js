@@ -1,21 +1,21 @@
 // TB-303 Bass Line
 // @param waveform   false
 // @param tuning     0     -12   12     linear  st
-// @param cutoff     100   20    300    exp     Hz
-// @param resonance  0.7   0     1      linear
-// @param envmod     0.5   0     1      linear
-// @param decay      400   200   2000   exp     ms
+// @param cutoff     80    60    300    exp     Hz
+// @param resonance  1.0   0     1      linear
+// @param envmod     0.0   0     1      linear
+// @param decay      300   200   2000   exp     ms
 // @param accent     1.0   0     1      linear
 // @param volume     0.7   0     1      linear
 
 class Processor {
     waveform = 0
     tuning = 0
-    cutoffHz = 300
-    resonance = 0.7
-    envmod = 0.5
-    decayMs = 400
-    accentAmount = 0.5
+    cutoffHz = 80
+    resonance = 0.8
+    envmod = 0.2
+    decayMs = 300
+    accentAmount = 1.0
     volume = 0.7
     phase = 0
     freqTarget = 220
@@ -41,14 +41,16 @@ class Processor {
     cutoffSmoothed = 200
     ampSmoothed = 0
     paramChanged(name, value) {
-        if (name === "waveform") this.waveform = value
-        if (name === "tuning") this.tuning = value
-        if (name === "cutoff") this.cutoffHz = value
-        if (name === "resonance") this.resonance = value
-        if (name === "envmod") this.envmod = value
-        if (name === "decay") this.decayMs = value
-        if (name === "accent") this.accentAmount = value
-        if (name === "volume") this.volume = value
+        switch (name) {
+            case "waveform": this.waveform = value; break
+            case "tuning": this.tuning = value; break
+            case "cutoff": this.cutoffHz = value; break
+            case "resonance": this.resonance = value; break
+            case "envmod": this.envmod = value; break
+            case "decay": this.decayMs = value; break
+            case "accent": this.accentAmount = value; break
+            case "volume": this.volume = value; break
+        }
     }
     noteOn(pitch, velocity, cent, id) {
         const freq = 440 * Math.pow(2, (pitch - 69 + cent / 100 + this.tuning) / 12)
@@ -114,7 +116,7 @@ class Processor {
         const postHpAlpha = 1 - Math.exp(-2 * PI * 24 / sr)
         const cutoffAlpha = 1 - Math.exp(-1 / (0.0005 * sr))
         const ampAlpha = 1 - Math.exp(-1 / (0.0005 * sr))
-        const envDepth = this.envmod * 4.5
+        const envDepth = 1.5 + this.envmod * 4.0
         const envOffset = this.envmod * 0.33
         for (let s = block.s0; s < block.s1; s++) {
             if (this.sliding) {
@@ -164,10 +166,10 @@ class Processor {
             }
             let targetCutoff = this.cutoffHz * Math.pow(2, envDepth * (this.megEnv - envOffset))
             if (this.isAccented) {
-                targetCutoff *= Math.pow(2, this.accentAmount * this.megEnv * 2.0)
+                targetCutoff *= Math.pow(2, this.accentAmount * this.megEnv * 2.5)
             }
-            targetCutoff *= Math.pow(2, this.accentCap * 1.5)
-            if (targetCutoff < 20) targetCutoff = 20
+            targetCutoff *= Math.pow(2, this.accentCap * 1.0)
+            if (targetCutoff < 60) targetCutoff = 60
             if (targetCutoff > sr * 0.45) targetCutoff = sr * 0.45
             this.cutoffSmoothed += (targetCutoff - this.cutoffSmoothed) * cutoffAlpha
             const gf = Math.tan(PI * this.cutoffSmoothed / sr2)
@@ -203,7 +205,7 @@ class Processor {
                 }
             }
             this.ampSmoothed += (amp - this.ampSmoothed) * ampAlpha
-            const sample = Math.tanh(filtered * this.ampSmoothed * 0.7) * this.volume
+            const sample = Math.tanh(filtered * this.ampSmoothed) * this.volume
             outL[s] += sample
             outR[s] += sample
             this.phase += phaseInc
