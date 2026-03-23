@@ -147,23 +147,11 @@ export class OfflineEngineRenderer {
         const {port, sab} = terminator.own(MIDIReceiver.create(() => 0,
             (deviceId, data, relativeTimeInMs) => source.receivedMIDIFromEngine(deviceId, data, relativeTimeInMs)))
 
-        await protocol.initialize(channel.port1, {
-            sampleRate,
-            numberOfChannels,
-            processorsUrl: AudioWorklets.processorsUrl,
-            syncStreamBuffer: reader.buffer,
-            controlFlagsBuffer,
-            project: source.toArrayBuffer(),
-            exportConfiguration: optExportConfiguration.unwrapOrUndefined()
-        })
-
-        const loadScriptDevice = async (
-            code: string,
-            headerPattern: RegExp,
-            registryName: string,
-            functionName: string,
-            uuid: string
-        ): Promise<void> => {
+        const loadScriptDevice = async (code: string,
+                                        headerPattern: RegExp,
+                                        registryName: string,
+                                        functionName: string,
+                                        uuid: string): Promise<void> => {
             const match = code.match(headerPattern)
             if (match === null) {return}
             const userCode = code.slice(match[0].length)
@@ -198,6 +186,15 @@ export class OfflineEngineRenderer {
                     UUID.toString(box.address.uuid))
             }
         }
+        await protocol.initialize(channel.port1, {
+            sampleRate,
+            numberOfChannels,
+            processorsUrl: AudioWorklets.processorsUrl,
+            syncStreamBuffer: reader.buffer,
+            controlFlagsBuffer,
+            project: source.toArrayBuffer(),
+            exportConfiguration: optExportConfiguration.unwrapOrUndefined()
+        })
         engineCommands.setupMIDI(port, sab)
         return new OfflineEngineRenderer(
             worker,

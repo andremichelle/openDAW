@@ -15,6 +15,7 @@ import {
 } from "@opendaw/lib-std"
 import {BoxEditing, BoxGraph, DeleteUpdate, NewUpdate} from "@opendaw/lib-box"
 import {
+    ApparatDeviceBox,
     AudioBusBox,
     AudioFileBox,
     AudioRegionBox,
@@ -22,9 +23,11 @@ import {
     BoxIO,
     BoxVisitor,
     RootBox,
+    SpielwerkDeviceBox,
     TimelineBox,
     TrackBox,
-    UserInterfaceBox
+    UserInterfaceBox,
+    WerkstattDeviceBox
 } from "@opendaw/studio-boxes"
 import {
     AnyRegionBoxAdapter,
@@ -49,6 +52,7 @@ import {
     UnionBoxTypes,
     UserEditingManager,
     VaryingTempoMap,
+    ScriptCompiler,
     VertexSelection
 } from "@opendaw/studio-adapters"
 import {LiveStreamBroadcaster, LiveStreamReceiver} from "@opendaw/lib-fusion"
@@ -209,6 +213,19 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     startAudioWorklet(restart?: RestartWorklet, options?: ProcessorOptions): EngineWorklet {
         console.debug(`start AudioWorklet`)
+        const audioContext = this.#env.audioWorklets.context
+        const loadScript = (config: ScriptCompiler.Config, deviceBox: ScriptCompiler.DeviceBox) =>
+            ScriptCompiler.create(config).load(audioContext, deviceBox).catch(reason =>
+                console.warn(`Failed to load script device ${UUID.toString(deviceBox.address.uuid)}:`, reason))
+        for (const box of this.boxGraph.boxes()) {
+            if (box instanceof ApparatDeviceBox) {
+                loadScript({headerTag: "apparat", registryName: "apparatProcessors", functionName: "apparat"}, box)
+            } else if (box instanceof WerkstattDeviceBox) {
+                loadScript({headerTag: "werkstatt", registryName: "werkstattProcessors", functionName: "werkstatt"}, box)
+            } else if (box instanceof SpielwerkDeviceBox) {
+                loadScript({headerTag: "spielwerk", registryName: "spielwerkProcessors", functionName: "spielwerk"}, box)
+            }
+        }
         const lifecycle = this.#terminator.spawn()
         const worklet: EngineWorklet = lifecycle.own(this.#env.audioWorklets.createEngine({project: this, options}))
         const handler = async (event: unknown) => {
