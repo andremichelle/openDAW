@@ -117,11 +117,7 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         <Button lifecycle={lifecycle}
                 onClick={toggleEditor}
                 appearance={{framed: true, tooltip: "Toggle Code Editor"}}
-                style={{
-                    fontSize: "16px",
-                    height: "min-content",
-                    marginTop: "1em"
-                }}><Icon symbol={IconSymbol.Code}/></Button>
+                style={{fontSize: "16px"}}><Icon symbol={IconSymbol.Code}/></Button>
     )
     let lastErrorMessage = ""
     const errorIcon: HTMLElement = (
@@ -259,10 +255,11 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
                       populateControls={() => (
                           <div className={className}>
                               {controls}
-                              <div className="editor">
+                              <Column ems={LKR} color={Colors.cream} style={{height: "3.5em", minWidth: "max-content"}}>
+                                  <h5>Code Editor</h5>
                                   {toggleEditorButton}
                                   {errorIcon}
-                              </div>
+                              </Column>
                           </div>
                       )}
                       populateMeter={() => config.populateMeter({lifecycle, service, adapter})}
