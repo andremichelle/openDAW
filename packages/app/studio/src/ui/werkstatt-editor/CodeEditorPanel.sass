@@ -38,9 +38,12 @@ component
     font-size: 11px
     font-family: monospace
     white-space: pre-wrap
+    min-height: 1em
     max-height: 80px
     overflow-y: auto
     border-top: 1px solid rgba(white, 0.1)
+    user-select: text !important
+    -webkit-user-select: text !important
     &.idle
       color: rgba(white, 0.4)
     &.success
