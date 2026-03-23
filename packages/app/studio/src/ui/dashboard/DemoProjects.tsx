@@ -38,7 +38,8 @@ const ids = [
     "cab976763f0" // Vapor Run
 ]
 
-const listUrl = `https://api.opendaw.studio/music/list-by-ids.php?ids=${ids.join(",")}`
+const apiRoot = import.meta.env.VITE_API_ROOT || "https://api.opendaw.studio"
+const listUrl = `${apiRoot}/music/list-by-ids.php?ids=${ids.join(",")}`
 
 const NewProjectJson: DemoProjectJson = {
     id: "",
@@ -71,7 +72,7 @@ const loadDemoProject = async (service: StudioService, json: DemoProjectJson) =>
     const dialog = RuntimeNotifier.progress({headline: "Loading Demo Project"})
     const folder = json.id
     const {status, value: arrayBuffer, error} = await Promises.tryCatch(
-        fetch(`https://api.opendaw.studio/music/uploads/${folder}/project.odb`)
+        fetch(`${apiRoot}/music/uploads/${folder}/project.odb`)
             .then(network.progress(progress => dialog.message = `Downloading bundle file... (${(progress * 100).toFixed(1)}%)`))
             .then(x => x.arrayBuffer()))
     dialog.terminate()

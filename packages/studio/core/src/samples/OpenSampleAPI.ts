@@ -19,8 +19,8 @@ import {WavFile} from "../WavFile"
 
 // Standard openDAW samples (considered to be non-removable)
 export class OpenSampleAPI implements SampleAPI {
-    static readonly ApiRoot = "https://api.opendaw.studio/samples"
-    static readonly FileRoot = "https://assets.opendaw.studio/samples"
+    static readonly ApiRoot = `${import.meta.env.VITE_API_ROOT || "https://api.opendaw.studio"}/samples`
+    static readonly FileRoot = `${import.meta.env.VITE_ASSETS_ROOT || "https://assets.opendaw.studio"}/samples`
 
     @Lazy
     static get(): OpenSampleAPI {return new OpenSampleAPI()}
