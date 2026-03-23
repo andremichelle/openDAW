@@ -160,7 +160,8 @@ export namespace RecordMidi {
                     if (regionBox.isAttached() && collection.isAttached()) {
                         const {position: regionPosition, duration, loopDuration} = regionBox
                         const maxDuration = loopEnabled && allowTakes ? loopTo - regionPosition.getValue() : Infinity
-                        const newDuration = Math.min(maxDuration, quantizeCeil(writePosition, beats) - regionPosition.getValue())
+                        const newDuration = Math.max(duration.getValue(),
+                            Math.min(maxDuration, quantizeCeil(writePosition, beats) - regionPosition.getValue()))
                         duration.setValue(newDuration)
                         loopDuration.setValue(newDuration)
                         for (const {event, take, creationOffset} of activeNotes.values()) {
