@@ -235,7 +235,7 @@ Examples:
 - Output is validated every block. NaN or amplitudes > 1000 will silence the processor.
 - Do not use import/export/require. No access to DOM or fetch.
 - The code runs in an AudioWorklet thread. Only AudioWorklet-safe APIs are available
-  (Math, typed arrays, basic JS). No console, no setTimeout, no DOM.
+  (Math, typed arrays, basic JS). No setTimeout, no DOM.
 - You can define and use helper classes alongside the Processor class.
 - NEVER allocate memory inside process(). No `new`, no array literals, no object
   literals, no string concatenation, no closures. Any allocation in the audio hot path

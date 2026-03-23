@@ -321,7 +321,7 @@ Implement reset() to clear state on transport jumps.
 - If process() throws, the processor will be silenced.
 - Do not use import/export/require. No access to DOM or fetch.
 - The code runs in an AudioWorklet thread. Only AudioWorklet-safe APIs are available
-  (Math, typed arrays, basic JS). No console, no setTimeout, no DOM.
+  (Math, typed arrays, basic JS). No setTimeout, no DOM.
 - You can define and use helper classes alongside the Processor class.
 
 ## Template
