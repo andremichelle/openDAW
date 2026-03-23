@@ -12,7 +12,7 @@ export namespace PublishMusic {
         }
         log("Mixdown audio...")
         const renderProgress = new DefaultObservableValue(0.0)
-        const mixdownResult = await Promises.tryCatch(OfflineEngineRenderer.start(profile.project, Option.None, renderProgress))
+        const mixdownResult = await Promises.tryCatch(OfflineEngineRenderer.start(profile.project.copy(), Option.None, renderProgress))
         if (mixdownResult.status === "rejected") {
             return panic(mixdownResult.error)
         }
