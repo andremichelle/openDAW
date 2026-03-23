@@ -24,6 +24,12 @@ export const installNoteViewMenu = (range: TimelineRange,
                     .addMenuItem(MenuItem.default({label: key, checked: value === pitchPositioner.noteHeight})
                         .setTriggerProcedure(() => pitchPositioner.noteHeight = value)))
             }),
+        MenuItem.default({label: "Center Notes", selectable: !events.isEmpty()})
+            .setTriggerProcedure(() => {
+                if (events.isEmpty()) {return}
+                const {content} = owner
+                pitchPositioner.centerNote = Math.round((content.minPitch + content.maxPitch) / 2)
+            }),
         MenuItem.default({label: "Zoom To All Notes", selectable: !events.isEmpty()})
             .setTriggerProcedure(() => {
                 if (events.isEmpty()) {return}

@@ -36,6 +36,7 @@ type Construct = {
 }
 
 const scale = new ScaleConfig()
+const pitchPositioner = new PitchPositioner()
 
 export const NoteEditor =
     ({lifecycle, service, menu: {editMenu, viewMenu}, range, snapping, reader}: Construct) => {
@@ -45,7 +46,6 @@ export const NoteEditor =
             .flatMap((adapter) => captureDevices.get(adapter.audioUnit.address.uuid))
             .map(capture => isInstanceOf(capture, CaptureMidi) ? capture : null).unwrap("No CaptureMidi available")
         const stepRecording = lifecycle.own(new DefaultObservableValue(false))
-        const pitchPositioner = lifecycle.own(new PitchPositioner())
         const modifyContext = new ObservableModifyContext<NoteModifier>()
         const propertyOwner = new DefaultObservableValue<PropertyAccessor>(NotePropertyVelocity)
         const eventsField = reader.content.box.events
@@ -107,7 +107,12 @@ export const NoteEditor =
                 return () => {
                     if (init) {
                         init = false
-                        centerNote = 60
+                        const {content} = reader
+                        if (content.events.isEmpty()) {
+                            centerNote = 60
+                        } else {
+                            centerNote = Math.round((content.minPitch + content.maxPitch) / 2)
+                        }
                     } else {
                         centerNote = pitchPositioner.centerNote
                     }
