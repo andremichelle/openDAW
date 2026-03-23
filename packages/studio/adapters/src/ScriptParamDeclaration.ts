@@ -36,7 +36,7 @@ const BoolStringMapping: StringMapping<number> = new class implements StringMapp
 }
 
 const parseSingleParam = (line: string): ParamDeclaration => {
-    const tokens = line.replace(/^\/\/ @param\s+/, "").split(/\s+/)
+    const tokens = line.replace(/^\/\/ @param\s+/, "").replace(/\s+\/\/.*$/, "").trim().split(/\s+/)
     if (tokens.length === 0) {
         throw new Error(`Malformed @param: '${line}'`)
     }
@@ -121,7 +121,7 @@ export namespace ScriptParamDeclaration {
         let match: Nullable<RegExpExecArray>
         SAMPLE_LINE.lastIndex = 0
         while ((match = SAMPLE_LINE.exec(code)) !== null) {
-            const tokens = match[0].replace(/^\/\/ @sample\s+/, "").split(/\s+/)
+            const tokens = match[0].replace(/^\/\/ @sample\s+/, "").replace(/\s+\/\/.*$/, "").trim().split(/\s+/)
             if (tokens.length === 0 || tokens[0].length === 0) {
                 throw new Error(`Malformed @sample: '${match[0]}' — expected: // @sample <name>`)
             }
