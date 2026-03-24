@@ -43,7 +43,11 @@ export const connectRoom = async (service: StudioService): Promise<void> => {
             const label = factory()
             terminator.own(label)
             const awareness = provider.awareness
-            const update = () => label.setValue(String(awareness.getStates().size))
+            const update = () => {
+                const size = awareness.getStates().size
+                console.debug(`[LiveRoom] awareness states: ${size}, keys:`, [...awareness.getStates().keys()])
+                label.setValue(String(size))
+            }
             awareness.on("update", update)
             terminator.own({terminate: () => awareness.off("update", update)})
             terminator.own(Runtime.scheduleInterval(update, 2000))
