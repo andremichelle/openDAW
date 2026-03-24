@@ -78,8 +78,7 @@ export class RegionReader<REGION extends LoopableRegionBoxAdapter<CONTENT>, CONT
                 switch (true) {
                     case update.matches(region.box.position):
                     case update.matches(region.box.duration):
-                    case update.matches(region.box.loopOffset):
-                    case update.matches(region.box.loopDuration): {
+                    case update.matches(region.box.loopOffset): {
                         run.request()
                         return
                     }
