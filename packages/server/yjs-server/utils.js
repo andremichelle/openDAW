@@ -240,6 +240,7 @@ export const setupWSConnection = (conn, req, {docName = (req.url || '').slice(1)
     // ✅ Allow only specific origins
     const allowedOrigins = [
         'https://opendaw.studio',
+        'https://dev.opendaw.studio',
         'https://live.opendaw.studio',
         'https://localhost:8080',
         'https://inspector.yjs.dev'
