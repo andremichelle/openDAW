@@ -43,22 +43,3 @@ jobs:
           BRANCH_NAME: ${{ github.ref_name }}
         run: |
           npx ts-node --transpile-only deploy/run.ts
-
-  deploy-yjs-server:
-    runs-on: ubuntu-latest
-    environment: production
-    needs: build-and-deploy
-    steps:
-      - name: ⬇️ Checkout
-        uses: actions/checkout@v5
-
-      - name: 🚀 Deploy yjs-server
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_SERVER: ${{ secrets.SSH_SERVER }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H "${SSH_SERVER#*@}" >> ~/.ssh/known_hosts
-          bash deploy/deploy-yjs.sh
