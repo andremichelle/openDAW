@@ -117,7 +117,9 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
         <Button lifecycle={lifecycle}
                 onClick={toggleEditor}
                 appearance={{framed: true, tooltip: "Toggle Code Editor"}}
-                style={{fontSize: "16px"}}><Icon symbol={IconSymbol.Code}/></Button>
+                style={{fontSize: "16px", marginTop: "4px"}}>
+            <Icon symbol={IconSymbol.Code}/>
+        </Button>
     )
     let lastErrorMessage = ""
     const errorIcon: HTMLElement = (
