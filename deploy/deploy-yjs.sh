@@ -6,7 +6,7 @@ set -euo pipefail
 REMOTE_DIR="/opt/opendaw/yjs-server"
 
 export SSHPASS="$SSH_PASSWORD"
-SSH_CMD="ssh -p 22 -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=accept-new"
+SSH_CMD="ssh -p 22 -o PreferredAuthentications=keyboard-interactive,password -o PubkeyAuthentication=no -o StrictHostKeyChecking=accept-new"
 
 echo "Syncing yjs-server files..."
 sshpass -e rsync -avz --delete \
