@@ -20,6 +20,9 @@ jobs:
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "${SSH_SERVER#*@}" >> ~/.ssh/known_hosts 2>/dev/null
+          echo "Key starts with: $(head -1 ~/.ssh/id_rsa)"
+          echo "Key line count: $(wc -l < ~/.ssh/id_rsa)"
+          ssh -vT "$SSH_SERVER" exit 2>&1 | grep -E "Offering|Trying|Authentication" || true
 
       - name: 🚀 Deploy yjs-server
         env:
