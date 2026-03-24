@@ -5,11 +5,10 @@ import {WerkstattParameterBox, WerkstattSampleBox} from "@opendaw/studio-boxes"
 import {ParamDeclaration, SampleDeclaration, ScriptParamDeclaration} from "./ScriptParamDeclaration"
 
 const COMPILER_VERSION = 1
-const FLOAT_TOLERANCE = 1e-6
 
 const createHeaderPattern = (tag: string): RegExp => new RegExp(`^// @${tag} (\\w+) (\\d+) (\\d+)\n`)
 
-const parseHeader = (source: string, pattern: RegExp): {userCode: string, update: number} => {
+const parseHeader = (source: string, pattern: RegExp): { userCode: string, update: number } => {
     const match = source.match(pattern)
     return match !== null ? {
         userCode: source.slice(match[0].length),
@@ -137,7 +136,7 @@ const registerWorklet = async (audioContext: BaseAudioContext, wrappedCode: stri
 export namespace ScriptCompiler {
     export interface DeviceBox {
         readonly graph: BoxGraph
-        readonly address: {readonly uuid: UUID.Bytes}
+        readonly address: { readonly uuid: UUID.Bytes }
         readonly code: StringField
         readonly parameters: Field<Pointers.Parameter>
         readonly samples: Field<Pointers.Sample>
@@ -159,6 +158,10 @@ export namespace ScriptCompiler {
             load: async (audioContext: BaseAudioContext, deviceBox: DeviceBox): Promise<void> => {
                 const {userCode, update} = parseHeader(deviceBox.code.getValue(), headerPattern)
                 if (update === 0) {return}
+                const params = ScriptParamDeclaration.parseParams(userCode)
+                const declMap = new Map<string, ParamDeclaration>()
+                for (const declaration of params) {declMap.set(declaration.label, declaration)}
+                cachedParamDeclarations.set(deviceBox, declMap)
                 const uuid = UUID.toString(deviceBox.address.uuid)
                 const wrappedCode = wrapCode(config, uuid, update, userCode)
                 validateCode(wrappedCode)
