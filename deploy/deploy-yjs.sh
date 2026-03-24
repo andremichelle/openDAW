@@ -13,8 +13,11 @@ rsync -avz --delete \
 echo "Installing dependencies and restarting..."
 ssh -o StrictHostKeyChecking=accept-new "$SSH_SERVER" << EOF
   cd $REMOTE_DIR
+  systemctl stop opendaw-yjs 2>/dev/null || true
+  fuser -k 443/tcp 2>/dev/null || true
+  sleep 1
   npm install --omit=dev
-  systemctl restart opendaw-yjs
+  systemctl start opendaw-yjs
   systemctl status opendaw-yjs --no-pager
 EOF
 
