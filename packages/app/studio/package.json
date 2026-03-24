@@ -21,6 +21,7 @@
     "@opendaw/studio-adapters": "^0.0.99",
     "@opendaw/studio-boxes": "^0.0.83",
     "@opendaw/studio-core": "^0.0.126",
+    "@opendaw/studio-p2p": "^0.0.1",
     "@opendaw/studio-enums": "^0.0.68",
     "@opendaw/studio-scripting": "^0.0.52",
     "@types/d3-force": "^3.0.10",

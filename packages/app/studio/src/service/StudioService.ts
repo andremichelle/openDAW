@@ -20,6 +20,7 @@ import {
     tryCatch,
     UUID
 } from "@opendaw/lib-std"
+import {ChainedSampleProvider, ChainedSoundfontProvider} from "@opendaw/studio-p2p"
 import {populateStudioMenu} from "@/service/StudioMenu"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
@@ -127,6 +128,8 @@ export class StudioService implements ProjectEnv {
                 readonly audioDevices: AudioOutputDevice,
                 readonly sampleManager: GlobalSampleLoaderManager,
                 readonly soundfontManager: GlobalSoundfontLoaderManager,
+                readonly chainedSampleProvider: ChainedSampleProvider,
+                readonly chainedSoundfontProvider: ChainedSoundfontProvider,
                 readonly cloudAuthManager: CloudAuthManager,
                 readonly buildInfo: BuildInfo) {
         this.#sampleService = new SampleService(audioContext)

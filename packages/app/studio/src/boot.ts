@@ -29,6 +29,7 @@ import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
 import {AudioData} from "@opendaw/lib-dsp"
+import {ChainedSampleProvider, ChainedSoundfontProvider} from "@opendaw/studio-p2p"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Menu} from "@/ui/components/Menu"
 
@@ -73,20 +74,23 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
                 console.debug(`AudioContext resumed (${context.state})`)), {capture: true, once: true})
     }
     const audioDevices = await AudioOutputDevice.create(context)
-    const sampleManager = new GlobalSampleLoaderManager({
+    const chainedSampleProvider = new ChainedSampleProvider({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[AudioData, SampleMetaData]> =>
             OpenSampleAPI.get().load(uuid, progress)
     })
-    const soundfontManager = new GlobalSoundfontLoaderManager({
+    const chainedSoundfontProvider = new ChainedSoundfontProvider({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[ArrayBuffer, SoundfontMetaData]> =>
             OpenSoundfontAPI.get().load(uuid, progress)
     })
+    const sampleManager = new GlobalSampleLoaderManager(chainedSampleProvider)
+    const soundfontManager = new GlobalSoundfontLoaderManager(chainedSoundfontProvider)
     const cloudAuthManager = CloudAuthManager.create({
         Dropbox: "jtehjzxaxf3bf1l",
         GoogleDrive: "628747153367-gt1oqcn3trr9l9a7jhigja6l1t3f1oik.apps.googleusercontent.com"
     })
     const service: StudioService = new StudioService(context, audioWorklets.value, audioDevices,
-        sampleManager, soundfontManager, cloudAuthManager, buildInfo)
+        sampleManager, soundfontManager, chainedSampleProvider, chainedSoundfontProvider,
+        cloudAuthManager, buildInfo)
     StudioShortcutManager.install(service)
     const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand())
     const surface = Surface.main({
