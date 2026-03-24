@@ -6,6 +6,7 @@ import {
     DefaultObservableValue,
     EmptyProcedure,
     isAbsent,
+    isDefined,
     Lifecycle,
     RuntimeNotifier,
     Terminator,
@@ -71,6 +72,40 @@ export const ShadertoyEditor = ({service, lifecycle}: Construct) => {
                         automaticLayout: true
                     })
                     const allowed = ["c", "v", "x", "a", "z", "y"]
+                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
+                        const selection = editor.getSelection()
+                        if (!isDefined(selection)) {return}
+                        const text = selection.isEmpty()
+                            ? model.getLineContent(selection.startLineNumber) + model.getEOL()
+                            : model.getValueInRange(selection)
+                        navigator.clipboard.writeText(text).catch(console.warn)
+                    })
+                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
+                        const selection = editor.getSelection()
+                        if (!isDefined(selection)) {return}
+                        const text = selection.isEmpty()
+                            ? model.getLineContent(selection.startLineNumber) + model.getEOL()
+                            : model.getValueInRange(selection)
+                        navigator.clipboard.writeText(text).then(() => {
+                            if (selection.isEmpty()) {
+                                editor.executeEdits("cut", [{
+                                    range: model.getFullModelRange().setStartPosition(selection.startLineNumber, 1)
+                                        .setEndPosition(selection.startLineNumber + 1, 1),
+                                    text: ""
+                                }])
+                            } else {
+                                editor.executeEdits("cut", [{range: selection, text: ""}])
+                            }
+                        }).catch(console.warn)
+                    })
+                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+                        navigator.clipboard.readText().then(text => {
+                            const selection = editor.getSelection()
+                            if (isDefined(selection)) {
+                                editor.executeEdits("paste", [{range: selection, text}])
+                            }
+                        }).catch(console.warn)
+                    })
                     const canCompile = (code: string): Attempt<void, string> => {
                         const canvas = document.createElement("canvas")
                         const gl = canvas.getContext("webgl2")
