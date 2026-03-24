@@ -262,8 +262,8 @@ Once an RTCPeerConnection is established, asset data flows over a data channel n
 
 ```
 ┌──────────┬──────────┬──────────┬──────────────────┐
-│ msg type │ asset ID │ chunk #  │ payload           │
-│ 1 byte   │ 32 bytes │ 4 bytes  │ up to 64KB        │
+│ msg type │ asset ID  │ chunk #  │ payload           │
+│ 1 byte   │ 16 bytes │ 4 bytes  │ up to 64KB        │
 └──────────┴──────────┴──────────┴──────────────────┘
 
 msg type:
