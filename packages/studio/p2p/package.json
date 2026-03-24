@@ -22,7 +22,10 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@opendaw/lib-std": "^0.0.72"
+    "@opendaw/lib-std": "^0.0.72",
+    "@opendaw/lib-dsp": "^0.0.77",
+    "@opendaw/studio-adapters": "^0.0.99",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.27",
