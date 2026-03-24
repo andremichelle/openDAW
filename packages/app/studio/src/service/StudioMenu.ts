@@ -4,6 +4,7 @@ import {RouteLocation} from "@opendaw/lib-jsx"
 import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {CloudBackup, FilePickerAcceptTypes, MenuItem, StudioPreferences, YService} from "@opendaw/studio-core"
+import {P2PSession, type SignalingSocket} from "@opendaw/studio-p2p"
 import {StudioService} from "@/service/StudioService"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {VideoRenderer} from "@/video/VideoRenderer"
@@ -125,6 +126,12 @@ export const populateStudioMenu = (service: StudioService) => {
                                         YService.getOrCreateRoom(service.projectProfileService.getValue()
                                             .map(profile => profile.project), service, roomName))
                                     if (status === "resolved") {
+                                        const p2pSession = new P2PSession({
+                                            chainedSampleProvider: service.chainedSampleProvider,
+                                            chainedSoundfontProvider: service.chainedSoundfontProvider,
+                                            createSocket: url => new WebSocket(url) as SignalingSocket
+                                        }, roomName, "wss://live.opendaw.studio")
+                                        project.own(p2pSession)
                                         service.projectProfileService.setProject(project, roomName)
                                     } else {
                                         await RuntimeNotifier.info({

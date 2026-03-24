@@ -1,30 +1,29 @@
 import {Option, Progress, UUID} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
 import {SoundfontMetaData} from "@opendaw/studio-adapters"
+import {type Fetcher} from "./ChainedProvider"
 
-export interface SoundfontProvider {
-    fetch(uuid: UUID.Bytes, progress: Progress.Handler): Promise<[ArrayBuffer, SoundfontMetaData]>
-}
+type SoundfontResult = [ArrayBuffer, SoundfontMetaData]
+export type SoundfontFetcher = Fetcher<SoundfontResult>
 
-export class ChainedSoundfontProvider implements SoundfontProvider {
-    readonly #cloud: SoundfontProvider
+export class ChainedSoundfontProvider implements SoundfontFetcher {
+    readonly #cloud: SoundfontFetcher
 
-    #peer: Option<SoundfontProvider> = Option.None
+    #peer: Option<SoundfontFetcher> = Option.None
 
-    constructor(cloud: SoundfontProvider) {
+    constructor(cloud: SoundfontFetcher) {
         this.#cloud = cloud
     }
 
-    attachPeer(provider: SoundfontProvider): void {this.#peer = Option.wrap(provider)}
+    attachPeer(provider: SoundfontFetcher): void {this.#peer = Option.wrap(provider)}
     detachPeer(): void {this.#peer = Option.None}
 
-    async fetch(uuid: UUID.Bytes, progress: Progress.Handler): Promise<[ArrayBuffer, SoundfontMetaData]> {
-        try {
-            return await this.#cloud.fetch(uuid, progress)
-        } catch (cloudError: unknown) {
-            return this.#peer.match({
-                none: () => {throw cloudError},
-                some: peer => peer.fetch(uuid, progress)
-            })
-        }
+    async fetch(uuid: UUID.Bytes, progress: Progress.Handler): Promise<SoundfontResult> {
+        const result = await Promises.tryCatch(this.#cloud.fetch(uuid, progress))
+        if (result.status === "resolved") {return result.value}
+        return this.#peer.match({
+            none: () => {throw result.error},
+            some: peer => peer.fetch(uuid, progress)
+        })
     }
 }

@@ -1,31 +1,30 @@
 import {Option, Progress, UUID} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
 import {AudioData} from "@opendaw/lib-dsp"
 import {SampleMetaData} from "@opendaw/studio-adapters"
+import {type Fetcher} from "./ChainedProvider"
 
-export interface SampleProvider {
-    fetch(uuid: UUID.Bytes, progress: Progress.Handler): Promise<[AudioData, SampleMetaData]>
-}
+type SampleResult = [AudioData, SampleMetaData]
+export type SampleFetcher = Fetcher<SampleResult>
 
-export class ChainedSampleProvider implements SampleProvider {
-    readonly #cloud: SampleProvider
+export class ChainedSampleProvider implements SampleFetcher {
+    readonly #cloud: SampleFetcher
 
-    #peer: Option<SampleProvider> = Option.None
+    #peer: Option<SampleFetcher> = Option.None
 
-    constructor(cloud: SampleProvider) {
+    constructor(cloud: SampleFetcher) {
         this.#cloud = cloud
     }
 
-    attachPeer(provider: SampleProvider): void {this.#peer = Option.wrap(provider)}
+    attachPeer(provider: SampleFetcher): void {this.#peer = Option.wrap(provider)}
     detachPeer(): void {this.#peer = Option.None}
 
-    async fetch(uuid: UUID.Bytes, progress: Progress.Handler): Promise<[AudioData, SampleMetaData]> {
-        try {
-            return await this.#cloud.fetch(uuid, progress)
-        } catch (cloudError: unknown) {
-            return this.#peer.match({
-                none: () => {throw cloudError},
-                some: peer => peer.fetch(uuid, progress)
-            })
-        }
+    async fetch(uuid: UUID.Bytes, progress: Progress.Handler): Promise<SampleResult> {
+        const result = await Promises.tryCatch(this.#cloud.fetch(uuid, progress))
+        if (result.status === "resolved") {return result.value}
+        return this.#peer.match({
+            none: () => {throw result.error},
+            some: peer => peer.fetch(uuid, progress)
+        })
     }
 }

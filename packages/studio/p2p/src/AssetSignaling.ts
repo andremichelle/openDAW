@@ -9,9 +9,9 @@ export type SignalingMessage = {
 export interface SignalingSocket {
     send(data: string): void
     close(): void
-    onmessage: ((event: {data: string}) => void) | null
-    onclose: (() => void) | null
-    onerror: ((error: unknown) => void) | null
+    onmessage: ((event: {readonly data: string}) => void) | null
+    onclose: ((event: unknown) => void) | null
+    onerror: ((event: unknown) => void) | null
 }
 
 export class AssetSignaling implements Terminable {
