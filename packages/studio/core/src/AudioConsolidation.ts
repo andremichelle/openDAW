@@ -1,5 +1,5 @@
 import {Arrays, Errors, isDefined, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
-import {AudioData, RegionCollection} from "@opendaw/lib-dsp"
+import {AudioData, RegionCollection, WavFile} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioRegionBoxAdapter, ExportStemsConfiguration} from "@opendaw/studio-adapters"
 import {
@@ -8,7 +8,6 @@ import {
     OfflineEngineRenderer,
     Project,
     SampleService,
-    WavFile,
     Workers
 } from "./index"
 

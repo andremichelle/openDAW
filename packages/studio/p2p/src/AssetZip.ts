@@ -1,8 +1,6 @@
 import JSZip from "jszip"
-import {AudioData} from "@opendaw/lib-dsp"
+import {AudioData, WavFile} from "@opendaw/lib-dsp"
 import {SampleMetaData, SoundfontMetaData} from "@opendaw/studio-adapters"
-
-export type WavDecoder = (buffer: ArrayBuffer) => AudioData
 
 export namespace AssetZip {
     export const packSample = async (wavBytes: ArrayBuffer, meta: SampleMetaData): Promise<ArrayBuffer> => {
@@ -12,11 +10,11 @@ export namespace AssetZip {
         return zip.generateAsync({type: "arraybuffer"})
     }
 
-    export const unpackSample = async (zipBytes: ArrayBuffer, decodeWav: WavDecoder): Promise<[AudioData, SampleMetaData]> => {
+    export const unpackSample = async (zipBytes: ArrayBuffer): Promise<[AudioData, SampleMetaData]> => {
         const zip = await JSZip.loadAsync(zipBytes)
         const wavBytes = await zip.file("audio.wav")!.async("arraybuffer")
         const metaJson = await zip.file("meta.json")!.async("string")
-        const audioData = decodeWav(wavBytes)
+        const audioData = WavFile.decodeFloats(wavBytes)
         const meta = SampleMetaData.parse(JSON.parse(metaJson))
         return [audioData, meta]
     }

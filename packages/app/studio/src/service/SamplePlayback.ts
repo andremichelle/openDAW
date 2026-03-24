@@ -10,8 +10,8 @@ import {
     unitValue,
     UUID
 } from "@opendaw/lib-std"
-import {OpenSampleAPI, SampleStorage, WavFile} from "@opendaw/studio-core"
-import {dbToGain} from "@opendaw/lib-dsp"
+import {OpenSampleAPI, SampleStorage} from "@opendaw/studio-core"
+import {dbToGain, WavFile} from "@opendaw/lib-dsp"
 
 export type PlaybackEvent = {
     type: "idle"

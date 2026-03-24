@@ -1,4 +1,5 @@
-import {OfflineEngineRenderer, ProjectBundle, ProjectProfile, WavFile} from "@opendaw/studio-core"
+import {OfflineEngineRenderer, ProjectBundle, ProjectProfile} from "@opendaw/studio-core"
+import {WavFile} from "@opendaw/lib-dsp"
 import {DefaultObservableValue, isDefined, Option, panic, Procedure, Progress} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 

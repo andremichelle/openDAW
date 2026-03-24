@@ -1,13 +1,12 @@
 import {DefaultObservableValue, Errors, Option, panic, RuntimeNotifier} from "@opendaw/lib-std"
-import {AudioData} from "@opendaw/lib-dsp"
+import {AudioData, WavFile} from "@opendaw/lib-dsp"
 import {
     ExternalLib,
     FFmpegConverter,
     FFmpegWorker,
     OfflineEngineRenderer,
     ProjectMeta,
-    ProjectProfile,
-    WavFile
+    ProjectProfile
 } from "@opendaw/studio-core"
 import {Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"

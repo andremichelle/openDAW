@@ -1,5 +1,5 @@
 import {Arrays, int, panic} from "@opendaw/lib-std"
-import {AudioData} from "@opendaw/lib-dsp"
+import {AudioData} from "./audio-data"
 
 export namespace WavFile {
     const MAGIC_RIFF = 0x46464952
@@ -42,7 +42,6 @@ export namespace WavFile {
         const numberOfFrames = Math.floor(dataSize / blockAlign)
         const audioData = AudioData.create(sampleRate, numberOfFrames, numberOfChannels)
         if (audioFormat === 3 && bitsPerSample === 32) {
-            // 32-bit float
             const interleaved = new Float32Array(buffer, dataOffset, numberOfFrames * numberOfChannels)
             for (let i = 0, w = 0; i < numberOfFrames; i++) {
                 for (let c = 0; c < numberOfChannels; c++) {
@@ -50,7 +49,6 @@ export namespace WavFile {
                 }
             }
         } else if (audioFormat === 1 && bitsPerSample === 16) {
-            // 16-bit PCM
             for (let i = 0, offset = dataOffset; i < numberOfFrames; i++) {
                 for (let c = 0; c < numberOfChannels; c++) {
                     audioData.frames[c][i] = view.getInt16(offset, true) / 32768
@@ -58,7 +56,6 @@ export namespace WavFile {
                 }
             }
         } else if (audioFormat === 1 && bitsPerSample === 24) {
-            // 24-bit PCM
             for (let i = 0, offset = dataOffset; i < numberOfFrames; i++) {
                 for (let c = 0; c < numberOfChannels; c++) {
                     const low = view.getUint16(offset, true)
@@ -73,13 +70,20 @@ export namespace WavFile {
         return audioData
     }
 
-    export const encodeFloats = (audio: AudioData | AudioBuffer, maxLength: int = Number.MAX_SAFE_INTEGER): ArrayBuffer => {
+    type AudioBufferLike = {
+        readonly sampleRate: number
+        readonly length: number
+        readonly numberOfChannels: number
+        getChannelData(channel: number): Float32Array
+    }
+
+    export const encodeFloats = (audio: AudioData | AudioBufferLike, maxLength: int = Number.MAX_SAFE_INTEGER): ArrayBuffer => {
         const bytesPerChannel = Float32Array.BYTES_PER_ELEMENT
         const sampleRate = audio.sampleRate
         let numberOfFrames: number
         let numberOfChannels: number
         let frames: ReadonlyArray<Float32Array>
-        if (audio instanceof AudioBuffer) {
+        if ("getChannelData" in audio) {
             frames = Arrays.create(index => audio.getChannelData(index), audio.numberOfChannels)
             numberOfFrames = audio.length
             numberOfChannels = audio.numberOfChannels
@@ -96,8 +100,8 @@ export namespace WavFile {
         view.setUint32(4, size - 8, true)
         view.setUint32(8, MAGIC_WAVE, true)
         view.setUint32(12, MAGIC_FMT, true)
-        view.setUint32(16, 16, true) // chunk length
-        view.setUint16(20, 3, true) // compression
+        view.setUint32(16, 16, true)
+        view.setUint16(20, 3, true)
         view.setUint16(22, numberOfChannels, true)
         view.setUint32(24, sampleRate, true)
         view.setUint32(28, sampleRate * numberOfChannels * bytesPerChannel, true)

@@ -4,4 +4,4 @@ export {
     encodeHeader, decodeHeader, encode, decode, split, reassemble
 } from "./ChunkProtocol"
 export {AssetSignaling, type SignalingMessage, type SignalingSocket} from "./AssetSignaling"
-export {AssetZip, type WavDecoder} from "./AssetZip"
+export {AssetZip} from "./AssetZip"

@@ -5,7 +5,7 @@ import {Sample} from "@opendaw/studio-adapters"
 import {OpenSampleAPI, SampleStorage} from "../samples"
 import {CloudHandler} from "./CloudHandler"
 import {Workers} from "../Workers"
-import {WavFile} from "../WavFile"
+import {WavFile} from "@opendaw/lib-dsp"
 
 type SampleDomains = Record<"stock" | "local" | "cloud", ReadonlyArray<Sample>>
 

@@ -3,8 +3,8 @@ import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Files, Html} from "@opendaw/lib-dom"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
-import {estimateBpm} from "@opendaw/lib-dsp"
-import {FilePickerAcceptTypes, OpenSampleAPI, WavFile} from "@opendaw/studio-core"
+import {estimateBpm, WavFile} from "@opendaw/lib-dsp"
+import {FilePickerAcceptTypes, OpenSampleAPI} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "SampleUploadPage")
 
