@@ -5,3 +5,5 @@ export {
 } from "./ChunkProtocol"
 export {AssetSignaling, type SignalingMessage, type SignalingSocket} from "./AssetSignaling"
 export {AssetZip} from "./AssetZip"
+export {ChainedSampleProvider, type SampleProvider} from "./ChainedSampleProvider"
+export {ChainedSoundfontProvider, type SoundfontProvider} from "./ChainedSoundfontProvider"
