@@ -1,0 +1,20 @@
+name: Restart yjs-server
+
+on:
+  workflow_dispatch:
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Restart yjs-server via SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_SERVER: ${{ secrets.SSH_SERVER }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${SSH_SERVER#*@}" >> ~/.ssh/known_hosts
+          ssh "$SSH_SERVER" "systemctl restart opendaw-yjs && systemctl status opendaw-yjs --no-pager"

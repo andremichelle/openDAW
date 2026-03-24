@@ -80,6 +80,7 @@ cat opendaw-deploy.pub >> /root/.ssh/authorized_keys
 
 In GitHub repo → Settings → Secrets and variables → Actions → add:
 - `SSH_PRIVATE_KEY`: contents of `opendaw-deploy` (private key)
+- `SSH_SERVER`: `root@159.69.124.128` (user@host, not hardcoded in scripts)
 
 ### 4. Add deploy script
 
