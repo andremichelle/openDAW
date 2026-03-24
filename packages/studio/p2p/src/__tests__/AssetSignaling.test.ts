@@ -1,17 +1,25 @@
 import {describe, expect, it, vi} from "vitest"
 import {AssetSignaling, type SignalingSocket} from "../AssetSignaling"
 
-const createMockSocket = (): SignalingSocket & { sent: Array<string>, simulateMessage: (data: string) => void } => {
-    const socket: SignalingSocket & { sent: Array<string>, simulateMessage: (data: string) => void } = {
+const createMockSocket = (connected: boolean = true): SignalingSocket & { sent: Array<string>, simulateMessage: (data: string) => void, simulateOpen: () => void } => {
+    const socket: SignalingSocket & { sent: Array<string>, simulateMessage: (data: string) => void, simulateOpen: () => void } = {
         sent: [],
+        readyState: connected ? 1 : 0,
         send(data: string) {this.sent.push(data)},
         close() {},
+        onopen: null,
         onmessage: null,
         onclose: null,
         onerror: null,
         simulateMessage(data: string) {
             if (this.onmessage !== null) {
                 this.onmessage({data})
+            }
+        },
+        simulateOpen() {
+            this.readyState = 1
+            if (this.onopen !== null) {
+                this.onopen({})
             }
         }
     }
@@ -36,15 +44,15 @@ describe("AssetSignaling", () => {
         })
     })
     describe("publish", () => {
-        it("sends message with topic attached", () => {
+        it("sends message wrapped in publish envelope", () => {
             const socket = createMockSocket()
             const signaling = new AssetSignaling(socket, "assets:room")
             signaling.publish({type: "asset-request", missing: ["uuid-1", "uuid-2"]})
             expect(socket.sent.length).toBe(2) // subscribe + publish
             expect(JSON.parse(socket.sent[1])).toEqual({
-                type: "asset-request",
+                type: "publish",
                 topic: "assets:room",
-                missing: ["uuid-1", "uuid-2"]
+                data: {type: "asset-request", missing: ["uuid-1", "uuid-2"]}
             })
         })
         it("does not send after terminate", () => {
@@ -63,15 +71,13 @@ describe("AssetSignaling", () => {
             const received: Array<unknown> = []
             signaling.subscribe(message => received.push(message))
             socket.simulateMessage(JSON.stringify({
-                type: "asset-inventory",
+                type: "publish",
                 topic: "assets:room",
-                peerId: "abc",
-                have: ["uuid-1"]
+                data: {type: "asset-inventory", peerId: "abc", have: ["uuid-1"]}
             }))
             expect(received.length).toBe(1)
             expect(received[0]).toEqual({
                 type: "asset-inventory",
-                topic: "assets:room",
                 peerId: "abc",
                 have: ["uuid-1"]
             })
@@ -82,9 +88,9 @@ describe("AssetSignaling", () => {
             const received: Array<unknown> = []
             signaling.subscribe(message => received.push(message))
             socket.simulateMessage(JSON.stringify({
-                type: "asset-inventory",
+                type: "publish",
                 topic: "assets:room-b",
-                peerId: "abc"
+                data: {type: "asset-inventory", peerId: "abc"}
             }))
             expect(received.length).toBe(0)
         })
@@ -103,9 +109,9 @@ describe("AssetSignaling", () => {
             signaling.subscribe(message => received.push(message))
             signaling.terminate()
             socket.simulateMessage(JSON.stringify({
-                type: "asset-inventory",
+                type: "publish",
                 topic: "assets:room",
-                peerId: "abc"
+                data: {type: "asset-inventory", peerId: "abc"}
             }))
             expect(received.length).toBe(0)
         })

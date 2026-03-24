@@ -45,10 +45,13 @@ export namespace OpfsWorker {
             async exists(path: string): Promise<boolean> {
                 return await this.#acquireLock(path, async () => {
                     if (DEBUG) {console.debug(`exists ${path}`)}
-                    const handle = await this.#resolveFile(path)
+                    const segments = pathToSegments(path)
+                    const {status: folderStatus} = await Promises.tryCatch(this.#resolveFolder(segments))
+                    if (folderStatus === "resolved") {return true}
+                    const {status: fileStatus, value: handle} = await Promises.tryCatch(this.#resolveFile(path))
+                    if (fileStatus === "rejected") {return false}
                     try {
-                        const size = handle.getSize()
-                        return size > 0
+                        return handle.getSize() > 0
                     } finally {
                         handle.close()
                     }
