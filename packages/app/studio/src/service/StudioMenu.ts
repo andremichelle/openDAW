@@ -1,15 +1,14 @@
-import {EmptyExec, isAbsent, RuntimeNotifier} from "@opendaw/lib-std"
+import {EmptyExec} from "@opendaw/lib-std"
 import {Browser, Files} from "@opendaw/lib-dom"
 import {RouteLocation} from "@opendaw/lib-jsx"
 import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {CloudBackup, FilePickerAcceptTypes, MenuItem, SampleStorage, SoundfontStorage, StudioPreferences, Workers, YService} from "@opendaw/studio-core"
-import {P2PSession, type SignalingSocket} from "@opendaw/studio-p2p"
-import {UUID} from "@opendaw/lib-std"
+import {CloudBackup, FilePickerAcceptTypes, MenuItem} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {VideoRenderer} from "@/video/VideoRenderer"
 import {createDebugMenu} from "@/service/DebugMenu"
+import {connectRoom} from "@/service/StudioLiveRoom.tsx"
 
 export const populateStudioMenu = (service: StudioService) => {
     const Global = GlobalShortcuts
@@ -109,55 +108,8 @@ export const populateStudioMenu = (service: StudioService) => {
                                 }).setTriggerProcedure(() => service.toggleSoftwareKeyboard())
                             )
                         }),
-                    MenuItem.default({
-                        label: "Experimental Features",
-                        hidden: !StudioPreferences.settings.debug["enable-beta-features"],
-                        separatorBefore: true
-                    }).setRuntimeChildrenProcedure(parent => {
-                        parent.addMenuItem(
-                            MenuItem.default({label: "Connect Room..."})
-                                .setTriggerProcedure(async () => {
-                                    const roomName = prompt("Enter a room name:", "")
-                                    if (isAbsent(roomName)) {return}
-                                    const dialog = RuntimeNotifier.progress({
-                                        headline: "Connecting to Room...",
-                                        message: "Please wait while we connect to the room..."
-                                    })
-                                    const {status, value: project, error} = await Promises.tryCatch(
-                                        YService.getOrCreateRoom(service.projectProfileService.getValue()
-                                            .map(profile => profile.project), service, roomName))
-                                    if (status === "resolved") {
-                                        const p2pSession = new P2PSession({
-                                            chainedSampleProvider: service.chainedSampleProvider,
-                                            chainedSoundfontProvider: service.chainedSoundfontProvider,
-                                            createSocket: url => new WebSocket(url) as SignalingSocket,
-                                            localPeerId: UUID.toString(UUID.generate()),
-                                            assetReader: {
-                                                hasSample: uuid => SampleStorage.get().exists(uuid),
-                                                hasSoundfont: uuid => Workers.Opfs.exists(`${SoundfontStorage.Folder}/${UUID.toString(uuid)}`),
-                                                readSample: async uuid => {
-                                                    const path = `${SampleStorage.Folder}/${UUID.toString(uuid)}`
-                                                    const [wavBytes, metaBytes] = await Promise.all([
-                                                        Workers.Opfs.read(`${path}/audio.wav`),
-                                                        Workers.Opfs.read(`${path}/meta.json`)
-                                                    ])
-                                                    return [wavBytes.buffer as ArrayBuffer, JSON.parse(new TextDecoder().decode(metaBytes))]
-                                                },
-                                                readSoundfont: uuid => SoundfontStorage.get().load(uuid)
-                                            }
-                                        }, roomName, "wss://live.opendaw.studio")
-                                        project.own(p2pSession)
-                                        service.projectProfileService.setProject(project, roomName)
-                                    } else {
-                                        await RuntimeNotifier.info({
-                                            headline: "Failed Connecting Room",
-                                            message: String(error)
-                                        })
-                                    }
-                                    dialog.terminate()
-                                })
-                        )
-                    }),
+                    MenuItem.default({label: "Join Live Room..."})
+                        .setTriggerProcedure(() => connectRoom(service)),
                     MenuItem.default({label: "Script Editor", separatorBefore: true})
                         .setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
                     MenuItem.default({
