@@ -16,6 +16,8 @@ export class AssetPeerConnection implements Terminable {
     readonly #signaling: AssetSignaling
     readonly #localPeerId: string
     readonly #remotePeerId: string
+    readonly #pendingCandidates: Array<RTCIceCandidateInit> = []
+    #remoteDescriptionSet: boolean = false
     #channel: RTCDataChannel | null = null
     #terminated: boolean = false
 
@@ -32,7 +34,6 @@ export class AssetPeerConnection implements Terminable {
         }
         this.#connection.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
             if (event.candidate !== null) {
-                console.debug("[P2P:RTC] sending ICE candidate to", remotePeerId)
                 this.#signaling.publish({
                     type: "rtc-ice-candidate",
                     peerId: this.#localPeerId,
@@ -68,6 +69,8 @@ export class AssetPeerConnection implements Terminable {
             resolve(event.channel)
         }
         await this.#connection.setRemoteDescription({type: "offer", sdp})
+        this.#remoteDescriptionSet = true
+        await this.#drainPendingCandidates()
         const answer = await this.#connection.createAnswer()
         await this.#connection.setLocalDescription(answer)
         this.#signaling.publish({
@@ -81,10 +84,16 @@ export class AssetPeerConnection implements Terminable {
 
     async handleAnswer(sdp: string): Promise<void> {
         await this.#connection.setRemoteDescription({type: "answer", sdp})
+        this.#remoteDescriptionSet = true
+        await this.#drainPendingCandidates()
     }
 
     async handleIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
-        await this.#connection.addIceCandidate(candidate)
+        if (this.#remoteDescriptionSet) {
+            await this.#connection.addIceCandidate(candidate)
+        } else {
+            this.#pendingCandidates.push(candidate)
+        }
     }
 
     async sendWithBackpressure(channel: RTCDataChannel, data: ArrayBuffer): Promise<void> {
@@ -98,6 +107,13 @@ export class AssetPeerConnection implements Terminable {
             await promise
         }
         channel.send(data)
+    }
+
+    async #drainPendingCandidates(): Promise<void> {
+        for (const candidate of this.#pendingCandidates) {
+            await this.#connection.addIceCandidate(candidate)
+        }
+        this.#pendingCandidates.length = 0
     }
 
     terminate(): void {

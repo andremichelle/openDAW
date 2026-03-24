@@ -22,6 +22,8 @@ export class PeerAssetProvider {
     readonly #pendingRequests: Map<string, PendingRequest> = new Map()
     readonly #incomingChunks: Map<string, Map<number, Uint8Array>> = new Map()
     readonly #transferMeta: Map<string, {totalChunks: number}> = new Map()
+    readonly #knownPeers: Set<string> = new Set()
+    readonly #transferringAssets: Set<string> = new Set()
 
     constructor(signaling: AssetSignaling, localPeerId: string) {
         this.#signaling = signaling
@@ -47,17 +49,33 @@ export class PeerAssetProvider {
         const uuidString = UUID.toString(uuid)
         const {promise, resolve, reject} = Promise.withResolvers<ArrayBuffer>()
         this.#pendingRequests.set(uuidString, {uuid, uuidString, assetType, progress, resolve, reject})
+        this.#broadcastRequest(uuidString, assetType)
+        return promise
+    }
+
+    #broadcastRequest(uuidString: string, assetType: string): void {
         console.debug("[P2P:Provider] broadcasting asset-request for", uuidString, assetType)
         this.#signaling.publish({
             type: "asset-request",
             peerId: this.#localPeerId,
             assets: [{uuid: uuidString, assetType}]
         })
-        return promise
+    }
+
+    #rebroadcastPending(): void {
+        for (const pending of this.#pendingRequests.values()) {
+            if (this.#transferringAssets.has(pending.uuidString)) {continue}
+            this.#broadcastRequest(pending.uuidString, pending.assetType)
+        }
     }
 
     #onSignalingMessage(message: SignalingMessage): void {
-        console.debug("[P2P:Provider] received signaling message:", message.type, "from", message.peerId)
+        const peerId = message.peerId as string | undefined
+        if (peerId !== undefined && peerId !== this.#localPeerId && !this.#knownPeers.has(peerId)) {
+            this.#knownPeers.add(peerId)
+            console.debug("[P2P:Provider] new peer discovered:", peerId, "- rebroadcasting pending requests")
+            this.#rebroadcastPending()
+        }
         switch (message.type) {
             case "asset-inventory":
                 this.#onInventory(message)
@@ -77,10 +95,8 @@ export class PeerAssetProvider {
         console.debug("[P2P:Provider] got inventory from", peerId, "have:", have)
         for (const uuidString of have) {
             const pending = this.#pendingRequests.get(uuidString)
-            if (pending === undefined) {
-                console.debug("[P2P:Provider] no pending request for", uuidString)
-                continue
-            }
+            if (pending === undefined) {continue}
+            if (this.#transferringAssets.has(uuidString)) {continue}
             console.debug("[P2P:Provider] initiating transfer for", uuidString, "from peer", peerId)
             this.#initiateTransfer(pending, peerId)
             break
@@ -88,6 +104,7 @@ export class PeerAssetProvider {
     }
 
     async #initiateTransfer(pending: PendingRequest, remotePeerId: string): Promise<void> {
+        this.#transferringAssets.add(pending.uuidString)
         const connection = new AssetPeerConnection(this.#signaling, this.#localPeerId, remotePeerId)
         this.#connections.set(remotePeerId, connection)
         console.debug("[P2P:Provider] creating WebRTC offer to", remotePeerId)
@@ -98,6 +115,7 @@ export class PeerAssetProvider {
         }
         channel.onerror = (event) => {
             console.error("[P2P:Provider] data channel error:", event)
+            this.#transferringAssets.delete(pending.uuidString)
             this.#pendingRequests.delete(pending.uuidString)
             pending.reject(new Error(`Data channel error for asset ${pending.uuidString}`))
         }
@@ -156,6 +174,7 @@ export class PeerAssetProvider {
                 console.debug("[P2P:Provider] reassembled zip:", zipBytes.byteLength, "bytes")
                 this.#incomingChunks.delete(pending.uuidString)
                 this.#transferMeta.delete(pending.uuidString)
+                this.#transferringAssets.delete(pending.uuidString)
                 this.#pendingRequests.delete(pending.uuidString)
                 pending.progress(1.0)
                 pending.resolve(zipBytes)
@@ -196,5 +215,6 @@ export class PeerAssetProvider {
         this.#pendingRequests.clear()
         this.#incomingChunks.clear()
         this.#transferMeta.clear()
+        this.#transferringAssets.clear()
     }
 }
