@@ -5,14 +5,17 @@ set -euo pipefail
 : "${SSH_PASSWORD:?SSH_PASSWORD is not set}"
 REMOTE_DIR="/opt/opendaw/yjs-server"
 
+export SSHPASS="$SSH_PASSWORD"
+SSH_CMD="ssh -p 22 -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=accept-new"
+
 echo "Syncing yjs-server files..."
-sshpass -p "$SSH_PASSWORD" rsync -avz --delete \
-  -e ssh \
+sshpass -e rsync -avz --delete \
+  -e "$SSH_CMD" \
   packages/server/yjs-server/ \
   "$SSH_SERVER:$REMOTE_DIR/"
 
 echo "Installing dependencies and restarting..."
-sshpass -p "$SSH_PASSWORD" ssh "$SSH_SERVER" << 'EOF'
+sshpass -e $SSH_CMD "$SSH_SERVER" << 'EOF'
   cd /opt/opendaw/yjs-server
   npm install --production
   systemctl restart opendaw-yjs
