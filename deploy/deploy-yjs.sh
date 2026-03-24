@@ -2,7 +2,7 @@
 set -euo pipefail
 
 : "${SSH_SERVER:?SSH_SERVER is not set}"
-REMOTE_DIR="/opt/opendaw/yjs-server"
+REMOTE_DIR="/opt/yjs-server"
 
 echo "Syncing yjs-server files..."
 rsync -avz --delete \

@@ -26,7 +26,7 @@ After=network.target
 [Service]
 Type=simple
 User=opendaw
-WorkingDirectory=/opt/opendaw/yjs-server
+WorkingDirectory=/opt/yjs-server
 ExecStart=/usr/bin/node server.js
 Restart=always
 RestartSec=5
@@ -55,9 +55,9 @@ systemctl start opendaw-yjs    # start now
 Before the first automated deploy, manually set up the target directory and move the currently running server code there:
 
 ```bash
-mkdir -p /opt/opendaw/yjs-server
-cp -r /path/to/current/yjs-server/* /opt/opendaw/yjs-server/
-cd /opt/opendaw/yjs-server
+mkdir -p /opt/yjs-server
+cp -r /path/to/current/yjs-server/* /opt/yjs-server/
+cd /opt/yjs-server
 npm install --production
 ```
 
@@ -91,14 +91,14 @@ Create `deploy/deploy-yjs.sh`:
 set -euo pipefail
 
 SERVER="root@159.69.124.128"
-REMOTE_DIR="/opt/opendaw/yjs-server"
+REMOTE_DIR="/opt/yjs-server"
 
 rsync -avz --delete \
   packages/server/yjs-server/ \
   "$SERVER:$REMOTE_DIR/"
 
 ssh "$SERVER" << 'EOF'
-  cd /opt/opendaw/yjs-server
+  cd /opt/yjs-server
   npm install --production
   systemctl restart opendaw-yjs
   systemctl status opendaw-yjs --no-pager
