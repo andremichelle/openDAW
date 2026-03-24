@@ -8,7 +8,7 @@ import {StudioService} from "@/service/StudioService"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {VideoRenderer} from "@/video/VideoRenderer"
 import {createDebugMenu} from "@/service/DebugMenu"
-import {connectRoom} from "@/service/StudioLiveRoom.tsx"
+import {connectRoom} from "@/service/StudioLiveRoomConnect"
 
 export const populateStudioMenu = (service: StudioService) => {
     const Global = GlobalShortcuts

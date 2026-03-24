@@ -16,9 +16,11 @@ export namespace YService {
     const ONLINE_SERVER_URL = "wss://live.opendaw.studio"
     const serverUrl = USE_LOCAL_SERVER ? LOCAL_SERVER_URL : ONLINE_SERVER_URL
 
+    export type RoomResult = { project: Project, provider: WebsocketProvider }
+
     export const getOrCreateRoom = async (optProject: Option<Project>,
                                           env: ProjectEnv,
-                                          roomName: string): Promise<Project> => {
+                                          roomName: string): Promise<RoomResult> => {
         if (roomName === "signaling") {return panic("Invalid room name: signaling")}
         const doc = new Y.Doc()
         const provider: WebsocketProvider = new WebsocketProvider(serverUrl, roomName, doc)
@@ -51,7 +53,7 @@ export namespace YService {
             // TODO Remove this cast at some point
             const editing = project.editing as BoxEditing
             editing.disable()
-            return project
+            return {project, provider}
         } else {
             if (optProject.nonEmpty()) {
                 const approved = await RuntimeNotifier.approve({
@@ -79,7 +81,7 @@ export namespace YService {
             project.own(sync)
             const editing = project.editing as BoxEditing
             editing.disable()
-            return project
+            return {project, provider}
         }
     }
 }
