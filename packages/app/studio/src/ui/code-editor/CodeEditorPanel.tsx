@@ -173,6 +173,15 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                                     </MenuButton>
                                 )}
                                 <Button lifecycle={lifecycle}
+                                        onClick={async () => {
+                                            const text = await navigator.clipboard.readText()
+                                            editor.setValue(text)
+                                            await compileCode()
+                                        }}
+                                        appearance={{tooltip: "Paste from clipboard and compile"}}>
+                                    <span>From Clipboard</span> <Icon symbol={IconSymbol.Insert}/>
+                                </Button>
+                                <Button lifecycle={lifecycle}
                                         onClick={close}
                                         appearance={{tooltip: "Close editor"}}>
                                     <span>Close Editor</span> <Icon symbol={IconSymbol.Exit}/>
