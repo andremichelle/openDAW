@@ -1,9 +1,10 @@
 import css from "./RoomStatus.sass?inline"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
-import {isDefined, Lifecycle, Nullable, Optional, Terminator} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, Nullable, Optional, RuntimeNotifier, Terminator} from "@opendaw/lib-std"
 import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {AwarenessUserState, RoomAwareness} from "@/service/RoomAwareness"
+import {Promises} from "@opendaw/lib-runtime"
 
 const className = Html.adoptStyleSheet(css, "room-status")
 
@@ -20,7 +21,15 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
             const roomLabel: HTMLElement = (
                 <span className="room-name"
                       title="Click to copy room name"
-                      onclick={() => navigator.clipboard.writeText(awareness.roomName)}>{awareness.roomName}</span>
+                      onclick={async () => {
+                          const {status} = await Promises.tryCatch(navigator.clipboard.writeText(awareness.roomName))
+                          if (status === "resolved") {
+                              await RuntimeNotifier.info({
+                                  headline: "Clipboard",
+                                  message: `Room-name '${awareness.roomName}' now in clipboard.`
+                              })
+                          }
+                      }}>{`Room '${awareness.roomName}'`}</span>
             )
             const render = () => {
                 const states = awareness.awareness.getStates()

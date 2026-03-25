@@ -1,7 +1,7 @@
 import css from "./PanelPlaceholder.sass?inline"
-import {DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
+import {DefaultObservableValue, isDefined, Lifecycle, Nullable, ObservableValue, Optional, Terminator} from "@opendaw/lib-std"
 import {Icon} from "@/ui/components/Icon.tsx"
-import {appendChildren, createElement, DomElement, Frag, Group} from "@opendaw/lib-jsx"
+import {appendChildren, createElement, DomElement, Frag, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
 import {PanelState} from "@/ui/workspace/PanelState.ts"
@@ -10,6 +10,7 @@ import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {ContentGlue} from "@/ui/workspace/ContentGlue.ts"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Browser, Events, Html} from "@opendaw/lib-dom"
+import {AwarenessUserState, RoomAwareness} from "@/service/RoomAwareness"
 import FlexLayoutConstrains = Workspace.FlexLayoutConstrains
 
 const className = Html.adoptStyleSheet(css, "PanelPlaceholder")
@@ -20,10 +21,11 @@ type Construct = {
     siblings: ReadonlyArray<ContentGlue>
     panelContents: PanelContents
     panelState: PanelState
+    roomAwareness: ObservableValue<Nullable<RoomAwareness>>
 }
 
 export const PanelPlaceholder =
-    ({lifecycle, panelContents, orientation, siblings, panelState}: Construct) => {
+    ({lifecycle, panelContents, orientation, siblings, panelState, roomAwareness}: Construct) => {
         const {icon, name, constrains, minimizable, popoutable} = panelState
         const HeaderSize = 18
         const container = <Group/>
@@ -96,11 +98,40 @@ export const PanelPlaceholder =
                 updateLayout()
             }
         }))
+        const presenceDots: HTMLElement = <div className="presence-dots"/>
         const header: HTMLElement = (
             <header>
-                <Icon symbol={icon}/> <span>{name}</span>
+                <Icon symbol={icon}/> <span>{name}</span> {presenceDots}
             </header>
         )
+        const roomLifecycle = lifecycle.own(new Terminator())
+        lifecycle.own(roomAwareness.catchupAndSubscribe(owner => {
+            roomLifecycle.terminate()
+            const awareness: Nullable<RoomAwareness> = owner.getValue()
+            if (isDefined(awareness)) {
+                const render = () => {
+                    const states = awareness.awareness.getStates()
+                    const localId = awareness.clientID
+                    const dots: Array<{ userName: string, color: string, self: boolean }> = []
+                    states.forEach((state, clientId) => {
+                        const user: Optional<AwarenessUserState> = state.user
+                        if (isDefined(user) && user.panel === name) {
+                            dots.push({userName: user.name, color: user.color, self: clientId === localId})
+                        }
+                    })
+                    dots.sort((first, second) => first.self === second.self ? 0 : first.self ? -1 : 1)
+                    replaceChildren(presenceDots, ...dots.map(dot => (
+                        <span className="dot" style={{backgroundColor: dot.color}} title={dot.userName}/>
+                    )))
+                }
+                const awarenessApi = awareness.awareness
+                awarenessApi.on("change", render)
+                roomLifecycle.own({terminate: () => awarenessApi.off("change", render)})
+                render()
+            } else {
+                replaceChildren(presenceDots)
+            }
+        }))
         appendChildren(element, <Frag>{header}{container}</Frag>)
         lifecycle.own(Events.subscribe(header, "dblclick", () => handler.toggleMinimize()))
         lifecycle.own(ContextMenu.subscribe(header, collector => collector.addItems(

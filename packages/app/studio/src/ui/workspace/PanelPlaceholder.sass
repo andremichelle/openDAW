@@ -18,7 +18,14 @@ component
       flex-direction: column
 
       > span
-        transform: rotate(90deg) translateX(calc(50% - 0.5em))
+        writing-mode: vertical-lr
+        text-orientation: sideways
+
+      > .presence-dots
+        flex-direction: column
+        align-items: center
+        margin-top: 0.5em
+        margin-left: 0
 
   > header
     font-size: 0.75em
@@ -43,6 +50,17 @@ component
 
     > span
       white-space: nowrap
+
+    > .presence-dots
+      display: flex
+      align-items: center
+      gap: 3px
+      margin-left: 0.5em
+
+      > .dot
+        width: 6px
+        height: 6px
+        border-radius: 50%
 
   > div
     > div.popup-label
