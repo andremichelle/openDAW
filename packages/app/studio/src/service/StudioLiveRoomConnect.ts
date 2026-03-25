@@ -1,5 +1,5 @@
 import {RuntimeNotifier, Terminator, UUID} from "@opendaw/lib-std"
-import {Promises, Runtime} from "@opendaw/lib-runtime"
+import {Promises} from "@opendaw/lib-runtime"
 import {SampleStorage, SoundfontStorage, Workers, YService} from "@opendaw/studio-core"
 import {P2PSession, type SignalingSocket} from "@opendaw/studio-p2p"
 import {StudioService} from "@/service/StudioService"
@@ -43,14 +43,9 @@ export const connectRoom = async (service: StudioService): Promise<void> => {
             const label = factory()
             terminator.own(label)
             const awareness = provider.awareness
-            const update = () => {
-                const size = awareness.getStates().size
-                console.debug(`[LiveRoom] awareness states: ${size}, keys:`, [...awareness.getStates().keys()])
-                label.setValue(String(size))
-            }
+            const update = () => label.setValue(String(awareness.getStates().size))
             awareness.on("update", update)
             terminator.own({terminate: () => awareness.off("update", update)})
-            terminator.own(Runtime.scheduleInterval(update, 2000))
             label.setTitle("Room Users")
             update()
         })
