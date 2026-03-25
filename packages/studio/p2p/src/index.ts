@@ -10,5 +10,5 @@ export {ChainedSoundfontProvider, type SoundfontFetcher} from "./ChainedSoundfon
 export {type Fetcher, type ChainedProvider} from "./ChainedProvider"
 export {AssetPeerConnection} from "./AssetPeerConnection"
 export {AssetServer, type AssetReader} from "./AssetServer"
-export {PeerAssetProvider} from "./PeerAssetProvider"
+export {PeerAssetProvider, STALL_TIMEOUT_MS, MAX_RETRIES} from "./PeerAssetProvider"
 export {P2PSession, type P2PSessionContext} from "./P2PSession"

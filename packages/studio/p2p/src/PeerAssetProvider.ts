@@ -6,6 +6,9 @@ import {AssetPeerConnection} from "./AssetPeerConnection"
 import {AssetZip} from "./AssetZip"
 import * as ChunkProtocol from "./ChunkProtocol"
 
+export const STALL_TIMEOUT_MS = 10_000
+export const MAX_RETRIES = 3
+
 type PendingRequest = {
     readonly uuid: UUID.Bytes
     readonly uuidString: string
@@ -13,6 +16,8 @@ type PendingRequest = {
     readonly progress: Progress.Handler
     readonly resolve: (zipBytes: ArrayBuffer) => void
     readonly reject: (error: Error) => void
+    retryCount: number
+    stallTimer: ReturnType<typeof setTimeout> | null
 }
 
 export class PeerAssetProvider {
@@ -23,7 +28,8 @@ export class PeerAssetProvider {
     readonly #incomingChunks: Map<string, Map<number, Uint8Array>> = new Map()
     readonly #transferMeta: Map<string, {totalChunks: number}> = new Map()
     readonly #knownPeers: Set<string> = new Set()
-    readonly #transferringAssets: Set<string> = new Set()
+    readonly #transferringAssets: Map<string, string> = new Map()
+    #terminated: boolean = false
 
     constructor(signaling: AssetSignaling, localPeerId: string) {
         this.#signaling = signaling
@@ -48,7 +54,10 @@ export class PeerAssetProvider {
     #requestAsset(uuid: UUID.Bytes, assetType: "sample" | "soundfont", progress: Progress.Handler): Promise<ArrayBuffer> {
         const uuidString = UUID.toString(uuid)
         const {promise, resolve, reject} = Promise.withResolvers<ArrayBuffer>()
-        this.#pendingRequests.set(uuidString, {uuid, uuidString, assetType, progress, resolve, reject})
+        this.#pendingRequests.set(uuidString, {
+            uuid, uuidString, assetType, progress, resolve, reject,
+            retryCount: 0, stallTimer: null
+        })
         this.#broadcastRequest(uuidString, assetType)
         return promise
     }
@@ -67,6 +76,50 @@ export class PeerAssetProvider {
             if (this.#transferringAssets.has(pending.uuidString)) {continue}
             this.#broadcastRequest(pending.uuidString, pending.assetType)
         }
+    }
+
+    #retryTransfer(uuidString: string, reason: string): void {
+        const pending = this.#pendingRequests.get(uuidString)
+        if (pending === undefined) {return}
+        this.#clearTransferState(uuidString)
+        pending.retryCount++
+        if (pending.retryCount >= MAX_RETRIES) {
+            console.warn("[P2P:Provider] max retries reached for", uuidString)
+            this.#pendingRequests.delete(uuidString)
+            pending.reject(new Error(`Transfer failed after ${MAX_RETRIES} retries: ${reason}`))
+            return
+        }
+        console.debug("[P2P:Provider] retrying transfer for", uuidString, `(attempt ${pending.retryCount + 1}/${MAX_RETRIES}, reason: ${reason})`)
+        this.#broadcastRequest(uuidString, pending.assetType)
+    }
+
+    #clearTransferState(uuidString: string): void {
+        const remotePeerId = this.#transferringAssets.get(uuidString)
+        this.#transferringAssets.delete(uuidString)
+        this.#incomingChunks.delete(uuidString)
+        this.#transferMeta.delete(uuidString)
+        const pending = this.#pendingRequests.get(uuidString)
+        if (pending !== undefined && pending.stallTimer !== null) {
+            clearTimeout(pending.stallTimer)
+            pending.stallTimer = null
+        }
+        if (remotePeerId !== undefined) {
+            const connection = this.#connections.get(remotePeerId)
+            if (connection !== undefined) {
+                connection.terminate()
+                this.#connections.delete(remotePeerId)
+            }
+        }
+    }
+
+    #resetStallTimer(pending: PendingRequest): void {
+        if (pending.stallTimer !== null) {
+            clearTimeout(pending.stallTimer)
+        }
+        pending.stallTimer = setTimeout(() => {
+            console.warn("[P2P:Provider] stall timeout for", pending.uuidString)
+            this.#retryTransfer(pending.uuidString, "stall timeout")
+        }, STALL_TIMEOUT_MS)
     }
 
     #onSignalingMessage(message: SignalingMessage): void {
@@ -105,23 +158,25 @@ export class PeerAssetProvider {
     }
 
     async #initiateTransfer(pending: PendingRequest, remotePeerId: string): Promise<void> {
-        this.#transferringAssets.add(pending.uuidString)
+        this.#transferringAssets.set(pending.uuidString, remotePeerId)
         const connection = new AssetPeerConnection(this.#signaling, this.#localPeerId, remotePeerId)
         this.#connections.set(remotePeerId, connection)
         console.debug("[P2P:Provider] creating WebRTC offer to", remotePeerId)
         const channel = await connection.createOffer()
         console.debug("[P2P:Provider] offer created, waiting for data channel open")
+        this.#resetStallTimer(pending)
         channel.onmessage = (event: MessageEvent) => {
             this.#onDataChannelMessage(pending, event.data as ArrayBuffer)
         }
-        channel.onerror = (event) => {
-            console.error("[P2P:Provider] data channel error:", event)
-            this.#transferringAssets.delete(pending.uuidString)
-            this.#pendingRequests.delete(pending.uuidString)
-            pending.reject(new Error(`Data channel error for asset ${pending.uuidString}`))
+        channel.onerror = () => {
+            console.warn("[P2P:Provider] data channel error for", pending.uuidString)
+            this.#retryTransfer(pending.uuidString, "data channel error")
         }
         channel.onclose = () => {
-            console.debug("[P2P:Provider] data channel closed")
+            console.debug("[P2P:Provider] data channel closed for", pending.uuidString)
+            if (this.#transferringAssets.has(pending.uuidString)) {
+                this.#retryTransfer(pending.uuidString, "data channel closed")
+            }
         }
         channel.onopen = () => {
             console.debug("[P2P:Provider] data channel open, sending transfer-request for", pending.uuidString)
@@ -134,6 +189,7 @@ export class PeerAssetProvider {
     }
 
     #onDataChannelMessage(pending: PendingRequest, buffer: ArrayBuffer): void {
+        this.#resetStallTimer(pending)
         const message = ChunkProtocol.decode(buffer)
         switch (message.msgType) {
             case ChunkProtocol.MsgType.TransferStart: {
@@ -173,6 +229,10 @@ export class PeerAssetProvider {
                 }
                 const zipBytes = ChunkProtocol.reassemble(ordered)
                 console.debug("[P2P:Provider] reassembled zip:", zipBytes.byteLength, "bytes")
+                if (pending.stallTimer !== null) {
+                    clearTimeout(pending.stallTimer)
+                    pending.stallTimer = null
+                }
                 this.#incomingChunks.delete(pending.uuidString)
                 this.#transferMeta.delete(pending.uuidString)
                 this.#transferringAssets.delete(pending.uuidString)
@@ -206,14 +266,19 @@ export class PeerAssetProvider {
     }
 
     terminate(): void {
+        if (this.#terminated) {return}
+        this.#terminated = true
         console.debug("[P2P:Provider] terminating")
+        for (const pending of this.#pendingRequests.values()) {
+            if (pending.stallTimer !== null) {
+                clearTimeout(pending.stallTimer)
+            }
+            pending.reject(new Error("P2P session terminated"))
+        }
         for (const connection of this.#connections.values()) {
             connection.terminate()
         }
         this.#connections.clear()
-        for (const pending of this.#pendingRequests.values()) {
-            pending.reject(new Error("P2P session terminated"))
-        }
         this.#pendingRequests.clear()
         this.#incomingChunks.clear()
         this.#transferMeta.clear()
