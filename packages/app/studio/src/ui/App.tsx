@@ -7,6 +7,7 @@ import {IconsPage} from "@/ui/pages/IconsPage.tsx"
 import {AutomationPage} from "@/ui/pages/AutomationPage.tsx"
 import {SampleUploadPage} from "@/ui/pages/SampleUploadPage.tsx"
 import {Footer} from "@/ui/Footer"
+import {RoomStatus} from "@/ui/RoomStatus"
 import {ManualPage} from "@/ui/pages/ManualPage"
 import {ColorsPage} from "@/ui/pages/ColorsPage"
 import {Header} from "@/ui/header/Header"
@@ -53,6 +54,7 @@ export const App = (service: StudioService) => {
                     {path: "/test", factory: TestPage}
                 ]}
             />
+            <RoomStatus lifecycle={terminator} service={service}/>
             <Footer lifecycle={terminator} service={service}/>
         </Frag>
     )

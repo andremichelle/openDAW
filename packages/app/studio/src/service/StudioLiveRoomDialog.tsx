@@ -5,18 +5,43 @@ import {createElement} from "@opendaw/lib-jsx"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Dialog} from "@/ui/components/Dialog"
 import {Surface} from "@/ui/surface/Surface"
+import {readIdentity, userColors} from "@/service/RoomAwareness"
 
 const className = Html.adoptStyleSheet(css, "StudioLiveRoomDialog")
 
-export const showConnectRoomDialog = (): Promise<string> => {
-    const {resolve, reject, promise} = Promise.withResolvers<string>()
-    const inputField: HTMLInputElement = (
-        <input className="default input" type="text" placeholder="Enter a room name"/>
+export type RoomDialogResult = { roomName: string, userName: string, userColor: string }
+
+export const showConnectRoomDialog = (): Promise<RoomDialogResult> => {
+    const {resolve, reject, promise} = Promise.withResolvers<RoomDialogResult>()
+    const identity = readIdentity()
+    const roomInput: HTMLInputElement = (
+        <input className="default input" type="text" placeholder="Enter a room name" maxLength={16}/>
+    )
+    const nameInput: HTMLInputElement = (
+        <input className="default input" type="text" placeholder="Your name" value={identity.name} maxLength={16}/>
+    )
+    let selectedColor = identity.color
+    const colorSwatches: HTMLElement = (
+        <div className="color-swatches">
+            {userColors().map(color => {
+                const swatch: HTMLElement = (
+                    <span className={color === selectedColor ? "swatch selected" : "swatch"}
+                          style={{backgroundColor: color}}
+                          onclick={() => {
+                              selectedColor = color
+                              colorSwatches.querySelectorAll(".swatch").forEach(element =>
+                                  element.classList.toggle("selected", (element as HTMLElement).style.backgroundColor === swatch.style.backgroundColor))
+                          }}/>
+                )
+                return swatch
+            })}
+        </div>
     )
     const approve = () => {
-        const value = inputField.value.trim()
-        if (value.length === 0) {return}
-        resolve(value)
+        const roomName = roomInput.value.trim()
+        const userName = nameInput.value.trim()
+        if (roomName.length === 0) {return}
+        resolve({roomName, userName: userName.length === 0 ? "Anonymous" : userName, userColor: selectedColor})
     }
     const dialog: HTMLDialogElement = (
         <Dialog headline="Join Live Room"
@@ -40,7 +65,12 @@ export const showConnectRoomDialog = (): Promise<string> => {
                     No assets are stored on the server.
                     They are exchanged directly between users via a P2P network
                     and stored locally in each user's browser (OPFS).</p>
-                {inputField}
+                <label>Room Name</label>
+                {roomInput}
+                <label>Your Name</label>
+                {nameInput}
+                <label>Your Color</label>
+                {colorSwatches}
             </div>
         </Dialog>
     )
@@ -53,6 +83,6 @@ export const showConnectRoomDialog = (): Promise<string> => {
     }
     Surface.get().flyout.appendChild(dialog)
     dialog.showModal()
-    inputField.focus()
+    roomInput.focus()
     return promise
 }

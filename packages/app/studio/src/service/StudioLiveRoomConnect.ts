@@ -4,19 +4,23 @@ import {SampleStorage, SoundfontStorage, Workers, YService} from "@opendaw/studi
 import {P2PSession, type SignalingSocket} from "@opendaw/studio-p2p"
 import {StudioService} from "@/service/StudioService"
 import {showConnectRoomDialog} from "@/service/StudioLiveRoomDialog.tsx"
+import {RoomAwareness, writeIdentity} from "@/service/RoomAwareness"
+import {Events} from "@opendaw/lib-dom"
 
 export const connectRoom = async (service: StudioService): Promise<void> => {
-    const roomName = await showConnectRoomDialog().catch(() => null)
-    if (roomName === null) {return}
+    const result = await showConnectRoomDialog().catch(() => null)
+    if (result === null) {return}
+    const {roomName, userName, userColor} = result
+    writeIdentity(userName, userColor)
     const progressDialog = RuntimeNotifier.progress({
         headline: "Connecting to Room...",
         message: "Please wait while we connect to the room..."
     })
-    const {status, value: result, error} = await Promises.tryCatch(
+    const {status, value: roomResult, error} = await Promises.tryCatch(
         YService.getOrCreateRoom(service.projectProfileService.getValue()
             .map(profile => profile.project), service, roomName))
     if (status === "resolved") {
-        const {project, provider} = result
+        const {project, provider} = roomResult
         const p2pSession = new P2PSession({
             chainedSampleProvider: service.chainedSampleProvider,
             chainedSoundfontProvider: service.chainedSoundfontProvider,
@@ -39,6 +43,17 @@ export const connectRoom = async (service: StudioService): Promise<void> => {
         project.own(p2pSession)
         const terminator = new Terminator()
         project.own(terminator)
+        const roomAwareness = new RoomAwareness(provider.awareness, roomName, userName, userColor)
+        terminator.own(roomAwareness)
+        terminator.own(Events.subscribe(window, "pointermove", (event: PointerEvent) => {
+            const target = event.target
+            if (target instanceof Element) {
+                const panel = target.closest("[data-panel-type]")
+                roomAwareness.panel.setValue(panel?.getAttribute("data-panel-type") ?? null)
+            } else {
+                roomAwareness.panel.setValue(null)
+            }
+        }))
         service.factoryFooterLabel().ifSome(factory => {
             const label = factory()
             terminator.own(label)
@@ -49,6 +64,8 @@ export const connectRoom = async (service: StudioService): Promise<void> => {
             label.setTitle("Room Users")
             update()
         })
+        service.setRoomAwareness(roomAwareness)
+        terminator.own({terminate: () => service.setRoomAwareness(null)})
         service.projectProfileService.setProject(project, roomName)
     } else {
         await RuntimeNotifier.info({

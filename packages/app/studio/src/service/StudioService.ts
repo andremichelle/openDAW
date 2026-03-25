@@ -72,6 +72,7 @@ import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
 import {Mixdowns} from "@/service/Mixdowns"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {CodeEditorState} from "@/ui/werkstatt-editor/CodeEditorState"
+import {RoomAwareness} from "@/service/RoomAwareness"
 
 /**
  * I am just piling stuff after stuff in here to boot the environment.
@@ -120,6 +121,7 @@ export class StudioService implements ProjectEnv {
     readonly #activeCodeEditor: MutableObservableOption<CodeEditorState> = new MutableObservableOption()
 
     #factoryFooterLabel: Option<Provider<FooterLabel>> = Option.None
+    readonly #roomAwareness = new DefaultObservableValue<Nullable<RoomAwareness>>(null)
 
     regionModifierInProgress: boolean = false
 
@@ -381,6 +383,9 @@ export class StudioService implements ProjectEnv {
     }
 
     factoryFooterLabel(): Option<Provider<FooterLabel>> {return this.#factoryFooterLabel}
+
+    get roomAwareness(): DefaultObservableValue<Nullable<RoomAwareness>> {return this.#roomAwareness}
+    setRoomAwareness(value: Nullable<RoomAwareness>): void {this.#roomAwareness.setValue(value)}
 
     get optShadertoyState(): Option<ShadertoyState> {return this.#shadertoyState}
     get activeCodeEditor(): MutableObservableOption<CodeEditorState> {return this.#activeCodeEditor}
