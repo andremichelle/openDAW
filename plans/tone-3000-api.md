@@ -6,96 +6,99 @@ Allow users to browse and load NAM models from [Tone 3000](https://www.tone3000.
 
 ## Architecture: Select Flow + Popup
 
-The Tone 3000 **Select Flow** is a redirect-based mechanism (like OAuth). We open it in a popup window, and use a local callback page + `postMessage` to get the result back into the editor.
+The Tone 3000 **Select Flow** is a redirect-based mechanism (like OAuth). We open it in a **popup window** (not a new tab), and use a local callback page + `localStorage` events to get the result back into the editor.
 
 ```
-Editor                     Popup (new tab)                  Tone 3000
+Editor                     Popup (popup window)             Tone 3000
   │                            │                               │
-  │── window.open() ──────────►│                               │
+  │── window.open(…, popup) ──►│                               │
   │                            │── redirect ──────────────────►│
   │                            │                               │ (user logs in,
   │                            │                               │  browses tones,
   │                            │                               │  selects one)
   │                            │◄── redirect with ?tone_url ──│
   │                            │                               │
-  │◄── postMessage(tone_url) ──│                               │
-  │                            │── window.close() ────────────►│
+  │◄── localStorage event ────│                               │
+  │                            │── waits for "done" signal ──►│
   │                            │                               │
   │── fetch(tone_url) ────────────────────────────────────────►│
   │◄── { tone, models[] } ────────────────────────────────────│
+  │                                                            │
+  │── show model picker (if multiple models) ──►               │
+  │◄── user selects model ──                                   │
   │                                                            │
   │── fetch(model.model_url) ─────────────────────────────────►│
   │◄── .nam file contents ────────────────────────────────────│
   │                                                            │
   │── create NeuralAmpModelBox & load ──►                      │
+  │── signal "done" to popup ──►                               │
+  │                            │── window.close() ────────────►│
 ```
 
-## Steps
+## Current State (implemented)
 
-### Step 1: Callback Page
+- [x] Step 1: Callback page (`tone3000-callback.html`)
+- [x] Step 2: Service logic (`NamTone3000.ts`)
+- [x] Step 3: Editor integration (`NeuralAmpDeviceEditor.tsx`)
+- [x] Popup window (not tab) — `window.open(url, "tone3000", "width=800,height=900,popup=yes")`
+- [ ] Step 4: Model picker dialog (for packs with multiple models)
+- [ ] Step 5: Model switching after initial load
 
-Create a minimal HTML page served by the app (e.g. `/tone3000-callback.html` in `packages/app/studio/public/`).
+## Feedback from Tone 3000 Team
 
-This page:
-1. Reads `tone_url` from `window.location.search`
-2. Sends it to `window.opener` via `postMessage`
-3. Closes itself
+### 1. Popup instead of new tab ✅ Done
 
-```html
-<!DOCTYPE html>
-<html>
-<head><title>Tone 3000</title></head>
-<body>
-<p>Loading...</p>
-<script>
-  const params = new URLSearchParams(window.location.search);
-  const toneUrl = params.get("tone_url");
-  if (toneUrl && window.opener) {
-    window.opener.postMessage({ type: "tone3000-select", tone_url: toneUrl }, "*");
-  }
-  window.close();
-</script>
-</body>
-</html>
+> Because the Select Flow opens in a new tab, it's not intuitive that clicking the download button will load the tone natively in openDAW. We recommend a pop-up instead.
+
+Fixed: `window.open()` now uses `"width=800,height=900,popup=yes"` features to open as a popup window.
+
+### 2. Model switching within a pack — TODO
+
+> After downloading a tone pack, there's no way to switch between models within that pack. This matters because some packs contain hundreds of models, and the key identifying information lives in the model name, which can be quite long. The UI needs to accommodate switching between models and displaying these full names.
+
+**Problem:** The current `pickModel()` silently auto-selects the "standard" model. There is no UI for choosing between models, and no way to switch after loading.
+
+**API constraints:** The Select Flow only accepts `app_id` and `redirect_url` — there is no parameter to select individual models. The `tone_url` response embeds all models with pre-signed download URLs. For packs with hundreds of models, the full list comes back in the response.
+
+## Step 4: Model Picker Dialog
+
+After fetching the tone data, if the tone has multiple models, show a **scrollable model picker dialog** before downloading.
+
+Requirements:
+- Scrollable list that handles hundreds of entries
+- Display full model names (can be long — this is the key identifying information)
+- Show model size tag (standard, lite, feather, nano, custom) as a secondary label
+- Single-click to select, then confirm — or double-click to select immediately
+- Pre-select "standard" model if available
+
+If the tone has only 1 model, skip the dialog and auto-load.
+
+### Implementation
+
+Create `NamModelPicker.tsx` alongside the other NeuralAmp components:
+
+```typescript
+// Show a dialog with a scrollable list of models
+// Returns the selected model, or undefined if cancelled
+showModelPickerDialog(tone: ToneResponse): Promise<Optional<ToneModel>>
 ```
 
-### Step 2: Tone 3000 Service
+The dialog should:
+- Use the existing `Dialogs.show()` pattern
+- Render a list with each entry showing: `model.name` (full, untruncated) + `model.size` badge
+- Support keyboard navigation (arrow keys + enter)
+- Have a search/filter input at the top for packs with many models
 
-Create a small service/utility (e.g. `Tone3000Service.ts` in `packages/app/studio/src/service/` or alongside the NeuralAmp editor) that encapsulates the flow:
+## Step 5: Model Switching After Load
 
-- `selectTone(): Promise<{ tone: Tone, models: Model[] }>`
-  1. Computes `redirect_url` = `${window.location.origin}/tone3000-callback.html`
-  2. Opens popup: `window.open(https://www.tone3000.com/api/v1/select?app_id=openDAW&redirect_url=${redirect_url}&gear=amp_pedal_full-rig&platform=nam)`
-  3. Listens for `message` event with `type === "tone3000-select"`
-  4. Fetches the `tone_url` (no auth needed, pre-signed)
-  5. Returns the tone + models data
-  6. Cleans up listener
+After a tone is loaded, the user needs to switch to a different model from the same pack without going through the Select Flow again.
 
-- `downloadModel(modelUrl: string): Promise<string>`
-  1. Fetches the model URL (pre-signed, no auth)
-  2. Returns the `.nam` file content as text
+Approach: **Cache the `ToneResponse`** so the model picker can be re-opened.
 
-### Step 3: Editor Integration
-
-In `NeuralAmpDeviceEditor.tsx`, add a second button next to the existing file-browse button:
-
-- **Icon**: Use a cloud/download icon or the Tone3000 logo
-- **onClick**: Calls `Tone3000Service.selectTone()`
-- On success:
-  1. Presents a model picker if the tone has multiple models (standard, lite, feather, nano), or auto-selects if only one
-  2. Downloads the selected model via `Tone3000Service.downloadModel(model.model_url)`
-  3. Creates a `NeuralAmpModelBox` (same pattern as `browseModel()` — SHA256 for UUID, dedup by hash)
-  4. Points `adapter.box.model.refer(modelBox)`
-
-The existing `browseModel()` function already shows the exact pattern for creating and loading a model. The Tone 3000 flow just replaces the file picker with a remote fetch.
-
-### Step 4: Model Size Selection (if multiple models)
-
-A tone can have multiple models in different sizes (standard, lite, feather, nano). We need a simple selection UI:
-
-- If 1 model → auto-load
-- If multiple → show a small dialog/dropdown letting user pick (show size label + name)
-- Default to "standard" if available
+- Store the last fetched `ToneResponse` (tone metadata + all model URLs) alongside the browse flow
+- Add a way to re-open the model picker using the cached data (e.g., clicking the model name label, or a dedicated "switch model" action)
+- When switching, download the new model and replace the current `NeuralAmpModelBox` reference (same create-or-dedup pattern)
+- Pre-signed URLs in the cached response may expire — handle fetch failures gracefully (re-trigger Select Flow if needed)
 
 ## API Details
 
@@ -104,8 +107,9 @@ A tone can have multiple models in different sizes (standard, lite, feather, nan
 GET https://www.tone3000.com/api/v1/select
   ?app_id=openDAW
   &redirect_url={callbackUrl}
-  &gear=amp_pedal_full-rig    (optional: filter by gear type)
 ```
+
+Only two parameters are supported. No `gear`, `platform`, or model-level filtering.
 
 ### Select Flow Response (fetched from `tone_url`)
 ```typescript
@@ -132,19 +136,25 @@ interface Model {
 type SelectResponse = Tone & { models: Model[] }
 ```
 
-## Key Files to Modify
+### Full API (not currently used)
 
-| File | Change |
-|------|--------|
-| `packages/app/studio/public/tone3000-callback.html` | **New** — callback page |
-| `packages/app/studio/src/ui/devices/audio-effects/NeuralAmp/Tone3000Service.ts` | **New** — select flow + fetch logic |
-| `packages/app/studio/src/ui/devices/audio-effects/NeuralAmpDeviceEditor.tsx` | Add Tone 3000 browse button |
-| `packages/app/studio/src/ui/devices/audio-effects/NeuralAmpDeviceEditor.sass` | Style the new button |
+A paginated `/api/v1/models?tone_id={id}&page=1&page_size=10` endpoint exists in the Full API, but requires authentication (access token via OAuth-like auth flow). The Select Flow's embedded models array with pre-signed URLs is sufficient for now.
+
+## Key Files
+
+| File | Status | Purpose |
+|------|--------|---------|
+| `packages/app/studio/public/tone3000-callback.html` | ✅ Done | Callback page — receives `tone_url` via localStorage |
+| `packages/app/studio/src/ui/devices/audio-effects/NeuralAmp/NamTone3000.ts` | ✅ Done (needs update) | Select flow + fetch + model loading |
+| `packages/app/studio/src/ui/devices/audio-effects/NeuralAmpDeviceEditor.tsx` | ✅ Done | Tone 3000 browse button in editor |
+| `packages/app/studio/src/ui/devices/audio-effects/NeuralAmpDeviceEditor.sass` | ✅ Done | Styling |
+| `packages/app/studio/src/ui/devices/audio-effects/NeuralAmp/Tone3000Dialog.tsx` | ✅ Done | Pre-browse info dialog |
+| `packages/app/studio/src/ui/devices/audio-effects/NeuralAmp/NamModelPicker.tsx` | TODO | Model picker dialog for multi-model packs |
 
 ## Considerations
 
-- **No app_id registration needed?** — We need to check if Tone 3000 requires registering an `app_id` or if any string works. May need to register "openDAW" with them.
-- **CORS** — The `tone_url` and `model_url` are pre-signed URLs from Tone 3000's CDN. They should be CORS-friendly for browser fetch. If not, we may need to proxy through our own server or use a different approach.
-- **Popup blockers** — The `window.open()` must be called directly from a user click handler (synchronous), otherwise browsers will block it. The button's `onClick` is a direct user gesture, so this should work.
-- **Offline / local-only** — The existing file-browse flow remains as the primary way to load local `.nam` files. Tone 3000 is an additional option for users who want to browse a library.
-- **Model label** — Use `tone.title + " — " + model.name` or similar as the `NeuralAmpModelBox.label`.
+- **CORS** — The `tone_url` and `model_url` are pre-signed URLs. They should be CORS-friendly for browser fetch.
+- **Popup blockers** — `window.open()` is called from a direct user click handler, so popup blockers should not interfere.
+- **Pre-signed URL expiry** — Cached `ToneResponse` model URLs may expire. If a download fails after switching models, re-trigger the Select Flow.
+- **Model label** — Use `tone.title + " — " + model.name` as the `NeuralAmpModelBox.label`.
+- **Offline / local-only** — The existing file-browse flow remains as the primary way to load local `.nam` files.
