@@ -90,6 +90,7 @@ export class PeerAssetProvider {
     }
 
     #onInventory(message: SignalingMessage): void {
+        if (message.targetPeerId !== this.#localPeerId) {return}
         const peerId = message.peerId as string
         const have = message.have as ReadonlyArray<string>
         console.debug("[P2P:Provider] got inventory from", peerId, "have:", have)
@@ -184,6 +185,7 @@ export class PeerAssetProvider {
     }
 
     async #onRtcAnswer(message: SignalingMessage): Promise<void> {
+        if (message.targetPeerId !== this.#localPeerId) {return}
         const peerId = message.peerId as string
         const sdp = message.sdp as string
         const connection = this.#connections.get(peerId)

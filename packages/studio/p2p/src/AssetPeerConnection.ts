@@ -1,4 +1,4 @@
-import {Terminable} from "@opendaw/lib-std"
+import {Nullable, Terminable} from "@opendaw/lib-std"
 import {AssetSignaling} from "./AssetSignaling"
 
 const RTC_CONFIG: RTCConfiguration = {
@@ -17,8 +17,9 @@ export class AssetPeerConnection implements Terminable {
     readonly #localPeerId: string
     readonly #remotePeerId: string
     readonly #pendingCandidates: Array<RTCIceCandidateInit> = []
+
     #remoteDescriptionSet: boolean = false
-    #channel: RTCDataChannel | null = null
+    #channel: Nullable<RTCDataChannel> = null
     #terminated: boolean = false
 
     constructor(signaling: AssetSignaling, localPeerId: string, remotePeerId: string) {
@@ -83,6 +84,7 @@ export class AssetPeerConnection implements Terminable {
     }
 
     async handleAnswer(sdp: string): Promise<void> {
+        if (this.#remoteDescriptionSet) {return}
         await this.#connection.setRemoteDescription({type: "answer", sdp})
         this.#remoteDescriptionSet = true
         await this.#drainPendingCandidates()
