@@ -132,15 +132,21 @@ export namespace RecordAudio {
             fileBox.ifSome(oldFileBox => {
                 if (!oldFileBox.isAttached() || oldFileBox.pointerHub.isEmpty()) {return}
                 editing.modify(() => {
+                    const incomingPointers = [...oldFileBox.pointerHub.incoming()]
+                    const incomingTransientPointers = [...oldFileBox.transientMarkers.pointerHub.incoming()]
+                    if (incomingPointers.length === 0) {
+                        oldFileBox.delete()
+                        return
+                    }
                     const newFileBox = AudioFileBox.create(boxGraph, uuid, box => {
                         box.fileName.setValue(oldFileBox.fileName.getValue())
                         box.startInSeconds.setValue(oldFileBox.startInSeconds.getValue())
                         box.endInSeconds.setValue(oldFileBox.endInSeconds.getValue())
                     })
-                    for (const pointer of [...oldFileBox.pointerHub.incoming()]) {
+                    for (const pointer of incomingPointers) {
                         pointer.refer(newFileBox)
                     }
-                    for (const pointer of [...oldFileBox.transientMarkers.pointerHub.incoming()]) {
+                    for (const pointer of incomingTransientPointers) {
                         pointer.refer(newFileBox.transientMarkers)
                     }
                     oldFileBox.delete()
@@ -173,7 +179,11 @@ export namespace RecordAudio {
                             recordingWorklet.limit(Math.ceil((currentWaveformOffset + duration) * sampleRate))
                         }
                     })
-                    fileBox.ifSome(({endInSeconds}) => endInSeconds.setValue(recordingWorklet.numberOfFrames / sampleRate))
+                    fileBox.ifSome(box => {
+                        if (box.isAttached()) {
+                            box.endInSeconds.setValue(recordingWorklet.numberOfFrames / sampleRate)
+                        }
+                    })
                 }
             }),
             engine.position.catchupAndSubscribe(owner => {
