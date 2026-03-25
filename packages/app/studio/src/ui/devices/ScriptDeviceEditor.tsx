@@ -16,7 +16,7 @@ import {ControlIndicator} from "@/ui/components/ControlIndicator"
 import {Icon} from "@/ui/components/Icon"
 import {Column} from "@/ui/devices/Column"
 import {LKR} from "@/ui/devices/constants"
-import {CodeEditorExample} from "@/ui/werkstatt-editor/CodeEditorState"
+import {CodeEditorExample} from "@/ui/code-editor/CodeEditorState"
 import {SampleSelector, SampleSelectStrategy} from "@/ui/devices/SampleSelector"
 import {MenuItem} from "@opendaw/studio-core"
 

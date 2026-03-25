@@ -17,7 +17,7 @@ import {VUMeterPanel} from "@/ui/meter/VUMeterPanel"
 import {PianoModePanel} from "@/ui/piano-panel/PianoModePanel.tsx"
 import {ShadertoyPreview} from "@/ui/shadertoy/ShadertoyPreview"
 import {ShadertoyEditor} from "@/ui/shadertoy/ShadertoyEditor"
-import {CodeEditorPanel} from "@/ui/werkstatt-editor/CodeEditorPanel"
+import {CodeEditorPanel} from "@/ui/code-editor/CodeEditorPanel"
 
 export const createPanelFactory = (service: StudioService): PanelContentFactory => ({
     create: (lifecycle: Lifecycle, type: PanelType): JsxValue => {

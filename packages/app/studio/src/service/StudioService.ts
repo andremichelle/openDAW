@@ -71,7 +71,7 @@ import {Surface} from "@/ui/surface/Surface"
 import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
 import {Mixdowns} from "@/service/Mixdowns"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
-import {CodeEditorState} from "@/ui/werkstatt-editor/CodeEditorState"
+import {CodeEditorState} from "@/ui/code-editor/CodeEditorState"
 import {RoomAwareness} from "@/service/RoomAwareness"
 
 /**

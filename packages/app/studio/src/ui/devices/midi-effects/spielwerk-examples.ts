@@ -6,7 +6,7 @@ import ProbabilityGate from "./examples/probability-gate.js?raw"
 import EchoNoteDelay from "./examples/echo-note-delay.js?raw"
 import PitchRangeFilter from "./examples/pitch-range-filter.js?raw"
 import TB303Sequencer from "./examples/tb-303-sequencer.js?raw"
-import {CodeEditorExample} from "@/ui/werkstatt-editor/CodeEditorState"
+import {CodeEditorExample} from "@/ui/code-editor/CodeEditorState"
 
 export const SpielwerkExamples: ReadonlyArray<CodeEditorExample> = [
     {name: "Chord Generator", code: ChordGenerator},
