@@ -15,10 +15,10 @@ export const showConnectRoomDialog = (): Promise<RoomDialogResult> => {
     const {resolve, reject, promise} = Promise.withResolvers<RoomDialogResult>()
     const identity = readIdentity()
     const roomInput: HTMLInputElement = (
-        <input className="default input" type="text" placeholder="Enter a room name" maxLength={16}/>
+        <input className="default input" type="text" placeholder="Required" maxLength={16} required={true}/>
     )
     const nameInput: HTMLInputElement = (
-        <input className="default input" type="text" placeholder="Your name" value={identity.name} maxLength={16}/>
+        <input className="default input" type="text" placeholder="Required" value={identity.name} maxLength={16} required={true}/>
     )
     let selectedColor = identity.color
     const colorSwatches: HTMLElement = (
@@ -40,8 +40,8 @@ export const showConnectRoomDialog = (): Promise<RoomDialogResult> => {
     const approve = () => {
         const roomName = roomInput.value.trim()
         const userName = nameInput.value.trim()
-        if (roomName.length === 0) {return}
-        resolve({roomName, userName: userName.length === 0 ? "Anonymous" : userName, userColor: selectedColor})
+        if (roomName.length === 0 || userName.length === 0) {return}
+        resolve({roomName, userName, userColor: selectedColor})
     }
     const dialog: HTMLDialogElement = (
         <Dialog headline="Join Live Room"

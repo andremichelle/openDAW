@@ -17,7 +17,7 @@ export type AwarenessUserState = {
 }
 
 export const readIdentity = (): { name: string, color: string } => ({
-    name: localStorage.getItem(StorageKeyName) ?? "Anonymous",
+    name: localStorage.getItem(StorageKeyName) ?? "",
     color: localStorage.getItem(StorageKeyColor) ?? UserColors[Math.floor(Math.random() * UserColors.length)]
 })
 
