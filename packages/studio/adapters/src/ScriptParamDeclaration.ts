@@ -67,7 +67,7 @@ const parseSingleParam = (line: string): ParamDeclaration => {
         if (isNaN(min) || isNaN(max)) {
             throw new Error(`Malformed @param: '${line}' — min/max must be numbers`)
         }
-        if (max - min < -FLOAT_TOLERANCE) {
+        if (max - min < FLOAT_TOLERANCE) {
             throw new Error(`Malformed @param: '${line}' — min (${min}) must be less than max (${max})`)
         }
         if (defaultValue < min - FLOAT_TOLERANCE || defaultValue > max + FLOAT_TOLERANCE) {
@@ -88,7 +88,7 @@ const parseSingleParam = (line: string): ParamDeclaration => {
     if (!VALID_MAPPINGS.includes(mapping)) {
         throw new Error(`Malformed @param: '${line}' — unknown mapping '${mapping}' (expected: linear, exp, int, bool)`)
     }
-    if (max - min < -FLOAT_TOLERANCE) {
+    if (mapping !== "bool" && max - min < FLOAT_TOLERANCE) {
         throw new Error(`Malformed @param: '${line}' — min (${min}) must be less than max (${max})`)
     }
     if (defaultValue < min - FLOAT_TOLERANCE || defaultValue > max + FLOAT_TOLERANCE) {
