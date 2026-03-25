@@ -44,6 +44,7 @@ export type ScriptDeviceEditorConfig = {
     readonly compiler: ScriptCompiler.Config
     readonly defaultCode: string
     readonly examples: ReadonlyArray<CodeEditorExample>
+    readonly starterPrompt: string
     readonly icon: IconSymbol
     readonly populateMenu: (parent: MenuItem, service: StudioService, deviceHost: DeviceHost, adapter: ScriptAdapter) => void
     readonly populateMeter: (construct: {
@@ -108,7 +109,8 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
                 },
                 initialCode: compiler.stripHeader(box.code.getValue()) || config.defaultCode,
                 previousScreen: service.layout.screen.getValue(),
-                examples: config.examples
+                examples: config.examples,
+                starterPrompt: config.starterPrompt
             })
         }
     }

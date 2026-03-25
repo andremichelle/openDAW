@@ -11,6 +11,7 @@ import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
 import {MenuButton} from "@/ui/components/MenuButton"
+import {Dialogs} from "@/ui/components/dialogs"
 import {CodeEditorHandler} from "./CodeEditorHandler"
 import {CodeEditorExample} from "./CodeEditorState"
 
@@ -27,6 +28,7 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
     const handler: Nullable<CodeEditorHandler> = isDefined(state) ? state.handler : null
     const initialCode = isDefined(state) ? state.initialCode : defaultCode
     const examples: ReadonlyArray<CodeEditorExample> = isDefined(state) ? state.examples : []
+    const starterPrompt = isDefined(state) ? state.starterPrompt : ""
     const setStatus = (text: string, type: "idle" | "success" | "error") => {
         statusLabel.textContent = text
         statusLabel.className = `status ${type}`
@@ -156,7 +158,10 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                                 {nameSpan}
                                 <Button lifecycle={lifecycle}
                                         onClick={compileCode}
-                                        appearance={{tooltip: `Compile (${Shortcut.of("Enter", {alt: true}).format()})`}}>
+                                        appearance={{
+                                            tooltip: `Compile (${Shortcut.of("Enter", {alt: true}).format()})`,
+                                            color: Colors.green
+                                        }}>
                                     <span>Compile</span> <Icon symbol={IconSymbol.Play}/>
                                 </Button>
                                 {examples.length > 0 && (
@@ -172,10 +177,32 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                                         <span>Examples</span>
                                     </MenuButton>
                                 )}
+                               {starterPrompt.length > 0 && (
+                                    <Button lifecycle={lifecycle}
+                                            onClick={() => navigator.clipboard.writeText(starterPrompt)
+                                                .then(() => Dialogs.info({
+                                                    headline: "AI Prompt Copied",
+                                                    message: "The starter prompt has been copied to your clipboard.\n\nPaste it into an AI assistant (e.g. ChatGPT, Claude) to get help writing code for this device.\n\nThen copy the generated code and use 'From Clipboard' to load it."
+                                                }))
+                                                .catch(reason => setStatus(String(reason), "error"))}
+                                            appearance={{tooltip: "Copy AI starter prompt to clipboard"}}>
+                                        <span>Start AI-Prompt</span> <Icon symbol={IconSymbol.Robot}/>
+                                    </Button>
+                                )}
                                 <Button lifecycle={lifecycle}
                                         onClick={async () => {
+                                            const approved = await Dialogs.approve({
+                                                headline: "From Clipboard",
+                                                message: "This will replace all code in the editor with the clipboard content and compile it.",
+                                                approveText: "Replace & Compile",
+                                                reverse: true
+                                            })
+                                            if (!approved) {return}
                                             const text = await navigator.clipboard.readText()
-                                            editor.setValue(text)
+                                            editor.executeEdits("clipboard", [{
+                                                range: model.getFullModelRange(),
+                                                text
+                                            }])
                                             await compileCode()
                                         }}
                                         appearance={{tooltip: "Paste from clipboard and compile"}}>
@@ -183,7 +210,7 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                                 </Button>
                                 <Button lifecycle={lifecycle}
                                         onClick={close}
-                                        appearance={{tooltip: "Close editor"}}>
+                                        appearance={{tooltip: "Close editor", color: Colors.red}}>
                                     <span>Close Editor</span> <Icon symbol={IconSymbol.Exit}/>
                                 </Button>
                             </header>

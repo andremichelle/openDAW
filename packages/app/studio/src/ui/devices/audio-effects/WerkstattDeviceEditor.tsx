@@ -1,4 +1,5 @@
 import defaultCode from "./werkstatt-default.js?raw"
+import starterPrompt from "./werkstatt-starter-prompt.txt?raw"
 import {DeviceHost, WerkstattDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
@@ -13,6 +14,7 @@ const config: ScriptDeviceEditorConfig = {
     compiler: {headerTag: "werkstatt", registryName: "werkstattProcessors", functionName: "werkstatt"},
     defaultCode,
     examples: WerkstattExamples,
+    starterPrompt,
     icon: EffectFactories.AudioNamed.Werkstatt.defaultIcon,
     populateMenu: (parent, service, deviceHost, adapter) =>
         MenuItems.forEffectDevice(parent, service, deviceHost, adapter as WerkstattDeviceBoxAdapter),

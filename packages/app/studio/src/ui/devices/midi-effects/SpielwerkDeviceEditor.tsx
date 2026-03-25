@@ -1,4 +1,5 @@
 import defaultCode from "./spielwerk-default.js?raw"
+import starterPrompt from "./spielwerk-starter-prompt.txt?raw"
 import {DeviceHost, SpielwerkDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
@@ -12,6 +13,7 @@ const config: ScriptDeviceEditorConfig = {
     compiler: {headerTag: "spielwerk", registryName: "spielwerkProcessors", functionName: "spielwerk"},
     defaultCode,
     examples: SpielwerkExamples,
+    starterPrompt,
     icon: IconSymbol.Code,
     populateMenu: (parent, service, deviceHost, adapter) =>
         MenuItems.forEffectDevice(parent, service, deviceHost, adapter as SpielwerkDeviceBoxAdapter),

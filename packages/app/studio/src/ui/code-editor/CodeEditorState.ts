@@ -12,4 +12,5 @@ export type CodeEditorState = Readonly<{
     initialCode: string
     previousScreen: Nullable<Workspace.ScreenKeys>
     examples: ReadonlyArray<CodeEditorExample>
+    starterPrompt: string
 }>
