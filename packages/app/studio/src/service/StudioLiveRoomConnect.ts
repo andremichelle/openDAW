@@ -6,6 +6,7 @@ import {StudioService} from "@/service/StudioService"
 import {showConnectRoomDialog} from "@/service/StudioLiveRoomDialog.tsx"
 import {RoomAwareness, writeIdentity} from "@/service/RoomAwareness"
 import {Events} from "@opendaw/lib-dom"
+import {RouteLocation} from "@opendaw/lib-jsx"
 
 export const connectRoom = async (service: StudioService, prefillRoomName?: Optional<string>): Promise<void> => {
     const result = await showConnectRoomDialog(prefillRoomName).catch(() => null)
@@ -64,6 +65,7 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
             label.setTitle("Room Users")
             update()
         })
+        RouteLocation.get().navigateTo("/")
         service.projectProfileService.setProject(project, roomName)
         service.setRoomAwareness(roomAwareness)
         terminator.own({terminate: () => service.setRoomAwareness(null)})
