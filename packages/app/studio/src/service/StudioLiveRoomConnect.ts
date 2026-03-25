@@ -64,9 +64,9 @@ export const connectRoom = async (service: StudioService): Promise<void> => {
             label.setTitle("Room Users")
             update()
         })
+        service.projectProfileService.setProject(project, roomName)
         service.setRoomAwareness(roomAwareness)
         terminator.own({terminate: () => service.setRoomAwareness(null)})
-        service.projectProfileService.setProject(project, roomName)
     } else {
         await RuntimeNotifier.info({
             headline: "Failed Connecting Room",

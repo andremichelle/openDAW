@@ -16,10 +16,17 @@ export type AwarenessUserState = {
     panel: Nullable<string>
 }
 
-export const readIdentity = (): { name: string, color: string } => ({
-    name: localStorage.getItem(StorageKeyName) ?? "",
-    color: localStorage.getItem(StorageKeyColor) ?? UserColors[Math.floor(Math.random() * UserColors.length)]
-})
+export const readIdentity = (): { name: string, color: string } => {
+    const name = localStorage.getItem(StorageKeyName) ?? ""
+    let color = localStorage.getItem(StorageKeyColor)
+    if (color === null) {
+        const bytes = new Uint8Array(1)
+        crypto.getRandomValues(bytes)
+        color = UserColors[bytes[0] % UserColors.length]
+        localStorage.setItem(StorageKeyColor, color)
+    }
+    return {name, color}
+}
 
 export const writeIdentity = (name: string, color: string): void => {
     localStorage.setItem(StorageKeyName, name)
