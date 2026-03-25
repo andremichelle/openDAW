@@ -20,10 +20,12 @@ component
     color: var(--color-shadow)
     word-break: break-all
     min-height: 1em
-    cursor: pointer
 
-    &:hover
-      color: var(--color-blue)
+    &.copyable
+      cursor: pointer
+
+      &:hover
+        color: var(--color-blue)
 
   > label
     font-size: 0.75rem

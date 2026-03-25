@@ -34,6 +34,8 @@ export const showConnectRoomDialog = (prefillRoomName?: Optional<string>): Promi
     )
     const updateUrlPreview = () => {
         urlPreview.textContent = `${location.origin}/join/${roomInput.value}`
+        const copyable = roomInput.value.trim().length > 0 && roomInput.checkValidity()
+        urlPreview.classList.toggle("copyable", copyable)
     }
     const roomInput: HTMLInputElement = (
         <input className="default input" type="text" placeholder="Required" maxLength={16} required={true}
