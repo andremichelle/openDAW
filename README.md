@@ -13,7 +13,7 @@
 and to **resurface the process of making music** by making **high-quality** creation tools accessible to everyone, with
 a strong focus on **education** and data-privacy.
 
-Subscribe to our <a href="https://buttondown.com/opendaw" target="newsletter">Newsletter</a> for regular updates.
+Subscribe to our [Newsletter](https://buttondown.com/opendaw) for regular updates.
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/andremichelle/openDAW/main/assets/studio-teaser.png"/>
