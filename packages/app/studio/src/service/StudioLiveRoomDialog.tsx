@@ -3,7 +3,7 @@ import {Errors, isDefined, Optional, RuntimeNotifier} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Dialog} from "@/ui/components/Dialog"
 import {Surface} from "@/ui/surface/Surface"
 import {readIdentity, userColors} from "@/service/RoomAwareness"
@@ -20,10 +20,14 @@ export const showConnectRoomDialog = (prefillRoomName?: Optional<string>): Promi
         <span className="url-preview"
               onclick={async () => {
                   const text = urlPreview.textContent
-                  if (isDefined(text) && text.length > 0) {
+                  if (text.length > 0
+                      && roomInput.value.trim().length > 0 && roomInput.checkValidity()
+                      && nameInput.value.trim().length > 0) {
                       const {status} = await Promises.tryCatch(navigator.clipboard.writeText(text))
                       if (status === "resolved") {
                           await RuntimeNotifier.info({headline: "Clipboard", message: "Join link copied to clipboard."})
+                      } else {
+                          await RuntimeNotifier.info({headline: "Clipboard", message: "Could not copy to clipboard."})
                       }
                   }
               }}/>
@@ -38,7 +42,8 @@ export const showConnectRoomDialog = (prefillRoomName?: Optional<string>): Promi
                value={hasRoomName ? prefillRoomName : ""} disabled={hasRoomName}/>
     )
     const nameInput: HTMLInputElement = (
-        <input className="default input" type="text" placeholder="Required" value={identity.name} maxLength={16} required={true}/>
+        <input className="default input" type="text" placeholder="Required" value={identity.name} maxLength={16}
+               required={true}/>
     )
     let selectedColor = identity.color
     const colorSwatches: HTMLElement = (
@@ -79,12 +84,12 @@ export const showConnectRoomDialog = (prefillRoomName?: Optional<string>): Promi
                     }
                 ]}>
             <div className={className}>
-                <p>Rooms are transient and will disappear shortly after the last user leaves.
-                    Do not forget to save your project before leaving.</p>
                 <p>Share the room name with other users so they can join.
                     No assets are stored on the server.
                     They are exchanged directly between users via a P2P network
                     and stored locally in each user's browser (OPFS).</p>
+                <p style={{color: Colors.red.toString()}}>Rooms are transient and will disappear shortly after the
+                    last user leaves. Do not forget to save your project before leaving!</p>
                 <label>Room Name</label>
                 {roomInput}
                 {urlPreview}
