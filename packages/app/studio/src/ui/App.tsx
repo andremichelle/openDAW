@@ -20,6 +20,7 @@ import {UsersPage} from "@/ui/pages/UsersPage"
 import {PrivacyPage} from "@/ui/pages/PrivacyPage"
 import {PreferencesPage} from "@/ui/pages/PreferencesPage"
 import {TestPage} from "@/ui/pages/TestPage"
+import {JoinRoomPage} from "@/ui/pages/JoinRoomPage"
 
 export const App = (service: StudioService) => {
     const terminator = new Terminator()
@@ -51,7 +52,8 @@ export const App = (service: StudioService) => {
                     {path: "/graph", factory: GraphPage},
                     {path: "/users", factory: UsersPage},
                     {path: "/open-bundle/*", factory: OpenBundlePage},
-                    {path: "/test", factory: TestPage}
+                    {path: "/test", factory: TestPage},
+                    {path: "/join/*", factory: JoinRoomPage}
                 ]}
             />
             <RoomStatus lifecycle={terminator} service={service}/>

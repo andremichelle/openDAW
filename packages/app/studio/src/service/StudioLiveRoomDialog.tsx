@@ -1,5 +1,6 @@
 import css from "./StudioLiveRoomDialog.sass?inline"
-import {Errors} from "@opendaw/lib-std"
+import {Errors, isDefined, Optional, RuntimeNotifier} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
 import {Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {IconSymbol} from "@opendaw/studio-enums"
@@ -11,11 +12,30 @@ const className = Html.adoptStyleSheet(css, "StudioLiveRoomDialog")
 
 export type RoomDialogResult = { roomName: string, userName: string, userColor: string }
 
-export const showConnectRoomDialog = (): Promise<RoomDialogResult> => {
+export const showConnectRoomDialog = (prefillRoomName?: Optional<string>): Promise<RoomDialogResult> => {
     const {resolve, reject, promise} = Promise.withResolvers<RoomDialogResult>()
     const identity = readIdentity()
+    const hasRoomName = isDefined(prefillRoomName) && prefillRoomName.length > 0
+    const urlPreview: HTMLElement = (
+        <span className="url-preview"
+              onclick={async () => {
+                  const text = urlPreview.textContent
+                  if (isDefined(text) && text.length > 0) {
+                      const {status} = await Promises.tryCatch(navigator.clipboard.writeText(text))
+                      if (status === "resolved") {
+                          await RuntimeNotifier.info({headline: "Clipboard", message: "Join link copied to clipboard."})
+                      }
+                  }
+              }}/>
+    )
+    const updateUrlPreview = () => {
+        urlPreview.textContent = `${location.origin}/join/${roomInput.value}`
+    }
     const roomInput: HTMLInputElement = (
-        <input className="default input" type="text" placeholder="Required" maxLength={16} required={true}/>
+        <input className="default input" type="text" placeholder="Required" maxLength={16} required={true}
+               pattern="[a-z0-9._-]+"
+               title="Only lowercase letters, numbers, hyphens, dots, and underscores"
+               value={hasRoomName ? prefillRoomName : ""} disabled={hasRoomName}/>
     )
     const nameInput: HTMLInputElement = (
         <input className="default input" type="text" placeholder="Required" value={identity.name} maxLength={16} required={true}/>
@@ -40,7 +60,7 @@ export const showConnectRoomDialog = (): Promise<RoomDialogResult> => {
     const approve = () => {
         const roomName = roomInput.value.trim()
         const userName = nameInput.value.trim()
-        if (roomName.length === 0 || userName.length === 0) {return}
+        if (roomName.length === 0 || userName.length === 0 || !roomInput.checkValidity()) {return}
         resolve({roomName, userName, userColor: selectedColor})
     }
     const dialog: HTMLDialogElement = (
@@ -67,6 +87,7 @@ export const showConnectRoomDialog = (): Promise<RoomDialogResult> => {
                     and stored locally in each user's browser (OPFS).</p>
                 <label>Room Name</label>
                 {roomInput}
+                {urlPreview}
                 <label>Your Name</label>
                 {nameInput}
                 <label>Your Color</label>
@@ -83,6 +104,15 @@ export const showConnectRoomDialog = (): Promise<RoomDialogResult> => {
     }
     Surface.get().flyout.appendChild(dialog)
     dialog.showModal()
-    roomInput.focus()
+    updateUrlPreview()
+    if (hasRoomName) {
+        nameInput.focus()
+    } else {
+        roomInput.addEventListener("input", () => {
+            roomInput.value = roomInput.value.toLowerCase()
+            updateUrlPreview()
+        })
+        roomInput.focus()
+    }
     return promise
 }

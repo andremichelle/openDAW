@@ -1,4 +1,4 @@
-import {RuntimeNotifier, Terminator, UUID} from "@opendaw/lib-std"
+import {Optional, RuntimeNotifier, Terminator, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {SampleStorage, SoundfontStorage, Workers, YService} from "@opendaw/studio-core"
 import {P2PSession, type SignalingSocket} from "@opendaw/studio-p2p"
@@ -7,8 +7,8 @@ import {showConnectRoomDialog} from "@/service/StudioLiveRoomDialog.tsx"
 import {RoomAwareness, writeIdentity} from "@/service/RoomAwareness"
 import {Events} from "@opendaw/lib-dom"
 
-export const connectRoom = async (service: StudioService): Promise<void> => {
-    const result = await showConnectRoomDialog().catch(() => null)
+export const connectRoom = async (service: StudioService, prefillRoomName?: Optional<string>): Promise<void> => {
+    const result = await showConnectRoomDialog(prefillRoomName).catch(() => null)
     if (result === null) {return}
     const {roomName, userName, userColor} = result
     writeIdentity(userName, userColor)

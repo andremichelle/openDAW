@@ -20,13 +20,14 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
             element.style.display = ""
             const roomLabel: HTMLElement = (
                 <span className="room-name"
-                      title="Click to copy room name"
+                      title="Click to copy join link"
                       onclick={async () => {
-                          const {status} = await Promises.tryCatch(navigator.clipboard.writeText(awareness.roomName))
+                          const joinUrl = `${location.origin}/join/${awareness.roomName}`
+                          const {status} = await Promises.tryCatch(navigator.clipboard.writeText(joinUrl))
                           if (status === "resolved") {
                               await RuntimeNotifier.info({
                                   headline: "Clipboard",
-                                  message: `Room-name '${awareness.roomName}' now in clipboard.`
+                                  message: `Join link copied to clipboard.`
                               })
                           }
                       }}>{`Room '${awareness.roomName}'`}</span>

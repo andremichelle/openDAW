@@ -9,8 +9,21 @@ component
   > .input
     margin-top: 0
 
+    &:disabled
+      opacity: 0.3
+
     &:invalid
       outline: 1px solid hsla(354, 100%, 65%, 0.25)
+
+  > .url-preview
+    font-size: 0.625rem
+    color: var(--color-shadow)
+    word-break: break-all
+    min-height: 1em
+    cursor: pointer
+
+    &:hover
+      color: var(--color-blue)
 
   > label
     font-size: 0.75rem
