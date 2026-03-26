@@ -74,7 +74,7 @@ class Processor {
         const ringDetune = ringInc * 1.00073
         const foldDrive = 1.0 + this.fold * 18.0
         const hasFold = this.fold > 0.001
-        const hasCrush = this.crush != 16
+        const hasCrush = this.crush !== 16
         const hasDecim = this.decimate > 0.001
         const hasRing = this.ring > 0.001
         const chaosAmt = this.chaos
