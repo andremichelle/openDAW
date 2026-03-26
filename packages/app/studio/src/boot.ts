@@ -115,14 +115,10 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
         progress: (request): RuntimeNotification.ProgressUpdater => Dialogs.progress(request)
     })
     if (buildInfo.env === "production" && !Browser.isLocalHost()) {
-        const uuid = buildInfo.uuid
-        const sourceCss = document.querySelector<HTMLLinkElement>("link[rel='stylesheet']")?.href ?? ""
-        const sourceCode = document.querySelector<HTMLScriptElement>("script[src]")?.src ?? ""
-        if (!sourceCss.includes(uuid) || !sourceCode.includes(uuid)) {
+        if (import.meta.env.BUILD_UUID !== buildInfo.uuid) {
             console.warn("Cache issue:")
-            console.warn("expected uuid", uuid)
-            console.warn("sourceCss", sourceCss)
-            console.warn("sourceCode", sourceCode)
+            console.warn("expected uuid", buildInfo.uuid)
+            console.warn("embedded uuid", import.meta.env.BUILD_UUID)
             Dialogs.cache()
             return
         }
