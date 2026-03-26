@@ -1,11 +1,6 @@
-// @param warmth  0.3   0.0  1.0
-// @param air     0.3   0.0  1.0
-// @param width   0.3   0.0  1.0
-// @param punch   0.3   0.0  1.0
-// @param output  1.0   0.5  1.5  linear
-
 // ─────────────────────────────────────────────────────────────────────────────
 //  BEAUTIFIER — transparent mastering enhancer
+// by Chaosmeister - https://github.com/Chaosmeister 
 //
 //  Signal chain:
 //   src → [warmth: harmonic exciter] → [air: high-shelf exciter]
@@ -29,6 +24,12 @@
 //  WIDTH: mid/side processing. M = (L+R)/2, S = (L-R)/2. Gain the side
 //    channel upward to widen, then reconstruct L/R. Zero-phase, no comb issues.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// @param warmth  0.3   0.0  1.0
+// @param air     0.3   0.0  1.0
+// @param width   0.3   0.0  1.0
+// @param punch   0.3   0.0  1.0
+// @param output  1.0   0.5  1.5  linear
 
 class Processor {
     // ── params ────────────────────────────────────────────────────────────────
