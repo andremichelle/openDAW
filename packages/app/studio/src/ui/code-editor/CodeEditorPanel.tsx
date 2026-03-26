@@ -155,15 +155,60 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                     return (
                         <div className="content">
                             <header>
+                                <Button lifecycle={lifecycle}
+                                        onClick={close}
+                                        appearance={{
+                                            tooltip: "Close editor",
+                                            color: Colors.red,
+                                            framed: true,
+                                            cursor: "pointer"
+                                        }}>
+                                    <Icon symbol={IconSymbol.Close}/>
+                                </Button>
                                 {nameSpan}
                                 <Button lifecycle={lifecycle}
                                         onClick={compileCode}
                                         appearance={{
-                                            tooltip: `Compile (${Shortcut.of("Enter", {alt: true}).format()})`,
-                                            color: Colors.green
+                                            tooltip: `Run (${Shortcut.of("Enter", {alt: true}).format()})`,
+                                            color: Colors.green,
+                                            cursor: "pointer"
                                         }}>
-                                    <span>Compile</span> <Icon symbol={IconSymbol.Play}/>
+                                    <span>Run</span> <Icon symbol={IconSymbol.Play}/>
                                 </Button>
+                                <Button lifecycle={lifecycle}
+                                        onClick={async () => {
+                                            const approved = await Dialogs.approve({
+                                                headline: "Run Clipboard",
+                                                message: "This will replace all code in the editor with the clipboard content and run it.",
+                                                approveText: "Replace & Run",
+                                                reverse: true
+                                            })
+                                            if (!approved) {return}
+                                            const text = await navigator.clipboard.readText()
+                                            editor.executeEdits("clipboard", [{
+                                                range: model.getFullModelRange(),
+                                                text
+                                            }])
+                                            await compileCode()
+                                        }}
+                                        appearance={{tooltip: "Paste from clipboard and run", cursor: "pointer"}}>
+                                    <span>Run Clipboard</span> <Icon symbol={IconSymbol.Paste}/>
+                                </Button>
+                                {starterPrompt.length > 0 && (
+                                    <Button lifecycle={lifecycle}
+                                            onClick={() => navigator.clipboard.writeText(starterPrompt)
+                                                .then(() => Dialogs.info({
+                                                    headline: "AI Prompt Copied",
+                                                    message: "The starter prompt has been copied to your clipboard.\n\nPaste it into an AI assistant (e.g. ChatGPT, Claude) to get help writing code for this device.\n\nThen copy the generated code and use 'From Clipboard' to load it."
+                                                }))
+                                                .catch(reason => setStatus(String(reason), "error"))}
+                                            appearance={{
+                                                tooltip: "Copy AI starter prompt to clipboard",
+                                                cursor: "pointer"
+                                            }}>
+                                        <span>Get Prompt</span> <Icon symbol={IconSymbol.Copy}/>
+                                    </Button>
+                                )}
                                 {examples.length > 0 && (
                                     <MenuButton root={MenuItem.root()
                                         .setRuntimeChildrenProcedure(parent => parent
@@ -177,42 +222,6 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                                         <span>Examples</span>
                                     </MenuButton>
                                 )}
-                               {starterPrompt.length > 0 && (
-                                    <Button lifecycle={lifecycle}
-                                            onClick={() => navigator.clipboard.writeText(starterPrompt)
-                                                .then(() => Dialogs.info({
-                                                    headline: "AI Prompt Copied",
-                                                    message: "The starter prompt has been copied to your clipboard.\n\nPaste it into an AI assistant (e.g. ChatGPT, Claude) to get help writing code for this device.\n\nThen copy the generated code and use 'From Clipboard' to load it."
-                                                }))
-                                                .catch(reason => setStatus(String(reason), "error"))}
-                                            appearance={{tooltip: "Copy AI starter prompt to clipboard"}}>
-                                        <span>Start AI-Prompt</span> <Icon symbol={IconSymbol.Robot}/>
-                                    </Button>
-                                )}
-                                <Button lifecycle={lifecycle}
-                                        onClick={async () => {
-                                            const approved = await Dialogs.approve({
-                                                headline: "From Clipboard",
-                                                message: "This will replace all code in the editor with the clipboard content and compile it.",
-                                                approveText: "Replace & Compile",
-                                                reverse: true
-                                            })
-                                            if (!approved) {return}
-                                            const text = await navigator.clipboard.readText()
-                                            editor.executeEdits("clipboard", [{
-                                                range: model.getFullModelRange(),
-                                                text
-                                            }])
-                                            await compileCode()
-                                        }}
-                                        appearance={{tooltip: "Paste from clipboard and compile"}}>
-                                    <span>From Clipboard</span> <Icon symbol={IconSymbol.Insert}/>
-                                </Button>
-                                <Button lifecycle={lifecycle}
-                                        onClick={close}
-                                        appearance={{tooltip: "Close editor", color: Colors.red}}>
-                                    <span>Close Editor</span> <Icon symbol={IconSymbol.Exit}/>
-                                </Button>
                             </header>
                             {container}
                             {statusLabel}

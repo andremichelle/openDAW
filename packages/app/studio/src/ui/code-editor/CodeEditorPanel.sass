@@ -15,7 +15,7 @@ component
 
   header
     height: 33px
-    padding: 1em
+    padding: 1em 1em 1em 2em
     display: flex
     align-items: center
     flex-direction: row
@@ -44,10 +44,13 @@ component
     border-top: 1px solid rgba(white, 0.1)
     user-select: text !important
     -webkit-user-select: text !important
+
     &.idle
       color: rgba(white, 0.4)
+
     &.success
       color: hsl(120, 60%, 60%)
+
     &.error
       background-color: hsl(0, 50%, 15%)
       color: hsl(0, 80%, 70%)

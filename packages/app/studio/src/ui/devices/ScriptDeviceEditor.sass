@@ -1,4 +1,5 @@
 @use "@/mixins"
+@use "@/colors"
 
 component
   display: flex
@@ -19,7 +20,7 @@ component
 
     &:empty
       border-radius: 3px
-      background-color: rgba(white, 0.02)
+      @include colors.panel-background-stripes-dark
 
   .error
     font-size: 16px
