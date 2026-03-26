@@ -1,8 +1,8 @@
 // Alienator
 // by Chaosmeister - https://github.com/Chaosmeister
-// @param chaos    0.3   0.0   1.0
+// @param chaos    0.0   0.0   1.0
 // @param drift    0.0   0.0   1.0
-// @param fold     0.5   0.0   1.0
+// @param fold     0.0   0.0   1.0
 // @param crush    16.0   1.0   16.0 int Bits
 // @param decimate 0.0   0.0   1.0 linear %
 // @param release  1.0   0.0   1.0
@@ -14,12 +14,12 @@ const ALIEN_DELAY = 65536
 const ALIEN_MASK = ALIEN_DELAY - 1
 
 class Processor {
-    fold = 0.5
+    fold = 0.0
     crush = 16.0
     decimate = 0.0
     ring = 0.0
     ringHz = 220
-    chaos = 0.3
+    chaos = 0.0
     drift = 0.0
     release = 1.0
     wet = 0.0
@@ -65,11 +65,6 @@ class Processor {
         const srcL = src[0], srcR = src[1]
         const outL = out[0], outR = out[1]
 
-        if (flags & 2) {
-            this.ringPhL = 0.0
-            this.ringPhR = 0.0
-        }
-
         const ringInc = this.ringHz / sampleRate * this.TWO_PI
         const ringDetune = ringInc * 1.00073
         const foldDrive = 1.0 + this.fold * 18.0
@@ -89,7 +84,23 @@ class Processor {
         const chaosBase = Math.floor(0.008 * sampleRate)
         const chaosSwing = Math.floor(0.004 * sampleRate)
         const chaosFB = chaosAmt * 0.65
-
+        
+        if (flags & 2) {
+            this.ringPhL = 0.0
+            this.ringPhR = 0.0
+            this.decimHoldL = 0.0
+            this.decimHoldR = 0.0
+            this.decimCntL = 0
+            this.decimCntR = 0
+        }
+        else if (!hasDecim)
+        {
+            this.decimHoldL = 0.0
+            this.decimHoldR = 0.0
+            this.decimCntL = 0
+            this.decimCntR = 0
+        }
+        
         for (let i = s0; i < s1; i++) {
             let xL = srcL[i]
             let xR = srcR[i]
