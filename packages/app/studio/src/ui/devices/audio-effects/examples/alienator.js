@@ -135,11 +135,11 @@ class Processor {
                 const rr = Math.sin(this.ringPhR)
                 xL = xL * (1.0 - this.ring) + xL * rl * this.ring
                 xR = xR * (1.0 - this.ring) + xR * rr * this.ring
+                this.ringPhL += ringInc
+                if (this.ringPhL > this.TWO_PI) this.ringPhL -= this.TWO_PI
+                this.ringPhR += ringDetune
+                if (this.ringPhR > this.TWO_PI) this.ringPhR -= this.TWO_PI
             }
-            this.ringPhL += ringInc
-            if (this.ringPhL > this.TWO_PI) this.ringPhL -= this.TWO_PI
-            this.ringPhR += ringDetune
-            if (this.ringPhR > this.TWO_PI) this.ringPhR -= this.TWO_PI
 
             // Write processed signal into delay (after stages, before limiter)
             this.delayL[this.delayWr] = xL * this.release
