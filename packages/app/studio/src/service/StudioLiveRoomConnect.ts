@@ -5,6 +5,7 @@ import {P2PSession, type SignalingSocket} from "@opendaw/studio-p2p"
 import {StudioService} from "@/service/StudioService"
 import {showConnectRoomDialog} from "@/service/StudioLiveRoomDialog.tsx"
 import {RoomAwareness, writeIdentity} from "@/service/RoomAwareness"
+import {ChatService} from "@/chat/ChatService"
 import {Events} from "@opendaw/lib-dom"
 import {RouteLocation} from "@opendaw/lib-jsx"
 
@@ -69,6 +70,10 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
         service.projectProfileService.setProject(project, roomName)
         service.setRoomAwareness(roomAwareness)
         terminator.own({terminate: () => service.setRoomAwareness(null)})
+        const chatService = new ChatService(provider.doc, userName, userColor)
+        terminator.own(chatService)
+        service.chatService.wrap(chatService)
+        terminator.own({terminate: () => service.chatService.clear()})
     } else {
         await RuntimeNotifier.info({
             headline: "Failed Connecting Room",

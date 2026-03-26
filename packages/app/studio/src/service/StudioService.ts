@@ -73,6 +73,7 @@ import {Mixdowns} from "@/service/Mixdowns"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {CodeEditorState} from "@/ui/code-editor/CodeEditorState"
 import {RoomAwareness} from "@/service/RoomAwareness"
+import {ChatService} from "@/chat/ChatService"
 
 /**
  * I am just piling stuff after stuff in here to boot the environment.
@@ -122,6 +123,7 @@ export class StudioService implements ProjectEnv {
 
     #factoryFooterLabel: Option<Provider<FooterLabel>> = Option.None
     readonly #roomAwareness = new DefaultObservableValue<Nullable<RoomAwareness>>(null)
+    readonly #chatService = new MutableObservableOption<ChatService>()
 
     regionModifierInProgress: boolean = false
 
@@ -386,6 +388,7 @@ export class StudioService implements ProjectEnv {
 
     get roomAwareness(): DefaultObservableValue<Nullable<RoomAwareness>> {return this.#roomAwareness}
     setRoomAwareness(value: Nullable<RoomAwareness>): void {this.#roomAwareness.setValue(value)}
+    get chatService(): MutableObservableOption<ChatService> {return this.#chatService}
 
     get optShadertoyState(): Option<ShadertoyState> {return this.#shadertoyState}
     get activeCodeEditor(): MutableObservableOption<CodeEditorState> {return this.#activeCodeEditor}

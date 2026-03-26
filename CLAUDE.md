@@ -13,3 +13,6 @@
   - Use `isAbsent(value)` instead of `value === undefined || value === null`
   - **Never use falsy checks like `!value` or `if (!value)` for null/undefined checks** - always use `!isDefined(value)` or `isAbsent(value)`
   - Never write `| null` or `| undefined` inline - always use the lib-std types.
+  - Use `MutableObservableOption<T>` instead of `DefaultObservableValue<Nullable<T>>`. Use `wrap(value)`/`clear()` instead of `setValue(value)`/`setValue(null)`.
+- **Never use `!` definite assignment assertions** (`let x!: Type`) to suppress compiler errors. Create elements as `const` upfront and embed them in JSX with `{el}`.
+- **Use the `.hidden` CSS class** instead of `element.style.display = "none"`. Use `element.classList.add("hidden")` / `element.classList.remove("hidden")`.

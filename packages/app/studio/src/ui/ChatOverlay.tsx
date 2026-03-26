@@ -1,99 +1,78 @@
 import css from "./ChatOverlay.sass?inline"
-import {createElement} from "@opendaw/lib-jsx"
-import {DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
+import {createElement, appendChildren} from "@opendaw/lib-jsx"
+import {DefaultObservableValue, Lifecycle, Option, Terminator} from "@opendaw/lib-std"
 import {Events, Html} from "@opendaw/lib-dom"
-import {Icon} from "@/ui/components/Icon.tsx"
+import {IconCartridge} from "@/ui/components/Icon.tsx"
 import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {Button} from "@/ui/components/Button.tsx"
+import {Icon} from "@/ui/components/Icon.tsx"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {ChatOverlayBackground} from "@/ui/ChatOverlayBackground.tsx"
+import {StudioService} from "@/service/StudioService"
+import {ChatService} from "@/chat/ChatService"
+import {ChatMessage} from "@/chat/ChatMessage"
 
 const className = Html.adoptStyleSheet(css, "ChatOverlay")
 
-type DummyMessage = {
-    name: string
-    color: string
-    text: string
-    time: string
-    self: boolean
+const formatTime = (timestamp: number): string => {
+    const date = new Date(timestamp)
+    return `${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`
 }
 
-const dummyMessages: ReadonlyArray<DummyMessage> = [
-    {name: "Alice", color: "#E06C75", text: "Hey, anyone here?", time: "14:02", self: false},
-    {name: "You", color: "#61AFEF", text: "Yeah, just joined!", time: "14:03", self: true},
-    {
-        name: "Alice",
-        color: "#E06C75",
-        text: "Cool! I added a new synth track, check it out",
-        time: "14:03",
-        self: false
-    },
-    {name: "Bob", color: "#98C379", text: "Sounds great, but the reverb is a bit much", time: "14:05", self: false},
-    {name: "You", color: "#61AFEF", text: "Agreed, I will dial it back", time: "14:05", self: true},
-    {
-        name: "Alice",
-        color: "#E06C75",
-        text: "Can you also try a shorter decay on the delay?",
-        time: "14:06",
-        self: false
-    },
-    {name: "Bob", color: "#98C379", text: "I am working on the drum pattern btw", time: "14:07", self: false},
-    {name: "You", color: "#61AFEF", text: "Nice, let me know when it is ready", time: "14:07", self: true},
-    {
-        name: "Alice",
-        color: "#E06C75",
-        text: "I have been thinking about the arrangement and I feel like we need a longer intro section with some atmospheric pads building up slowly before the main beat drops in. Maybe we could also add some field recordings or foley sounds to give it more texture and depth. What do you think about layering some vinyl crackle underneath?",
-        time: "14:10",
-        self: false
-    },
-    {
-        name: "Bob",
-        color: "#98C379",
-        text: "That sounds like a solid plan. I could also pitch-shift some of the vocal chops and scatter them across the stereo field to create a wider soundstage. We should also consider adding a breakdown section around the two minute mark where everything strips back to just the bass and some filtered percussion before building back up",
-        time: "14:12",
-        self: false
-    },
-    {
-        name: "You",
-        color: "#61AFEF",
-        text: "Love both ideas. Let me bounce the current mix so we have a reference point before making changes. I will also export the stems separately so we can each work on our parts independently and merge them later without stepping on each other",
-        time: "14:13",
-        self: true
-    }
-]
+const renderMessage = (message: ChatMessage): HTMLElement => (
+    <div className="message">
+        <div className="header">
+            <span className="dot" style={{backgroundColor: message.color}}/>
+            <span className="name">{message.name}</span>
+            <span className="time">{formatTime(message.timestamp)}</span>
+        </div>
+        <div className="text" style={{borderLeftColor: message.color}}>{message.text}</div>
+    </div>
+)
 
-type Construct = { lifecycle: Lifecycle }
+type Construct = { lifecycle: Lifecycle, service: StudioService }
 
-export const ChatOverlay = ({lifecycle}: Construct) => {
+export const ChatOverlay = ({lifecycle, service}: Construct) => {
     const sendOnEnter = lifecycle.own(new DefaultObservableValue<boolean>(true))
-    const closeAfterSend = lifecycle.own(new DefaultObservableValue<boolean>(true))
+    const closeAfterSend = lifecycle.own(new DefaultObservableValue<boolean>(false))
+    const tabIcon = lifecycle.own(new DefaultObservableValue<IconSymbol>(IconSymbol.ChatEmpty))
+    const messagesContainer: HTMLElement = (<div className="messages"/>)
+    const textArea: HTMLTextAreaElement = (<textarea placeholder="Type a message..." maxLength={300} rows={2}/>)
+    const isOpen = () => element.classList.contains("open")
+    const updateTabIcon = () => {
+        tabIcon.setValue(hasUnread ? IconSymbol.ChatMessage : IconSymbol.ChatEmpty)
+    }
+    let hasUnread = false
+    const markUnread = () => {
+        if (!isOpen()) {
+            hasUnread = true
+            updateTabIcon()
+        }
+    }
+    const clearUnread = () => {
+        hasUnread = false
+        updateTabIcon()
+    }
     const element: HTMLElement = (
         <div className={className}>
             <div className="chat-tab" onInit={(tab: HTMLElement) => {
                 lifecycle.own(Events.subscribe(tab, "click", () => {
+                    const opening = !isOpen()
                     element.classList.toggle("open")
+                    if (opening) {
+                        clearUnread()
+                    }
                 }))
             }}>
-                <Icon symbol={IconSymbol.ChatEmpty}/>
+                <IconCartridge lifecycle={lifecycle} symbol={tabIcon}/>
             </div>
             <div className="chat-window">
-                <div className="messages">
-                    {dummyMessages.map(message => (
-                        <div className={message.self ? "message self" : "message"}>
-                            <div className="header">
-                                <span className="dot" style={{backgroundColor: message.color}}/>
-                                <span className="name">{message.name}</span>
-                                <span className="time">{message.time}</span>
-                            </div>
-                            <div className="text" style={{borderLeftColor: message.color}}>{message.text}</div>
-                        </div>
-                    ))}
-                </div>
+                {messagesContainer}
                 <div className="input-area">
-                    <textarea placeholder="Type a message..." maxLength={300} rows={2}/>
+                    {textArea}
                     <Button lifecycle={lifecycle}
                             appearance={{framed: true, landscape: true}}
-                            onClick={() => {}}>
+                            onClick={() => send()}>
                         <Icon symbol={IconSymbol.Play}/>
                     </Button>
                 </div>
@@ -109,5 +88,53 @@ export const ChatOverlay = ({lifecycle}: Construct) => {
         </div>
     )
     element.prepend(<ChatOverlayBackground lifecycle={lifecycle} element={element}/>)
+    const send = () => {
+        service.chatService.ifSome(chatService => {
+            chatService.sendMessage(textArea.value)
+            textArea.value = ""
+            if (closeAfterSend.getValue()) {
+                setTimeout(() => element.classList.remove("open"), 1000)
+            }
+        })
+    }
+    lifecycle.own(Events.subscribe(textArea, "keydown", (event: KeyboardEvent) => {
+        if (event.key === "Enter" && !event.shiftKey && sendOnEnter.getValue()) {
+            event.preventDefault()
+            send()
+        }
+    }))
+    const scrollToBottom = () => {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight
+    }
+    const serviceLifecycle = lifecycle.own(new Terminator())
+    lifecycle.own(service.chatService.catchupAndSubscribe((option: Option<ChatService>) => {
+        serviceLifecycle.terminate()
+        Html.empty(messagesContainer)
+        hasUnread = false
+        if (option.nonEmpty()) {
+            const chatService = option.unwrap()
+            element.classList.remove("hidden")
+            const messages = chatService.messages()
+            messages.forEach(message => {
+                appendChildren(messagesContainer, renderMessage(message))
+            })
+            if (messages.length > 0) {
+                markUnread()
+            }
+            scrollToBottom()
+            serviceLifecycle.own(chatService.subscribe({
+                onMessageAdded: (message: ChatMessage) => {
+                    appendChildren(messagesContainer, renderMessage(message))
+                    scrollToBottom()
+                    markUnread()
+                }
+            }))
+        } else {
+            element.classList.add("hidden")
+            element.classList.remove("open")
+            updateTabIcon()
+        }
+    }))
+    element.classList.add("hidden")
     return element
 }

@@ -57,7 +57,7 @@ export const App = (service: StudioService) => {
                     {path: "/join/*", factory: JoinRoomPage}
                 ]}
             />
-            <ChatOverlay lifecycle={terminator}/>
+            <ChatOverlay lifecycle={terminator} service={service}/>
             <RoomStatus lifecycle={terminator} service={service}/>
             <Footer lifecycle={terminator} service={service}/>
         </Frag>
