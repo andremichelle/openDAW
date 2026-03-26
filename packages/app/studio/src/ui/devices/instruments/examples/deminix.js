@@ -239,14 +239,14 @@ class Processor {
             for (let s = block.s0; s < block.s1; s++) {
                 if (v.gate) {
                     const target = v.sustainGain * v.velocity
-                    if (this.attack === 0) {
+                    if (this.attack < v.attackRate) {
                         v.gain = target
                     }
                     else {
                         v.gain += (target - v.gain) * v.attackRate / this.attack
                     }
                 } else {
-                    if (this.release === 0) {
+                    if (this.release < v.releaseRate) {
                         v.active = false
                         break
                     }
