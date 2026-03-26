@@ -1,4 +1,5 @@
 // Alienator
+// by Chaosmeister - https://github.com/Chaosmeister
 // @param chaos    0.3   0.0   1.0
 // @param drift    0.0   0.0   1.0
 // @param fold     0.5   0.0   1.0
