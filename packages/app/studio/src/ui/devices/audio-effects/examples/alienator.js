@@ -1,8 +1,8 @@
 // Alienator
 // by Chaosmeister - https://github.com/Chaosmeister
-// @param chaos    0.3   0.0   1.0
+// @param chaos    0.0   0.0   1.0
 // @param drift    0.0   0.0   1.0
-// @param fold     0.5   0.0   1.0
+// @param fold     0.0   0.0   1.0
 // @param crush    16.0   1.0   16.0 int Bits
 // @param decimate 0.0   0.0   1.0 linear %
 // @param release  1.0   0.0   1.0
@@ -14,12 +14,12 @@ const ALIEN_DELAY = 65536
 const ALIEN_MASK = ALIEN_DELAY - 1
 
 class Processor {
-    fold = 0.5
+    fold = 0.0
     crush = 16.0
     decimate = 0.0
     ring = 0.0
     ringHz = 220
-    chaos = 0.3
+    chaos = 0.0
     drift = 0.0
     release = 1.0
     wet = 0.0
