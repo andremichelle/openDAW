@@ -1,7 +1,7 @@
 import css from "./ChatOverlay.sass?inline"
 import {createElement, appendChildren} from "@opendaw/lib-jsx"
-import {DefaultObservableValue, Lifecycle, Option, Terminator} from "@opendaw/lib-std"
-import {Events, Html} from "@opendaw/lib-dom"
+import {DefaultObservableValue, Lifecycle, Option, Terminable, Terminator} from "@opendaw/lib-std"
+import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
 import {IconCartridge} from "@/ui/components/Icon.tsx"
 import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {Button} from "@/ui/components/Button.tsx"
@@ -37,7 +37,7 @@ export const ChatOverlay = ({lifecycle, service}: Construct) => {
     const closeAfterSend = lifecycle.own(new DefaultObservableValue<boolean>(false))
     const tabIcon = lifecycle.own(new DefaultObservableValue<IconSymbol>(IconSymbol.ChatEmpty))
     const messagesContainer: HTMLElement = (<div className="messages"/>)
-    const textArea: HTMLTextAreaElement = (<textarea placeholder="Type a message..." maxLength={300} rows={2}/>)
+    const textArea: HTMLTextAreaElement = (<textarea placeholder="Type a message..." maxLength={300} rows={1}/>)
     const isOpen = () => element.classList.contains("open")
     const updateTabIcon = () => {
         tabIcon.setValue(hasUnread ? IconSymbol.ChatMessage : IconSymbol.ChatEmpty)
@@ -103,9 +103,14 @@ export const ChatOverlay = ({lifecycle, service}: Construct) => {
             send()
         }
     }))
-    const scrollToBottom = () => {
-        messagesContainer.scrollTop = messagesContainer.scrollHeight
-    }
+    const scrollToBottom = () => messagesContainer.scrollTop = messagesContainer.scrollHeight
+    let scrollSubscription: Terminable = Terminable.Empty
+    lifecycle.own(Events.subscribe(textArea, "transitionend", () => scrollSubscription.terminate()))
+    lifecycle.own(sendOnEnter.catchupAndSubscribe(owner => {
+        textArea.classList.toggle("single-line", owner.getValue())
+        scrollSubscription.terminate()
+        scrollSubscription = AnimationFrame.add(scrollToBottom)
+    }))
     const serviceLifecycle = lifecycle.own(new Terminator())
     lifecycle.own(service.chatService.catchupAndSubscribe((option: Option<ChatService>) => {
         serviceLifecycle.terminate()
@@ -115,9 +120,7 @@ export const ChatOverlay = ({lifecycle, service}: Construct) => {
             const chatService = option.unwrap()
             element.classList.remove("hidden")
             const messages = chatService.messages()
-            messages.forEach(message => {
-                appendChildren(messagesContainer, renderMessage(message))
-            })
+            messages.forEach(message => appendChildren(messagesContainer, renderMessage(message)))
             if (messages.length > 0) {
                 markUnread()
             }

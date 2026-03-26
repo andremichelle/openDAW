@@ -116,7 +116,12 @@ component
         padding: 0.35em 0.5em
         border-radius: 3px
         resize: none
-
+        height: 6.5em
+        overflow-y: auto
+        transition: height 0.25s ease-in-out
+        &.single-line
+          height: 1.9em
+          overflow: hidden
         &::placeholder
           color: var(--color-dark)
 
