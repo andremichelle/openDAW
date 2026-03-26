@@ -99,10 +99,11 @@ component
 
     > .input-area
       display: flex
-      gap: 0.25em
-      padding: 0 0.5em 0.5em
+      column-gap: 1em
+      margin: 1em 0 0.5em 0
+      padding: 0 1em 0.5em
 
-      > input
+      > textarea
         flex: 1
         appearance: none
         border: none
@@ -113,23 +114,8 @@ component
         background-color: rgba(black, 0.2)
         padding: 0.35em 0.5em
         border-radius: 3px
+        resize: none
 
         &::placeholder
           color: var(--color-dark)
 
-      > .send
-        appearance: none
-        border: none
-        background: none
-        cursor: pointer
-        padding: 0.25em
-        display: flex
-        align-items: center
-
-        > svg
-          width: 12px
-          height: 12px
-          fill: var(--color-dark)
-
-        &:hover > svg
-          fill: var(--color-gray)
