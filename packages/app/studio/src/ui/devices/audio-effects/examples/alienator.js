@@ -20,7 +20,7 @@ class Processor {
     ring = 0.0
     ringHz = 220
     chaos = 0.3
-    drift = 1.0
+    drift = 0.0
     release = 1.0
     wet = 0.0
 
