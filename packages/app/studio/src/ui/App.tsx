@@ -8,6 +8,7 @@ import {AutomationPage} from "@/ui/pages/AutomationPage.tsx"
 import {SampleUploadPage} from "@/ui/pages/SampleUploadPage.tsx"
 import {Footer} from "@/ui/Footer"
 import {RoomStatus} from "@/ui/RoomStatus"
+import {ChatOverlay} from "@/ui/ChatOverlay"
 import {ManualPage} from "@/ui/pages/ManualPage"
 import {ColorsPage} from "@/ui/pages/ColorsPage"
 import {Header} from "@/ui/header/Header"
@@ -56,6 +57,7 @@ export const App = (service: StudioService) => {
                     {path: "/join/*", factory: JoinRoomPage}
                 ]}
             />
+            <ChatOverlay lifecycle={terminator}/>
             <RoomStatus lifecycle={terminator} service={service}/>
             <Footer lifecycle={terminator} service={service}/>
         </Frag>

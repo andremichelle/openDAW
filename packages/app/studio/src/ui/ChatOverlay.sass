@@ -1,0 +1,60 @@
+@use "@/colors"
+
+$tab-width: 28px
+$window-width: 320px
+$padding: 8px
+
+component
+  position: fixed
+  right: 0
+  top: 10%
+  bottom: 10%
+  width: $tab-width + $window-width
+  z-index: 5000
+  transition: transform 0.25s ease-in-out
+  transform: translateX($window-width)
+  pointer-events: none
+
+  &.open
+    transform: translateX(0)
+
+  > .shape
+    position: absolute
+    top: 0
+    left: 0
+    width: 100%
+    height: 100%
+    pointer-events: none
+    filter: drop-shadow(-2px 0 6px rgba(black, 0.4))
+
+    > .outer
+      fill: var(--color-panel-background-bright)
+
+    > .inner
+      fill: var(--color-panel-background-dark)
+
+  > .chat-tab
+    pointer-events: auto
+    position: absolute
+    left: 0
+    top: 50%
+    transform: translateY(-50%)
+    width: $tab-width
+    height: $tab-width
+    display: flex
+    align-items: center
+    justify-content: center
+    cursor: pointer
+
+    > svg
+      width: 16px
+      height: 16px
+      fill: var(--color-gray)
+
+  > .chat-window
+    pointer-events: auto
+    position: absolute
+    top: $padding
+    left: $tab-width + $padding
+    right: 0
+    bottom: $padding
