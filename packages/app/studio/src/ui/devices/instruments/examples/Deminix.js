@@ -1,4 +1,5 @@
 // Deterministic Matrix Synth -> Deminix
+// by Chaosmeister - https://github.com/Chaosmeister
 // Version 2
 // added separate fine - tuning controls for the amount of applied Tremolo, Vibrato, FMod, Attack & Release without changing the sound itself too much
 // removed randomized Pan - is already controllable through opendaw
