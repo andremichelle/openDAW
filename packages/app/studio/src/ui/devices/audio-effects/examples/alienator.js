@@ -90,6 +90,14 @@ class Processor {
         const chaosSwing = Math.floor(0.004 * sampleRate)
         const chaosFB = chaosAmt * 0.65
 
+        if (!hasDecim)
+        {
+            this.decimHoldL = 0.0
+            this.decimHoldR = 0.0
+            this.decimCntL = 0
+            this.decimCntR = 0
+        }
+        
         for (let i = s0; i < s1; i++) {
             let xL = srcL[i]
             let xR = srcR[i]
