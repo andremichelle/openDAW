@@ -1,5 +1,9 @@
+import css from "./ChatOverlayBackground.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
 import {Lifecycle} from "@opendaw/lib-std"
+import {Html} from "@opendaw/lib-dom"
+
+const className = Html.adoptStyleSheet(css, "ChatOverlayBackground")
 
 const TabWidth = 30
 const WindowWidth = 320
@@ -65,20 +69,16 @@ export const ChatOverlayBackground = ({lifecycle, element}: Construct) => {
     let outerPath: SVGPathElement
     let innerPath: SVGPathElement
     const svg = (
-        <svg classList="shape" onInit={(svg: SVGSVGElement) => { svgElement = svg }}>
+        <svg classList={className} onInit={(svg: SVGSVGElement) => { svgElement = svg }}>
             <path classList="outer" onInit={(path: SVGPathElement) => { outerPath = path }}/>
             <path classList="inner" onInit={(path: SVGPathElement) => { innerPath = path }}/>
         </svg>
     )
-    const observer = new ResizeObserver(entries => {
-        for (const entry of entries) {
-            const {height} = entry.contentRect
-            svgElement.setAttribute("viewBox", `0 0 ${TabWidth + WindowWidth} ${height}`)
-            outerPath.setAttribute("d", buildOuterPath(height))
-            innerPath.setAttribute("d", buildInnerPath(height))
-        }
-    })
-    observer.observe(element)
-    lifecycle.own({terminate: () => observer.disconnect()})
+    lifecycle.own(Html.watchResize(element, entry => {
+        const {height} = entry.contentRect
+        svgElement.setAttribute("viewBox", `0 0 ${TabWidth + WindowWidth} ${height}`)
+        outerPath.setAttribute("d", buildOuterPath(height))
+        innerPath.setAttribute("d", buildInnerPath(height))
+    }))
     return svg
 }

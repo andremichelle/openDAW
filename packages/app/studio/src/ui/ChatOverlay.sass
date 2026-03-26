@@ -1,6 +1,6 @@
 @use "@/colors"
 
-$tab-width: 28px
+$tab-width: 30px
 $window-width: 320px
 $padding: 8px
 
@@ -17,21 +17,6 @@ component
 
   &.open
     transform: translateX(0)
-
-  > .shape
-    position: absolute
-    top: 0
-    left: 0
-    width: 100%
-    height: 100%
-    pointer-events: none
-    filter: drop-shadow(-2px 0 6px rgba(black, 0.4))
-
-    > .outer
-      fill: var(--color-panel-background-bright)
-
-    > .inner
-      fill: var(--color-panel-background-dark)
 
   > .chat-tab
     pointer-events: auto
@@ -58,3 +43,93 @@ component
     left: $tab-width + $padding
     right: 0
     bottom: $padding
+    display: flex
+    flex-direction: column
+    font-size: 0.6875rem
+
+    > .messages
+      flex: 1
+      overflow-y: auto
+      padding: 0.5em
+      display: flex
+      flex-direction: column
+      gap: 0.35em
+
+      > .message
+        display: flex
+        flex-direction: column
+        gap: 0.15em
+        line-height: 1.4
+
+        > .header
+          display: flex
+          align-items: center
+          gap: 0.35em
+
+          > .dot
+            width: 6px
+            height: 6px
+            border-radius: 50%
+            flex-shrink: 0
+
+          > .name
+            color: var(--color-bright)
+            font-weight: bold
+            white-space: nowrap
+
+          > .time
+            color: var(--color-dark)
+            font-size: 0.85em
+            margin-left: auto
+
+        > .text
+          color: var(--color-gray)
+          word-break: break-word
+          margin-left: 2.5px
+          border-left: 1px solid
+          padding-left: calc(6px + 0.35em - 4px)
+
+
+    > .options
+      display: flex
+      gap: 1em
+      padding: 0.35em 0.5em
+      font-size: 0.625rem
+      color: var(--color-dark)
+
+    > .input-area
+      display: flex
+      gap: 0.25em
+      padding: 0 0.5em 0.5em
+
+      > input
+        flex: 1
+        appearance: none
+        border: none
+        outline: none
+        font: inherit
+        font-size: 0.6875rem
+        color: var(--color-bright)
+        background-color: rgba(black, 0.2)
+        padding: 0.35em 0.5em
+        border-radius: 3px
+
+        &::placeholder
+          color: var(--color-dark)
+
+      > .send
+        appearance: none
+        border: none
+        background: none
+        cursor: pointer
+        padding: 0.25em
+        display: flex
+        align-items: center
+
+        > svg
+          width: 12px
+          height: 12px
+          fill: var(--color-dark)
+
+        &:hover > svg
+          fill: var(--color-gray)
