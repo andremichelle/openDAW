@@ -809,6 +809,14 @@ export const IconLibrary = () => (
                 <path
                     d="M7 4V2H17V4H20.0066C20.5552 4 21 4.44495 21 4.9934V21.0066C21 21.5552 20.5551 22 20.0066 22H3.9934C3.44476 22 3 21.5551 3 21.0066V4.9934C3 4.44476 3.44495 4 3.9934 4H7ZM7 6H5V20H19V6H17V8H7V6ZM9 4V6H15V4H9Z"/>
             </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.ChatEmpty)} viewBox="0 0 24 24" fill="currentColor">
+                <path
+                    d="M10 3H14C18.4183 3 22 6.58172 22 11C22 15.4183 18.4183 19 14 19V22.5C9 20.5 2 17.5 2 11C2 6.58172 5.58172 3 10 3ZM12 17H14C17.3137 17 20 14.3137 20 11C20 7.68629 17.3137 5 14 5H10C6.68629 5 4 7.68629 4 11C4 14.61 6.46208 16.9656 12 19.4798V17Z"/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.ChatMessage)} viewBox="0 0 24 24" fill="currentColor">
+                <path
+                    d="M10 3H14C18.4183 3 22 6.58172 22 11C22 15.4183 18.4183 19 14 19V22.5C9 20.5 2 17.5 2 11C2 6.58172 5.58172 3 10 3Z"/>
+            </symbol>
         </defs>
     </symbol>
 )

@@ -12,6 +12,8 @@ export enum IconSymbol {
     Box,
     Browse,
     Bug,
+    ChatEmpty,
+    ChatMessage,
     Copy,
     Maximizer,
     Fold,
