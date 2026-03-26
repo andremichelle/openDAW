@@ -215,24 +215,6 @@ Before starting, ensure you have the following installed on your system:
 
 Watch Polarity's Video *"there's a new FREE DAW in town"*
 
-## Get Involved
-
-We welcome contributions from developers, musicians, educators, and enthusiasts. To learn more about how you can
-participate, visit our [Contribute](https://opendaw.org/contribute) page.
-
-### What We Are Looking For:
-
-1. **Offline desktop build (e.g., via Tauri) or a standalone installable PWA** — offer offline capability.
-2. **Cloud-agnostic project storage** — a facade layer that lets users plug in different cloud services (e.g., Drive,
-   S3, Dropbox) for projects and sample libraries.
-3. **Live remote collaboration** — real-time session sharing and sync so multiple users can edit the same project
-   concurrently.
-4. **AI manual assistant** — an embedded agent that answers context-aware questions and guides users through features as
-   they work.
-5. **AI-powered stem splitting** — integrated source-separation to extract vocals, drums, and other stems directly
-   inside the DAW.
-6. **Import and Export** - Contribute every possible file format IO
-
 ## Links
 
 * [opendaw.studio (prototype)](https://opendaw.studio)
