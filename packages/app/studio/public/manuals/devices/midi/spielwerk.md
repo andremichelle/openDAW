@@ -44,7 +44,19 @@ The status bar at the bottom shows the current state:
 
 ---
 
-## 2. Parameters
+## 2. Label
+
+Set the device name using a `// @label` comment:
+
+```javascript
+// @label My MIDI Effect
+```
+
+When the script compiles, the device panel header will display this name. Omitting `@label` keeps the current name. An empty `@label` (without a name) causes a compile error.
+
+---
+
+## 3. Parameters
 
 Declare parameters using `// @param` comments at the top of your code:
 
@@ -104,7 +116,7 @@ Parameters are reconciled on each compile: new parameters are added, removed par
 
 ---
 
-## 3. Keyboard Shortcuts
+## 4. Keyboard Shortcuts
 
 | Shortcut            | Action                              |
 |---------------------|-------------------------------------|
@@ -113,7 +125,7 @@ Parameters are reconciled on each compile: new parameters are added, removed par
 
 ---
 
-## 4. Safety
+## 5. Safety
 
 The engine validates every note your code yields:
 
@@ -130,7 +142,7 @@ When silenced, all active notes are released and the device passes nothing until
 
 ---
 
-## 5. API Reference
+## 6. API Reference
 
 Your code must define a `class Processor` with a generator method `process`. Optionally implement `paramChanged` to receive parameter updates and `reset` to clear state on transport jumps.
 
@@ -218,12 +230,12 @@ State is reset when the code is recompiled (a new instance is created).
 
 ---
 
-## 6. Examples
+## 7. Examples
 
 Select **Examples** in the code editor toolbar to load ready-made processors (Chord Generator, Velocity, Pitch, Random Humanizer, Probability Gate, Echo / Note Delay, Pitch Range Filter).
 
 ---
 
-## 7. AI Assistance
+## 8. AI Assistance
 
 Click **Start AI-Prompt** in the editor toolbar to copy a detailed starter prompt to your clipboard. Paste it into any AI assistant to get help writing Spielwerk processors. Once the AI generates code, copy it and click **From Clipboard** to load and compile it directly.

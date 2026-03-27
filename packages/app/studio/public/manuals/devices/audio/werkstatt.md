@@ -42,7 +42,19 @@ The status bar at the bottom shows the current state:
 
 ---
 
-## 2. Parameters
+## 2. Label
+
+Set the device name using a `// @label` comment:
+
+```javascript
+// @label My Effect
+```
+
+When the script compiles, the device panel header will display this name. Omitting `@label` keeps the current name. An empty `@label` (without a name) causes a compile error.
+
+---
+
+## 3. Parameters
 
 Declare parameters using `// @param` comments at the top of your code:
 
@@ -102,7 +114,7 @@ Parameters are reconciled on each compile: new parameters are added, removed par
 
 ---
 
-## 3. Keyboard Shortcuts
+## 4. Keyboard Shortcuts
 
 | Shortcut            | Action                              |
 |---------------------|-------------------------------------|
@@ -111,7 +123,7 @@ Parameters are reconciled on each compile: new parameters are added, removed par
 
 ---
 
-## 4. Safety
+## 5. Safety
 
 The engine validates your output on every audio block:
 
@@ -123,7 +135,7 @@ When silenced, the device outputs silence until the next successful compile.
 
 ---
 
-## 5. API Reference
+## 6. API Reference
 
 Your code must define a `class Processor` with a `process` method. Optionally implement `paramChanged` to receive parameter updates.
 
@@ -162,12 +174,12 @@ class Processor {
 
 ---
 
-## 6. Examples
+## 7. Examples
 
 Select **Examples** in the code editor toolbar to load ready-made processors (Hard Clipper, Ring Modulator, Simple Delay, Biquad Lowpass).
 
 ---
 
-## 7. AI Assistance
+## 8. AI Assistance
 
 Click **Start AI-Prompt** in the editor toolbar to copy a detailed starter prompt to your clipboard. Paste it into any AI assistant to get help writing Werkstatt processors. Once the AI generates code, copy it and click **From Clipboard** to load and compile it directly.
