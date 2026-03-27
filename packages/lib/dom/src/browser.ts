@@ -26,7 +26,7 @@ export namespace Browser {
         .replace(/\s+/g, " ")
         .trim() : "N/A"
     export const id = () => {
-        if (!hasLocation) {return ""}
+        if (!hasLocation || typeof localStorage === "undefined") {return ""}
         const key = "__id__"
         const id = localStorage.getItem(key)
         if (isDefined(id)) {return id}
