@@ -89,6 +89,7 @@ export namespace ClipboardManager {
         }
         return Terminable.many(
             Events.subscribe(element, "copy", (event: ClipboardEvent) => {
+                if (Events.isTextInput(document.activeElement)) {return}
                 if (!handler.canCopy(noClient)) {return}
                 handler.copy().ifSome(entry => {
                     event.preventDefault()
@@ -99,6 +100,7 @@ export namespace ClipboardManager {
                 })
             }),
             Events.subscribe(element, "cut", (event: ClipboardEvent) => {
+                if (Events.isTextInput(document.activeElement)) {return}
                 if (!handler.canCut(noClient)) {return}
                 handler.cut().ifSome(entry => {
                     event.preventDefault()
@@ -109,6 +111,7 @@ export namespace ClipboardManager {
                 })
             }),
             Events.subscribe(document, "paste", (event: ClipboardEvent) => {
+                if (Events.isTextInput(document.activeElement)) {return}
                 if (!element.contains(document.activeElement) && document.activeElement !== document.body) {return}
                 const text = event.clipboardData?.getData("text/plain") ?? ""
                 const entry = decode(text)
@@ -127,6 +130,7 @@ export namespace ClipboardManager {
                 }
             }),
             Events.subscribe(document, "keydown", (event: KeyboardEvent) => {
+                if (Events.isTextInput(document.activeElement)) {return}
                 if (!element.contains(document.activeElement) && document.activeElement !== document.body) {return}
                 const isMod = event.metaKey || event.ctrlKey
                 if (!isMod || event.shiftKey || event.altKey) {return}

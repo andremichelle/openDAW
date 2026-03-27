@@ -47,7 +47,7 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                 failure={({retry, reason}) => (<p onclick={retry}>{reason}</p>)}
                 loading={() => ThreeDots()}
                 success={([monaco]) => {
-                    const container = (<div className="monaco-editor"/>)
+                    const container: HTMLDivElement = (<div className="monaco-editor"/>)
                     const modelUri = monaco.Uri.parse("file:///werkstatt.js")
                     let model = monaco.editor.getModel(modelUri)
                     if (!model) {
@@ -92,39 +92,15 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                     }
                     const allowed = ["c", "v", "x", "a", "z", "y"]
                     editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.Enter, () => compileCode().finally())
-                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
-                        const selection = editor.getSelection()
-                        if (!isDefined(selection)) {return}
-                        const text = selection.isEmpty()
-                            ? model.getLineContent(selection.startLineNumber) + model.getEOL()
-                            : model.getValueInRange(selection)
-                        Clipboard.writeText(text)
-                    })
-                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
-                        const selection = editor.getSelection()
-                        if (!isDefined(selection)) {return}
-                        const text = selection.isEmpty()
-                            ? model.getLineContent(selection.startLineNumber) + model.getEOL()
-                            : model.getValueInRange(selection)
-                        Clipboard.writeText(text).then(() => {
-                            if (selection.isEmpty()) {
-                                editor.executeEdits("cut", [{
-                                    range: model.getFullModelRange().setStartPosition(selection.startLineNumber, 1)
-                                        .setEndPosition(selection.startLineNumber + 1, 1),
-                                    text: ""
-                                }])
-                            } else {
-                                editor.executeEdits("cut", [{range: selection, text: ""}])
+                    editor.onDidBlurEditorText(() => {
+                        const restore = () => {
+                            container.removeEventListener("pointerdown", restore, true)
+                            if (document.activeElement instanceof HTMLElement) {
+                                document.activeElement.blur()
                             }
-                        })
-                    })
-                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-                        Clipboard.readText().then(text => {
-                            const selection = editor.getSelection()
-                            if (isDefined(selection)) {
-                                editor.executeEdits("paste", [{range: selection, text}])
-                            }
-                        })
+                            editor.focus()
+                        }
+                        container.addEventListener("pointerdown", restore, true)
                     })
                     lifecycle.ownAll(
                         Events.subscribe(container, "keydown", event => {

@@ -6,14 +6,13 @@ import {
     DefaultObservableValue,
     EmptyProcedure,
     isAbsent,
-    isDefined,
     Lifecycle,
     RuntimeNotifier,
     Terminator,
     UUID
 } from "@opendaw/lib-std"
 import {Await, createElement} from "@opendaw/lib-jsx"
-import {Clipboard, Events, Html, Keyboard} from "@opendaw/lib-dom"
+import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {ShadertoyBox} from "@opendaw/studio-boxes"
@@ -72,39 +71,15 @@ export const ShadertoyEditor = ({service, lifecycle}: Construct) => {
                         automaticLayout: true
                     })
                     const allowed = ["c", "v", "x", "a", "z", "y"]
-                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
-                        const selection = editor.getSelection()
-                        if (!isDefined(selection)) {return}
-                        const text = selection.isEmpty()
-                            ? model.getLineContent(selection.startLineNumber) + model.getEOL()
-                            : model.getValueInRange(selection)
-                        Clipboard.writeText(text)
-                    })
-                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
-                        const selection = editor.getSelection()
-                        if (!isDefined(selection)) {return}
-                        const text = selection.isEmpty()
-                            ? model.getLineContent(selection.startLineNumber) + model.getEOL()
-                            : model.getValueInRange(selection)
-                        Clipboard.writeText(text).then(() => {
-                            if (selection.isEmpty()) {
-                                editor.executeEdits("cut", [{
-                                    range: model.getFullModelRange().setStartPosition(selection.startLineNumber, 1)
-                                        .setEndPosition(selection.startLineNumber + 1, 1),
-                                    text: ""
-                                }])
-                            } else {
-                                editor.executeEdits("cut", [{range: selection, text: ""}])
+                    editor.onDidBlurEditorText(() => {
+                        const restore = () => {
+                            container.removeEventListener("pointerdown", restore, true)
+                            if (document.activeElement instanceof HTMLElement) {
+                                document.activeElement.blur()
                             }
-                        })
-                    })
-                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-                        Clipboard.readText().then(text => {
-                            const selection = editor.getSelection()
-                            if (isDefined(selection)) {
-                                editor.executeEdits("paste", [{range: selection, text}])
-                            }
-                        })
+                            editor.focus()
+                        }
+                        container.addEventListener("pointerdown", restore, true)
                     })
                     const canCompile = (code: string): Attempt<void, string> => {
                         const canvas = document.createElement("canvas")

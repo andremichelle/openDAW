@@ -1,12 +1,12 @@
 import css from "./CodeEditorPage.sass?inline"
-import {Clipboard, Events, Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@opendaw/lib-dom"
 import {Await, createElement, PageContext, PageFactory, RouteLocation} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {isDefined, Option, panic, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {Option, panic, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {ScriptHost} from "@opendaw/studio-scripting"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {MenuItem, Project} from "@opendaw/studio-core"
@@ -102,39 +102,15 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                         stickyScroll: {enabled: false}
                     })
                     const allowed = ["c", "v", "x", "a", "z", "y"]
-                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
-                        const selection = editor.getSelection()
-                        if (!isDefined(selection)) {return}
-                        const text = selection.isEmpty()
-                            ? model.getLineContent(selection.startLineNumber) + model.getEOL()
-                            : model.getValueInRange(selection)
-                        Clipboard.writeText(text)
-                    })
-                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
-                        const selection = editor.getSelection()
-                        if (!isDefined(selection)) {return}
-                        const text = selection.isEmpty()
-                            ? model.getLineContent(selection.startLineNumber) + model.getEOL()
-                            : model.getValueInRange(selection)
-                        Clipboard.writeText(text).then(() => {
-                            if (selection.isEmpty()) {
-                                editor.executeEdits("cut", [{
-                                    range: model.getFullModelRange().setStartPosition(selection.startLineNumber, 1)
-                                        .setEndPosition(selection.startLineNumber + 1, 1),
-                                    text: ""
-                                }])
-                            } else {
-                                editor.executeEdits("cut", [{range: selection, text: ""}])
+                    editor.onDidBlurEditorText(() => {
+                        const restore = () => {
+                            container.removeEventListener("pointerdown", restore, true)
+                            if (document.activeElement instanceof HTMLElement) {
+                                document.activeElement.blur()
                             }
-                        })
-                    })
-                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-                        Clipboard.readText().then(text => {
-                            const selection = editor.getSelection()
-                            if (isDefined(selection)) {
-                                editor.executeEdits("paste", [{range: selection, text}])
-                            }
-                        })
+                            editor.focus()
+                        }
+                        container.addEventListener("pointerdown", restore, true)
                     })
                     lifecycle.ownAll(
                         Events.subscribe(container, "keydown", event => {
