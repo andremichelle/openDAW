@@ -13,6 +13,7 @@ import {
 } from "@opendaw/lib-std"
 import {Await, createElement} from "@opendaw/lib-jsx"
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
+import {MonacoFactory} from "@/monaco/factory"
 import {Promises} from "@opendaw/lib-runtime"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {ShadertoyBox} from "@opendaw/studio-boxes"
@@ -46,40 +47,11 @@ export const ShadertoyEditor = ({service, lifecycle}: Construct) => {
                 failure={({retry, reason}) => (<p onclick={retry}>{reason}</p>)}
                 loading={() => ThreeDots()}
                 success={([monaco]) => {
-                    const container = (<div className="monaco-editor"/>)
-                    const modelUri = monaco.Uri.parse("file:///shader.glsl")
-                    let model = monaco.editor.getModel(modelUri)
-                    if (!model) {
-                        const code = rootBox.shadertoy.targetVertex.mapOr((box) =>
-                            asInstanceOf(box, ShadertoyBox).shaderCode.getValue(), Example)
-                        model = monaco.editor.createModel(code, "glsl", modelUri)
-                    }
-                    const editor = monaco.editor.create(container, {
-                        language: "glsl",
-                        quickSuggestions: {
-                            other: true,
-                            comments: false,
-                            strings: false
-                        },
-                        occurrencesHighlight: "off", // prevents Firefox issue
-                        suggestOnTriggerCharacters: true,
-                        acceptSuggestionOnCommitCharacter: true,
-                        acceptSuggestionOnEnter: "on",
-                        wordBasedSuggestions: "off",
-                        model: model,
-                        theme: "vs-dark",
-                        automaticLayout: true
-                    })
-                    const allowed = ["c", "v", "x", "a", "z", "y"]
-                    editor.onDidBlurEditorText(() => {
-                        const restore = () => {
-                            container.removeEventListener("pointerdown", restore, true)
-                            if (document.activeElement instanceof HTMLElement) {
-                                document.activeElement.blur()
-                            }
-                            editor.focus()
-                        }
-                        container.addEventListener("pointerdown", restore, true)
+                    const initialCode = rootBox.shadertoy.targetVertex.mapOr((box) =>
+                        asInstanceOf(box, ShadertoyBox).shaderCode.getValue(), Example)
+                    const {editor, model, container} = MonacoFactory.create({
+                        monaco, lifecycle, language: "glsl",
+                        uri: "file:///shader.glsl", initialCode
                     })
                     const canCompile = (code: string): Attempt<void, string> => {
                         const canvas = document.createElement("canvas")
@@ -173,19 +145,6 @@ export const ShadertoyEditor = ({service, lifecycle}: Construct) => {
                                 event.stopPropagation()
                             }*/
                         }, {capture: true}),
-                        Events.subscribe(container, "keydown", event => {
-                            if ((event.ctrlKey || event.metaKey) && allowed.includes(event.key.toLowerCase())) {
-                                return // Let Monaco handle these
-                            }
-                            event.stopPropagation()
-                        }),
-                        Events.subscribe(container, "keyup", event => {
-                            if ((event.ctrlKey || event.metaKey) && allowed.includes(event.key.toLowerCase())) {
-                                return // Let Monaco handle these
-                            }
-                            event.stopPropagation()
-                        }),
-                        Events.subscribe(container, "keypress", event => event.stopPropagation())
                     )
                     return (
                         <div>

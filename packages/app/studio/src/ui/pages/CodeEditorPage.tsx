@@ -1,5 +1,6 @@
 import css from "./CodeEditorPage.sass?inline"
-import {Events, Html} from "@opendaw/lib-dom"
+import {Html} from "@opendaw/lib-dom"
+import {MonacoFactory} from "@/monaco/factory"
 import {Await, createElement, PageContext, PageFactory, RouteLocation} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
@@ -78,56 +79,10 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                 failure={({retry, reason}) => (<p onclick={retry}>{reason}</p>)}
                 loading={() => ThreeDots()}
                 success={([monaco]) => {
-                    const container = (<div className="monaco-editor"/>)
-                    const modelUri = monaco.Uri.parse("file:///main.ts")
-                    let model = monaco.editor.getModel(modelUri)
-                    if (!model) {
-                        model = monaco.editor.createModel(Examples.Simple, "typescript", modelUri)
-                    }
-                    const editor = monaco.editor.create(container, {
-                        language: "typescript",
-                        quickSuggestions: {
-                            other: true,
-                            comments: false,
-                            strings: false
-                        },
-                        occurrencesHighlight: "off", // prevents Firefox issue
-                        suggestOnTriggerCharacters: true,
-                        acceptSuggestionOnCommitCharacter: true,
-                        acceptSuggestionOnEnter: "on",
-                        wordBasedSuggestions: "off", // Important! Use only TS suggestions
-                        model: model,
-                        theme: "vs-dark",
-                        automaticLayout: true,
-                        stickyScroll: {enabled: false}
+                    const {model, container} = MonacoFactory.create({
+                        monaco, lifecycle, language: "typescript",
+                        uri: "file:///main.ts", initialCode: Examples.Simple
                     })
-                    const allowed = ["c", "v", "x", "a", "z", "y"]
-                    editor.onDidBlurEditorText(() => {
-                        const restore = () => {
-                            container.removeEventListener("pointerdown", restore, true)
-                            if (document.activeElement instanceof HTMLElement) {
-                                document.activeElement.blur()
-                            }
-                            editor.focus()
-                        }
-                        container.addEventListener("pointerdown", restore, true)
-                    })
-                    lifecycle.ownAll(
-                        Events.subscribe(container, "keydown", event => {
-                            if ((event.ctrlKey || event.metaKey) && allowed.includes(event.key.toLowerCase())) {
-                                return // Let Monaco handle these
-                            }
-                            event.stopPropagation()
-                        }),
-                        Events.subscribe(container, "keyup", event => {
-                            if ((event.ctrlKey || event.metaKey) && allowed.includes(event.key.toLowerCase())) {
-                                return // Let Monaco handle these
-                            }
-                            event.stopPropagation()
-                        }),
-                        Events.subscribe(container, "keypress", event => event.stopPropagation())
-                    )
-                    requestAnimationFrame(() => editor.focus())
                     const compileAndRun = async () => {
                         try {
                             const worker = await monaco.languages.typescript.getTypeScriptWorker()

@@ -3,6 +3,7 @@ import defaultCode from "../devices/audio-effects/werkstatt-default.js?raw"
 import {isDefined, Lifecycle, Nullable} from "@opendaw/lib-std"
 import {Await, createElement} from "@opendaw/lib-jsx"
 import {Clipboard, Events, Html, Keyboard, Shortcut} from "@opendaw/lib-dom"
+import {MonacoFactory} from "@/monaco/factory"
 import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {MenuItem} from "@opendaw/studio-core"
@@ -47,30 +48,9 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                 failure={({retry, reason}) => (<p onclick={retry}>{reason}</p>)}
                 loading={() => ThreeDots()}
                 success={([monaco]) => {
-                    const container: HTMLDivElement = (<div className="monaco-editor"/>)
-                    const modelUri = monaco.Uri.parse("file:///werkstatt.js")
-                    let model = monaco.editor.getModel(modelUri)
-                    if (!model) {
-                        model = monaco.editor.createModel(initialCode, "javascript", modelUri)
-                    } else {
-                        model.setValue(initialCode)
-                    }
-                    const editor = monaco.editor.create(container, {
-                        language: "javascript",
-                        quickSuggestions: {
-                            other: true,
-                            comments: false,
-                            strings: false
-                        },
-                        occurrencesHighlight: "off",
-                        suggestOnTriggerCharacters: true,
-                        acceptSuggestionOnCommitCharacter: true,
-                        acceptSuggestionOnEnter: "on",
-                        wordBasedSuggestions: "off",
-                        model: model,
-                        theme: "vs-dark",
-                        automaticLayout: true,
-                        stickyScroll: {enabled: false}
+                    const {editor, model, container} = MonacoFactory.create({
+                        monaco, lifecycle, language: "javascript",
+                        uri: "file:///werkstatt.js", initialCode
                     })
                     const compileCode = async () => {
                         if (!isDefined(handler)) {
@@ -90,43 +70,16 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                             if (editor.getValue() !== code) {editor.setValue(code)}
                         }))
                     }
-                    const allowed = ["c", "v", "x", "a", "z", "y"]
                     editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.Enter, () => compileCode().finally())
-                    editor.onDidBlurEditorText(() => {
-                        const restore = () => {
-                            container.removeEventListener("pointerdown", restore, true)
-                            if (document.activeElement instanceof HTMLElement) {
-                                document.activeElement.blur()
-                            }
-                            editor.focus()
+                    lifecycle.own(Events.subscribe(container, "keydown", event => {
+                        if (Keyboard.isControlKey(event) && event.code === "KeyS") {
+                            compileCode()
+                                .then(() => service.projectProfileService.save().finally())
+                                .finally()
+                            event.preventDefault()
+                            event.stopPropagation()
                         }
-                        container.addEventListener("pointerdown", restore, true)
-                    })
-                    lifecycle.ownAll(
-                        Events.subscribe(container, "keydown", event => {
-                            if (Keyboard.isControlKey(event) && event.code === "KeyS") {
-                                compileCode()
-                                    .then(() => service.projectProfileService.save().finally())
-                                    .finally()
-                                event.preventDefault()
-                                event.stopPropagation()
-                            }
-                        }, {capture: true}),
-                        Events.subscribe(container, "keydown", event => {
-                            if ((event.ctrlKey || event.metaKey) && allowed.includes(event.key.toLowerCase())) {
-                                return
-                            }
-                            event.stopPropagation()
-                        }),
-                        Events.subscribe(container, "keyup", event => {
-                            if ((event.ctrlKey || event.metaKey) && allowed.includes(event.key.toLowerCase())) {
-                                return
-                            }
-                            event.stopPropagation()
-                        }),
-                        Events.subscribe(container, "keypress", event => event.stopPropagation())
-                    )
-                    requestAnimationFrame(() => editor.focus())
+                    }, {capture: true}))
                     const close = () => service.closeCodeEditor()
                     return (
                         <div className="content">
