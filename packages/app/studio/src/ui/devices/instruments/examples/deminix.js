@@ -5,7 +5,7 @@
 // removed randomized Pan - is already controllable through opendaw
 // removed final 0.25 multiplicator -> now 4x louder sounds
 // added Volume control to be able to prevent clipping 
-
+// @label Deminix
 // The UI is created column-wise but I like row-wise better
 // @param 1         5   1   9  int
 // @param 4         5   1   9  int

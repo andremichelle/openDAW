@@ -25,6 +25,7 @@
 //    channel upward to widen, then reconstruct L/R. Zero-phase, no comb issues.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// @label Beautifier
 // @param warmth  0.3   0.0  1.0
 // @param air     0.3   0.0  1.0
 // @param width   0.3   0.0  1.0

@@ -1,4 +1,4 @@
-// TB-303 Bass Line
+// @label TB-303 Bass Line
 // @param waveform   false
 // @param tuning     0     -12   12     linear  st
 // @param cutoff     80    60    300    exp     Hz

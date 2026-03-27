@@ -1,4 +1,4 @@
-// Simple Sine Synth
+// @label Simple Sine Synth
 // @param attack 0.01 0.001 1.0 exp s
 // @param release 0.3 0.01 2.0 exp s
 

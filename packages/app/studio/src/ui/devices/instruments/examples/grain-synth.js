@@ -1,4 +1,4 @@
-// Grain Synthesizer
+// @label Grain Synthesizer
 // @sample grain
 // @param density 8 1 32 int
 // @param size 0.2 0.01 0.5 exp s

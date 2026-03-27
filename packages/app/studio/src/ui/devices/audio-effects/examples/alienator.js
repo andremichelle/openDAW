@@ -1,4 +1,4 @@
-// Alienator
+// @label Alienator
 // by Chaosmeister - https://github.com/Chaosmeister
 // @param chaos    0.0   0.0   1.0
 // @param drift    0.0   0.0   1.0
