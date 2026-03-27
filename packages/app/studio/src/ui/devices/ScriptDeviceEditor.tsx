@@ -1,5 +1,5 @@
 import css from "./ScriptDeviceEditor.sass?inline"
-import {DeviceBoxAdapter, DeviceHost, ParameterAdapterSet, ScriptCompiler, ScriptParamDeclaration} from "@opendaw/studio-adapters"
+import {DeviceBoxAdapter, DeviceHost, ParameterAdapterSet, ScriptCompiler, ScriptDeclaration} from "@opendaw/studio-adapters"
 import {asInstanceOf, Editing, EmptyExec, isDefined, Lifecycle, MutableObservableValue, Nullable, Observable, ObservableValue, Observer, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
 import {Promises} from "@opendaw/lib-runtime"
@@ -35,7 +35,7 @@ const boolModel = (editing: Editing, parameter: AutomatableParameterFieldAdapter
     }
 
 type ScriptAdapter = DeviceBoxAdapter & {
-    readonly box: ScriptCompiler.DeviceBox
+    readonly box: ScriptCompiler.ScriptDeviceBox
     readonly parameters: ParameterAdapterSet
     readonly codeChanged: Observable<void>
 }
@@ -157,7 +157,7 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
                 const werkstattParam = asInstanceOf(paramBox, WerkstattParameterBox)
                 const parameter = adapter.parameters.parameterAt(werkstattParam.value.address)
                 const label = werkstattParam.label.getValue()
-                const declarations = ScriptParamDeclaration.parseParams(box.code.getValue())
+                const declarations = ScriptDeclaration.parseParams(box.code.getValue())
                 const declaration = declarations.find(decl => decl.label === label)
                 const isBool = isDefined(declaration) && declaration.mapping === "bool"
                 const terminator = new Terminator()

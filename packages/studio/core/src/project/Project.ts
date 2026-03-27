@@ -214,7 +214,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     startAudioWorklet(restart?: RestartWorklet, options?: ProcessorOptions): EngineWorklet {
         console.debug(`start AudioWorklet`)
         const audioContext = this.#env.audioWorklets.context
-        const loadScript = (config: ScriptCompiler.Config, deviceBox: ScriptCompiler.DeviceBox) =>
+        const loadScript = (config: ScriptCompiler.Config, deviceBox: ScriptCompiler.ScriptDeviceBox) =>
             ScriptCompiler.create(config).load(audioContext, deviceBox).catch(reason =>
                 console.warn(`Failed to load script device ${UUID.toString(deviceBox.address.uuid)}:`, reason))
         for (const box of this.boxGraph.boxes()) {

@@ -2,7 +2,8 @@ import {asInstanceOf, Editing, isDefined, UUID} from "@opendaw/lib-std"
 import {BoxGraph, Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {WerkstattParameterBox, WerkstattSampleBox} from "@opendaw/studio-boxes"
-import {ParamDeclaration, SampleDeclaration, ScriptParamDeclaration} from "./ScriptParamDeclaration"
+import {ParamDeclaration, SampleDeclaration, ScriptDeclaration} from "./ScriptDeclaration"
+import {DeviceBox} from "./DeviceBox"
 
 const COMPILER_VERSION = 1
 
@@ -19,9 +20,9 @@ const parseHeader = (source: string, pattern: RegExp): { userCode: string, updat
     }
 }
 
-const cachedParamDeclarations = new WeakMap<ScriptCompiler.DeviceBox, Map<string, ParamDeclaration>>()
+const cachedParamDeclarations = new WeakMap<ScriptCompiler.ScriptDeviceBox, Map<string, ParamDeclaration>>()
 
-const reconcileParameters = (deviceBox: ScriptCompiler.DeviceBox, declared: ReadonlyArray<ParamDeclaration>, order: Map<string, number>): void => {
+const reconcileParameters = (deviceBox: ScriptCompiler.ScriptDeviceBox, declared: ReadonlyArray<ParamDeclaration>, order: Map<string, number>): void => {
     const boxGraph = deviceBox.graph
     const previousDeclarations = cachedParamDeclarations.get(deviceBox) ?? new Map<string, ParamDeclaration>()
     const existingPointers = deviceBox.parameters.pointerHub.filter()
@@ -45,7 +46,7 @@ const reconcileParameters = (deviceBox: ScriptCompiler.DeviceBox, declared: Read
         const unifiedIndex = order.get(declaration.label) ?? 0
         const existing = existingByLabel.get(declaration.label)
         const previous = previousDeclarations.get(declaration.label)
-        const declarationChanged = !isDefined(previous) || !ScriptParamDeclaration.isEqual(previous, declaration)
+        const declarationChanged = !isDefined(previous) || !ScriptDeclaration.isEqual(previous, declaration)
         if (isDefined(existing) && declarationChanged) {
             existing.delete()
             existingByLabel.delete(declaration.label)
@@ -69,7 +70,7 @@ const reconcileParameters = (deviceBox: ScriptCompiler.DeviceBox, declared: Read
     cachedParamDeclarations.set(deviceBox, newDeclarations)
 }
 
-const reconcileSamples = (deviceBox: ScriptCompiler.DeviceBox, declared: ReadonlyArray<SampleDeclaration>, order: Map<string, number>): void => {
+const reconcileSamples = (deviceBox: ScriptCompiler.ScriptDeviceBox, declared: ReadonlyArray<SampleDeclaration>, order: Map<string, number>): void => {
     const boxGraph = deviceBox.graph
     const existingPointers = deviceBox.samples.pointerHub.filter()
     const existingByLabel = new Map<string, WerkstattSampleBox>()
@@ -134,9 +135,8 @@ const registerWorklet = async (audioContext: BaseAudioContext, wrappedCode: stri
 }
 
 export namespace ScriptCompiler {
-    export interface DeviceBox {
+    export interface ScriptDeviceBox extends DeviceBox {
         readonly graph: BoxGraph
-        readonly address: { readonly uuid: UUID.Bytes }
         readonly code: StringField
         readonly parameters: Field<Pointers.Parameter>
         readonly samples: Field<Pointers.Sample>
@@ -155,10 +155,10 @@ export namespace ScriptCompiler {
         let maxUpdate = 0
         return {
             stripHeader: (source: string): string => parseHeader(source, headerPattern).userCode,
-            load: async (audioContext: BaseAudioContext, deviceBox: DeviceBox): Promise<void> => {
+            load: async (audioContext: BaseAudioContext, deviceBox: ScriptDeviceBox): Promise<void> => {
                 const {userCode, update} = parseHeader(deviceBox.code.getValue(), headerPattern)
                 if (update === 0) {return}
-                const params = ScriptParamDeclaration.parseParams(userCode)
+                const params = ScriptDeclaration.parseParams(userCode)
                 const declMap = new Map<string, ParamDeclaration>()
                 for (const declaration of params) {declMap.set(declaration.label, declaration)}
                 cachedParamDeclarations.set(deviceBox, declMap)
@@ -169,7 +169,7 @@ export namespace ScriptCompiler {
             },
             compile: async (audioContext: BaseAudioContext,
                             editing: Editing,
-                            deviceBox: DeviceBox,
+                            deviceBox: ScriptDeviceBox,
                             source: string,
                             append: boolean = false): Promise<void> => {
                 const userCode = parseHeader(source, headerPattern).userCode
@@ -178,13 +178,15 @@ export namespace ScriptCompiler {
                 const newUpdate = maxUpdate + 1
                 maxUpdate = newUpdate
                 const uuid = UUID.toString(deviceBox.address.uuid)
-                const params = ScriptParamDeclaration.parseParams(userCode)
-                const samples = ScriptParamDeclaration.parseSamples(userCode)
-                const order = ScriptParamDeclaration.parseDeclarationOrder(userCode)
+                const params = ScriptDeclaration.parseParams(userCode)
+                const samples = ScriptDeclaration.parseSamples(userCode)
+                const order = ScriptDeclaration.parseDeclarationOrder(userCode)
                 const wrappedCode = wrapCode(config, uuid, newUpdate, userCode)
                 validateCode(wrappedCode)
+                const label = ScriptDeclaration.parseLabel(userCode)
                 const modifier = () => {
                     deviceBox.code.setValue(createHeader(newUpdate) + userCode)
+                    label.ifSome(name => deviceBox.label.setValue(name))
                     reconcileParameters(deviceBox, params, order)
                     reconcileSamples(deviceBox, samples, order)
                 }
