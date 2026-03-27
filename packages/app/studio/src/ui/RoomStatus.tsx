@@ -1,7 +1,7 @@
 import css from "./RoomStatus.sass?inline"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {isDefined, Lifecycle, Nullable, Optional, RuntimeNotifier, Terminator} from "@opendaw/lib-std"
-import {Html} from "@opendaw/lib-dom"
+import {Clipboard, Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {AwarenessUserState, RoomAwareness} from "@/service/RoomAwareness"
 import {Promises} from "@opendaw/lib-runtime"
@@ -23,7 +23,7 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
                       title="Click to copy join link"
                       onclick={async () => {
                           const joinUrl = `${location.origin}/join/${awareness.roomName}`
-                          const {status} = await Promises.tryCatch(navigator.clipboard.writeText(joinUrl))
+                          const {status} = await Promises.tryCatch(Clipboard.writeText(joinUrl))
                           if (status === "resolved") {
                               await RuntimeNotifier.info({
                                   headline: "Clipboard",

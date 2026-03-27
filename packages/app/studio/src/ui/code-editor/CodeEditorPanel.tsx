@@ -2,7 +2,7 @@ import css from "./CodeEditorPanel.sass?inline"
 import defaultCode from "../devices/audio-effects/werkstatt-default.js?raw"
 import {isDefined, Lifecycle, Nullable} from "@opendaw/lib-std"
 import {Await, createElement} from "@opendaw/lib-jsx"
-import {Events, Html, Keyboard, Shortcut} from "@opendaw/lib-dom"
+import {Clipboard, Events, Html, Keyboard, Shortcut} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {MenuItem} from "@opendaw/studio-core"
@@ -98,7 +98,7 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                         const text = selection.isEmpty()
                             ? model.getLineContent(selection.startLineNumber) + model.getEOL()
                             : model.getValueInRange(selection)
-                        navigator.clipboard.writeText(text).catch(console.warn)
+                        Clipboard.writeText(text)
                     })
                     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
                         const selection = editor.getSelection()
@@ -106,7 +106,7 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                         const text = selection.isEmpty()
                             ? model.getLineContent(selection.startLineNumber) + model.getEOL()
                             : model.getValueInRange(selection)
-                        navigator.clipboard.writeText(text).then(() => {
+                        Clipboard.writeText(text).then(() => {
                             if (selection.isEmpty()) {
                                 editor.executeEdits("cut", [{
                                     range: model.getFullModelRange().setStartPosition(selection.startLineNumber, 1)
@@ -116,15 +116,15 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                             } else {
                                 editor.executeEdits("cut", [{range: selection, text: ""}])
                             }
-                        }).catch(console.warn)
+                        })
                     })
                     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-                        navigator.clipboard.readText().then(text => {
+                        Clipboard.readText().then(text => {
                             const selection = editor.getSelection()
                             if (isDefined(selection)) {
                                 editor.executeEdits("paste", [{range: selection, text}])
                             }
-                        }).catch(console.warn)
+                        })
                     })
                     lifecycle.ownAll(
                         Events.subscribe(container, "keydown", event => {
@@ -184,7 +184,7 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                                                 reverse: true
                                             })
                                             if (!approved) {return}
-                                            const text = await navigator.clipboard.readText()
+                                            const text = await Clipboard.readText()
                                             editor.executeEdits("clipboard", [{
                                                 range: model.getFullModelRange(),
                                                 text
@@ -196,7 +196,7 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                                 </Button>
                                 {starterPrompt.length > 0 && (
                                     <Button lifecycle={lifecycle}
-                                            onClick={() => navigator.clipboard.writeText(starterPrompt)
+                                            onClick={() => Clipboard.writeText(starterPrompt)
                                                 .then(() => Dialogs.info({
                                                     headline: "AI Prompt Copied",
                                                     message: "The starter prompt has been copied to your clipboard.\n\nPaste it into an AI assistant (e.g. ChatGPT, Claude) to get help writing code for this device.\n\nThen copy the generated code and use 'From Clipboard' to load it."

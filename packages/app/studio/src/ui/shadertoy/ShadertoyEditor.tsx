@@ -13,7 +13,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {Await, createElement} from "@opendaw/lib-jsx"
-import {Events, Html, Keyboard} from "@opendaw/lib-dom"
+import {Clipboard, Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {ShadertoyBox} from "@opendaw/studio-boxes"
@@ -78,7 +78,7 @@ export const ShadertoyEditor = ({service, lifecycle}: Construct) => {
                         const text = selection.isEmpty()
                             ? model.getLineContent(selection.startLineNumber) + model.getEOL()
                             : model.getValueInRange(selection)
-                        navigator.clipboard.writeText(text).catch(console.warn)
+                        Clipboard.writeText(text)
                     })
                     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
                         const selection = editor.getSelection()
@@ -86,7 +86,7 @@ export const ShadertoyEditor = ({service, lifecycle}: Construct) => {
                         const text = selection.isEmpty()
                             ? model.getLineContent(selection.startLineNumber) + model.getEOL()
                             : model.getValueInRange(selection)
-                        navigator.clipboard.writeText(text).then(() => {
+                        Clipboard.writeText(text).then(() => {
                             if (selection.isEmpty()) {
                                 editor.executeEdits("cut", [{
                                     range: model.getFullModelRange().setStartPosition(selection.startLineNumber, 1)
@@ -96,15 +96,15 @@ export const ShadertoyEditor = ({service, lifecycle}: Construct) => {
                             } else {
                                 editor.executeEdits("cut", [{range: selection, text: ""}])
                             }
-                        }).catch(console.warn)
+                        })
                     })
                     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-                        navigator.clipboard.readText().then(text => {
+                        Clipboard.readText().then(text => {
                             const selection = editor.getSelection()
                             if (isDefined(selection)) {
                                 editor.executeEdits("paste", [{range: selection, text}])
                             }
-                        }).catch(console.warn)
+                        })
                     })
                     const canCompile = (code: string): Attempt<void, string> => {
                         const canvas = document.createElement("canvas")

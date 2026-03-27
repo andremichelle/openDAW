@@ -89,19 +89,10 @@ export const populateStudioMenu = (service: StudioService) => {
                     MenuItem.default({
                         label: "Show MIDI-Keyboard",
                         icon: IconSymbol.Piano,
+                        separatorBefore: true,
                         shortcut: GlobalShortcuts["toggle-software-keyboard"].shortcut.format(),
                         checked: service.isSoftwareKeyboardVisible()
                     }).setTriggerProcedure(() => service.toggleSoftwareKeyboard()),
-                    MenuItem.default({
-                        label: "Script Editor",
-                        icon: IconSymbol.Code,
-                    }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
-                    MenuItem.default({
-                        label: "Preferences",
-                        shortcut: GlobalShortcuts["show-preferences"].shortcut.format(),
-                        separatorBefore: true,
-                        icon: IconSymbol.System
-                    }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/preferences")),
                     MenuItem.default({
                         label: "Cloud Backup",
                         icon: IconSymbol.CloudFolder,
@@ -122,6 +113,17 @@ export const populateStudioMenu = (service: StudioService) => {
                                 .setTriggerProcedure(() => RouteLocation.get().navigateTo("/manuals/cloud-backup"))
                         )
                     }),
+                    MenuItem.default({
+                        label: "Script Editor",
+                        separatorBefore: true,
+                        icon: IconSymbol.Code,
+                    }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
+                    MenuItem.default({
+                        label: "Preferences",
+                        shortcut: GlobalShortcuts["show-preferences"].shortcut.format(),
+                        separatorBefore: true,
+                        icon: IconSymbol.System
+                    }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/preferences")),
                     createDebugMenu(service)
                 )
             }

@@ -12,7 +12,6 @@ import {Dialogs} from "@/ui/components/dialogs"
 export const createDebugMenu = (service: StudioService) => MenuItem.default({
     label: "Debug",
     icon: IconSymbol.Bug,
-    separatorBefore: true,
     hidden: !StudioPreferences.settings.debug["enable-debug-menu"]
 }).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
     MenuItem.header({label: "Debugging", icon: IconSymbol.System}),

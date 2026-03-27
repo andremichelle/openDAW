@@ -6,7 +6,7 @@ import {Promises} from "@opendaw/lib-runtime"
 import {createElement} from "@opendaw/lib-jsx"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
-import {Html} from "@opendaw/lib-dom"
+import {Clipboard, Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {AudioFileBox, WerkstattParameterBox, WerkstattSampleBox} from "@opendaw/studio-boxes"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder"
@@ -127,7 +127,7 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
     const errorIcon: HTMLElement = (
         <div className="error hidden"
              style={{cursor: "pointer"}}
-             onclick={() => navigator.clipboard.writeText(lastErrorMessage)}>
+             onclick={() => Clipboard.writeText(lastErrorMessage)}>
             <Icon symbol={IconSymbol.Bug}/>
         </div>
     )

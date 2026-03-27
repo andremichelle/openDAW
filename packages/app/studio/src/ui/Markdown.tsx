@@ -1,4 +1,4 @@
-import {Browser, Html, ModfierKeys} from "@opendaw/lib-dom"
+import {Browser, Clipboard, Html, ModfierKeys} from "@opendaw/lib-dom"
 import css from "./Markdown.sass?inline"
 import {Exec, isDefined} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
@@ -53,7 +53,7 @@ export const renderMarkdown = (element: HTMLElement, text: string, actions?: Rec
         code.title = "Click to copy to clipboard"
         code.onclick = async () => {
             if (isDefined(code.textContent)) {
-                const {status} = await Promises.tryCatch(navigator.clipboard.writeText(code.textContent))
+                const {status} = await Promises.tryCatch(Clipboard.writeText(code.textContent))
                 alert(status === "resolved"
                     ? "Copied to clipboard"
                     : "Could not copy to clipboard.")

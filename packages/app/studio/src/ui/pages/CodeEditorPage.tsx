@@ -1,5 +1,5 @@
 import css from "./CodeEditorPage.sass?inline"
-import {Events, Html} from "@opendaw/lib-dom"
+import {Clipboard, Events, Html} from "@opendaw/lib-dom"
 import {Await, createElement, PageContext, PageFactory, RouteLocation} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
@@ -108,7 +108,7 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                         const text = selection.isEmpty()
                             ? model.getLineContent(selection.startLineNumber) + model.getEOL()
                             : model.getValueInRange(selection)
-                        navigator.clipboard.writeText(text).catch(console.warn)
+                        Clipboard.writeText(text)
                     })
                     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
                         const selection = editor.getSelection()
@@ -116,7 +116,7 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                         const text = selection.isEmpty()
                             ? model.getLineContent(selection.startLineNumber) + model.getEOL()
                             : model.getValueInRange(selection)
-                        navigator.clipboard.writeText(text).then(() => {
+                        Clipboard.writeText(text).then(() => {
                             if (selection.isEmpty()) {
                                 editor.executeEdits("cut", [{
                                     range: model.getFullModelRange().setStartPosition(selection.startLineNumber, 1)
@@ -126,15 +126,15 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                             } else {
                                 editor.executeEdits("cut", [{range: selection, text: ""}])
                             }
-                        }).catch(console.warn)
+                        })
                     })
                     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-                        navigator.clipboard.readText().then(text => {
+                        Clipboard.readText().then(text => {
                             const selection = editor.getSelection()
                             if (isDefined(selection)) {
                                 editor.executeEdits("paste", [{range: selection, text}])
                             }
-                        }).catch(console.warn)
+                        })
                     })
                     lifecycle.ownAll(
                         Events.subscribe(container, "keydown", event => {

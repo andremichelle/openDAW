@@ -1,5 +1,5 @@
 import {Client, Option, Subscription, Terminable} from "@opendaw/lib-std"
-import {Events, ReservedShortcuts} from "@opendaw/lib-dom"
+import {Clipboard, Events, ReservedShortcuts} from "@opendaw/lib-dom"
 import {ContextMenu} from "./ContextMenu"
 import {MenuItem} from "../menu/MenuItems"
 import {StudioPreferences} from "../../StudioPreferences"
@@ -52,7 +52,7 @@ export namespace ClipboardManager {
         const noClient: Client = {clientX: 0, clientY: 0}
         const writeEntry = (entry: E): void => {
             fallbackEntry = Option.wrap(entry)
-            navigator.clipboard?.writeText(encode(entry)).catch(() => {})
+            Clipboard.writeText(encode(entry))
         }
         const performCopy = (): boolean => {
             if (!handler.canCopy(noClient)) {return false}
@@ -68,7 +68,7 @@ export namespace ClipboardManager {
         }
         const performPaste = async () => {
             try {
-                const rawText = await navigator.clipboard.readText()
+                const rawText = await Clipboard.readText()
                 const text = Option.wrap(rawText)
                 const entry = text.flatMap(decode)
                 if (entry.nonEmpty()) {
@@ -145,7 +145,7 @@ export namespace ClipboardManager {
             ContextMenu.subscribe(element, async collector => {
                 if (!StudioPreferences.settings.editing["show-clipboard-menu"]) {return}
                 const {client} = collector
-                const text = await Option.async(navigator.clipboard.readText())
+                const text = await Option.async(Clipboard.readText())
                 const entry = text.flatMap(decode)
                 const canPaste = entry.map(entry => handler.canPaste(entry, client))
                     .unwrapOrElse(() => fallbackEntry

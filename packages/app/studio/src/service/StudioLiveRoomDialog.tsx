@@ -1,7 +1,7 @@
 import css from "./StudioLiveRoomDialog.sass?inline"
 import {Errors, isDefined, Optional, RuntimeNotifier} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
-import {Html} from "@opendaw/lib-dom"
+import {Clipboard, Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Dialog} from "@/ui/components/Dialog"
@@ -23,7 +23,7 @@ export const showConnectRoomDialog = (prefillRoomName?: Optional<string>): Promi
                   if (text.length > 0
                       && roomInput.value.trim().length > 0 && roomInput.checkValidity()
                       && nameInput.value.trim().length > 0) {
-                      const {status} = await Promises.tryCatch(navigator.clipboard.writeText(text))
+                      const {status} = await Promises.tryCatch(Clipboard.writeText(text))
                       if (status === "resolved") {
                           await RuntimeNotifier.info({headline: "Clipboard", message: "Join link copied to clipboard."})
                       } else {
@@ -86,19 +86,32 @@ export const showConnectRoomDialog = (prefillRoomName?: Optional<string>): Promi
                     }
                 ]}>
             <div className={className}>
-                <p>Share the room name with other users so they can join.
-                    No assets are stored on the server.
-                    They are exchanged directly between users via a P2P network
-                    and stored locally in each user's browser (OPFS).</p>
-                <p style={{color: Colors.red.toString()}}>Rooms are transient and will disappear shortly after the
-                    last user leaves. Do not forget to save your project before leaving!</p>
-                <label>Room Name</label>
-                {roomInput}
-                {urlPreview}
-                <label>Your Name</label>
-                {nameInput}
-                <label>Your Color</label>
-                {colorSwatches}
+                <p>
+                    Live rooms let you collaborate with others in real time.
+                    Share the room name and anyone can join your session.
+                </p>
+                <p>
+                    All data is exchanged directly between participants,
+                    nothing is stored on the server.
+                    Assets are kept locally in each user's browser.
+                </p>
+                <div className="group">
+                    <label>Room Name</label>
+                    {roomInput}
+                    {urlPreview}
+                </div>
+                <div className="group">
+                    <label>Your Name</label>
+                    {nameInput}
+                </div>
+                <div className="group">
+                    <label>Your Color</label>
+                    {colorSwatches}
+                </div>
+                <p style={{color: Colors.orange.toString()}}>
+                    Rooms disappear shortly after the last user leaves.
+                    Make sure to save your project before leaving!
+                </p>
             </div>
         </Dialog>
     )

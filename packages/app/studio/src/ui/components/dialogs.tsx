@@ -19,7 +19,7 @@ import {Box, BoxGraph} from "@opendaw/lib-box"
 import {BoxDebugView} from "./BoxDebugView"
 import {BoxesDebugView} from "@/ui/components/BoxesDebugView.tsx"
 import {ProgressBar} from "@/ui/components/ProgressBar.tsx"
-import {Browser} from "@opendaw/lib-dom"
+import {Browser, Clipboard} from "@opendaw/lib-dom"
 
 export namespace Dialogs {
     type Default = {
@@ -250,7 +250,7 @@ export namespace Dialogs {
                             const {status, value, error} = tryCatch(() =>
                                 JSON.stringify(box.toJSON(), null, 2))
                             if (status === "success") {
-                                navigator.clipboard.writeText(value)
+                                Clipboard.writeText(value)
                                     .then(EmptyExec, EmptyExec)
                                     .finally(() => handler.close())
                             } else {
