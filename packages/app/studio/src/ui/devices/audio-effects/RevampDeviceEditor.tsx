@@ -23,8 +23,7 @@ import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {EffectFactories, LinearScale} from "@opendaw/studio-core"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
-import {ControlIndicator} from "@/ui/components/ControlIndicator"
-import {attachParameterContextMenu} from "@/ui/menu/automation"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {Colors} from "@opendaw/studio-enums"
@@ -65,233 +64,288 @@ export const RevampDeviceEditor = ({adapter, service, lifecycle, deviceHost}: Co
                                   {curves}
                                   <div className="switches">
                                       {[highPass, lowShelf, lowBell, midBell, highBell, highShelf, lowPass]
-                                          .map((parameter: Parameters, index: int) => {
-                                              const enabled = parameter.enabled
-                                              const checkbox: Element = (
-                                                  <ControlIndicator lifecycle={lifecycle} parameter={enabled}>
-                                                      <Checkbox lifecycle={lifecycle}
-                                                                model={EditWrapper.forAutomatableParameter(editing, enabled)}
-                                                                appearance={{activeColor: ColorSets[index].full}}>
-                                                          <Icon symbol={symbols[index]}/>
-                                                      </Checkbox>
-                                                  </ControlIndicator>
-                                              )
-                                              lifecycle.own(attachParameterContextMenu(
-                                                  editing, midiLearning, deviceHost.audioUnitBoxAdapter().tracks, enabled, checkbox))
-                                              return checkbox
-                                          })}
+                                          .map((parameter: Parameters, index: int) => (
+                                              <AutomationControl lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 midiLearning={midiLearning}
+                                                                 tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                                 parameter={parameter.enabled}>
+                                                  <Checkbox lifecycle={lifecycle}
+                                                            model={EditWrapper.forAutomatableParameter(editing, parameter.enabled)}
+                                                            appearance={{activeColor: ColorSets[index].full}}>
+                                                      <Icon symbol={symbols[index]}/>
+                                                  </Checkbox>
+                                              </AutomationControl>
+                                          ))}
                                   </div>
                               </div>
                               <Column ems={ems} space={0} color={Colors.cream}>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={highPass.frequency}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={highPass.frequency}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={highPass.order}
-                                                             options={orderValueGuide}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={highPass.order}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={highPass.q}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={highPass.q}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={highPass.frequency}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={highPass.frequency}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={highPass.frequency}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={highPass.order}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={highPass.order}
+                                                                 options={orderValueGuide}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={highPass.order}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={highPass.q}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={highPass.q}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={highPass.q}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
                               </Column>
                               <Column ems={ems} space={0} color={Colors.cream}>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={lowShelf.frequency}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={lowShelf.frequency}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={lowShelf.gain}
-                                                             options={decibelValueGuide}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={lowShelf.gain}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={lowShelf.frequency}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={lowShelf.frequency}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={lowShelf.frequency}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={lowShelf.gain}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={lowShelf.gain}
+                                                                 options={decibelValueGuide}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={lowShelf.gain}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
                               </Column>
                               <Column ems={ems} space={0} color={Colors.cream}>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={lowBell.frequency}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={lowBell.frequency}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={lowBell.gain}
-                                                             options={decibelValueGuide}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={lowBell.gain}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={lowBell.q}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={lowBell.q}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={lowBell.frequency}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={lowBell.frequency}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={lowBell.frequency}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={lowBell.gain}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={lowBell.gain}
+                                                                 options={decibelValueGuide}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={lowBell.gain}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={lowBell.q}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={lowBell.q}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={lowBell.q}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
                               </Column>
                               <Column ems={ems} space={0} color={Colors.cream}>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={midBell.frequency}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={midBell.frequency}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={midBell.gain}
-                                                             options={decibelValueGuide}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={midBell.gain}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={midBell.q}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={midBell.q}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={midBell.frequency}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={midBell.frequency}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={midBell.frequency}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={midBell.gain}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={midBell.gain}
+                                                                 options={decibelValueGuide}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={midBell.gain}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={midBell.q}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={midBell.q}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={midBell.q}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
                               </Column>
                               <Column ems={ems} space={0} color={Colors.cream}>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={highBell.frequency}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={highBell.frequency}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={highBell.gain}
-                                                             options={decibelValueGuide}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={highBell.gain}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={highBell.q}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={highBell.q}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={highBell.frequency}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={highBell.frequency}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={highBell.frequency}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={highBell.gain}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={highBell.gain}
+                                                                 options={decibelValueGuide}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={highBell.gain}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={highBell.q}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={highBell.q}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={highBell.q}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
                               </Column>
                               <Column ems={ems} space={0} color={Colors.cream}>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={highShelf.frequency}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={highShelf.frequency}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={highShelf.gain}
-                                                             options={decibelValueGuide}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={highShelf.gain}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={highShelf.frequency}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={highShelf.frequency}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={highShelf.frequency}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={highShelf.gain}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={highShelf.gain}
+                                                                 options={decibelValueGuide}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={highShelf.gain}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
                               </Column>
                               <Column ems={ems} space={0} color={Colors.cream}>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={lowPass.frequency}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={lowPass.frequency}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={lowPass.order}
-                                                             options={orderValueGuide}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={lowPass.order}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
-                                  <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                             editing={editing}
-                                                             parameter={lowPass.q}>
-                                      <ParameterLabel lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      midiLearning={midiLearning}
-                                                      adapter={adapter}
-                                                      parameter={lowPass.q}
-                                                      framed standalone/>
-                                  </RelativeUnitValueDragging>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={lowPass.frequency}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={lowPass.frequency}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={lowPass.frequency}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={lowPass.order}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={lowPass.order}
+                                                                 options={orderValueGuide}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={lowPass.order}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={lowPass.q}>
+                                      <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                                 editing={editing}
+                                                                 parameter={lowPass.q}>
+                                          <ParameterLabel lifecycle={lifecycle}
+                                                          parameter={lowPass.q}
+                                                          framed/>
+                                      </RelativeUnitValueDragging>
+                                  </AutomationControl>
                               </Column>
                           </div>
                       )}

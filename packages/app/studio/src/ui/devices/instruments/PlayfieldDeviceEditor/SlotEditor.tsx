@@ -8,7 +8,7 @@ import {AutomatableParameterFieldAdapter, Gate, PlayfieldSampleBoxAdapter} from 
 import {CanvasPainter} from "@opendaw/studio-core"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {Checkbox} from "@/ui/components/Checkbox"
-import {ControlIndicator} from "@/ui/components/ControlIndicator"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 import {MidiKeys} from "@opendaw/lib-dsp"
 import {SlotUtils} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotUtils"
 import {SampleSelector, SampleSelectStrategy} from "@/ui/devices/SampleSelector"
@@ -45,14 +45,19 @@ export const SlotEditor = ({lifecycle, service, adapter}: Construct) => {
     const createParameterLabel = (parameter: AutomatableParameterFieldAdapter) => (
         <div className="parameter-label">
             <div className="label">{parameter.name}</div>
-            <RelativeUnitValueDragging lifecycle={lifecycle}
-                                       editing={editing}
-                                       parameter={parameter}>
-                <ParameterLabel lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
-                                adapter={deviceAdapter}
-                                parameter={parameter}
-                                framed standalone/>
-            </RelativeUnitValueDragging>
+            <AutomationControl lifecycle={lifecycle}
+                               editing={editing}
+                               midiLearning={midiLearning}
+                               tracks={deviceAdapter.deviceHost().audioUnitBoxAdapter().tracks}
+                               parameter={parameter}>
+                <RelativeUnitValueDragging lifecycle={lifecycle}
+                                           editing={editing}
+                                           parameter={parameter}>
+                    <ParameterLabel lifecycle={lifecycle}
+                                    parameter={parameter}
+                                    framed/>
+                </RelativeUnitValueDragging>
+            </AutomationControl>
         </div>
     )
     lifecycle.ownAll(
@@ -130,29 +135,35 @@ export const SlotEditor = ({lifecycle, service, adapter}: Construct) => {
                     {labelNote}
                     <div className="checkboxes">
                         <div>
-                            <ControlIndicator lifecycle={lifecycle} parameter={mute}>
+                            <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                                               tracks={deviceAdapter.deviceHost().audioUnitBoxAdapter().tracks}
+                                               parameter={mute}>
                                 <Checkbox lifecycle={lifecycle}
                                           model={EditWrapper.forAutomatableParameter(editing, mute)}
                                           appearance={{activeColor: Colors.red, framed: true}}>
                                     <Icon symbol={IconSymbol.Mute}/>
                                 </Checkbox>
-                            </ControlIndicator>
-                            <ControlIndicator lifecycle={lifecycle} parameter={solo}>
+                            </AutomationControl>
+                            <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                                               tracks={deviceAdapter.deviceHost().audioUnitBoxAdapter().tracks}
+                                               parameter={solo}>
                                 <Checkbox lifecycle={lifecycle}
                                           model={EditWrapper.forAutomatableParameter(editing, solo)}
                                           appearance={{activeColor: Colors.yellow, framed: true}}>
                                     <Icon symbol={IconSymbol.Solo}/>
                                 </Checkbox>
-                            </ControlIndicator>
+                            </AutomationControl>
                         </div>
-                        <ControlIndicator lifecycle={lifecycle} parameter={exclude}>
+                        <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                                           tracks={deviceAdapter.deviceHost().audioUnitBoxAdapter().tracks}
+                                           parameter={exclude}>
                             <Checkbox lifecycle={lifecycle}
                                       model={EditWrapper.forAutomatableParameter(editing, exclude)}
                                       className="exclude"
                                       appearance={{activeColor: Colors.orange, framed: true}}>
                                 <span style={{fontSize: "0.5em"}}>Excl.</span>
                             </Checkbox>
-                        </ControlIndicator>
+                        </AutomationControl>
                     </div>
                 </div>
                 <div className="column">

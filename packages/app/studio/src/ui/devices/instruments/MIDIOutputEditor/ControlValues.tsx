@@ -32,8 +32,8 @@ export const ControlValues = ({lifecycle, project, adapter}: Construct) => (
                         const element = (
                             <ControlValue lifecycle={lifecycle}
                                           project={project}
+                                          tracks={adapter.deviceHost().audioUnitBoxAdapter().tracks}
                                           box={parameterBox}
-                                          adapter={adapter}
                                           parameter={parameter}/>
                         )
                         parent.appendChild(element)

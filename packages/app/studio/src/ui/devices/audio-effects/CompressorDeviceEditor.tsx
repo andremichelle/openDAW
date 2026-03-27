@@ -14,6 +14,7 @@ import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import {Meters} from "@/ui/devices/audio-effects/Compressor/Meters"
 import {CompressionCurve} from "@/ui/devices/audio-effects/Compressor/CompressionCurve"
 import {SidechainButton} from "@/ui/devices/SidechainButton"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 
 const className = Html.adoptStyleSheet(css, "CompressorDeviceEditor")
 
@@ -38,17 +39,20 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
     const createLabelControlFrag = (parameter: AutomatableParameterFieldAdapter<number>) => (
         <Frag>
             <span>{parameter.name}</span>
-            <RelativeUnitValueDragging lifecycle={lifecycle}
-                                       editing={editing}
-                                       parameter={parameter}
-                                       supressValueFlyout={true}>
-                <ParameterLabel lifecycle={lifecycle}
-                                editing={editing}
-                                midiLearning={midiLearning}
-                                adapter={adapter}
-                                parameter={parameter}
-                                framed standalone/>
-            </RelativeUnitValueDragging>
+            <AutomationControl lifecycle={lifecycle}
+                               editing={editing}
+                               midiLearning={midiLearning}
+                               tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                               parameter={parameter}>
+                <RelativeUnitValueDragging lifecycle={lifecycle}
+                                           editing={editing}
+                                           parameter={parameter}
+                                           supressValueFlyout={true}>
+                    <ParameterLabel lifecycle={lifecycle}
+                                    parameter={parameter}
+                                    framed/>
+                </RelativeUnitValueDragging>
+            </AutomationControl>
         </Frag>
     )
     return (

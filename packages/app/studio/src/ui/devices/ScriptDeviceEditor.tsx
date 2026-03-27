@@ -12,7 +12,7 @@ import {AudioFileBox, WerkstattParameterBox, WerkstattSampleBox} from "@opendaw/
 import {ControlBuilder} from "@/ui/devices/ControlBuilder"
 import {Button} from "@/ui/components/Button"
 import {Checkbox} from "@/ui/components/Checkbox"
-import {ControlIndicator} from "@/ui/components/ControlIndicator"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 import {Icon} from "@/ui/components/Icon"
 import {Column} from "@/ui/devices/Column"
 import {LKR} from "@/ui/devices/constants"
@@ -161,10 +161,15 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
                 const declaration = declarations.find(decl => decl.label === label)
                 const isBool = isDefined(declaration) && declaration.mapping === "bool"
                 const terminator = new Terminator()
+                const tracks = adapter.deviceHost().audioUnitBoxAdapter().tracks
                 const element: HTMLElement = isBool
-                    ? (<Column ems={LKR} color={Colors.cream}>
-                        <h5>{label}</h5>
-                        <ControlIndicator lifecycle={terminator} parameter={parameter}>
+                    ? (<AutomationControl lifecycle={terminator}
+                                          editing={editing}
+                                          midiLearning={midiLearning}
+                                          tracks={tracks}
+                                          parameter={parameter}>
+                        <Column ems={LKR} color={Colors.cream}>
+                            <h5>{label}</h5>
                             <Checkbox lifecycle={terminator}
                                       model={boolModel(editing, parameter)}
                                       style={{marginTop: "0.25em"}}
@@ -176,8 +181,8 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
                                       }}>
                                 <Icon symbol={IconSymbol.Checkbox}/>
                             </Checkbox>
-                        </ControlIndicator>
-                    </Column>)
+                        </Column>
+                    </AutomationControl>)
                     : ControlBuilder.createKnob({
                         lifecycle: terminator,
                         editing,
@@ -185,9 +190,10 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
                         adapter,
                         parameter
                     })
-                element.style.order = String(werkstattParam.index.getValue())
+                const orderTarget = element.firstElementChild as HTMLElement
+                orderTarget.style.order = String(werkstattParam.index.getValue())
                 terminator.own(werkstattParam.index.catchupAndSubscribe(owner =>
-                    element.style.order = String(owner.getValue())))
+                    orderTarget.style.order = String(owner.getValue())))
                 controls.appendChild(element)
                 set.add({uuid: paramBox.address.uuid, lifecycle: terminator})
                 terminator.own({terminate: () => element.remove()})

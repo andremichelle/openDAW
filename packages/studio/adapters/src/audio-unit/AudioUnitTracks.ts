@@ -57,6 +57,7 @@ export class AudioUnitTracks implements Terminable {
         adapter.box.delete()
     }
 
+    get audioUnitBox(): AudioUnitBoxAdapter["box"] {return this.#adapter.box}
     get collection(): IndexedBoxAdapterCollection<TrackBoxAdapter, Pointers.TrackCollection> {return this.#collection}
 
     values(): ReadonlyArray<TrackBoxAdapter> {return this.#collection.adapters()}

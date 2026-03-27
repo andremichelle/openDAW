@@ -23,6 +23,7 @@ import {Address, PointerField, PointerTypes, PrimitiveField, PrimitiveType, Prim
 import {Pointers} from "@opendaw/studio-enums"
 import {BoxVisitor, TrackBox} from "@opendaw/studio-boxes"
 import {TrackBoxAdapter} from "./timeline/TrackBoxAdapter"
+import {AudioUnitTracks} from "./audio-unit/AudioUnitTracks"
 import {BoxAdaptersContext} from "./BoxAdaptersContext"
 
 const ExternalControlTypes = [
@@ -132,6 +133,15 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     get address(): Address {return this.#field.address}
     get track(): Option<TrackBoxAdapter> {return this.#trackBoxAdapter}
 
+    registerTracks(tracks: AudioUnitTracks): Terminable {
+        return this.#context.parameterFieldAdapters.registerTracks(this.address, tracks)
+    }
+    touchStart(): void {
+        this.#context.parameterFieldAdapters.touchStart(this.address)
+        this.#context.parameterFieldAdapters.notifyWrite(this, this.getUnitValue())
+    }
+    touchEnd(): void {this.#context.parameterFieldAdapters.touchEnd(this.address)}
+
     updateMappings(valueMapping: ValueMapping<T>, stringMapping: StringMapping<T>): void {
         this.#valueMapping = valueMapping
         this.#stringMapping = stringMapping
@@ -166,6 +176,7 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     }
     getValue(): T {return this.#field.getValue()}
     setValue(value: T) {
+        if (value === this.getValue()) {return}
         const previousUnitValue = this.getUnitValue()
         this.#field.setValue(value)
         this.#context.parameterFieldAdapters.notifyWrite(this, previousUnitValue)

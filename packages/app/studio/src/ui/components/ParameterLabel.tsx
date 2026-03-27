@@ -1,29 +1,20 @@
 import css from "./ParameterLabel.sass?inline"
-import {ControlSource, Editing, Lifecycle, Terminable} from "@opendaw/lib-std"
+import {Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {attachParameterContextMenu} from "@/ui/menu/automation.ts"
-import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
 import {Html} from "@opendaw/lib-dom"
-import {MIDILearning} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "ParameterLabel")
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: Editing
-    midiLearning: MIDILearning
-    adapter: DeviceBoxAdapter
     parameter: AutomatableParameterFieldAdapter
     classList?: ReadonlyArray<string>
     framed?: boolean
-    standalone?: boolean
 }
 
 export const ParameterLabel = (
-    {
-        lifecycle, editing, midiLearning, adapter, parameter,
-        classList, framed, standalone
-    }: Construct): HTMLLabelElement => (
+    {lifecycle, parameter, classList, framed}: Construct): HTMLLabelElement => (
     <label className={Html.buildClassList(className, framed && "framed", ...classList ?? [])}
            onInit={element => {
                const onValueChange = (adapter: AutomatableParameterFieldAdapter) => {
@@ -32,17 +23,7 @@ export const ParameterLabel = (
                    element.textContent = printValue.value
                    element.setAttribute("unit", printValue.unit)
                }
-               lifecycle.ownAll(
-                   standalone === true
-                       ? attachParameterContextMenu(editing, midiLearning,
-                           adapter.deviceHost().audioUnitBoxAdapter().tracks, parameter, element)
-                       : Terminable.Empty,
-                   parameter.catchupAndSubscribeControlSources({
-                       onControlSourceAdd: (source: ControlSource) => element.classList.add(source),
-                       onControlSourceRemove: (source: ControlSource) => element.classList.remove(source)
-                   }),
-                   parameter.subscribe(onValueChange)
-               )
+               lifecycle.own(parameter.subscribe(onValueChange))
                onValueChange(parameter)
            }}/>
 )

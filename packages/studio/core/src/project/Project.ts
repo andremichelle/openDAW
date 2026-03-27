@@ -47,12 +47,12 @@ import {
     RegionAdapters,
     RootBoxAdapter,
     SampleLoaderManager,
+    ScriptCompiler,
     SoundfontLoaderManager,
     TimelineBoxAdapter,
     UnionBoxTypes,
     UserEditingManager,
     VaryingTempoMap,
-    ScriptCompiler,
     VertexSelection
 } from "@opendaw/studio-adapters"
 import {LiveStreamBroadcaster, LiveStreamReceiver} from "@opendaw/lib-fusion"
@@ -219,11 +219,23 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                 console.warn(`Failed to load script device ${UUID.toString(deviceBox.address.uuid)}:`, reason))
         for (const box of this.boxGraph.boxes()) {
             if (box instanceof ApparatDeviceBox) {
-                loadScript({headerTag: "apparat", registryName: "apparatProcessors", functionName: "apparat"}, box)
+                loadScript({
+                    headerTag: "apparat",
+                    registryName: "apparatProcessors",
+                    functionName: "apparat"
+                }, box).finally()
             } else if (box instanceof WerkstattDeviceBox) {
-                loadScript({headerTag: "werkstatt", registryName: "werkstattProcessors", functionName: "werkstatt"}, box)
+                loadScript({
+                    headerTag: "werkstatt",
+                    registryName: "werkstattProcessors",
+                    functionName: "werkstatt"
+                }, box).finally()
             } else if (box instanceof SpielwerkDeviceBox) {
-                loadScript({headerTag: "spielwerk", registryName: "spielwerkProcessors", functionName: "spielwerk"}, box)
+                loadScript({
+                    headerTag: "spielwerk",
+                    registryName: "spielwerkProcessors",
+                    functionName: "spielwerk"
+                }, box).finally()
             }
         }
         const lifecycle = this.#terminator.spawn()

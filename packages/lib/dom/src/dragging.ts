@@ -35,12 +35,13 @@ export namespace Dragging {
                                                            factory: Func<PointerEvent, Option<Process>>,
                                                            options?: ProcessOptions): Terminable => {
         const processCycle = new Terminator()
-        // Cancel any active drag when a new one starts. On some platforms (e.g. ChromeOS),
-        // isPrimary may be true for multiple simultaneous touch points, bypassing the
-        // multi-touch guard above. Without this, listeners from the previous drag accumulate
+        // Cancel any active drag when a new one starts. On some platforms (e.g., ChromeOS),
+        // isPrimary may be true for multiple simultaneous touchpoints, bypassing the
+        // multitouch guard above. Without this, listeners from the previous drag accumulate
         // and can reference stale state.
         let cancelActive: Exec = EmptyExec
         return Terminable.many(processCycle, Events.subscribe(target, "pointerdown", (event: PointerEvent) => {
+            if (event.defaultPrevented) {return}
             if (options?.multiTouch !== true && !event.isPrimary) {return}
             if (event.buttons !== 1 || (Browser.isMacOS() && event.ctrlKey)) {return}
             cancelActive()
@@ -48,8 +49,7 @@ export namespace Dragging {
             if (option.isEmpty()) {return}
             const process: Process = option.unwrap()
             const pointerId: int = event.pointerId
-            event.stopPropagation()
-            event.stopImmediatePropagation()
+            event.preventDefault()
             try {
                 target.setPointerCapture(pointerId)
             } catch (_) {return}

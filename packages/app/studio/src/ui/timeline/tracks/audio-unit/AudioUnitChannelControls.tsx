@@ -9,8 +9,7 @@ import {createElement} from "@opendaw/lib-jsx"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {AudioUnitBoxAdapter} from "@opendaw/studio-adapters"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {attachParameterContextMenu} from "@/ui/menu/automation.ts"
-import {ControlIndicator} from "@/ui/components/ControlIndicator"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 import {Html} from "@opendaw/lib-dom"
 import {CaptureAudio} from "@opendaw/studio-core"
 import {HorizontalPeakMeter} from "@/ui/components/HorizontalPeakMeter"
@@ -31,52 +30,53 @@ export const AudioUnitChannelControls = ({lifecycle, service, adapter}: Construc
     const {project} = service
     const {captureDevices, editing, midiLearning} = project
     const {volume, panning, mute, solo} = adapter.namedParameter
+    const tracks = adapter.tracks
     const volumeControl = (
-        <RelativeUnitValueDragging lifecycle={lifecycle}
-                                   editing={project.editing}
-                                   parameter={volume}
-                                   options={SnapCommonDecibel}>
-            <ControlIndicator lifecycle={lifecycle} parameter={volume}>
+        <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                           tracks={tracks} parameter={volume} offset={2}>
+            <RelativeUnitValueDragging lifecycle={lifecycle}
+                                       editing={project.editing}
+                                       parameter={volume}
+                                       options={SnapCommonDecibel}>
                 <Knob lifecycle={lifecycle} value={volume} anchor={0.0} color={Colors.yellow}/>
-            </ControlIndicator>
-        </RelativeUnitValueDragging>
+            </RelativeUnitValueDragging>
+        </AutomationControl>
     )
     const panningControl = (
-        <RelativeUnitValueDragging lifecycle={lifecycle}
-                                   editing={editing}
-                                   parameter={panning}
-                                   options={SnapCenter}>
-            <ControlIndicator lifecycle={lifecycle} parameter={panning}>
+        <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                           tracks={tracks} parameter={panning} offset={2}>
+            <RelativeUnitValueDragging lifecycle={lifecycle}
+                                       editing={editing}
+                                       parameter={panning}
+                                       options={SnapCenter}>
                 <Knob lifecycle={lifecycle} value={panning} anchor={0.5} color={Colors.green}/>
-            </ControlIndicator>
-        </RelativeUnitValueDragging>
+            </RelativeUnitValueDragging>
+        </AutomationControl>
     )
     const muteControl = (
-        <ControlIndicator lifecycle={lifecycle} parameter={mute}>
+        <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                           tracks={tracks} parameter={mute}>
             <Checkbox lifecycle={lifecycle}
                       model={EditWrapper.forAutomatableParameter(editing, mute)}
                       appearance={{activeColor: Colors.orange, framed: true}}>
                 <Icon symbol={IconSymbol.Mute}/>
             </Checkbox>
-        </ControlIndicator>
+        </AutomationControl>
     )
     const soloControl = (
-        <ControlIndicator lifecycle={lifecycle} parameter={solo}>
+        <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                           tracks={tracks} parameter={solo}>
             <Checkbox lifecycle={lifecycle}
                       model={EditWrapper.forAutomatableParameter(editing, solo)}
                       appearance={{activeColor: Colors.yellow, framed: true}}>
                 <Icon symbol={IconSymbol.Solo}/>
             </Checkbox>
-        </ControlIndicator>
+        </AutomationControl>
     )
     const peaksInDb = new Float32Array(Arrays.create(() => Number.NEGATIVE_INFINITY, 2))
     let streamRunning = false
     const captureOption = captureDevices.get(adapter.uuid)
     lifecycle.ownAll(
-        attachParameterContextMenu(editing, midiLearning, adapter.tracks, volume, volumeControl),
-        attachParameterContextMenu(editing, midiLearning, adapter.tracks, panning, panningControl),
-        attachParameterContextMenu(editing, midiLearning, adapter.tracks, mute, muteControl),
-        attachParameterContextMenu(editing, midiLearning, adapter.tracks, solo, soloControl),
         captureOption.match({
             none: () => Terminable.Empty,
             some: capture => {

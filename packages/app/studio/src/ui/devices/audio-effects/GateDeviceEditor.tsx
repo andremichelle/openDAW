@@ -10,6 +10,7 @@ import {StudioService} from "@/service/StudioService"
 import {EffectFactories} from "@opendaw/studio-core"
 import {ParameterLabel} from "@/ui/components/ParameterLabel"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 import {GateDisplay} from "@/ui/devices/audio-effects/Gate/GateDisplay"
 import {SidechainButton} from "@/ui/devices/SidechainButton"
 import {ParameterToggleButton} from "@/ui/devices/ParameterToggleButton"
@@ -39,17 +40,20 @@ export const GateDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
     const createLabelControlFrag = (parameter: AutomatableParameterFieldAdapter<number>) => (
         <div className="control">
             <h3>{parameter.name}</h3>
-            <RelativeUnitValueDragging lifecycle={lifecycle}
-                                       editing={editing}
-                                       parameter={parameter}
-                                       supressValueFlyout={true}>
-                <ParameterLabel lifecycle={lifecycle}
-                                editing={editing}
-                                midiLearning={midiLearning}
-                                adapter={adapter}
-                                parameter={parameter}
-                                framed standalone/>
-            </RelativeUnitValueDragging>
+            <AutomationControl lifecycle={lifecycle}
+                               editing={editing}
+                               midiLearning={midiLearning}
+                               tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                               parameter={parameter}>
+                <RelativeUnitValueDragging lifecycle={lifecycle}
+                                           editing={editing}
+                                           parameter={parameter}
+                                           supressValueFlyout={true}>
+                    <ParameterLabel lifecycle={lifecycle}
+                                    parameter={parameter}
+                                    framed/>
+                </RelativeUnitValueDragging>
+            </AutomationControl>
         </div>
     )
     return (
