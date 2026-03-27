@@ -81,42 +81,47 @@ export const populateStudioMenu = (service: StudioService) => {
                             }).setTriggerProcedure(async () => Promises.tryCatch(VideoRenderer.render(
                                 service.project, service.profile.meta.name, service.project.engine.sampleRate)))
                         )),
-                    MenuItem.default({label: "Cloud Backup"})
-                        .setRuntimeChildrenProcedure(parent => {
-                            parent.addMenuItem(
-                                MenuItem.default({
-                                    label: "Dropbox",
-                                    icon: IconSymbol.Dropbox
-                                }).setTriggerProcedure(() =>
-                                    CloudBackup.backup(service.cloudAuthManager, "Dropbox").catch(EmptyExec)),
-                                MenuItem.default({
-                                    label: "GoogleDrive",
-                                    icon: IconSymbol.GoogleDrive
-                                }).setTriggerProcedure(() =>
-                                    CloudBackup.backup(service.cloudAuthManager, "GoogleDrive").catch(EmptyExec)),
-                                MenuItem.default({label: "Help", icon: IconSymbol.Help, separatorBefore: true})
-                                    .setTriggerProcedure(() => RouteLocation.get().navigateTo("/manuals/cloud-backup"))
-                            )
-                        }),
-                    MenuItem.default({label: "Window", separatorBefore: true})
-                        .setRuntimeChildrenProcedure(parent => {
-                            return parent.addMenuItem(
-                                MenuItem.default({
-                                    label: "Show MIDI-Keyboard",
-                                    shortcut: GlobalShortcuts["toggle-software-keyboard"].shortcut.format(),
-                                    checked: service.isSoftwareKeyboardVisible()
-                                }).setTriggerProcedure(() => service.toggleSoftwareKeyboard())
-                            )
-                        }),
-                    MenuItem.default({label: "Join Live Room..."})
-                        .setTriggerProcedure(() => connectRoom(service)),
-                    MenuItem.default({label: "Script Editor", separatorBefore: true})
-                        .setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
+                    MenuItem.default({
+                        label: "Join Live Room...",
+                        icon: IconSymbol.Connected,
+                        separatorBefore: true,
+                    }).setTriggerProcedure(() => connectRoom(service)),
+                    MenuItem.default({
+                        label: "Show MIDI-Keyboard",
+                        icon: IconSymbol.Piano,
+                        shortcut: GlobalShortcuts["toggle-software-keyboard"].shortcut.format(),
+                        checked: service.isSoftwareKeyboardVisible()
+                    }).setTriggerProcedure(() => service.toggleSoftwareKeyboard()),
+                    MenuItem.default({
+                        label: "Script Editor",
+                        icon: IconSymbol.Code,
+                    }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
                     MenuItem.default({
                         label: "Preferences",
                         shortcut: GlobalShortcuts["show-preferences"].shortcut.format(),
-                        separatorBefore: true
+                        separatorBefore: true,
+                        icon: IconSymbol.System
                     }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/preferences")),
+                    MenuItem.default({
+                        label: "Cloud Backup",
+                        icon: IconSymbol.CloudFolder,
+                        separatorBefore: true,
+                    }).setRuntimeChildrenProcedure(parent => {
+                        parent.addMenuItem(
+                            MenuItem.default({
+                                label: "Dropbox",
+                                icon: IconSymbol.Dropbox
+                            }).setTriggerProcedure(() =>
+                                CloudBackup.backup(service.cloudAuthManager, "Dropbox").catch(EmptyExec)),
+                            MenuItem.default({
+                                label: "GoogleDrive",
+                                icon: IconSymbol.GoogleDrive
+                            }).setTriggerProcedure(() =>
+                                CloudBackup.backup(service.cloudAuthManager, "GoogleDrive").catch(EmptyExec)),
+                            MenuItem.default({label: "Help", icon: IconSymbol.Help, separatorBefore: true})
+                                .setTriggerProcedure(() => RouteLocation.get().navigateTo("/manuals/cloud-backup"))
+                        )
+                    }),
                     createDebugMenu(service)
                 )
             }
