@@ -23,6 +23,7 @@ export namespace InstrumentFactories {
     export const Tape: InstrumentFactory<void, TapeDeviceBox> = {
         defaultName: "Tape",
         defaultIcon: IconSymbol.Tape,
+        briefDescription: "Audio Player",
         description: "Plays audio regions & clips",
         manualPage: DeviceManualUrls.Tape,
         trackType: TrackType.Audio,
@@ -45,6 +46,7 @@ export namespace InstrumentFactories {
     export const Nano: InstrumentFactory<AudioFileBox, NanoDeviceBox> = {
         defaultName: "Nano",
         defaultIcon: IconSymbol.NanoWave,
+        briefDescription: "Simple Sampler",
         description: "Simple sampler",
         manualPage: DeviceManualUrls.Nano,
         trackType: TrackType.Notes,
@@ -85,6 +87,7 @@ export namespace InstrumentFactories {
     export const Playfield: InstrumentFactory<PlayfieldAttachment, PlayfieldDeviceBox> = {
         defaultName: "Playfield",
         defaultIcon: IconSymbol.Playfield,
+        briefDescription: "Drum Machine",
         description: "Drum computer",
         manualPage: DeviceManualUrls.Playfield,
         trackType: TrackType.Notes,
@@ -116,6 +119,7 @@ export namespace InstrumentFactories {
     export const Vaporisateur: InstrumentFactory<void, VaporisateurDeviceBox> = {
         defaultName: "Vaporisateur",
         defaultIcon: IconSymbol.Piano,
+        briefDescription: "Subtractive Synth",
         description: "Classic subtractive synthesizer",
         manualPage: DeviceManualUrls.Vaporisateur,
         trackType: TrackType.Notes,
@@ -148,6 +152,7 @@ export namespace InstrumentFactories {
     export const MIDIOutput: InstrumentFactory<void, MIDIOutputDeviceBox> = {
         defaultName: "MIDIOutput",
         defaultIcon: IconSymbol.Midi,
+        briefDescription: "Send MIDI",
         description: "MIDI Output",
         manualPage: DeviceManualUrls.MIDIOutput,
         trackType: TrackType.Notes,
@@ -166,6 +171,7 @@ export namespace InstrumentFactories {
     export const Soundfont: InstrumentFactory<{ uuid: UUID.String, name: string }, SoundfontDeviceBox> = {
         defaultName: "Soundfont",
         defaultIcon: IconSymbol.SoundFont,
+        briefDescription: "Soundfont Player",
         description: "Soundfont Player",
         manualPage: DeviceManualUrls.Soundfont,
         trackType: TrackType.Notes,
@@ -190,6 +196,7 @@ export namespace InstrumentFactories {
     export const Apparat: InstrumentFactory<void, ApparatDeviceBox> = {
         defaultName: "Apparat",
         defaultIcon: IconSymbol.Code,
+        briefDescription: "Scriptable Instrument",
         description: "User-scripted instrument",
         manualPage: DeviceManualUrls.Apparat,
         trackType: TrackType.Notes,
