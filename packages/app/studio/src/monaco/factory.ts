@@ -34,19 +34,10 @@ export namespace MonacoFactory {
             model,
             theme: "vs-dark",
             automaticLayout: true,
-            stickyScroll: {enabled: false}
+            stickyScroll: {enabled: false},
+            editContext: false
         })
         const allowed = ["c", "v", "x", "a", "z", "y"]
-        editor.onDidBlurEditorText(() => {
-            const restore = () => {
-                container.removeEventListener("pointerdown", restore, true)
-                if (document.activeElement instanceof HTMLElement) {
-                    document.activeElement.blur()
-                }
-                editor.focus()
-            }
-            container.addEventListener("pointerdown", restore, true)
-        })
         lifecycle.ownAll(
             Events.subscribe(container, "keydown", event => {
                 if ((event.ctrlKey || event.metaKey) && allowed.includes(event.key.toLowerCase())) {

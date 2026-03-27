@@ -41,33 +41,25 @@ With ClipboardManager no longer intercepting, Monaco's native clipboard works. T
 
 Removed the silent `document.execCommand("copy")` fallback for `writeText` and the silent empty-string return for `readText`. Both now show a `RuntimeNotifier.info()` dialog when `navigator.clipboard` fails, so the user knows to check browser permissions.
 
-### Restore editor focus after blur (in editor component)
+### Disable EditContext API (`editContext: false`)
 
-When Monaco loses focus to any external element, its internal keybinding dispatch breaks even after clicking back. The fix lives inside the editor component.
+Monaco v0.53.0+ switched from a hidden `<textarea>` to the EditContext API for text input. This introduced focus tracking regressions ([#5081](https://github.com/microsoft/monaco-editor/issues/5081), [#5059](https://github.com/microsoft/monaco-editor/issues/5059)). The EditContext API causes Monaco's internal focus state to desync when external elements steal focus — the cursor still blinks and typing works, but keybinding dispatch breaks.
 
-#### Failed attempts
+Setting `editContext: false` reverts to the pre-0.53 textarea-based input which has mature, well-tested focus handling.
 
-1. **pointerdown + requestAnimationFrame + editor.focus()**: `editor.focus()` is a no-op when Monaco thinks it still has focus.
-2. **onDidBlurEditorText + pointerdown capture + editor.focus()**: Synchronous in capture phase. Same no-op issue.
-3. **onDidBlurEditorText + pointerdown + setTimeout(0) + editor.focus()**: Deferred. Same no-op issue.
-4. **onDidBlurEditorText + querySelector("textarea").blur()/focus()**: Works, but depends on Monaco's internal DOM structure.
+Note: upgrading to Monaco 0.55.1 does NOT fix these focus issues.
 
-#### Working solution
+#### Failed workaround attempts (before finding root cause)
 
-```typescript
-editor.onDidBlurEditorText(() => {
-    const restore = () => {
-        container.removeEventListener("pointerdown", restore, true)
-        if (document.activeElement instanceof HTMLElement) {
-            document.activeElement.blur()
-        }
-        editor.focus()
-    }
-    container.addEventListener("pointerdown", restore, true)
-})
-```
+1. **pointerdown + requestAnimationFrame + editor.focus()**: No-op when Monaco thinks it still has focus.
+2. **onDidBlurEditorText + pointerdown capture + editor.focus()**: Same no-op issue.
+3. **onDidBlurEditorText + pointerdown + setTimeout(0) + editor.focus()**: Same.
+4. **onDidBlurEditorText + querySelector("textarea").blur()/focus()**: Works but fragile (depends on Monaco DOM internals).
+5. **onDidBlurEditorText + activeElement.blur() + editor.focus()**: Works but requires user to click back into editor.
 
-Key insight: `editor.focus()` alone is a no-op when Monaco thinks it still has focus. The preceding `document.activeElement.blur()` clears the stale focus state so `editor.focus()` performs a full focus cycle. Uses `onDidBlurEditorText` to detect actual focus loss and a one-shot `pointerdown` listener in capture phase to restore on next click.
+### Shared editor setup (`MonacoFactory`)
+
+Extracted duplicated Monaco setup code into `MonacoFactory.create()` in `packages/app/studio/src/monaco/factory.ts`. All three editors now use this shared factory which handles: model creation, editor options, `editContext: false`, keyboard event isolation, and initial focus.
 
 ## Files changed
 
@@ -75,9 +67,10 @@ Key insight: `editor.focus()` alone is a no-op when Monaco thinks it still has f
 |------|--------|
 | `packages/lib/dom/src/clipboard.ts` | Remove fallbacks, show RuntimeNotifier on failure |
 | `packages/studio/core/src/ui/clipboard/ClipboardManager.ts` | Add `isTextInput` guard to all handlers |
-| `packages/app/studio/src/ui/code-editor/CodeEditorPanel.tsx` | Remove addCommand overrides, add focus restore |
-| `packages/app/studio/src/ui/pages/CodeEditorPage.tsx` | Remove addCommand overrides, add focus restore |
-| `packages/app/studio/src/ui/shadertoy/ShadertoyEditor.tsx` | Remove addCommand overrides, add focus restore |
+| `packages/app/studio/src/monaco/factory.ts` | New shared Monaco editor factory |
+| `packages/app/studio/src/ui/code-editor/CodeEditorPanel.tsx` | Remove addCommand overrides, use MonacoFactory |
+| `packages/app/studio/src/ui/pages/CodeEditorPage.tsx` | Remove addCommand overrides, use MonacoFactory |
+| `packages/app/studio/src/ui/shadertoy/ShadertoyEditor.tsx` | Remove addCommand overrides, use MonacoFactory |
 
 ## Event flow after fix
 
@@ -88,11 +81,3 @@ Key insight: `editor.focus()` alone is a no-op when Monaco thinks it still has f
 3. Event bubbles to container — `stopPropagation()` lets Cmd+C/V/X through (in `allowed` list)
 4. Event reaches `document` — ClipboardManager sees `isTextInput(activeElement)` is true, bails out
 5. Clipboard operation succeeds
-
-### Focus restore (after button click steals focus)
-
-1. User clicks a header button — focus leaves Monaco's textarea
-2. `onDidBlurEditorText` fires — registers one-shot `pointerdown` listener on container (capture phase)
-3. User clicks back into the editor
-4. `pointerdown` listener fires — blurs `document.activeElement`, then calls `editor.focus()`
-5. Monaco's keybinding dispatch is fully restored
