@@ -53,7 +53,7 @@ export const NumberInput = ({
         Events.subscribe(element, "focusout", (event: Event) => {
             if (!isInstanceOf(event.target, HTMLElement)) {return}
             const result = mapper.y(event.target.textContent ?? "")
-            if (result.type === "explicit") {
+            if (result.type === "explicit" && !isNaN(result.value)) {
                 model.setValue(isDefined(guard) ? guard.guard(result.value) : result.value)
             }
             updateDigits()
@@ -85,7 +85,7 @@ export const NumberInput = ({
                 case "ArrowUp": {
                     event.preventDefault()
                     const result = mapper.y(target.textContent ?? "")
-                    if (result.type !== "explicit") {return}
+                    if (result.type !== "explicit" || isNaN(result.value)) {return}
                     const nextValue: int = result.value + step
                     model.setValue(isDefined(guard) ? guard.guard(nextValue) : nextValue)
                     Html.selectContent(target)
@@ -94,7 +94,7 @@ export const NumberInput = ({
                 case "ArrowDown": {
                     event.preventDefault()
                     const result = mapper.y(target.textContent ?? "")
-                    if (result.type !== "explicit") {return}
+                    if (result.type !== "explicit" || isNaN(result.value)) {return}
                     const nextValue: int = result.value - step
                     model.setValue(isDefined(guard) ? guard.guard(nextValue) : nextValue)
                     Html.selectContent(target)
@@ -103,27 +103,21 @@ export const NumberInput = ({
                 case "Enter": {
                     event.preventDefault()
                     const result = mapper.y(target.textContent ?? "")
-                    if (result.type !== "explicit") {return}
-                    const nextValue: int = result.value
-                    model.setValue(isDefined(guard) ? guard.guard(nextValue) : nextValue)
-                    updateDigits()
-                    Html.selectContent(target)
+                    if (result.type === "explicit" && !isNaN(result.value)) {
+                        model.setValue(isDefined(guard) ? guard.guard(result.value) : result.value)
+                    }
+                    target.blur()
                     break
                 }
-                case "Digit1":
-                case "Digit2":
-                case "Digit3":
-                case "Digit4":
-                case "Digit5":
-                case "Digit6":
-                case "Digit7":
-                case "Digit8":
-                case "Digit9":
-                case "Digit0":
+                case "Digit0": case "Digit1": case "Digit2": case "Digit3": case "Digit4":
+                case "Digit5": case "Digit6": case "Digit7": case "Digit8": case "Digit9":
+                case "Numpad0": case "Numpad1": case "Numpad2": case "Numpad3": case "Numpad4":
+                case "Numpad5": case "Numpad6": case "Numpad7": case "Numpad8": case "Numpad9":
                 case "Tab":
                 case "ArrowLeft":
                 case "ArrowRight":
                 case "Minus":
+                case "NumpadSubtract":
                 case "Backspace": {
                     break // Allow
                 }
