@@ -210,7 +210,8 @@ export namespace ScriptParamDeclaration {
                             valueMapping: ValueMapping.unipolar(),
                             stringMapping: StringMapping.percent({fractionDigits: 1})
                         }
-                    parametric.createParameter(paramBox.value, valueMapping, stringMapping, label)
+                    parametric.createParameter(paramBox.value, valueMapping, stringMapping, label,
+                        undefined, paramBox.defaultValue.getValue())
                     if (isDefined(declaration)) {cachedDeclarations.set(label, declaration)}
                 }),
                 onRemoved: (({box}) => {

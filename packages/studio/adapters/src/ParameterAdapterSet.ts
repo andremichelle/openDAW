@@ -28,9 +28,10 @@ export class ParameterAdapterSet implements Terminable {
                                                valueMapping: ValueMapping<T>,
                                                stringMapping: StringMapping<T>,
                                                name: string,
-                                               anchor?: unitValue): AutomatableParameterFieldAdapter<T> {
+                                               anchor?: unitValue,
+                                               resetValue?: T): AutomatableParameterFieldAdapter<T> {
         const adapter = new AutomatableParameterFieldAdapter<T>(
-            this.#context, field, valueMapping, stringMapping, name, anchor)
+            this.#context, field, valueMapping, stringMapping, name, anchor, resetValue)
         const added = this.#parameters.add(adapter)
         assert(added, `Could not add adapter for ${field}`)
         return adapter

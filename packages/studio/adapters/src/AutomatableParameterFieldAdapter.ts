@@ -37,6 +37,7 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     readonly #field: PrimitiveField<T, Pointers.Automation>
     readonly #name: string
     readonly #anchor: unitValue
+    readonly #resetValue: Option<T>
 
     readonly #terminator: Terminator = new Terminator()
     readonly #valueChangeNotifier: Notifier<this>
@@ -55,13 +56,15 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
                 valueMapping: ValueMapping<T>,
                 stringMapping: StringMapping<T>,
                 name: string,
-                anchor?: unitValue) {
+                anchor?: unitValue,
+                resetValue?: T) {
         this.#context = context
         this.#field = field
         this.#valueMapping = valueMapping
         this.#stringMapping = stringMapping
         this.#name = name
         this.#anchor = anchor ?? 0.0
+        this.#resetValue = Option.wrap(resetValue)
         this.#terminator.own(this.#context.parameterFieldAdapters.register(this))
         this.#valueChangeNotifier = this.#terminator.own(new Notifier<this>())
         this.#controlSource = new Listeners<ControlSourceListener>()
@@ -198,7 +201,7 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
         }
     }
 
-    reset(): void {this.setValue(this.#valueMapping.clamp(this.#field.initValue))}
+    reset(): void {this.setValue(this.#resetValue.unwrapOrElse(this.#field.initValue))}
 
     terminate(): void {
         this.#automationHandle.ifSome(handle => handle.terminate())
