@@ -88,7 +88,11 @@ export const NoteEditor =
         }
         bindToTrack()
         const regionBox = (reader as RegionReader<NoteRegionBoxAdapter, NoteEventCollectionBoxAdapter>).region.box
-        lifecycle.own(regionBox.regions.subscribe(() => bindToTrack()))
+        lifecycle.own(regionBox.regions.subscribe(() => {
+            if (reader.trackBoxAdapter.nonEmpty()) {
+                bindToTrack()
+            }
+        }))
         const stepRecording = lifecycle.own(new DefaultObservableValue(false))
         const modifyContext = new ObservableModifyContext<NoteModifier>()
         const propertyOwner = new DefaultObservableValue<PropertyAccessor>(NotePropertyVelocity)
