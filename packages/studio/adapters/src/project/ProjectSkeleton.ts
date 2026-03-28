@@ -4,7 +4,7 @@ import {
     AudioUnitBox,
     BoxIO,
     BoxVisitor,
-    CompressorDeviceBox,
+    MaximizerDeviceBox,
     GrooveShuffleBox,
     RootBox,
     TimelineBox,
@@ -35,7 +35,7 @@ export namespace ProjectSkeleton {
     const FORMAT_VERSION = 2
 
     export const empty = (options: {
-        createOutputCompressor: boolean,
+        createOutputMaximizer: boolean,
         createDefaultUser: boolean
     }): ProjectSkeleton => {
         const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
@@ -61,13 +61,12 @@ export namespace ProjectSkeleton {
             box.output.refer(rootBox.outputDevice)
             box.index.setValue(0)
         })
-        if (options.createOutputCompressor) {
-            CompressorDeviceBox.create(boxGraph, UUID.generate(), box => {
-                box.label.setValue("Master Compressor")
+        if (options.createOutputMaximizer) {
+            MaximizerDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("Master Maximizer")
                 box.index.setValue(0)
                 box.host.refer(primaryAudioOutputUnit.audioEffects)
-                box.threshold.setValue(0)
-                box.ratio.setValue(24)
+                box.lookahead.setValue(false)
             })
         }
         const timelineBox = TimelineBox.create(boxGraph, UUID.generate())

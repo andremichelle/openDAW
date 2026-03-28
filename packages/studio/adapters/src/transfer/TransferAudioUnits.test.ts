@@ -21,7 +21,7 @@ describe("TransferAudioUnits.transfer", () => {
     beforeEach(() => {
         skeleton = ProjectSkeleton.empty({
             createDefaultUser: false,
-            createOutputCompressor: false
+            createOutputMaximizer: false
         })
     })
 
@@ -199,7 +199,7 @@ describe("TransferAudioUnits.transfer", () => {
     })
 
     it("copies to target graph in cross-project scenario", () => {
-        const source = ProjectSkeleton.empty({createDefaultUser: false, createOutputCompressor: false})
+        const source = ProjectSkeleton.empty({createDefaultUser: false, createOutputMaximizer: false})
         const {audioUnitBox} = createAudioUnitWithInstrument(source)
         skeleton.boxGraph.beginTransaction()
         const [copiedAudioUnit] = TransferAudioUnits.transfer([audioUnitBox], skeleton)
@@ -219,7 +219,7 @@ describe("TransferAudioUnits.transfer", () => {
     const createPopulatedSource = (unitCount: number): {
         source: ProjectSkeleton, units: AudioUnitBox[]
     } => {
-        const source = ProjectSkeleton.empty({createDefaultUser: false, createOutputCompressor: false})
+        const source = ProjectSkeleton.empty({createDefaultUser: false, createOutputMaximizer: false})
         const units: AudioUnitBox[] = []
         for (let idx = 0; idx < unitCount; idx++) {
             units.push(createAudioUnitWithInstrument(source).audioUnitBox)

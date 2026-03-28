@@ -27,8 +27,8 @@ describe("DevicesClipboardHandler", () => {
     let target: ProjectSkeleton
 
     beforeEach(() => {
-        source = ProjectSkeleton.empty({createDefaultUser: true, createOutputCompressor: false})
-        target = ProjectSkeleton.empty({createDefaultUser: true, createOutputCompressor: false})
+        source = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+        target = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
     })
 
     const createAudioUnit = (skeleton: ProjectSkeleton, index: number = 1): AudioUnitBox => {

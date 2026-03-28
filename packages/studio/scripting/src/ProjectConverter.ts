@@ -11,7 +11,7 @@ export namespace ProjectConverter {
         console.time("convert")
         const skeleton = ProjectSkeleton.empty({
             createDefaultUser: true,
-            createOutputCompressor: false
+            createOutputMaximizer: false
         })
         const {boxGraph, mandatoryBoxes: {rootBox, timelineBox, userInterfaceBoxes: [defaultUser]}} = skeleton
         const {bpm, timeSignature} = project

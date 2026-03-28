@@ -26,11 +26,11 @@ export const StudioSettingsSchema = z.object({
     }).default({musical: true, absolute: false, details: false, fps: 25}),
     "engine": z.object({
         "note-audition-while-editing": z.boolean(),
-        "auto-create-output-compressor": z.boolean(),
+        "auto-create-output-maximizer": z.boolean(),
         "stop-playback-when-overloading": z.boolean()
     }).default({
         "note-audition-while-editing": true,
-        "auto-create-output-compressor": true,
+        "auto-create-output-maximizer": true,
         "stop-playback-when-overloading": true
     }),
     "pointer": z.object({

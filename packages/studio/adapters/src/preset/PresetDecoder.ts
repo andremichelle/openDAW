@@ -106,7 +106,7 @@ export namespace PresetDecoder {
         console.debug("ReplaceAudioUnit with preset...")
         const skeleton = ProjectSkeleton.empty({
             createDefaultUser: false,
-            createOutputCompressor: false
+            createOutputMaximizer: false
         })
         const sourceBoxGraph = skeleton.boxGraph
         const targetBoxGraph = targetAudioUnitBox.graph

@@ -82,9 +82,9 @@ export type ProjectCreateOptions = {
 export class Project implements BoxAdaptersContext, Terminable, TerminableOwner {
     static new(env: ProjectEnv, options?: ProjectCreateOptions): Project {
         const createDefaultUser = options?.noDefaultUser !== true
-        const createOutputCompressor = StudioPreferences.settings.engine["auto-create-output-compressor"]
+        const createOutputMaximizer = StudioPreferences.settings.engine["auto-create-output-maximizer"]
         const {boxGraph, mandatoryBoxes} = ProjectSkeleton.empty({
-            createOutputCompressor,
+            createOutputMaximizer,
             createDefaultUser
         })
         const project = new Project(env, boxGraph, mandatoryBoxes)
@@ -205,7 +205,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                     this.#registerSample(update.uuid)
                 } else if (update instanceof DeleteUpdate && update.name === AudioFileBox.ClassName) {
                     this.#unregisterSample(update.uuid)
-                    this.#deleteUserCreatedSample(update.uuid)
+                    this.#deleteUserCreatedSample(update.uuid).finally()
                 }
             }
         }))

@@ -17,7 +17,7 @@ import {PPQN, TimeBase} from "@opendaw/lib-dsp"
 
 export const testAudioProject = async (service: StudioService) => {
     const skeleton =
-        ProjectSkeleton.empty({createDefaultUser: true, createOutputCompressor: false})
+        ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
     const {boxGraph, mandatoryBoxes: {userInterfaceBoxes, timelineBox}} = skeleton
     boxGraph.beginTransaction()
     timelineBox.bpm.setValue(140)
