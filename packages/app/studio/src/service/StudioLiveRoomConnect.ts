@@ -70,6 +70,8 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
         service.projectProfileService.setProject(project, roomName)
         service.setRoomAwareness(roomAwareness)
         terminator.own({terminate: () => service.setRoomAwareness(null)})
+        service.setTrafficMeter(p2pSession.trafficMeter)
+        terminator.own({terminate: () => service.setTrafficMeter(null)})
         const chatService = new ChatService(provider.doc, userName, userColor)
         terminator.own(chatService)
         service.chatService.wrap(chatService)

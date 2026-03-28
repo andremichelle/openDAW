@@ -5,6 +5,7 @@ import {type SignalingMessage, AssetSignaling} from "./AssetSignaling"
 import {AssetPeerConnection} from "./AssetPeerConnection"
 import {AssetZip} from "./AssetZip"
 import * as ChunkProtocol from "./ChunkProtocol"
+import {TrafficMeter} from "./TrafficMeter"
 
 export const STALL_TIMEOUT_MS = 10_000
 export const MAX_RETRIES = 3
@@ -23,6 +24,7 @@ type PendingRequest = {
 export class PeerAssetProvider {
     readonly #signaling: AssetSignaling
     readonly #localPeerId: string
+    readonly #trafficMeter: TrafficMeter
     readonly #connections: Map<string, AssetPeerConnection> = new Map()
     readonly #pendingRequests: Map<string, PendingRequest> = new Map()
     readonly #incomingChunks: Map<string, Map<number, Uint8Array>> = new Map()
@@ -31,9 +33,10 @@ export class PeerAssetProvider {
     readonly #transferringAssets: Map<string, string> = new Map()
     #terminated: boolean = false
 
-    constructor(signaling: AssetSignaling, localPeerId: string) {
+    constructor(signaling: AssetSignaling, localPeerId: string, trafficMeter: TrafficMeter) {
         this.#signaling = signaling
         this.#localPeerId = localPeerId
+        this.#trafficMeter = trafficMeter
         this.#signaling.subscribe(message => this.#onSignalingMessage(message))
         console.debug("[P2P:Provider] initialized, peerId:", localPeerId)
     }
@@ -190,6 +193,7 @@ export class PeerAssetProvider {
 
     #onDataChannelMessage(pending: PendingRequest, buffer: ArrayBuffer): void {
         this.#resetStallTimer(pending)
+        this.#trafficMeter.recordDownload(buffer.byteLength)
         const message = ChunkProtocol.decode(buffer)
         switch (message.msgType) {
             case ChunkProtocol.MsgType.TransferStart: {

@@ -20,7 +20,7 @@ import {
     tryCatch,
     UUID
 } from "@opendaw/lib-std"
-import {ChainedSampleProvider, ChainedSoundfontProvider} from "@opendaw/studio-p2p"
+import {ChainedSampleProvider, ChainedSoundfontProvider, TrafficMeter} from "@opendaw/studio-p2p"
 import {populateStudioMenu} from "@/service/StudioMenu"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
@@ -123,6 +123,7 @@ export class StudioService implements ProjectEnv {
 
     #factoryFooterLabel: Option<Provider<FooterLabel>> = Option.None
     readonly #roomAwareness = new DefaultObservableValue<Nullable<RoomAwareness>>(null)
+    readonly #trafficMeter = new DefaultObservableValue<Nullable<TrafficMeter>>(null)
     readonly #chatService = new MutableObservableOption<ChatService>()
 
     regionModifierInProgress: boolean = false
@@ -388,6 +389,8 @@ export class StudioService implements ProjectEnv {
 
     get roomAwareness(): DefaultObservableValue<Nullable<RoomAwareness>> {return this.#roomAwareness}
     setRoomAwareness(value: Nullable<RoomAwareness>): void {this.#roomAwareness.setValue(value)}
+    get trafficMeter(): DefaultObservableValue<Nullable<TrafficMeter>> {return this.#trafficMeter}
+    setTrafficMeter(value: Nullable<TrafficMeter>): void {this.#trafficMeter.setValue(value)}
     get chatService(): MutableObservableOption<ChatService> {return this.#chatService}
 
     get optShadertoyState(): Option<ShadertoyState> {return this.#shadertoyState}

@@ -7,6 +7,7 @@ import {AwarenessUserState, RoomAwareness} from "@/service/RoomAwareness"
 import {Promises} from "@opendaw/lib-runtime"
 import {Icon} from "@/ui/components/Icon"
 import {IconSymbol} from "@opendaw/studio-enums"
+import {TrafficWatch} from "@/ui/TrafficWatch"
 
 const className = Html.adoptStyleSheet(css, "room-status")
 
@@ -48,12 +49,14 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
                     }
                 })
                 users.sort((first, second) => first.self === second.self ? 0 : first.self ? -1 : 1)
+                const trafficWatch = <TrafficWatch lifecycle={roomLifecycle}
+                                                   trafficMeter={service.trafficMeter.getValue()}/>
                 replaceChildren(element, roomLabel, ...users.map(user => (
                     <div className={user.self ? "user self" : "user"}>
                         <span className="dot" style={{backgroundColor: user.color}}/>
                         <span>{user.name}</span>
                     </div>
-                )))
+                )), trafficWatch)
             }
             const awarenessApi = awareness.awareness
             awarenessApi.on("change", render)

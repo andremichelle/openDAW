@@ -4,6 +4,7 @@ import {AssetSignaling, type SignalingMessage} from "./AssetSignaling"
 import {AssetPeerConnection} from "./AssetPeerConnection"
 import * as ChunkProtocol from "./ChunkProtocol"
 import {AssetZip} from "./AssetZip"
+import {TrafficMeter} from "./TrafficMeter"
 
 export type AssetReader = {
     readonly hasSample: (uuid: UUID.Bytes) => Promise<boolean>
@@ -16,12 +17,14 @@ export class AssetServer {
     readonly #signaling: AssetSignaling
     readonly #localPeerId: string
     readonly #assetReader: AssetReader
+    readonly #trafficMeter: TrafficMeter
     readonly #connections: Map<string, AssetPeerConnection> = new Map()
 
-    constructor(signaling: AssetSignaling, localPeerId: string, assetReader: AssetReader) {
+    constructor(signaling: AssetSignaling, localPeerId: string, assetReader: AssetReader, trafficMeter: TrafficMeter) {
         this.#signaling = signaling
         this.#localPeerId = localPeerId
         this.#assetReader = assetReader
+        this.#trafficMeter = trafficMeter
         this.#signaling.subscribe(message => this.#onSignalingMessage(message))
         console.debug("[P2P:Server] initialized, peerId:", localPeerId)
     }
@@ -125,8 +128,9 @@ export class AssetServer {
         await connection.sendWithBackpressure(channel,
             ChunkProtocol.encode(ChunkProtocol.MsgType.TransferStart, uuid, 0, startPayload))
         for (let index = 0; index < chunks.length; index++) {
-            await connection.sendWithBackpressure(channel,
-                ChunkProtocol.encode(ChunkProtocol.MsgType.ChunkData, uuid, index, chunks[index]))
+            const encoded = ChunkProtocol.encode(ChunkProtocol.MsgType.ChunkData, uuid, index, chunks[index])
+            await connection.sendWithBackpressure(channel, encoded)
+            this.#trafficMeter.recordUpload(encoded.byteLength)
         }
         await connection.sendWithBackpressure(channel,
             ChunkProtocol.encode(ChunkProtocol.MsgType.TransferComplete, uuid, 0, new Uint8Array(0)))
