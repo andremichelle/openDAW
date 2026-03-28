@@ -17,10 +17,10 @@ type Construct = {
     positioner: PitchPositioner
     scale: ScaleConfig
     noteReceiver: NoteStreamReceiver
-    capture: CaptureMidi
+    captureRef: { current: CaptureMidi }
 }
 
-export const PianoRoll = ({lifecycle, positioner, scale, noteReceiver, capture}: Construct) => {
+export const PianoRoll = ({lifecycle, positioner, scale, noteReceiver, captureRef}: Construct) => {
     const canvas: HTMLCanvasElement = <canvas/>
     const canvasPainter = lifecycle.own(new CanvasPainter(canvas, painter => {
         const context = painter.context
@@ -62,6 +62,7 @@ export const PianoRoll = ({lifecycle, positioner, scale, noteReceiver, capture}:
             positioner.scrollModel.moveBy(event.deltaY)
         }, {passive: false}),
         Dragging.attach(canvas, ({clientY}) => {
+            const capture = captureRef.current
             let pitch = positioner.yToPitch(clientY - canvas.getBoundingClientRect().top)
             capture.notify(NoteSignal.on(capture.uuid, pitch, 1.0))
             return Option.wrap({

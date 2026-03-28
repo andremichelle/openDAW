@@ -4,24 +4,25 @@ import {LiveStreamReceiver} from "@opendaw/lib-fusion"
 
 export class NoteStreamReceiver implements Terminable {
     readonly #terminator = new Terminator()
-
-    readonly #receiver: LiveStreamReceiver
-    readonly #address: Address
-
     readonly #bits: Bits
     readonly #notifier: Notifier<this>
 
-    constructor(receiver: LiveStreamReceiver, address: Address) {
-        this.#receiver = receiver
-        this.#address = address
+    #binding: Terminable = Terminable.Empty
 
+    constructor(receiver: LiveStreamReceiver, address?: Address) {
         this.#bits = new Bits(128)
         this.#notifier = new Notifier<this>()
-        this.#terminator.own(this.#receiver.subscribeIntegers(this.#address, (array: Int32Array) => {
-            if (this.#bits.replace(array.buffer)) {
-                this.#notifier.notify(this)
-            }
-        }))
+        if (address !== undefined) {
+            this.#binding = this.#subscribe(receiver, address)
+        }
+    }
+
+    bind(receiver: LiveStreamReceiver, address: Address): Terminable {
+        this.#binding.terminate()
+        this.#bits.clear()
+        this.#binding = this.#subscribe(receiver, address)
+        this.#notifier.notify(this)
+        return this.#binding
     }
 
     isNoteOn(note: byte): boolean {return this.#bits.getBit(note)}
@@ -29,5 +30,16 @@ export class NoteStreamReceiver implements Terminable {
 
     subscribe(observer: Observer<this>): Subscription {return this.#notifier.subscribe(observer)}
 
-    terminate(): void {this.#terminator.terminate()}
+    terminate(): void {
+        this.#binding.terminate()
+        this.#terminator.terminate()
+    }
+
+    #subscribe(receiver: LiveStreamReceiver, address: Address): Terminable {
+        return receiver.subscribeIntegers(address, (array: Int32Array) => {
+            if (this.#bits.replace(array.buffer)) {
+                this.#notifier.notify(this)
+            }
+        })
+    }
 }

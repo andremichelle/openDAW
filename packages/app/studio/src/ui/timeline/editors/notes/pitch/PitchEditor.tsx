@@ -14,7 +14,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {CanvasPainter, CaptureMidi, Project, StudioPreferences, TimelineRange} from "@opendaw/studio-core"
+import {CanvasPainter, Project, StudioPreferences, TimelineRange} from "@opendaw/studio-core"
 import {PitchPositioner} from "./PitchPositioner.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {Scroller} from "@/ui/components/Scroller.tsx"
@@ -63,7 +63,6 @@ type Construct = {
     modifyContext: ObservableModifyContext<NoteModifier>
     reader: NoteEventOwnerReader
     stepRecording: MutableObservableValue<boolean>
-    capture: CaptureMidi
 }
 
 export const PitchEditor = ({

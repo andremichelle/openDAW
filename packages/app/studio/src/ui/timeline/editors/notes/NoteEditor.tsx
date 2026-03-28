@@ -1,6 +1,6 @@
 import css from "./NoteEditor.sass?inline"
 import {Html, ShortcutManager} from "@opendaw/lib-dom"
-import {DefaultObservableValue, int, isInstanceOf, Lifecycle, Terminable, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, int, isInstanceOf, Lifecycle, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {PitchEditor} from "@/ui/timeline/editors/notes/pitch/PitchEditor.tsx"
@@ -11,7 +11,11 @@ import {NoteEventBox} from "@opendaw/studio-boxes"
 import {PianoRoll} from "@/ui/timeline/editors/notes/pitch/PianoRoll.tsx"
 import {ScaleConfig} from "@/ui/timeline/editors/notes/pitch/ScaleConfig.ts"
 import {PitchEditorHeader} from "@/ui/timeline/editors/notes/pitch/PitchEditorHeader.tsx"
-import {FilteredSelection, NoteEventBoxAdapter, NoteSignal, NoteStreamReceiver} from "@opendaw/studio-adapters"
+import {
+    FilteredSelection, NoteEventBoxAdapter, NoteEventCollectionBoxAdapter,
+    NoteRegionBoxAdapter, NoteSignal, NoteStreamReceiver
+} from "@opendaw/studio-adapters"
+import {RegionReader} from "@/ui/timeline/editors/RegionReader"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {PropertyEditor} from "./property/PropertyEditor.tsx"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
@@ -42,9 +46,49 @@ export const NoteEditor =
     ({lifecycle, service, menu: {editMenu, viewMenu}, range, snapping, reader}: Construct) => {
         const {project} = service
         const {captureDevices, editing, engine, boxGraph, boxAdapters} = project
-        const capture: CaptureMidi = reader.trackBoxAdapter
+        const resolveCapture = (): CaptureMidi => reader.trackBoxAdapter
             .flatMap((adapter) => captureDevices.get(adapter.audioUnit.address.uuid))
             .map(capture => isInstanceOf(capture, CaptureMidi) ? capture : null).unwrap("No CaptureMidi available")
+        const captureRef = {current: resolveCapture()}
+        const noteReceiver = lifecycle.own(new NoteStreamReceiver(project.liveStreamReceiver))
+        const trackBindings = lifecycle.own(new Terminator())
+        const bindToTrack = () => {
+            const oldCapture = captureRef.current
+            for (let pitch = 0; pitch < 128; pitch++) {
+                if (noteReceiver.isNoteOn(pitch)) {
+                    oldCapture.notify(NoteSignal.off(oldCapture.uuid, pitch))
+                }
+            }
+            trackBindings.terminate()
+            captureRef.current = resolveCapture()
+            const audioUnitAddress = reader.trackBoxAdapter.unwrap().audioUnit.address
+            noteReceiver.bind(project.liveStreamReceiver, audioUnitAddress)
+            trackBindings.own(captureRef.current.subscribeNotes(signal => {
+                if (engine.isPlaying.getValue() || !stepRecording.getValue()) {return}
+                if (NoteSignal.isOn(signal)) {
+                    const {pitch, velocity} = signal
+                    const position = snapping.floor(engine.position.getValue())
+                    const duration = snapping.value(position)
+                    let createdNote = false
+                    editing.modify(() => {
+                        NoteEventBox.create(boxGraph, UUID.generate(), box => {
+                            box.events.refer(eventsField)
+                            box.position.setValue(position - reader.offset)
+                            box.duration.setValue(duration)
+                            box.pitch.setValue(pitch)
+                            box.velocity.setValue(velocity)
+                        })
+                        createdNote = true
+                    })
+                    if (createdNote) {
+                        engine.setPosition(position + duration)
+                    }
+                }
+            }))
+        }
+        bindToTrack()
+        const regionBox = (reader as RegionReader<NoteRegionBoxAdapter, NoteEventCollectionBoxAdapter>).region.box
+        lifecycle.own(regionBox.regions.subscribe(() => bindToTrack()))
         const stepRecording = lifecycle.own(new DefaultObservableValue(false))
         const modifyContext = new ObservableModifyContext<NoteModifier>()
         const propertyOwner = new DefaultObservableValue<PropertyAccessor>(NotePropertyVelocity)
@@ -55,8 +99,6 @@ export const NoteEditor =
                 fx: adapter => adapter.box,
                 fy: vertex => project.boxAdapters.adapterFor(vertex.box, NoteEventBoxAdapter)
             }))
-        const audioUnitAddress = reader.trackBoxAdapter.unwrap().audioUnit.address
-        const noteReceiver = lifecycle.own(new NoteStreamReceiver(project.liveStreamReceiver, audioUnitAddress))
         const pitchHeader: HTMLElement = (
             <div className="pitch-header">
                 <PitchEditorHeader lifecycle={lifecycle}
@@ -68,7 +110,7 @@ export const NoteEditor =
                            positioner={pitchPositioner}
                            scale={scale}
                            noteReceiver={noteReceiver}
-                           capture={capture}/>
+                           captureRef={captureRef}/>
             </div>
         )
         const pitchBody: HTMLElement = (
@@ -80,7 +122,6 @@ export const NoteEditor =
                              snapping={snapping}
                              positioner={pitchPositioner}
                              scale={scale}
-                             capture={capture}
                              selection={selection}
                              modifyContext={modifyContext}
                              reader={reader}
@@ -155,28 +196,6 @@ export const NoteEditor =
                 .forEach(cursor => cursor.classList.toggle("step-recording", owner.getValue()))),
             Terminable.create(() => document.querySelectorAll("[data-component='cursor']")
                 .forEach(cursor => cursor.classList.remove("step-recording"))),
-            capture.subscribeNotes(signal => {
-                if (engine.isPlaying.getValue() || !stepRecording.getValue()) {return}
-                if (NoteSignal.isOn(signal)) {
-                    const {pitch, velocity} = signal
-                    const position = snapping.floor(engine.position.getValue())
-                    const duration = snapping.value(position)
-                    let createdNote = false
-                    editing.modify(() => {
-                        NoteEventBox.create(boxGraph, UUID.generate(), box => {
-                            box.events.refer(eventsField)
-                            box.position.setValue(position - reader.offset)
-                            box.duration.setValue(duration)
-                            box.pitch.setValue(pitch)
-                            box.velocity.setValue(velocity)
-                        })
-                        createdNote = true
-                    })
-                    if (createdNote) {
-                        engine.setPosition(position + duration)
-                    }
-                }
-            }),
             ClipboardManager.install(element, clipboardHandler)
         )
         return element
