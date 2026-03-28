@@ -14,7 +14,7 @@ import {
 } from "@opendaw/lib-std"
 import {Box, BoxGraph} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {TrackBox} from "@opendaw/studio-boxes"
+import {RootBox, TrackBox} from "@opendaw/studio-boxes"
 import {
     AudioEffectDeviceAdapter,
     BoxAdapters,
@@ -120,12 +120,17 @@ export namespace DevicesClipboard {
                     .filter(pointer => pointer.mandatory && !pointer.box.ephemeral
                         && !isDefined(pointer.box.resource))
                     .map(pointer => pointer.box)
+                const mandatoryDeps = Array.from(boxGraph.dependenciesOf(box, {
+                    alwaysFollowMandatory: true,
+                    excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
+                        || dep.name === RootBox.ClassName
+                }).boxes).filter(dep => !isDefined(dep.resource))
                 const preserved = [box, ...ownedChildren].flatMap(root =>
                     Array.from(boxGraph.dependenciesOf(root, {
                         alwaysFollowMandatory: true,
                         excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
                     }).boxes).filter(dep => dep.resource === "preserved"))
-                return [...ownedChildren, ...preserved]
+                return [...ownedChildren, ...mandatoryDeps, ...preserved]
             })
             const trackContent: Box[] = []
             if (isNotNull(instrument)) {
@@ -241,7 +246,8 @@ export namespace DevicesClipboard {
                         entry.data,
                         boxGraph,
                         {
-                            mapPointer: pointer => {
+                            mapPointer: (pointer, address) => {
+                                if (address.isEmpty()) {return Option.None}
                                 if (pointer.pointerType === Pointers.InstrumentHost && replaceInstrument) {
                                     return Option.wrap(host.inputField.address)
                                 }
@@ -256,6 +262,13 @@ export namespace DevicesClipboard {
                                 }
                                 if (pointer.pointerType === Pointers.Automation && replaceInstrument) {
                                     return Option.wrap(host.audioUnitBoxAdapter().address)
+                                }
+                                if (pointer.pointerType === Pointers.MIDIDevice) {
+                                    const rootBox: Optional<RootBox> = boxGraph.boxes()
+                                        .find(box => isInstanceOf(box, RootBox)) as Optional<RootBox>
+                                    if (isDefined(rootBox)) {
+                                        return Option.wrap(rootBox.outputMidiDevices.address)
+                                    }
                                 }
                                 return Option.None
                             },

@@ -6,10 +6,13 @@ import {
     AudioFileBox,
     AudioUnitBox,
     CompressorDeviceBox,
+    MIDIOutputBox,
+    MIDIOutputDeviceBox,
     NoteEventCollectionBox,
     NoteRegionBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
+    RootBox,
     TapeDeviceBox,
     TrackBox,
     VaporisateurDeviceBox,
@@ -236,6 +239,11 @@ describe("DevicesClipboardHandler", () => {
             .filter(pointer => pointer.mandatory && !pointer.box.ephemeral
                 && !isDefined(pointer.box.resource))
             .map(pointer => pointer.box)
+        const mandatoryDeps = Array.from(boxGraph.dependenciesOf(deviceBox, {
+            alwaysFollowMandatory: true,
+            excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
+                || dep.name === RootBox.ClassName
+        }).boxes).filter(dep => !isDefined(dep.resource))
         const preserved = [deviceBox, ...ownedChildren].flatMap(root =>
             Array.from(boxGraph.dependenciesOf(root, {
                 alwaysFollowMandatory: true,
@@ -263,7 +271,7 @@ describe("DevicesClipboardHandler", () => {
             }
         }
         const seen = new Set<string>()
-        return [...ownedChildren, ...preserved, ...trackContent].filter(box => {
+        return [...ownedChildren, ...mandatoryDeps, ...preserved, ...trackContent].filter(box => {
             const uuid = UUID.toString(box.address.uuid)
             if (seen.has(uuid)) return false
             seen.add(uuid)
@@ -1049,6 +1057,182 @@ describe("DevicesClipboardHandler", () => {
     // ─────────────────────────────────────────────────────────
     // isInstanceOf type narrowing
     // ─────────────────────────────────────────────────────────
+
+    // ─────────────────────────────────────────────────────────
+    // MIDIOutputDeviceBox copy & paste
+    // ─────────────────────────────────────────────────────────
+
+    const addMIDIOutputInstrument = (skeleton: ProjectSkeleton, audioUnit: AudioUnitBox,
+                                     label: string): MIDIOutputDeviceBox => {
+        const {boxGraph} = skeleton
+        let device!: MIDIOutputDeviceBox
+        boxGraph.beginTransaction()
+        device = MIDIOutputDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.label.setValue(label)
+            box.host.refer(audioUnit.input)
+        })
+        boxGraph.endTransaction()
+        return device
+    }
+
+    const connectMIDIOutput = (skeleton: ProjectSkeleton,
+                               deviceBox: MIDIOutputDeviceBox,
+                               outputId: string, outputLabel: string): MIDIOutputBox => {
+        const {boxGraph, mandatoryBoxes: {rootBox}} = skeleton
+        let midiOutputBox!: MIDIOutputBox
+        boxGraph.beginTransaction()
+        midiOutputBox = MIDIOutputBox.create(boxGraph, UUID.generate(), box => {
+            box.id.setValue(outputId)
+            box.label.setValue(outputLabel)
+            box.root.refer(rootBox.outputMidiDevices)
+        })
+        deviceBox.device.refer(midiOutputBox.device)
+        boxGraph.endTransaction()
+        return midiOutputBox
+    }
+
+    describe("MIDIOutputDeviceBox copy & paste", () => {
+        it("collects MIDIOutputBox as dependency when device pointer is set", () => {
+            const audioUnit = createAudioUnit(source)
+            const midiDevice = addMIDIOutputInstrument(source, audioUnit, "MIDIOut")
+            connectMIDIOutput(source, midiDevice, "output-1", "MIDI Port 1")
+            const deps = collectDeviceDependencies(midiDevice, source.boxGraph)
+            expect(deps.filter(box => isInstanceOf(box, MIDIOutputBox)).length).toBe(1)
+        })
+        it("does not collect RootBox as dependency", () => {
+            const audioUnit = createAudioUnit(source)
+            const midiDevice = addMIDIOutputInstrument(source, audioUnit, "MIDIOut")
+            connectMIDIOutput(source, midiDevice, "output-1", "MIDI Port 1")
+            const deps = collectDeviceDependencies(midiDevice, source.boxGraph)
+            expect(deps.filter(box => isInstanceOf(box, RootBox)).length).toBe(0)
+        })
+        it("does not collect MIDIOutputBox when device pointer is empty", () => {
+            const audioUnit = createAudioUnit(source)
+            const midiDevice = addMIDIOutputInstrument(source, audioUnit, "MIDIOut")
+            const deps = collectDeviceDependencies(midiDevice, source.boxGraph)
+            expect(deps.filter(box => isInstanceOf(box, MIDIOutputBox)).length).toBe(0)
+        })
+        it("paste MIDIOutput with empty device pointer does not fill it", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceMidi = addMIDIOutputInstrument(source, sourceAU, "Source MIDI")
+            const deps = collectDeviceDependencies(sourceMidi, source.boxGraph, sourceAU)
+            const data = ClipboardUtils.serializeBoxes([sourceMidi, ...deps])
+            const targetAU = createAudioUnit(target)
+            target.boxGraph.beginTransaction()
+            const boxes = ClipboardUtils.deserializeBoxes(data, target.boxGraph, {
+                mapPointer: (pointer, address) => {
+                    if (address.isEmpty()) {return Option.None}
+                    if (pointer.pointerType === Pointers.InstrumentHost) {
+                        return Option.wrap(targetAU.input.address)
+                    }
+                    if (pointer.pointerType === Pointers.MIDIDevice) {
+                        return Option.wrap(target.mandatoryBoxes.rootBox.outputMidiDevices.address)
+                    }
+                    if (pointer.pointerType === Pointers.TrackCollection) {
+                        return Option.wrap(targetAU.tracks.address)
+                    }
+                    if (pointer.pointerType === Pointers.Automation) {
+                        return Option.wrap(targetAU.address)
+                    }
+                    return Option.None
+                },
+                excludeBox: () => false
+            })
+            target.boxGraph.endTransaction()
+            const pastedDevice = boxes.find(box => isInstanceOf(box, MIDIOutputDeviceBox)) as MIDIOutputDeviceBox
+            expect(pastedDevice).toBeDefined()
+            expect(pastedDevice.device.isEmpty()).toBe(true)
+        })
+        it("paste-replace MIDIOutput with connected device does not throw", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceMidi = addMIDIOutputInstrument(source, sourceAU, "Source MIDI")
+            connectMIDIOutput(source, sourceMidi, "output-1", "MIDI Port 1")
+            const deps = collectDeviceDependencies(sourceMidi, source.boxGraph, sourceAU)
+            const data = ClipboardUtils.serializeBoxes([sourceMidi, ...deps])
+            const targetAU = createAudioUnit(target)
+            const targetVapo = addVaporisateur(target, targetAU, "Target Vapo")
+            expect(() => {
+                target.boxGraph.beginTransaction()
+                targetVapo.delete()
+                ClipboardUtils.deserializeBoxes(data, target.boxGraph, {
+                    ...makePasteMapper(targetAU, true),
+                    mapPointer: (pointer, address) => {
+                        const base = makePasteMapper(targetAU, true).mapPointer(pointer)
+                        if (base.nonEmpty()) {return base}
+                        if (pointer.pointerType === Pointers.MIDIDevice) {
+                            return Option.wrap(target.mandatoryBoxes.rootBox.outputMidiDevices.address)
+                        }
+                        return Option.None
+                    }
+                })
+                target.boxGraph.endTransaction()
+            }).not.toThrow()
+        })
+        it("pasted MIDIOutputBox.root points to target RootBox.outputMidiDevices", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceMidi = addMIDIOutputInstrument(source, sourceAU, "Source MIDI")
+            connectMIDIOutput(source, sourceMidi, "output-1", "MIDI Port 1")
+            const deps = collectDeviceDependencies(sourceMidi, source.boxGraph, sourceAU)
+            const data = ClipboardUtils.serializeBoxes([sourceMidi, ...deps])
+            const targetAU = createAudioUnit(target)
+            target.boxGraph.beginTransaction()
+            const boxes = ClipboardUtils.deserializeBoxes(data, target.boxGraph, {
+                mapPointer: (pointer, address) => {
+                    if (pointer.pointerType === Pointers.InstrumentHost) {
+                        return Option.wrap(targetAU.input.address)
+                    }
+                    if (pointer.pointerType === Pointers.MIDIDevice) {
+                        return Option.wrap(target.mandatoryBoxes.rootBox.outputMidiDevices.address)
+                    }
+                    if (pointer.pointerType === Pointers.TrackCollection) {
+                        return Option.wrap(targetAU.tracks.address)
+                    }
+                    if (pointer.pointerType === Pointers.Automation) {
+                        return Option.wrap(targetAU.address)
+                    }
+                    return Option.None
+                },
+                excludeBox: () => false
+            })
+            target.boxGraph.endTransaction()
+            const pastedMidiOutputBox = boxes.find(box => isInstanceOf(box, MIDIOutputBox)) as MIDIOutputBox
+            expect(pastedMidiOutputBox).toBeDefined()
+            expect(pastedMidiOutputBox.root.targetVertex.unwrap().box).toBe(target.mandatoryBoxes.rootBox)
+        })
+        it("pasted MIDIOutputDeviceBox.device points to pasted MIDIOutputBox", () => {
+            const sourceAU = createAudioUnit(source)
+            const sourceMidi = addMIDIOutputInstrument(source, sourceAU, "Source MIDI")
+            connectMIDIOutput(source, sourceMidi, "output-1", "MIDI Port 1")
+            const deps = collectDeviceDependencies(sourceMidi, source.boxGraph, sourceAU)
+            const data = ClipboardUtils.serializeBoxes([sourceMidi, ...deps])
+            const targetAU = createAudioUnit(target)
+            target.boxGraph.beginTransaction()
+            const boxes = ClipboardUtils.deserializeBoxes(data, target.boxGraph, {
+                mapPointer: (pointer, address) => {
+                    if (pointer.pointerType === Pointers.InstrumentHost) {
+                        return Option.wrap(targetAU.input.address)
+                    }
+                    if (pointer.pointerType === Pointers.MIDIDevice) {
+                        return Option.wrap(target.mandatoryBoxes.rootBox.outputMidiDevices.address)
+                    }
+                    if (pointer.pointerType === Pointers.TrackCollection) {
+                        return Option.wrap(targetAU.tracks.address)
+                    }
+                    if (pointer.pointerType === Pointers.Automation) {
+                        return Option.wrap(targetAU.address)
+                    }
+                    return Option.None
+                },
+                excludeBox: () => false
+            })
+            target.boxGraph.endTransaction()
+            const pastedDevice = boxes.find(box => isInstanceOf(box, MIDIOutputDeviceBox)) as MIDIOutputDeviceBox
+            const pastedMidiOutput = boxes.find(box => isInstanceOf(box, MIDIOutputBox)) as MIDIOutputBox
+            expect(pastedDevice).toBeDefined()
+            expect(pastedMidiOutput).toBeDefined()
+            expect(pastedDevice.device.targetVertex.unwrap().box).toBe(pastedMidiOutput)
+        })
+    })
 
     describe("isInstanceOf type narrowing", () => {
         it("narrows TrackBox type directly without intermediate null variable", () => {
