@@ -3,7 +3,7 @@
 component
   display: grid
   grid-template-columns: repeat(4, 3.5em)
-  grid-template-rows: 5em 2em 3.5em
+  grid-template-rows: 3em 2em 2em 3.5em
   row-gap: 0.25em
   height: 192px
   @include mixins.Control
@@ -15,7 +15,7 @@ component
     border-radius: 4px
     outline: 0.5px solid hsla(200, 40%, 70%, 0.12)
 
-  > div.model-row
+  > div.browse-row
     grid-column: 1 / -1
     display: flex
     column-gap: 0.5em
@@ -28,24 +28,74 @@ component
         width: 100%
         display: block
 
-    span.name
+    div.pack-label
       flex: 1 0 0
-      height: calc(100% - 8px)
-      margin: 4px 0
+      min-width: 0
+      padding: 0 0.5em
+      display: flex
+      flex-direction: column
+      row-gap: 0.125em
       font-size: 10px
-      line-height: 24px
-      padding: 0 6px
-      border-radius: 4px
+
+      span.pack-header
+        display: block
+        text-transform: uppercase
+        opacity: 0.4
+
+      span.pack-name
+        display: block
+        white-space: nowrap
+        overflow: hidden
+        text-overflow: ellipsis
+
+        &.empty
+          font-style: italic
+
+  > div.model-row
+    grid-column: 1 / -1
+    display: flex
+    column-gap: 0.25em
+    align-items: center
+
+    div.step-arrows
+      flex: 0 0 auto
+      display: flex
+      flex-direction: column
+      gap: 1px
+
+      button.step-arrow
+        display: flex
+        background: none
+        border: none
+        color: inherit
+        font-size: 10px
+        line-height: 1
+        padding: 1px 3px
+        cursor: pointer
+        opacity: 0.6
+
+        &:hover
+          opacity: 1
+
+        &.disabled
+          opacity: 0.3
+          pointer-events: none
+
+    > button.stretch
+      flex: 1 1 0
+      min-width: 0
+
+    span.model-label
+      display: block
+      font-size: 10px
+      padding: 0 0.5em
       white-space: nowrap
       overflow: hidden
       text-overflow: ellipsis
-      background-color: rgba(white, 0.04)
+      width: calc(100% - 1em)
 
       &.empty
         font-style: italic
-
-      &.error
-        color: var(--color-orange)
 
   > div.controls-row
     grid-column: 1 / -1
