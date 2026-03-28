@@ -93,7 +93,7 @@ The `id` field (from `Model.id` in the API) is used as the OPFS filename — it'
 1. After `fetchTone(toneUrl)` returns the `ToneResponse`, check if `tone3000/{tone.id}/pack.json` exists in OPFS
 2. If cached: compare `tone.updated_at` from the fresh response against `pack.json.updatedAt`. If they match → skip download, go straight to model loading. If they differ → download only the missing/new models, remove stale ones, update `pack.json`
 3. If not cached: download all models in the pack (parallel fetch with concurrency limit), store each in OPFS, then write `pack.json`
-4. Show download progress — packs can be up to 80MB. Open question: progress in the Tone 3000 popup or in the editor itself (TBD)
+4. Show download progress — packs can be up to 80MB. Progress lives wherever the download happens (currently editor-side in `NamTone3000.browse()`)
 5. Support cancellation — if cancelled, clean up partially written pack folder
 6. After storing, load the default "standard" model (same as today)
 
