@@ -120,6 +120,7 @@ export namespace NamTone3000 {
             const toneUrlPromise = waitForToneUrl()
             window.open(url, "tone3000")
             const toneUrl = await toneUrlPromise
+            localStorage.setItem(StorageDoneKey, "true")
             const tone = await fetchTone(toneUrl)
             if (tone.models.length === 0) {return}
             const meta = await storePackToOpfs(tone)
@@ -143,7 +144,6 @@ export namespace NamTone3000 {
                     }
                 }
             })
-            localStorage.setItem(StorageDoneKey, "true")
         } catch (error) {
             if (Errors.isAbort(error)) {return}
             console.error("Failed to load NAM model from Tone 3000:", error)
