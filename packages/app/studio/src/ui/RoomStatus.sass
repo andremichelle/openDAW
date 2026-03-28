@@ -8,12 +8,17 @@ component
   padding: 0 1rem
   font-size: 0.625rem
   color: var(--color-dark)
-  @include colors.panel-background-dark
+  @include colors.panel-background-stripes-dark
 
-  > .room-name
-    color: var(--color-bright)
-    cursor: pointer
-    white-space: nowrap
+  > .room-label
+    display: flex
+    align-items: center
+    color: var(--color-green)
+    column-gap: 0.25em
+
+    > .room-name
+      cursor: pointer
+      white-space: nowrap
 
   > .user
     display: flex
@@ -22,8 +27,8 @@ component
     white-space: nowrap
 
     > .dot
-      width: 6px
-      height: 6px
+      min-width: 6px
+      min-height: 6px
       border-radius: 50%
       flex-shrink: 0
 
