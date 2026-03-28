@@ -20,11 +20,11 @@ export class AssetServer {
     readonly #trafficMeter: TrafficMeter
     readonly #connections: Map<string, AssetPeerConnection> = new Map()
 
-    constructor(signaling: AssetSignaling, localPeerId: string, assetReader: AssetReader, trafficMeter: TrafficMeter) {
+    constructor(signaling: AssetSignaling, localPeerId: string, assetReader: AssetReader, trafficMeter?: TrafficMeter) {
         this.#signaling = signaling
         this.#localPeerId = localPeerId
         this.#assetReader = assetReader
-        this.#trafficMeter = trafficMeter
+        this.#trafficMeter = trafficMeter ?? new TrafficMeter()
         this.#signaling.subscribe(message => this.#onSignalingMessage(message))
         console.debug("[P2P:Server] initialized, peerId:", localPeerId)
     }

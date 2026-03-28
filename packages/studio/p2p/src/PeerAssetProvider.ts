@@ -31,12 +31,14 @@ export class PeerAssetProvider {
     readonly #transferMeta: Map<string, {totalChunks: number}> = new Map()
     readonly #knownPeers: Set<string> = new Set()
     readonly #transferringAssets: Map<string, string> = new Map()
+    readonly #activePeerTransfers: Map<string, string> = new Map()
+    readonly #peerQueues: Map<string, Array<string>> = new Map()
     #terminated: boolean = false
 
-    constructor(signaling: AssetSignaling, localPeerId: string, trafficMeter: TrafficMeter) {
+    constructor(signaling: AssetSignaling, localPeerId: string, trafficMeter?: TrafficMeter) {
         this.#signaling = signaling
         this.#localPeerId = localPeerId
-        this.#trafficMeter = trafficMeter
+        this.#trafficMeter = trafficMeter ?? new TrafficMeter()
         this.#signaling.subscribe(message => this.#onSignalingMessage(message))
         console.debug("[P2P:Provider] initialized, peerId:", localPeerId)
     }
@@ -107,12 +109,28 @@ export class PeerAssetProvider {
             pending.stallTimer = null
         }
         if (remotePeerId !== undefined) {
+            this.#activePeerTransfers.delete(remotePeerId)
             const connection = this.#connections.get(remotePeerId)
             if (connection !== undefined) {
                 connection.terminate()
                 this.#connections.delete(remotePeerId)
             }
+            this.#drainPeerQueue(remotePeerId)
         }
+    }
+
+    #drainPeerQueue(peerId: string): void {
+        const queue = this.#peerQueues.get(peerId)
+        if (queue === undefined || queue.length === 0) {return}
+        while (queue.length > 0) {
+            const uuidString = queue.shift()!
+            const pending = this.#pendingRequests.get(uuidString)
+            if (pending === undefined || this.#transferringAssets.has(uuidString)) {continue}
+            console.debug("[P2P:Provider] dequeuing transfer for", uuidString, "from peer", peerId)
+            this.#initiateTransfer(pending, peerId)
+            return
+        }
+        this.#peerQueues.delete(peerId)
     }
 
     #resetStallTimer(pending: PendingRequest): void {
@@ -154,6 +172,13 @@ export class PeerAssetProvider {
             const pending = this.#pendingRequests.get(uuidString)
             if (pending === undefined) {continue}
             if (this.#transferringAssets.has(uuidString)) {continue}
+            if (this.#activePeerTransfers.has(peerId)) {
+                console.debug("[P2P:Provider] peer", peerId, "busy, queuing", uuidString)
+                const queue = this.#peerQueues.get(peerId) ?? []
+                if (!queue.includes(uuidString)) {queue.push(uuidString)}
+                this.#peerQueues.set(peerId, queue)
+                continue
+            }
             console.debug("[P2P:Provider] initiating transfer for", uuidString, "from peer", peerId)
             this.#initiateTransfer(pending, peerId)
             break
@@ -162,6 +187,7 @@ export class PeerAssetProvider {
 
     async #initiateTransfer(pending: PendingRequest, remotePeerId: string): Promise<void> {
         this.#transferringAssets.set(pending.uuidString, remotePeerId)
+        this.#activePeerTransfers.set(remotePeerId, pending.uuidString)
         const connection = new AssetPeerConnection(this.#signaling, this.#localPeerId, remotePeerId)
         this.#connections.set(remotePeerId, connection)
         console.debug("[P2P:Provider] creating WebRTC offer to", remotePeerId)
@@ -237,10 +263,20 @@ export class PeerAssetProvider {
                     clearTimeout(pending.stallTimer)
                     pending.stallTimer = null
                 }
+                const remotePeerId = this.#transferringAssets.get(pending.uuidString)
                 this.#incomingChunks.delete(pending.uuidString)
                 this.#transferMeta.delete(pending.uuidString)
                 this.#transferringAssets.delete(pending.uuidString)
                 this.#pendingRequests.delete(pending.uuidString)
+                if (remotePeerId !== undefined) {
+                    this.#activePeerTransfers.delete(remotePeerId)
+                    const connection = this.#connections.get(remotePeerId)
+                    if (connection !== undefined) {
+                        connection.terminate()
+                        this.#connections.delete(remotePeerId)
+                    }
+                    this.#drainPeerQueue(remotePeerId)
+                }
                 pending.progress(1.0)
                 pending.resolve(zipBytes)
                 break
@@ -287,5 +323,7 @@ export class PeerAssetProvider {
         this.#incomingChunks.clear()
         this.#transferMeta.clear()
         this.#transferringAssets.clear()
+        this.#activePeerTransfers.clear()
+        this.#peerQueues.clear()
     }
 }
