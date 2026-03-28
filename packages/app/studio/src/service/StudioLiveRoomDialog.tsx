@@ -10,6 +10,29 @@ import {readIdentity, userColors} from "@/service/RoomAwareness"
 
 const className = Html.adoptStyleSheet(css, "StudioLiveRoomDialog")
 
+const randomRoomName = (length: number = 11): string => {
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+    const values = crypto.getRandomValues(new Uint8Array(length))
+    return Array.from(values, byte => chars[byte % chars.length]).join("")
+}
+
+const randomUserName = (): string => {
+    const adjectives = [
+        "Analog", "Electric", "Acoustic", "Harmonic", "Sonic",
+        "Melodic", "Ambient", "Tonal", "Stereo", "Resonant",
+        "Phantom", "Cosmic", "Modular", "Spectral", "Orbital",
+        "Neon", "Lucid", "Astral", "Magnetic", "Chromatic"
+    ]
+    const nouns = [
+        "Maestro", "Voyager", "Pioneer", "Prophet", "Nomad",
+        "Atom", "Aurora", "Echo", "Nova", "Prism",
+        "Opus", "Rebel", "Ghost", "Oracle", "Nexus",
+        "Drifter", "Vertex", "Sphinx", "Cipher", "Pilot"
+    ]
+    const [a, b] = crypto.getRandomValues(new Uint8Array(2))
+    return `${adjectives[a % adjectives.length]} ${nouns[b % nouns.length]}`
+}
+
 export type RoomDialogResult = { roomName: string, userName: string, userColor: string }
 
 export const showConnectRoomDialog = (prefillRoomName?: Optional<string>): Promise<RoomDialogResult> => {
@@ -39,12 +62,13 @@ export const showConnectRoomDialog = (prefillRoomName?: Optional<string>): Promi
     }
     const roomInput: HTMLInputElement = (
         <input className="default input" type="text" placeholder="Required" maxLength={16} required={true}
-               pattern="[a-z0-9._-]+"
+               pattern="[a-z0-9\.\-_]+"
                title="Only lowercase letters, numbers, hyphens, dots, and underscores"
-               value={hasRoomName ? prefillRoomName : ""} disabled={hasRoomName}/>
+               value={hasRoomName ? prefillRoomName : randomRoomName()} disabled={hasRoomName}/>
     )
     const nameInput: HTMLInputElement = (
-        <input className="default input" type="text" placeholder="Required" value={identity.name} maxLength={16}
+        <input className="default input" type="text" placeholder="Required"
+               value={identity.name.length > 0 ? identity.name : randomUserName()} maxLength={16}
                required={true}/>
     )
     let selectedColor = identity.color
@@ -56,8 +80,9 @@ export const showConnectRoomDialog = (prefillRoomName?: Optional<string>): Promi
                           style={{backgroundColor: color}}
                           onclick={() => {
                               selectedColor = color
-                              colorSwatches.querySelectorAll(".swatch").forEach(element =>
-                                  element.classList.toggle("selected", (element as HTMLElement).style.backgroundColor === swatch.style.backgroundColor))
+                              colorSwatches.querySelectorAll<HTMLElement>(".swatch").forEach(element =>
+                                  element.classList.toggle("selected",
+                                      element.style.backgroundColor === swatch.style.backgroundColor))
                           }}/>
                 )
                 return swatch
@@ -133,6 +158,7 @@ export const showConnectRoomDialog = (prefillRoomName?: Optional<string>): Promi
             updateUrlPreview()
         })
         roomInput.focus()
+        roomInput.select()
     }
     return promise
 }
