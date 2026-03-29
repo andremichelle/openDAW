@@ -84,6 +84,23 @@ Examples:
 // @param mode    0     0      3    int
 // @param bypass  false
 
+## Grouping parameters and samples
+Group parameters and samples visually using @group comments:
+
+// @group <name> [color]
+
+Parameters and samples after a @group belong to that group until the next @group.
+Available colors: blue, green, yellow, cream, orange, red, purple, white, gray, dark.
+Color defaults to "dark" if omitted.
+
+Example:
+// @group Envelope green
+// @param attack 0.01 0.001 1.0 exp s
+// @param release 0.5 0 5 exp s
+// @group Samples orange
+// @sample wavetable
+// @param volume 0.8
+
 ## Declaring samples
 Samples are declared as comments:
 

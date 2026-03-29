@@ -114,6 +114,29 @@ The knob displays the mapped value with the unit. `paramChanged` receives the ma
 
 Parameters are reconciled on each compile: new parameters are added, removed parameters are deleted, and existing parameters keep their current value. Multiple spaces between tokens are allowed for alignment.
 
+### Groups
+
+Organize parameters visually using `// @group` comments:
+
+```javascript
+// @group Timing green
+// @param rate    0.5   0.1  2.0  exp
+// @param swing   0.5
+// @group Output blue
+// @param chance  0.5   0    1    linear
+// @param repeats 3     1    8    int
+```
+
+```
+// @group <name> [color]
+```
+
+Parameters declared after a `@group` belong to that group until the next `@group` or end of declarations. Each group renders as a labeled section on the device panel with a colored header.
+
+Available colors: `blue`, `green`, `yellow`, `cream`, `orange`, `red`, `purple`, `white`, `gray`, `dark` (default).
+
+Parameters before any `@group` appear ungrouped.
+
 ---
 
 ## 4. Keyboard Shortcuts
