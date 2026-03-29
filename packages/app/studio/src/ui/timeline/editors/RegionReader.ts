@@ -60,6 +60,7 @@ export class RegionReader<REGION extends LoopableRegionBoxAdapter<CONTENT>, CONT
     get trackBoxAdapter(): Option<TrackBoxAdapter> {return this.region.trackBoxAdapter}
 
     subscribeChange(observer: Observer<void>): Subscription {return this.region.subscribeChange(observer)}
+    subscribeTrackChange(observer: Observer<void>): Subscription {return this.region.box.regions.subscribe(() => observer())}
     keeoOverlapping(range: TimelineRange): Subscription {
         const region = this.region
         const run = deferNextFrame(() => {
