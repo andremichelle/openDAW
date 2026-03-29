@@ -11,10 +11,7 @@ import {NoteEventBox} from "@opendaw/studio-boxes"
 import {PianoRoll} from "@/ui/timeline/editors/notes/pitch/PianoRoll.tsx"
 import {ScaleConfig} from "@/ui/timeline/editors/notes/pitch/ScaleConfig.ts"
 import {PitchEditorHeader} from "@/ui/timeline/editors/notes/pitch/PitchEditorHeader.tsx"
-import {
-    FilteredSelection, NoteEventBoxAdapter, NoteEventCollectionBoxAdapter,
-    NoteRegionBoxAdapter, NoteSignal, NoteStreamReceiver
-} from "@opendaw/studio-adapters"
+import {FilteredSelection, NoteEventBoxAdapter, NoteSignal, NoteStreamReceiver} from "@opendaw/studio-adapters"
 import {RegionReader} from "@/ui/timeline/editors/RegionReader"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {PropertyEditor} from "./property/PropertyEditor.tsx"
@@ -87,12 +84,14 @@ export const NoteEditor =
             }))
         }
         bindToTrack()
-        const regionBox = (reader as RegionReader<NoteRegionBoxAdapter, NoteEventCollectionBoxAdapter>).region.box
-        lifecycle.own(regionBox.regions.subscribe(() => {
-            if (reader.trackBoxAdapter.nonEmpty()) {
-                bindToTrack()
-            }
-        }))
+        if (reader instanceof RegionReader) {
+            const regionBox = reader.region.box
+            lifecycle.own(regionBox.regions.subscribe(() => {
+                if (reader.trackBoxAdapter.nonEmpty()) {
+                    bindToTrack()
+                }
+            }))
+        }
         const stepRecording = lifecycle.own(new DefaultObservableValue(false))
         const modifyContext = new ObservableModifyContext<NoteModifier>()
         const propertyOwner = new DefaultObservableValue<PropertyAccessor>(NotePropertyVelocity)
