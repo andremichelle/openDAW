@@ -19,9 +19,25 @@ export interface SampleDeclaration {
     readonly label: string
 }
 
+export interface GroupDeclaration {
+    readonly label: string
+    readonly color: string
+}
+
+export type DeclarationItem =
+    | { readonly type: "param", readonly declaration: ParamDeclaration }
+    | { readonly type: "sample", readonly declaration: SampleDeclaration }
+
+export interface DeclarationSection {
+    readonly group: Nullable<GroupDeclaration>
+    readonly items: ReadonlyArray<DeclarationItem>
+}
+
 const LABEL_LINE = /^\/\/ @label .+$/m
 const PARAM_LINE = /^\/\/ @param .+$/gm
 const SAMPLE_LINE = /^\/\/ @sample .+$/gm
+const GROUP_LINE = /^\/\/ @group .+$/gm
+const DIRECTIVE_LINE = /^\/\/ @(group|param|sample) .+$/gm
 const DECLARATION_LINE = /^\/\/ @(?:param|sample) \S+/gm
 const FLOAT_TOLERANCE = 1e-6
 const VALID_MAPPINGS: ReadonlyArray<string> = ["linear", "exp", "int", "bool"]
@@ -154,6 +170,38 @@ export namespace ScriptDeclaration {
             }
         }
         return order
+    }
+
+    export const parseGroups = (code: string): ReadonlyArray<DeclarationSection> => {
+        const sections: Array<DeclarationSection> = []
+        let currentGroup: Nullable<GroupDeclaration> = null
+        let currentItems: Array<DeclarationItem> = []
+        DIRECTIVE_LINE.lastIndex = 0
+        let match: Nullable<RegExpExecArray>
+        while ((match = DIRECTIVE_LINE.exec(code)) !== null) {
+            const line = match[0]
+            const type = match[1]
+            if (type === "group") {
+                if (currentItems.length > 0 || currentGroup !== null) {
+                    sections.push({group: currentGroup, items: currentItems})
+                }
+                const tokens = line.replace(/^\/\/ @group\s+/, "").trim().split(/\s+/)
+                currentGroup = {label: tokens[0], color: tokens[1] ?? "dark"}
+                currentItems = []
+            } else if (type === "param") {
+                currentItems.push({type: "param", declaration: parseSingleParam(line)})
+            } else if (type === "sample") {
+                const tokens = line.replace(/^\/\/ @sample\s+/, "").replace(/\s+\/\/.*$/, "").trim().split(/\s+/)
+                if (tokens.length === 0 || tokens[0].length === 0) {
+                    throw new Error(`Malformed @sample: '${line}' — expected: // @sample <name>`)
+                }
+                currentItems.push({type: "sample", declaration: {label: tokens[0]}})
+            }
+        }
+        if (currentItems.length > 0 || currentGroup !== null) {
+            sections.push({group: currentGroup, items: currentItems})
+        }
+        return sections
     }
 
     export const resolveValueMapping = (declaration: ParamDeclaration): ValueMapping<number> => {
