@@ -1,4 +1,4 @@
-import {Terminator} from "@opendaw/lib-std"
+import {isDefined, Terminator} from "@opendaw/lib-std"
 import {createElement, Frag, Router} from "@opendaw/lib-jsx"
 import {WorkspacePage} from "@/ui/workspace/WorkspacePage.tsx"
 import {StudioService} from "@/service/StudioService.ts"
@@ -25,6 +25,11 @@ import {JoinRoomPage} from "@/ui/pages/JoinRoomPage"
 
 export const App = (service: StudioService) => {
     const terminator = new Terminator()
+    const favicon = document.querySelector<HTMLLinkElement>("link[rel='icon']")
+    if (isDefined(favicon)) {
+        terminator.own(service.roomAwareness.catchupAndSubscribe(owner =>
+            favicon.href = isDefined(owner.getValue()) ? "/favicon-live.svg" : "/favicon.svg"))
+    }
     return (
         <Frag>
             <Header lifecycle={new Terminator()} service={service}/>
