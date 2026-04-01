@@ -26,6 +26,7 @@ export type Construct<T> = {
 }
 
 export class YSync<T> implements Terminable {
+    /** @internal */
     static isEmpty(doc: Y.Doc): boolean {
         return doc.getMap("boxes").size === 0
     }
@@ -60,12 +61,24 @@ export class YSync<T> implements Terminable {
         return sync
     }
 
-    readonly #terminator = new Terminator()
+    static #computePathPrefix(boxes: Y.Map<unknown>): ReadonlyArray<string | number> {
+        const prefix: Array<string | number> = []
+        let item = (boxes as unknown as { _item: unknown })._item as
+            { parentSub: string | number, parent: { _item: unknown } } | null
+        while (item !== null) {
+            prefix.unshift(item.parentSub)
+            const parent = item.parent as unknown as { _item: unknown }
+            item = parent._item as typeof item
+        }
+        return prefix
+    }
 
+    readonly #terminator = new Terminator()
     readonly #boxGraph: BoxGraph<T>
     readonly #conflict: Option<Provider<boolean>>
     readonly #boxes: Y.Map<unknown>
     readonly #updates: Array<Update>
+    readonly #pathPrefix: ReadonlyArray<string | number>
 
     #ignoreUpdates: boolean = false
 
@@ -74,6 +87,7 @@ export class YSync<T> implements Terminable {
         this.#conflict = Option.wrap(conflict)
         this.#boxes = boxes
         this.#updates = []
+        this.#pathPrefix = YSync.#computePathPrefix(boxes)
         this.#terminator.ownAll(this.#setupYjs(), this.#setupOpenDAW())
     }
 
@@ -82,12 +96,13 @@ export class YSync<T> implements Terminable {
     #setupYjs(): Subscription {
         const eventHandler: EventHandler = (events, {origin, local}) => {
             const originLabel = typeof origin === "string" ? origin : "WebsocketProvider"
+            const isOwnOrigin = typeof origin === "string" && origin.startsWith("[openDAW]")
             const isHistoryReplay = typeof origin === "string" && origin.startsWith("[history]")
-            console.debug(`got ${events.length} ${local ? "local" : "external"} updates from '${originLabel}, isHistoryReplay: ${isHistoryReplay}'`)
-            if (local && !isHistoryReplay) {return}
+            console.debug(`got ${events.length} ${local ? "local" : "external"} updates from '${originLabel}', isHistoryReplay: ${isHistoryReplay}`)
+            if (isOwnOrigin || (local && !isHistoryReplay)) {return}
             this.#boxGraph.beginTransaction()
             for (const event of events) {
-                const path = event.path
+                const path = this.#normalizePath(event.path)
                 const keys = event.changes.keys
                 for (const [key, change] of keys.entries()) {
                     if (change.action === "add") {
@@ -134,6 +149,15 @@ export class YSync<T> implements Terminable {
             console.debug(`Box '${key}' has already been created. Performing 'Upsert'.`)
             YMapper.applyFromBoxMap(optBox.unwrap(), fields)
         }
+    }
+
+    #normalizePath(path: ReadonlyArray<string | number>): ReadonlyArray<string | number> {
+        const prefix = this.#pathPrefix
+        if (prefix.length === 0 || path.length < prefix.length) {return path}
+        for (let i = 0; i < prefix.length; i++) {
+            if (path[i] !== prefix[i]) {return path}
+        }
+        return path.slice(prefix.length)
     }
 
     #updateValue(path: ReadonlyArray<string | number>, key: string): void {
