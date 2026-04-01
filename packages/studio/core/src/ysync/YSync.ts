@@ -26,6 +26,8 @@ export type Construct<T> = {
 }
 
 export class YSync<T> implements Terminable {
+    static debugging: boolean = false
+
     /** @internal */
     static isEmpty(doc: Y.Doc): boolean {
         return doc.getMap("boxes").size === 0
@@ -105,6 +107,9 @@ export class YSync<T> implements Terminable {
                 const path = this.#normalizePath(event.path)
                 const keys = event.changes.keys
                 for (const [key, change] of keys.entries()) {
+                    if (YSync.debugging) {
+                        console.debug(`${change.action} on ${path}:${key}`)
+                    }
                     if (change.action === "add") {
                         assert(path.length === 0, "'Add' cannot have a path")
                         this.#createBox(key)
@@ -161,7 +166,6 @@ export class YSync<T> implements Terminable {
     }
 
     #updateValue(path: ReadonlyArray<string | number>, key: string): void {
-        console.debug(`#updateValue`, path, key)
         const vertexOption = this.#boxGraph.findVertex(YMapper.pathToAddress(path, key))
         if (vertexOption.isEmpty()) {
             console.debug(`Vertex at '${path}' does not exist. Ignoring.`)
