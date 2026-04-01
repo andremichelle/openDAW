@@ -137,6 +137,7 @@ export class YSync<T> implements Terminable {
     }
 
     #updateValue(path: ReadonlyArray<string | number>, key: string): void {
+        console.debug(`#updateValue`, path, key)
         const vertexOption = this.#boxGraph.findVertex(YMapper.pathToAddress(path, key))
         if (vertexOption.isEmpty()) {
             console.debug(`Vertex at '${path}' does not exist. Ignoring.`)
