@@ -1,3 +1,5 @@
+if ("stackTraceLimit" in Error) {Error.stackTraceLimit = 50}
+
 import "./main.sass"
 import {App} from "@/ui/App.tsx"
 import {panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
@@ -64,6 +66,7 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
     console.debug("requesting custom sampleRate", sampleRate ?? "'No (Firefox)'")
     const context = new AudioContext({sampleRate, latencyHint: 0})
     console.debug(`AudioContext state: ${context.state}, sampleRate: ${context.sampleRate}`)
+    console.debug(`Error.stackTraceLimit: ${Error.stackTraceLimit ?? "N/A"}`)
     const audioWorklets = await Promises.tryCatch(AudioWorklets.createFor(context))
     if (audioWorklets.status === "rejected") {
         return panic(audioWorklets.error)
