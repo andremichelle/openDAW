@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.129](https://github.com/andremichelle/openDAW/compare/@opendaw/lab@0.0.128...@opendaw/lab@0.0.129) (2026-04-01)
+
+**Note:** Version bump only for package @opendaw/lab
+
 ## [0.0.128](https://github.com/andremichelle/openDAW/compare/@opendaw/lab@0.0.127...@opendaw/lab@0.0.128) (2026-04-01)
 
 **Note:** Version bump only for package @opendaw/lab
