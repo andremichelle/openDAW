@@ -5,16 +5,16 @@
 ## Goal
 
 When a track is armed for recording, the live input signal splits into two independent paths:
-1. **Recording path** — goes to the `RecordingWorklet` through the existing capture `gainNode` (unchanged)
+1. **Recording path** — goes to the `RecordingWorklet` through `recordGainNode` (capture `gainDb`)
 2. **Monitoring path** — has its own volume, pan, mute, and optional output device routing
 
 The monitoring controls do **not** affect the recorded signal.
 
-## Decisions (from Q&A)
+## Decisions
 
 | Question | Answer |
 |----------|--------|
-| Signal split point | After **source node** (option A) — capture gain only affects recording |
+| Signal split point | After **source node** — capture gain only affects recording |
 | Monitoring controls | Volume (dB), pan, mute — all three |
 | "Effects" mode behavior | Signal goes through effects chain + channel strip, then monitoring volume/pan/mute applied **on top** |
 | "Direct" mode behavior | Monitoring volume/pan/mute applied before output |
@@ -23,8 +23,14 @@ The monitoring controls do **not** affect the recorded signal.
 | UI | New menu entry in track header right-click menu → opens **modal dialog** |
 | Force-mono | Stays where it is (not in the dialog) |
 | Worklet second output | Pre-allocate **8 channels** (4 stereo sources max) — `outputChannelCount` is immutable after construction |
+| `outputNode` getter | Returns `recordGainNode` (shows what's being recorded); dialog gets its own peak meter on `monitorPanNode` |
+| Channel strip mute/solo | Affects monitoring in "effects" mode (accepted) |
+| Dialog without armed state | Auto-arms the track when dialog opens |
+| `setSinkId` failure | Show error dialog, revert to previous device |
 
-## Current Signal Flow
+## Signal Flow
+
+### Current
 
 ```
 MediaStream → SourceNode → GainNode (capture gainDb)
@@ -33,9 +39,7 @@ MediaStream → SourceNode → GainNode (capture gainDb)
                                 └── [effects] → EngineWorklet → effects → channelStrip → output
 ```
 
-Both recording and monitoring share the same `gainNode`, so `gainDb` affects both.
-
-## New Signal Flow
+### New
 
 ```
 MediaStream → SourceNode ─┬── RecordGainNode (capture gainDb) → RecordingWorklet
@@ -43,28 +47,19 @@ MediaStream → SourceNode ─┬── RecordGainNode (capture gainDb) → Reco
                            └── [monitoring path, mode-dependent]:
 
   [direct]
-    SourceNode → MonitorGainNode → MonitorPanNode → MonitorDestination
+    SourceNode → PassThrough → MonitorGainNode → MonitorPanNode → MonitorDestination
 
   [effects]
-    SourceNode → EngineWorklet input[0] → effects → channelStrip
-                                                         │
-                                          EngineWorklet output[1] (channels assigned per track)
-                                                         │
-                                          ChannelSplitterNode (main thread)
-                                                         │
-                                          MonitorGainNode → MonitorPanNode → MonitorDestination
+    SourceNode → EngineWorklet input → effects → channelStrip
+                                                      │
+                                       EngineWorklet output[1] (per-track channels)
+                                                      │
+                                       ChannelSplitterNode (main thread)
+                                                      │
+                     PassThrough → MonitorGainNode → MonitorPanNode → MonitorDestination
 ```
 
-### Worklet Second Output — Channel Allocation
-
-Mirrors the existing input-side `#rebuildMonitoringMerger` pattern, but in reverse:
-
-- `EngineWorklet` constructed with `numberOfOutputs: 2, outputChannelCount: [numberOfChannels, 8]`
-- `outputs[0]` = main mix (unchanged)
-- `outputs[1]` = monitoring output, 8 channels pre-allocated (supports up to 4 stereo monitoring sources)
-- The existing `MonitoringMapEntry` already assigns channel indices per audio unit — the same map drives both input and output channel allocation
-- In `EngineProcessor.render()`, each audio unit with active monitoring writes its post-channel-strip signal to assigned channels in `outputs[1]`
-- On the main thread, a `ChannelSplitterNode` on `outputs[1]` feeds each track's monitoring gain/pan chain
+A pass-through `GainNode` (gain=1.0) sits before `MonitorGainNode`. Switching modes only means rewiring the **input** of the pass-through — everything downstream stays connected.
 
 ### MonitorDestination
 
@@ -73,37 +68,44 @@ Mirrors the existing input-side `#rebuildMonitoringMerger` pattern, but in rever
 
 ### Mute
 
-Mute silences the monitoring path but keeps the chain alive (no teardown). Implemented by setting `MonitorGainNode.gain.value = 0` when muted, restoring the monitoring volume when unmuted.
+Sets `MonitorGainNode.gain.value = 0` when muted, restores volume when unmuted. Chain stays alive for instant unmute.
 
 ## Implementation Steps
 
 ### Step 1 — Split the signal in `CaptureAudio.ts`
 
-Restructure `#audioChain` to have two gain nodes:
+Restructure `#audioChain`:
 
-```
+```typescript
 #audioChain: Nullable<{
     sourceNode: MediaStreamAudioSourceNode
-    recordGainNode: GainNode        // for recording (existing gainDb)
-    monitorGainNode: GainNode       // for monitoring (independent volume)
-    monitorPanNode: StereoPannerNode // for monitoring pan
+    recordGainNode: GainNode           // for recording (existing gainDb)
+    monitorPassThrough: GainNode       // gain=1.0, input rewired per mode
+    monitorGainNode: GainNode          // monitoring volume
+    monitorPanNode: StereoPannerNode   // monitoring pan
     channelCount: 1 | 2
 }>
 ```
 
 In `#rebuildAudioChain`:
-- `sourceNode.connect(recordGainNode)` — recording path
-- `sourceNode.connect(monitorGainNode)` — monitoring path (direct mode only; effects mode connects sourceNode to engine)
-- `monitorGainNode.connect(monitorPanNode)` — pan after volume
-- `recordGainNode.gain.value = dbToGain(this.#gainDb)` (existing behavior)
+- `sourceNode.connect(recordGainNode)` — always connected
+- `monitorPassThrough.gain.value = 1.0` — never changes
+- `monitorPassThrough.connect(monitorGainNode)`
+- `monitorGainNode.connect(monitorPanNode)`
+- `recordGainNode.gain.value = dbToGain(this.#gainDb)`
 - `monitorGainNode.gain.value = muted ? 0 : dbToGain(this.#monitorVolumeDb)`
 - `monitorPanNode.pan.value = this.#monitorPan`
+- Do **NOT** connect `sourceNode → monitorPassThrough` here — that's mode-dependent, handled by `#connectMonitoring`
 
-Update `prepareRecording` / `startRecording` to use `recordGainNode` instead of `gainNode`.
+Update `outputNode` getter to return `recordGainNode`.
+
+Update `#destroyAudioChain` to disconnect all nodes: `sourceNode`, `recordGainNode`, `monitorPassThrough`, `monitorGainNode`, `monitorPanNode`.
+
+Update `prepareRecording` / `startRecording` to use `recordGainNode`.
 
 ### Step 2 — Add ephemeral monitoring state to `CaptureAudio`
 
-New private fields (not persisted — no box changes):
+New private fields (not persisted):
 
 ```typescript
 #monitorVolumeDb: number = 0.0
@@ -111,45 +113,59 @@ New private fields (not persisted — no box changes):
 #monitorMuted: boolean = false
 ```
 
-Expose as getters/setters. Setters update the Web Audio nodes in real time:
-- `monitorVolumeDb` → sets `monitorGainNode.gain.value`
-- `monitorPan` → sets `monitorPanNode.pan.value`
-- `monitorMuted` → sets `monitorGainNode.gain.value` to 0 or restores volume
+Getters/setters that update Web Audio nodes in real time:
+- `monitorVolumeDb` → `monitorGainNode.gain.value = muted ? 0 : dbToGain(value)`
+- `monitorPan` → `monitorPanNode.pan.value = value`
+- `monitorMuted` → `monitorGainNode.gain.value = 0` or restore
 
 ### Step 3 — Update `#connectMonitoring` / `#disconnectMonitoring`
 
 **"direct" mode:**
-- Connect `sourceNode → monitorGainNode → monitorPanNode → MonitorDestination`
-- Monitoring controls applied directly on the main-thread Web Audio graph
+- Connect `sourceNode → monitorPassThrough` (main-thread Web Audio)
+- Connect `monitorPanNode → MonitorDestination`
 
 **"effects" mode:**
-- Register `sourceNode` (raw, no capture gain) as the monitoring source with the engine
-- Engine routes through effects + channel strip as today
-- Post-channel-strip signal written to `outputs[1]` at assigned channels (worklet side)
-- On the main thread, `ChannelSplitterNode` extracts this track's channels from `outputs[1]`
-- Splitter output → `monitorGainNode → monitorPanNode → MonitorDestination`
+- Register `sourceNode` (not `recordGainNode`) as monitoring source with engine
+- Engine processes through effects + channel strip
+- Engine provides a way for `CaptureAudio` to receive the post-channel-strip signal back from `output[1]` → splitter → `monitorPassThrough`
+- Connect `monitorPanNode → MonitorDestination`
 
-### Step 4 — Worklet changes (second output for "effects" mode)
+**"off" mode:**
+- Disconnect `monitorPassThrough` input
+- Disconnect `monitorPanNode` output
 
-**`EngineWorklet.ts` (main thread):**
-- Change constructor: `numberOfOutputs: 2, outputChannelCount: [numberOfChannels, 8]`
-- Add `#monitoringSplitter: Nullable<ChannelSplitterNode>` for splitting `outputs[1]`
-- In `#rebuildMonitoringMerger`, also rebuild the output-side splitter:
-  - Create `ChannelSplitterNode(8)` connected to the worklet's second output
-  - For each monitoring source, connect the assigned splitter output channels back to the corresponding `CaptureAudio`'s `monitorGainNode`
-- Expose a method for `CaptureAudio` to receive its splitter output connection
+Fix `requestChannels` subscriber (lines 49-54) to use `sourceNode` instead of `gainNode`.
 
-**`EngineProcessor.ts` (worklet thread):**
-- In `render()`, after processing all audio units:
-  - For each audio unit with active monitoring channels, copy its post-channel-strip audio to the assigned channels in `outputs[1]`
-  - Clear unused channels in `outputs[1]` to silence
+### Step 4 — Worklet changes (second output)
 
-**`AudioDeviceChain.ts` / `AudioUnit.ts`:**
-- After the channel strip processes the monitoring-mixed signal, the post-channel-strip buffer must be readable
-- The audio unit needs to expose its post-channel-strip monitoring contribution
-- Key question: the channel strip processes the entire audio unit signal (instrument + monitoring). We need only the monitoring contribution post-effects. This may require the `MonitoringMixProcessor` to keep a copy of what it mixed in, so the post-channel-strip result can be attributed
+**`EngineWorklet.ts` (constructor):**
+```typescript
+numberOfOutputs: 2,
+outputChannelCount: [numberOfChannels, 8]
+```
 
-**Simpler alternative:** Since the monitoring mix is additive (mixed into the instrument buffer), and in a recording scenario the instrument is likely silent (no playback while recording), the post-channel-strip output effectively IS the monitoring signal. If instrument playback is active simultaneously, we'd need separation — but that's an edge case we can defer.
+**`Project.ts` (connection):**
+```typescript
+worklet.connect(worklet.context.destination, 0)  // Only output 0 to speakers
+```
+
+**`EngineProcessor.ts` (render):**
+- Change destructuring: `render(inputs, [mainOutput, monitoringOutput])`
+- After processing all audio units, for each unit with active monitoring channels:
+  - Copy its post-channel-strip audio (`audioUnit.audioOutput()`) to assigned channels in `monitoringOutput`
+- Assumption: armed tracks have no simultaneous tape playback, so post-channel-strip = monitoring signal
+
+**`EngineWorklet.ts` (output splitter):**
+- Add `#monitoringSplitter: Nullable<ChannelSplitterNode>`
+- Rename `#rebuildMonitoringMerger` → `#rebuildMonitoring` (or similar)
+- In the rebuild, handle BOTH:
+  - **Input side:** ChannelMergerNode aggregating sources → worklet input (as today)
+  - **Output side:** ChannelSplitterNode on worklet output[1] → per-track pass-through nodes
+- When a source is added/removed, rebuild both sides in one pass
+- Channel assignments (from `MonitoringMapEntry`) are shared by both sides
+
+**New engine API:**
+- The engine needs to provide a way for `CaptureAudio` to receive the processed monitoring signal back from `output[1]`. Exact API shape to be determined during implementation — either extend `registerMonitoringSource` to accept a destination node, or provide a separate getter.
 
 ### Step 5 — Output device routing
 
@@ -163,50 +179,58 @@ Add to `CaptureAudio`:
 
 When a custom output device is selected:
 1. Create `MediaStreamAudioDestinationNode` on the `audioContext`
-2. Connect `monitorPanNode → monitorStreamDest`
-3. Create `<audio>` element, set `srcObject = monitorStreamDest.stream`
-4. Call `audio.setSinkId(deviceId)`
-5. Call `audio.play()`
+2. Disconnect `monitorPanNode` from current destination
+3. Connect `monitorPanNode → monitorStreamDest`
+4. Create `<audio>` element, set `srcObject = monitorStreamDest.stream`
+5. Call `audio.setSinkId(deviceId)` — on failure, show error dialog and revert to previous device
+6. Call `audio.play()`
 
 When cleared (back to default):
 1. Disconnect `monitorStreamDest`
 2. Connect `monitorPanNode → audioContext.destination`
 3. Clean up `<audio>` element
 
+Device list sourced from `AudioDevices.queryListOutputDevices()`.
+
 ### Step 6 — Modal dialog UI
 
 New menu entry in `TrackHeaderMenu.ts`:
 ```
-"Monitoring Settings..." → opens MonitoringDialog
+"Monitoring Settings..." → auto-arms the track, then opens MonitoringDialog
 ```
 
 **MonitoringDialog** contents:
+- **Peak meter** tapping `monitorPanNode` (shows what the user hears)
 - **Volume** knob/slider (dB, default 0)
 - **Pan** knob (-1 to +1, default center)
 - **Mute** toggle
-- **Output Device** dropdown (lists available output devices via `AudioDevices.queryListOutputDevices()`, with "Default" as first option — hidden when `setSinkId` not supported)
+- **Output Device** dropdown (hidden when `setSinkId` not supported)
 
-Dialog reads/writes the ephemeral state on `CaptureAudio`.
+Dialog reads/writes ephemeral state on `CaptureAudio`.
 
-Only visible when `captureDevices.get(uuid)` returns a `CaptureAudio` instance (i.e., audio tracks with capture configured).
+Only visible when `captureDevices.get(uuid)` returns a `CaptureAudio` instance.
 
-## Open Questions / Risks
+## Risks
 
-1. **Monitoring + playback overlap in "effects" mode:** If an armed track also has instrument playback active, the post-channel-strip signal contains both instrument and monitoring audio. Separating them would require tracking the monitoring contribution through the effects chain. For now, assume armed tracks don't play back simultaneously — revisit if needed.
+1. **Monitoring + playback overlap in "effects" mode:** If an armed track also plays back, the post-channel-strip signal contains both. We assume armed tracks don't play back simultaneously — revisit if needed.
 
-2. **Channel exhaustion:** With 8 pre-allocated channels, arming a 5th stereo track for monitoring will fail silently. Should we warn the user or fall back to "direct" mode?
+2. **Channel exhaustion:** 8 channels = 4 stereo sources max. Arming a 5th stereo track silently gets no monitoring. Consider warning the user or falling back to "direct" mode.
 
-3. **Latency:** The `MediaStreamDestination` → `<audio>` → `setSinkId` path adds latency. Acceptable for monitoring but worth noting.
+3. **Latency:** `MediaStreamDestination` → `<audio>` → `setSinkId` adds latency. Acceptable for monitoring.
 
-4. **Browser support:** `setSinkId` is Chrome-only (already gated by `AudioOutputDevice.switchable`). The dialog hides the output device selector when not supported.
+4. **Browser support:** `setSinkId` is Chrome-only (gated by `AudioOutputDevice.switchable`). Dialog hides output device selector when unsupported.
+
+5. **Output splitter timing:** Brief silence (1-2 frames) when splitter rebuilds before worklet receives updated map. Inaudible.
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `packages/studio/core/src/capture/CaptureAudio.ts` | Split signal, add monitoring state, update connect/disconnect |
-| `packages/studio/core/src/EngineWorklet.ts` | Second output (8ch), output-side splitter, connect to per-track monitoring chain |
-| `packages/studio/core-processors/src/EngineProcessor.ts` | Write post-channel-strip monitoring to `outputs[1]` |
-| `packages/studio/core-processors/src/AudioDeviceChain.ts` | Expose post-channel-strip buffer for monitoring extraction |
-| `packages/app/studio/src/ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts` | Add "Monitoring Settings..." menu entry |
-| `packages/app/studio/src/ui/monitoring/MonitoringDialog.ts` | New file — modal dialog component |
+| `packages/studio/core/src/capture/CaptureAudio.ts` | Split signal, add monitoring state, pass-through node, update connect/disconnect |
+| `packages/studio/core/src/EngineWorklet.ts` | Second output (8ch), output splitter, rebuild both sides, new API for monitoring output |
+| `packages/studio/core/src/Engine.ts` | Interface update for new monitoring output API |
+| `packages/studio/core/src/EngineFacade.ts` | Delegate new API |
+| `packages/studio/core/src/project/Project.ts` | `worklet.connect(destination, 0)` — only output 0 |
+| `packages/studio/core-processors/src/EngineProcessor.ts` | Destructure both outputs, write monitoring to `monitoringOutput` |
+| `packages/app/studio/src/ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts` | Add "Monitoring Settings..." entry, auto-arm |
+| `packages/app/studio/src/ui/monitoring/MonitoringDialog.ts` | New file — modal dialog with volume, pan, mute, peak meter, output device |
