@@ -105,7 +105,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         const {project} = this.manager
         const {env: {audioContext, audioWorklets, sampleManager, sampleService}} = project
         if (isUndefined(audioContext.outputLatency)) {
-            const approved = RuntimeNotifier.approve({
+            const approved = await RuntimeNotifier.approve({
                 headline: "Warning",
                 message: "Your browser does not support 'output latency'. This will cause timing issue while recording.",
                 approveText: "Ignore",
