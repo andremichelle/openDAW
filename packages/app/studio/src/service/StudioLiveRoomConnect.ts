@@ -1,5 +1,5 @@
-import {Optional, RuntimeNotifier, Terminator, UUID} from "@opendaw/lib-std"
-import {Promises} from "@opendaw/lib-runtime"
+import {Optional, RuntimeNotifier, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
+import {Promises, Wait} from "@opendaw/lib-runtime"
 import {SampleStorage, SoundfontStorage, Workers, YService} from "@opendaw/studio-core"
 import {P2PSession, type SignalingSocket} from "@opendaw/studio-p2p"
 import {StudioService} from "@/service/StudioService"
@@ -76,6 +76,7 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
         terminator.own(chatService)
         service.chatService.wrap(chatService)
         terminator.own({terminate: () => service.chatService.clear()})
+        await Wait.timeSpan(TimeSpan.seconds(1))
     } else {
         await RuntimeNotifier.info({
             headline: "Failed Connecting Room",

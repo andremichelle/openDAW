@@ -145,6 +145,30 @@ When playing back samples, account for sample rate differences between the sampl
 const playbackRate = data.sampleRate / sampleRate
 ```
 
+### Groups
+
+Organize parameters and samples visually using `// @group` comments:
+
+```javascript
+// @group Envelope green
+// @param attack  0.01  0.001  1.0  exp  s
+// @param release 0.5   0      5.0  exp  s
+// @group Samples orange
+// @sample wavetable
+// @sample grain
+// @param volume 0.8
+```
+
+```
+// @group <name> [color]
+```
+
+Parameters and samples declared after a `@group` belong to that group until the next `@group` or end of declarations. Each group renders as a labeled section on the device panel with a colored header.
+
+Available colors: `blue`, `green`, `yellow`, `cream`, `orange`, `red`, `purple`, `white`, `gray`, `dark` (default).
+
+Parameters and samples before any `@group` appear ungrouped.
+
 ---
 
 ## 5. Keyboard Shortcuts

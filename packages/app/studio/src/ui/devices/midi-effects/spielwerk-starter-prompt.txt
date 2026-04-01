@@ -75,6 +75,22 @@ Multiple spaces between tokens are allowed for alignment.
 
 Each @param creates an automatable knob on the device UI.
 
+## Grouping parameters
+Group parameters visually using @group comments:
+
+// @group <name> [color]
+
+Parameters after a @group belong to that group until the next @group.
+Available colors: blue, green, yellow, cream, orange, red, purple, white, gray, dark.
+Color defaults to "dark" if omitted.
+
+Example:
+// @group Timing green
+// @param rate 0.5 0.1 2.0 exp
+// @param swing 0.5
+// @group Output blue
+// @param chance 0.5 0 1 linear
+
 Examples:
 // @param chance   0.5  0  1    linear
 // @param repeats  3    1  8    int

@@ -54,6 +54,22 @@ Multiple spaces between tokens are allowed for alignment.
 
 Each @param creates an automatable knob on the device UI.
 
+## Grouping parameters
+Group parameters visually using @group comments:
+
+// @group <name> [color]
+
+Parameters after a @group belong to that group until the next @group.
+Available colors: blue, green, yellow, cream, orange, red, purple, white, gray, dark.
+Color defaults to "dark" if omitted.
+
+Example:
+// @group Envelope green
+// @param attack 0.01 0 1 exp s
+// @param release 0.5 0 5 exp s
+// @group Filter blue
+// @param cutoff 1000 20 20000 exp Hz
+
 Examples:
 // @param gain 1.0
 // @param cutoff  1000  20  20000  exp  Hz
