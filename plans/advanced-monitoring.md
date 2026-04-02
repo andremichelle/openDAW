@@ -111,17 +111,18 @@ registerSource(uuid, sourceNode, numChannels, monitorGainNode)
   - Calls #rebuild()
 
 unregisterSource(uuid)
-  - Removes from map, disconnects source
+  - Removes from map (does NOT disconnect sourceNode — it's shared with the recording path)
   - Calls #rebuild()
 
 #rebuild()
   - Disconnects old ChannelMergerNode (input side)
+  - Disconnects all old per-track output ChannelMergerNode(2)s from their monitorGainNodes
   - If no sources: sends empty map to worklet, returns
   - Enforces 8-channel limit (log warning if exceeded)
   - Creates new ChannelMergerNode(totalChannels), connects to worklet input
   - For each source:
     - Splits sourceNode channels → merger inputs (input side, as today)
-    - Connects splitter outputs → ChannelMergerNode(2) → monitorGainNode (output side)
+    - Creates new ChannelMergerNode(2), connects splitter outputs → merger → monitorGainNode (output side)
     - Records channel assignments
   - Sends updateMonitoringMap to worklet
 ```
@@ -180,15 +181,18 @@ effects: engine.registerMonitoringSource(uuid, sourceNode, channelCount, monitor
 ```
 Where `monitorDestination` is `#monitorStreamDest` if set, else `audioContext.destination`.
 
-**`#disconnectMonitoring`** — uses **targeted** disconnect on `monitorPanNode` to preserve dialog meter connection:
+**`#disconnectMonitoring`** — guards against null `#audioChain`, uses **targeted** disconnects to preserve dialog meter and recording path:
 ```
+if #audioChain is null: return (nothing was connected)
 off:     no-op
 direct:  sourceNode.disconnect(monitorGainNode)
          monitorPanNode.disconnect(currentDestination)
-effects: engine.unregisterMonitoringSource(uuid)
+effects: engine.unregisterMonitoringSource(uuid)  // does NOT disconnect sourceNode
          monitorPanNode.disconnect(currentDestination)
 ```
 Where `currentDestination` is `#monitorStreamDest` if set, else `audioContext.destination`.
+
+Note: `unregisterMonitoringSource` must NOT call `sourceNode.disconnect()` — sourceNode is shared with the recording path (`sourceNode → recordGainNode → RecordingWorklet`). The router only removes the source from its map and rebuilds internal wiring.
 
 ### 4. Worklet-side changes
 
@@ -331,6 +335,9 @@ Remove the existing "Input Monitoring" submenu from `TrackHeaderMenu.ts`.
 39. **Offline render unaffected**: Export stems or offline render with armed tracks → offline output should not contain monitoring signal. Verify `AudioOfflineRenderer` connects only output 0.
 40. **Set device then enable monitoring**: Open dialog → select custom device while mode is "off" → set mode to "direct" → monitoring should immediately play from custom device (not default speakers).
 41. **Termination with active audio element**: Custom output device active, monitoring playing → delete track → no resource leaks (audio element paused, srcObject cleared, no console errors).
+42. **Recording survives effects unregister**: Start recording → enable effects monitoring → switch to direct monitoring (unregisters from engine) → recording must continue without interruption. `sourceNode → recordGainNode` connection must survive the unregister.
+43. **Mode switch before stream ready**: Set mode to "direct" → before stream arrives, switch to "effects" → `#disconnectMonitoring` with null `#audioChain` → must not crash (guard returns early).
+44. **Multiple rebuild cycles don't leak mergers**: Arm track → effects monitoring → change input device 5 times → check console for no Web Audio warnings, verify old per-track mergers are disconnected on each rebuild.
 
 ## Risks
 
