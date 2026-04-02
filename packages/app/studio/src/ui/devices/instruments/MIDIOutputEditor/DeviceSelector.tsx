@@ -121,7 +121,7 @@ export const DeviceSelector = ({lifecycle, project, adapter}: Construct) => {
                                      some: output => subscriber.ownAll(
                                          output.id.catchupAndSubscribe(owner => deviceIdObserver(owner.getValue())),
                                          output.label.catchupAndSubscribe(owner =>
-                                             element.textContent = Strings.nonEmpty(
+                                             element.textContent = Strings.fallback(
                                                  owner.getValue(), "No device selected"))
                                      )
                                  })

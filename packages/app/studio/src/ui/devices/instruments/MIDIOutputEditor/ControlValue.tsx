@@ -37,7 +37,7 @@ export const ControlValue = ({lifecycle, project, tracks, box, parameter}: Const
             }} provider={() => ({unit: "", value: box.label.getValue()})}>
                 <span onInit={element => lifecycle.own(box.label
                     .catchupAndSubscribe(owner =>
-                        element.textContent = Strings.nonEmpty(owner.getValue(), "Unnamed")))}/>
+                        element.textContent = Strings.fallback(owner.getValue(), "Unnamed")))}/>
             </DblClckTextInput>
             <span>#</span>
             <NumberInput lifecycle={lifecycle}
