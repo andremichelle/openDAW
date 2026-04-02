@@ -47,7 +47,7 @@ export namespace PresetDecoder {
         }
         const sourceBoxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
         try {
-            sourceBoxGraph.fromArrayBuffer(bytes.slice(8))
+            sourceBoxGraph.fromArrayBuffer(bytes.slice(8), false)
         } catch (reason) {
             RuntimeNotifier.info({
                 headline: "Could Not Import Preset",

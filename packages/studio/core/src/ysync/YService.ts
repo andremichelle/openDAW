@@ -1,5 +1,5 @@
 import {Errors, Option, panic, RuntimeNotifier, TimeSpan, UUID} from "@opendaw/lib-std"
-import {BoxEditing, BoxGraph} from "@opendaw/lib-box"
+import {BoxGraph} from "@opendaw/lib-box"
 import {Promises} from "@opendaw/lib-runtime"
 import {BoxIO, UserInterfaceBox} from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
@@ -50,9 +50,6 @@ export namespace YService {
                 conflict: () => project.invalid()
             })
             project.own(sync)
-            // TODO Remove this cast at some point
-            const editing = project.editing as BoxEditing
-            editing.disable()
             return {project, provider}
         } else {
             if (optProject.nonEmpty()) {
@@ -79,8 +76,6 @@ export namespace YService {
             boxGraph.endTransaction()
             project.follow(userInterfaceBox)
             project.own(sync)
-            const editing = project.editing as BoxEditing
-            editing.disable()
             return {project, provider}
         }
     }
