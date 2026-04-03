@@ -26,7 +26,7 @@ export class SoundfontService extends AssetService<Soundfont, void> {
         ]).then(([local, remote]) => {
             this.#local = Option.wrap(Arrays.subtract(local, remote, (a, b) => a.uuid === b.uuid))
             this.#remote = Option.wrap(remote)
-        })
+        }, error => console.warn("Failed to load soundfont index:", error))
     }
 
     get local(): Option<ReadonlyArray<Soundfont>> {return this.#local}

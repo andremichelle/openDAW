@@ -42,6 +42,6 @@ export class AudioOutputDevice {
 
     #resolveSinkId(): string {
         const sinkId = this.#context.sinkId
-        return typeof sinkId === "string" ? Strings.nonEmpty(sinkId, "default") : "default"
+        return typeof sinkId === "string" ? Strings.fallback(sinkId, "default") : "default"
     }
 }
