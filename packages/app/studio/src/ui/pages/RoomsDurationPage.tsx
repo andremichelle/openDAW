@@ -26,6 +26,7 @@ export const RoomsDurationPage: PageFactory<StudioService> = ({lifecycle}: PageC
                     const labels = entries.map(([k]) => k)
                     const maxValue = Math.max(...values)
                     const minValue = Math.min(...values)
+                    const valueRange = maxValue > minValue ? maxValue - minValue : 1
                     const years = [...new Set(labels.map(label => label.slice(0, 4)))]
                     const yearColors = [Colors.blue, Colors.green, Colors.purple, Colors.orange]
                     const yearColorMap = new Map(years.map((year, index) => [year, yearColors[index % yearColors.length]]))
@@ -50,7 +51,7 @@ export const RoomsDurationPage: PageFactory<StudioService> = ({lifecycle}: PageC
                                     <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height}>
                                         {Array.from({length: gridLines + 1}, (_, i) => {
                                             const y = padding.top + (chartHeight / gridLines) * i
-                                            const value = Math.round(maxValue - ((maxValue - minValue) / gridLines) * i)
+                                            const value = Math.round(maxValue - (valueRange / gridLines) * i)
                                             return (
                                                 <Frag>
                                                     <line x1={padding.left} y1={y} x2={width - padding.right} y2={y}
@@ -62,7 +63,7 @@ export const RoomsDurationPage: PageFactory<StudioService> = ({lifecycle}: PageC
                                             )
                                         })}
                                         {values.map((value, i) => {
-                                            const barHeight = ((value - minValue) / (maxValue - minValue)) * chartHeight * 0.9 + chartHeight * 0.1
+                                            const barHeight = ((value - minValue) / valueRange) * chartHeight * 0.9 + chartHeight * 0.1
                                             const x = padding.left + i * barWidth + barPadding / 2
                                             const y = padding.top + chartHeight - barHeight
                                             const year = labels[i].slice(0, 4)
@@ -109,7 +110,7 @@ export const RoomsDurationPage: PageFactory<StudioService> = ({lifecycle}: PageC
                                                 const end = Math.min(values.length, start + windowSize)
                                                 const slice = values.slice(start, end)
                                                 const avg = slice.reduce((sum, val) => sum + val, 0) / slice.length
-                                                const barHeight = ((avg - minValue) / (maxValue - minValue)) * chartHeight * 0.9 + chartHeight * 0.1
+                                                const barHeight = ((avg - minValue) / valueRange) * chartHeight * 0.9 + chartHeight * 0.1
                                                 const x = padding.left + i * barWidth + barWidth / 2
                                                 const y = padding.top + chartHeight - barHeight
                                                 return `${x},${y}`
