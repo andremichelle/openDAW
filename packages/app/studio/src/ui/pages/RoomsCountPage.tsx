@@ -21,6 +21,7 @@ export const RoomsCountPage: PageFactory<StudioService> = ({lifecycle}: PageCont
                 loading={() => <ThreeDots/>}
                 success={(data: RoomsData) => {
                     const entries = Object.entries(data).sort(([a], [b]) => a.localeCompare(b))
+                    if (entries.length === 0) return <p>No data yet</p>
                     const values = entries.map(([, v]) => v)
                     const labels = entries.map(([k]) => k)
                     const maxValue = Math.max(...values)
