@@ -1,4 +1,4 @@
-import css from "./RoomsPage.sass?inline"
+import css from "./StatsPage.sass?inline"
 import {createElement, LocalLink, PageFactory} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import type {StudioService} from "@/service/StudioService.ts"
