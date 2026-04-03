@@ -18,6 +18,7 @@ import {GraphPage} from "@/ui/pages/GraphPage"
 import {CodeEditorPage} from "@/ui/pages/CodeEditorPage"
 import {OpenBundlePage} from "@/ui/pages/OpenBundlePage"
 import {UsersPage} from "@/ui/pages/UsersPage"
+import {StatsPage} from "@/ui/pages/StatsPage"
 import {RoomsCountPage} from "@/ui/pages/RoomsCountPage"
 import {RoomsDurationPage} from "@/ui/pages/RoomsDurationPage"
 import {PrivacyPage} from "@/ui/pages/PrivacyPage"
@@ -58,6 +59,7 @@ export const App = (service: StudioService) => {
                     {path: "/upload", factory: SampleUploadPage},
                     {path: "/colors", factory: ColorsPage},
                     {path: "/graph", factory: GraphPage},
+                    {path: "/stats", factory: StatsPage},
                     {path: "/stats/users", factory: UsersPage},
                     {path: "/stats/rooms-created", factory: RoomsCountPage},
                     {path: "/stats/rooms-duration", factory: RoomsDurationPage},
