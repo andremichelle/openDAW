@@ -12,7 +12,7 @@ type RoomsData = Record<string, number>
 export const RoomsDurationPage: PageFactory<StudioService> = ({lifecycle}: PageContext<StudioService>) => {
     return (
         <div className={className}>
-            <h1>Total Room Duration Per Day</h1>
+            <h1>Total Room Duration Per Day (minutes)</h1>
             <Await
                 factory={() => fetch("https://live.opendaw.studio/stats/rooms-duration.json", {mode: "cors"})
                     .then(response => response.json())
