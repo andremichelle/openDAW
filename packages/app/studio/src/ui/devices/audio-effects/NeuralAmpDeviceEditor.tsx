@@ -1,6 +1,6 @@
 import css from "./NeuralAmpDeviceEditor.sass?inline"
 import {DeviceHost, NeuralAmpDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {DefaultObservableValue, isDefined, Lifecycle, Nullable, Optional} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, isDefined, Lifecycle, MutableObservableOption, Nullable, Optional, SortedSet} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
@@ -19,7 +19,7 @@ import {Button} from "@/ui/components/Button"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {MenuItem} from "@opendaw/studio-core"
 import {NamLocal} from "@/ui/devices/audio-effects/NeuralAmp/NamLocal"
-import {NamTone3000, PackMeta, readPackMetaFromId} from "@/ui/devices/audio-effects/NeuralAmp/NamTone3000"
+import {NamTone3000, PackMeta, readPackMetaFromId, scanCachedModels} from "@/ui/devices/audio-effects/NeuralAmp/NamTone3000"
 import {NeuralAmpModelBox} from "@opendaw/studio-boxes"
 
 const className = Html.adoptStyleSheet(css, "NeuralAmpDeviceEditor")
@@ -38,7 +38,11 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
     const {boxGraph, editing, midiLearning} = project
     const {inputGain, outputGain, mix} = adapter.namedParameter
     const model = new DefaultObservableValue<Nullable<NamModel>>(null)
-    const packMeta = new DefaultObservableValue<Nullable<PackMeta>>(null)
+    const packMeta = new MutableObservableOption<PackMeta>()
+    const cachedModelIds = new SortedSet<number, number>(id => id, (a, b) => a - b)
+    const isDownloading = new DefaultObservableValue<boolean>(false)
+    const urlsExpired = new DefaultObservableValue<boolean>(false)
+    let switchController: Nullable<AbortController> = null
     const updateModel = () => {
         const modelJson = adapter.getModelJson()
         if (modelJson.length === 0) {
@@ -54,19 +58,34 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
     const updatePackMeta = () => {
         const target = adapter.box.model.targetVertex
         if (target.isEmpty()) {
-            packMeta.setValue(null)
+            packMeta.clear()
+            cachedModelIds.clear()
             return
         }
         const modelBox = target.unwrap().box as NeuralAmpModelBox
         const packId = modelBox.packId.getValue()
         if (packId.length === 0) {
-            packMeta.setValue(null)
+            packMeta.clear()
+            cachedModelIds.clear()
             return
         }
-        readPackMetaFromId(packId).then(meta => packMeta.setValue(meta))
+        readPackMetaFromId(packId).then(meta => {
+            if (isDefined(meta)) {
+                packMeta.wrap(meta)
+                scanCachedModels(packId, meta).then(ids => {
+                    cachedModelIds.clear()
+                    for (const id of ids) {cachedModelIds.add(id)}
+                })
+            } else {
+                packMeta.clear()
+                cachedModelIds.clear()
+            }
+        })
     }
     lifecycle.own(model)
     lifecycle.own(packMeta)
+    lifecycle.own(isDownloading)
+    lifecycle.own(urlsExpired)
     lifecycle.own(adapter.modelField.subscribe(() => {
         updateModel()
         updatePackMeta()
@@ -80,7 +99,7 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
         if (isDefined(current)) {showNamModelDialog(current)}
     }
     const getCurrentModelId = (): Optional<number> => {
-        const meta = packMeta.getValue()
+        const meta = packMeta.unwrapOrNull()
         if (!isDefined(meta)) {return undefined}
         const target = adapter.box.model.targetVertex
         if (target.isEmpty()) {return undefined}
@@ -97,16 +116,33 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
             return entryA.name.localeCompare(entryB.name)
         })
     }
-    const switchModel = (entry: PackMeta["models"][number]) => {
-        const meta = packMeta.getValue()
+    const switchModel = async (entry: PackMeta["models"][number]) => {
+        const meta = packMeta.unwrapOrNull()
         if (!isDefined(meta)) {return}
-        NamTone3000.loadModelFromPack(
-            meta.toneId.toString(), entry.id, entry.name,
-            boxGraph, editing, adapter, meta.title
-        )
+        if (isDefined(switchController)) {switchController.abort()}
+        const controller = new AbortController()
+        switchController = controller
+        isDownloading.setValue(true)
+        urlsExpired.setValue(false)
+        try {
+            await NamTone3000.loadModelFromPack(
+                meta.toneId.toString(), entry.id, entry.name,
+                boxGraph, editing, adapter, meta.title, controller.signal
+            )
+            cachedModelIds.add(entry.id)
+        } catch (error) {
+            if (Errors.isAbort(error)) {return}
+            console.error("Failed to switch model:", error)
+            urlsExpired.setValue(true)
+        } finally {
+            if (switchController === controller) {
+                isDownloading.setValue(false)
+                switchController = null
+            }
+        }
     }
     const canStep = (direction: -1 | 1): boolean => {
-        const meta = packMeta.getValue()
+        const meta = packMeta.unwrapOrNull()
         if (!isDefined(meta)) {return false}
         const sorted = getSortedModels(meta)
         if (sorted.length === 0) {return false}
@@ -117,7 +153,7 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
         return direction === -1 ? currentIndex > 0 : currentIndex < sorted.length - 1
     }
     const stepModel = (direction: -1 | 1) => {
-        const meta = packMeta.getValue()
+        const meta = packMeta.unwrapOrNull()
         if (!isDefined(meta)) {return}
         const sorted = getSortedModels(meta)
         if (sorted.length === 0) {return}
@@ -133,7 +169,11 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
         switchModel(sorted[nextIndex])
     }
     const modelMenuRoot = MenuItem.root().setRuntimeChildrenProcedure(parent => {
-        const meta = packMeta.getValue()
+        if (isDownloading.getValue()) {
+            parent.addMenuItem(MenuItem.default({label: "Downloading…", selectable: false}))
+            return
+        }
+        const meta = packMeta.unwrapOrNull()
         if (!isDefined(meta)) {
             parent.addMenuItem(MenuItem.default({label: "No pack available", selectable: false}))
             return
@@ -142,9 +182,11 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
         const sorted = getSortedModels(meta)
         let lastSize = ""
         for (const entry of sorted) {
+            const isCached = cachedModelIds.hasKey(entry.id)
             const item = MenuItem.default({
                 label: entry.name,
                 checked: entry.id === currentId,
+                icon: isCached ? IconSymbol.Box : IconSymbol.CloudFolder,
                 separatorBefore: entry.size !== lastSize && lastSize !== ""
             }).setTriggerProcedure(() => switchModel(entry))
             parent.addMenuItem(item)
@@ -192,7 +234,7 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                       <span className="pack-header">Tone3000 Pack</span>
                                       <span className="pack-name" onInit={(element: HTMLSpanElement) => {
                                           lifecycle.own(packMeta.catchupAndSubscribe(observable => {
-                                              const meta = observable.getValue()
+                                              const meta = observable.unwrapOrNull()
                                               element.textContent = isDefined(meta) ? meta.title : "N/A"
                                               element.classList.toggle("empty", !isDefined(meta))
                                           }))
@@ -208,15 +250,28 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                               }}
                                               stretch={true}>
                                       <span className="model-label" onInit={(element: HTMLSpanElement) => {
-                                          lifecycle.own(model.catchupAndSubscribe(observable => {
-                                              const current = observable.getValue()
-                                              if (isDefined(current)) {
-                                                  element.textContent = current.metadata?.name ?? "Unknown Model"
-                                              } else {
-                                                  element.textContent = "No model loaded"
+                                          const updateLabel = () => {
+                                              if (isDownloading.getValue()) {
+                                                  element.textContent = "Downloading…"
+                                                  element.classList.toggle("empty", false)
+                                              } else if (urlsExpired.getValue()) {
+                                                  element.textContent = "URLs expired — re-select pack"
                                                   element.classList.toggle("empty", true)
+                                              } else {
+                                                  const current = model.getValue()
+                                                  if (isDefined(current)) {
+                                                      element.textContent = current.metadata?.name ?? "Unknown Model"
+                                                      element.classList.toggle("empty", false)
+                                                  } else {
+                                                      element.textContent = "No model loaded"
+                                                      element.classList.toggle("empty", true)
+                                                  }
                                               }
-                                          }))
+                                          }
+                                          lifecycle.own(model.subscribe(updateLabel))
+                                          lifecycle.own(isDownloading.subscribe(updateLabel))
+                                          lifecycle.own(urlsExpired.subscribe(updateLabel))
+                                          updateLabel()
                                       }}/>
                                   </MenuButton>
                                   <div className="step-arrows" onInit={(container: HTMLDivElement) => {

@@ -41,7 +41,7 @@ Editor                     Popup (popup window)             Tone 3000
 - [x] Step 2: Service logic (`NamTone3000.ts`)
 - [x] Step 3: Editor integration (`NeuralAmpDeviceEditor.tsx`)
 - [x] Popup window (not tab) — `window.open(url, "tone3000", "width=800,height=900,popup=yes")`
-- [ ] Step 4: Store entire pack in OPFS (`tone3000/{tone.id}/`)
+- [ ] Step 4: Store pack metadata + first model in OPFS (`tone3000/{tone.id}/`)
 - [ ] Step 5: Add `packId` field to NeuralAmpModelBox schema
 - [ ] Step 6: Model dropdown in editor UI (replaces static label)
 - [ ] Step 7: Handle missing pack (dropdown shows "No pack available")
@@ -62,9 +62,9 @@ Fixed: `window.open()` now uses `"width=800,height=900,popup=yes"` features to o
 
 **API constraints:** The Select Flow only accepts `app_id` and `redirect_url` — there is no parameter to select individual models. The `tone_url` response embeds all models with pre-signed download URLs. For packs with hundreds of models, the full list comes back in the response.
 
-## Step 4: Store entire pack in OPFS
+## Step 4: Store pack metadata and first model in OPFS
 
-When a user selects a tone from Tone 3000, download **all models** in the pack and store them in OPFS. This eliminates pre-signed URL expiry issues and enables offline model switching.
+When a user selects a tone from Tone 3000, download **only the first model** and store it along with pack metadata (including pre-signed URLs) in OPFS. Remaining models are downloaded on-demand when selected in the dropdown. This avoids downloading up to 80MB of data upfront for large packs.
 
 ### OPFS layout
 
@@ -75,27 +75,37 @@ tone3000/{tone.id}/
     {model.id}.nam   ← raw model JSON, keyed by numeric model id
 ```
 
-`pack.json` structure (derived from `ToneResponse`, but without `model_url` since those expire):
+`pack.json` structure (derived from `ToneResponse`, includes `model_url` for on-demand fetching):
 
 ```typescript
 interface PackMeta {
     toneId: number
     title: string
     updatedAt: string   // from Tone.updated_at — used for cache invalidation
-    models: ReadonlyArray<{ id: number, name: string, size: string }>
+    models: ReadonlyArray<{ id: number, name: string, size: string, model_url: string }>
 }
 ```
 
+Note: `model_url` values are pre-signed and will expire. See Considerations for handling expiry during on-demand downloads.
+
 The `id` field (from `Model.id` in the API) is used as the OPFS filename — it's unique within a pack and avoids issues with special characters in model names.
 
-### Download flow
+### Initial download flow (on pack selection)
 
 1. After `fetchTone(toneUrl)` returns the `ToneResponse`, check if `tone3000/{tone.id}/pack.json` exists in OPFS
-2. If cached: compare `tone.updated_at` from the fresh response against `pack.json.updatedAt`. If they match → skip download, go straight to model loading. If they differ → download only the missing/new models, remove stale ones, update `pack.json`
-3. If not cached: download all models in the pack (parallel fetch with concurrency limit), store each in OPFS, then write `pack.json`
-4. Show download progress — packs can be up to 80MB. Progress lives wherever the download happens (currently editor-side in `NamTone3000.browse()`)
-5. Support cancellation — if cancelled, clean up partially written pack folder
-6. After storing, load the default "standard" model (same as today)
+2. **Always** rewrite `pack.json` with the fresh `ToneResponse` data — this refreshes all `model_url` values (pre-signed URLs expire). If `updatedAt` changed, also remove stale model files that are no longer in the new model list
+3. If `pack.json` existed but lacked `model_url` fields (old format from pre-lazy-loading), treat as a fresh pack — the already-cached `.nam` files remain valid and won't be re-downloaded
+4. Pick the default "standard" model (or first if no standard). Check if its `.nam` file exists in OPFS — if yes, skip download. If not, download and store it (no progress dialog for a single model)
+5. Load that model (same as today)
+
+### On-demand download flow (on model switch)
+
+1. User selects a model from the dropdown
+2. Abort any in-flight model switch (`AbortController.abort()` on the previous fetch)
+3. Check if `tone3000/{toneId}/models/{modelId}.nam` exists in OPFS
+4. If cached: load directly from OPFS
+5. If not cached: fetch from `model_url` stored in `pack.json`, store in OPFS, add model id to `cachedModelIds` set, then load
+6. If fetch fails with 403 or network error: set an error observable. The model label shows **"URLs expired — re-select pack"** and the Tone 3000 browse button receives a `"pulse"` CSS class (subtle animation). Clicking the Tone 3000 button re-runs the Select Flow for the same tone, which rewrites `pack.json` with fresh URLs and clears the error state. Already-cached `.nam` files are preserved
 
 ### Access pattern
 
@@ -178,20 +188,28 @@ Add a light grid to the spectrum canvas, matching the compressor curve style:
 ### Behavior
 
 - The dropdown is always present, regardless of whether the model came from Tone 3000 or local import
-- On model load (or `packId` change): eagerly read `pack.json` from OPFS into memory. This is small (just id/name/size per model, no actual model data)
-- On click (synchronous): populate dropdown from the in-memory model list
-  - If list is available: show all model names + size badges, highlight the currently loaded model
+- On model load (or `packId` change): eagerly read `pack.json` from OPFS into memory, then **scan OPFS for which model files exist** and store the cached set in a `DefaultObservableValue<ReadonlySet<number>>`. Both `pack.json` and the cached set are small — this avoids async work at menu-open time since `setRuntimeChildrenProcedure` is synchronous
+- On click (synchronous): populate dropdown from the in-memory model list and cached set
+  - If list is available: show all model names + size badges, highlight the currently loaded model. Uncached models get `IconSymbol.Download` via `MenuItem.default({icon})` to indicate they need fetching
   - If `packId` is empty or pack was not found in OPFS: show a single non-selectable entry "No pack available"
-- On selection: load the chosen `.nam` from OPFS (async), create/dedup `NeuralAmpModelBox`, update the device's model pointer
+- On selection: **cancel any pending model switch** (abort previous fetch if in flight) to prevent race conditions from rapid clicks. Then load the chosen `.nam` from OPFS if cached, otherwise download on-demand from `model_url` in `pack.json`. On success: update the cached set, create/dedup `NeuralAmpModelBox`, update the device's model pointer. On failure (expired URL): set an error flag on the observable — the model label shows "URLs expired — re-select pack" and the Tone 3000 browse button pulses
+- **Loading state**: `switchModel` must `await` the result. While a download is in progress, set a boolean observable `isDownloading` — the model label shows "Downloading…", the dropdown and step arrows are disabled. On completion or abort, clear the flag
 
 ### Model switching flow
 
 ```
 Model loads / packId changes → read pack.json from OPFS into memory (async, eager)
+                             → scan OPFS for existing .nam files → update cachedModelIds set
 
-User clicks dropdown          → show in-memory model list (synchronous)
+User clicks dropdown          → show in-memory model list (synchronous, from packMeta + cachedModelIds)
+                              → uncached models show download icon
                               → user picks a model
-                              → read model .nam from OPFS (async)
+                              → abort any in-flight model switch (cancel previous fetch)
+                              → set isDownloading = true, label shows "Downloading…"
+                              → if cached: read model .nam from OPFS (async)
+                              → if not cached: fetch from model_url, store in OPFS, add to cachedModelIds
+                              → if fetch fails (expired URL): set error state, label shows "URLs expired"
+                              → set isDownloading = false
                               → compute SHA256 UUID
                               → find or create NeuralAmpModelBox (set packId + label)
                               → update adapter.box.model pointer
@@ -297,9 +315,9 @@ A paginated `/api/v1/models?tone_id={id}&page=1&page_size=10` endpoint exists in
 
 - **CORS** — The `tone_url` and `model_url` are pre-signed URLs. They should be CORS-friendly for browser fetch.
 - **Popup blockers** — `window.open()` is called from a direct user click handler, so popup blockers should not interfere.
-- **Pre-signed URL expiry** — No longer an issue for model switching. All models are downloaded to OPFS upfront. Expiry only matters if the initial download fails mid-way (retry with new Select Flow).
+- **Pre-signed URL expiry** — Since models are downloaded on-demand, stored `model_url` values in `pack.json` may expire before the user selects them. Mitigated on two fronts: (1) every Select Flow re-run rewrites `pack.json` with fresh URLs regardless of `updatedAt`, keeping cached `.nam` files intact; (2) on 403/network error, the UI shows "URLs expired — re-select pack" in the model label and pulses the Tone 3000 button to guide the user.
 - **Model label** — Use `tone.title + " — " + model.name` as the `NeuralAmpModelBox.label`.
 - **Offline / local-only** — The existing file-browse flow remains as the primary way to load local `.nam` files.
 - **OPFS storage size** — Packs with many models will consume significant OPFS space. Consider showing pack size before download and/or offering a "delete cached pack" action.
-- **Pack deduplication** — If the same pack is selected again via Select Flow, detect it by `tone.id` and skip re-download.
-- **Concurrent downloads** — Use a concurrency limit (e.g., 4-6 parallel fetches) when downloading pack models to avoid overwhelming the browser or the API.
+- **Pack deduplication** — If the same pack is selected again via Select Flow, detect it by `tone.id`. Already-cached `.nam` files are kept; only `pack.json` is rewritten (to refresh URLs). No model re-download unless the file is missing.
+- **Concurrent downloads** — No longer needed for initial selection (only one model is downloaded). On-demand downloads are sequential (one at a time as user selects).
