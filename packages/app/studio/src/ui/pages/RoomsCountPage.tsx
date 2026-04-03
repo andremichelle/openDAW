@@ -14,10 +14,7 @@ export const RoomsCountPage: PageFactory<StudioService> = ({lifecycle}: PageCont
         <div className={className}>
             <h1>Rooms Created Per Day</h1>
             <Await
-                factory={() => fetch("https://live.opendaw.studio/stats/rooms-count.json", {
-                    mode: "cors",
-                    credentials: "include"
-                })
+                factory={() => fetch("https://live.opendaw.studio/stats/rooms-count.json", {mode: "cors"})
                     .then(response => response.json())
                     .then(data => data as RoomsData)}
                 failure={({reason}) => <p style={{color: Colors.orange.toString()}}>Failed to load data: {reason}</p>}
