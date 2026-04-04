@@ -12,6 +12,7 @@ export interface VideoExportConfig {
 
 export interface VideoExporter extends Terminable {
     addFrame(canvas: OffscreenCanvas, audio: Float32Array[], timestampSeconds: number): Promise<void>
-    finalize(): Promise<Uint8Array>
+    finalize(): Promise<void>
+    abort(): Promise<void>
     readonly progress: ObservableValue<number>
 }

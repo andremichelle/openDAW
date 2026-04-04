@@ -1,16 +1,33 @@
-import {asInstanceOf, DefaultObservableValue, Option, panic, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
+import {
+    asInstanceOf,
+    DefaultObservableValue,
+    isDefined,
+    Option,
+    panic,
+    RuntimeNotifier,
+    TimeSpan
+} from "@opendaw/lib-std"
 import {dbToGain, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {OfflineEngineRenderer, Project} from "@opendaw/studio-core"
-import {Files} from "@opendaw/lib-dom"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
 import {ShadertoyBox} from "@opendaw/studio-boxes"
-import {showVideoExportDialog, VideoOverlay, WebCodecsVideoExporter} from "@/video"
+import type {VideoExporter} from "@/video"
+import {
+    BufferVideoExporter,
+    showVideoExportDialog,
+    StreamVideoExporter,
+    VideoOverlay,
+    WebCodecsVideoExporter
+} from "@/video"
 import {Promises} from "@opendaw/lib-runtime"
 
 const MAX_DURATION_SECONDS = TimeSpan.hours(1).absSeconds()
 const SILENCE_THRESHOLD_DB = -72.0
 const SILENCE_DURATION_SECONDS = 10
+
+const isAllocationError = (error: unknown): boolean =>
+    error instanceof RangeError && /alloc|array|memory/i.test(error.message)
 
 export namespace VideoRenderer {
     export const render = async (source: Project, projectName: string, sampleRate: number): Promise<void> => {
@@ -19,6 +36,20 @@ export namespace VideoRenderer {
         }
         const config = await showVideoExportDialog(sampleRate)
         const {width, height, frameRate, duration, overlay: overlayEnabled, videoBitrate} = config
+        const exportConfig = {width, height, frameRate, sampleRate, numberOfChannels: 2, videoBitrate}
+        let exporter: VideoExporter
+        if (isDefined(window.showSaveFilePicker)) {
+            const result = await Promises.tryCatch(
+                window.showSaveFilePicker({suggestedName: "opendaw-video.mp4"})
+            )
+            if (result.status === "rejected") {return}
+            const writable = await result.value.createWritable()
+            exporter = await Promises.timeout(
+                StreamVideoExporter.create(exportConfig, writable), TimeSpan.seconds(10))
+        } else {
+            exporter = await Promises.timeout(
+                BufferVideoExporter.create(exportConfig), TimeSpan.seconds(10))
+        }
         console.time("Render Video")
         const project = source.copy()
         const {boxGraph, timelineBox: {loopArea: {enabled}}} = project
@@ -33,19 +64,9 @@ export namespace VideoRenderer {
             cancel: () => active = false
         })
 
-        dialog.message = "Initializing..."
-        const exporter = await Promises.timeout(WebCodecsVideoExporter.create({
-            width,
-            height,
-            frameRate,
-            sampleRate,
-            numberOfChannels: 2,
-            videoBitrate
-        }), TimeSpan.seconds(10))
-
-        const estimator = TimeSpan.createEstimator()
-
         try {
+            dialog.message = "Initializing..."
+            const estimator = TimeSpan.createEstimator()
             const shadertoyCanvas = new OffscreenCanvas(width, height)
             const shadertoyContext = shadertoyCanvas.getContext("webgl2")!
             const shadertoyState = new ShadertoyState(project)
@@ -148,28 +169,22 @@ export namespace VideoRenderer {
 
             if (!active) {
                 dialog.terminate()
-                exporter.terminate()
+                await exporter.abort()
                 return
             }
 
             dialog.message = "Finalizing video..."
-            const outputData = await exporter.finalize()
+            await exporter.finalize()
             dialog.terminate()
-
-            const approved = await RuntimeNotifier.approve({
-                headline: "Save Video",
-                message: `Size: ${(outputData.byteLength / 1024 / 1024).toFixed(1)}MB`,
-                approveText: "Save"
-            })
-            if (approved) {
-                await Files.save(outputData.buffer as ArrayBuffer, {suggestedName: "opendaw-video.mp4"})
-            }
         } catch (error) {
             dialog.terminate()
-            exporter.terminate()
+            await exporter.abort()
+            const message = isAllocationError(error)
+                ? "Video is too large for this browser. Please use Chrome."
+                : String(error)
             await RuntimeNotifier.info({
                 headline: "Video Export Failed",
-                message: String(error)
+                message
             })
             throw error
         }
