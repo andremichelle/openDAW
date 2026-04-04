@@ -35,7 +35,8 @@ export namespace MonacoFactory {
             theme: "vs-dark",
             automaticLayout: true,
             stickyScroll: {enabled: false},
-            editContext: false
+            editContext: false,
+            dropIntoEditor: {enabled: false}
         })
         const allowed = ["c", "v", "x", "a", "z", "y"]
         lifecycle.ownAll(
@@ -51,7 +52,8 @@ export namespace MonacoFactory {
                 }
                 event.stopPropagation()
             }),
-            Events.subscribe(container, "keypress", event => event.stopPropagation())
+            Events.subscribe(container, "keypress", event => event.stopPropagation()),
+            Events.subscribe(container, "dragover", event => event.stopPropagation())
         )
         requestAnimationFrame(() => editor.focus())
         return {editor, model, container}
