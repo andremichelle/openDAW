@@ -200,10 +200,17 @@ export namespace RecordAudio {
                     editing.modify(() => {
                         currentTake.ifSome(take => {
                             const actualDurationInSeconds = take.regionBox.duration.getValue()
+                            if (actualDurationInSeconds <= 0) {
+                                take.regionBox.delete()
+                                currentTake = Option.None
+                                return
+                            }
                             finalizeTake(take, actualDurationInSeconds)
                             currentWaveformOffset += actualDurationInSeconds
                         })
-                        startNewTake(loopFrom)
+                        if (currentTake.nonEmpty()) {
+                            startNewTake(loopFrom)
+                        }
                     }, false)
                 }
                 lastPosition = currentPosition
