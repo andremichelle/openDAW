@@ -50,6 +50,10 @@ export namespace Dragging {
             const process: Process = option.unwrap()
             const pointerId: int = event.pointerId
             event.preventDefault()
+            if (target instanceof HTMLElement) {
+                if (!target.hasAttribute("tabindex")) {target.tabIndex = -1}
+                target.focus({preventScroll: true})
+            }
             try {
                 target.setPointerCapture(pointerId)
             } catch (_) {return}
