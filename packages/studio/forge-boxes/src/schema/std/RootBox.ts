@@ -7,7 +7,7 @@ export const RootBox: BoxSchema<Pointers> = {
         name: "RootBox",
         fields: {
             1: {type: "pointer", name: "timeline", mandatory: true, pointerType: Pointers.Timeline},
-            2: {type: "field", name: "users", pointerRules: {accepts: [Pointers.User], mandatory: true}},
+            2: {type: "field", name: "users", pointerRules: {accepts: [Pointers.User], mandatory: false}},
             3: {type: "string", name: "created"},
             4: {type: "pointer", name: "groove", mandatory: true, pointerType: Pointers.Groove},
             5: {
