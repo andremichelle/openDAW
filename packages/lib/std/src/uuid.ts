@@ -36,8 +36,9 @@ export namespace UUID {
     export const toDataOutput = (output: DataOutput, uuid: UUID.Bytes): void =>
         output.writeBytes(new Int8Array(uuid.buffer))
 
+    const hex: string[] = Arrays.create(index => (index + 0x100).toString(16).substring(1), 256)
+
     export const toString = (format: Bytes): UUID.String => {
-        const hex: string[] = Arrays.create(index => (index + 0x100).toString(16).substring(1), 256)
         return (hex[format[0]] + hex[format[1]] +
             hex[format[2]] + hex[format[3]] + "-" +
             hex[format[4]] + hex[format[5]] + "-" +
