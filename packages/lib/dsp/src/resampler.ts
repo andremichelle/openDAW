@@ -28,10 +28,15 @@ for (let i = 0, p0 = 0, p1 = 0; i < HALFBAND_COEFF.length; i++) {
     }
 }
 
-// Single-stage 2x resampler using polyphase halfband filter
+// Buffer sizes padded to power-of-2 for bitmask indexing
+const UP_BUFFER_SIZE = 16
+const UP_BUFFER_MASK = UP_BUFFER_SIZE - 1
+const DOWN_BUFFER_SIZE = 32
+const DOWN_BUFFER_MASK = DOWN_BUFFER_SIZE - 1
+
 class Resampler2xMono {
-    #upBuffer = new Float32Array(PHASE0_COEFF.length)
-    #downBuffer = new Float32Array(HALFBAND_COEFF.length)
+    #upBuffer = new Float32Array(UP_BUFFER_SIZE)
+    #downBuffer = new Float32Array(DOWN_BUFFER_SIZE)
     #upIndex: int = 0
     #downIndex: int = 0
 
@@ -42,60 +47,46 @@ class Resampler2xMono {
         this.#downIndex = 0
     }
 
-
     upsample(input: Float32Array, output: Float32Array, fromIndex: int, toIndex: int): void {
         const buffer = this.#upBuffer
         const phase0 = PHASE0_COEFF
         const phase1 = PHASE1_COEFF
-
+        let upIndex = this.#upIndex
         for (let i = fromIndex; i < toIndex; i++) {
-            const x = input[i]
+            buffer[upIndex] = input[i]
             const outIdx = (i - fromIndex) * 2
-
-            // Store input in circular buffer
-            buffer[this.#upIndex] = x
-
-            // Polyphase filter for even output sample (phase 0)
             let sum0 = 0
             for (let j = 0; j < phase0.length; j++) {
-                const idx = (this.#upIndex - j + buffer.length) % buffer.length
-                sum0 += buffer[idx] * phase0[j]
+                sum0 += buffer[(upIndex - j) & UP_BUFFER_MASK] * phase0[j]
             }
-            output[outIdx] = sum0 * 2  // Compensate for zero-stuffing
-
-            // Polyphase filter for odd output sample (phase 1)
+            output[outIdx] = sum0 * 2
             let sum1 = 0
             for (let j = 0; j < phase1.length; j++) {
-                // Phase 1 uses samples offset by 0.5 at input rate
-                const idx = (this.#upIndex - j + buffer.length - 1) % buffer.length
-                sum1 += buffer[idx] * phase1[j]
+                sum1 += buffer[(upIndex - j - 1) & UP_BUFFER_MASK] * phase1[j]
             }
-            output[outIdx + 1] = sum1 * 2  // Compensate for zero-stuffing
-
-            this.#upIndex = (this.#upIndex + 1) % buffer.length
+            output[outIdx + 1] = sum1 * 2
+            upIndex = (upIndex + 1) & UP_BUFFER_MASK
         }
+        this.#upIndex = upIndex
     }
 
     downsample(input: Float32Array, output: Float32Array, fromIndex: int, toIndex: int): void {
         const buffer = this.#downBuffer
         const coeff = HALFBAND_COEFF
-
+        let downIndex = this.#downIndex
         for (let i = fromIndex; i < toIndex; i++) {
             const inIdx = (i - fromIndex) * 2
-            // Add both input samples to buffer
-            buffer[this.#downIndex] = input[inIdx]
-            this.#downIndex = (this.#downIndex + 1) % buffer.length
-            buffer[this.#downIndex] = input[inIdx + 1]
-            this.#downIndex = (this.#downIndex + 1) % buffer.length
-
-            // Apply full anti-aliasing filter and decimate
+            buffer[downIndex] = input[inIdx]
+            downIndex = (downIndex + 1) & DOWN_BUFFER_MASK
+            buffer[downIndex] = input[inIdx + 1]
+            downIndex = (downIndex + 1) & DOWN_BUFFER_MASK
             let sum = 0
             for (let j = 0; j < coeff.length; j++) {
-                const idx = (this.#downIndex - 1 - j + buffer.length) % buffer.length
-                sum += buffer[idx] * coeff[j]
+                sum += buffer[(downIndex - 1 - j) & DOWN_BUFFER_MASK] * coeff[j]
             }
             output[i] = sum
         }
+        this.#downIndex = downIndex
     }
 }
 
