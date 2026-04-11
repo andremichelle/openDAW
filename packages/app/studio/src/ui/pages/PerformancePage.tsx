@@ -4,6 +4,8 @@ import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {BenchmarkCategory, BenchmarkResult, RENDER_SECONDS, runAllBenchmarks, SAMPLE_RATE} from "@/perf/benchmarks"
 import {isDefined} from "@opendaw/lib-std"
+import {Button} from "@/ui/components/Button"
+import {Colors} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "PerformancePage")
 
@@ -42,57 +44,64 @@ const createAudioElement = (audio: Float32Array[]): HTMLAudioElement => {
         }
     }
     const blob = new Blob([buffer], {type: "audio/wav"})
-    const el = document.createElement("audio")
-    el.controls = true
-    el.src = URL.createObjectURL(blob)
-    el.addEventListener("play", () => {
-        if (activeAudio !== null && activeAudio !== el) {
+    const audioElement = document.createElement("audio")
+    audioElement.controls = true
+    audioElement.src = URL.createObjectURL(blob)
+    audioElement.addEventListener("play", () => {
+        if (activeAudio !== null && activeAudio !== audioElement) {
             activeAudio.pause()
             activeAudio.currentTime = 0
         }
-        activeAudio = el
+        activeAudio = audioElement
     })
-    return el
+    return audioElement
 }
 
-export const PerformancePage: PageFactory<StudioService> = ({service}) => {
+export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}) => {
     const results: Array<BenchmarkResult> = []
+    const tbody = <tbody/>
+    const statusEl: HTMLSpanElement = <span className="status">Ready</span>
     let running = false
-    let tbody: HTMLTableSectionElement
-    let statusEl: HTMLSpanElement
-    let runButton: HTMLButtonElement
+    const renderRow = (result: BenchmarkResult, maxMarginal: number): Element => {
+        if (isDefined(result.error)) {
+            return (
+                <tr className="error">
+                    <td className="name">{result.name}</td>
+                    <td className="number" colSpan={5}>{result.error}</td>
+                </tr>
+            )
+        }
+        const barWidth = result.marginalMs > 0 && maxMarginal > 0
+            ? (result.marginalMs / maxMarginal) * 100 : 0
+        const isBaseline = result.category === "Baseline"
+        return (
+            <tr>
+                <td className="name">{result.name}</td>
+                <td className="number">{result.renderMs.toFixed(0)}</td>
+                <td className="number">{isBaseline ? "-" : result.marginalMs.toFixed(0)}</td>
+                <td className="number">{isBaseline ? "-" : result.perQuantumUs.toFixed(2)}</td>
+                <td className="bar-cell">
+                    <div className="bar" style={{width: `${barWidth.toFixed(1)}%`}}/>
+                </td>
+                <td className="audio-cell">
+                    {isDefined(result.audio) ? createAudioElement(result.audio) : null}
+                </td>
+            </tr>
+        )
+    }
     const updateTable = () => {
         const maxMarginal = results.reduce((max, result) => Math.max(max, result.marginalMs), 0)
-        tbody.innerHTML = ""
+        tbody.replaceChildren()
         for (const category of CategoryOrder) {
             const categoryResults = results.filter(result => result.category === category)
             if (categoryResults.length === 0) {continue}
-            const headerRow = document.createElement("tr")
-            headerRow.className = "category"
-            headerRow.innerHTML = `<td colspan="6">${category}</td>`
-            tbody.appendChild(headerRow)
+            tbody.appendChild(
+                <tr className="category">
+                    <td colSpan={6}>{category}</td>
+                </tr>
+            )
             for (const result of categoryResults.sort((a, b) => b.renderMs - a.renderMs)) {
-                const row = document.createElement("tr")
-                if (isDefined(result.error)) {
-                    row.className = "error"
-                    row.innerHTML = `<td class="name">${result.name}</td>`
-                        + `<td class="number" colspan="5">${result.error}</td>`
-                } else {
-                    const barWidth = result.marginalMs > 0 && maxMarginal > 0
-                        ? (result.marginalMs / maxMarginal) * 100 : 0
-                    const isBaseline = result.category === "Baseline"
-                    row.innerHTML = `<td class="name">${result.name}</td>`
-                        + `<td class="number">${result.renderMs.toFixed(0)}</td>`
-                        + `<td class="number">${isBaseline ? "-" : result.marginalMs.toFixed(0)}</td>`
-                        + `<td class="number">${isBaseline ? "-" : result.perQuantumUs.toFixed(2)}</td>`
-                        + `<td class="bar-cell"><div class="bar" style="width: ${barWidth.toFixed(1)}%"></div></td>`
-                        + `<td class="audio-cell"></td>`
-                    if (isDefined(result.audio)) {
-                        const audioCell = row.querySelector(".audio-cell")
-                        if (isDefined(audioCell)) {audioCell.appendChild(createAudioElement(result.audio))}
-                    }
-                }
-                tbody.appendChild(row)
+                tbody.appendChild(renderRow(result, maxMarginal))
             }
         }
     }
@@ -101,7 +110,6 @@ export const PerformancePage: PageFactory<StudioService> = ({service}) => {
         running = true
         results.length = 0
         updateTable()
-        runButton.disabled = true
         statusEl.textContent = "Starting benchmarks..."
         await runAllBenchmarks(
             service,
@@ -114,7 +122,6 @@ export const PerformancePage: PageFactory<StudioService> = ({service}) => {
             }
         )
         running = false
-        runButton.disabled = false
         statusEl.textContent = `Done. ${results.length} benchmarks completed.`
     }
     return (
@@ -127,21 +134,24 @@ export const PerformancePage: PageFactory<StudioService> = ({service}) => {
                 <span><b>per quantum</b> — marginal cost divided by the number of 128-sample blocks rendered ({(RENDER_SECONDS * SAMPLE_RATE / 128).toLocaleString()} blocks). Shows how much time the device adds to each audio callback.</span>
             </div>
             <div className="controls">
-                <button onInit={element => { runButton = element; element.onclick = run }}>Run All</button>
-                <span className="status" onInit={element => statusEl = element}>Ready</span>
+                <Button lifecycle={lifecycle}
+                        appearance={{framed: true, color: Colors.blue}}
+                        style={{fontSize: "0.75em"}}
+                        onClick={run}>Run All</Button>
+                {statusEl}
             </div>
             <table>
                 <thead>
-                    <tr>
-                        <th>Device</th>
-                        <th>render (ms)</th>
-                        <th>marginal (ms)</th>
-                        <th>per quantum (us)</th>
-                        <th>relative</th>
-                        <th></th>
-                    </tr>
+                <tr>
+                    <th>Device</th>
+                    <th>render (ms)</th>
+                    <th>marginal (ms)</th>
+                    <th>per quantum (us)</th>
+                    <th>relative</th>
+                    <th></th>
+                </tr>
                 </thead>
-                <tbody onInit={element => tbody = element}/>
+                {tbody}
             </table>
             <div style={{opacity: "0.4", fontSize: "11px"}}>
                 Negative marginal values indicate measurement noise — the device cost is too small to measure reliably.

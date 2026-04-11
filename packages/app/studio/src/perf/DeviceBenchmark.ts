@@ -339,6 +339,7 @@ export const runAllBenchmarks = async (
     onProgress: (progress: BenchmarkProgress) => void,
     onResult: (result: BenchmarkResult) => void
 ): Promise<void> => {
+    await service.audioContext.suspend()
     const sampleData = createSampleData()
     const totalDevices = audioEffects.length + instruments.length + 3
     const totalQuanta = RENDER_SECONDS * SAMPLE_RATE / 128
@@ -382,4 +383,5 @@ export const runAllBenchmarks = async (
             instrument.needsSample ? sampleData : null), "Instrument", instrument.name, baselineMs)
         step++
     }
+    await service.audioContext.resume()
 }
