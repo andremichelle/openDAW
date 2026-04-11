@@ -32,7 +32,7 @@ import type {Peaks} from "@opendaw/lib-fusion"
 import {StudioService} from "@/service/StudioService"
 import {BenchmarkCategory, BenchmarkResult} from "./measure"
 
-export const RENDER_SECONDS = 10
+export const RENDER_SECONDS = 60
 export const SAMPLE_RATE = 48_000
 
 type DeviceSpec = {
