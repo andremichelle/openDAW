@@ -102,7 +102,29 @@ Instead of auto-downloading all presets on boot, the browser shows a **"Download
 - Subsequent loads skip the banner if `presets/cloud/` already has content
 - A "Re-download Presets" option in a settings or context menu allows refreshing the cloud presets later
 
-### 4. New Device Browser Categories
+### 4. PassthroughDevice (No-Op Instrument for Effect Chains)
+
+Effect chain presets need a valid AudioUnit in the BoxGraph, but have no real instrument. We introduce a **PassthroughDeviceBox** — a minimal instrument that passes audio through unchanged.
+
+**Schema** (`packages/studio/forge-boxes/src/schema/devices/instruments/PassthroughDeviceBox.ts`):
+```typescript
+export const PassthroughDeviceBox: BoxSchema<Pointers> =
+    DeviceFactory.createInstrument("PassthroughDeviceBox", "audio", {})
+```
+
+No custom fields — just the standard instrument attributes (host, label, icon, enabled, minimized).
+
+**Processor**: Reuse the existing `NopDeviceProcessor` pattern (already used for `UnknownAudioEffectDevice` and `ModularDeviceBox`). Create a `PassthroughDeviceProcessor` that implements `InstrumentDeviceProcessor` the same way — copies input to output, returns `Option.None` for `noteEventTarget`.
+
+**Registration**:
+- Add `PassthroughDeviceBox` to `DeviceDefinitions` in `forge-boxes/src/schema/devices/index.ts`
+- Add `visitPassthroughDeviceBox` to `InstrumentDeviceProcessorFactory` in `DeviceProcessorFactory.ts`
+- Add `PassthroughDeviceBoxAdapter` to the adapters package
+- Add a `PassthroughFactory` to `InstrumentFactories` (internal only, not shown in the Instruments list)
+
+**Usage**: When saving an effect chain preset, the encoder wraps the audio effects in an AudioUnit with a Passthrough instrument. When loading, `PresetDecoder.replaceAudioUnit` with `keepMIDIEffects: true` extracts only the audio effects. The Passthrough device itself is discarded during import — it never appears in the user's project.
+
+### 5. New Device Browser Categories
 
 Expand from 3 to 5 categories:
 
@@ -112,11 +134,11 @@ Expand from 3 to 5 categories:
 | **Instruments** | green | Instruments only (as today) |
 | **Audio Effects** | blue | Audio effects only (as today) |
 | **MIDI Effects** | orange | MIDI effects only (as today) |
-| **Effect Chains** | cyan/teal | Audio-effect-only presets (no instrument, just a chain of audio effects) |
+| **Effect Chains** | cyan/teal | Audio-effect-only presets (Passthrough instrument + audio effects chain) |
 
 **Audio Units** contain complete `.odp` presets that include an instrument with its full signal chain. These are dragged onto an existing audio unit to replace it, or clicked to create a new one.
 
-**Effect Chains** contain `.odp` presets that have no instrument, only a chain of audio effects. These can be dragged into the audio effects container to insert the entire chain at once.
+**Effect Chains** contain `.odp` presets with a PassthroughDevice as the instrument and only audio effects in the chain. On import, the Passthrough is stripped and only the audio effects are inserted.
 
 ### 5. Collapsible Sections
 
@@ -153,22 +175,39 @@ Each device `<li>` gets a disclosure triangle (CSS triangle or SVG chevron) in f
 - Cloud presets shown first, then a separator, then user presets
 - "Save Current..." row (only visible when an audio unit is selected) saves the current device state as a user preset via `PresetEncoder.encode`
 
-### 7. New Drag Data Type
+### 8. New Drag Data Types
 
-Extend `AnyDragData` with:
+**Individual presets** (from disclosure triangle lists):
 ```typescript
 type DragPreset = {
     type: "preset"
-    category: "instrument" | "audio-effect" | "midi-effect" | "audio-unit" | "effect-chain"
+    category: "instrument" | "audio-effect" | "midi-effect" | "audio-unit"
     uuid: UUID.String
     device: string
 }
 ```
 
-Update `DevicePanelDragAndDrop` to handle `DragPreset`:
-- For `"instrument"` / `"audio-unit"`: replace the current instrument (same as `replaceAudioUnit`)
-- For `"audio-effect"` / `"effect-chain"`: insert effect(s) at drop index
-- For `"midi-effect"`: insert MIDI effect at drop index
+**Effect chain presets** get their own drag type because they behave like dragging a single audio effect (insert marker, index-based positioning) but create multiple effects at the drop index:
+```typescript
+type DragEffectChain = {
+    type: "effect-chain"
+    uuid: UUID.String
+}
+```
+
+**Drop handling in `DevicePanelDragAndDrop`:**
+
+- `DragPreset` with `category: "instrument"` or `"audio-unit"`: replace the current instrument via `PresetDecoder.replaceAudioUnit`
+- `DragPreset` with `category: "audio-effect"`: insert a single effect at drop index (load preset, decode, insert)
+- `DragPreset` with `category: "midi-effect"`: insert a single MIDI effect at drop index
+- `DragEffectChain`: uses the **same drag UX as a single audio effect** — shows an insert marker in `audioEffectsContainer`, computes the drop index via `DragAndDrop.findInsertLocation`. On drop:
+  1. Load the `.odp` preset from OPFS
+  2. Decode the AudioUnit via `PresetDecoder` into a temporary skeleton
+  3. Extract all audio effect boxes from the source AudioUnit (skip the Passthrough instrument)
+  4. Insert them sequentially into the target AudioUnit's `audioEffects` field starting at the drop index
+  5. Each effect gets `index = dropIndex + i` and existing effects at `>= dropIndex` are shifted up
+
+This means the drag feedback (insert marker between existing effects) is identical to dragging a single effect, but the drop creates the full chain in one editing transaction.
 
 ### 8. Panel Width
 
@@ -190,16 +229,23 @@ Update `DevicePanelDragAndDrop` to handle `DragPreset`:
 ## File Changes
 
 ### New Files
+- `packages/studio/forge-boxes/src/schema/devices/instruments/PassthroughDeviceBox.ts` - no-op instrument schema (zero custom fields)
+- `packages/studio/core-processors/src/devices/instruments/PassthroughDeviceProcessor.ts` - passthrough audio processor (copies input to output, `noteEventTarget: Option.None`)
 - `packages/studio/core/src/presets/PresetStorage.ts` - OPFS storage for presets
 - `packages/studio/core/src/presets/PresetMeta.ts` - metadata type + zod schema
 - `packages/studio/core/src/presets/OpenPresetAPI.ts` - cloud preset API
 - `packages/studio/core/src/presets/PresetService.ts` - combines cloud + user storage, manages download state
 
 ### Modified Files
+- `packages/studio/forge-boxes/src/schema/devices/index.ts` - add `PassthroughDeviceBox` to `DeviceDefinitions`
+- `packages/studio/core-processors/src/DeviceProcessorFactory.ts` - add `visitPassthroughDeviceBox` to `InstrumentDeviceProcessorFactory`
+- `packages/studio/adapters/src/factories/InstrumentFactories.ts` - add internal `Passthrough` factory (not exported in `Named`)
+- `packages/studio/adapters/src/preset/PresetEncoder.ts` - add `encodeEffectChain(audioEffectsField)` that wraps effects in a Passthrough AudioUnit
+- `packages/studio/adapters/src/preset/PresetDecoder.ts` - add `insertEffectChain(arrayBuffer, targetAudioUnit, insertIndex)` that strips the Passthrough and inserts only audio effects at the given index
 - `packages/app/studio/src/ui/browse/DevicesBrowser.tsx` - collapsible sections, triangles, preset lists, new categories, download banner
 - `packages/app/studio/src/ui/browse/DevicesBrowser.sass` - triangle column, collapse animation, preset rows, banner styling
-- `packages/app/studio/src/ui/AnyDragData.ts` - add `DragPreset` type
-- `packages/app/studio/src/ui/devices/DevicePanelDragAndDrop.ts` - handle `DragPreset` drops
+- `packages/app/studio/src/ui/AnyDragData.ts` - add `DragPreset` and `DragEffectChain` types
+- `packages/app/studio/src/ui/devices/DevicePanelDragAndDrop.ts` - handle `DragPreset` and `DragEffectChain` drops (effect chain uses same insert-marker UX as single audio effect)
 - `packages/app/studio/src/ui/devices/menu-items.ts` - user preset save/rename/delete/export/import
 - `packages/app/studio/src/boot.ts` - create `PresetService` and pass to `StudioService`
 - `packages/app/studio/src/service/StudioService.ts` - accept and expose `PresetService`
@@ -208,21 +254,22 @@ Update `DevicePanelDragAndDrop` to handle `DragPreset`:
 
 ## Implementation Order
 
-1. **PresetMeta + PresetStorage** - data layer (OPFS read/write/list for presets)
-2. **OpenPresetAPI** - server list + download
-3. **PresetService** - combines cloud + user, manages download state
-4. **Boot integration** - wire PresetService into StudioService
-5. **DevicesBrowser UI** - collapsible sections, disclosure triangles, preset lists, download banner
-6. **New categories** - Audio Units and Effect Chains sections
-7. **DragPreset + drop handling** - drag presets from browser to device panel
-8. **User preset management** - save/rename/delete/export/import via context menus
+1. **PassthroughDeviceBox** - schema, processor, adapter, factory (internal-only instrument)
+2. **PresetMeta + PresetStorage** - data layer (OPFS read/write/list for presets)
+3. **OpenPresetAPI** - server list + download
+4. **PresetService** - combines cloud + user, manages download state
+5. **PresetEncoder/Decoder extensions** - `encodeEffectChain` and `insertEffectChain` using Passthrough
+6. **Boot integration** - wire PresetService into StudioService
+7. **DevicesBrowser UI** - collapsible sections, disclosure triangles, preset lists, download banner
+8. **New categories** - Audio Units and Effect Chains sections
+9. **DragPreset + DragEffectChain + drop handling** - effect chain drag uses same insert-marker UX as single effect, creates full chain at drop index
+10. **User preset management** - save/rename/delete/export/import via context menus
 
 ---
 
 ## Open Questions
 
 - Server-side: Does `api.opendaw.studio` need a new `/presets/` endpoint, or can we reuse an existing deployment pattern?
-- Should effect-chain presets store just the effect boxes, or a full AudioUnit with no instrument?
 - Should the "Audio Units" category show presets grouped by instrument type, or flat?
 - How to handle preset compatibility when device schemas evolve (version mismatch)?
 - Should cloud preset metadata include a preview/thumbnail or tags for filtering?

@@ -1,85 +1,132 @@
-# Performance Optimisation Plan
+# Performance Test Suite Plan
 
-## Context
+## Goal
 
-CPU load has roughly doubled across projects over the last weeks. The HRClock performance meter now makes
-this visible.
+Create a test suite that measures per-quantum CPU cost of the audio engine and all device processors
+in isolation. Tests run in vitest (no browser needed) and report microseconds per quantum. Results
+serve as a baseline — regressions are caught by comparing against stored thresholds.
 
-Additionally, `AnimationFrame` was running at 120fps on ProMotion displays — now throttled to 60fps.
+## Approach
 
----
+The device processors all implement the `Processor` interface (`process(processInfo: ProcessInfo)`).
+Most extend `AudioProcessor` or `EventProcessor`. The key insight: their `processAudio(block)` /
+`processEvents(block, from, to)` methods operate on plain `Float32Array` buffers and `Block` structs
+with no dependency on `AudioWorkletProcessor` or Web Audio APIs. We can call them directly.
 
-## 0. ROOT CAUSE: UUID.toString in TapeDeviceProcessor hot path [DONE]
+The test harness creates a mock `ProcessInfo` with a single block spanning one render quantum
+(128 samples), feeds silence or a test signal, and measures the wall-clock time of N iterations
+using `performance.now()`.
 
-**Primary cause of the ~2x regression.**
+## Test Harness
 
-### 0a. UUID.toString recreates 256-element hex lookup table on every call
+**File:** `packages/studio/core-processors/src/perf/PerfHarness.ts`
 
-**File:** `packages/lib/std/src/uuid.ts:39-40`
-
-`UUID.toString()` had the hex lookup table (`Arrays.create(... , 256)`) declared INSIDE the function
-body. Every call allocated a 256-element string array + 256 intermediate strings. This function is
-called in many places but became critical when TapeDeviceProcessor started using it in the per-block
-hot path.
-
-**Fix:** Hoisted the `hex` table to module scope — computed once, reused forever.
-
-### 0b. TapeDeviceProcessor: Set\<string\> + UUID.toString per block per lane
-
-**File:** `packages/studio/core-processors/src/devices/instruments/TapeDeviceProcessor.ts`
-
-The voice management refactoring (switching from `instanceof`-based to UUID-based voice tracking)
-introduced per-block hot-path calls:
-
-```ts
-const visitedUuids: Set<string> = new Set()        // allocation per block per lane
-visitedUuids.add(UUID.toString(region.uuid))        // per region
-visitedUuids.has(UUID.toString(voice.sourceUuid))   // per voice
+```
+- createBlock(sampleRate): Block — returns a single-block ProcessInfo for one quantum
+- measureProcessor(processor, iterations): { totalMs, perQuantumUs, perSampleNs }
+- warmup(processor, count): void — run N quanta to trigger V8 JIT before measuring
 ```
 
-For a project with 8 tracks × 2 regions × 375 quanta/sec, that was ~6,000 UUID.toString calls/sec,
-each creating 258 objects (256-string hex table + array + result string) = ~1.5M allocations/sec.
+Since device processors need an `EngineContext` and box adapters to construct, and mocking the full
+context is impractical, the tests will work at two levels:
 
-**Fix:** Replaced `Set<string>` with a reusable `Array<UUID.Bytes>` instance field. Lookups use
-`UUID.equals()` (16-byte comparison, zero allocation). The array is cleared via `length = 0` each
-block.
+### Level 1: DSP kernel benchmarks (no context needed)
 
----
+Test the raw DSP functions that device processors call internally. These are pure functions operating
+on Float32Arrays with no framework dependency:
 
-## 1. BlockRenderer: Eliminate allocation in render loop [DONE]
+- `FreeVerb.process` — reverb convolution
+- `DattorroReverbDsp` — plate reverb
+- `DelayDeviceDsp` — delay line read/write
+- `SimpleLimiter.replace` — limiter
+- `FadingEnvelope.fillGainBuffer` — fading envelope
+- `Ramp.moveAndGet` (in a loop) — parameter smoothing
+- `PitchVoice.process` — sample playback with interpolation
+- `TimeStretchSequencer.process` — granular time stretch
+- `AudioAnalyser.process` — FFT analysis
+- `AudioBuffer.mixInto / replaceInto` — buffer operations
 
-**File:** `packages/studio/core-processors/src/BlockRenderer.ts:118`
+### Level 2: Processor-level benchmarks (mock context)
 
-Replaced `Array.from(Iterables.take(markerTrack.events.iterateFrom(p0), 2))` with direct
-`floorLastIndex` + `optAt` lookups. Zero allocations.
+Create a minimal `EngineContext` stub that provides just enough for processors to construct and run.
+This requires mocking: `boxGraph`, `boxAdapters`, `broadcaster`, `registerProcessor`, `tempoMap`.
 
----
+Test each processor category:
 
-## 2. Scriptable Device Processors: Pre-allocate and reduce per-block waste [DONE]
+**Audio effects** (AudioProcessor subclasses):
+- CompressorDeviceProcessor
+- CrusherDeviceProcessor
+- DattorroReverbDeviceProcessor
+- DelayDeviceProcessor
+- FoldDeviceProcessor
+- GateDeviceProcessor
+- MaximizerDeviceProcessor
+- RevampDeviceProcessor (EQ)
+- ReverbDeviceProcessor
+- StereoToolDeviceProcessor
+- TidalDeviceProcessor
 
-**Files:**
-- `packages/studio/core-processors/src/devices/audio-effects/WerkstattDeviceProcessor.ts`
-- `packages/studio/core-processors/src/devices/instruments/ApparatDeviceProcessor.ts`
-- `packages/studio/core-processors/src/devices/midi-effects/SpielwerkDeviceProcessor.ts`
+**Instruments** (process with note events):
+- TapeDeviceProcessor (sample playback)
+- VaporisateurDeviceProcessor (synth)
+- NanoDeviceProcessor
+- PlayfieldDeviceProcessor
 
-**Changes applied:**
-- **Werkstatt**: Reuse `#io` instance field instead of allocating `UserIO` per block.
-- **Apparat**: `parseUpdate()` regex replaced with cached `#pendingUpdate` set by code subscription.
-- **Spielwerk**: Reuse `#events` array (clear via `length = 0`) and `#userBlock` instance field.
-  Iterator uses index-based traversal instead of closure over `events[Symbol.iterator]()`.
-- **All three**: `parseUpdate()` regex replaced with cached `#pendingUpdate` set by code subscription.
-  No regex in the hot path.
+**Infrastructure** (always active):
+- ChannelStripProcessor
+- AuxSendProcessor
+- AudioBusProcessor
+- MonitoringMixProcessor
+- Metronome
+- BlockRenderer
+- UpdateClock
 
-**Not applied (deferred):**
-- `validateOutput` opt-in countdown — kept for safety; can revisit if profiling shows it matters.
-- Apparat `#pollSamples` debounce — reverted, async sample loading requires per-block polling.
+### Level 3: Full pipeline benchmark
 
----
+Construct a minimal audio graph (instrument → effect → channel strip → output bus) and measure
+the cost of rendering N quanta through the full `EngineProcessor.render()` path. This catches
+overhead in graph traversal, event dispatch, and phase notification.
 
-## 3. Maximizer: Reduce per-sample transcendental calls [DONE]
+## Test Structure
 
-**File:** `packages/studio/core-processors/src/devices/audio-effects/MaximizerDeviceProcessor.ts`
+```
+packages/studio/core-processors/src/perf/
+  PerfHarness.ts          — measurement utilities
+  dsp.perf.ts             — Level 1: DSP kernel benchmarks
+  processors.perf.ts      — Level 2: processor benchmarks (if context mocking is feasible)
+  pipeline.perf.ts        — Level 3: full pipeline (if context mocking is feasible)
+```
 
-Cached `dbToGain(MAGIC_HEADROOM - threshold)` as `#headroomGain`. Updated in `parameterChanged()`.
-Per-sample loop uses the cached value when the threshold ramp is not interpolating (steady state, 99.9%
-of the time). During the brief 10ms ramp, the per-sample computation is preserved for correctness.
+## Output Format
+
+Each test reports:
+```
+[Processor]        | per quantum (μs) | per sample (ns) | iterations
+CompressorDevice   |            12.3  |           96.1  |      10000
+DelayDevice        |             8.7  |           68.0  |      10000
+...
+```
+
+## Execution
+
+- `npx vitest run src/perf/` — run all perf tests
+- Tests use `performance.now()` (available in Node via `perf_hooks`)
+- Each test does 1000 warmup iterations before 10000 measured iterations
+- Results are printed to stdout; no assertions by default
+- Optional: store baseline in `perf-baseline.json`, fail if any processor exceeds 2x baseline
+
+## Implementation Order
+
+1. **PerfHarness** — measurement utilities, Block/ProcessInfo factories
+2. **DSP kernel benchmarks** — start with PitchVoice, FreeVerb, DelayDsp, SimpleLimiter
+3. **Processor benchmarks** — start with the processors that don't need complex context
+   (ChannelStripProcessor, AuxSendProcessor are simplest)
+4. **Full pipeline** — deferred until context mocking is feasible
+
+## Open Questions
+
+- How much of `EngineContext` can be stubbed without the full box graph? The processors subscribe
+  to box field changes during construction — a mock context may need to provide real box instances
+  for the device under test.
+- Should perf tests run in CI? They are timing-sensitive and may produce flaky results on shared
+  runners. Consider running them only locally or on dedicated hardware.
