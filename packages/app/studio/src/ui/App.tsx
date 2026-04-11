@@ -24,6 +24,7 @@ import {PrivacyPage} from "@/ui/pages/PrivacyPage"
 import {PreferencesPage} from "@/ui/pages/PreferencesPage"
 import {TestPage} from "@/ui/pages/TestPage"
 import {JoinRoomPage} from "@/ui/pages/JoinRoomPage"
+import {PerformancePage} from "@/ui/pages/PerformancePage"
 
 export const App = (service: StudioService) => {
     const terminator = new Terminator()
@@ -64,6 +65,7 @@ export const App = (service: StudioService) => {
                     {path: "/users", factory: () => { RouteLocation.get().navigateTo("/stats/users"); return <div/> }},
                     {path: "/open-bundle/*", factory: OpenBundlePage},
                     {path: "/test", factory: TestPage},
+                    {path: "/performance", factory: PerformancePage},
                     {path: "/join/*", factory: JoinRoomPage}
                 ]}
             />

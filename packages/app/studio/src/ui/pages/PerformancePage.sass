@@ -1,0 +1,66 @@
+component
+  flex: 1 0 0
+  display: flex
+  flex-direction: column
+  padding: 24px
+  gap: 16px
+  overflow-y: auto
+  h1
+    font-size: 18px
+    font-weight: 600
+  .controls
+    display: flex
+    gap: 8px
+    align-items: center
+  .status
+    opacity: 0.5
+    font-size: 12px
+  button
+    padding: 6px 16px
+    background: var(--surface-2)
+    border: 1px solid var(--border)
+    border-radius: 4px
+    color: var(--text)
+    cursor: pointer
+    font-size: 12px
+    &:hover
+      background: var(--surface-3)
+    &:disabled
+      opacity: 0.4
+      cursor: default
+  table
+    border-collapse: collapse
+    font-size: 12px
+    font-variant-numeric: tabular-nums
+    width: 100%
+    table-layout: auto
+    th, td
+      padding: 4px 12px
+      border-bottom: 1px solid var(--border)
+      white-space: nowrap
+    th
+      text-align: left
+      opacity: 0.5
+      font-weight: 400
+    tr.category td
+      font-weight: 600
+      padding-top: 12px
+      opacity: 0.6
+      border-bottom: none
+    tr.error td
+      opacity: 0.4
+    td.name
+      font-weight: 500
+    td.number
+      text-align: right
+      font-family: monospace
+    td.bar-cell
+      width: 100%
+      .bar
+        height: 14px
+        background: var(--accent, hsl(200, 83%, 55%))
+        border-radius: 2px
+        transition: width 0.2s ease
+    td.audio-cell
+      audio
+        height: 20px

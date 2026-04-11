@@ -2,131 +2,113 @@
 
 ## Goal
 
-Create a test suite that measures per-quantum CPU cost of the audio engine and all device processors
-in isolation. Tests run in vitest (no browser needed) and report microseconds per quantum. Results
-serve as a baseline — regressions are caught by comparing against stored thresholds.
+A `/performance` page that benchmarks every device processor using the real audio engine.
+Each device is tested in its own project, rendered via `OfflineEngineRenderer` (runs in a Worker).
+Results show per-device rendering cost with actual audio flowing through the pipeline.
 
 ## Approach
 
-The device processors all implement the `Processor` interface (`process(processInfo: ProcessInfo)`).
-Most extend `AudioProcessor` or `EventProcessor`. The key insight: their `processAudio(block)` /
-`processEvents(block, from, to)` methods operate on plain `Float32Array` buffers and `Block` structs
-with no dependency on `AudioWorkletProcessor` or Web Audio APIs. We can call them directly.
+For each device to benchmark:
+1. Create a project programmatically with a Tape instrument + sample (audio source)
+2. Add the device under test as an audio effect (or as the instrument for instrument devices)
+3. Add note/audio regions so audio is actually playing
+4. Render a fixed duration (e.g. 10 seconds) via `OfflineEngineRenderer`
+5. Measure total render time
+6. Compare against a baseline project (no effects) to get marginal device cost
 
-The test harness creates a mock `ProcessInfo` with a single block spanning one render quantum
-(128 samples), feeds silence or a test signal, and measures the wall-clock time of N iterations
-using `performance.now()`.
+### Project creation
 
-## Test Harness
+Use the scripting API (`ProjectImpl` + `ProjectConverter.toSkeleton`) for devices it supports.
+For device types not yet in the scripting API, use the box API directly:
+- `ProjectSkeleton.empty()` for the base
+- `AudioUnitFactory.create()` for audio units
+- `*DeviceBox.create(boxGraph, uuid, config)` for each device type
 
-**File:** `packages/studio/core-processors/src/perf/PerfHarness.ts`
+### Audio source for effects benchmarks
 
-```
-- createBlock(sampleRate): Block — returns a single-block ProcessInfo for one quantum
-- measureProcessor(processor, iterations): { totalMs, perQuantumUs, perSampleNs }
-- warmup(processor, count): void — run N quanta to trigger V8 JIT before measuring
-```
+Create a Tape instrument with a programmatic sample (sine wave or noise via `AudioData.create`).
+Add an audio region spanning the render duration so audio flows through the entire chain.
 
-Since device processors need an `EngineContext` and box adapters to construct, and mocking the full
-context is impractical, the tests will work at two levels:
+### Devices to benchmark
 
-### Level 1: DSP kernel benchmarks (no context needed)
+**Audio Effects:**
+- CompressorDeviceBox
+- CrusherDeviceBox
+- DattorroReverbDeviceBox
+- DelayDeviceBox
+- FoldDeviceBox
+- GateDeviceBox
+- MaximizerDeviceBox
+- RevampDeviceBox (EQ)
+- ReverbDeviceBox
+- StereoToolDeviceBox
+- TidalDeviceBox
+- WaveshaperDeviceBox
 
-Test the raw DSP functions that device processors call internally. These are pure functions operating
-on Float32Arrays with no framework dependency:
+**Instruments** (as the sound source itself):
+- VaporisateurDeviceBox (synth — needs note regions)
+- TapeDeviceBox (sample playback — needs audio region + sample)
+- PlayfieldDeviceBox (drum machine)
+- NanoDeviceBox (simple sampler)
+- SoundfontDeviceBox
 
-- `FreeVerb.process` — reverb convolution
-- `DattorroReverbDsp` — plate reverb
-- `DelayDeviceDsp` — delay line read/write
-- `SimpleLimiter.replace` — limiter
-- `FadingEnvelope.fillGainBuffer` — fading envelope
-- `Ramp.moveAndGet` (in a loop) — parameter smoothing
-- `PitchVoice.process` — sample playback with interpolation
-- `TimeStretchSequencer.process` — granular time stretch
-- `AudioAnalyser.process` — FFT analysis
-- `AudioBuffer.mixInto / replaceInto` — buffer operations
-
-### Level 2: Processor-level benchmarks (mock context)
-
-Create a minimal `EngineContext` stub that provides just enough for processors to construct and run.
-This requires mocking: `boxGraph`, `boxAdapters`, `broadcaster`, `registerProcessor`, `tempoMap`.
-
-Test each processor category:
-
-**Audio effects** (AudioProcessor subclasses):
-- CompressorDeviceProcessor
-- CrusherDeviceProcessor
-- DattorroReverbDeviceProcessor
-- DelayDeviceProcessor
-- FoldDeviceProcessor
-- GateDeviceProcessor
-- MaximizerDeviceProcessor
-- RevampDeviceProcessor (EQ)
-- ReverbDeviceProcessor
-- StereoToolDeviceProcessor
-- TidalDeviceProcessor
-
-**Instruments** (process with note events):
-- TapeDeviceProcessor (sample playback)
-- VaporisateurDeviceProcessor (synth)
-- NanoDeviceProcessor
-- PlayfieldDeviceProcessor
-
-**Infrastructure** (always active):
+**Infrastructure** (always present, measured via baseline):
 - ChannelStripProcessor
-- AuxSendProcessor
 - AudioBusProcessor
-- MonitoringMixProcessor
-- Metronome
-- BlockRenderer
-- UpdateClock
+- Mixer
 
-### Level 3: Full pipeline benchmark
+### Measurement
 
-Construct a minimal audio graph (instrument → effect → channel strip → output bus) and measure
-the cost of rendering N quanta through the full `EngineProcessor.render()` path. This catches
-overhead in graph traversal, event dispatch, and phase notification.
+The `OfflineEngineRenderer` renders inside a Worker using the real `EngineProcessor`.
+Timing is done around the `renderer.render()` call from the main thread. While this includes
+message-passing overhead, it's constant across all devices so the relative comparison is valid.
 
-## Test Structure
+For each device: `deviceTime = renderTime - baselineTime`
 
-```
-packages/studio/core-processors/src/perf/
-  PerfHarness.ts          — measurement utilities
-  dsp.perf.ts             — Level 1: DSP kernel benchmarks
-  processors.perf.ts      — Level 2: processor benchmarks (if context mocking is feasible)
-  pipeline.perf.ts        — Level 3: full pipeline (if context mocking is feasible)
-```
+## Files
 
-## Output Format
+### `packages/app/studio/src/perf/DeviceBenchmark.ts`
 
-Each test reports:
-```
-[Processor]        | per quantum (μs) | per sample (ns) | iterations
-CompressorDevice   |            12.3  |           96.1  |      10000
-DelayDevice        |             8.7  |           68.0  |      10000
-...
-```
+Creates test projects and runs them through `OfflineEngineRenderer`:
+- `createBaselineProject(service)` — Tape + sample, no effects
+- `createEffectProject(service, deviceType)` — Tape + sample + one effect
+- `runBenchmark(project, durationSeconds)` — renders and returns elapsed ms
 
-## Execution
+### `packages/app/studio/src/perf/benchmarks.ts`
 
-- `npx vitest run src/perf/` — run all perf tests
-- Tests use `performance.now()` (available in Node via `perf_hooks`)
-- Each test does 1000 warmup iterations before 10000 measured iterations
-- Results are printed to stdout; no assertions by default
-- Optional: store baseline in `perf-baseline.json`, fail if any processor exceeds 2x baseline
+Device registry: list of all devices to test with their box creation functions.
 
-## Implementation Order
+### `packages/app/studio/src/ui/pages/PerformancePage.tsx`
 
-1. **PerfHarness** — measurement utilities, Block/ProcessInfo factories
-2. **DSP kernel benchmarks** — start with PitchVoice, FreeVerb, DelayDsp, SimpleLimiter
-3. **Processor benchmarks** — start with the processors that don't need complex context
-   (ChannelStripProcessor, AuxSendProcessor are simplest)
-4. **Full pipeline** — deferred until context mocking is feasible
+Page at `/performance`. Shows:
+- "Run All" button
+- Progress indicator (which device is being tested)
+- Results table: Device | render time (ms) | marginal cost (ms) | cost per quantum (us) | bar
+- Sorted by cost, bar chart proportional to slowest
 
-## Open Questions
+### `packages/app/studio/src/ui/pages/PerformancePage.sass`
 
-- How much of `EngineContext` can be stubbed without the full box graph? The processors subscribe
-  to box field changes during construction — a mock context may need to provide real box instances
-  for the device under test.
-- Should perf tests run in CI? They are timing-sensitive and may produce flaky results on shared
-  runners. Consider running them only locally or on dedicated hardware.
+Styling for the results table and bars.
+
+### `packages/app/studio/src/ui/App.tsx` (modify)
+
+Add route: `{path: "/performance", factory: PerformancePage}`
+
+## Key dependencies
+
+- `OfflineEngineRenderer` from `@opendaw/studio-core` — already works in a Worker
+- `ProjectSkeleton`, `AudioUnitFactory` from `@opendaw/studio-adapters`
+- Device box types from `@opendaw/studio-boxes`
+- `Project` from `@opendaw/studio-core` — for creating renderable projects
+- `StudioService` — available via PageContext, provides ProjectEnv
+
+## Open questions
+
+- Should instruments be tested separately (with notes playing) or only as the audio source for
+  effect benchmarks?
+- The `OfflineEngineRenderer.create()` is async and involves worker setup per benchmark. Running
+  15+ benchmarks sequentially will take time. Is that acceptable, or should we batch devices into
+  fewer projects (e.g., one device per track in a single project)?
+- The render duration determines measurement accuracy vs. wall-clock wait time.
+  10 seconds of audio at 48kHz = 375,000 quanta. At ~50% CPU, rendering should take ~5 seconds
+  per device, so the full suite would take ~2-3 minutes.
