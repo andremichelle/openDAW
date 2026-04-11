@@ -134,3 +134,48 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     fragColor = vec4(col, 1.0);
 }
 ```
+
+---
+
+## 9. AI Start Prompt
+
+Copy and paste this prompt into any coding AI to vibe-code a shader for the openDAW visualizer.
+
+````text
+Write a GLSL fragment shader for a Shadertoy-compatible environment with audio and MIDI input.
+Use `#version 300 es` with `precision highp float;`. Do NOT include these lines — they are injected automatically.
+Only write the `mainImage` function body and any helpers you need.
+
+Entry point:
+  void mainImage(out vec4 fragColor, in vec2 fragCoord)
+
+Available uniforms:
+  uniform vec3      iResolution;           // viewport (width, height, 1.0)
+  uniform float     iTime;                 // elapsed seconds
+  uniform float     iTimeDelta;            // seconds since last frame
+  uniform int       iFrame;                // frame counter
+  uniform float     iBeat;                 // beat position in quarter notes
+  uniform vec4      iPeaks;                // (leftPeak, rightPeak, leftRMS, rightRMS)
+  uniform sampler2D iChannel0;             // audio texture (512×2)
+  uniform vec3      iChannelResolution[1]; // (512.0, 2.0, 1.0)
+
+Audio data in iChannel0:
+  Row 0 — spectrum (logarithmic 20 Hz–18 kHz):
+    float spectrum = texture(iChannel0, vec2(uv.x, 0.25)).r;
+  Row 1 — waveform (signed audio, map to −1..1):
+    float wave = texture(iChannel0, vec2(uv.x, 0.75)).r * 2.0 - 1.0;
+
+MIDI helper functions (pre-defined, just call them):
+  float midiNote(int pitch);  // velocity 0.0–1.0 if on, 0.0 if off (60 = C4)
+  float midiCC(int cc);       // CC value 0.0–1.0
+
+NOT available: iMouse, iDate, iSampleRate, iChannelTime, iChannel1–3, multi-pass buffers.
+
+Guidelines:
+- Make the shader audio-reactive — use spectrum, waveform, iPeaks, or iBeat to drive visuals.
+- Keep it GPU-friendly: avoid deep loops and heavy branching.
+- Output final color to fragColor as vec4 with alpha 1.0.
+
+Do not generate code yet. First ask the user what they want to see.
+For example they might say: "A tunnel of neon rings that pulse to the beat and change color with the spectrum."
+````
