@@ -5,7 +5,6 @@ import {
     Exec,
     int,
     isDefined,
-    Iterables,
     Nullable,
     Option,
     Procedure,
@@ -115,13 +114,15 @@ export class BlockRenderer implements Terminable {
 
                 // --- MARKER ---
                 if (markerTrack.enabled) {
-                    const markers = Array.from(Iterables.take(markerTrack.events.iterateFrom(p0), 2))
-                    if (markers.length > 0) {
-                        const [prev, next] = markers
+                    const floorIndex = markerTrack.events.floorLastIndex(p0)
+                    const startIndex = floorIndex < 0 ? 0 : floorIndex
+                    const prev = markerTrack.events.optAt(startIndex)
+                    if (isDefined(prev)) {
+                        const next = markerTrack.events.optAt(startIndex + 1)
                         // This branch happens if all markers are in the future
                         if (this.#currentMarker === null) {
                             if (prev.position >= p0 && prev.position < p1) {
-                                action = {type: "marker", prev, next}
+                                action = {type: "marker", prev, next: next!}
                                 actionPosition = prev.position
                             }
                         } else if (

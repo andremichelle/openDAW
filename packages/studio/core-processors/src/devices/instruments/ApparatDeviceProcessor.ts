@@ -57,6 +57,7 @@ export class ApparatDeviceProcessor extends AudioProcessor
 
     #userProcessor: Option<UserProcessor> = Option.None
     #currentUpdate: int = -1
+    #pendingUpdate: int = -1
     #silenced: boolean = false
     #enabled: boolean = true
 
@@ -80,6 +81,7 @@ export class ApparatDeviceProcessor extends AudioProcessor
                 const newUpdate = parseUpdate(owner.getValue())
                 if (newUpdate > 0 && newUpdate !== this.#currentUpdate) {
                     this.#silenced = true
+                    this.#pendingUpdate = newUpdate
                     this.#userProcessor = Option.None
                     this.#audioOutput.clear()
                     this.#tryLoad(newUpdate)
@@ -168,9 +170,8 @@ export class ApparatDeviceProcessor extends AudioProcessor
     processAudio(block: Block): void {
         if (!this.#enabled) {return}
         if (this.#silenced) {
-            const expectedUpdate = parseUpdate(this.#adapter.box.code.getValue())
-            if (expectedUpdate > 0 && expectedUpdate !== this.#currentUpdate) {
-                this.#tryLoad(expectedUpdate)
+            if (this.#pendingUpdate > 0 && this.#pendingUpdate !== this.#currentUpdate) {
+                this.#tryLoad(this.#pendingUpdate)
             }
             if (this.#silenced) {return}
         }
