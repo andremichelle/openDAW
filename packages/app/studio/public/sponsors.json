@@ -1,5 +1,76 @@
 {
-  "fetchedAt": null,
-  "totalCount": 0,
-  "sponsors": []
+  "fetchedAt": "2026-04-12T13:30:41.132Z",
+  "totalCount": 10,
+  "sponsors": [
+    {
+      "type": "User",
+      "login": "RobertAnthonyDevelopment",
+      "name": "Robert Anthony",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/156968669?u=a8765908da76fd2ac78ce9ab33b9298bb793a9da&v=4",
+      "url": "https://github.com/RobertAnthonyDevelopment"
+    },
+    {
+      "type": "User",
+      "login": "Chaosmeister",
+      "name": null,
+      "avatarUrl": "https://avatars.githubusercontent.com/u/13346344?u=cb5ecbcd3b45e0429cacf9a1b1d373eaf76ee4be&v=4",
+      "url": "https://github.com/Chaosmeister"
+    },
+    {
+      "type": "User",
+      "login": "thadguidry",
+      "name": "Thad Guidry",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/986438?u=0398b4be0a2459487b25a8303423992b9fc6474a&v=4",
+      "url": "https://github.com/thadguidry"
+    },
+    {
+      "type": "User",
+      "login": "andrasf",
+      "name": null,
+      "avatarUrl": "https://avatars.githubusercontent.com/u/288001?v=4",
+      "url": "https://github.com/andrasf"
+    },
+    {
+      "type": "User",
+      "login": "Noah-Silvera",
+      "name": "Noah Silvera",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/8933450?u=30e09922a2e61be01fb062aeae1206baa8da0dc2&v=4",
+      "url": "https://github.com/Noah-Silvera"
+    },
+    {
+      "type": "User",
+      "login": "polarity",
+      "name": "Robert Agthe",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/147424?u=cb07929c9c9c6be7650bf6532ef52e31206524a0&v=4",
+      "url": "https://github.com/polarity"
+    },
+    {
+      "type": "User",
+      "login": "mark-orion",
+      "name": "Mark Dammer",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/5022007?u=35d7fc5f652c7bff4d180fc7598f0eec070b4668&v=4",
+      "url": "https://github.com/mark-orion"
+    },
+    {
+      "type": "User",
+      "login": "shawnlukas",
+      "name": "Shawn Lukas",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/7964626?u=dba216ed40f9b105de67d29bb5b9fd4916f8eb15&v=4",
+      "url": "https://github.com/shawnlukas"
+    },
+    {
+      "type": "User",
+      "login": "xnstad",
+      "name": "Truls",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/43418907?u=4935f1d030d63cfd570baab59e657a4f0b4f6049&v=4",
+      "url": "https://github.com/xnstad"
+    },
+    {
+      "type": "User",
+      "login": "kaiartikkas",
+      "name": "kai",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/52412391?u=a5606a573f4ae1e306428fbce0dbf4a25dcf64c9&v=4",
+      "url": "https://github.com/kaiartikkas"
+    }
+  ]
 }
