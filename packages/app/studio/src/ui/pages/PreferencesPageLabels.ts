@@ -99,6 +99,12 @@ export namespace PreferencesPageLabels {
                 truncateNotesAtRegionEnd: "Stop notes at region end"
             }
         },
+        debug: {
+            label: "Debug",
+            fields: {
+                dspLoadMeasurement: "DSP load measurement"
+            }
+        },
         recording: {
             label: "Recording",
             fields: {

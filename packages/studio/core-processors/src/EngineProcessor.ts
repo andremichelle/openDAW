@@ -191,8 +191,10 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
             x.isPlaying = transporting
             x.isRecording = isRecording
             x.isCountingIn = isCountingIn
-            x.perfBuffer.set(this.#perfBuffer)
-            x.perfIndex = this.#perfWriteIndex
+            if (this.#preferences.settings.debug.dspLoadMeasurement) {
+                x.perfBuffer.set(this.#perfBuffer)
+                x.perfIndex = this.#perfWriteIndex
+            }
         })
         this.#liveStreamBroadcaster = this.#terminator.own(LiveStreamBroadcaster.create(this.#messenger, "engine-live-data"))
         this.#updateClock = new UpdateClock(this)
@@ -359,7 +361,8 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         if (!this.#valid) {return false}
         if (this.#panic) {return panic("Manual Panic")}
         this.#currentInput = inputs[0] ?? []
-        const elapsed = this.#hrClock.start()
+        const measureLoad = this.#preferences.settings.debug.dspLoadMeasurement
+        const elapsed = measureLoad ? this.#hrClock.start() : 0
         const metronomeEnabled = this.#timeInfo.metronomeEnabled
         this.#notifier.notify(ProcessPhase.Before)
         if (this.#processQueue.isEmpty()) {
@@ -390,9 +393,11 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         }
         this.#notifier.notify(ProcessPhase.After)
         this.#clipSequencing.changes().ifSome(changes => this.#engineToClient.notifyClipSequenceChanges(changes))
-        this.#hrClock.end()
-        this.#perfBuffer[this.#perfWriteIndex] = elapsed
-        this.#perfWriteIndex = (this.#perfWriteIndex + 1) % PERF_BUFFER_SIZE
+        if (measureLoad) {
+            this.#hrClock.end()
+            this.#perfBuffer[this.#perfWriteIndex] = elapsed
+            this.#perfWriteIndex = (this.#perfWriteIndex + 1) % PERF_BUFFER_SIZE
+        }
         this.#stateSender.tryWrite()
         this.#liveStreamBroadcaster.flush()
         return true

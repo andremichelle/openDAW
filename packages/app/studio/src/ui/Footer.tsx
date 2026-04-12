@@ -64,7 +64,10 @@ export const Footer = ({lifecycle, service}: Construct) => {
                             }, 1000))
                         }}>N/A</FooterItem>
             <FooterItem title="CPU Load" minWidth="4ch"
-                        onInit={({value}) => {
+                        onInit={({component, value}) => {
+                            lifecycle.own(engine.preferences.catchupAndSubscribe(enabled => {
+                                component.classList.toggle("hidden", !enabled)
+                            }, "debug", "dspLoadMeasurement"))
                             lifecycle.own(engine.cpuLoad.catchupAndSubscribe(owner => {
                                 const percent = Math.min(owner.getValue(), 100)
                                 value.textContent = `${percent}%`

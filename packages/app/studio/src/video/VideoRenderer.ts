@@ -123,6 +123,7 @@ export namespace VideoRenderer {
                 const actualSamplesToRender = quantumsNeeded * RenderQuantum
                 const channels = await renderer.step(actualSamplesToRender)
                 samplesRendered += actualSamplesToRender
+                project.liveStreamReceiver.dispatch()
                 if (duration === 0) {
                     let maxSample = 0
                     for (const channel of channels) {

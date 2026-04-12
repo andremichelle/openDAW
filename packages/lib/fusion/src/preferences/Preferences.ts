@@ -42,17 +42,27 @@ export namespace Preferences {
     }
 
     const loadFromStorage = <SETTINGS>(key: string, zod: z.ZodType<SETTINGS>): SETTINGS => {
-        if (!hasLocalStorage) {return zod.parse({})}
+        const defaults = zod.parse({})
+        if (!hasLocalStorage) {return defaults}
         const stored = localStorage.getItem(key)
-        if (isDefined(stored)) {
-            const {status, value} = tryCatch(() => JSON.parse(stored))
-            if (status === "success") {
-                const result = zod.safeParse(value)
-                if (result.success) {
-                    return result.data
-                }
+        if (!isDefined(stored)) {return defaults}
+        const {status, value} = tryCatch(() => JSON.parse(stored))
+        if (status !== "success" || typeof value !== "object" || value === null) {return defaults}
+        const result = zod.safeParse(value)
+        if (result.success) {return result.data}
+        // Full parse failed (schema changed). Parse each section independently to preserve valid user settings.
+        const merged: Record<string, unknown> = {}
+        for (const sectionKey of Object.keys(defaults as Record<string, unknown>)) {
+            const sectionSchema = (zod as z.ZodObject<any>).shape?.[sectionKey]
+            if (isDefined(sectionSchema) && isDefined((value as Record<string, unknown>)[sectionKey])) {
+                const sectionResult = sectionSchema.safeParse((value as Record<string, unknown>)[sectionKey])
+                merged[sectionKey] = sectionResult.success
+                    ? sectionResult.data
+                    : (defaults as Record<string, unknown>)[sectionKey]
+            } else {
+                merged[sectionKey] = (defaults as Record<string, unknown>)[sectionKey]
             }
         }
-        return zod.parse({})
+        return merged as SETTINGS
     }
 }
