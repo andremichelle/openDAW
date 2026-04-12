@@ -37,13 +37,20 @@ export abstract class WebCodecsVideoExporter implements VideoExporter {
             keyFrameInterval: 2
         })
         output.addVideoTrack(videoSource)
-        const audioSource = new AudioSampleSource({
-            codec: "opus",
-            bitrate: config.audioBitrate ?? 192_000
-        })
+        const audioBitrate = config.audioBitrate ?? 192_000
+        const audioCodec = await WebCodecsVideoExporter.#pickAudioCodec(config.sampleRate, config.numberOfChannels, audioBitrate)
+        const audioSource = new AudioSampleSource({codec: audioCodec, bitrate: audioBitrate})
         output.addAudioTrack(audioSource)
         await output.start()
         return {output, videoSource, audioSource, AudioSample, ctx}
+    }
+
+    static async #pickAudioCodec(sampleRate: number, numberOfChannels: number, bitrate: number): Promise<"aac" | "opus"> {
+        const aacSupported = await Promises.tryCatch(AudioEncoder.isConfigSupported({
+            codec: "mp4a.40.2", sampleRate, numberOfChannels, bitrate
+        }))
+        if (aacSupported.status === "resolved" && aacSupported.value.supported === true) {return "aac"}
+        return "opus"
     }
 
     readonly #config: VideoExportConfig
