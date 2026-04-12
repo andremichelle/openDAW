@@ -41,6 +41,7 @@ export abstract class WebCodecsVideoExporter implements VideoExporter {
         const audioCodec = await WebCodecsVideoExporter.#pickAudioCodec(config.sampleRate, config.numberOfChannels, audioBitrate)
         const audioSource = new AudioSampleSource({codec: audioCodec, bitrate: audioBitrate})
         output.addAudioTrack(audioSource)
+        console.debug(`VideoExport codecs → video: avc, audio: ${audioCodec}`)
         await output.start()
         return {output, videoSource, audioSource, AudioSample, ctx}
     }
