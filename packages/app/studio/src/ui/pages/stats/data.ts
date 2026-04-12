@@ -1,4 +1,4 @@
-import {isDefined} from "@opendaw/lib-std"
+import {Nullable, Option, isAbsent} from "@opendaw/lib-std"
 
 export type DailySeries = ReadonlyArray<readonly [date: string, value: number]>
 
@@ -12,7 +12,7 @@ export type GitHubStats = {
     forks: number
     watchers: number
     openIssues: number
-    latestRelease: string | undefined
+    lastCommit: number
 }
 
 export type DiscordStats = {
@@ -28,16 +28,22 @@ export type ErrorStats = {
     ratio: string
 }
 
+export type BuildInfo = {
+    date: number
+    uuid: string
+    env: string
+}
+
 export type Sponsor = {
     type: "User" | "Organization"
     login: string
-    name: string | null
+    name: Nullable<string>
     avatarUrl: string
     url: string
 }
 
 export type SponsorStats = {
-    fetchedAt: string | null
+    fetchedAt: Nullable<string>
     totalCount: number
     sponsors: ReadonlyArray<Sponsor>
 }
@@ -45,17 +51,18 @@ export type SponsorStats = {
 const sortByDate = (record: Record<string, number>): DailySeries =>
     Object.entries(record).sort(([a], [b]) => a.localeCompare(b))
 
-const cacheGet = <T>(key: string, ttlMs: number): T | undefined => {
+const cacheGet = <T>(key: string, ttlMs: number): Option<T> => {
     const raw = sessionStorage.getItem(key)
-    if (!isDefined(raw)) return undefined
+    if (isAbsent(raw)) return Option.None
     const parsed = JSON.parse(raw) as { at: number, value: T }
-    if (Date.now() - parsed.at > ttlMs) return undefined
-    return parsed.value
+    if (Date.now() - parsed.at > ttlMs) return Option.None
+    return Option.wrap(parsed.value)
 }
 
-const cacheSet = <T>(key: string, value: T): void => {
-    sessionStorage.setItem(key, JSON.stringify({at: Date.now(), value}))
-}
+const cacheSet = <T>(key: string, value: T): void => sessionStorage.setItem(key, JSON.stringify({
+    at: Date.now(),
+    value
+}))
 
 const fetchJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
     const response = await fetch(url, init)
@@ -80,29 +87,26 @@ export const fetchUserStats = async (): Promise<DailySeries> => {
 }
 
 const GITHUB_REPO = "andremichelle/openDAW"
-const GITHUB_CACHE_KEY = "stats:github"
+const GITHUB_CACHE_KEY = "stats:github:v2"
 const GITHUB_TTL = 10 * 60 * 1000
 
 export const fetchGitHubStats = async (): Promise<GitHubStats> => {
     const cached = cacheGet<GitHubStats>(GITHUB_CACHE_KEY, GITHUB_TTL)
-    if (isDefined(cached)) return cached
+    if (cached.nonEmpty()) return cached.unwrap()
     type RepoResponse = {
         stargazers_count: number
         forks_count: number
         subscribers_count: number
         open_issues_count: number
+        pushed_at: string
     }
-    type ReleaseResponse = { tag_name: string }
-    const [repo, release] = await Promise.all([
-        fetchJson<RepoResponse>(`https://api.github.com/repos/${GITHUB_REPO}`),
-        fetchJson<ReleaseResponse>(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`).catch(() => undefined)
-    ])
+    const repo = await fetchJson<RepoResponse>(`https://api.github.com/repos/${GITHUB_REPO}`)
     const stats: GitHubStats = {
         stars: repo.stargazers_count,
         forks: repo.forks_count,
         watchers: repo.subscribers_count,
         openIssues: repo.open_issues_count,
-        latestRelease: release?.tag_name
+        lastCommit: new Date(repo.pushed_at).getTime()
     }
     cacheSet(GITHUB_CACHE_KEY, stats)
     return stats
@@ -114,7 +118,7 @@ const DISCORD_TTL = 5 * 60 * 1000
 
 export const fetchDiscordStats = async (): Promise<DiscordStats> => {
     const cached = cacheGet<DiscordStats>(DISCORD_CACHE_KEY, DISCORD_TTL)
-    if (isDefined(cached)) return cached
+    if (cached.nonEmpty()) return cached.unwrap()
     type InviteResponse = {
         approximate_member_count: number
         approximate_presence_count: number
@@ -134,12 +138,49 @@ export const fetchDiscordStats = async (): Promise<DiscordStats> => {
 export const fetchSponsorStats = async (): Promise<SponsorStats> =>
     fetchJson<SponsorStats>("/sponsors.json")
 
+export const fetchBuildInfo = async (): Promise<BuildInfo> =>
+    fetchJson<BuildInfo>("/build-info.json")
+
+export const formatRelativeDate = (timestamp: number): string => {
+    const diff = Date.now() - timestamp
+    const days = Math.floor(diff / (24 * 60 * 60 * 1000))
+    if (days === 0) return "today"
+    if (days === 1) return "1 day ago"
+    if (days < 30) return `${days} days ago`
+    const months = Math.floor(days / 30)
+    if (months === 1) return "1 month ago"
+    return `${months} months ago`
+}
+
+const NPM_CACHE_KEY = "stats:npm"
+const NPM_TTL = 60 * 60 * 1000
+
+export const fetchNpmWeeklyDownloads = async (packageName: string): Promise<number> => {
+    const key = `${NPM_CACHE_KEY}:${packageName}`
+    const cached = cacheGet<number>(key, NPM_TTL)
+    if (cached.nonEmpty()) return cached.unwrap()
+    type NpmResponse = { downloads: number }
+    const data = await fetchJson<NpmResponse>(
+        `https://api.npmjs.org/downloads/point/last-week/${packageName}`)
+    cacheSet(key, data.downloads)
+    return data.downloads
+}
+
+export const bestColumnCount = (totalCells: number): number => {
+    if (totalCells <= 1) return 1
+    let bestCols = totalCells
+    for (let rows = 1; rows * rows <= totalCells; rows++) {
+        if (totalCells % rows === 0) bestCols = totalCells / rows
+    }
+    return bestCols
+}
+
 const ERROR_CACHE_KEY = "stats:errors"
 const ERROR_TTL = 5 * 60 * 1000
 
 export const fetchErrorStats = async (): Promise<ErrorStats> => {
     const cached = cacheGet<ErrorStats>(ERROR_CACHE_KEY, ERROR_TTL)
-    if (isDefined(cached)) return cached
+    if (cached.nonEmpty()) return cached.unwrap()
     type StatusResponse = { Total: number, Fixed: number, Unfixed: number, Ratio: string }
     const data = await fetchJson<StatusResponse>("https://logs.opendaw.studio/status.php")
     const stats: ErrorStats = {

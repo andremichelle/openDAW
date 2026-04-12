@@ -16,6 +16,8 @@ export const Tile = ({label, value, icon}: TileProps) => (
             <div className="tile-label">{label}</div>
             <div className="tile-value">{value}</div>
         </div>
-        <div className="tile-icon">{icon}</div>
+        <div className="tile-icon">
+            <span className="tile-icon-glyph">{icon}</span>
+        </div>
     </div>
 )

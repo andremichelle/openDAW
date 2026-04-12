@@ -1,51 +1,57 @@
 @use "@/colors"
 
-$accent-gradient: linear-gradient(135deg, rgba(black, 0.4), rgba(white, 0.1))
+$accent-gradient: linear-gradient(0, rgba(white, 0.13), rgba(black, 0.1))
 
 component
+  font-size: 1rem
   display: flex
   align-items: center
   justify-content: space-between
-  gap: 1.5rem
-  background-color: var(--color-panel-background-bright)
-  border-radius: 1rem
-  padding: 1.7rem 2rem
-  border: 1px solid rgba(white, 0.04)
-  min-height: 10rem
+  gap: 1em
+  background: linear-gradient(0deg, rgba(white, 0.02), rgba(white, 0.10))
+  box-shadow: inset 0 1px 1px 0 rgba(white, 0.1)
+  border-radius: 0.75em
+  padding: 1em
+  min-width: 0
   overflow: hidden
 
   .tile-text
     display: flex
     flex-direction: column
-    gap: 0.4rem
+    gap: 0.25em
     min-width: 0
 
     .tile-label
       color: var(--color-shadow)
-      font-size: 1.3rem
+      font-size: 0.625em
       text-transform: uppercase
-      letter-spacing: 0.06em
+      letter-spacing: 0.05em
       white-space: nowrap
       overflow: hidden
       text-overflow: ellipsis
 
     .tile-value
       color: var(--color-cream)
-      font-size: 2.8rem
+      font-size: 1.5em
       font-weight: 700
       font-variant-numeric: tabular-nums
       white-space: nowrap
+      overflow: hidden
+      text-overflow: ellipsis
       line-height: 1.1
 
   .tile-icon
     flex-shrink: 0
-    width: 4rem
-    height: 4rem
-    border-radius: 1rem
+    width: 3em
+    height: 3em
+    border-radius: 0.75em
     background: $accent-gradient
     display: flex
     align-items: center
     justify-content: center
     color: var(--color-cream)
     font-weight: 700
-    font-size: 1.9rem
+    box-shadow: 0 0 8px 0 rgba(black, 0.2), 0 0 1px 1px rgba(white, 0.1)
+
+    .tile-icon-glyph
+      font-size: 1.45em

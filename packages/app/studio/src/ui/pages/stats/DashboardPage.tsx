@@ -9,23 +9,31 @@ import {BarChart, LineChart} from "./charts"
 import {Card, RangeControl} from "./components"
 import {Tile} from "./Tile"
 import {
+    BuildInfo,
     DailySeries,
     DiscordStats,
     ErrorStats,
     GitHubStats,
     RoomStats,
     SponsorStats,
+    fetchBuildInfo,
     fetchDiscordStats,
     fetchErrorStats,
     fetchGitHubStats,
+    fetchNpmWeeklyDownloads,
     fetchRoomStats,
     fetchSponsorStats,
     fetchUserStats,
+    formatHours,
     formatNumber,
-    minutesToHours
+    formatRelativeDate,
+    minutesToHours,
+    sumValues
 } from "./data"
 
 const className = Html.adoptStyleSheet(css, "DashboardPage")
+
+const NPM_PACKAGE = "@opendaw/lib-std"
 
 type DashboardData = {
     rooms: RoomStats
@@ -33,7 +41,7 @@ type DashboardData = {
 }
 
 type LiveTiles = {
-    peakUsers: HTMLDivElement
+    peakUsers: HTMLSpanElement
 }
 
 const sliceSeries = (series: DailySeries, fromDate: string, toDate: string): DailySeries =>
@@ -75,26 +83,24 @@ const StatsBody = ({lifecycle, data, tiles}: StatsBodyProps) => {
         tiles.peakUsers.textContent = formatNumber(Math.max(0, ...peakUsers.map(([, value]) => value)))
     }))
     return (
-        <Frag>
-            <div className="grid">
-                <div className="span-12">
-                    <Card title="Daily Peak Users" accent={<span>concurrent</span>} className="hero">
-                        <LineChart lifecycle={lifecycle} series={peakUsersSeries} color={Colors.green.toString()}/>
-                        <RangeControl lifecycle={lifecycle} dates={dates} range={range}/>
-                    </Card>
-                </div>
-                <div className="span-6">
-                    <Card title="Daily Live Rooms" accent={<span>rooms per day</span>} className="compact">
-                        <LineChart lifecycle={lifecycle} series={liveRoomsSeries} color={Colors.purple.toString()}/>
-                    </Card>
-                </div>
-                <div className="span-6">
-                    <Card title="Daily Live Rooms Hours" accent={<span>hours per day</span>} className="compact">
-                        <BarChart lifecycle={lifecycle} series={liveHoursSeries} color={Colors.blue.toString()}/>
-                    </Card>
-                </div>
+        <div className="grid">
+            <div className="span-12">
+                <Card title="Daily Peak Users" accent={<span>concurrent</span>} className="hero">
+                    <LineChart lifecycle={lifecycle} series={peakUsersSeries} color={Colors.green.toString()}/>
+                    <RangeControl lifecycle={lifecycle} dates={dates} range={range}/>
+                </Card>
             </div>
-        </Frag>
+            <div className="span-6">
+                <Card title="Daily Live Rooms" accent={<span>rooms per day</span>} className="compact">
+                    <LineChart lifecycle={lifecycle} series={liveRoomsSeries} color={Colors.purple.toString()}/>
+                </Card>
+            </div>
+            <div className="span-6">
+                <Card title="Daily Live Rooms Hours" accent={<span>hours per day</span>} className="compact">
+                    <BarChart lifecycle={lifecycle} series={liveHoursSeries} color={Colors.blue.toString()}/>
+                </Card>
+            </div>
+        </div>
     )
 }
 
@@ -102,6 +108,9 @@ const GitHubTiles = ({stats}: { stats: GitHubStats }) => (
     <Frag>
         <Tile label="GitHub stars" value={formatNumber(stats.stars)} icon="★"/>
         <Tile label="GitHub forks" value={formatNumber(stats.forks)} icon="⑂"/>
+        <Tile label="GitHub watchers" value={formatNumber(stats.watchers)} icon="◉"/>
+        <Tile label="GitHub Open issues" value={formatNumber(stats.openIssues)} icon="◈"/>
+        <Tile label="GitHub Last commit" value={formatRelativeDate(stats.lastCommit)} icon="↗"/>
     </Frag>
 )
 
@@ -112,9 +121,33 @@ const DiscordTiles = ({stats}: { stats: DiscordStats }) => (
     </Frag>
 )
 
-const ErrorTiles = ({stats}: { stats: ErrorStats }) => (
+const ErrorTile = ({stats}: { stats: ErrorStats }) => (
     <Tile label="Errors fixed" value={stats.ratio} icon="✓"/>
 )
+
+const NpmTile = ({downloads}: { downloads: number }) => (
+    <Tile label="NPM weekly" value={formatNumber(downloads)} icon="⤓"/>
+)
+
+const BuildTile = ({info}: { info: BuildInfo }) => (
+    <Tile label="Last build" value={formatRelativeDate(info.date)} icon="⚙"/>
+)
+
+const AllTimeTiles = ({data}: { data: DashboardData }) => {
+    const totalRooms = sumValues(data.rooms.count)
+    const totalMinutes = sumValues(data.rooms.duration)
+    const totalHours = totalMinutes / 60
+    const allTimePeak = Math.max(0, ...data.users.map(([, value]) => value))
+    const avgSession = totalRooms === 0 ? 0 : totalMinutes / totalRooms
+    return (
+        <Frag>
+            <Tile label="Rooms Total Create" value={formatNumber(totalRooms)} icon="∑"/>
+            <Tile label="Rooms Total Hours" value={formatHours(totalHours)} icon="⏱"/>
+            <Tile label="Total Users" value={formatNumber(allTimePeak)} icon="↑"/>
+            <Tile label="Avg session" value={formatHours(avgSession / 60)} icon="x̄"/>
+        </Frag>
+    )
+}
 
 const SponsorsCard = ({stats}: { stats: SponsorStats }) => {
     const grid: HTMLDivElement = <div className="sponsors"/>
@@ -135,14 +168,27 @@ const SponsorsCard = ({stats}: { stats: SponsorStats }) => {
 export const DashboardPage: PageFactory<StudioService> = ({lifecycle}: PageContext<StudioService>) => {
     const updatedAt = new Date().toLocaleString()
     const tiles: LiveTiles = {
-        peakUsers: <div className="tile-value"/>
+        peakUsers: <span/>
     }
+    const dataPromise: Promise<DashboardData> = (async () => {
+        const [rooms, users] = await Promise.all([
+            fetchRoomStats(),
+            fetchUserStats().catch(() => [] as DailySeries)
+        ])
+        return {rooms, users}
+    })()
     return (
         <div className={className}>
             <header className="dashboard-head">
                 <h1>openDAW Statistics</h1>
                 <span className="updated">Updated {updatedAt}</span>
             </header>
+            <Await
+                factory={() => fetchSponsorStats()}
+                loading={() => null}
+                failure={() => null}
+                success={(stats: SponsorStats) => stats.totalCount > 0 ? <SponsorsCard stats={stats}/> : null}
+            />
             <div className="tiles">
                 <Await
                     factory={() => fetchGitHubStats()}
@@ -160,24 +206,30 @@ export const DashboardPage: PageFactory<StudioService> = ({lifecycle}: PageConte
                     factory={() => fetchErrorStats()}
                     loading={() => <Tile label="Errors" value="…" icon="!"/>}
                     failure={() => <Tile label="Errors" value="n/a" icon="!"/>}
-                    success={(stats: ErrorStats) => <ErrorTiles stats={stats}/>}
+                    success={(stats: ErrorStats) => <ErrorTile stats={stats}/>}
+                />
+                <Await
+                    factory={() => fetchNpmWeeklyDownloads(NPM_PACKAGE)}
+                    loading={() => <Tile label="NPM weekly" value="…" icon="⤓"/>}
+                    failure={() => <Tile label="NPM weekly" value="n/a" icon="⤓"/>}
+                    success={(downloads: number) => <NpmTile downloads={downloads}/>}
+                />
+                <Await
+                    factory={() => fetchBuildInfo()}
+                    loading={() => <Tile label="Last build" value="…" icon="⚙"/>}
+                    failure={() => <Tile label="Last build" value="n/a" icon="⚙"/>}
+                    success={(info: BuildInfo) => <BuildTile info={info}/>}
+                />
+                <Await
+                    factory={() => dataPromise}
+                    loading={() => <Tile label="All-time" value="…" icon="∑"/>}
+                    failure={() => <Tile label="All-time" value="n/a" icon="∑"/>}
+                    success={(data: DashboardData) => <AllTimeTiles data={data}/>}
                 />
                 <Tile label="Peak users (range)" value={tiles.peakUsers} icon="U"/>
             </div>
             <Await
-                factory={() => fetchSponsorStats()}
-                loading={() => null}
-                failure={() => null}
-                success={(stats: SponsorStats) => stats.totalCount > 0 ? <SponsorsCard stats={stats}/> : null}
-            />
-            <Await
-                factory={async (): Promise<DashboardData> => {
-                    const [rooms, users] = await Promise.all([
-                        fetchRoomStats(),
-                        fetchUserStats().catch(() => [] as DailySeries)
-                    ])
-                    return {rooms, users}
-                }}
+                factory={() => dataPromise}
                 loading={() => <ThreeDots/>}
                 failure={({reason}) => <p className="error">Failed to load stats: {reason}</p>}
                 success={(data: DashboardData) => <StatsBody lifecycle={lifecycle} data={data} tiles={tiles}/>}
