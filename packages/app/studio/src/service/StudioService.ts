@@ -315,17 +315,22 @@ export class StudioService implements ProjectEnv {
             this.#projectProfileService.setValue(Option.wrap(
                 new ProjectProfile(UUID.generate(), Project.new(this), ProjectMeta.init("Untitled"), Option.None)))
         }
-        const {editing, boxGraph} = this.project
-        let dialog = RuntimeNotifier.progress({headline: "Importing Stems..."})
+        const {editing, boxGraph, api} = this.project
+        let aborted = false
+        const onCancel = () => {aborted = true}
+        let dialog = RuntimeNotifier.progress({headline: "Importing Stems...", cancel: onCancel})
         for (let index = 0; index < audioEntries.length; index++) {
+            if (aborted) {break}
             const [path, file] = audioEntries[index]
             const name = path.substring(path.lastIndexOf("/") + 1).replace(/\.wav$/i, "")
             dialog.message = `Importing ${name} (${index + 1}/${audioEntries.length})`
             const arrayBuffer = await file.async("arraybuffer").then(buffer => buffer.slice(0))
+            if (aborted) {break}
             const {status, value: sample, error} = await Promises.tryCatch(this.#sampleService.importFile({
                 name,
                 arrayBuffer
             }))
+            if (aborted) {break}
             if (status === "rejected") {
                 console.warn(`Failed to import '${name}'`, error)
                 dialog.terminate()
@@ -336,13 +341,14 @@ export class StudioService implements ProjectEnv {
                     cancelText: "Cancel Import"
                 })
                 if (!skip) {break}
-                dialog = RuntimeNotifier.progress({headline: "Importing Stems..."})
+                dialog = RuntimeNotifier.progress({headline: "Importing Stems...", cancel: onCancel})
                 continue
             }
             const uuid = UUID.parse(sample.uuid)
             await Promises.tryCatch(this.sampleManager.getAudioData(uuid))
+            if (aborted) {break}
             editing.modify(() => {
-                const {trackBox, instrumentBox} = this.project.api.createInstrument(InstrumentFactories.Tape)
+                const {trackBox, instrumentBox} = api.createInstrument(InstrumentFactories.Tape)
                 instrumentBox.label.setValue(name)
                 const audioFileBox = boxGraph.findBox<AudioFileBox>(uuid)
                     .unwrapOrElse(() => AudioFileBox.create(boxGraph, uuid, box => {

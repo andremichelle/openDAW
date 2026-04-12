@@ -51,48 +51,60 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
         const optDrop = this.canDrop(event, data)
         if (optDrop.isEmpty()) {return}
         const drop = optDrop.unwrap()
-        const {boxAdapters, boxGraph, editing} = this.project
+        const project = this.project
+        const {boxAdapters, boxGraph, editing, api} = project
+        let aborted = false
+        const subscription = this.#service.projectProfileService.subscribe(() => {aborted = true})
         let sample: Sample
         if (data.type === "sample") {
             sample = data.sample
         } else if (data.type === "file") {
             const file = data.file
-            if (!isDefined(file)) {return}
+            if (!isDefined(file)) {subscription.terminate(); return}
             const {status, value, error} = await Promises.tryCatch(file.arrayBuffer()
                 .then(arrayBuffer => this.#service.sampleService.importFile({name: file.name, arrayBuffer})))
+            if (aborted) {subscription.terminate(); return}
             if (status === "rejected") {
                 console.warn(error)
+                subscription.terminate()
                 return
             }
-            this.project.trackUserCreatedSample(UUID.parse(value.uuid))
+            project.trackUserCreatedSample(UUID.parse(value.uuid))
             sample = value
         } else if (data.type === "instrument") {
-            editing.modify(() => this.project.api.createAnyInstrument(InstrumentFactories[data.device]))
+            subscription.terminate()
+            editing.modify(() => api.createAnyInstrument(InstrumentFactories[data.device]))
             return
         } else {
+            subscription.terminate()
             return
         }
         const {uuid: uuidAsString, name} = sample
         const uuid = UUID.parse(uuidAsString)
         const audioDataResult = await Promises.tryCatch(this.#service.sampleManager.getAudioData(uuid))
+        if (aborted) {subscription.terminate(); return}
         if (audioDataResult.status === "rejected") {
             console.warn("Failed to load sample:", audioDataResult.error)
+            subscription.terminate()
             await RuntimeNotifier.info({headline: "Sample Error", message: `Failed to load sample '${name}'.`})
             return
         }
         const audioFileBoxResult = await Promises.tryCatch(AudioFileBoxFactory
             .createModifier(Workers.Transients, boxGraph, audioDataResult.value, uuid, name))
+        if (aborted) {subscription.terminate(); return}
         if (audioFileBoxResult.status === "rejected") {
             console.warn("Failed to create audio file:", audioFileBoxResult.error)
+            subscription.terminate()
             await RuntimeNotifier.info({headline: "Sample Error", message: `Failed to process sample '${name}'.`})
             return
         }
+        subscription.terminate()
         const audioFileBoxFactory = audioFileBoxResult.value
         editing.modify(() => {
             let trackBoxAdapter: TrackBoxAdapter
             if (drop === "instrument") {
                 trackBoxAdapter = boxAdapters
-                    .adapterFor(this.project.api.createInstrument(InstrumentFactories.Tape).trackBox, TrackBoxAdapter)
+                    .adapterFor(api.createInstrument(InstrumentFactories.Tape).trackBox, TrackBoxAdapter)
             } else if (drop?.type === "track") {
                 trackBoxAdapter = drop.track.trackBoxAdapter
             } else if (drop?.type === "clip") {
