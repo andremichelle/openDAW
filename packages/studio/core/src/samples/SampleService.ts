@@ -71,7 +71,7 @@ export class SampleService extends AssetService<Sample, AudioData> {
         if (wavResult.status === "success") {return wavResult.value}
         console.debug("decoding with web-api-api (fallback)")
         const {status, value: audioBuffer} = await Promises.tryCatch(this.audioContext.decodeAudioData(arrayBuffer))
-        if (status === "rejected") {return Promise.reject()}
+        if (status === "rejected") {return Promise.reject(new Error("Could not decode audio file"))}
         const audioData = AudioData.create(audioBuffer.sampleRate, audioBuffer.length, audioBuffer.numberOfChannels)
         for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
             audioData.frames[channel].set(audioBuffer.getChannelData(channel))
