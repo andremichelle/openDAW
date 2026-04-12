@@ -11,6 +11,7 @@ import {
     Subscription,
     Terminable,
     Terminator,
+    tryCatch,
     UUID
 } from "@opendaw/lib-std"
 import {ArrayField, BoxGraph, Field, ObjectField, PointerField, PrimitiveField, Update} from "@opendaw/lib-box"
@@ -103,35 +104,39 @@ export class YSync<T> implements Terminable {
             console.debug(`got ${events.length} ${local ? "local" : "external"} updates from '${originLabel}', isHistoryReplay: ${isHistoryReplay}, isOwnOrigin: ${isOwnOrigin}`)
             if (isOwnOrigin || (local && !isHistoryReplay)) {return}
             this.#boxGraph.beginTransaction()
-            for (const event of events) {
-                const path = this.#normalizePath(event.path)
-                const keys = event.changes.keys
-                for (const [key, change] of keys.entries()) {
-                    if (YSync.debugging) {
-                        console.debug(`${change.action} on ${path}:${key}`)
-                    }
-                    if (change.action === "add") {
-                        assert(path.length === 0, "'Add' cannot have a path")
-                        this.#createBox(key)
-                    } else if (change.action === "update") {
-                        if (path.length === 0) {continue}
-                        assert(path.length >= 2, "Invalid path: must have at least 2 elements (uuid, 'fields').")
-                        this.#updateValue(path, key)
-                    } else if (change.action === "delete") {
-                        assert(path.length === 0, "'Delete' cannot have a path")
-                        this.#deleteBox(key)
+            const result = tryCatch(() => {
+                for (const event of events) {
+                    const path = this.#normalizePath(event.path)
+                    const keys = event.changes.keys
+                    for (const [key, change] of keys.entries()) {
+                        if (YSync.debugging) {
+                            console.debug(`${change.action} on ${path}:${key}`)
+                        }
+                        if (change.action === "add") {
+                            assert(path.length === 0, "'Add' cannot have a path")
+                            this.#createBox(key)
+                        } else if (change.action === "update") {
+                            if (path.length === 0) {continue}
+                            assert(path.length >= 2, "Invalid path: must have at least 2 elements (uuid, 'fields').")
+                            this.#updateValue(path, key)
+                        } else if (change.action === "delete") {
+                            assert(path.length === 0, "'Delete' cannot have a path")
+                            this.#deleteBox(key)
+                        }
                     }
                 }
-            }
-            try {
                 this.#ignoreUpdates = true
                 this.#boxGraph.endTransaction()
                 this.#ignoreUpdates = false
-                // TODO Only in DEV-MODE
-                //  this.#boxGraph.verifyPointers()
-            } catch (reason) {
-                this.terminate()
-                return panic(reason)
+            })
+            if (result.status === "failure") {
+                this.#ignoreUpdates = false
+                if (this.#boxGraph.inTransaction()) {
+                    this.#boxGraph.abortTransaction()
+                }
+                console.warn(`[YSync] Transaction rejected, rolling back:`, result.error)
+                this.#rollbackTransaction(events)
+                return
             }
             const highLevelConflict = this.#conflict.mapOr(check => check(), false)
             if (highLevelConflict) {
@@ -166,12 +171,9 @@ export class YSync<T> implements Terminable {
     }
 
     #updateValue(path: ReadonlyArray<string | number>, key: string): void {
-        const vertexOption = this.#boxGraph.findVertex(YMapper.pathToAddress(path, key))
-        if (vertexOption.isEmpty()) {
-            console.debug(`Vertex at '${path}' does not exist. Ignoring.`)
-            return
-        }
-        const vertex = vertexOption.unwrap("Could not find field")
+        const address = YMapper.pathToAddress(path, key)
+        const vertex = this.#boxGraph.findVertex(address)
+            .unwrap(`Vertex at '${address.toString()}' does not exist.`)
         const [uuidAsString, fieldsKey, ...fieldKeys] = path
         const targetMap = YMapper.findMap((this.#boxes
             .get(String(uuidAsString)) as Y.Map<unknown>)
@@ -187,16 +189,11 @@ export class YSync<T> implements Terminable {
     }
 
     #deleteBox(key: string): void {
-        const optBox = this.#boxGraph.findBox(UUID.parse(key))
-        if (optBox.isEmpty()) {
-            console.debug(`Box '${key}' has already been deleted. Ignoring.`)
-        } else {
-            const box = optBox.unwrap()
-            // It is possible that Yjs have swallowed the pointer releases since they were 'inside' the box.
-            box.outgoingEdges().forEach(([pointer]) => pointer.defer())
-            box.incomingEdges().forEach(pointer => pointer.defer())
-            this.#boxGraph.unstageBox(box)
-        }
+        const box = this.#boxGraph.findBox(UUID.parse(key))
+            .unwrap(`Box '${key}' does not exist.`)
+        box.outgoingEdges().forEach(([pointer]) => pointer.defer())
+        box.incomingEdges().forEach(pointer => pointer.defer())
+        this.#boxGraph.unstageBox(box)
     }
 
     #rollbackTransaction(events: ReadonlyArray<Y.YEvent<any>>): void {
@@ -230,8 +227,8 @@ export class YSync<T> implements Terminable {
         return Terminable.many(
             this.#boxGraph.subscribeTransaction({
                 onBeginTransaction: EmptyExec,
-                onEndTransaction: () => {
-                    if (this.#ignoreUpdates) {
+                onEndTransaction: (rolledBack) => {
+                    if (this.#ignoreUpdates || rolledBack) {
                         this.#updates.length = 0
                         return
                     }

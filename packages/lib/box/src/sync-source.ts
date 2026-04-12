@@ -34,7 +34,11 @@ export class SyncSource<M> implements Terminable {
 
         this.#terminator.own(graph.subscribeTransaction({
             onBeginTransaction: EmptyExec,
-            onEndTransaction: () => {
+            onEndTransaction: (rolledBack) => {
+                if (rolledBack) {
+                    Arrays.clear(updates)
+                    return
+                }
                 this.#caller.sendUpdates(updates)
                 if (SyncSource.DEBUG_CHECKSUM) {
                     this.#caller.checksum(graph.checksum()).then(EmptyExec, (reason) => panic(reason))

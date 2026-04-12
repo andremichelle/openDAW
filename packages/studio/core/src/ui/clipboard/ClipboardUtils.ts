@@ -51,7 +51,7 @@ export namespace ClipboardUtils {
         const graphData = new Int8Array(graphDataLength)
         input.readBytes(graphData)
         const clipboardGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
-        clipboardGraph.fromArrayBuffer(graphData.buffer)
+        clipboardGraph.fromArrayBuffer(graphData.buffer, false)
         const skippedExternalUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
         clipboardGraph.boxes().forEach(box => {
             if (box.resource === "preserved" && targetGraph.findBox(box.address.uuid).nonEmpty()) {

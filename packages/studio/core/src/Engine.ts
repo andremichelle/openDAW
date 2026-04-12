@@ -26,7 +26,7 @@ export interface Engine extends Terminable {
     scheduleClipStop(trackIds: ReadonlyArray<UUID.Bytes>): void
     subscribeClipNotification(observer: Observer<ClipNotification>): Subscription
     subscribeDeviceMessage(uuid: string, listener: Procedure<string>): Subscription
-    registerMonitoringSource(uuid: UUID.Bytes, node: AudioNode, numChannels: 1 | 2): void
+    registerMonitoringSource(uuid: UUID.Bytes, node: AudioNode, numChannels: 1 | 2, destinationNode: AudioNode): void
     unregisterMonitoringSource(uuid: UUID.Bytes): void
 
     get position(): ObservableValue<ppqn>

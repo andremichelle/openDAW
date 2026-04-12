@@ -1,5 +1,5 @@
 import {isDefined, Terminator} from "@opendaw/lib-std"
-import {createElement, Frag, RouteLocation, Router} from "@opendaw/lib-jsx"
+import {createElement, Frag, Router} from "@opendaw/lib-jsx"
 import {WorkspacePage} from "@/ui/workspace/WorkspacePage.tsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {ComponentsPage} from "@/ui/pages/ComponentsPage.tsx"
@@ -18,6 +18,7 @@ import {GraphPage} from "@/ui/pages/GraphPage"
 import {CodeEditorPage} from "@/ui/pages/CodeEditorPage"
 import {OpenBundlePage} from "@/ui/pages/OpenBundlePage"
 import {UsersPage} from "@/ui/pages/UsersPage"
+import {StatsPage} from "@/ui/pages/StatsPage"
 import {RoomsCountPage} from "@/ui/pages/RoomsCountPage"
 import {RoomsDurationPage} from "@/ui/pages/RoomsDurationPage"
 import {PrivacyPage} from "@/ui/pages/PrivacyPage"
@@ -59,10 +60,16 @@ export const App = (service: StudioService) => {
                     {path: "/upload", factory: SampleUploadPage},
                     {path: "/colors", factory: ColorsPage},
                     {path: "/graph", factory: GraphPage},
+                    {path: "/stats", factory: StatsPage},
                     {path: "/stats/users", factory: UsersPage},
                     {path: "/stats/rooms-created", factory: RoomsCountPage},
                     {path: "/stats/rooms-duration", factory: RoomsDurationPage},
-                    {path: "/users", factory: () => { RouteLocation.get().navigateTo("/stats/users"); return <div/> }},
+                    {
+                        path: "/users", factory: (context) => {
+                            history.replaceState(null, "", "/stats/users")
+                            return UsersPage(context)
+                        }
+                    },
                     {path: "/open-bundle/*", factory: OpenBundlePage},
                     {path: "/test", factory: TestPage},
                     {path: "/performance", factory: PerformancePage},

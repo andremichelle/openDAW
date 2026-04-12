@@ -166,7 +166,7 @@ export class ProjectProfileService {
                 const json = JSON.parse(jsonString)
                 console.debug("parsed json", json)
                 const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
-                boxGraph.fromJSON(json)
+                boxGraph.fromJSON(json, false)
                 boxGraph.debugBoxes()
                 const mandatoryBoxes = ProjectSkeleton.findMandatoryBoxes(boxGraph)
                 const skeleton: ProjectSkeleton = {boxGraph, mandatoryBoxes}

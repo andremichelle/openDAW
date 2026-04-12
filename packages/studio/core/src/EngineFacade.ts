@@ -135,8 +135,8 @@ export class EngineFacade implements Engine {
     subscribeDeviceMessage(uuid: string, listener: Procedure<string>): Subscription {
         return this.#worklet.unwrap("No worklet to subscribeDeviceMessage").subscribeDeviceMessage(uuid, listener)
     }
-    registerMonitoringSource(uuid: UUID.Bytes, node: AudioNode, numChannels: 1 | 2): void {
-        this.#worklet.ifSome(worklet => worklet.registerMonitoringSource(uuid, node, numChannels))
+    registerMonitoringSource(uuid: UUID.Bytes, node: AudioNode, numChannels: 1 | 2, destinationNode: AudioNode): void {
+        this.#worklet.ifSome(worklet => worklet.registerMonitoringSource(uuid, node, numChannels, destinationNode))
     }
     unregisterMonitoringSource(uuid: UUID.Bytes): void {
         this.#worklet.ifSome(worklet => worklet.unregisterMonitoringSource(uuid))

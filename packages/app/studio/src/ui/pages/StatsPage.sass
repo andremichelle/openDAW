@@ -1,0 +1,16 @@
+@use "@/colors"
+@use "@/mixins"
+
+component
+  flex: 1
+  padding: 2em
+  display: flex
+  flex-direction: column
+  overflow: hidden
+  @include colors.panel-background
+
+  h1
+    color: var(--color-cream)
+
+  ul li
+    padding: 0.5em 0

@@ -113,7 +113,7 @@ export namespace ProjectSkeleton {
         const boxGraphChunk = new Int8Array(boxGraphChunkLength)
         input.readBytes(boxGraphChunk)
         const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
-        boxGraph.fromArrayBuffer(boxGraphChunk.buffer)
+        boxGraph.fromArrayBuffer(boxGraphChunk.buffer, false)
         return {boxGraph, mandatoryBoxes: findMandatoryBoxes(boxGraph)}
     }
 

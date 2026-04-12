@@ -188,7 +188,8 @@ export class AudioDeviceChain implements DeviceChain {
             }
             return
         }
-        if (this.#options.includeSends) {
+        const monitoringActive = this.#monitoringMixer.nonEmpty() && this.#monitoringMixer.unwrap().isActive
+        if (this.#options.includeSends && !monitoringActive) {
             this.#auxSends.forEach(auxSend => {
                 const target = context.getAudioUnit(auxSend.adapter.targetBus.deviceHost().uuid)
                 this.#disconnector.own(auxSend.setAudioSource(source.audioOutput))
@@ -199,7 +200,7 @@ export class AudioDeviceChain implements DeviceChain {
         }
         this.#disconnector.own(this.#channelStrip.setAudioSource(source.audioOutput))
         this.#disconnector.own(context.registerEdge(edgeSource, this.#channelStrip))
-        if (optOutput.nonEmpty() && !isOutputUnit) {
+        if (optOutput.nonEmpty() && !isOutputUnit && !monitoringActive) {
             const audioBus = optOutput.unwrap()
             this.#disconnector.own(audioBus.addAudioSource(this.#channelStrip.audioOutput))
             this.#disconnector.own(context.registerEdge(this.#channelStrip, audioBus))

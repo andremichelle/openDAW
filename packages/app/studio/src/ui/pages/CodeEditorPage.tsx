@@ -40,7 +40,7 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
     const host = new ScriptHost({
         openProject: (buffer: ArrayBufferLike, name?: string): void => {
             const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
-            boxGraph.fromArrayBuffer(buffer)
+            boxGraph.fromArrayBuffer(buffer, false)
             const mandatoryBoxes = ProjectSkeleton.findMandatoryBoxes(boxGraph)
             const project = Project.fromSkeleton(service, {boxGraph, mandatoryBoxes})
             pendingSamples.forEach(uuid => project.trackUserCreatedSample(uuid))
