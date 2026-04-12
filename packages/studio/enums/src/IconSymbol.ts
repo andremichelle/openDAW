@@ -17,6 +17,7 @@ export enum IconSymbol {
     Copy,
     Maximizer,
     Fold,
+    Charts,
     Checkbox,
     Clips,
     Close,

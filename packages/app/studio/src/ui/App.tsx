@@ -17,10 +17,7 @@ import {ImprintPage} from "@/ui/pages/ImprintPage.tsx"
 import {GraphPage} from "@/ui/pages/GraphPage"
 import {CodeEditorPage} from "@/ui/pages/CodeEditorPage"
 import {OpenBundlePage} from "@/ui/pages/OpenBundlePage"
-import {UsersPage} from "@/ui/pages/UsersPage"
-import {StatsPage} from "@/ui/pages/StatsPage"
-import {RoomsCountPage} from "@/ui/pages/RoomsCountPage"
-import {RoomsDurationPage} from "@/ui/pages/RoomsDurationPage"
+import {DashboardPage} from "@/ui/pages/stats/DashboardPage"
 import {PrivacyPage} from "@/ui/pages/PrivacyPage"
 import {PreferencesPage} from "@/ui/pages/PreferencesPage"
 import {TestPage} from "@/ui/pages/TestPage"
@@ -60,14 +57,11 @@ export const App = (service: StudioService) => {
                     {path: "/upload", factory: SampleUploadPage},
                     {path: "/colors", factory: ColorsPage},
                     {path: "/graph", factory: GraphPage},
-                    {path: "/stats", factory: StatsPage},
-                    {path: "/stats/users", factory: UsersPage},
-                    {path: "/stats/rooms-created", factory: RoomsCountPage},
-                    {path: "/stats/rooms-duration", factory: RoomsDurationPage},
+                    {path: "/stats", factory: DashboardPage},
                     {
                         path: "/users", factory: (context) => {
-                            history.replaceState(null, "", "/stats/users")
-                            return UsersPage(context)
+                            history.replaceState(null, "", "/stats")
+                            return DashboardPage(context)
                         }
                     },
                     {path: "/open-bundle/*", factory: OpenBundlePage},

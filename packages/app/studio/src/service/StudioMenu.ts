@@ -124,6 +124,10 @@ export const populateStudioMenu = (service: StudioService) => {
                         separatorBefore: true,
                         icon: IconSymbol.System
                     }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/preferences")),
+                    MenuItem.default({
+                        label: "Statistics",
+                        icon: IconSymbol.Charts
+                    }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/stats")),
                     createDebugMenu(service)
                 )
             }

@@ -1,0 +1,51 @@
+@use "@/colors"
+
+$accent-gradient: linear-gradient(135deg, rgba(black, 0.4), rgba(white, 0.1))
+
+component
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: 1.5rem
+  background-color: var(--color-panel-background-bright)
+  border-radius: 1rem
+  padding: 1.7rem 2rem
+  border: 1px solid rgba(white, 0.04)
+  min-height: 10rem
+  overflow: hidden
+
+  .tile-text
+    display: flex
+    flex-direction: column
+    gap: 0.4rem
+    min-width: 0
+
+    .tile-label
+      color: var(--color-shadow)
+      font-size: 1.3rem
+      text-transform: uppercase
+      letter-spacing: 0.06em
+      white-space: nowrap
+      overflow: hidden
+      text-overflow: ellipsis
+
+    .tile-value
+      color: var(--color-cream)
+      font-size: 2.8rem
+      font-weight: 700
+      font-variant-numeric: tabular-nums
+      white-space: nowrap
+      line-height: 1.1
+
+  .tile-icon
+    flex-shrink: 0
+    width: 4rem
+    height: 4rem
+    border-radius: 1rem
+    background: $accent-gradient
+    display: flex
+    align-items: center
+    justify-content: center
+    color: var(--color-cream)
+    font-weight: 700
+    font-size: 1.9rem
