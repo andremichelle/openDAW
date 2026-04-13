@@ -35,7 +35,7 @@ import {EnvelopeDisplay} from "@/ui/devices/instruments/VaporisateurDeviceEditor
 import {FilterDisplay} from "@/ui/devices/instruments/VaporisateurDeviceEditor/FilterDisplay"
 import {Logo} from "@/ui/devices/instruments/VaporisateurDeviceEditor/Logo"
 import {OscillatorSelector} from "@/ui/devices/instruments/VaporisateurDeviceEditor/OscillatorSelector"
-import {AutomatableControl} from "@/ui/components/AutomatableControl"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 
 const className = Html.adoptStyleSheet(css, "editor")
 
@@ -65,57 +65,43 @@ export const VaporisateurDeviceEditor = ({lifecycle, service, adapter, deviceHos
     const {project} = service
     const {editing, midiLearning, liveStreamReceiver} = project
     const {
-        oscillators,
-        noise,
-        unisonCount,
-        unisonDetune,
-        unisonStereo,
-        glideTime,
-        cutoff,
-        resonance,
-        filterEnvelope,
-        filterKeyboard,
-        filterOrder,
-        lfoWaveform,
-        lfoRate,
-        lfoTargetTune,
-        lfoTargetCutoff,
-        lfoTargetVolume,
-        attack,
-        decay,
-        sustain,
-        release,
-        voicingMode
+        oscillators, noise, unisonCount, unisonDetune, unisonStereo, glideTime,
+        cutoff, resonance, filterEnvelope, filterKeyboard, filterOrder,
+        lfoWaveform, lfoRate, lfoTargetTune, lfoTargetCutoff, lfoTargetVolume,
+        attack, decay, sustain, release, voicingMode
     } = adapter.namedParameter
     const createLabelControlFrag = (lifecycle: Lifecycle,
                                     parameter: AutomatableParameterFieldAdapter<number>,
                                     threshold?: number | ReadonlyArray<number>) => (
         <Frag>
             <h3>{parameter.name}</h3>
-            <RelativeUnitValueDragging lifecycle={lifecycle}
-                                       editing={editing}
-                                       parameter={parameter}
-                                       options={isDefined(threshold) ? {snap: {threshold}} : undefined}
-                                       supressValueFlyout={true}>
-                <ParameterLabel lifecycle={lifecycle}
-                                editing={editing}
-                                midiLearning={midiLearning}
-                                adapter={adapter}
-                                parameter={parameter}
-                                classList={["center"]}
-                                framed={true} standalone/>
-            </RelativeUnitValueDragging>
+            <AutomationControl lifecycle={lifecycle}
+                               editing={editing}
+                               midiLearning={midiLearning}
+                               tracks={adapter.deviceHost().audioUnitBoxAdapter().tracks}
+                               parameter={parameter}>
+                <RelativeUnitValueDragging lifecycle={lifecycle}
+                                           editing={editing}
+                                           parameter={parameter}
+                                           options={isDefined(threshold) ? {snap: {threshold}} : undefined}
+                                           supressValueFlyout={true}>
+                    <ParameterLabel lifecycle={lifecycle}
+                                    parameter={parameter}
+                                    classList={["center"]}
+                                    framed={true}/>
+                </RelativeUnitValueDragging>
+            </AutomationControl>
         </Frag>
     )
     const createWaveformSelector = (lifecycle: Lifecycle,
                                     parameter: AutomatableParameterFieldAdapter<ClassicWaveform>) => (
         <Frag>
             <h3>{parameter.name}</h3>
-            <AutomatableControl lifecycle={lifecycle}
-                                editing={editing}
-                                midiLearning={midiLearning}
-                                adapter={adapter}
-                                parameter={parameter}>
+            <AutomationControl lifecycle={lifecycle}
+                               editing={editing}
+                               midiLearning={midiLearning}
+                               tracks={adapter.deviceHost().audioUnitBoxAdapter().tracks}
+                               parameter={parameter}>
                 <RadioGroup lifecycle={lifecycle}
                             model={EditWrapper.forAutomatableParameter(editing, parameter)}
                             style={{fontSize: "9px"}}
@@ -138,7 +124,7 @@ export const VaporisateurDeviceEditor = ({lifecycle, service, adapter, deviceHos
                                     }/>
                                 }
                             ]}/>
-            </AutomatableControl>
+            </AutomationControl>
         </Frag>
     )
     const bindWaveformParameter = (lifecycle: Lifecycle,

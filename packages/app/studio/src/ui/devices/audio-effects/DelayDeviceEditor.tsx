@@ -10,6 +10,7 @@ import {StudioService} from "@/service/StudioService"
 import {EffectFactories} from "@moises-ai/studio-core"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import {ParameterLabel} from "@/ui/components/ParameterLabel"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "DelayDeviceEditor")
@@ -39,19 +40,22 @@ export const DelayDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const createLabelControlFrag = ({lifecycle, parameter, name, grid: {u, v}, threshold}: Control) => (
         <div className="control" style={{gridArea: `${v + 1} / ${u + 1} / ${v + 3} / ${u + 2}`}}>
             <h3>{name ?? parameter.name}</h3>
-            <RelativeUnitValueDragging lifecycle={lifecycle}
-                                       editing={editing}
-                                       parameter={parameter}
-                                       options={isDefined(threshold) ? {snap: {threshold}} : undefined}
-                                       supressValueFlyout={true}>
-                <ParameterLabel lifecycle={lifecycle}
-                                editing={editing}
-                                midiLearning={midiLearning}
-                                adapter={adapter}
-                                parameter={parameter}
-                                classList={["center"]}
-                                framed={true} standalone/>
-            </RelativeUnitValueDragging>
+            <AutomationControl lifecycle={lifecycle}
+                               editing={editing}
+                               midiLearning={midiLearning}
+                               tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                               parameter={parameter}>
+                <RelativeUnitValueDragging lifecycle={lifecycle}
+                                           editing={editing}
+                                           parameter={parameter}
+                                           options={isDefined(threshold) ? {snap: {threshold}} : undefined}
+                                           supressValueFlyout={true}>
+                    <ParameterLabel lifecycle={lifecycle}
+                                    parameter={parameter}
+                                    classList={["center"]}
+                                    framed={true}/>
+                </RelativeUnitValueDragging>
+            </AutomationControl>
         </div>
     )
     return (

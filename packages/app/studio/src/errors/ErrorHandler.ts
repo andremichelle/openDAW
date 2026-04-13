@@ -10,9 +10,10 @@ import {BuildInfo} from "@/BuildInfo"
 const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP", "Zotero Connector"]
 const IgnoredErrors = [
     "ResizeObserver loop completed with undelivered notifications.",
-    "Request timeout appSettingsDistributor.getValue"
+    "Request timeout appSettingsDistributor.getValue",
+    "Script error."
 ]
-const BrowserInternalPatterns = ["feature named"]
+const BrowserInternalPatterns = ["feature named", "window.__firefox__"]
 const MonacoPatterns = ["monaco-editor", "vs/base/common/errors"]
 const ThirdPartyAppPatterns = ["_callback_receiveMIDIMessage", "_callback_addSource"]
 const UrlPattern = /https?:\/\/[^\s)]+/g
@@ -83,6 +84,11 @@ export class ErrorHandler {
         }
         if (!(event instanceof PromiseRejectionEvent)) {return false}
         const {reason} = event
+        if (reason instanceof Error && IgnoredErrors.some(ignored => reason.message.includes(ignored))) {
+            console.warn(reason.message)
+            event.preventDefault()
+            return true
+        }
         if (Errors.isAbort(reason)) {
             console.debug(`Abort '${reason.message}'`)
             event.preventDefault()

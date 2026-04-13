@@ -19,7 +19,7 @@ import {Box, BoxGraph} from "@moises-ai/lib-box"
 import {BoxDebugView} from "./BoxDebugView"
 import {BoxesDebugView} from "@/ui/components/BoxesDebugView.tsx"
 import {ProgressBar} from "@/ui/components/ProgressBar.tsx"
-import {Browser} from "@moises-ai/lib-dom"
+import {Browser, Clipboard} from "@moises-ai/lib-dom"
 
 export namespace Dialogs {
     type Default = {
@@ -153,14 +153,8 @@ export namespace Dialogs {
                              }: RuntimeNotification.ProgressRequest): RuntimeNotification.ProgressUpdater => {
         const lifecycle = new Terminator()
         const buttons: ReadonlyArray<Button> = isDefined(cancel)
-            ? [{
-                text: "Cancel",
-                primary: true,
-                onClick: handler => {
-                    cancel()
-                    handler.close()
-                }
-            }] : Arrays.empty()
+            ? [{text: "Cancel", primary: true, onClick: handler => handler.close()}]
+            : Arrays.empty()
         const messageElement: HTMLParagraphElement = (<p style={{
             margin: "1em 0 0.5em 0",
             width: "100%",
@@ -172,6 +166,7 @@ export namespace Dialogs {
             <Dialog headline={headline}
                     icon={IconSymbol.System}
                     cancelable={isDefined(cancel)}
+                    onCancel={cancel}
                     buttons={buttons}>
                 {messageElement}
                 {progress && (
@@ -182,7 +177,7 @@ export namespace Dialogs {
         Surface.get(origin).flyout.appendChild(dialog)
         dialog.addEventListener("close", () => lifecycle.terminate(), {once: true})
         dialog.showModal()
-        lifecycle.own(Terminable.create(() => dialog.close()))
+        lifecycle.own(Terminable.create(() => dialog.close("done")))
         return new class implements RuntimeNotification.ProgressUpdater {
             set message(value: string) {messageElement.textContent = value}
             terminate(): void {lifecycle.terminate()}
@@ -250,7 +245,7 @@ export namespace Dialogs {
                             const {status, value, error} = tryCatch(() =>
                                 JSON.stringify(box.toJSON(), null, 2))
                             if (status === "success") {
-                                navigator.clipboard.writeText(value)
+                                Clipboard.writeText(value)
                                     .then(EmptyExec, EmptyExec)
                                     .finally(() => handler.close())
                             } else {

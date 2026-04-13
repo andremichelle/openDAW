@@ -66,7 +66,10 @@ export class DefaultSoundfontLoader implements SoundfontLoader {
                 } else {
                     return this.#fetch()
                 }
-            })
+            }).catch(error => {
+            console.warn("Failed to load soundfont:", error)
+            this.#setState({type: "error", reason: error instanceof Error ? error.message : String(error)})
+        })
     }
 
     async #fetch(): Promise<void> {

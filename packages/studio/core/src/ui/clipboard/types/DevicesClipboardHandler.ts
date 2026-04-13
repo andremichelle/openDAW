@@ -4,14 +4,17 @@ import {
     Editing,
     int,
     isDefined,
+    isInstanceOf,
     isNotNull,
     Option,
     Optional,
     Provider,
-    RuntimeNotifier
+    RuntimeNotifier,
+    UUID
 } from "@moises-ai/lib-std"
 import {Box, BoxGraph} from "@moises-ai/lib-box"
 import {Pointers} from "@moises-ai/studio-enums"
+import {RootBox, TrackBox} from "@moises-ai/studio-boxes"
 import {
     AudioEffectDeviceAdapter,
     BoxAdapters,
@@ -113,17 +116,44 @@ export namespace DevicesClipboard {
                 ...audioEffects.map(adapter => adapter.box)
             ]
             const dependencies = deviceBoxes.flatMap(box => {
-                const preserved = Array.from(boxGraph.dependenciesOf(box, {
-                    alwaysFollowMandatory: true,
-                    excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
-                }).boxes).filter(dep => dep.resource === "preserved")
                 const ownedChildren = box.incomingEdges()
                     .filter(pointer => pointer.mandatory && !pointer.box.ephemeral
-                        && !DeviceBoxUtils.isDeviceBox(pointer.box) && !isDefined(pointer.box.resource))
+                        && !isDefined(pointer.box.resource))
                     .map(pointer => pointer.box)
-                return [...preserved, ...ownedChildren]
+                const mandatoryDeps = Array.from(boxGraph.dependenciesOf(box, {
+                    alwaysFollowMandatory: true,
+                    excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
+                        || dep.name === RootBox.ClassName
+                }).boxes).filter(dep => !isDefined(dep.resource))
+                const preserved = [box, ...ownedChildren].flatMap(root =>
+                    Array.from(boxGraph.dependenciesOf(root, {
+                        alwaysFollowMandatory: true,
+                        excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
+                    }).boxes).filter(dep => dep.resource === "preserved"))
+                return [...ownedChildren, ...mandatoryDeps, ...preserved]
             })
-            const allBoxes = [...deviceBoxes, ...dependencies]
+            const trackContent: Box[] = []
+            if (isNotNull(instrument)) {
+                getHost().ifSome(host => {
+                    const tracksField = host.audioUnitBoxAdapter().tracksField
+                    for (const pointer of tracksField.pointerHub.filter(Pointers.TrackCollection)) {
+                        if (!isInstanceOf(pointer.box, TrackBox)) {continue}
+                        const track = pointer.box
+                        trackContent.push(track)
+                        for (const regionPointer of track.regions.pointerHub.incoming()) {
+                            trackContent.push(regionPointer.box)
+                            const regionDeps = Array.from(boxGraph.dependenciesOf(regionPointer.box, {
+                                alwaysFollowMandatory: true,
+                                excludeBox: (dep: Box) => dep.ephemeral
+                                    || isInstanceOf(dep, TrackBox)
+                                    || DeviceBoxUtils.isDeviceBox(dep)
+                            }).boxes)
+                            trackContent.push(...regionDeps)
+                        }
+                    }
+                })
+            }
+            const allBoxes = [...deviceBoxes, ...dependencies, ...trackContent]
             const instrumentContent = isNotNull(instrument)
                 ? (instrument.box.tags.content as Optional<InstrumentContent>) ?? ""
                 : ""
@@ -192,6 +222,12 @@ export namespace DevicesClipboard {
                 editing.modify(() => {
                     selection.deselectAll()
                     if (replaceInstrument && isDefined(selectedInstrument)) {
+                        const tracksField = host.audioUnitBoxAdapter().tracksField
+                        for (const pointer of tracksField.pointerHub.filter(Pointers.TrackCollection)) {
+                            if (isInstanceOf(pointer.box, TrackBox)) {
+                                pointer.box.delete()
+                            }
+                        }
                         selectedInstrument.box.delete()
                     }
                     for (const adapter of host.midiEffects.adapters()) {
@@ -210,7 +246,8 @@ export namespace DevicesClipboard {
                         entry.data,
                         boxGraph,
                         {
-                            mapPointer: pointer => {
+                            mapPointer: (pointer, address) => {
+                                if (address.isEmpty()) {return Option.None}
                                 if (pointer.pointerType === Pointers.InstrumentHost && replaceInstrument) {
                                     return Option.wrap(host.inputField.address)
                                 }
@@ -220,9 +257,23 @@ export namespace DevicesClipboard {
                                 if (pointer.pointerType === Pointers.AudioEffectHost) {
                                     return Option.wrap(host.audioEffectsField.address)
                                 }
+                                if (pointer.pointerType === Pointers.TrackCollection && replaceInstrument) {
+                                    return Option.wrap(host.audioUnitBoxAdapter().tracksField.address)
+                                }
+                                if (pointer.pointerType === Pointers.Automation && replaceInstrument) {
+                                    return Option.wrap(host.audioUnitBoxAdapter().address)
+                                }
+                                if (pointer.pointerType === Pointers.MIDIDevice) {
+                                    const rootBox: Optional<RootBox> = boxGraph.boxes()
+                                        .find(box => isInstanceOf(box, RootBox)) as Optional<RootBox>
+                                    if (isDefined(rootBox)) {
+                                        return Option.wrap(rootBox.outputMidiDevices.address)
+                                    }
+                                }
                                 return Option.None
                             },
-                            excludeBox: box => DeviceBoxUtils.isInstrumentDeviceBox(box) && !replaceInstrument
+                            excludeBox: box => !replaceInstrument
+                                && (DeviceBoxUtils.isInstrumentDeviceBox(box) || isInstanceOf(box, TrackBox))
                         }
                     )
                     const deviceBoxes = boxes.filter(box => DeviceBoxUtils.isDeviceBox(box))
@@ -236,6 +287,14 @@ export namespace DevicesClipboard {
                         .sort((a, b) => a.index.getValue() - b.index.getValue())
                     newMidiEffects.forEach((box, idx) => box.index.setValue(midiInsertIndex + idx))
                     newAudioEffects.forEach((box, idx) => box.index.setValue(audioInsertIndex + idx))
+                    if (replaceInstrument) {
+                        const tracksField = host.audioUnitBoxAdapter().tracksField
+                        const allTracks = tracksField.pointerHub.filter(Pointers.TrackCollection)
+                            .filter(pointer => isInstanceOf(pointer.box, TrackBox))
+                            .map(pointer => pointer.box as TrackBox)
+                            .sort((trackA, trackB) => trackA.index.getValue() - trackB.index.getValue())
+                        allTracks.forEach((track, idx) => track.index.setValue(idx))
+                    }
                     selection.select(...deviceBoxes.map(box => boxAdapters.adapterFor(box, Devices.isAny)))
                 })
             }

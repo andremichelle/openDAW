@@ -1,4 +1,4 @@
-import {Arrays, Func, isDefined, isInstanceOf, panic, SortedSet, UUID} from "@moises-ai/lib-std"
+import {Arrays, Func, isDefined, isInstanceOf, Option, panic, SortedSet, UUID} from "@moises-ai/lib-std"
 import {Address} from "./address"
 import {PointerField} from "./pointer"
 import {Vertex} from "./vertex"
@@ -10,6 +10,7 @@ export class GraphEdges {
     readonly #requiresExclusive: SortedSet<Address, Vertex>
     readonly #incoming: SortedSet<Address, [Address, Array<PointerField>]>
     readonly #outgoing: SortedSet<Address, [PointerField, Address]>
+    readonly #affected: SortedSet<UUID.Bytes, UUID.Bytes>
 
     constructor() {
         this.#requiresTarget = Address.newSet<PointerField>(source => source.address)
@@ -17,6 +18,7 @@ export class GraphEdges {
         this.#requiresExclusive = Address.newSet<Vertex>(vertex => vertex.address)
         this.#incoming = Address.newSet<[Address, Array<PointerField>]>(([address]) => address)
         this.#outgoing = Address.newSet<[PointerField, Address]>(([source]) => source.address)
+        this.#affected = UUID.newSet<UUID.Bytes>(uuid => uuid)
     }
 
     watchVertex(vertex: Vertex | PointerField): void {
@@ -37,6 +39,7 @@ export class GraphEdges {
                 this.#requiresExclusive.add(vertex)
             }
         }
+        this.#affected.add(vertex.address.uuid)
     }
 
     unwatchVerticesOf(...boxes: ReadonlyArray<Box>): void {
@@ -66,6 +69,8 @@ export class GraphEdges {
             none: () => this.#incoming.add([target, [source]]),
             some: ([, sources]) => sources.push(source)
         })
+        this.#affected.add(source.address.uuid)
+        this.#affected.add(target.uuid)
     }
 
     disconnect(source: PointerField): void {
@@ -73,6 +78,8 @@ export class GraphEdges {
         const [, sources] = this.#incoming.get(target)
         Arrays.remove(sources, source)
         if (sources.length === 0) {this.#incoming.removeByKey(target)}
+        this.#affected.add(source.address.uuid)
+        this.#affected.add(target.uuid)
     }
 
     isConnected(source: PointerField, target: Address): boolean {
@@ -90,6 +97,46 @@ export class GraphEdges {
         } else {
             return this.#incoming.opt(vertex.address).mapOr(([_, pointers]) => pointers, Arrays.empty())
         }
+    }
+
+    clearAffected(): void {this.#affected.clear()}
+
+    tryValidateAffected(): Option<Error> {
+        const map: Func<Vertex, UUID.Bytes> = ({box: {address: {uuid}}}) => uuid
+        for (const uuid of this.#affected.values()) {
+            const pointers = this.#collectSameBox(this.#requiresTarget, uuid, map)
+            for (const pointer of pointers) {
+                if (pointer.isEmpty()) {
+                    this.#affected.clear()
+                    if (pointer.mandatory) {
+                        return Option.wrap(new Error(`Pointer ${pointer.toString()} requires an edge.`))
+                    } else {
+                        return Option.wrap(new Error(`Illegal state: ${pointer} has no edge requirements.`))
+                    }
+                }
+            }
+            const targets = this.#collectSameBox(this.#requiresPointer, uuid, map)
+            for (const target of targets) {
+                if (target.pointerHub.isEmpty()) {
+                    this.#affected.clear()
+                    if (target.pointerRules.mandatory) {
+                        return Option.wrap(new Error(`Target ${target.toString()} requires an edge.`))
+                    } else {
+                        return Option.wrap(new Error(`Illegal state: ${target} has no edge requirements.`))
+                    }
+                }
+            }
+            const exclusives = this.#collectSameBox(this.#requiresExclusive, uuid, map)
+            for (const target of exclusives) {
+                const count = target.pointerHub.size()
+                if (count > 1) {
+                    this.#affected.clear()
+                    return Option.wrap(new Error(`Target ${target.toString()} is exclusive but has ${count} incoming pointers.`))
+                }
+            }
+        }
+        this.#affected.clear()
+        return Option.None
     }
 
     validateRequirements(): void {

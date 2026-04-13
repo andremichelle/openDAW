@@ -16,17 +16,6 @@ component
   &.center
     justify-content: center
 
-  &.midi, .midi &, &.automated, .automated &
-    min-width: 4em
-    border-radius: 0.125em
-    background-color: rgba(white, 0.02)
-
-  &.midi, .midi &
-    box-shadow: 0 0 1px 0 var(--color-orange)
-
-  &.automated, .automated &
-    box-shadow: 0 0 1px 0 var(--color-blue)
-
   &[unit]:not([unit=""]):after
     content: attr(unit)
     color: var(--color-dark)

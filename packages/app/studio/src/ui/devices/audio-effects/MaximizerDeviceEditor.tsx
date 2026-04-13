@@ -10,7 +10,7 @@ import {StudioService} from "@/service/StudioService"
 import {EffectFactories} from "@moises-ai/studio-core"
 import {MaximizerVolumeMarkers, VolumeSlider} from "@/ui/components/VolumeSlider"
 import {Meters} from "@/ui/devices/audio-effects/Maximizer/Meters"
-import {ControlIndicator} from "@/ui/components/ControlIndicator"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 
 const className = Html.adoptStyleSheet(css, "MaximizerDeviceEditor")
 
@@ -23,7 +23,7 @@ type Construct = {
 
 export const MaximizerDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
-    const {editing} = project
+    const {editing, midiLearning} = project
     const {threshold} = adapter.namedParameter
 
     // PeakBroadcaster values: [peakL, peakR, rmsL, rmsR]
@@ -58,13 +58,16 @@ export const MaximizerDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                               }}>Lookahead
                               </div>
                               <div className="slider-section">
-                                  <ControlIndicator lifecycle={lifecycle}
-                                                    parameter={threshold}>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={threshold}>
                                       <VolumeSlider lifecycle={lifecycle}
                                                     editing={editing}
                                                     parameter={threshold}
                                                     markers={MaximizerVolumeMarkers}/>
-                                  </ControlIndicator>
+                                  </AutomationControl>
                               </div>
                           </div>
                       )}

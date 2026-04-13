@@ -10,15 +10,6 @@ component
   color: var(--color-dark)
   @include colors.panel-background-dark
 
-  article
-    white-space: nowrap
-    min-width: max-content
-
-    &:before
-      content: attr(title)
-      color: var(--color-shadow)
-      margin-right: 0.5em
-
   > div.storage
     &.warning
       &:after

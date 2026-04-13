@@ -13,7 +13,7 @@ import {Column} from "@/ui/devices/Column"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {Icon} from "@/ui/components/Icon"
-import {ControlIndicator} from "@/ui/components/ControlIndicator"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 import {AutoGainButton} from "@/ui/devices/audio-effects/StereoTool/AutoGainButton"
 import {EffectFactories, MenuItem} from "@moises-ai/studio-core"
 import {Mixing} from "@moises-ai/lib-dsp"
@@ -77,51 +77,31 @@ export const StereoToolDeviceEditor = ({lifecycle, service, adapter, deviceHost}
                                   anchor: 0.5
                               })}
                               <div className="checkboxes">
-                                  <Column ems={LKR.slice(2)} color={Colors.cream}>
-                                      <h5>L-</h5>
-                                      <ControlIndicator lifecycle={lifecycle} parameter={invertL}>
-                                          <Checkbox lifecycle={lifecycle}
-                                                    model={EditWrapper.forAutomatableParameter(editing, invertL)}
-                                                    appearance={{
-                                                        color: Colors.cream,
-                                                        activeColor: Colors.red,
-                                                        framed: false,
-                                                        cursor: "pointer"
-                                                    }}>
-                                              <Icon symbol={IconSymbol.Invert}/>
-                                          </Checkbox>
-                                      </ControlIndicator>
-                                  </Column>
-                                  <Column ems={LKR.slice(2)} color={Colors.cream}>
-                                      <h5>R-</h5>
-                                      <ControlIndicator lifecycle={lifecycle} parameter={invertR}>
-                                          <Checkbox lifecycle={lifecycle}
-                                                    model={EditWrapper.forAutomatableParameter(editing, invertR)}
-                                                    appearance={{
-                                                        color: Colors.cream,
-                                                        activeColor: Colors.red,
-                                                        framed: false,
-                                                        cursor: "pointer"
-                                                    }}>
-                                              <Icon symbol={IconSymbol.Invert}/>
-                                          </Checkbox>
-                                      </ControlIndicator>
-                                  </Column>
-                                  <Column ems={LKR.slice(2)} color={Colors.cream}>
-                                      <h5>LR</h5>
-                                      <ControlIndicator lifecycle={lifecycle} parameter={swap}>
-                                          <Checkbox lifecycle={lifecycle}
-                                                    model={EditWrapper.forAutomatableParameter(editing, swap)}
-                                                    appearance={{
-                                                        color: Colors.cream,
-                                                        activeColor: Colors.blue,
-                                                        framed: false,
-                                                        cursor: "pointer"
-                                                    }}>
-                                              <Icon symbol={IconSymbol.Swap}/>
-                                          </Checkbox>
-                                      </ControlIndicator>
-                                  </Column>
+                                  {([
+                                      {label: "L-", parameter: invertL, color: Colors.red, icon: IconSymbol.Invert},
+                                      {label: "R-", parameter: invertR, color: Colors.red, icon: IconSymbol.Invert},
+                                      {label: "LR", parameter: swap, color: Colors.blue, icon: IconSymbol.Swap}
+                                  ] as const).map(({label, parameter, color, icon}) => (
+                                      <AutomationControl lifecycle={lifecycle}
+                                                         editing={editing}
+                                                         midiLearning={midiLearning}
+                                                         tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                         parameter={parameter}>
+                                          <Column ems={LKR.slice(2)} color={Colors.cream}>
+                                              <h5>{label}</h5>
+                                              <Checkbox lifecycle={lifecycle}
+                                                        model={EditWrapper.forAutomatableParameter(editing, parameter)}
+                                                        appearance={{
+                                                            color: Colors.cream,
+                                                            activeColor: color,
+                                                            framed: false,
+                                                            cursor: "pointer"
+                                                        }}>
+                                                  <Icon symbol={icon}/>
+                                              </Checkbox>
+                                          </Column>
+                                      </AutomationControl>
+                                  ))}
                               </div>
                           </div>)}
                       populateMeter={() => (

@@ -1,6 +1,6 @@
 {
     "name": "@opendaw/studio-core-workers",
-    "version": "0.0.94",
+    "version": "0.0.97",
     "license": "LGPL-3.0-or-later",
     "private": true,
     "exports": {

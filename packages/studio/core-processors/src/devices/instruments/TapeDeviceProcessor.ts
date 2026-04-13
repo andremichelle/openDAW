@@ -40,6 +40,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         buffer.fill(1.0)
         return buffer
     })()
+    readonly #visitedUuids: Array<UUID.Bytes> = []
 
     #enabled: boolean = true
 
@@ -113,7 +114,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             this.#fadeOutAllPitchVoices(lane)
             lane.sequencer.reset()
         }
-        const visitedUuids: Set<string> = new Set()
+        this.#visitedUuids.length = 0
         const intervals = this.context.clipSequencing.iterate(adapter.uuid, p0, p1)
         for (const {optClip, sectionFrom, sectionTo} of intervals) {
             optClip.match({
@@ -135,7 +136,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                                     region.position, region.duration)
                             }
                         } else {
-                            visitedUuids.add(UUID.toString(region.uuid))
+                            this.#visitedUuids.push(region.uuid)
                             for (const cycle of LoopableRegion.locateLoops(region, p0, p1)) {
                                 this.#processPassPitch(
                                     lane, block, cycle, region, optData.unwrap(), region.uuid)
@@ -163,7 +164,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
                                 timeStretch, transients, clip.waveformOffset.getValue(), null, 0, clip.duration)
                         }
                     } else {
-                        visitedUuids.add(UUID.toString(clip.uuid))
+                        this.#visitedUuids.push(clip.uuid)
                         for (const cycle of LoopableRegion.locateLoops({
                             position: 0.0,
                             loopDuration: clip.duration,
@@ -177,7 +178,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             })
         }
         lane.pitchVoices.removeByPredicate(voice => {
-            if (visitedUuids.has(UUID.toString(voice.sourceUuid))) {return false}
+            if (this.#visitedUuids.some(uuid => UUID.equals(uuid, voice.sourceUuid))) {return false}
             voice.startFadeOut(0)
             lane.fadingVoices.push(voice)
             return true

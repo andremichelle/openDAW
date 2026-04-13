@@ -6,7 +6,6 @@ import {
     isNotUndefined,
     Notifier,
     Observer,
-    panic,
     Progress,
     RuntimeNotifier,
     Subscription,
@@ -63,7 +62,10 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
             const {error, status, value: files} =
                 await Promises.tryCatch(Files.open({...this.filePickerOptions, multiple: false}))
             if (status === "rejected") {
-                if (Errors.isAbort(error) || Errors.isNotAllowed(error)) {return} else {return panic(String(error)) }
+                if (Errors.isAbort(error) || Errors.isNotAllowed(error)) {return}
+                console.warn(`File browse failed: ${error}`)
+                await RuntimeNotifier.info({headline: "File Access Error", message: String(error)})
+                return
             }
             if (files.length === 0) {return}
             const readResult = await Promises.tryCatch(files[0].arrayBuffer())
@@ -74,10 +76,19 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
                 })
                 continue
             }
-            const asset = await this.importFile({uuid, arrayBuffer: readResult.value, progressHandler: Progress.Empty})
+            const importResult = await Promises.tryCatch(this.importFile({
+                uuid, name: files[0].name, arrayBuffer: readResult.value, progressHandler: Progress.Empty
+            }))
+            if (importResult.status === "rejected") {
+                await RuntimeNotifier.info({
+                    headline: `${this.nameSingular} Import Failed`,
+                    message: `'${files[0].name}' could not be imported: ${String(importResult.error)}`
+                })
+                continue
+            }
             await RuntimeNotifier.info({
                 headline: "Replaced Asset",
-                message: `${asset.name} has been replaced`
+                message: `${importResult.value.name} has been replaced`
             })
             manager.invalidate(uuid)
         }
@@ -87,7 +98,10 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
         const {error, status, value: files} =
             await Promises.tryCatch(Files.open({...filePickerSettings, multiple}))
         if (status === "rejected") {
-            if (Errors.isAbort(error) || Errors.isNotAllowed(error)) {return []} else {return panic(String(error)) }
+            if (Errors.isAbort(error) || Errors.isNotAllowed(error)) {return []}
+            console.warn(`File browse failed: ${error}`)
+            await RuntimeNotifier.info({headline: "File Access Error", message: String(error)})
+            return []
         }
         const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({

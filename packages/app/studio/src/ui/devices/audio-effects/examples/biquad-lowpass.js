@@ -1,4 +1,4 @@
-// Biquad Lowpass
+// @label Biquad Lowpass
 // @param cutoff 1000 20 20000 exp Hz
 // @param resonance 0.707 0.1 10 linear
 

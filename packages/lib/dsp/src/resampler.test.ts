@@ -207,6 +207,53 @@ describe("Resampler", () => {
         })
     })
 
+    describe("Sample-exact output", () => {
+        test("2x upsample produces expected output for deterministic input", () => {
+            const resampler = new ResamplerMono(2)
+            const input = new Float32Array(16)
+            for (let i = 0; i < 16; i++) {input[i] = Math.sin(2 * Math.PI * i / 16)}
+            const output = new Float32Array(32)
+            resampler.upsample(input, output, 0, 16)
+            const snapshot = Array.from(output).map(v => Math.round(v * 1e6) / 1e6)
+            expect(snapshot).toMatchSnapshot()
+        })
+        test("2x downsample produces expected output for deterministic input", () => {
+            const resampler = new ResamplerMono(2)
+            const input = new Float32Array(32)
+            for (let i = 0; i < 32; i++) {input[i] = Math.sin(2 * Math.PI * i / 32)}
+            const output = new Float32Array(16)
+            resampler.downsample(input, output, 0, 16)
+            const snapshot = Array.from(output).map(v => Math.round(v * 1e6) / 1e6)
+            expect(snapshot).toMatchSnapshot()
+        })
+        test("4x round-trip produces expected output for deterministic input", () => {
+            const resampler = new ResamplerMono(4)
+            const input = new Float32Array(RenderQuantum)
+            for (let i = 0; i < RenderQuantum; i++) {input[i] = Math.sin(2 * Math.PI * 440 * i / 44100)}
+            const upsampled = new Float32Array(RenderQuantum * 4)
+            const output = new Float32Array(RenderQuantum)
+            for (let i = 0; i < 3; i++) {
+                resampler.upsample(input, upsampled, 0, RenderQuantum)
+                resampler.downsample(upsampled, output, 0, RenderQuantum)
+            }
+            const snapshot = Array.from(output.subarray(0, 32)).map(v => Math.round(v * 1e6) / 1e6)
+            expect(snapshot).toMatchSnapshot()
+        })
+        test("8x round-trip produces expected output for deterministic input", () => {
+            const resampler = new ResamplerMono(8)
+            const input = new Float32Array(RenderQuantum)
+            for (let i = 0; i < RenderQuantum; i++) {input[i] = Math.sin(2 * Math.PI * 440 * i / 44100)}
+            const upsampled = new Float32Array(RenderQuantum * 8)
+            const output = new Float32Array(RenderQuantum)
+            for (let i = 0; i < 5; i++) {
+                resampler.upsample(input, upsampled, 0, RenderQuantum)
+                resampler.downsample(upsampled, output, 0, RenderQuantum)
+            }
+            const snapshot = Array.from(output.subarray(0, 32)).map(v => Math.round(v * 1e6) / 1e6)
+            expect(snapshot).toMatchSnapshot()
+        })
+    })
+
     describe("Consistency across multiple calls", () => {
         test("produces consistent results with same input", () => {
             const resampler = new ResamplerMono(2)

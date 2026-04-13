@@ -180,21 +180,23 @@ export class RegionClipResolver {
         const tasks = RegionClipResolver.createTasksFromMasks(
             this.#ground.regions.collection.iterateRange(0, maxComplete),
             maxComplete, masks, this.#strategy.showOrigin())
-        console.debug("[ClipResolver.#createSolver]", {
-            trackIndex: this.#ground.listIndex,
-            masks: masks.map(mask => ({p: mask.position, c: mask.complete})),
-            maxComplete,
-            showOrigin: this.#strategy.showOrigin(),
-            allRegions: allRegions.map(region => ({
-                p: region.position, d: region.duration, c: region.complete, sel: region.isSelected
-            })),
-            tasks: tasks.map(task => {
-                const base = {type: task.type, regionP: task.region.position, regionC: task.region.complete}
-                if (task.type === "separate") {return {...base, begin: task.begin, end: task.end}}
-                if (task.type === "start" || task.type === "complete") {return {...base, position: task.position}}
-                return base
+        if (tasks.length > 0) {
+            console.debug("[ClipResolver.#createSolver]", {
+                trackIndex: this.#ground.listIndex,
+                masks: masks.map(mask => ({p: mask.position, c: mask.complete})),
+                maxComplete,
+                showOrigin: this.#strategy.showOrigin(),
+                allRegions: allRegions.map(region => ({
+                    p: region.position, d: region.duration, c: region.complete, sel: region.isSelected
+                })),
+                tasks: tasks.map(task => {
+                    const base = {type: task.type, regionP: task.region.position, regionC: task.region.complete}
+                    if (task.type === "separate") {return {...base, begin: task.begin, end: task.end}}
+                    if (task.type === "start" || task.type === "complete") {return {...base, position: task.position}}
+                    return base
+                })
             })
-        })
+        }
         this.#masks.length = 0
         return () => this.#executeTasks(tasks)
     }

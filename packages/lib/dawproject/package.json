@@ -1,6 +1,6 @@
 {
     "name": "@moises-ai/lib-dawproject",
-    "version": "0.0.63",
+    "version": "0.0.65",
     "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",

@@ -50,7 +50,7 @@ export namespace MenuItems {
                     await Files.save(presetBytes as ArrayBuffer, {
                         types: [FilePickerAcceptTypes.PresetFileType],
                         suggestedName: `${audioUnit.label}.odp`
-                    })
+                    }).catch(console.warn)
                 }),
             MenuItem.default({label: "Load Preset..."})
                 .setTriggerProcedure(async () => {

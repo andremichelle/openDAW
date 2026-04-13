@@ -35,6 +35,7 @@ export const Dashboard = ({lifecycle, service}: Construct) => {
                     Visit <a
                     href="https://discord.opendaw.studio/" target="discord">Discord</a> and <a
                     href="https://github.com/andremichelle/opendaw" target="github">GitHub</a> for more information.
+                    Subscribe to our <a href="https://buttondown.com/opendaw" target="newsletter">Newsletter</a>.
                     Built with ❤️
                 </p>
             </article>

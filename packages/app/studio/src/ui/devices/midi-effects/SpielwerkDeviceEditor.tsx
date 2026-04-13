@@ -1,8 +1,10 @@
-import defaultCode from "./spielwerk-default.txt?raw"
+import defaultCode from "./spielwerk-default.js?raw"
+import starterPrompt from "./spielwerk-starter-prompt.txt?raw"
 import {DeviceHost, SpielwerkDeviceBoxAdapter} from "@moises-ai/studio-adapters"
 import {Lifecycle} from "@moises-ai/lib-std"
 import {createElement} from "@moises-ai/lib-jsx"
 import {IconSymbol} from "@moises-ai/studio-enums"
+import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {StudioService} from "@/service/StudioService"
 import {SpielwerkExamples} from "./spielwerk-examples"
 import {ScriptDeviceEditor, ScriptDeviceEditorConfig} from "@/ui/devices/ScriptDeviceEditor"
@@ -11,7 +13,10 @@ const config: ScriptDeviceEditorConfig = {
     compiler: {headerTag: "spielwerk", registryName: "spielwerkProcessors", functionName: "spielwerk"},
     defaultCode,
     examples: SpielwerkExamples,
+    starterPrompt,
     icon: IconSymbol.Code,
+    populateMenu: (parent, service, deviceHost, adapter) =>
+        MenuItems.forEffectDevice(parent, service, deviceHost, adapter as SpielwerkDeviceBoxAdapter),
     populateMeter: () => null
 }
 

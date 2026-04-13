@@ -37,12 +37,18 @@ component
 
     > div.title
       font-size: 11px
+      display: flex
+      column-gap: 3px
 
       > span.name
         color: var(--color-orange)
 
       > span.artist
+        flex: 1 0 0
         color: var(--color-green)
+
+      > span.size
+        color: rgba(white, 0.2)
 
     > div.tags
       display: flex

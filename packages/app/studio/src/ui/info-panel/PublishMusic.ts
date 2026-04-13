@@ -1,4 +1,5 @@
-import {OfflineEngineRenderer, ProjectBundle, ProjectProfile, WavFile} from "@moises-ai/studio-core"
+import {OfflineEngineRenderer, ProjectBundle, ProjectProfile} from "@moises-ai/studio-core"
+import {WavFile} from "@moises-ai/lib-dsp"
 import {DefaultObservableValue, isDefined, Option, panic, Procedure, Progress} from "@moises-ai/lib-std"
 import {Promises} from "@moises-ai/lib-runtime"
 
@@ -12,7 +13,7 @@ export namespace PublishMusic {
         }
         log("Mixdown audio...")
         const renderProgress = new DefaultObservableValue(0.0)
-        const mixdownResult = await Promises.tryCatch(OfflineEngineRenderer.start(profile.project, Option.None, renderProgress))
+        const mixdownResult = await Promises.tryCatch(OfflineEngineRenderer.start(profile.project.copy(), Option.None, renderProgress))
         if (mixdownResult.status === "rejected") {
             return panic(mixdownResult.error)
         }

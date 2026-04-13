@@ -26,6 +26,11 @@ export const EngineSettingsSchema = z.object({
         pauseOnLoopDisabled: false,
         truncateNotesAtRegionEnd: false
     }),
+    debug: z.object({
+        dspLoadMeasurement: z.boolean()
+    }).default({
+        dspLoadMeasurement: false
+    }),
     recording: z.object({
         countInBars: z.union(_RecordingCountInBars.map(value => z.literal(value))),
         allowTakes: z.boolean(),

@@ -1,27 +1,20 @@
-import {Editing, Lifecycle, unitValue} from "@moises-ai/lib-std"
+import {Lifecycle, unitValue} from "@moises-ai/lib-std"
 import {Knob} from "@/ui/components/Knob.tsx"
 import {ParameterLabel} from "@/ui/components/ParameterLabel.tsx"
 import {createElement} from "@moises-ai/lib-jsx"
-import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@moises-ai/studio-adapters"
-import {MIDILearning} from "@moises-ai/studio-core"
+import {AutomatableParameterFieldAdapter} from "@moises-ai/studio-adapters"
 
 type Construct = {
     lifecycle: Lifecycle
-    editing: Editing
-    midiDevices: MIDILearning,
-    adapter: DeviceBoxAdapter
     parameter: AutomatableParameterFieldAdapter
     anchor: unitValue
 }
 
-export const LabelKnob = ({lifecycle, editing, midiDevices, adapter, parameter, anchor}: Construct) => {
+export const LabelKnob = ({lifecycle, parameter, anchor}: Construct) => {
     return (
         <div style={{display: "contents"}}>
             <Knob lifecycle={lifecycle} value={parameter} anchor={anchor}/>
             <ParameterLabel lifecycle={lifecycle}
-                            editing={editing}
-                            midiLearning={midiDevices}
-                            adapter={adapter}
                             parameter={parameter}/>
         </div>
     )

@@ -3,8 +3,8 @@ import {createElement, PageContext, PageFactory} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Files, Html} from "@moises-ai/lib-dom"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
-import {estimateBpm} from "@moises-ai/lib-dsp"
-import {FilePickerAcceptTypes, OpenSampleAPI, WavFile} from "@moises-ai/studio-core"
+import {estimateBpm, WavFile} from "@moises-ai/lib-dsp"
+import {FilePickerAcceptTypes, OpenSampleAPI} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "SampleUploadPage")
 

@@ -145,6 +145,7 @@ export namespace AudioUnitsClipboard {
             boxGraph,
             {
                 mapPointer: (pointer, address) => {
+                    if (address.isEmpty()) {return Option.None}
                     if (pointer.pointerType === Pointers.TrackCollection) {
                         return Option.wrap(outputBox.tracks.address)
                     }
@@ -182,6 +183,7 @@ export namespace AudioUnitsClipboard {
             boxGraph,
             {
                 mapPointer: (pointer, address) => {
+                    if (address.isEmpty()) {return Option.None}
                     if (pointer.pointerType === Pointers.AudioUnits) {
                         return Option.wrap(rootBox.audioUnits.address)
                     }

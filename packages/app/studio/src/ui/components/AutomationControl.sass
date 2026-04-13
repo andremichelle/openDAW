@@ -1,0 +1,20 @@
+component
+  display: contents
+
+.automation-indicator
+  position: absolute
+  pointer-events: none
+  border-radius: 2px
+  background-color: rgba(white, 0.02)
+
+  &.automated
+    box-shadow: 0 0 1px 0 var(--color-blue)
+
+  &.midi
+    box-shadow: 0 0 1px 0 var(--color-orange)
+
+  &.modulated
+    box-shadow: 0 0 1px 0 var(--color-green)
+
+  &.external
+    box-shadow: 0 0 1px 0 var(--color-purple)

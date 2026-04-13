@@ -20,6 +20,11 @@ export namespace ValueDragging {
             const horizontal = options?.horizontal === true
             const process = optProcess.unwrap()
             const startValue = process.start()
+            if (!Number.isFinite(startValue)) {
+                console.warn(`ValueDragging: start() returned non-finite value (${startValue}); aborting drag`)
+                safeExecute(process.finally)
+                return Option.None
+            }
             const guide = ValueGuide.create(options)
             if (event.shiftKey) {guide.disable()} else {guide.enable()}
             guide.begin(startValue)

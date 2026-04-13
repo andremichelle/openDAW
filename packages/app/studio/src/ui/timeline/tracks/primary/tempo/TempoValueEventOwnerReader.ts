@@ -30,6 +30,7 @@ export class TempoValueEventOwnerReader implements ValueEventOwnerReader {
         return Terminable.Empty
     }
     mapPlaybackCursor(position: ppqn): ppqn {return position}
+    subscribeTrackChange(_observer: Observer<void>): Subscription {return Terminable.Empty}
     subscribeChange(observer: Observer<void>): Subscription {
         let inner: Subscription = Terminable.Empty
         return Terminable.many(

@@ -10,6 +10,11 @@ export namespace Browser {
     export const isWindows = () => hasNavigator && navigator.userAgent.includes("Windows")
     export const isChrome = () => hasNavigator && /chrome|chromium|crios/.test(navigator.userAgent.toLowerCase()) && !/edg|opera|opr/.test(navigator.userAgent.toLowerCase())
     export const isFirefox = () => hasNavigator && navigator.userAgent.toLowerCase().includes("firefox")
+    export const isMobile = (): boolean => {
+        if (!hasNavigator) {return false}
+        if ((navigator as any).userAgentData?.mobile === true) {return true}
+        return /iPhone|iPod|Android.*Mobile|webOS|BlackBerry|Opera Mini|IEMobile/i.test(navigator.userAgent)
+    }
     export const isWeb = () => !isTauriApp()
     export const isVitest = typeof process !== "undefined" && process.env?.VITEST === "true"
     export const isTauriApp = () => "__TAURI__" in window
@@ -21,7 +26,7 @@ export namespace Browser {
         .replace(/\s+/g, " ")
         .trim() : "N/A"
     export const id = () => {
-        if (!hasLocation) {return ""}
+        if (!hasLocation || typeof localStorage === "undefined") {return ""}
         const key = "__id__"
         const id = localStorage.getItem(key)
         if (isDefined(id)) {return id}

@@ -1,13 +1,12 @@
 import {DefaultObservableValue, Errors, Option, panic, RuntimeNotifier} from "@moises-ai/lib-std"
-import {AudioData} from "@moises-ai/lib-dsp"
+import {AudioData, WavFile} from "@moises-ai/lib-dsp"
 import {
     ExternalLib,
     FFmpegConverter,
     FFmpegWorker,
     OfflineEngineRenderer,
     ProjectMeta,
-    ProjectProfile,
-    WavFile
+    ProjectProfile
 } from "@moises-ai/studio-core"
 import {Files} from "@moises-ai/lib-dom"
 import {Promises} from "@moises-ai/lib-runtime"

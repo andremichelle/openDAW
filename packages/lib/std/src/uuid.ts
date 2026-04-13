@@ -36,8 +36,9 @@ export namespace UUID {
     export const toDataOutput = (output: DataOutput, uuid: UUID.Bytes): void =>
         output.writeBytes(new Int8Array(uuid.buffer))
 
+    const hex: string[] = Arrays.create(index => (index + 0x100).toString(16).substring(1), 256)
+
     export const toString = (format: Bytes): UUID.String => {
-        const hex: string[] = Arrays.create(index => (index + 0x100).toString(16).substring(1), 256)
         return (hex[format[0]] + hex[format[1]] +
             hex[format[2]] + hex[format[3]] + "-" +
             hex[format[4]] + hex[format[5]] + "-" +
@@ -51,7 +52,7 @@ export namespace UUID {
     export const parse = (string: string): Uint8Array => {
         const cleanUuid = string.replace(/-/g, "").toLowerCase()
         if (cleanUuid.length !== 32) {
-            return panic("Invalid UUID format")
+            return panic(`Invalid UUID format (${string})`)
         }
         const bytes = new Uint8Array(length)
         for (let i = 0, j = 0; i < 32; i += 2, j++) {
@@ -89,7 +90,7 @@ export namespace UUID {
     export type ZodLike = { string: typeof import("zod").string }
     export const zType = (z: ZodLike) =>
         z.string()
-            .refine((uuid): uuid is UUID.String => UUID.validateString(uuid), {message: "Invalid UUID format"})
+            .refine((uuid): uuid is UUID.String => UUID.validateString(uuid), {message: "Invalid UUID format (Zod)"})
             .transform(uuid => uuid as UUID.String)
 
     const fromUint8Array = (arr: Uint8Array): Uint8Array => {

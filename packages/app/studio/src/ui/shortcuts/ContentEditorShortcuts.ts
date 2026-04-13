@@ -4,9 +4,9 @@ import {CommonShortcuts} from "@/ui/shortcuts/CommonShortcuts"
 export const ContentEditorShortcutsFactory = ShortcutValidator.validate({
     ...CommonShortcuts.Position,
     ...CommonShortcuts.Selection,
-    "zoom-to-content": {
+    "zoom-to-loop-duration": {
         shortcut: Shortcut.of(Key.Backslash),
-        description: "Zoom to content"
+        description: "Zoom to loop duration"
     }
 })
 

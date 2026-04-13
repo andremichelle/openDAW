@@ -1,4 +1,5 @@
 import {
+    ApparatDeviceBox,
     ArpeggioDeviceBox,
     AudioBusBox,
     BoxVisitor,
@@ -32,6 +33,7 @@ import {
 } from "@moises-ai/studio-boxes"
 import {DelayDeviceProcessor} from "./devices/audio-effects/DelayDeviceProcessor"
 import {
+    ApparatDeviceBoxAdapter,
     ArpeggioDeviceBoxAdapter,
     AudioBusBoxAdapter,
     MaximizerDeviceBoxAdapter,
@@ -95,11 +97,14 @@ import {NeuralAmpDeviceProcessor} from "./devices/audio-effects/NeuralAmpDeviceP
 import {WaveshaperDeviceProcessor} from "./devices/audio-effects/WaveshaperDeviceProcessor"
 import {WerkstattDeviceProcessor} from "./devices/audio-effects/WerkstattDeviceProcessor"
 import {SpielwerkDeviceProcessor} from "./devices/midi-effects/SpielwerkDeviceProcessor"
+import {ApparatDeviceProcessor} from "./devices/instruments/ApparatDeviceProcessor"
 
 export namespace InstrumentDeviceProcessorFactory {
     export const create = (context: EngineContext,
                            box: Box): Maybe<InstrumentDeviceProcessor | AudioBusProcessor> =>
         box.accept<BoxVisitor<InstrumentDeviceProcessor | AudioBusProcessor>>({
+            visitApparatDeviceBox: (box: ApparatDeviceBox) =>
+                new ApparatDeviceProcessor(context, context.boxAdapters.adapterFor(box, ApparatDeviceBoxAdapter)),
             visitAudioBusBox: (box: AudioBusBox) =>
                 new AudioBusProcessor(context, context.boxAdapters.adapterFor(box, AudioBusBoxAdapter)),
             visitVaporisateurDeviceBox: (box: VaporisateurDeviceBox) =>

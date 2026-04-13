@@ -31,7 +31,7 @@ export namespace AudioOfflineRenderer {
             exportConfiguration: optExportConfiguration.unwrapOrUndefined()
         })
         engineWorklet.play()
-        engineWorklet.connect(context.destination)
+        engineWorklet.connect(context.destination, 0)
         await engineWorklet.isReady()
         while (!await engineWorklet.queryLoadingComplete()) {await Wait.timeSpan(TimeSpan.seconds(1))}
 

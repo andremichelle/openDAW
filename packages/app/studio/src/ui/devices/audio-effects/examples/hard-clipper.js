@@ -1,4 +1,4 @@
-// Hard Clipper
+// @label Hard Clipper
 // @param threshold 0.5 0.1 1.0 linear
 // @param soft false
 

@@ -14,10 +14,10 @@ import {Sample, SampleMetaData} from "@moises-ai/studio-adapters"
 import {SampleAPI} from "@moises-ai/studio-core"
 import {base64Credentials, OpenDAWHeaders} from "../OpenDAWHeaders"
 import {z} from "zod"
-import {AudioData} from "@moises-ai/lib-dsp"
-import {WavFile} from "../WavFile"
+import {AudioData, WavFile} from "@moises-ai/lib-dsp"
 
 // Standard openDAW samples (considered to be non-removable)
+/** @internal */
 export class OpenSampleAPI implements SampleAPI {
     static readonly ApiRoot = "https://api.opendaw.studio/samples"
     static readonly FileRoot = "https://assets.opendaw.studio/samples"

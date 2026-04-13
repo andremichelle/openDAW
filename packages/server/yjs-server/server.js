@@ -3,8 +3,9 @@
 import {WebSocketServer} from "ws"
 import https from "https"
 import fs from "fs"
+import path from "path"
 import * as number from "lib0/number"
-import {setupWSConnection} from "./utils.js"
+import {setupWSConnection, ROOM_CLEANUP_DELAY_MS, dataDir} from "./utils.js"
 import * as map from 'lib0/map'
 
 const host = process.env.HOST || "0.0.0.0"
@@ -19,7 +20,29 @@ const certConfig = isDev ? {
     cert: fs.readFileSync("/etc/letsencrypt/live/live.opendaw.studio/fullchain.pem"),
 }
 
-const server = https.createServer(certConfig, (_req, res) => {
+const corsAllowedOrigins = [
+    'https://opendaw.studio',
+    'https://dev.opendaw.studio',
+    'https://localhost:8080'
+]
+
+const server = https.createServer(certConfig, (req, res) => {
+    const origin = req.headers.origin
+    if (origin && corsAllowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin)
+    }
+    if (req.url === '/stats/rooms-count.json' || req.url === '/stats/rooms-duration.json') {
+        const filename = req.url === '/stats/rooms-count.json' ? 'rooms-count.json' : 'rooms-duration.json'
+        try {
+            const content = fs.readFileSync(path.join(dataDir, filename), 'utf8')
+            res.writeHead(200, {"Content-Type": "application/json"})
+            res.end(content)
+        } catch (err) {
+            res.writeHead(200, {"Content-Type": "application/json"})
+            res.end('{}')
+        }
+        return
+    }
     res.writeHead(200, {"Content-Type": "text/plain"})
     res.end("okay")
 })
@@ -33,6 +56,20 @@ const signalingWss = new WebSocketServer({noServer: true})
 
 // Track rooms and peers for signaling
 const rooms = new Map()
+const roomCleanupTimers = new Map()
+
+const scheduleSignalingCleanup = (topic) => {
+    console.log(`Signaling topic '${topic}' is empty, scheduling cleanup in ${ROOM_CLEANUP_DELAY_MS / 1000}s`)
+    const timer = setTimeout(() => {
+        roomCleanupTimers.delete(topic)
+        const subscribers = rooms.get(topic)
+        if (!subscribers || subscribers.size === 0) {
+            console.log(`Cleaning up signaling topic: ${topic}`)
+            rooms.delete(topic)
+        }
+    }, ROOM_CLEANUP_DELAY_MS)
+    roomCleanupTimers.set(topic, timer)
+}
 
 signalingWss.on('connection', (conn, req) => {
     console.log('WebRTC signaling connection from', req.headers.origin)
@@ -50,6 +87,11 @@ signalingWss.on('connection', (conn, req) => {
             switch (message.type) {
                 case 'subscribe': {
                     (message.topics || []).forEach(topic => {
+                        if (roomCleanupTimers.has(topic)) {
+                            console.log(`Cancelled signaling cleanup for topic: ${topic} (peer reconnected)`)
+                            clearTimeout(roomCleanupTimers.get(topic))
+                            roomCleanupTimers.delete(topic)
+                        }
                         subscribedTopics.add(topic)
                         const subscribers = map.setIfUndefined(rooms, topic, () => new Set())
                         subscribers.add(conn)
@@ -65,7 +107,7 @@ signalingWss.on('connection', (conn, req) => {
                         if (subscribers) {
                             subscribers.delete(conn)
                             if (subscribers.size === 0) {
-                                rooms.delete(topic)
+                                scheduleSignalingCleanup(topic)
                             }
                         }
                     })
@@ -114,7 +156,7 @@ signalingWss.on('connection', (conn, req) => {
             if (subscribers) {
                 subscribers.delete(conn)
                 if (subscribers.size === 0) {
-                    rooms.delete(topic)
+                    scheduleSignalingCleanup(topic)
                 }
             }
         })

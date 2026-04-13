@@ -33,6 +33,16 @@ export const PerformanceStats = ({lifecycle, service}: Construct) => {
         writePixelIndex = 0
         budgetMs = (RenderQuantum / service.audioContext.sampleRate) * 1000
     }))
+    const powerButton: HTMLDivElement = (
+        <div className="power"
+             title="Toggle DSP load measurement"
+             onclick={() => {
+                 const settings = service.engine.preferences.settings
+                 settings.debug.dspLoadMeasurement = !settings.debug.dspLoadMeasurement
+             }}>
+            {"\u23FB"}
+        </div>
+    )
     return (
         <div className={className}
              onInit={element => {
@@ -83,7 +93,11 @@ export const PerformanceStats = ({lifecycle, service}: Construct) => {
                          animationLifeSpan.own(AnimationFrame.add(painter.requestUpdate))
                      }
                  }, "debug", "show-cpu-stats"))
+                 lifecycle.own(service.engine.preferences.catchupAndSubscribe(enabled => {
+                     powerButton.classList.toggle("hidden", enabled)
+                 }, "debug", "dspLoadMeasurement"))
              }}>
+            {powerButton}
             <div className="label">CPU</div>
             <canvas style={{width: `${WIDTH}px`, height: `${HEIGHT}px`}}/>
             <div className="end"/>

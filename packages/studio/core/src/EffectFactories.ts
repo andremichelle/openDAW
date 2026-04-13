@@ -35,6 +35,7 @@ export namespace EffectFactories {
     export const Arpeggio: EffectFactory = {
         defaultName: "Arpeggio",
         defaultIcon: IconSymbol.Stack,
+        briefDescription: "Arpeggiator",
         description: "Generates rhythmic note sequences from chords",
         manualPage: DeviceManualUrls.Arpeggio,
         separatorBefore: false,
@@ -51,6 +52,7 @@ export namespace EffectFactories {
     export const Pitch: EffectFactory = {
         defaultName: "Pitch",
         defaultIcon: IconSymbol.Note,
+        briefDescription: "Pitch Transformer",
         description: "Shifts the pitch of incoming notes",
         manualPage: DeviceManualUrls.Pitch,
         separatorBefore: false,
@@ -67,6 +69,7 @@ export namespace EffectFactories {
     export const Velocity: EffectFactory = {
         defaultName: "Velocity",
         defaultIcon: IconSymbol.Velocity,
+        briefDescription: "Velocity Transformer",
         description: "Manipulates the velocity of incoming notes",
         manualPage: DeviceManualUrls.Velocity,
         separatorBefore: false,
@@ -83,6 +86,7 @@ export namespace EffectFactories {
     export const Zeitgeist: EffectFactory = {
         defaultName: "Zeitgeist",
         defaultIcon: IconSymbol.Zeitgeist,
+        briefDescription: "Shuffle",
         description: "Distorts space and time",
         manualPage: DeviceManualUrls.Zeitgeist,
         separatorBefore: false,
@@ -116,6 +120,7 @@ export namespace EffectFactories {
     export const Spielwerk: EffectFactory = {
         defaultName: "Spielwerk",
         defaultIcon: IconSymbol.Code,
+        briefDescription: "Scriptable FX",
         description: "User-scripted MIDI effect processor",
         manualPage: DeviceManualUrls.Spielwerk,
         separatorBefore: false,
@@ -132,8 +137,8 @@ export namespace EffectFactories {
     export const StereoTool: EffectFactory = {
         defaultName: "Stereo Tool",
         defaultIcon: IconSymbol.Stereo,
-        description:
-            "Computes a stereo transformation matrix with volume, panning, phase inversion and stereo width.",
+        briefDescription: "Stereo Imaging",
+        description: "Computes a stereo transformation matrix with volume, panning, phase inversion and stereo width.",
         manualPage: DeviceManualUrls.StereoTool,
         separatorBefore: false,
         external: false,
@@ -149,6 +154,7 @@ export namespace EffectFactories {
     export const Delay: EffectFactory = {
         defaultName: "Delay",
         defaultIcon: IconSymbol.Time,
+        briefDescription: "Echo FX",
         description: "Echoes the input signal with time-based repeats",
         manualPage: DeviceManualUrls.Delay,
         separatorBefore: false,
@@ -166,8 +172,8 @@ export namespace EffectFactories {
     export const DattorroReverb: EffectFactory = {
         defaultName: "Dattorro Reverb",
         defaultIcon: IconSymbol.Dattorro,
-        description:
-            "Dense algorithmic reverb based on Dattorro's design, capable of infinite decay",
+        briefDescription: "Reverb",
+        description: "Dense algorithmic reverb based on Dattorro's design, capable of infinite decay",
         manualPage: DeviceManualUrls.DattorroReverb,
         separatorBefore: false,
         external: false,
@@ -183,6 +189,7 @@ export namespace EffectFactories {
     export const Maximizer: EffectFactory = {
         defaultName: "Maximizer",
         defaultIcon: IconSymbol.Volume,
+        briefDescription: "Brickwall Limiter",
         description: "Brickwall limiter with automatic makeup gain",
         manualPage: DeviceManualUrls.Maximizer,
         separatorBefore: false,
@@ -199,8 +206,8 @@ export namespace EffectFactories {
     export const Compressor: EffectFactory = {
         defaultName: "Compressor",
         defaultIcon: IconSymbol.Compressor,
-        description:
-            "Reduces the dynamic range by attenuating signals above a threshold",
+        briefDescription: "Compressor",
+        description: "Reduces the dynamic range by attenuating signals above a threshold",
         manualPage: DeviceManualUrls.Compressor,
         separatorBefore: false,
         external: false,
@@ -216,6 +223,7 @@ export namespace EffectFactories {
     export const Gate: EffectFactory = {
         defaultName: "Gate",
         defaultIcon: IconSymbol.Gate,
+        briefDescription: "Noise Gate",
         description: "Attenuates signals below a threshold to reduce noise",
         manualPage: DeviceManualUrls.Gate,
         separatorBefore: false,
@@ -232,6 +240,7 @@ export namespace EffectFactories {
     export const Reverb: EffectFactory = {
         defaultName: "Free Reverb",
         defaultIcon: IconSymbol.Cube,
+        briefDescription: "Reverb",
         description: "Simulates space and depth with reflections",
         manualPage: DeviceManualUrls.Reverb,
         separatorBefore: false,
@@ -249,6 +258,7 @@ export namespace EffectFactories {
     export const Crusher: EffectFactory = {
         defaultName: "Crusher",
         defaultIcon: IconSymbol.Bug,
+        briefDescription: "Bit Crusher",
         description: "Degrates the audio signal",
         manualPage: DeviceManualUrls.Crusher,
         separatorBefore: false,
@@ -265,6 +275,7 @@ export namespace EffectFactories {
     export const Fold: EffectFactory = {
         defaultName: "Fold",
         defaultIcon: IconSymbol.Fold,
+        briefDescription: "Wavefolder",
         description: "Folds the signal back into audio-range",
         manualPage: DeviceManualUrls.Fold,
         separatorBefore: false,
@@ -281,6 +292,7 @@ export namespace EffectFactories {
     export const Waveshaper: EffectFactory = {
         defaultName: "Waveshaper",
         defaultIcon: IconSymbol.Curve,
+        briefDescription: "Waveshaper",
         description: "Applies nonlinear waveshaping distortion",
         manualPage: DeviceManualUrls.Waveshaper,
         separatorBefore: false,
@@ -297,6 +309,7 @@ export namespace EffectFactories {
     export const Tidal: EffectFactory = {
         defaultName: "Tidal",
         defaultIcon: IconSymbol.Tidal,
+        briefDescription: "Tremolo & Autopan",
         description: "Shape rhythm and space through volume and pan.",
         manualPage: DeviceManualUrls.Tidal,
         separatorBefore: false,
@@ -314,6 +327,7 @@ export namespace EffectFactories {
     export const Revamp: EffectFactory = {
         defaultName: "Revamp",
         defaultIcon: IconSymbol.EQ,
+        briefDescription: "Graphical EQ",
         description: "Shapes the frequency balance of the sound",
         manualPage: DeviceManualUrls.Revamp,
         separatorBefore: false,
@@ -330,6 +344,7 @@ export namespace EffectFactories {
     export const NeuralAmp: EffectFactory = {
         defaultName: "Tone3000",
         defaultIcon: IconSymbol.Tone3000,
+        briefDescription: "Amp Modeler",
         description: "Access thousands of amps, pedals, and cabs captured with Neural Amp Modeler.",
         manualPage: DeviceManualUrls.NeuralAmp,
         separatorBefore: false,
@@ -346,6 +361,7 @@ export namespace EffectFactories {
     export const Werkstatt: EffectFactory = {
         defaultName: "Werkstatt",
         defaultIcon: IconSymbol.Code,
+        briefDescription: "Scriptable FX",
         description: "User-scripted DSP processor",
         manualPage: DeviceManualUrls.Werkstatt,
         separatorBefore: false,
@@ -362,16 +378,13 @@ export namespace EffectFactories {
     export const Modular: EffectFactory = {
         defaultName: "🔇 Create New Modular Audio Effect (inaudible yet)",
         defaultIcon: IconSymbol.Box,
+        briefDescription: "Modular System",
         description: "",
         manualPage: DeviceManualUrls.Modular,
         separatorBefore: true,
         external: false,
         type: "audio",
-        create: (
-            {boxGraph, rootBox, userEditingManager},
-            hostField,
-            index
-        ): ModularDeviceBox => {
+        create: ({boxGraph, rootBox, userEditingManager}, hostField, index): ModularDeviceBox => {
             const moduleSetupBox = ModularBox.create(
                 boxGraph,
                 UUID.generate(),

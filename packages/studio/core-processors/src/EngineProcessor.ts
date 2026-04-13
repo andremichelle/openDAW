@@ -110,6 +110,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
     #processQueue: Option<ReadonlyArray<Processor>> = Option.None
     #primaryOutput: Option<AudioUnit> = Option.None
     #currentInput: ReadonlyArray<Float32Array> = []
+    #monitoringMap: ReadonlyArray<MonitoringMapEntry> = []
 
     #context: Option<EngineContext> = Option.None
     #midiSender: Option<MIDISender> = Option.None
@@ -191,8 +192,10 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
             x.isPlaying = transporting
             x.isRecording = isRecording
             x.isCountingIn = isCountingIn
-            x.perfBuffer.set(this.#perfBuffer)
-            x.perfIndex = this.#perfWriteIndex
+            if (this.#preferences.settings.debug.dspLoadMeasurement) {
+                x.perfBuffer.set(this.#perfBuffer)
+                x.perfIndex = this.#perfWriteIndex
+            }
         })
         this.#liveStreamBroadcaster = this.#terminator.own(LiveStreamBroadcaster.create(this.#messenger, "engine-live-data"))
         this.#updateClock = new UpdateClock(this)
@@ -233,6 +236,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                     this.optAudioUnit(uuid).ifSome(unit => unit.setFrozenAudio(Option.wrap(audioData)))
                 },
                 updateMonitoringMap: (map: ReadonlyArray<MonitoringMapEntry>): void => {
+                    this.#monitoringMap = map
                     this.#audioUnits.forEach(unit => unit.clearMonitoringChannels())
                     for (const {uuid, channels} of map) {
                         this.optAudioUnit(uuid).ifSome(unit => unit.setMonitoringChannels(channels))
@@ -355,11 +359,12 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
         }
     }
 
-    render(inputs: Float32Array[][], [output]: Float32Array[][]): boolean {
+    render(inputs: Float32Array[][], [mainOutput, monitoringOutput]: Float32Array[][]): boolean {
         if (!this.#valid) {return false}
         if (this.#panic) {return panic("Manual Panic")}
         this.#currentInput = inputs[0] ?? []
-        const elapsed = this.#hrClock.start()
+        const measureLoad = this.#preferences.settings.debug.dspLoadMeasurement
+        const elapsed = measureLoad ? this.#hrClock.start() : 0
         const metronomeEnabled = this.#timeInfo.metronomeEnabled
         this.#notifier.notify(ProcessPhase.Before)
         if (this.#processQueue.isEmpty()) {
@@ -376,23 +381,34 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
             processors.forEach(processor => processor.process(processInfo))
             if (metronomeEnabled) {this.#metronome.process(processInfo)}
         })
+        if (isDefined(monitoringOutput)) {
+            for (const {uuid, channels} of this.#monitoringMap) {
+                this.optAudioUnit(uuid).ifSome(unit => {
+                    const [l, r] = unit.audioOutput().channels()
+                    monitoringOutput[channels[0]].set(l)
+                    if (channels.length === 2) {monitoringOutput[channels[1]].set(r)}
+                })
+            }
+        }
         if (this.#stemExports.length === 0) {
-            this.#primaryOutput.unwrap().audioOutput().replaceInto(output)
-            if (metronomeEnabled) {this.#metronome.output.mixInto(output)}
-            this.#peaks.process(output[0], output[1])
-            this.#analyser.process(output[0], output[1], 0, RenderQuantum)
+            this.#primaryOutput.unwrap().audioOutput().replaceInto(mainOutput)
+            if (metronomeEnabled) {this.#metronome.output.mixInto(mainOutput)}
+            this.#peaks.process(mainOutput[0], mainOutput[1])
+            this.#analyser.process(mainOutput[0], mainOutput[1], 0, RenderQuantum)
         } else {
             this.#stemExports.forEach((unit: AudioUnit, index: int) => {
                 const [l, r] = unit.audioOutput().channels()
-                output[index * 2].set(l)
-                output[index * 2 + 1].set(r)
+                mainOutput[index * 2].set(l)
+                mainOutput[index * 2 + 1].set(r)
             })
         }
         this.#notifier.notify(ProcessPhase.After)
         this.#clipSequencing.changes().ifSome(changes => this.#engineToClient.notifyClipSequenceChanges(changes))
-        this.#hrClock.end()
-        this.#perfBuffer[this.#perfWriteIndex] = elapsed
-        this.#perfWriteIndex = (this.#perfWriteIndex + 1) % PERF_BUFFER_SIZE
+        if (measureLoad) {
+            this.#hrClock.end()
+            this.#perfBuffer[this.#perfWriteIndex] = elapsed
+            this.#perfWriteIndex = (this.#perfWriteIndex + 1) % PERF_BUFFER_SIZE
+        }
         this.#stateSender.tryWrite()
         this.#liveStreamBroadcaster.flush()
         return true

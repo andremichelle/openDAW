@@ -50,6 +50,7 @@ export namespace ProjectStorage {
     }
 
     export const listUsedAssets = async (type: Class<AudioFileBox | SoundfontFileBox>): Promise<Set<string>> => {
+        console.debug("listUsedAssets", type.name)
         const uuids: Array<string> = []
         const files = await Workers.Opfs.list(ProjectPaths.Folder)
         for (const {name} of files.filter(file => file.kind === "directory")) {

@@ -13,6 +13,7 @@ import {
 } from "@moises-ai/lib-std"
 import {Await, createElement} from "@moises-ai/lib-jsx"
 import {Events, Html, Keyboard} from "@moises-ai/lib-dom"
+import {MonacoFactory} from "@/monaco/factory"
 import {Promises} from "@moises-ai/lib-runtime"
 import {IconSymbol} from "@moises-ai/studio-enums"
 import {ShadertoyBox} from "@moises-ai/studio-boxes"
@@ -46,31 +47,12 @@ export const ShadertoyEditor = ({service, lifecycle}: Construct) => {
                 failure={({retry, reason}) => (<p onclick={retry}>{reason}</p>)}
                 loading={() => ThreeDots()}
                 success={([monaco]) => {
-                    const container = (<div className="monaco-editor"/>)
-                    const modelUri = monaco.Uri.parse("file:///shader.glsl")
-                    let model = monaco.editor.getModel(modelUri)
-                    if (!model) {
-                        const code = rootBox.shadertoy.targetVertex.mapOr((box) =>
-                            asInstanceOf(box, ShadertoyBox).shaderCode.getValue(), Example)
-                        model = monaco.editor.createModel(code, "glsl", modelUri)
-                    }
-                    const editor = monaco.editor.create(container, {
-                        language: "glsl",
-                        quickSuggestions: {
-                            other: true,
-                            comments: false,
-                            strings: false
-                        },
-                        occurrencesHighlight: "off", // prevents Firefox issue
-                        suggestOnTriggerCharacters: true,
-                        acceptSuggestionOnCommitCharacter: true,
-                        acceptSuggestionOnEnter: "on",
-                        wordBasedSuggestions: "off",
-                        model: model,
-                        theme: "vs-dark",
-                        automaticLayout: true
+                    const initialCode = rootBox.shadertoy.targetVertex.mapOr((box) =>
+                        asInstanceOf(box, ShadertoyBox).shaderCode.getValue(), Example)
+                    const {editor, model, container} = MonacoFactory.create({
+                        monaco, lifecycle, language: "glsl",
+                        uri: "file:///shader.glsl", initialCode
                     })
-                    const allowed = ["c", "v", "x", "a", "z", "y"]
                     const canCompile = (code: string): Attempt<void, string> => {
                         const canvas = document.createElement("canvas")
                         const gl = canvas.getContext("webgl2")
@@ -163,19 +145,6 @@ export const ShadertoyEditor = ({service, lifecycle}: Construct) => {
                                 event.stopPropagation()
                             }*/
                         }, {capture: true}),
-                        Events.subscribe(container, "keydown", event => {
-                            if ((event.ctrlKey || event.metaKey) && allowed.includes(event.key.toLowerCase())) {
-                                return // Let Monaco handle these
-                            }
-                            event.stopPropagation()
-                        }),
-                        Events.subscribe(container, "keyup", event => {
-                            if ((event.ctrlKey || event.metaKey) && allowed.includes(event.key.toLowerCase())) {
-                                return // Let Monaco handle these
-                            }
-                            event.stopPropagation()
-                        }),
-                        Events.subscribe(container, "keypress", event => event.stopPropagation())
                     )
                     return (
                         <div>

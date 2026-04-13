@@ -16,6 +16,7 @@ import {PrimitiveType} from "@moises-ai/lib-box"
 import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {ParameterLabel} from "@/ui/components/ParameterLabel.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 import {DeviceInterfaceKnobBox} from "@moises-ai/studio-boxes"
 import {Events, Html} from "@moises-ai/lib-dom"
 import {Colors, IconSymbol} from "@moises-ai/studio-enums"
@@ -112,14 +113,17 @@ export const GenericModuleView = ({lifecycle, environment, adapter}: Construct) 
                             return (
                                 <Frag>
                                     {label}
-                                    <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing}
-                                                               parameter={parameterAdapter}>
-                                        <ParameterLabel lifecycle={lifecycle}
-                                                        editing={editing}
-                                                        midiLearning={midiLearning}
-                                                        adapter={adapter.modular.device}
-                                                        parameter={parameterAdapter}/>
-                                    </RelativeUnitValueDragging>
+                                    <AutomationControl lifecycle={lifecycle}
+                                                       editing={editing}
+                                                       midiLearning={midiLearning}
+                                                       tracks={adapter.modular.device.deviceHost().audioUnitBoxAdapter().tracks}
+                                                       parameter={parameterAdapter}>
+                                        <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing}
+                                                                   parameter={parameterAdapter}>
+                                            <ParameterLabel lifecycle={lifecycle}
+                                                            parameter={parameterAdapter}/>
+                                        </RelativeUnitValueDragging>
+                                    </AutomationControl>
                                 </Frag>
                             )
                         case PrimitiveType.Boolean:

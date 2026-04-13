@@ -3,6 +3,7 @@ import {Column} from "@/ui/devices/Column.tsx"
 import {createElement} from "@moises-ai/lib-jsx"
 import {LKR} from "@/ui/devices/constants.ts"
 import {ParameterLabelKnob} from "@/ui/devices/ParameterLabelKnob.tsx"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 import {Color, Editing, TerminableOwner, ValueGuide} from "@moises-ai/lib-std"
 import {PrimitiveValues} from "@moises-ai/lib-box"
 import {MIDILearning} from "@moises-ai/studio-core"
@@ -35,18 +36,23 @@ export namespace ControlBuilder {
          style,
          disableAutomation
      }: Creation<T>) => {
+        const tracks = adapter.deviceHost().audioUnitBoxAdapter().tracks
         return (
-            <Column ems={LKR} color={color ?? Colors.cream} style={style}>
-                <h5>{parameter.name}</h5>
-                <ParameterLabelKnob lifecycle={lifecycle}
-                                    editing={editing}
-                                    midiLearning={midiLearning}
-                                    adapter={adapter}
-                                    parameter={parameter}
-                                    options={options}
-                                    anchor={anchor}
-                                    disableAutomation={disableAutomation}/>
-            </Column>
+            <AutomationControl lifecycle={lifecycle}
+                               editing={editing}
+                               midiLearning={midiLearning}
+                               tracks={tracks}
+                               parameter={parameter}
+                               disableAutomation={disableAutomation}>
+                <Column ems={LKR} color={color ?? Colors.cream} style={style}>
+                    <h5>{parameter.name}</h5>
+                    <ParameterLabelKnob lifecycle={lifecycle}
+                                        editing={editing}
+                                        parameter={parameter}
+                                        options={options}
+                                        anchor={anchor}/>
+                </Column>
+            </AutomationControl>
         )
     }
 }

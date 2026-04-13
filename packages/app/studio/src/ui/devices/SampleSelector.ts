@@ -19,8 +19,9 @@ export interface SampleSelectStrategy {
 export namespace SampleSelectStrategy {
     export const changePointer = (filePointer: PointerField<Pointers.AudioFile>,
                                   replacement: Option<AudioFileBox>): void => {
+        if (!filePointer.box.isAttached()) {return}
         replacement.match({
-            none: () => filePointer.box.delete(), // no sample > delete box
+            none: () => filePointer.box.delete(),
             some: newFile => filePointer.targetVertex.match({
                 none: () => filePointer.refer(newFile), // just refer
                 some: ({box: existingFile}) => {

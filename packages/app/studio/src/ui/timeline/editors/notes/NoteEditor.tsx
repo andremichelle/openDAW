@@ -1,6 +1,6 @@
 import css from "./NoteEditor.sass?inline"
 import {Html, ShortcutManager} from "@moises-ai/lib-dom"
-import {DefaultObservableValue, int, isInstanceOf, Lifecycle, Terminable, UUID} from "@moises-ai/lib-std"
+import {DefaultObservableValue, int, isInstanceOf, Lifecycle, Terminable, Terminator, UUID} from "@moises-ai/lib-std"
 import {createElement} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {PitchEditor} from "@/ui/timeline/editors/notes/pitch/PitchEditor.tsx"
@@ -36,16 +36,57 @@ type Construct = {
 }
 
 const scale = new ScaleConfig()
+const pitchPositioner = new PitchPositioner()
 
 export const NoteEditor =
     ({lifecycle, service, menu: {editMenu, viewMenu}, range, snapping, reader}: Construct) => {
         const {project} = service
         const {captureDevices, editing, engine, boxGraph, boxAdapters} = project
-        const capture: CaptureMidi = reader.trackBoxAdapter
+        const resolveCapture = (): CaptureMidi => reader.trackBoxAdapter
             .flatMap((adapter) => captureDevices.get(adapter.audioUnit.address.uuid))
             .map(capture => isInstanceOf(capture, CaptureMidi) ? capture : null).unwrap("No CaptureMidi available")
+        const captureRef = {current: resolveCapture()}
+        const noteReceiver = lifecycle.own(new NoteStreamReceiver(project.liveStreamReceiver))
+        const trackBindings = lifecycle.own(new Terminator())
+        const bindToTrack = () => {
+            const oldCapture = captureRef.current
+            for (let pitch = 0; pitch < 128; pitch++) {
+                if (noteReceiver.isNoteOn(pitch)) {
+                    oldCapture.notify(NoteSignal.off(oldCapture.uuid, pitch))
+                }
+            }
+            trackBindings.terminate()
+            captureRef.current = resolveCapture()
+            const audioUnitAddress = reader.trackBoxAdapter.unwrap().audioUnit.address
+            noteReceiver.bind(project.liveStreamReceiver, audioUnitAddress)
+            trackBindings.own(captureRef.current.subscribeNotes(signal => {
+                if (engine.isPlaying.getValue() || !stepRecording.getValue()) {return}
+                if (NoteSignal.isOn(signal)) {
+                    const {pitch, velocity} = signal
+                    const position = snapping.floor(engine.position.getValue())
+                    const duration = snapping.value(position)
+                    let createdNote = false
+                    editing.modify(() => {
+                        NoteEventBox.create(boxGraph, UUID.generate(), box => {
+                            box.events.refer(eventsField)
+                            box.position.setValue(position - reader.offset)
+                            box.duration.setValue(duration)
+                            box.pitch.setValue(pitch)
+                            box.velocity.setValue(velocity)
+                        })
+                        createdNote = true
+                    })
+                    if (createdNote) {
+                        engine.setPosition(position + duration)
+                    }
+                }
+            }))
+        }
+        bindToTrack()
+        lifecycle.own(reader.subscribeTrackChange(() => {
+            if (reader.trackBoxAdapter.nonEmpty()) {bindToTrack()}
+        }))
         const stepRecording = lifecycle.own(new DefaultObservableValue(false))
-        const pitchPositioner = lifecycle.own(new PitchPositioner())
         const modifyContext = new ObservableModifyContext<NoteModifier>()
         const propertyOwner = new DefaultObservableValue<PropertyAccessor>(NotePropertyVelocity)
         const eventsField = reader.content.box.events
@@ -55,8 +96,6 @@ export const NoteEditor =
                 fx: adapter => adapter.box,
                 fy: vertex => project.boxAdapters.adapterFor(vertex.box, NoteEventBoxAdapter)
             }))
-        const audioUnitAddress = reader.trackBoxAdapter.unwrap().audioUnit.address
-        const noteReceiver = lifecycle.own(new NoteStreamReceiver(project.liveStreamReceiver, audioUnitAddress))
         const pitchHeader: HTMLElement = (
             <div className="pitch-header">
                 <PitchEditorHeader lifecycle={lifecycle}
@@ -68,7 +107,7 @@ export const NoteEditor =
                            positioner={pitchPositioner}
                            scale={scale}
                            noteReceiver={noteReceiver}
-                           capture={capture}/>
+                           captureRef={captureRef}/>
             </div>
         )
         const pitchBody: HTMLElement = (
@@ -80,7 +119,6 @@ export const NoteEditor =
                              snapping={snapping}
                              positioner={pitchPositioner}
                              scale={scale}
-                             capture={capture}
                              selection={selection}
                              modifyContext={modifyContext}
                              reader={reader}
@@ -107,7 +145,12 @@ export const NoteEditor =
                 return () => {
                     if (init) {
                         init = false
-                        centerNote = 60
+                        const {content} = reader
+                        if (content.events.isEmpty()) {
+                            centerNote = 60
+                        } else {
+                            centerNote = Math.round((content.minPitch + content.maxPitch) / 2)
+                        }
                     } else {
                         centerNote = pitchPositioner.centerNote
                     }
@@ -150,28 +193,6 @@ export const NoteEditor =
                 .forEach(cursor => cursor.classList.toggle("step-recording", owner.getValue()))),
             Terminable.create(() => document.querySelectorAll("[data-component='cursor']")
                 .forEach(cursor => cursor.classList.remove("step-recording"))),
-            capture.subscribeNotes(signal => {
-                if (engine.isPlaying.getValue() || !stepRecording.getValue()) {return}
-                if (NoteSignal.isOn(signal)) {
-                    const {pitch, velocity} = signal
-                    const position = snapping.floor(engine.position.getValue())
-                    const duration = snapping.value(position)
-                    let createdNote = false
-                    editing.modify(() => {
-                        NoteEventBox.create(boxGraph, UUID.generate(), box => {
-                            box.events.refer(eventsField)
-                            box.position.setValue(position - reader.offset)
-                            box.duration.setValue(duration)
-                            box.pitch.setValue(pitch)
-                            box.velocity.setValue(velocity)
-                        })
-                        createdNote = true
-                    })
-                    if (createdNote) {
-                        engine.setPosition(position + duration)
-                    }
-                }
-            }),
             ClipboardManager.install(element, clipboardHandler)
         )
         return element

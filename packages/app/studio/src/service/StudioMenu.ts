@@ -1,13 +1,14 @@
-import {EmptyExec, isAbsent, RuntimeNotifier} from "@moises-ai/lib-std"
+import {EmptyExec} from "@moises-ai/lib-std"
 import {Browser, Files} from "@moises-ai/lib-dom"
 import {RouteLocation} from "@moises-ai/lib-jsx"
 import {Promises} from "@moises-ai/lib-runtime"
 import {Colors, IconSymbol} from "@moises-ai/studio-enums"
-import {CloudBackup, FilePickerAcceptTypes, MenuItem, StudioPreferences, YService} from "@moises-ai/studio-core"
+import {CloudBackup, FilePickerAcceptTypes, MenuItem} from "@moises-ai/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {VideoRenderer} from "@/video/VideoRenderer"
 import {createDebugMenu} from "@/service/DebugMenu"
+import {connectRoom} from "@/service/StudioLiveRoomConnect"
 
 export const populateStudioMenu = (service: StudioService) => {
     const Global = GlobalShortcuts
@@ -80,69 +81,53 @@ export const populateStudioMenu = (service: StudioService) => {
                             }).setTriggerProcedure(async () => Promises.tryCatch(VideoRenderer.render(
                                 service.project, service.profile.meta.name, service.project.engine.sampleRate)))
                         )),
-                    MenuItem.default({label: "Cloud Backup"})
-                        .setRuntimeChildrenProcedure(parent => {
-                            parent.addMenuItem(
-                                MenuItem.default({
-                                    label: "Dropbox",
-                                    icon: IconSymbol.Dropbox
-                                }).setTriggerProcedure(() =>
-                                    CloudBackup.backup(service.cloudAuthManager, "Dropbox").catch(EmptyExec)),
-                                MenuItem.default({
-                                    label: "GoogleDrive",
-                                    icon: IconSymbol.GoogleDrive
-                                }).setTriggerProcedure(() =>
-                                    CloudBackup.backup(service.cloudAuthManager, "GoogleDrive").catch(EmptyExec)),
-                                MenuItem.default({label: "Help", icon: IconSymbol.Help, separatorBefore: true})
-                                    .setTriggerProcedure(() => RouteLocation.get().navigateTo("/manuals/cloud-backup"))
-                            )
-                        }),
-                    MenuItem.default({label: "Window", separatorBefore: true})
-                        .setRuntimeChildrenProcedure(parent => {
-                            return parent.addMenuItem(
-                                MenuItem.default({
-                                    label: "Show MIDI-Keyboard",
-                                    shortcut: GlobalShortcuts["toggle-software-keyboard"].shortcut.format(),
-                                    checked: service.isSoftwareKeyboardVisible()
-                                }).setTriggerProcedure(() => service.toggleSoftwareKeyboard())
-                            )
-                        }),
                     MenuItem.default({
-                        label: "Experimental Features",
-                        hidden: !StudioPreferences.settings.debug["enable-beta-features"],
-                        separatorBefore: true
+                        label: "Join Live Room...",
+                        icon: IconSymbol.Connected,
+                        separatorBefore: true,
+                    }).setTriggerProcedure(() => connectRoom(service)),
+                    MenuItem.default({
+                        label: "Show MIDI-Keyboard",
+                        icon: IconSymbol.Piano,
+                        separatorBefore: true,
+                        shortcut: GlobalShortcuts["toggle-software-keyboard"].shortcut.format(),
+                        checked: service.isSoftwareKeyboardVisible()
+                    }).setTriggerProcedure(() => service.toggleSoftwareKeyboard()),
+                    MenuItem.default({
+                        label: "Cloud Backup",
+                        icon: IconSymbol.CloudFolder,
+                        separatorBefore: true,
                     }).setRuntimeChildrenProcedure(parent => {
                         parent.addMenuItem(
-                            MenuItem.default({label: "Connect Room..."})
-                                .setTriggerProcedure(async () => {
-                                    const roomName = prompt("Enter a room name:", "")
-                                    if (isAbsent(roomName)) {return}
-                                    const dialog = RuntimeNotifier.progress({
-                                        headline: "Connecting to Room...",
-                                        message: "Please wait while we connect to the room..."
-                                    })
-                                    const {status, value: project, error} = await Promises.tryCatch(
-                                        YService.getOrCreateRoom(service.projectProfileService.getValue()
-                                            .map(profile => profile.project), service, roomName))
-                                    if (status === "resolved") {
-                                        service.projectProfileService.setProject(project, roomName)
-                                    } else {
-                                        await RuntimeNotifier.info({
-                                            headline: "Failed Connecting Room",
-                                            message: String(error)
-                                        })
-                                    }
-                                    dialog.terminate()
-                                })
+                            MenuItem.default({
+                                label: "Dropbox",
+                                icon: IconSymbol.Dropbox
+                            }).setTriggerProcedure(() =>
+                                CloudBackup.backup(service.cloudAuthManager, "Dropbox").catch(EmptyExec)),
+                            MenuItem.default({
+                                label: "GoogleDrive",
+                                icon: IconSymbol.GoogleDrive
+                            }).setTriggerProcedure(() =>
+                                CloudBackup.backup(service.cloudAuthManager, "GoogleDrive").catch(EmptyExec)),
+                            MenuItem.default({label: "Help", icon: IconSymbol.Help, separatorBefore: true})
+                                .setTriggerProcedure(() => RouteLocation.get().navigateTo("/manuals/cloud-backup"))
                         )
                     }),
-                    MenuItem.default({label: "Script Editor", separatorBefore: true})
-                        .setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
+                    MenuItem.default({
+                        label: "Script Editor",
+                        separatorBefore: true,
+                        icon: IconSymbol.Code,
+                    }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
                     MenuItem.default({
                         label: "Preferences",
                         shortcut: GlobalShortcuts["show-preferences"].shortcut.format(),
-                        separatorBefore: true
+                        separatorBefore: true,
+                        icon: IconSymbol.System
                     }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/preferences")),
+                    MenuItem.default({
+                        label: "Statistics",
+                        icon: IconSymbol.Charts
+                    }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/stats")),
                     createDebugMenu(service)
                 )
             }

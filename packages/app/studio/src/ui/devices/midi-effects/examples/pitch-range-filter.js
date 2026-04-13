@@ -1,4 +1,4 @@
-// Pitch Range Filter
+// @label Pitch Range Filter
 // @param low 36 0 127 int
 // @param high 84 0 127 int
 

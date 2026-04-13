@@ -2,9 +2,8 @@ import {ByteArrayInput, EmptyExec, Lazy, UUID} from "@moises-ai/lib-std"
 import {Peaks, SamplePeaks} from "@moises-ai/lib-fusion"
 import {Sample, SampleMetaData} from "@moises-ai/studio-adapters"
 import {Workers} from "../Workers"
-import {WavFile} from "../WavFile"
 import {Storage} from "../Storage"
-import {AudioData} from "@moises-ai/lib-dsp"
+import {AudioData, WavFile} from "@moises-ai/lib-dsp"
 
 export namespace SampleStorage {
     export type NewSample = {

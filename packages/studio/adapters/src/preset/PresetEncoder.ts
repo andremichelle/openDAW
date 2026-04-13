@@ -10,7 +10,7 @@ export namespace PresetEncoder {
         const header = ByteArrayOutput.create()
         header.writeInt(PresetHeader.MAGIC_HEADER_OPEN)
         header.writeInt(PresetHeader.FORMAT_VERSION)
-        const preset = ProjectSkeleton.empty({createOutputCompressor: false, createDefaultUser: false})
+        const preset = ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
         const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}} = preset
         const audioUnitBoxes = [audioUnitBox]
         const excludeBox = (box: Box): boolean =>

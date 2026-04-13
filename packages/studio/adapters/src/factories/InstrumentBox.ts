@@ -1,4 +1,5 @@
 import {
+    ApparatDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
     PlayfieldDeviceBox,
@@ -8,6 +9,7 @@ import {
 } from "@moises-ai/studio-boxes"
 
 export type InstrumentBox =
+    | ApparatDeviceBox
     | TapeDeviceBox
     | VaporisateurDeviceBox
     | NanoDeviceBox

@@ -1,8 +1,8 @@
 import {Dialog} from "@/ui/components/Dialog"
 import {Surface} from "@/ui/surface/Surface"
-import {IconSymbol} from "@moises-ai/studio-enums"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {createElement} from "@moises-ai/lib-jsx"
-import {DefaultObservableValue, Errors, isInstanceOf, Terminator} from "@moises-ai/lib-std"
+import {DefaultObservableValue, Errors, isDefined, isInstanceOf, Terminator} from "@moises-ai/lib-std"
 import {Button} from "@/ui/components/Button"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {NumberInput} from "@/ui/components/NumberInput"
@@ -151,6 +151,14 @@ export const showVideoExportDialog = async (sampleRate: number): Promise<VideoEx
                         <Icon symbol={IconSymbol.Checkbox}/>
                     </Checkbox>
                 </div>
+                {!isDefined(window.showSaveFilePicker) && (
+                    <div style={{
+                        fontSize: "0.875em",
+                        opacity: "0.8",
+                        marginTop: "0.5em",
+                        color: Colors.orange.toString()
+                    }}>For larger video files, Chrome is recommended.</div>
+                )}
             </div>
         </Dialog>
     )

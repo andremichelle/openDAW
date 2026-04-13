@@ -10,8 +10,8 @@ import {
     unitValue,
     UUID
 } from "@moises-ai/lib-std"
-import {OpenSampleAPI, SampleStorage, WavFile} from "@moises-ai/studio-core"
-import {dbToGain} from "@moises-ai/lib-dsp"
+import {OpenSampleAPI, SampleStorage} from "@moises-ai/studio-core"
+import {dbToGain, WavFile} from "@moises-ai/lib-dsp"
 
 export type PlaybackEvent = {
     type: "idle"

@@ -1,4 +1,5 @@
-import {CaptureAudio, MenuItem, MonitoringMode, Project} from "@moises-ai/studio-core"
+import {CaptureAudio, MenuItem, Project} from "@moises-ai/studio-core"
+import {MonitoringDialog} from "@/ui/monitoring/MonitoringDialog"
 import {isInstanceOf, Procedure, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
 import {
     AudioUnitBoxAdapter,
@@ -42,22 +43,16 @@ export const installTrackHeaderMenu = (service: StudioService,
         MenuCapture.createItem(service, audioUnitBoxAdapter,
             trackBoxAdapter, editing, captureDevices.get(audioUnitBoxAdapter.uuid)),
         MenuItem.default({
-            label: "Input Monitoring",
+            label: "Monitoring",
             hidden: captureDevices.get(audioUnitBoxAdapter.uuid)
                 .mapOr(capture => !isInstanceOf(capture, CaptureAudio), true)
-        }).setRuntimeChildrenProcedure(parent => {
+        }).setTriggerProcedure(() => {
             const optCapture = captureDevices.get(audioUnitBoxAdapter.uuid)
-            if (optCapture.isEmpty()) {return parent}
+            if (optCapture.isEmpty()) {return}
             const capture = optCapture.unwrap()
-            if (!isInstanceOf(capture, CaptureAudio)) {return parent}
-            const currentMode = capture.monitoringMode
-            const addModeItem = (mode: MonitoringMode, label: string) =>
-                parent.addMenuItem(MenuItem.default({label, checked: currentMode === mode})
-                    .setTriggerProcedure(() => capture.monitoringMode = mode))
-            addModeItem("off", "Off")
-            addModeItem("direct", "Direct")
-            addModeItem("effects", "With Effects")
-            return parent
+            if (!isInstanceOf(capture, CaptureAudio)) {return}
+            capture.armed.setValue(true)
+            MonitoringDialog.open(service, capture).finally()
         }),
         MenuItem.default({
             label: "Force Mono",

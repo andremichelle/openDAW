@@ -1,7 +1,7 @@
 {
     "name": "@opendaw/lab",
     "private": true,
-    "version": "0.0.126",
+    "version": "0.0.130",
     "type": "module",
     "license": "LGPL-3.0-or-later",
     "scripts": {
