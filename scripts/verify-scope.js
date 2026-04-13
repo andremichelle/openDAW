@@ -38,6 +38,7 @@ const PUBLISHABLE_PACKAGES = new Set([
   "studio-boxes",
   "studio-enums",
   "studio-scripting",
+  "studio-p2p",
 ]);
 
 function isPublishable(shortName) {
