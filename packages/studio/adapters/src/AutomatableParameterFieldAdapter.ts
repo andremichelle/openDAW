@@ -23,6 +23,7 @@ import {Address, PointerField, PointerTypes, PrimitiveField, PrimitiveType, Prim
 import {Pointers} from "@moises-ai/studio-enums"
 import {BoxVisitor, TrackBox} from "@moises-ai/studio-boxes"
 import {TrackBoxAdapter} from "./timeline/TrackBoxAdapter"
+import {AudioUnitTracks} from "./audio-unit/AudioUnitTracks"
 import {BoxAdaptersContext} from "./BoxAdaptersContext"
 
 const ExternalControlTypes = [
@@ -34,14 +35,16 @@ const ExternalControlTypes = [
 export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> implements Parameter<T>, Terminable {
     readonly #context: BoxAdaptersContext
     readonly #field: PrimitiveField<T, Pointers.Automation>
-    readonly #valueMapping: ValueMapping<T>
-    readonly #stringMapping: StringMapping<T>
     readonly #name: string
     readonly #anchor: unitValue
+    readonly #resetValue: Option<T>
 
     readonly #terminator: Terminator = new Terminator()
     readonly #valueChangeNotifier: Notifier<this>
     readonly #controlSource: Listeners<ControlSourceListener>
+
+    #valueMapping: ValueMapping<T>
+    #stringMapping: StringMapping<T>
 
     #trackBoxAdapter: Option<TrackBoxAdapter> = Option.None
     #automationHandle: Option<Terminable> = Option.None
@@ -53,13 +56,15 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
                 valueMapping: ValueMapping<T>,
                 stringMapping: StringMapping<T>,
                 name: string,
-                anchor?: unitValue) {
+                anchor?: unitValue,
+                resetValue?: T) {
         this.#context = context
         this.#field = field
         this.#valueMapping = valueMapping
         this.#stringMapping = stringMapping
         this.#name = name
         this.#anchor = anchor ?? 0.0
+        this.#resetValue = Option.wrap(resetValue)
         this.#terminator.own(this.#context.parameterFieldAdapters.register(this))
         this.#valueChangeNotifier = this.#terminator.own(new Notifier<this>())
         this.#controlSource = new Listeners<ControlSourceListener>()
@@ -131,6 +136,21 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     get address(): Address {return this.#field.address}
     get track(): Option<TrackBoxAdapter> {return this.#trackBoxAdapter}
 
+    registerTracks(tracks: AudioUnitTracks): Terminable {
+        return this.#context.parameterFieldAdapters.registerTracks(this.address, tracks)
+    }
+    touchStart(): void {
+        this.#context.parameterFieldAdapters.touchStart(this.address)
+        this.#context.parameterFieldAdapters.notifyWrite(this, this.getUnitValue())
+    }
+    touchEnd(): void {this.#context.parameterFieldAdapters.touchEnd(this.address)}
+
+    updateMappings(valueMapping: ValueMapping<T>, stringMapping: StringMapping<T>): void {
+        this.#valueMapping = valueMapping
+        this.#stringMapping = stringMapping
+        this.#valueChangeNotifier.notify(this)
+    }
+
     valueAt(position: ppqn): T {
         const optTrack = this.#trackBoxAdapter
         if (optTrack.nonEmpty()) {
@@ -159,6 +179,7 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     }
     getValue(): T {return this.#field.getValue()}
     setValue(value: T) {
+        if (value === this.getValue()) {return}
         const previousUnitValue = this.getUnitValue()
         this.#field.setValue(value)
         this.#context.parameterFieldAdapters.notifyWrite(this, previousUnitValue)
@@ -180,7 +201,7 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
         }
     }
 
-    reset(): void {this.setValue(this.#valueMapping.clamp(this.#field.initValue))}
+    reset(): void {this.setValue(this.#resetValue.unwrapOrElse(this.#field.initValue))}
 
     terminate(): void {
         this.#automationHandle.ifSome(handle => handle.terminate())

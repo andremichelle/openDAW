@@ -56,7 +56,9 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
     #source: Option<AudioBuffer> = Option.None
     #userProcessor: Option<UserProcessor> = Option.None
     #currentUpdate: int = -1
+    #pendingUpdate: int = -1
     #silenced: boolean = false
+    readonly #io: {src: [Float32Array, Float32Array], out: [Float32Array, Float32Array]}
 
     constructor(context: EngineContext, adapter: WerkstattDeviceBoxAdapter) {
         super(context)
@@ -66,12 +68,17 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
         this.#uuid = UUID.toString(adapter.uuid)
         this.#boundParameters = []
+        this.#io = {
+            src: [this.#output.getChannel(0), this.#output.getChannel(1)],
+            out: [this.#output.getChannel(0), this.#output.getChannel(1)]
+        }
         const {parameters, box} = adapter
         this.ownAll(
             box.code.catchupAndSubscribe(owner => {
                 const newUpdate = parseUpdate(owner.getValue())
                 if (newUpdate > 0 && newUpdate !== this.#currentUpdate) {
                     this.#silenced = true
+                    this.#pendingUpdate = newUpdate
                     this.#userProcessor = Option.None
                     this.#output.clear()
                     this.#tryLoad(newUpdate)
@@ -96,10 +103,10 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
         this.readAllParameters()
     }
 
-    #tryLoad(update: int): void {
+    #tryLoad(expectedUpdate: int): void {
         const registry = (globalThis as any).openDAW?.werkstattProcessors?.[this.#uuid]
-        if (isDefined(registry) && registry.update === update) {
-            this.#swapProcessor(registry.create, update)
+        if (isDefined(registry) && registry.update === expectedUpdate) {
+            this.#swapProcessor(registry.create, expectedUpdate)
         }
     }
 
@@ -167,31 +174,30 @@ export class WerkstattDeviceProcessor extends AudioProcessor implements AudioEff
 
     processAudio(block: Block): void {
         if (this.#silenced) {
-            const expectedUpdate = parseUpdate(this.#adapter.box.code.getValue())
-            if (expectedUpdate > 0 && expectedUpdate !== this.#currentUpdate) {
-                this.#tryLoad(expectedUpdate)
+            if (this.#pendingUpdate > 0 && this.#pendingUpdate !== this.#currentUpdate) {
+                this.#tryLoad(this.#pendingUpdate)
             }
             if (this.#silenced) {return}
         }
         if (this.#source.isEmpty() || this.#userProcessor.isEmpty()) {return}
         const source = this.#source.unwrap()
         const proc = this.#userProcessor.unwrap()
-        const io: UserIO = {
-            src: [source.getChannel(0), source.getChannel(1)],
-            out: [this.#output.getChannel(0), this.#output.getChannel(1)]
-        }
+        this.#io.src[0] = source.getChannel(0)
+        this.#io.src[1] = source.getChannel(1)
+        this.#io.out[0] = this.#output.getChannel(0)
+        this.#io.out[1] = this.#output.getChannel(1)
         try {
-            proc.process(io, block)
+            proc.process(this.#io, block)
         } catch (error) {
             this.#silence(`Runtime error: ${error}`)
             return
         }
-        const validationError = validateOutput(io.out, block.s0, block.s1)
+        const validationError = validateOutput(this.#io.out, block.s0, block.s1)
         if (validationError !== null) {
             this.#silence(validationError)
             return
         }
-        this.#peaks.process(io.out[0], io.out[1], block.s0, block.s1)
+        this.#peaks.process(this.#io.out[0], this.#io.out[1], block.s0, block.s1)
     }
 
     toString(): string {return `{${this.constructor.name} (${this.#id})`}

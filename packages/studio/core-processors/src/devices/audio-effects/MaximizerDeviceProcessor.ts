@@ -36,6 +36,7 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
     #lookahead: boolean = true
     #processed: boolean = false
     #reductionMin: number = 0.0
+    #headroomGain: number = 1.0
 
     #source: Option<AudioBuffer> = Option.None
 
@@ -112,6 +113,8 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
         const srcR = source.getChannel(1)
         const outL = this.#output.getChannel(0)
         const outR = this.#output.getChannel(1)
+        const thresholdRamping = this.#threshold.isInterpolating()
+        const steadyHeadroomGain = thresholdRamping ? 0.0 : this.#headroomGain
         if (this.#lookahead) {
             const buffer = this.#buffer
             const frames = this.#lookAheadFrames
@@ -121,7 +124,6 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
                 const inp0 = srcL[i]
                 const inp1 = srcR[i]
                 const peak = Math.max(Math.abs(inp0), Math.abs(inp1))
-                // Peak hold: track max peak for L samples (while it's in the lookahead buffer)
                 if (peak > this.#peakHold) {
                     this.#peakHold = peak
                     this.#peakHoldCounter = this.#lookAheadFrames
@@ -130,7 +132,6 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
                 } else {
                     this.#peakHold = peak
                 }
-                // Envelope ramps towards peak hold (not current peak)
                 if (this.#envelope < this.#peakHold) {
                     this.#envelope = Math.min(this.#peakHold, this.#envelope + this.#peakHold / this.#lookAheadFrames)
                 } else {
@@ -138,7 +139,8 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
                 }
                 const threshold = this.#threshold.moveAndGet()
                 const reductionDb = Math.min(0.0, threshold - gainToDb(this.#envelope))
-                const gain = dbToGain(reductionDb) * dbToGain(MAGIC_HEADROOM - threshold)
+                const headroomGain = thresholdRamping ? dbToGain(MAGIC_HEADROOM - threshold) : steadyHeadroomGain
+                const gain = dbToGain(reductionDb) * headroomGain
                 const out0 = buffer0[this.#position] * gain
                 const out1 = buffer1[this.#position] * gain
                 outL[i] = clamp(out0, -1.0, +1.0)
@@ -153,7 +155,6 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
                 const inp0 = srcL[i]
                 const inp1 = srcR[i]
                 const peak = Math.max(Math.abs(inp0), Math.abs(inp1))
-                // Peak hold: track max peak for L samples (while it's in the lookahead buffer)
                 if (peak > this.#peakHold) {
                     this.#peakHold = peak
                     this.#peakHoldCounter = this.#lookAheadFrames
@@ -162,7 +163,6 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
                 } else {
                     this.#peakHold = peak
                 }
-                // Envelope ramps towards peak hold (not current peak)
                 if (this.#envelope < this.#peakHold) {
                     this.#envelope = Math.min(this.#peakHold, this.#envelope + this.#peakHold / this.#lookAheadFrames)
                 } else {
@@ -170,11 +170,10 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
                 }
                 const threshold = this.#threshold.moveAndGet()
                 const reductionDb = Math.min(0.0, threshold - gainToDb(this.#envelope))
-                const gain = dbToGain(reductionDb) * dbToGain(MAGIC_HEADROOM - threshold)
-                const out0 = inp0 * gain
-                const out1 = inp1 * gain
-                outL[i] = out0
-                outR[i] = out1
+                const headroomGain = thresholdRamping ? dbToGain(MAGIC_HEADROOM - threshold) : steadyHeadroomGain
+                const gain = dbToGain(reductionDb) * headroomGain
+                outL[i] = inp0 * gain
+                outR[i] = inp1 * gain
                 if (reductionDb < this.#reductionMin) {this.#reductionMin = reductionDb}
             }
         }
@@ -185,7 +184,9 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
 
     parameterChanged(parameter: AutomatableParameter): void {
         if (parameter === this.parameterThreshold) {
-            this.#threshold.set(this.parameterThreshold.getValue(), this.#processed)
+            const threshold = this.parameterThreshold.getValue()
+            this.#threshold.set(threshold, this.#processed)
+            this.#headroomGain = dbToGain(MAGIC_HEADROOM - threshold)
         }
     }
 

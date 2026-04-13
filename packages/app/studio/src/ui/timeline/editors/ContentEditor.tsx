@@ -1,6 +1,6 @@
 import css from "./ContentEditor.sass?inline"
-import {Lifecycle, Option, Terminator, ValueMapping} from "@moises-ai/lib-std"
-import {createElement, Frag, replaceChildren} from "@moises-ai/lib-jsx"
+import {Lifecycle, Option, Terminator, ValueMapping} from "@opendaw/lib-std"
+import {createElement, Frag, replaceChildren} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {
     AudioClipBox,
@@ -10,7 +10,7 @@ import {
     NoteRegionBox,
     ValueClipBox,
     ValueRegionBox
-} from "@moises-ai/studio-boxes"
+} from "@opendaw/studio-boxes"
 import {NoteEditor} from "@/ui/timeline/editors/notes/NoteEditor.tsx"
 import {
     AudioClipBoxAdapter,
@@ -19,16 +19,16 @@ import {
     NoteRegionBoxAdapter,
     ValueClipBoxAdapter,
     ValueRegionBoxAdapter
-} from "@moises-ai/studio-adapters"
-import {Box, PointerField, Vertex} from "@moises-ai/lib-box"
+} from "@opendaw/studio-adapters"
+import {Box, PointerField, Vertex} from "@opendaw/lib-box"
 import {SnapSelector} from "@/ui/timeline/SnapSelector.tsx"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {MenuItem, TimelineRange} from "@moises-ai/studio-core"
+import {MenuItem, TimelineRange} from "@opendaw/studio-core"
 import {TimeAxis} from "@/ui/timeline/TimeAxis.tsx"
 import {TimelineRangeSlider} from "@/ui/timeline/TimelineRangeSlider.tsx"
 import {ValueEventsEditor} from "./value/ValueEventsEditor.tsx"
 import {FlexSpacer} from "@/ui/components/FlexSpacer.tsx"
-import {PPQN} from "@moises-ai/lib-dsp"
+import {PPQN} from "@opendaw/lib-dsp"
 import {AudioEditor} from "@/ui/timeline/editors/audio/AudioEditor.tsx"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {EditorMenuCollector} from "@/ui/timeline/editors/EditorMenuCollector.ts"
@@ -42,9 +42,9 @@ import {
     ValueEventOwnerReader
 } from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {RegionReader} from "@/ui/timeline/editors/RegionReader.ts"
-import {Colors, Pointers} from "@moises-ai/studio-enums"
+import {Colors, Pointers} from "@opendaw/studio-enums"
 import {ParameterValueEditing} from "@/ui/timeline/editors/value/ParameterValueEditing.ts"
-import {deferNextFrame, Html, ShortcutManager} from "@moises-ai/lib-dom"
+import {Browser, deferNextFrame, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 
 const className = Html.adoptStyleSheet(css, "ContentEditor")
@@ -66,22 +66,25 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
         editMenu: MenuItem.root()
     }
     let owner: Option<EventOwnerReader<unknown>> = Option.None
-    const zommContent = () => owner.ifSome(reader =>
+    const zoomToLoopDuration = () => owner.ifSome(reader =>
         range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16))
+    const attachGenericViewMenu = () => runtime.own(menu.viewMenu.attach(collector => {
+        return collector.addItems(
+            MenuItem.default({
+                label: "Zoom to loop duration",
+                selectable: editingSubject.get().nonEmpty(),
+                shortcut: ContentEditorShortcuts["zoom-to-loop-duration"].shortcut.format()
+            }).setTriggerProcedure(zoomToLoopDuration),
+            MenuItem.default({
+                label: "Exit",
+                hidden: !Browser.isLocalHost(),
+                selectable: editingSubject.get().nonEmpty()
+            }).setTriggerProcedure(() => editingSubject.clear())
+        )
+    }))
     lifecycle.ownAll(
         {terminate: () => {owner = Option.None}},
-        snapping.registerSignatureTrackAdapter(service.project.timelineBoxAdapter.signatureTrack),
-        menu.viewMenu.attach(collector => {
-            return collector.addItems(
-                MenuItem.default({
-                    label: "Zoom to content",
-                    selectable: editingSubject.get().nonEmpty(),
-                    shortcut: ContentEditorShortcuts["zoom-to-content"].shortcut.format()
-                }).setTriggerProcedure(zommContent),
-                MenuItem.default({label: "Exit", selectable: editingSubject.get().nonEmpty()})
-                    .setTriggerProcedure(() => editingSubject.clear())
-            )
-        })
+        snapping.registerSignatureTrackAdapter(service.project.timelineBoxAdapter.signatureTrack)
     )
     const element: HTMLElement = (
         <div className={className} tabIndex={-1}>
@@ -206,6 +209,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                     return createAudioEditor(reader)
                 }
             }) ?? (() => fallback(vertex.box))())
+            attachGenericViewMenu()
             range.width = contentEditor.clientWidth
             owner.ifSome(reader =>
                 range.zoomRange(reader.offset, reader.offset + reader.loopDuration + PPQN.Bar, 16))
@@ -259,7 +263,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                 engine.setPosition(Math.max(0, snapping.ceil(pos) - snapping.value(pos)))
             }
         }, {allowRepeat: true}),
-        shortcuts.register(ContentEditorShortcuts["zoom-to-content"].shortcut, zommContent)
+        shortcuts.register(ContentEditorShortcuts["zoom-to-loop-duration"].shortcut, zoomToLoopDuration)
     )
     return element
 }

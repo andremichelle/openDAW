@@ -8,7 +8,44 @@ import * as map from 'lib0/map'
 
 import * as eventloop from 'lib0/eventloop'
 
+import fs from 'fs'
+import path from 'path'
+import {fileURLToPath} from 'url'
+
 import {callbackHandler, isCallbackSet} from './callback.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+export const dataDir = path.join(__dirname, 'data')
+
+/** @type {Map<string, {origin: string, started: number}>} */
+const roomSessions = new Map()
+
+const statsAllowedOrigins = [
+    'https://opendaw.studio',
+    'https://dev.opendaw.studio',
+    'https://localhost:8080'
+]
+
+/**
+ * @param {string} day
+ * @param {number} durationMinutes
+ */
+const appendToStats = (day, durationMinutes) => {
+    try {
+        const countFile = path.join(dataDir, 'rooms-count.json')
+        const durationFile = path.join(dataDir, 'rooms-duration.json')
+        const counts = JSON.parse(fs.readFileSync(countFile, 'utf8'))
+        counts[day] = (counts[day] || 0) + 1
+        fs.writeFileSync(countFile, JSON.stringify(counts))
+        const durations = JSON.parse(fs.readFileSync(durationFile, 'utf8'))
+        durations[day] = (durations[day] || 0) + durationMinutes
+        fs.writeFileSync(durationFile, JSON.stringify(durations))
+    } catch (err) {
+        console.error('Failed to write room stats:', err)
+    }
+}
+
+export const ROOM_CLEANUP_DELAY_MS = 60_000
 
 const CALLBACK_DEBOUNCE_WAIT = parseInt(process.env.CALLBACK_DEBOUNCE_WAIT || '2000')
 const CALLBACK_DEBOUNCE_MAXWAIT = parseInt(process.env.CALLBACK_DEBOUNCE_MAXWAIT || '10000')
@@ -46,6 +83,11 @@ export const getPersistence = () => persistence
  * @type {Map<string,WSSharedDoc>}
  */
 export const docs = new Map()
+
+/**
+ * @type {Map<string, ReturnType<typeof setTimeout>>}
+ */
+const docCleanupTimers = new Map()
 
 const messageSync = 0
 const messageAwareness = 1
@@ -198,12 +240,30 @@ const closeConn = (doc, conn) => {
         const controlledIds = doc.conns.get(conn)
         doc.conns.delete(conn)
         awarenessProtocol.removeAwarenessStates(doc.awareness, Array.from(controlledIds), null)
-        if (doc.conns.size === 0 && persistence !== null) {
-            // if persisted, we store state and destroy ydocument
-            persistence.writeState(doc.name, doc).then(() => {
-                doc.destroy()
-            })
-            docs.delete(doc.name)
+        if (doc.conns.size === 0) {
+            console.log(`Room '${doc.name}' is empty, scheduling cleanup in ${ROOM_CLEANUP_DELAY_MS / 1000}s`)
+            const timer = setTimeout(() => {
+                docCleanupTimers.delete(doc.name)
+                if (doc.conns.size === 0) {
+                    console.log(`Cleaning up room: ${doc.name}`)
+                    if (persistence !== null) {
+                        persistence.writeState(doc.name, doc).then(() => {
+                            doc.destroy()
+                        })
+                    } else {
+                        doc.destroy()
+                    }
+                    const session = roomSessions.get(doc.name)
+                    if (session) {
+                        const durationMinutes = Math.max(1, Math.round((Date.now() - session.started) / 60_000))
+                        const day = new Date(session.started).toISOString().slice(0, 10)
+                        appendToStats(day, durationMinutes)
+                        roomSessions.delete(doc.name)
+                    }
+                    docs.delete(doc.name)
+                }
+            }, ROOM_CLEANUP_DELAY_MS)
+            docCleanupTimers.set(doc.name, timer)
         }
     }
     conn.close()
@@ -240,6 +300,7 @@ export const setupWSConnection = (conn, req, {docName = (req.url || '').slice(1)
     // ✅ Allow only specific origins
     const allowedOrigins = [
         'https://opendaw.studio',
+        'https://dev.opendaw.studio',
         'https://live.opendaw.studio',
         'https://localhost:8080',
         'https://inspector.yjs.dev'
@@ -252,8 +313,17 @@ export const setupWSConnection = (conn, req, {docName = (req.url || '').slice(1)
     }
     conn.binaryType = 'arraybuffer'
     // get doc, initialize if it does not exist yet
+    const isNewRoom = !docs.has(docName)
     const doc = getYDoc(docName, gc)
+    if (isNewRoom && origin && statsAllowedOrigins.includes(origin)) {
+        roomSessions.set(docName, {origin, started: Date.now()})
+    }
     doc.conns.set(conn, new Set())
+    if (docCleanupTimers.has(docName)) {
+        console.log(`Cancelled cleanup for room: ${docName} (user reconnected)`)
+        clearTimeout(docCleanupTimers.get(docName))
+        docCleanupTimers.delete(docName)
+    }
     // listen and reply to events
     conn.on('message', /** @param {ArrayBuffer} message */message => messageListener(conn, doc, new Uint8Array(message)))
 

@@ -187,7 +187,7 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
         shortcuts.register(SoftwareMIDIShortcuts["decrement-octave"].shortcut, () => octave.setValue(octave.getValue() - 1)),
         ...NoteShortcuts.map(({shortcut}, index) => shortcuts.register(shortcut, () => playNote(shortcut, index))),
         Surface.subscribeKeyboard("keyup", event => {
-            const index = activeCodes.get(event.code) ?? -1
+            const index = activeCodes.get(Shortcut.resolveCode(event)) ?? -1
             if (index >= 0) {
                 if (activeKeys[index] === -1) {return}
                 softwareMIDIInput.sendNoteOff(activeKeys[index])

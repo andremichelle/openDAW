@@ -57,6 +57,7 @@ export class ClipReader<CONTENT> implements EventOwnerReader<CONTENT> {
     get trackBoxAdapter(): Option<TrackBoxAdapter> {return this.clip.trackBoxAdapter}
 
     subscribeChange(observer: Observer<void>): Subscription {return this.clip.subscribeChange(observer)}
+    subscribeTrackChange(observer: Observer<void>): Subscription {return this.clip.box.clips.subscribe(() => observer())}
     keeoOverlapping(range: TimelineRange): Subscription {
         const clip = this.clip
         return clip.box.subscribe(Propagation.Children, update => {

@@ -4,6 +4,7 @@ import {OpenDAWHeaders} from "../OpenDAWHeaders"
 import {network, Promises} from "@moises-ai/lib-runtime"
 import {z} from "zod"
 
+/** @internal */
 export class OpenSoundfontAPI {
     static readonly ApiRoot = "https://api.opendaw.studio/soundfonts"
     static readonly FileRoot = "https://assets.opendaw.studio/soundfonts"

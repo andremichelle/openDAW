@@ -141,9 +141,10 @@ export const VolumeSlider = ({lifecycle, editing, parameter, markers = DefaultVo
     lifecycle.ownAll(
         Html.watchResize(wrapper, () => {
             if (!wrapper.isConnected) {return}
+            const {clientWidth, clientHeight} = wrapper
+            if (clientWidth === 0 || clientHeight === 0) {return}
             lineContainer.setAttribute("stroke-width", String(strokeWidth))
             const {baseVal: rect} = svg.viewBox
-            const {clientWidth, clientHeight} = wrapper
             rect.width = clientWidth
             rect.height = clientHeight
             const em = parseFloat(getComputedStyle(wrapper).fontSize)

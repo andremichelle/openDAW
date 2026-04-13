@@ -26,6 +26,14 @@ Example uses:
 
 Click the **Editor** button on the device panel to open the full-screen code editor. The editor uses Monaco (the engine behind VS Code) with JavaScript syntax highlighting.
 
+The toolbar at the top provides:
+
+- **Compile** — Compile and load the code into the audio engine
+- **Examples** — Load ready-made processors to learn from
+- **From Clipboard** — Paste code from the clipboard into the editor and compile it in one step
+- **Start AI-Prompt** — Copy a device-specific AI starter prompt to the clipboard, ready to paste into an AI assistant (e.g. ChatGPT, Claude) for help writing processors
+- **Close Editor** — Return to the previous view
+
 The status bar at the bottom shows the current state:
 
 - **Idle** — No compilation attempted yet
@@ -34,7 +42,19 @@ The status bar at the bottom shows the current state:
 
 ---
 
-## 2. Parameters
+## 2. Label
+
+Set the device name using a `// @label` comment:
+
+```javascript
+// @label My Effect
+```
+
+When the script compiles, the device panel header will display this name. Omitting `@label` keeps the current name. An empty `@label` (without a name) causes a compile error.
+
+---
+
+## 3. Parameters
 
 Declare parameters using `// @param` comments at the top of your code:
 
@@ -92,9 +112,34 @@ The knob displays the mapped value with the unit. `paramChanged` receives the ma
 
 Parameters are reconciled on each compile: new parameters are added, removed parameters are deleted, and existing parameters keep their current value. Multiple spaces between tokens are allowed for alignment.
 
+### Groups
+
+Organize parameters visually using `// @group` comments:
+
+```javascript
+// @group Envelope green
+// @param attack  0.01  0.001  1.0  exp  s
+// @param decay   0.2   0      2.0  exp  s
+// @param sustain 0.7
+// @param release 0.5   0      5.0  exp  s
+// @group Filter blue
+// @param cutoff  1000  20  20000  exp  Hz
+// @param resonance 0.5
+```
+
+```
+// @group <name> [color]
+```
+
+Parameters and samples declared after a `@group` belong to that group until the next `@group` or end of declarations. Each group renders as a labeled section on the device panel with a colored header.
+
+Available colors: `blue`, `green`, `yellow`, `cream`, `orange`, `red`, `purple`, `white`, `gray`, `dark` (default).
+
+Parameters before any `@group` appear ungrouped.
+
 ---
 
-## 3. Keyboard Shortcuts
+## 4. Keyboard Shortcuts
 
 | Shortcut            | Action                              |
 |---------------------|-------------------------------------|
@@ -103,7 +148,7 @@ Parameters are reconciled on each compile: new parameters are added, removed par
 
 ---
 
-## 4. Safety
+## 5. Safety
 
 The engine validates your output on every audio block:
 
@@ -115,7 +160,7 @@ When silenced, the device outputs silence until the next successful compile.
 
 ---
 
-## 5. API Reference
+## 6. API Reference
 
 Your code must define a `class Processor` with a `process` method. Optionally implement `paramChanged` to receive parameter updates.
 
@@ -154,109 +199,12 @@ class Processor {
 
 ---
 
-## 6. Examples
+## 7. Examples
 
 Select **Examples** in the code editor toolbar to load ready-made processors (Hard Clipper, Ring Modulator, Simple Delay, Biquad Lowpass).
 
 ---
 
-## 7. AI Prompt
+## 8. AI Assistance
 
-Copy the following prompt into an AI assistant to get help writing Werkstatt processors:
-
-```
-You are helping the user write a DSP processor for the openDAW Werkstatt audio effect.
-The user writes plain JavaScript (no imports, no modules). The code runs inside an AudioWorklet.
-
-The code MUST define a class called `Processor` with the following interface:
-
-class Processor {
-    process(io, block) { }       // required
-    paramChanged(label, value) { } // optional
-}
-
-## process(io, block)
-Called on every audio block. Must fill the output buffers between s0 and s1.
-
-io (audio buffers):
-- io.src[0] — Float32Array, left input channel
-- io.src[1] — Float32Array, right input channel
-- io.out[0] — Float32Array, left output channel (write to this)
-- io.out[1] — Float32Array, right output channel (write to this)
-
-block (timing and transport):
-- block.s0    — first sample index to process (inclusive)
-- block.s1    — last sample index to process (exclusive)
-- block.index — block counter (increments each audio callback)
-- block.bpm   — current project tempo in beats per minute
-- block.p0    — start position in ppqn (pulses per quarter note, 480 ppqn)
-- block.p1    — end position in ppqn
-- block.flags — bitmask of transport state:
-    1 = transporting (transport is active)
-    2 = discontinuous (position jumped, e.g. seek or loop restart)
-    4 = playing (playback is active)
-    8 = bpmChanged (tempo changed this block)
-
-You MUST only read/write indices from s0 to s1 (exclusive). Do NOT assume the arrays
-start at index 0 or that the full length is available.
-Use block.bpm and block.p0/p1 for tempo-synced effects. Use block.flags to detect
-transport state changes (e.g. reset phase on discontinuous).
-
-## paramChanged(label, value)
-Called when a parameter knob changes value.
-
-- label — string, matches the name from the @param comment
-- value — the mapped value (number). For unipolar: 0.0–1.0. For linear/exp: min–max.
-  For int: integer in min–max. For bool: 0 or 1.
-
-## Declaring parameters
-Parameters are declared as comments at the top of the file:
-
-// @param <name> [default] [min max type [unit]]
-
-Supported types: linear, exp, int, bool.
-If no type is given, the parameter is unipolar (0–1).
-If the default is "true" or "false", the type is bool.
-Multiple spaces between tokens are allowed for alignment.
-
-Each @param creates an automatable knob on the device UI.
-
-Examples:
-// @param gain 1.0
-// @param cutoff  1000  20  20000  exp  Hz
-// @param mode    0     0   3      int
-// @param bypass  false
-
-## Globals
-- sampleRate — number, the audio sample rate in Hz (e.g. 44100, 48000).
-  Always use this instead of hardcoding a sample rate.
-
-## Constraints
-- Output is validated every block. NaN or amplitudes > 1000 will silence the processor.
-- Do not use import/export/require. No access to DOM or fetch.
-- The code runs in an AudioWorklet thread. Only AudioWorklet-safe APIs are available
-  (Math, typed arrays, basic JS). No console, no setTimeout, no DOM.
-- You can define and use helper classes alongside the Processor class.
-- NEVER allocate memory inside process(). No `new`, no array literals, no object
-  literals, no string concatenation, no closures. Any allocation in the audio hot path
-  causes GC pauses and audio glitches. Pre-allocate all buffers and state as class fields.
-
-## Template
-
-// @param gain 1.0
-
-class Processor {
-    gain = 1.0
-    paramChanged(label, value) {
-        if (label === "gain") this.gain = value
-    }
-    process({src, out}, {s0, s1}) {
-        const [srcL, srcR] = src
-        const [outL, outR] = out
-        for (let i = s0; i < s1; i++) {
-            outL[i] = srcL[i] * this.gain
-            outR[i] = srcR[i] * this.gain
-        }
-    }
-}
-```
+Click **Start AI-Prompt** in the editor toolbar to copy a detailed starter prompt to your clipboard. Paste it into any AI assistant to get help writing Werkstatt processors. Once the AI generates code, copy it and click **From Clipboard** to load and compile it directly.

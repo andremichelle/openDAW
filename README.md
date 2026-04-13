@@ -13,6 +13,8 @@
 and to **resurface the process of making music** by making **high-quality** creation tools accessible to everyone, with
 a strong focus on **education** and data-privacy.
 
+Subscribe to our [Newsletter](https://buttondown.com/opendaw) for regular updates.
+
 <p align="center">
 <img src="https://raw.githubusercontent.com/andremichelle/openDAW/main/assets/studio-teaser.png"/>
 </p>
@@ -50,10 +52,9 @@ operations of the app.
 
 If you are interested in helping, here are areas where we need support:
 
-1. **Y.JS Server + WebRTC File Sharing** - for live collaboration
-2. **Offline App** — e.g. wrapping openDAW with [Tauri](https://tauri.app/) for a native desktop experience
-3. **PWA** — turning openDAW into a fully installable Progressive Web App with offline support
-4. **Timeline Track Management** — design and UX help for track layout, ordering, grouping, and interaction
+1. **Offline App** — e.g. wrapping openDAW with [Tauri](https://tauri.app/) for a native desktop experience
+2. **PWA** — turning openDAW into a fully installable Progressive Web App with offline support
+3. **Timeline Track Management** — design and UX help for track layout, ordering, grouping, and interaction
 
 We always appreciate help on open issues: https://github.com/andremichelle/openDAW/issues
 
@@ -212,24 +213,6 @@ Before starting, ensure you have the following installed on your system:
 [![Custom Caption: Watch the Demo](https://img.youtube.com/vi/VPTXeJY6Eaw/0.jpg)](https://www.youtube.com/watch?v=VPTXeJY6Eaw)
 
 Watch Polarity's Video *"there's a new FREE DAW in town"*
-
-## Get Involved
-
-We welcome contributions from developers, musicians, educators, and enthusiasts. To learn more about how you can
-participate, visit our [Contribute](https://opendaw.org/contribute) page.
-
-### What We Are Looking For:
-
-1. **Offline desktop build (e.g., via Tauri) or a standalone installable PWA** — offer offline capability.
-2. **Cloud-agnostic project storage** — a facade layer that lets users plug in different cloud services (e.g., Drive,
-   S3, Dropbox) for projects and sample libraries.
-3. **Live remote collaboration** — real-time session sharing and sync so multiple users can edit the same project
-   concurrently.
-4. **AI manual assistant** — an embedded agent that answers context-aware questions and guides users through features as
-   they work.
-5. **AI-powered stem splitting** — integrated source-separation to extract vocals, drums, and other stems directly
-   inside the DAW.
-6. **Import and Export** - Contribute every possible file format IO
 
 ## Links
 

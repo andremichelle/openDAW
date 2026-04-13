@@ -23,6 +23,9 @@ export default defineConfig(({command}) => {
 
     return {
         base,
+        define: {
+            "import.meta.env.BUILD_UUID": JSON.stringify(uuid)
+        },
         resolve: {
             alias: {
                 "@": resolve(__dirname, "./src")

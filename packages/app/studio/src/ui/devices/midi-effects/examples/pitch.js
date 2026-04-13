@@ -1,4 +1,4 @@
-// Pitch
+// @label Pitch
 // @param octaves 0 -4 4 int
 // @param semiTones 0 -12 12 int
 // @param cent 0 -100 100 linear

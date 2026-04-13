@@ -12,9 +12,10 @@ import {
     TerminableOwner,
     Terminator,
     UUID
-} from "@moises-ai/lib-std"
-import {BoxEditing, BoxGraph, DeleteUpdate, NewUpdate} from "@moises-ai/lib-box"
+} from "@opendaw/lib-std"
+import {BoxEditing, BoxGraph, DeleteUpdate, NewUpdate} from "@opendaw/lib-box"
 import {
+    ApparatDeviceBox,
     AudioBusBox,
     AudioFileBox,
     AudioRegionBox,
@@ -22,10 +23,12 @@ import {
     BoxIO,
     BoxVisitor,
     RootBox,
+    SpielwerkDeviceBox,
     TimelineBox,
     TrackBox,
-    UserInterfaceBox
-} from "@moises-ai/studio-boxes"
+    UserInterfaceBox,
+    WerkstattDeviceBox
+} from "@opendaw/studio-boxes"
 import {
     AnyRegionBoxAdapter,
     AudioUnitBoxAdapter,
@@ -44,14 +47,15 @@ import {
     RegionAdapters,
     RootBoxAdapter,
     SampleLoaderManager,
+    ScriptCompiler,
     SoundfontLoaderManager,
     TimelineBoxAdapter,
     UnionBoxTypes,
     UserEditingManager,
     VaryingTempoMap,
     VertexSelection
-} from "@moises-ai/studio-adapters"
-import {LiveStreamBroadcaster, LiveStreamReceiver} from "@moises-ai/lib-fusion"
+} from "@opendaw/studio-adapters"
+import {LiveStreamBroadcaster, LiveStreamReceiver} from "@opendaw/lib-fusion"
 import {ProjectEnv} from "./ProjectEnv"
 import {Mixer} from "../Mixer"
 import {ProjectApi} from "./ProjectApi"
@@ -61,8 +65,8 @@ import {EngineFacade} from "../EngineFacade"
 import {EngineWorklet} from "../EngineWorklet"
 import {MidiDevices, MIDILearning} from "../midi"
 import {ProjectValidation} from "./ProjectValidation"
-import {ppqn, TempoMap, TimeBase} from "@moises-ai/lib-dsp"
-import {MidiData} from "@moises-ai/lib-midi"
+import {ppqn, TempoMap, TimeBase} from "@opendaw/lib-dsp"
+import {MidiData} from "@opendaw/lib-midi"
 import {StudioPreferences} from "../StudioPreferences"
 import {RegionOverlapResolver, TimelineFocus} from "../ui"
 import {SampleStorage} from "../samples"
@@ -78,9 +82,9 @@ export type ProjectCreateOptions = {
 export class Project implements BoxAdaptersContext, Terminable, TerminableOwner {
     static new(env: ProjectEnv, options?: ProjectCreateOptions): Project {
         const createDefaultUser = options?.noDefaultUser !== true
-        const createOutputCompressor = StudioPreferences.settings.engine["auto-create-output-compressor"]
+        const createOutputMaximizer = StudioPreferences.settings.engine["auto-create-output-maximizer"]
         const {boxGraph, mandatoryBoxes} = ProjectSkeleton.empty({
-            createOutputCompressor,
+            createOutputMaximizer,
             createDefaultUser
         })
         const project = new Project(env, boxGraph, mandatoryBoxes)
@@ -201,7 +205,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                     this.#registerSample(update.uuid)
                 } else if (update instanceof DeleteUpdate && update.name === AudioFileBox.ClassName) {
                     this.#unregisterSample(update.uuid)
-                    this.#deleteUserCreatedSample(update.uuid)
+                    this.#deleteUserCreatedSample(update.uuid).finally()
                 }
             }
         }))
@@ -209,6 +213,31 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     startAudioWorklet(restart?: RestartWorklet, options?: ProcessorOptions): EngineWorklet {
         console.debug(`start AudioWorklet`)
+        const audioContext = this.#env.audioWorklets.context
+        const loadScript = (config: ScriptCompiler.Config, deviceBox: ScriptCompiler.ScriptDeviceBox) =>
+            ScriptCompiler.create(config).load(audioContext, deviceBox).catch(reason =>
+                console.warn(`Failed to load script device ${UUID.toString(deviceBox.address.uuid)}:`, reason))
+        for (const box of this.boxGraph.boxes()) {
+            if (box instanceof ApparatDeviceBox) {
+                loadScript({
+                    headerTag: "apparat",
+                    registryName: "apparatProcessors",
+                    functionName: "apparat"
+                }, box).finally()
+            } else if (box instanceof WerkstattDeviceBox) {
+                loadScript({
+                    headerTag: "werkstatt",
+                    registryName: "werkstattProcessors",
+                    functionName: "werkstatt"
+                }, box).finally()
+            } else if (box instanceof SpielwerkDeviceBox) {
+                loadScript({
+                    headerTag: "spielwerk",
+                    registryName: "spielwerkProcessors",
+                    functionName: "spielwerk"
+                }, box).finally()
+            }
+        }
         const lifecycle = this.#terminator.spawn()
         const worklet: EngineWorklet = lifecycle.own(this.#env.audioWorklets.createEngine({project: this, options}))
         const handler = async (event: unknown) => {
@@ -222,7 +251,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         }
         worklet.addEventListener("error", handler)
         worklet.addEventListener("processorerror", handler)
-        worklet.connect(worklet.context.destination)
+        worklet.connect(worklet.context.destination, 0)
         this.engine.setWorklet(worklet)
         return worklet
     }

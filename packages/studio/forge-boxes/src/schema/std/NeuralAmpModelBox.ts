@@ -7,7 +7,8 @@ export const NeuralAmpModelBox: BoxSchema<Pointers> = {
         name: "NeuralAmpModelBox",
         fields: {
             1: {type: "string", name: "label"},
-            2: {type: "string", name: "model"}
+            2: {type: "string", name: "model"},
+            3: {type: "string", name: "pack-id"}
         }
     },
     pointerRules: {accepts: [Pointers.NeuralAmpModel], mandatory: true},

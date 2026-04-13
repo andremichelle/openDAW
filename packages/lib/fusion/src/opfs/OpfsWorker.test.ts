@@ -189,12 +189,12 @@ describe("OpfsWorker", () => {
             await protocol.write("zero.bin", new Uint8Array(0))
             expect(await protocol.exists("zero.bin")).toBe(false)
         })
-        it("should reject for non-existent file", async () => {
-            await expect(protocol.exists("ghost.bin")).rejects.toThrow()
+        it("should return false for non-existent file", async () => {
+            expect(await protocol.exists("ghost.bin")).toBe(false)
         })
-        it("should reject when path is a directory", async () => {
+        it("should return true when path is a directory", async () => {
             await protocol.write("dir/file.bin", new Uint8Array([1]))
-            await expect(protocol.exists("dir")).rejects.toThrow()
+            expect(await protocol.exists("dir")).toBe(true)
         })
     })
 

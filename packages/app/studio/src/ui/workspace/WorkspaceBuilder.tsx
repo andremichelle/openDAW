@@ -3,15 +3,17 @@ import {PanelPlaceholder} from "@/ui/workspace/PanelPlaceholder.tsx"
 import {PanelResizer} from "@/ui/workspace/PanelResizer.tsx"
 import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
 import {ContentGlue} from "@/ui/workspace/ContentGlue.ts"
-import {isDefined, Iterables, Lifecycle, Nullable, Unhandled} from "@moises-ai/lib-std"
-import {Html} from "@moises-ai/lib-dom"
-import {appendChildren, createElement} from "@moises-ai/lib-jsx"
+import {isDefined, Iterables, Lifecycle, Nullable, ObservableValue, Unhandled} from "@opendaw/lib-std"
+import {RoomAwareness} from "@/service/RoomAwareness"
+import {Html} from "@opendaw/lib-dom"
+import {appendChildren, createElement} from "@opendaw/lib-jsx"
 
 export namespace WorkspaceBuilder {
     export const buildScreen = (lifecycle: Lifecycle,
                                 panelContents: PanelContents,
                                 element: HTMLElement,
-                                screenKey: Nullable<Workspace.ScreenKeys>) => {
+                                screenKey: Nullable<Workspace.ScreenKeys>,
+                                roomAwareness: ObservableValue<Nullable<RoomAwareness>>) => {
         Html.empty(element)
         if (screenKey === null) {return}
         const build = (container: HTMLElement,
@@ -26,7 +28,8 @@ export namespace WorkspaceBuilder {
                                           orientation={orientation}
                                           siblings={siblings}
                                           panelContents={panelContents}
-                                          panelState={content}/>
+                                          panelState={content}
+                                          roomAwareness={roomAwareness}/>
                     )
                 } else if (content.type === "layout") {
                     const section = (

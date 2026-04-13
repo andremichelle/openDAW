@@ -1,6 +1,7 @@
 import {
     byte,
     Errors,
+    isAbsent,
     Lazy,
     MutableObservableOption,
     MutableObservableValue,
@@ -57,7 +58,13 @@ export class MidiDevices {
         return output
     }
 
-    static #memoizedRequest = Promises.memoizeAsync(() => navigator.requestMIDIAccess({sysex: false}))
+    static #memoizedRequest = Promises.memoizeAsync(async () => {
+        const result = await navigator.requestMIDIAccess({sysex: false})
+        if (isAbsent(result)) {
+            return panic("You browser does not support MIDI.")
+        }
+        return result
+    })
 
     static async requestPermission() {
         if (this.canRequestMidiAccess()) {

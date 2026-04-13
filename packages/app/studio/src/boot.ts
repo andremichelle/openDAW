@@ -1,13 +1,15 @@
+if ("stackTraceLimit" in Error) {Error.stackTraceLimit = 50}
+
 import "./main.sass"
 import {App} from "@/ui/App.tsx"
-import {panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
+import {panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
-import {SampleMetaData, SoundfontMetaData} from "@moises-ai/studio-adapters"
+import {SampleMetaData, SoundfontMetaData} from "@opendaw/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {installCursors} from "@/ui/Cursors.ts"
 import {BuildInfo} from "./BuildInfo"
 import {Surface} from "@/ui/surface/Surface.tsx"
-import {replaceChildren} from "@moises-ai/lib-jsx"
+import {replaceChildren} from "@opendaw/lib-jsx"
 import {
     AudioWorklets,
     CloudAuthManager,
@@ -18,17 +20,18 @@ import {
     OpenSampleAPI,
     OpenSoundfontAPI,
     Workers
-} from "@moises-ai/studio-core"
+} from "@opendaw/studio-core"
 import {testFeatures} from "@/features.ts"
 import {MissingFeature} from "@/ui/MissingFeature.tsx"
 import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
 import {showStoragePersistDialog} from "@/AppDialogs"
-import {Promises} from "@moises-ai/lib-runtime"
-import {AnimationFrame, Browser, Html, ShortcutManager} from "@moises-ai/lib-dom"
+import {Promises} from "@opendaw/lib-runtime"
+import {AnimationFrame, Browser, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
-import {AudioData} from "@moises-ai/lib-dsp"
+import {AudioData} from "@opendaw/lib-dsp"
+import {ChainedSampleProvider, ChainedSoundfontProvider} from "@opendaw/studio-p2p"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Menu} from "@/ui/components/Menu"
 
@@ -63,6 +66,7 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
     console.debug("requesting custom sampleRate", sampleRate ?? "'No (Firefox)'")
     const context = new AudioContext({sampleRate, latencyHint: 0})
     console.debug(`AudioContext state: ${context.state}, sampleRate: ${context.sampleRate}`)
+    console.debug(`Error.stackTraceLimit: ${Error.stackTraceLimit ?? "N/A"}`)
     const audioWorklets = await Promises.tryCatch(AudioWorklets.createFor(context))
     if (audioWorklets.status === "rejected") {
         return panic(audioWorklets.error)
@@ -73,20 +77,23 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
                 console.debug(`AudioContext resumed (${context.state})`)), {capture: true, once: true})
     }
     const audioDevices = await AudioOutputDevice.create(context)
-    const sampleManager = new GlobalSampleLoaderManager({
+    const chainedSampleProvider = new ChainedSampleProvider({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[AudioData, SampleMetaData]> =>
             OpenSampleAPI.get().load(uuid, progress)
     })
-    const soundfontManager = new GlobalSoundfontLoaderManager({
+    const chainedSoundfontProvider = new ChainedSoundfontProvider({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[ArrayBuffer, SoundfontMetaData]> =>
             OpenSoundfontAPI.get().load(uuid, progress)
     })
+    const sampleManager = new GlobalSampleLoaderManager(chainedSampleProvider)
+    const soundfontManager = new GlobalSoundfontLoaderManager(chainedSoundfontProvider)
     const cloudAuthManager = CloudAuthManager.create({
         Dropbox: "jtehjzxaxf3bf1l",
         GoogleDrive: "628747153367-gt1oqcn3trr9l9a7jhigja6l1t3f1oik.apps.googleusercontent.com"
     })
     const service: StudioService = new StudioService(context, audioWorklets.value, audioDevices,
-        sampleManager, soundfontManager, cloudAuthManager, buildInfo)
+        sampleManager, soundfontManager, chainedSampleProvider, chainedSoundfontProvider,
+        cloudAuthManager, buildInfo)
     StudioShortcutManager.install(service)
     const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand())
     const surface = Surface.main({
@@ -111,14 +118,10 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
         progress: (request): RuntimeNotification.ProgressUpdater => Dialogs.progress(request)
     })
     if (buildInfo.env === "production" && !Browser.isLocalHost()) {
-        const uuid = buildInfo.uuid
-        const sourceCss = document.querySelector<HTMLLinkElement>("link[rel='stylesheet']")?.href ?? ""
-        const sourceCode = document.querySelector<HTMLScriptElement>("script[src]")?.src ?? ""
-        if (!sourceCss.includes(uuid) || !sourceCode.includes(uuid)) {
+        if (import.meta.env.BUILD_UUID !== buildInfo.uuid) {
             console.warn("Cache issue:")
-            console.warn("expected uuid", uuid)
-            console.warn("sourceCss", sourceCss)
-            console.warn("sourceCode", sourceCode)
+            console.warn("expected uuid", buildInfo.uuid)
+            console.warn("embedded uuid", import.meta.env.BUILD_UUID)
             Dialogs.cache()
             return
         }

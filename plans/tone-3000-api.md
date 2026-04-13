@@ -6,96 +6,228 @@ Allow users to browse and load NAM models from [Tone 3000](https://www.tone3000.
 
 ## Architecture: Select Flow + Popup
 
-The Tone 3000 **Select Flow** is a redirect-based mechanism (like OAuth). We open it in a popup window, and use a local callback page + `postMessage` to get the result back into the editor.
+The Tone 3000 **Select Flow** is a redirect-based mechanism (like OAuth). We open it in a **popup window** (not a new tab), and use a local callback page + `localStorage` events to get the result back into the editor.
 
 ```
-Editor                     Popup (new tab)                  Tone 3000
+Editor                     Popup (popup window)             Tone 3000
   │                            │                               │
-  │── window.open() ──────────►│                               │
+  │── window.open(…, popup) ──►│                               │
   │                            │── redirect ──────────────────►│
   │                            │                               │ (user logs in,
   │                            │                               │  browses tones,
   │                            │                               │  selects one)
   │                            │◄── redirect with ?tone_url ──│
   │                            │                               │
-  │◄── postMessage(tone_url) ──│                               │
-  │                            │── window.close() ────────────►│
+  │◄── localStorage event ────│                               │
+  │                            │── waits for "done" signal ──►│
   │                            │                               │
   │── fetch(tone_url) ────────────────────────────────────────►│
   │◄── { tone, models[] } ────────────────────────────────────│
+  │                                                            │
+  │── show model picker (if multiple models) ──►               │
+  │◄── user selects model ──                                   │
   │                                                            │
   │── fetch(model.model_url) ─────────────────────────────────►│
   │◄── .nam file contents ────────────────────────────────────│
   │                                                            │
   │── create NeuralAmpModelBox & load ──►                      │
+  │── signal "done" to popup ──►                               │
+  │                            │── window.close() ────────────►│
 ```
 
-## Steps
+## Current State (implemented)
 
-### Step 1: Callback Page
+- [x] Step 1: Callback page (`tone3000-callback.html`)
+- [x] Step 2: Service logic (`NamTone3000.ts`)
+- [x] Step 3: Editor integration (`NeuralAmpDeviceEditor.tsx`)
+- [x] Popup window (not tab) — `window.open(url, "tone3000", "width=800,height=900,popup=yes")`
+- [ ] Step 4: Store pack metadata + first model in OPFS (`tone3000/{tone.id}/`)
+- [ ] Step 5: Add `packId` field to NeuralAmpModelBox schema
+- [ ] Step 6: Model dropdown in editor UI (replaces static label)
+- [ ] Step 7: Handle missing pack (dropdown shows "No pack available")
 
-Create a minimal HTML page served by the app (e.g. `/tone3000-callback.html` in `packages/app/studio/public/`).
+## Feedback from Tone 3000 Team
 
-This page:
-1. Reads `tone_url` from `window.location.search`
-2. Sends it to `window.opener` via `postMessage`
-3. Closes itself
+### 1. Popup instead of new tab ✅ Done
 
-```html
-<!DOCTYPE html>
-<html>
-<head><title>Tone 3000</title></head>
-<body>
-<p>Loading...</p>
-<script>
-  const params = new URLSearchParams(window.location.search);
-  const toneUrl = params.get("tone_url");
-  if (toneUrl && window.opener) {
-    window.opener.postMessage({ type: "tone3000-select", tone_url: toneUrl }, "*");
-  }
-  window.close();
-</script>
-</body>
-</html>
+> Because the Select Flow opens in a new tab, it's not intuitive that clicking the download button will load the tone natively in openDAW. We recommend a pop-up instead.
+
+Fixed: `window.open()` now uses `"width=800,height=900,popup=yes"` features to open as a popup window.
+
+### 2. Model switching within a pack — TODO
+
+> After downloading a tone pack, there's no way to switch between models within that pack. This matters because some packs contain hundreds of models, and the key identifying information lives in the model name, which can be quite long. The UI needs to accommodate switching between models and displaying these full names.
+
+**Problem:** The current `pickModel()` silently auto-selects the "standard" model. There is no UI for choosing between models, and no way to switch after loading.
+
+**API constraints:** The Select Flow only accepts `app_id` and `redirect_url` — there is no parameter to select individual models. The `tone_url` response embeds all models with pre-signed download URLs. For packs with hundreds of models, the full list comes back in the response.
+
+## Step 4: Store pack metadata and first model in OPFS
+
+When a user selects a tone from Tone 3000, download **only the first model** and store it along with pack metadata (including pre-signed URLs) in OPFS. Remaining models are downloaded on-demand when selected in the dropdown. This avoids downloading up to 80MB of data upfront for large packs.
+
+### OPFS layout
+
+```
+tone3000/{tone.id}/
+  pack.json          ← pack metadata (title, model list with ids, names + sizes)
+  models/
+    {model.id}.nam   ← raw model JSON, keyed by numeric model id
 ```
 
-### Step 2: Tone 3000 Service
+`pack.json` structure (derived from `ToneResponse`, includes `model_url` for on-demand fetching):
 
-Create a small service/utility (e.g. `Tone3000Service.ts` in `packages/app/studio/src/service/` or alongside the NeuralAmp editor) that encapsulates the flow:
+```typescript
+interface PackMeta {
+    toneId: number
+    title: string
+    updatedAt: string   // from Tone.updated_at — used for cache invalidation
+    models: ReadonlyArray<{ id: number, name: string, size: string, model_url: string }>
+}
+```
 
-- `selectTone(): Promise<{ tone: Tone, models: Model[] }>`
-  1. Computes `redirect_url` = `${window.location.origin}/tone3000-callback.html`
-  2. Opens popup: `window.open(https://www.tone3000.com/api/v1/select?app_id=openDAW&redirect_url=${redirect_url}&gear=amp_pedal_full-rig&platform=nam)`
-  3. Listens for `message` event with `type === "tone3000-select"`
-  4. Fetches the `tone_url` (no auth needed, pre-signed)
-  5. Returns the tone + models data
-  6. Cleans up listener
+Note: `model_url` values are pre-signed and will expire. See Considerations for handling expiry during on-demand downloads.
 
-- `downloadModel(modelUrl: string): Promise<string>`
-  1. Fetches the model URL (pre-signed, no auth)
-  2. Returns the `.nam` file content as text
+The `id` field (from `Model.id` in the API) is used as the OPFS filename — it's unique within a pack and avoids issues with special characters in model names.
 
-### Step 3: Editor Integration
+### Initial download flow (on pack selection)
 
-In `NeuralAmpDeviceEditor.tsx`, add a second button next to the existing file-browse button:
+1. After `fetchTone(toneUrl)` returns the `ToneResponse`, check if `tone3000/{tone.id}/pack.json` exists in OPFS
+2. **Always** rewrite `pack.json` with the fresh `ToneResponse` data — this refreshes all `model_url` values (pre-signed URLs expire). If `updatedAt` changed, also remove stale model files that are no longer in the new model list
+3. If `pack.json` existed but lacked `model_url` fields (old format from pre-lazy-loading), treat as a fresh pack — the already-cached `.nam` files remain valid and won't be re-downloaded
+4. Pick the default "standard" model (or first if no standard). Check if its `.nam` file exists in OPFS — if yes, skip download. If not, download and store it (no progress dialog for a single model)
+5. Load that model (same as today)
 
-- **Icon**: Use a cloud/download icon or the Tone3000 logo
-- **onClick**: Calls `Tone3000Service.selectTone()`
-- On success:
-  1. Presents a model picker if the tone has multiple models (standard, lite, feather, nano), or auto-selects if only one
-  2. Downloads the selected model via `Tone3000Service.downloadModel(model.model_url)`
-  3. Creates a `NeuralAmpModelBox` (same pattern as `browseModel()` — SHA256 for UUID, dedup by hash)
-  4. Points `adapter.box.model.refer(modelBox)`
+### On-demand download flow (on model switch)
 
-The existing `browseModel()` function already shows the exact pattern for creating and loading a model. The Tone 3000 flow just replaces the file picker with a remote fetch.
+1. User selects a model from the dropdown
+2. Abort any in-flight model switch (`AbortController.abort()` on the previous fetch)
+3. Check if `tone3000/{toneId}/models/{modelId}.nam` exists in OPFS
+4. If cached: load directly from OPFS
+5. If not cached: fetch from `model_url` stored in `pack.json`, store in OPFS, add model id to `cachedModelIds` set, then load
+6. If fetch fails with 403 or network error: set an error observable. The model label shows **"URLs expired — re-select pack"** and the Tone 3000 browse button receives a `"pulse"` CSS class (subtle animation). Clicking the Tone 3000 button re-runs the Select Flow for the same tone, which rewrites `pack.json` with fresh URLs and clears the error state. Already-cached `.nam` files are preserved
 
-### Step 4: Model Size Selection (if multiple models)
+### Access pattern
 
-A tone can have multiple models in different sizes (standard, lite, feather, nano). We need a simple selection UI:
+```typescript
+// Reading a model from a cached pack
+const json = await Workers.Opfs.read(`tone3000/${toneId}/models/${modelId}.nam`)
+const modelText = new TextDecoder().decode(json)
+```
 
-- If 1 model → auto-load
-- If multiple → show a small dialog/dropdown letting user pick (show size label + name)
-- Default to "standard" if available
+## Step 5: Add `packId` field to NeuralAmpModelBox
+
+Store the Tone 3000 pack ID on the model box so the UI can look up the pack in OPFS after project reload.
+
+### Schema change
+
+Add field `3: packId` (StringField) to the `NeuralAmpModelBox` schema:
+
+```typescript
+// packages/studio/forge-boxes/src/schema/std/NeuralAmpModelBox.ts
+export const NeuralAmpModelBox: BoxSchema<Pointers> = {
+    type: "box",
+    class: {
+        name: "NeuralAmpModelBox",
+        fields: {
+            1: {type: "string", name: "label"},
+            2: {type: "string", name: "model"},
+            3: {type: "string", name: "pack-id"}  // ← new, becomes `packId` in generated class
+        }
+    },
+    pointerRules: {accepts: [Pointers.NeuralAmpModel], mandatory: true},
+    resource: "preserved"
+}
+```
+
+- Store `tone.id.toString()` in this field when creating a model box from Tone 3000
+- Leave empty for locally imported `.nam` files (no pack association)
+- Regenerate the box class after schema change
+
+### Usage
+
+When the UI sees a non-empty `packId`, it knows:
+- The model came from Tone 3000
+- The full pack lives at `tone3000/{packId}/` in OPFS
+- The dropdown should be enabled for model switching
+
+## Step 6: Model dropdown in editor UI
+
+Re-layout the editor to accommodate pack info and model selection. The device keeps its overall height — the spectrum analyser loses one row to make room.
+
+### Layout change
+
+Current grid: `grid-template-rows: 5em 2em 3.5em` (3 rows, 2 gaps)
+```
+Row 1: spectrum analyser          (5em)
+Row 2: [tone3000] [local] [model name ............] [info]
+Row 3: [input gain] [mix] [output gain] [mono]
+```
+
+New grid: `grid-template-rows: 3em 2em 2em 3.5em` (4 rows, 3 gaps)
+```
+Row 1: spectrum analyser (reduced height)          (3em)
+Row 2: [tone3000] [local]              [pack name →]   ← browse buttons + pack label (right-aligned)
+Row 3: [◄] [model dropdown ............] [►] [info]    ← prev/next arrows + model dropdown + info
+Row 4: [input gain] [mix] [output gain] [mono]         ← unchanged
+```
+
+### Spectrum grid
+
+Add a light grid to the spectrum canvas, matching the compressor curve style:
+- Color: `"hsla(200, 40%, 70%, 0.12)"` (same as the existing canvas outline)
+- Line width: `1.0 / devicePixelRatio` (thin, crisp)
+- Drawn before the spectrum path in `SpectrumRenderer.ts`
+
+### Row details
+
+- Row 2: browse buttons stay, model name span is replaced with the **pack title** (right-aligned, pushed to edge). Shows "No pack" if no pack is loaded
+- Row 3: new row with prev/next arrows, model dropdown (shows current model name, opens grouped list), and the info button
+- Row 4: knobs stay in their position
+
+### Behavior
+
+- The dropdown is always present, regardless of whether the model came from Tone 3000 or local import
+- On model load (or `packId` change): eagerly read `pack.json` from OPFS into memory, then **scan OPFS for which model files exist** and store the cached set in a `DefaultObservableValue<ReadonlySet<number>>`. Both `pack.json` and the cached set are small — this avoids async work at menu-open time since `setRuntimeChildrenProcedure` is synchronous
+- On click (synchronous): populate dropdown from the in-memory model list and cached set
+  - If list is available: show all model names + size badges, highlight the currently loaded model. Uncached models get `IconSymbol.Download` via `MenuItem.default({icon})` to indicate they need fetching
+  - If `packId` is empty or pack was not found in OPFS: show a single non-selectable entry "No pack available"
+- On selection: **cancel any pending model switch** (abort previous fetch if in flight) to prevent race conditions from rapid clicks. Then load the chosen `.nam` from OPFS if cached, otherwise download on-demand from `model_url` in `pack.json`. On success: update the cached set, create/dedup `NeuralAmpModelBox`, update the device's model pointer. On failure (expired URL): set an error flag on the observable — the model label shows "URLs expired — re-select pack" and the Tone 3000 browse button pulses
+- **Loading state**: `switchModel` must `await` the result. While a download is in progress, set a boolean observable `isDownloading` — the model label shows "Downloading…", the dropdown and step arrows are disabled. On completion or abort, clear the flag
+
+### Model switching flow
+
+```
+Model loads / packId changes → read pack.json from OPFS into memory (async, eager)
+                             → scan OPFS for existing .nam files → update cachedModelIds set
+
+User clicks dropdown          → show in-memory model list (synchronous, from packMeta + cachedModelIds)
+                              → uncached models show download icon
+                              → user picks a model
+                              → abort any in-flight model switch (cancel previous fetch)
+                              → set isDownloading = true, label shows "Downloading…"
+                              → if cached: read model .nam from OPFS (async)
+                              → if not cached: fetch from model_url, store in OPFS, add to cachedModelIds
+                              → if fetch fails (expired URL): set error state, label shows "URLs expired"
+                              → set isDownloading = false
+                              → compute SHA256 UUID
+                              → find or create NeuralAmpModelBox (set packId + label)
+                              → update adapter.box.model pointer
+                              → clean up old model box if orphaned
+```
+
+### UI details
+
+- Long model names are truncated with ellipsis (tooltip shows full name)
+- Models grouped by size category (standard, lite, feather, nano, custom) as section headers in the dropdown. Each category lists its models underneath. Categories with no models are omitted
+- Simple scrollable dropdown, no filter/search (filters deferred to a future iteration)
+- Two arrow buttons (prev/next) alongside the dropdown for quick sequential navigation. The order must match the dropdown: models sorted by category (standard → lite → feather → nano → custom), then by name within each category
+- Typical packs: 1–20 models, sometimes 60, rare outliers at 300+
+- Size categories are known from the API's `Model.size` field and stored in `pack.json`
+
+## Step 7: Handle missing pack
+
+If the user opens a project referencing a `packId` but the pack is missing from OPFS (cleared cache, different machine), the dropdown shows "No pack available". Re-triggering the Tone 3000 Select Flow for the same tone will re-download the pack and restore the dropdown.
 
 ## API Details
 
@@ -104,27 +236,58 @@ A tone can have multiple models in different sizes (standard, lite, feather, nan
 GET https://www.tone3000.com/api/v1/select
   ?app_id=openDAW
   &redirect_url={callbackUrl}
-  &gear=amp_pedal_full-rig    (optional: filter by gear type)
+  &gear={gear}        (optional filter)
+  &platform=nam        (filter to NAM only — device cannot handle IRs or other formats)
 ```
 
 ### Select Flow Response (fetched from `tone_url`)
 ```typescript
+type Gear = "amp" | "full-rig" | "pedal" | "outboard" | "ir"
+type Platform = "nam" | "ir" | "aida-x" | "aa-snapshot" | "proteus"
+type Size = "standard" | "lite" | "feather" | "nano" | "custom"
+type License = "t3k" | "cc-by" | "cc-by-sa" | "cc-by-nc" | "cc-by-nc-sa" | "cc-by-nd" | "cc-by-nc-nd" | "cco"
+
+interface EmbeddedUser {
+  id: number
+  username: string
+  avatar_url: string | null
+  url: string
+}
+
+interface Make { id: number, name: string }
+interface Tag { id: number, name: string }
+
 interface Tone {
   id: number
+  user_id: number
+  user: EmbeddedUser
+  created_at: string
+  updated_at: string
   title: string
   description: string | null
-  gear: "amp" | "full-rig" | "pedal" | "outboard" | "ir"
-  platform: "nam" | "ir" | "aida-x" | "aa-snapshot" | "proteus"
-  sizes: ("standard" | "lite" | "feather" | "nano" | "custom")[]
+  gear: Gear
+  images: string[] | null
+  is_public: boolean | null
+  links: string[] | null
+  platform: Platform
+  license: License
+  sizes: Size[]
+  makes: Make[]
+  tags: Tag[]
   models_count: number
-  user: { username: string }
+  downloads_count: number
+  favorites_count: number
+  url: string
 }
 
 interface Model {
   id: number
-  name: string
-  size: "standard" | "lite" | "feather" | "nano" | "custom"
+  created_at: string
+  updated_at: string
+  user_id: number
   model_url: string  // pre-signed, no auth needed
+  name: string
+  size: Size
   tone_id: number
 }
 
@@ -132,19 +295,29 @@ interface Model {
 type SelectResponse = Tone & { models: Model[] }
 ```
 
-## Key Files to Modify
+### Full API (not currently used)
 
-| File | Change |
-|------|--------|
-| `packages/app/studio/public/tone3000-callback.html` | **New** — callback page |
-| `packages/app/studio/src/ui/devices/audio-effects/NeuralAmp/Tone3000Service.ts` | **New** — select flow + fetch logic |
-| `packages/app/studio/src/ui/devices/audio-effects/NeuralAmpDeviceEditor.tsx` | Add Tone 3000 browse button |
-| `packages/app/studio/src/ui/devices/audio-effects/NeuralAmpDeviceEditor.sass` | Style the new button |
+A paginated `/api/v1/models?tone_id={id}&page=1&page_size=10` endpoint exists in the Full API, but requires authentication. The Select Flow's embedded models array with pre-signed URLs is sufficient for now. Rate limit: 100 requests/minute.
+
+## Key Files
+
+| File | Status | Purpose |
+|------|--------|---------|
+| `packages/app/studio/public/tone3000-callback.html` | ✅ Done | Callback page — receives `tone_url` via localStorage |
+| `packages/app/studio/src/ui/devices/audio-effects/NeuralAmp/NamTone3000.ts` | ✅ Done (needs update) | Select flow + fetch + OPFS pack storage + model loading |
+| `packages/app/studio/src/ui/devices/audio-effects/NeuralAmpDeviceEditor.tsx` | ✅ Done (needs update) | Tone 3000 browse button + model dropdown |
+| `packages/app/studio/src/ui/devices/audio-effects/NeuralAmpDeviceEditor.sass` | ✅ Done (needs update) | Styling for dropdown |
+| `packages/app/studio/src/ui/devices/audio-effects/NeuralAmp/Tone3000Dialog.tsx` | ✅ Done | Pre-browse info dialog |
+| `packages/studio/forge-boxes/src/schema/std/NeuralAmpModelBox.ts` | TODO | Add `packId` field (Step 5) |
+| `packages/studio/boxes/src/NeuralAmpModelBox.ts` | TODO | Regenerate after schema change (Step 5) |
 
 ## Considerations
 
-- **No app_id registration needed?** — We need to check if Tone 3000 requires registering an `app_id` or if any string works. May need to register "openDAW" with them.
-- **CORS** — The `tone_url` and `model_url` are pre-signed URLs from Tone 3000's CDN. They should be CORS-friendly for browser fetch. If not, we may need to proxy through our own server or use a different approach.
-- **Popup blockers** — The `window.open()` must be called directly from a user click handler (synchronous), otherwise browsers will block it. The button's `onClick` is a direct user gesture, so this should work.
-- **Offline / local-only** — The existing file-browse flow remains as the primary way to load local `.nam` files. Tone 3000 is an additional option for users who want to browse a library.
-- **Model label** — Use `tone.title + " — " + model.name` or similar as the `NeuralAmpModelBox.label`.
+- **CORS** — The `tone_url` and `model_url` are pre-signed URLs. They should be CORS-friendly for browser fetch.
+- **Popup blockers** — `window.open()` is called from a direct user click handler, so popup blockers should not interfere.
+- **Pre-signed URL expiry** — Since models are downloaded on-demand, stored `model_url` values in `pack.json` may expire before the user selects them. Mitigated on two fronts: (1) every Select Flow re-run rewrites `pack.json` with fresh URLs regardless of `updatedAt`, keeping cached `.nam` files intact; (2) on 403/network error, the UI shows "URLs expired — re-select pack" in the model label and pulses the Tone 3000 button to guide the user.
+- **Model label** — Use `tone.title + " — " + model.name` as the `NeuralAmpModelBox.label`.
+- **Offline / local-only** — The existing file-browse flow remains as the primary way to load local `.nam` files.
+- **OPFS storage size** — Packs with many models will consume significant OPFS space. Consider showing pack size before download and/or offering a "delete cached pack" action.
+- **Pack deduplication** — If the same pack is selected again via Select Flow, detect it by `tone.id`. Already-cached `.nam` files are kept; only `pack.json` is rewritten (to refresh URLs). No model re-download unless the file is missing.
+- **Concurrent downloads** — No longer needed for initial selection (only one model is downloaded). On-demand downloads are sequential (one at a time as user selects).

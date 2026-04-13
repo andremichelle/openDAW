@@ -13,14 +13,16 @@ component
   @include colors.panel-background
 
   > div.resources
-    display: flex
-    flex-direction: column
+    display: grid
+    grid-template-columns: auto auto 1fr
     row-gap: 0.75em
+    column-gap: 0.75em
 
     > section
+      grid-column: 1 / -1
       font-size: 11px
-      display: flex
-      flex-direction: column
+      display: grid
+      grid-template-columns: subgrid
       row-gap: 0.25em
       color: var(--color)
 
@@ -34,6 +36,7 @@ component
         --color: var(--color-orange)
 
       > h1
+        grid-column: 1 / -1
         display: inline-block
         width: min-content
         white-space: nowrap
@@ -43,16 +46,18 @@ component
         background-color: rgba(black, 0.12)
 
       > ul
+        grid-column: 1 / -1
         margin: 0
         padding: 0.25em 0.5em
         font-size: 1em
         list-style: none
         color: var(--color-dark)
-        display: flex
-        flex-direction: column
+        display: grid
+        grid-template-columns: subgrid
         row-gap: 0.375em
 
         > hr
+          grid-column: 1 / -1
           border: none
           background-color: rgba(white, 0.04)
           margin: 0.25em 0
@@ -60,14 +65,20 @@ component
           width: 100%
 
         > li
-          display: flex
-          flex-direction: row
+          display: grid
+          grid-column: 1 / -1
+          grid-template-columns: subgrid
           align-items: center
-          column-gap: 0.75em
           cursor: pointer
 
           &[draggable]
             cursor: grab
+
+          > span.brief
+            opacity: 0.3
+            overflow: hidden
+            white-space: nowrap
+            text-overflow: ellipsis
 
           &:hover
             color: var(--color-gray)

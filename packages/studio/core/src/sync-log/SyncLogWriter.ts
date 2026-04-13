@@ -45,10 +45,13 @@ export class SyncLogWriter implements Terminable {
             onBeginTransaction: () =>
                 this.#transactionSubscription =
                     boxGraph.subscribeToAllUpdatesImmediate({onUpdate: (update: Update) => updates.push(update)}),
-            onEndTransaction: () => {
+            onEndTransaction: (rolledBack) => {
                 this.#transactionSubscription.terminate()
                 this.#transactionSubscription = Terminable.Empty
-                if (updates.length === 0) {return}
+                if (rolledBack || updates.length === 0) {
+                    updates = []
+                    return
+                }
                 const ref = updates
                 updates = []
                 this.#appendCommit(previous => Commit.createUpdate(previous.thisHash, ref))

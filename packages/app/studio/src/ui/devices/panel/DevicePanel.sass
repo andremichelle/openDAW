@@ -15,7 +15,7 @@ component
     overflow: hidden
     position: relative
     border-radius: 0 2px 2px 0
-    @include colors.panel-background-dark
+    @include colors.panel-background
 
     > div.editors
       margin: 0.25rem 1px 0.75rem 0.25rem
@@ -34,22 +34,22 @@ component
           pointer-events: auto
 
         &.frozen
-          filter: saturate(0)
+          filter: saturate(0) opacity(0.3)
 
           *
             pointer-events: none !important
 
-          &.midi-container
-            border-top: 1px var(--color-orange) solid
-            background: linear-gradient(to bottom, var(--color-orange) -500%, transparent 20%)
+        > div.midi-container
+          border-top: 1px var(--color-orange) solid
+          background: linear-gradient(to bottom, var(--color-orange) -500%, transparent 20%)
 
-          &.source-container
-            border-top: 1px var(--color-green) solid
-            background: linear-gradient(to bottom, var(--color-green) -500%, transparent 20%)
+        > div.source-container
+          border-top: 1px var(--color-green) solid
+          background: linear-gradient(to bottom, var(--color-green) -500%, transparent 20%)
 
-          &.audio-container
-            border-top: 1px var(--color-blue) solid
-            background: linear-gradient(to bottom, var(--color-blue) -500%, transparent 20%)
+        > div.audio-container
+          border-top: 1px var(--color-blue) solid
+          background: linear-gradient(to bottom, var(--color-blue) -500%, transparent 20%)
 
   > div.channel-strip-container
     border-radius: 2px 0 0 2px

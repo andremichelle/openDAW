@@ -1,0 +1,30 @@
+name: Deploy yjs-server
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v5
+
+      - name: 🔑 Set up SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_SERVER: ${{ secrets.SSH_SERVER }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${SSH_SERVER#*@}" >> ~/.ssh/known_hosts 2>/dev/null
+          echo "Key starts with: $(head -1 ~/.ssh/id_rsa)"
+          echo "Key line count: $(wc -l < ~/.ssh/id_rsa)"
+          ssh -vT "$SSH_SERVER" exit 2>&1 | grep -E "Offering|Trying|Authentication" || true
+
+      - name: 🚀 Deploy yjs-server
+        env:
+          SSH_SERVER: ${{ secrets.SSH_SERVER }}
+        run: bash deploy/deploy-yjs.sh

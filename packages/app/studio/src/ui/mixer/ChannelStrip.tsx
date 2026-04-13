@@ -1,8 +1,8 @@
 import css from "./ChannelStrip.sass?inline"
-import {EmptyExec, Lifecycle, Terminable, UUID} from "@moises-ai/lib-std"
-import {AudioUnitBoxAdapter, ColorCodes} from "@moises-ai/studio-adapters"
-import {AudioUnitType, Colors, IconSymbol} from "@moises-ai/studio-enums"
-import {createElement, DomElement, Frag, Inject} from "@moises-ai/lib-jsx"
+import {EmptyExec, Lifecycle, Terminable, UUID} from "@opendaw/lib-std"
+import {AudioUnitBoxAdapter, ColorCodes} from "@opendaw/studio-adapters"
+import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
+import {createElement, DomElement, Frag, Inject} from "@opendaw/lib-jsx"
 import {VolumeSlider} from "@/ui/components/VolumeSlider.tsx"
 import {PeakMeter} from "@/ui/components/PeakMeter.tsx"
 import {Checkbox} from "@/ui/components/Checkbox.tsx"
@@ -11,17 +11,16 @@ import {Knob} from "@/ui/components/Knob.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {SnapCenter} from "@/ui/configs"
 import {StudioService} from "@/service/StudioService"
-import {ChannelStripView, ContextMenu, MenuItem} from "@moises-ai/studio-core"
+import {ChannelStripView, ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {AuxSendGroup} from "@/ui/mixer/AuxSendGroup.tsx"
 import {DblClckTextInput} from "@/ui/wrapper/DblClckTextInput.tsx"
 import {ChannelOutputSelector} from "@/ui/mixer/ChannelOutputSelector.tsx"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
-import {gainToDb} from "@moises-ai/lib-dsp"
-import {attachParameterContextMenu} from "@/ui/menu/automation.ts"
+import {gainToDb} from "@opendaw/lib-dsp"
 import {DebugMenus} from "@/ui/menu/debug.ts"
-import {ControlIndicator} from "../components/ControlIndicator"
+import {AutomationControl} from "../components/AutomationControl"
 import {DragAndDrop} from "../DragAndDrop"
-import {Events, Html} from "@moises-ai/lib-dom"
+import {Events, Html} from "@opendaw/lib-dom"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {AudioOutputSelector} from "./AudioOutputSelector"
 
@@ -59,40 +58,45 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
             maxPeakLabel.classList.toggle("clipping", maxPeak > 0.0)
         }
     }))
+    const tracks = adapter.tracks
     const volumeControl = (
-        <ControlIndicator lifecycle={lifecycle} parameter={volume}>
+        <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                           tracks={tracks} parameter={volume}>
             <VolumeSlider lifecycle={lifecycle} editing={editing} parameter={volume}/>
-        </ControlIndicator>
+        </AutomationControl>
     )
     const panningControl = (
-        <ControlIndicator lifecycle={lifecycle} parameter={panning}>
+        <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                           tracks={tracks} parameter={panning}>
             <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing} parameter={panning}
                                        options={SnapCenter}>
                 <Knob lifecycle={lifecycle} value={panning} anchor={0.5}/>
             </RelativeUnitValueDragging>
-        </ControlIndicator>
+        </AutomationControl>
     )
     const muteModel = EditWrapper.forAutomatableParameter(editing, mute)
     const soloModel = EditWrapper.forAutomatableParameter(editing, solo)
     const muteControl = (
-        <ControlIndicator lifecycle={lifecycle} parameter={mute}>
+        <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                           tracks={tracks} parameter={mute}>
             <Checkbox lifecycle={lifecycle}
                       model={muteModel}
                       className="mute"
                       appearance={{color: Colors.shadow, activeColor: Colors.orange, framed: true}}>
                 <Icon symbol={IconSymbol.Mute}/>
             </Checkbox>
-        </ControlIndicator>
+        </AutomationControl>
     )
     const soloControl = (
-        <ControlIndicator lifecycle={lifecycle} parameter={solo}>
+        <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                           tracks={tracks} parameter={solo}>
             <Checkbox lifecycle={lifecycle}
                       model={soloModel}
                       className="solo"
                       appearance={{color: Colors.shadow, activeColor: Colors.yellow, framed: true}}>
                 <Icon symbol={IconSymbol.Solo}/>
             </Checkbox>
-        </ControlIndicator>
+        </AutomationControl>
     )
     const lockIcon: HTMLElement = <Icon symbol={IconSymbol.Lock} className="lock-icon"/>
     lockIcon.style.display = adapter.isInstrument && project.audioUnitFreeze.isFrozen(adapter) ? "" : "none"
@@ -146,9 +150,6 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
             </div>
         </div>
     )
-    if (!isOutput) {
-        lifecycle.own(attachParameterContextMenu(editing, midiLearning, adapter.tracks, solo, soloControl))
-    }
     lifecycle.ownAll(
         mixer.registerChannelStrip(adapter, {
             silent: (value: boolean) => peakMeter.classList.toggle("silent", value)
@@ -186,9 +187,6 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
             )
         }),
         adapter.input.catchupAndSubscribeLabelChange(option => inputLabel.value = option.unwrapOrElse("No Input")),
-        attachParameterContextMenu(editing, midiLearning, adapter.tracks, volume, volumeControl),
-        attachParameterContextMenu(editing, midiLearning, adapter.tracks, panning, panningControl),
-        attachParameterContextMenu(editing, midiLearning, adapter.tracks, mute, muteControl),
         service.subscribeSignal(() => permanentPeak = Number.NEGATIVE_INFINITY, "reset-peaks"),
         Events.subscribe(maxPeakLabel, "pointerdown", (event) => {
             service.resetPeaks()

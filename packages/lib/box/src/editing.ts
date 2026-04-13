@@ -8,8 +8,10 @@ import {
     Notifier,
     Observer,
     Option,
+    RuntimeNotifier,
     Subscription,
     SyncProvider,
+    tryCatch,
     UUID
 } from "@moises-ai/lib-std"
 import {DeleteUpdate, NewUpdate, PointerUpdate, PrimitiveUpdate, Update} from "./updates"
@@ -116,8 +118,19 @@ export class BoxEditing implements Editing {
         if (this.#pending.length > 0) {this.mark()}
         console.debug("undo")
         const modifications = this.#marked[--this.#historyIndex]
-        modifications.toReversed().forEach(step => step.inverse(this.#graph))
-        this.#graph.edges().validateRequirements()
+        const reversed = modifications.toReversed()
+        const applied: Array<Modification> = []
+        for (const step of reversed) {
+            const result = tryCatch(() => step.inverse(this.#graph))
+            if (result.status === "failure") {
+                if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
+                applied.toReversed().forEach(completed => completed.forward(this.#graph))
+                this.#historyIndex++
+                RuntimeNotifier.info({headline: "Undo Failed", message: "This history step is no longer valid due to changes from other participants."})
+                return false
+            }
+            applied.push(step)
+        }
         this.#notifier.notify()
         return true
     }
@@ -125,8 +138,19 @@ export class BoxEditing implements Editing {
     redo(): boolean {
         if (!this.canRedo()) {return false}
         console.debug("redo")
-        this.#marked[this.#historyIndex++].forEach(step => step.forward(this.#graph))
-        this.#graph.edges().validateRequirements()
+        const modifications = this.#marked[this.#historyIndex++]
+        const applied: Array<Modification> = []
+        for (const step of modifications) {
+            const result = tryCatch(() => step.forward(this.#graph))
+            if (result.status === "failure") {
+                if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
+                applied.toReversed().forEach(completed => completed.inverse(this.#graph))
+                this.#historyIndex--
+                RuntimeNotifier.info({headline: "Redo Failed", message: "This history step is no longer valid due to changes from other participants."})
+                return false
+            }
+            applied.push(step)
+        }
         this.#notifier.notify()
         return true
     }
@@ -145,7 +169,6 @@ export class BoxEditing implements Editing {
     modify<R>(modifier: SyncProvider<Maybe<R>>, mark: boolean = true): Option<R> {
         assert(!this.#inProcess, "Cannot call modify while a modification process is running")
         if (this.#modifying || this.#graph.inTransaction()) {
-            // Nested modify call or reactive call during undo/redo — just execute without separate recording
             this.#notifier.notify()
             return Option.wrap(modifier())
         }
@@ -155,19 +178,25 @@ export class BoxEditing implements Editing {
         const subscription = this.#graph.subscribeToAllUpdates({
             onUpdate: (update: Update) => updates.push(update)
         })
-        this.#graph.beginTransaction()
-        const result = modifier()
-        this.#graph.endTransaction()
+        const result = tryCatch(() => {
+            this.#graph.beginTransaction()
+            const result = modifier()
+            this.#graph.endTransaction()
+            return result
+        })
         subscription.terminate()
+        this.#modifying = false
+        if (result.status === "failure") {
+            if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
+            throw result.error
+        }
         const optimized = optimizeUpdates(updates)
         if (optimized.length > 0) {
             this.#pending.push(new Modification(optimized))
         }
-        this.#modifying = false
-        this.#graph.edges().validateRequirements()
         if (mark) {this.mark()}
         this.#notifier.notify()
-        return Option.wrap(result)
+        return Option.wrap(result.value)
     }
 
     append<R>(modifier: SyncProvider<Maybe<R>>): Option<R> {
@@ -189,10 +218,18 @@ export class BoxEditing implements Editing {
         const subscription = this.#graph.subscribeToAllUpdates({
             onUpdate: (update: Update) => updates.push(update)
         })
-        this.#graph.beginTransaction()
-        const result = modifier()
-        this.#graph.endTransaction()
+        const result = tryCatch(() => {
+            this.#graph.beginTransaction()
+            const result = modifier()
+            this.#graph.endTransaction()
+            return result
+        })
         subscription.terminate()
+        this.#modifying = false
+        if (result.status === "failure") {
+            if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
+            throw result.error
+        }
         const optimized = optimizeUpdates(updates)
         if (optimized.length > 0) {
             const modification = new Modification(optimized)
@@ -210,10 +247,8 @@ export class BoxEditing implements Editing {
                 this.#historyIndex = this.#marked.length
             }
         }
-        this.#modifying = false
-        this.#graph.edges().validateRequirements()
         this.#notifier.notify()
-        return Option.wrap(result)
+        return Option.wrap(result.value)
     }
 
     beginModification(): ModificationProcess {
@@ -225,27 +260,27 @@ export class BoxEditing implements Editing {
             onUpdate: (update: Update) => updates.push(update)
         })
         this.#graph.beginTransaction()
+        const cleanup = () => {
+            subscription.terminate()
+            this.#modifying = false
+            this.#inProcess = false
+        }
         return {
             approve: () => {
-                this.#graph.endTransaction()
-                subscription.terminate()
+                const result = tryCatch(() => this.#graph.endTransaction())
+                cleanup()
+                if (result.status === "failure") {throw result.error}
                 const optimized = optimizeUpdates(updates)
                 if (optimized.length > 0) {
                     this.#pending.push(new Modification(optimized))
                 }
-                this.#modifying = false
-                this.#inProcess = false
-                this.#graph.edges().validateRequirements()
                 this.mark()
                 this.#notifier.notify()
             },
             revert: () => {
-                this.#graph.endTransaction()
-                subscription.terminate()
-                this.#modifying = false
-                this.#inProcess = false
-                this.#graph.edges().validateRequirements()
-                if (updates.length > 0) {
+                const result = tryCatch(() => this.#graph.endTransaction())
+                cleanup()
+                if (result.status === "success" && updates.length > 0) {
                     new Modification(updates).inverse(this.#graph)
                 }
             }

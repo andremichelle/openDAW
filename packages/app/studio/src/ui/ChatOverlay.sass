@@ -1,0 +1,127 @@
+@use "@/colors"
+
+$tab-width: 30px
+$window-width: 320px
+$padding: 8px
+
+component
+  position: fixed
+  right: 0
+  top: 10%
+  bottom: 10%
+  width: $tab-width + $window-width
+  z-index: 5000
+  transition: transform 0.25s ease-in-out
+  transform: translateX($window-width)
+  pointer-events: none
+
+  &.open
+    transform: translateX(0)
+
+  > .chat-tab
+    pointer-events: auto
+    position: absolute
+    left: 0
+    top: 50%
+    transform: translateY(-50%)
+    width: $tab-width
+    height: $tab-width
+    display: flex
+    align-items: center
+    justify-content: center
+    cursor: pointer
+
+    > svg
+      width: 16px
+      height: 16px
+      fill: var(--color-gray)
+
+  > .chat-window
+    pointer-events: auto
+    position: absolute
+    top: $padding + 4px
+    left: $tab-width + $padding
+    right: 0
+    bottom: $padding + 4px
+    display: flex
+    flex-direction: column
+    font-size: 0.6875rem
+
+    > .messages
+      flex: 1
+      overflow-y: auto
+      padding: 0.5em
+      mask-image: linear-gradient(to bottom, transparent, black 4px, black calc(100% - 4px), transparent)
+      display: flex
+      flex-direction: column
+      gap: 0.35em
+
+      > .message
+        display: flex
+        flex-direction: column
+        gap: 0.15em
+        line-height: 1.4
+
+        > .header
+          display: flex
+          align-items: center
+          gap: 0.35em
+
+          > .dot
+            width: 6px
+            height: 6px
+            border-radius: 50%
+            flex-shrink: 0
+
+          > .name
+            color: var(--color-bright)
+            font-weight: bold
+            white-space: nowrap
+
+          > .time
+            color: var(--color-dark)
+            font-size: 0.85em
+            margin-left: auto
+
+        > .text
+          color: var(--color-gray)
+          word-break: break-word
+          margin-left: 2.5px
+          border-left: 1px solid
+          padding-left: calc(6px + 0.35em - 4px)
+
+
+    > .options
+      display: flex
+      gap: 1em
+      padding: 0.35em 0.5em
+      font-size: 0.625rem
+      color: var(--color-dark)
+
+    > .input-area
+      display: flex
+      column-gap: 1em
+      margin: 1em 0 0.5em 0
+      padding: 0 1em 0.5em
+
+      > textarea
+        flex: 1
+        appearance: none
+        border: none
+        outline: none
+        font: inherit
+        font-size: 0.6875rem
+        color: var(--color-bright)
+        background-color: rgba(black, 0.2)
+        padding: 0.35em 0.5em
+        border-radius: 3px
+        resize: none
+        height: 6.5em
+        overflow-y: auto
+        transition: height 0.25s ease-in-out
+        &.single-line
+          height: 1.9em
+          overflow: hidden
+        &::placeholder
+          color: var(--color-dark)
+

@@ -126,6 +126,10 @@ export class Shortcut {
         return Option.wrap(new Shortcut(code, ctrl, shift, alt))
     }
 
+    static resolveCode(event: KeyboardEvent): string {
+        return event.code.startsWith("Key") ? `Key${event.key.toUpperCase()}` : event.code
+    }
+
     static fromEvent(event: KeyboardEvent): Option<Shortcut> {
         if (Events.isAutofillEvent(event)) {return Option.None}
         const code = event.code
@@ -140,10 +144,7 @@ export class Shortcut {
         ) {
             return Option.None
         }
-        // For letters, use event.key to get the layout-independent character
-        const effectiveCode = code.startsWith("Key")
-            ? `Key${event.key.toUpperCase()}`
-            : code
+        const effectiveCode = Shortcut.resolveCode(event)
         const shortcut = new Shortcut(effectiveCode, Keyboard.isControlKey(event), event.shiftKey, event.altKey)
         if (ReservedShortcuts.isReserved(shortcut)) {return Option.None}
         return Option.wrap(shortcut)
@@ -213,15 +214,9 @@ export class Shortcut {
 
     matches(event: KeyboardEvent): boolean {
         if (Events.isAutofillEvent(event)) {return false}
-        let codeMatches: boolean
-        if (this.#code.startsWith("Key")) {
-            // For letters, use event.key to respect keyboard layout (e.g. QWERTZ)
-            const expectedLetter = this.#code.slice(3).toLowerCase()
-            codeMatches = event.key.toLowerCase() === expectedLetter
-        } else {
-            codeMatches = event.code === this.#code
-                || (this.#code === Key.DeleteAction && Keyboard.isDelete(event))
-        }
+        const resolvedCode = Shortcut.resolveCode(event)
+        const codeMatches = resolvedCode === this.#code
+            || (this.#code === Key.DeleteAction && Keyboard.isDelete(event))
         return codeMatches
             && this.#ctrl === Keyboard.isControlKey(event)
             && this.#shift === event.shiftKey

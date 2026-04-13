@@ -7,6 +7,7 @@ export namespace AnimationFrame {
 
     let id: int = -1
     let driver: Nullable<WindowProxy> = null
+    let lastTimestamp: number = 0.0
 
     export const add = (exec: Exec): Terminable => {
         recurring.add(exec)
@@ -35,7 +36,10 @@ export namespace AnimationFrame {
         nonrecurring.clear()
     }
 
-    const exe = (): void => {
+    const exe = (timestamp: DOMHighResTimeStamp): void => {
+        id = driver?.requestAnimationFrame(exe) ?? -1
+        if (timestamp - lastTimestamp < 16.0) {return}
+        lastTimestamp = timestamp
         if (recurring.size > 0 || nonrecurring.size > 0) {
             recurring.forEach((exec: Exec) => queue.push(exec))
             nonrecurring.forEach((exec: Exec) => queue.push(exec))
@@ -43,7 +47,6 @@ export namespace AnimationFrame {
             queue.forEach((exec: Exec) => exec())
             queue.length = 0
         }
-        id = driver?.requestAnimationFrame(exe) ?? -1
     }
 }
 

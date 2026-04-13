@@ -1,5 +1,6 @@
 import {createElement, JsxValue} from "@moises-ai/lib-jsx"
 import {
+    ApparatDeviceBox,
     ArpeggioDeviceBox,
     AudioBusBox,
     BoxVisitor,
@@ -34,6 +35,7 @@ import {
 } from "@moises-ai/studio-boxes"
 import {ArpeggioDeviceEditor} from "@/ui/devices/midi-effects/ArpeggioDeviceEditor.tsx"
 import {
+    ApparatDeviceBoxAdapter,
     ArpeggioDeviceBoxAdapter,
     AudioBusBoxAdapter,
     CompressorDeviceBoxAdapter,
@@ -76,6 +78,7 @@ import {PitchDeviceEditor} from "./midi-effects/PitchDeviceEditor"
 import {TapeDeviceEditor} from "@/ui/devices/instruments/TapeDeviceEditor.tsx"
 import {VaporisateurDeviceEditor} from "@/ui/devices/instruments/VaporisateurDeviceEditor.tsx"
 import {AudioBusEditor} from "@/ui/devices/AudioBusEditor.tsx"
+import {ApparatDeviceEditor} from "./instruments/ApparatDeviceEditor"
 import {NanoDeviceEditor} from "./instruments/NanoDeviceEditor"
 import {PlayfieldDeviceEditor} from "./instruments/PlayfieldDeviceEditor"
 import {StereoToolDeviceEditor} from "./audio-effects/StereoToolDeviceEditor"
@@ -145,6 +148,12 @@ export namespace DeviceEditorFactory {
                                              box: Box,
                                              deviceHost: DeviceHost) =>
         asDefined(box.accept<BoxVisitor<JsxValue>>({
+            visitApparatDeviceBox: (box: ApparatDeviceBox): JsxValue => (
+                <ApparatDeviceEditor lifecycle={lifecycle}
+                                     service={service}
+                                     adapter={service.project.boxAdapters.adapterFor(box, ApparatDeviceBoxAdapter)}
+                                     deviceHost={deviceHost}/>
+            ),
             visitTapeDeviceBox: (box: TapeDeviceBox): JsxValue => (
                 <TapeDeviceEditor lifecycle={lifecycle}
                                   service={service}

@@ -1,15 +1,16 @@
-import {CaptureAudio, MenuItem, MonitoringMode, Project} from "@moises-ai/studio-core"
-import {isInstanceOf, Procedure, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
+import {CaptureAudio, MenuItem, Project} from "@opendaw/studio-core"
+import {MonitoringDialog} from "@/ui/monitoring/MonitoringDialog"
+import {isInstanceOf, Procedure, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {
     AudioUnitBoxAdapter,
     DeviceAccepts,
     TrackBoxAdapter,
     TrackType,
     TransferAudioUnits
-} from "@moises-ai/studio-adapters"
+} from "@opendaw/studio-adapters"
 import {DebugMenus} from "@/ui/menu/debug"
 import {MidiImport} from "@/ui/timeline/MidiImport.ts"
-import {CaptureMidiBox, TrackBox} from "@moises-ai/studio-boxes"
+import {CaptureMidiBox, TrackBox} from "@opendaw/studio-boxes"
 import {StudioService} from "@/service/StudioService"
 import {MenuCapture} from "@/ui/timeline/tracks/audio-unit/menu/capture"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
@@ -42,22 +43,16 @@ export const installTrackHeaderMenu = (service: StudioService,
         MenuCapture.createItem(service, audioUnitBoxAdapter,
             trackBoxAdapter, editing, captureDevices.get(audioUnitBoxAdapter.uuid)),
         MenuItem.default({
-            label: "Input Monitoring",
+            label: "Monitoring",
             hidden: captureDevices.get(audioUnitBoxAdapter.uuid)
                 .mapOr(capture => !isInstanceOf(capture, CaptureAudio), true)
-        }).setRuntimeChildrenProcedure(parent => {
+        }).setTriggerProcedure(() => {
             const optCapture = captureDevices.get(audioUnitBoxAdapter.uuid)
-            if (optCapture.isEmpty()) {return parent}
+            if (optCapture.isEmpty()) {return}
             const capture = optCapture.unwrap()
-            if (!isInstanceOf(capture, CaptureAudio)) {return parent}
-            const currentMode = capture.monitoringMode
-            const addModeItem = (mode: MonitoringMode, label: string) =>
-                parent.addMenuItem(MenuItem.default({label, checked: currentMode === mode})
-                    .setTriggerProcedure(() => capture.monitoringMode = mode))
-            addModeItem("off", "Off")
-            addModeItem("direct", "Direct")
-            addModeItem("effects", "With Effects")
-            return parent
+            if (!isInstanceOf(capture, CaptureAudio)) {return}
+            capture.armed.setValue(true)
+            MonitoringDialog.open(service, capture).finally()
         }),
         MenuItem.default({
             label: "Force Mono",

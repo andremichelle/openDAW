@@ -1,4 +1,4 @@
-// Echo / Note Delay
+// @label Echo / Note Delay
 // @param repeats 3 1 8 int
 // @param delay 120 24 480 int
 // @param decay 0.7 0.1 1.0 linear

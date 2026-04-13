@@ -20,6 +20,9 @@ type Construct = {
 }
 
 const ids = [
+    "ae8ec50bfac", // Orange 3
+    "192c9b77aaa", // Reese Boots
+    "b3c0b901b24", // Open Up
     "8dd3364e113", // The Rocinante Experience
     "84f9c4fbb76", // Ambition
     "3a96772867c", // Fleur de Soul

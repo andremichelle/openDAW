@@ -1,62 +1,61 @@
 {
-    "name": "@moises-ai/studio-sdk",
-    "version": "0.0.128",
-    "license": "LGPL-3.0-or-later",
-    "type": "module",
-    "publishConfig": {
-        "registry": "https://npm.pkg.github.com",
-        "access": "public"
-    },
-    "description": "One-line installer for the complete OpenDAW Studio tool-chain",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/andremichelle/opendaw"
-    },
-    "keywords": [
-        "opendaw",
-        "audio-dev",
-        "daw-sdk",
-        "web-audio",
-        "music-apps",
-        "typescript",
-        "synth",
-        "fx"
-    ],
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-        ".": {
-            "types": "./dist/index.d.ts",
-            "default": "./dist/index.js"
-        }
-    },
-    "files": [
-        "dist/**/*",
-        "README.md"
-    ],
-    "scripts": {
-        "sync-version": "node scripts/sync-version.js",
-        "build": "npm run sync-version && tsc",
-        "prepublishOnly": "npm run build"
-    },
-    "devDependencies": {
-        "@opendaw/typescript-config": "*"
-    },
-    "dependencies": {
-        "@moises-ai/lib-box": "*",
-        "@moises-ai/lib-dawproject": "*",
-        "@moises-ai/lib-dom": "*",
-        "@moises-ai/lib-dsp": "*",
-        "@moises-ai/lib-fusion": "*",
-        "@moises-ai/lib-jsx": "*",
-        "@moises-ai/lib-midi": "*",
-        "@moises-ai/lib-runtime": "*",
-        "@moises-ai/lib-std": "*",
-        "@moises-ai/lib-xml": "*",
-        "@moises-ai/studio-adapters": "*",
-        "@moises-ai/studio-boxes": "*",
-        "@moises-ai/studio-core": "*",
-        "@moises-ai/studio-enums": "*"
-    },
-    "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
+  "name": "@opendaw/studio-sdk",
+  "version": "0.0.132",
+  "license": "LGPL-3.0-or-later",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "One-line installer for the complete OpenDAW Studio tool-chain",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andremichelle/opendaw"
+  },
+  "keywords": [
+    "opendaw",
+    "audio-dev",
+    "daw-sdk",
+    "web-audio",
+    "music-apps",
+    "typescript",
+    "synth",
+    "fx"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "scripts": {
+    "sync-version": "node scripts/sync-version.js",
+    "build": "npm run sync-version && tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@opendaw/typescript-config": "^0.0.29"
+  },
+  "dependencies": {
+    "@opendaw/lib-box": "^0.0.80",
+    "@opendaw/lib-dawproject": "^0.0.65",
+    "@opendaw/lib-dom": "^0.0.79",
+    "@opendaw/lib-dsp": "^0.0.79",
+    "@opendaw/lib-fusion": "^0.0.87",
+    "@opendaw/lib-jsx": "^0.0.79",
+    "@opendaw/lib-midi": "^0.0.61",
+    "@opendaw/lib-runtime": "^0.0.75",
+    "@opendaw/lib-std": "^0.0.74",
+    "@opendaw/lib-xml": "^0.0.60",
+    "@opendaw/studio-adapters": "^0.0.102",
+    "@opendaw/studio-boxes": "^0.0.85",
+    "@opendaw/studio-core": "^0.0.130",
+    "@opendaw/studio-enums": "^0.0.70"
+  },
+  "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

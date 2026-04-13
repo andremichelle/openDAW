@@ -1,13 +1,13 @@
-import {asInstanceOf, isDefined, StringMapping, Terminator, UUID, ValueMapping} from "@moises-ai/lib-std"
-import {Address, BooleanField, Int32Field, PointerField, StringField} from "@moises-ai/lib-box"
-import {SpielwerkDeviceBox, WerkstattParameterBox} from "@moises-ai/studio-boxes"
-import {Pointers} from "@moises-ai/studio-enums"
+import {Observable, Option, Terminator, UUID} from "@opendaw/lib-std"
+import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
+import {SpielwerkDeviceBox} from "@opendaw/studio-boxes"
+import {Pointers} from "@opendaw/studio-enums"
 import {DeviceHost, Devices, MidiEffectDeviceAdapter} from "../../DeviceAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
-import {parseParams, resolveParamMappings} from "../../ScriptParamDeclaration"
+import {ScriptDeclaration} from "../../ScriptDeclaration"
 
 export class SpielwerkDeviceBoxAdapter implements MidiEffectDeviceAdapter {
     readonly #terminator = new Terminator()
@@ -19,27 +19,15 @@ export class SpielwerkDeviceBoxAdapter implements MidiEffectDeviceAdapter {
     readonly #context: BoxAdaptersContext
     readonly #box: SpielwerkDeviceBox
     readonly #parametric: ParameterAdapterSet
+    readonly #codeChanged: Observable<void>
 
     constructor(context: BoxAdaptersContext, box: SpielwerkDeviceBox) {
         this.#context = context
         this.#box = box
         this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
-        this.#terminator.own(
-            box.parameters.pointerHub.catchupAndSubscribe({
-                onAdded: (({box: parameterBox}) => {
-                    const paramBox = asInstanceOf(parameterBox, WerkstattParameterBox)
-                    const label = paramBox.label.getValue()
-                    const declarations = parseParams(box.code.getValue())
-                    const declaration = declarations.find(decl => decl.label === label)
-                    const {valueMapping, stringMapping} = isDefined(declaration)
-                        ? resolveParamMappings(declaration)
-                        : {valueMapping: ValueMapping.unipolar(), stringMapping: StringMapping.percent({fractionDigits: 1})}
-                    this.#parametric.createParameter(paramBox.value, valueMapping, stringMapping, label)
-                }),
-                onRemoved: (({box}) => this.#parametric
-                    .removeParameter(asInstanceOf(box, WerkstattParameterBox).value.address))
-            })
-        )
+        const {terminable, codeChanged} = ScriptDeclaration.subscribeScriptParams(this.#parametric, box.code, box.parameters)
+        this.#terminator.own(terminable)
+        this.#codeChanged = codeChanged
     }
 
     get box(): SpielwerkDeviceBox {return this.#box}
@@ -51,6 +39,7 @@ export class SpielwerkDeviceBoxAdapter implements MidiEffectDeviceAdapter {
     get minimizedField(): BooleanField {return this.#box.minimized}
     get host(): PointerField<Pointers.MIDIEffectHost> {return this.#box.host}
     get parameters(): ParameterAdapterSet {return this.#parametric}
+    get codeChanged(): Observable<void> {return this.#codeChanged}
 
     deviceHost(): DeviceHost {
         return this.#context.boxAdapters

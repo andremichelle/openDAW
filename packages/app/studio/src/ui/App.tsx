@@ -1,5 +1,5 @@
-import {Terminator} from "@moises-ai/lib-std"
-import {createElement, Frag, Router} from "@moises-ai/lib-jsx"
+import {isDefined, Terminator} from "@opendaw/lib-std"
+import {createElement, Frag, Router} from "@opendaw/lib-jsx"
 import {WorkspacePage} from "@/ui/workspace/WorkspacePage.tsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {ComponentsPage} from "@/ui/pages/ComponentsPage.tsx"
@@ -7,6 +7,8 @@ import {IconsPage} from "@/ui/pages/IconsPage.tsx"
 import {AutomationPage} from "@/ui/pages/AutomationPage.tsx"
 import {SampleUploadPage} from "@/ui/pages/SampleUploadPage.tsx"
 import {Footer} from "@/ui/Footer"
+import {RoomStatus} from "@/ui/RoomStatus"
+import {ChatOverlay} from "@/ui/ChatOverlay"
 import {ManualPage} from "@/ui/pages/ManualPage"
 import {ColorsPage} from "@/ui/pages/ColorsPage"
 import {Header} from "@/ui/header/Header"
@@ -15,13 +17,20 @@ import {ImprintPage} from "@/ui/pages/ImprintPage.tsx"
 import {GraphPage} from "@/ui/pages/GraphPage"
 import {CodeEditorPage} from "@/ui/pages/CodeEditorPage"
 import {OpenBundlePage} from "@/ui/pages/OpenBundlePage"
-import {UsersPage} from "@/ui/pages/UsersPage"
+import {DashboardPage} from "@/ui/pages/stats/DashboardPage"
 import {PrivacyPage} from "@/ui/pages/PrivacyPage"
 import {PreferencesPage} from "@/ui/pages/PreferencesPage"
 import {TestPage} from "@/ui/pages/TestPage"
+import {JoinRoomPage} from "@/ui/pages/JoinRoomPage"
+import {PerformancePage} from "@/ui/pages/PerformancePage"
 
 export const App = (service: StudioService) => {
     const terminator = new Terminator()
+    const favicon = document.querySelector<HTMLLinkElement>("link[rel='icon']")
+    if (isDefined(favicon)) {
+        terminator.own(service.roomAwareness.catchupAndSubscribe(owner =>
+            favicon.href = isDefined(owner.getValue()) ? "/favicon-live.svg" : "/favicon.svg"))
+    }
     return (
         <Frag>
             <Header lifecycle={new Terminator()} service={service}/>
@@ -48,11 +57,21 @@ export const App = (service: StudioService) => {
                     {path: "/upload", factory: SampleUploadPage},
                     {path: "/colors", factory: ColorsPage},
                     {path: "/graph", factory: GraphPage},
-                    {path: "/users", factory: UsersPage},
+                    {path: "/stats", factory: DashboardPage},
+                    {
+                        path: "/users", factory: (context) => {
+                            history.replaceState(null, "", "/stats")
+                            return DashboardPage(context)
+                        }
+                    },
                     {path: "/open-bundle/*", factory: OpenBundlePage},
-                    {path: "/test", factory: TestPage}
+                    {path: "/test", factory: TestPage},
+                    {path: "/performance", factory: PerformancePage},
+                    {path: "/join/*", factory: JoinRoomPage}
                 ]}
             />
+            <ChatOverlay lifecycle={terminator} service={service}/>
+            <RoomStatus lifecycle={terminator} service={service}/>
             <Footer lifecycle={terminator} service={service}/>
         </Frag>
     )

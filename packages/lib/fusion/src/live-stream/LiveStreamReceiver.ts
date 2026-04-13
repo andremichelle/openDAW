@@ -174,6 +174,8 @@ export class LiveStreamReceiver implements Terminable {
         )
     }
 
+    dispatch(): void {this.#dispatch()}
+
     #updateDataViews(): void {
         if (this.#sab.isEmpty() || this.#numPackages === 0 || this.#numPackages !== this.#sabNumPackages) {return}
         const data = this.#sab.unwrap()

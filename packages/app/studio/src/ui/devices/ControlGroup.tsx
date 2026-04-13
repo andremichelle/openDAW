@@ -1,11 +1,12 @@
 import css from "./ControlGroup.sass?inline"
-import {Html} from "@moises-ai/lib-dom"
-import {Color, Editing, int, Lifecycle} from "@moises-ai/lib-std"
-import {createElement, Frag} from "@moises-ai/lib-jsx"
-import {AutomatableParameterFieldAdapter, DeviceBoxAdapter} from "@moises-ai/studio-adapters"
-import {MIDILearning} from "@moises-ai/studio-core"
+import {Html} from "@opendaw/lib-dom"
+import {Color, Editing, int, Lifecycle} from "@opendaw/lib-std"
+import {createElement, Frag} from "@opendaw/lib-jsx"
+import {AudioUnitTracks, AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
+import {MIDILearning} from "@opendaw/studio-core"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import {ParameterLabel} from "@/ui/components/ParameterLabel"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 
 const className = Html.adoptStyleSheet(css, "ControlGroup")
 
@@ -16,13 +17,13 @@ type Construct = {
     name: string
     editing: Editing
     midiLearning: MIDILearning
-    deviceAdapter: DeviceBoxAdapter
+    tracks: AudioUnitTracks
     parameters: ReadonlyArray<AutomatableParameterFieldAdapter<number>>
     style?: Partial<CSSStyleDeclaration>
 }
 
 export const ControlGroup = ({
-                                 lifecycle, color, name, editing, midiLearning, deviceAdapter,
+                                 lifecycle, color, name, editing, midiLearning, tracks,
                                  parameters, gridUV: {u, v}, style
                              }: Construct) => {
     return (
@@ -34,17 +35,20 @@ export const ControlGroup = ({
                 {parameters.map(parameter => (
                     <Frag>
                         <span className="parameter-name">{parameter.name}</span>
-                        <RelativeUnitValueDragging lifecycle={lifecycle}
-                                                   editing={editing}
-                                                   parameter={parameter}
-                                                   supressValueFlyout={true}>
-                            <ParameterLabel lifecycle={lifecycle}
-                                            editing={editing}
-                                            midiLearning={midiLearning}
-                                            adapter={deviceAdapter}
-                                            parameter={parameter}
-                                            framed standalone/>
-                        </RelativeUnitValueDragging>
+                        <AutomationControl lifecycle={lifecycle}
+                                           editing={editing}
+                                           midiLearning={midiLearning}
+                                           tracks={tracks}
+                                           parameter={parameter}>
+                            <RelativeUnitValueDragging lifecycle={lifecycle}
+                                                       editing={editing}
+                                                       parameter={parameter}
+                                                       supressValueFlyout={true}>
+                                <ParameterLabel lifecycle={lifecycle}
+                                                parameter={parameter}
+                                                framed/>
+                            </RelativeUnitValueDragging>
+                        </AutomationControl>
                     </Frag>
                 ))}
             </div>

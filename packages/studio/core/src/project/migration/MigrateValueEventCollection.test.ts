@@ -5,7 +5,7 @@ import {BoxIO, BoxVisitor, ValueEventBox, ValueEventCollectionBox} from "@moises
 import {migrateValueEventCollection} from "./MigrateValueEventCollection"
 
 const createTestSetup = () => {
-    const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
+    const boxGraph = new BoxGraph<BoxIO.TypeMap>()
     boxGraph.beginTransaction()
     const collection = ValueEventCollectionBox.create(boxGraph, UUID.generate())
     boxGraph.endTransaction()

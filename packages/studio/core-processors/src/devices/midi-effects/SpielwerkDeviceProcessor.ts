@@ -91,9 +91,14 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
     readonly #uuid: string
     readonly #boundParameters: Array<AutomatableParameter<number>>
 
+    readonly #events: Array<UserEvent> = []
+    readonly #userBlock: {from: ppqn, to: ppqn, bpm: number, s0: int, s1: int, flags: int}
+        = {from: 0, to: 0, bpm: 0, s0: 0, s1: 0, flags: 0}
+
     #source: Option<NoteEventSource> = Option.None
     #userProcessor: Option<UserProcessor> = Option.None
     #currentUpdate: int = -1
+    #pendingUpdate: int = -1
     #silenced: boolean = false
     #wasPlaying: boolean = false
 
@@ -112,6 +117,7 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
                 const newUpdate = parseUpdate(owner.getValue())
                 if (newUpdate > 0 && newUpdate !== this.#currentUpdate) {
                     this.#silenced = true
+                    this.#pendingUpdate = newUpdate
                     this.#userProcessor = Option.None
                     this.#tryLoad(newUpdate)
                 }
@@ -165,18 +171,17 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
         }
         this.#wasPlaying = playing
         if (this.#silenced) {
-            const expectedUpdate = parseUpdate(this.#adapter.box.code.getValue())
-            if (expectedUpdate > 0 && expectedUpdate !== this.#currentUpdate) {
-                this.#tryLoad(expectedUpdate)
+            if (this.#pendingUpdate > 0 && this.#pendingUpdate !== this.#currentUpdate) {
+                this.#tryLoad(this.#pendingUpdate)
             }
         }
         if (this.#source.nonEmpty() && this.#userProcessor.nonEmpty() && !this.#silenced) {
             const source = this.#source.unwrap()
             const proc = this.#userProcessor.unwrap()
-            const events: Array<UserEvent> = []
+            this.#events.length = 0
             for (const event of source.processNotes(from, to, flags)) {
                 if (NoteLifecycleEvent.isStart(event)) {
-                    events.push({
+                    this.#events.push({
                         gate: true,
                         id: event.id,
                         position: event.position,
@@ -192,7 +197,7 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
                         }
                     }
                     this.#sourceToOutput.removeKey(event.id)
-                    events.push({
+                    this.#events.push({
                         gate: false,
                         id: event.id,
                         position: event.position,
@@ -208,26 +213,29 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
                 }
             }
             let currentSourceId: int = -1
+            const events = this.#events
             const trackedEvents: Iterable<UserEvent> = {
                 [Symbol.iterator](): Iterator<UserEvent> {
-                    const inner = events[Symbol.iterator]()
+                    let index = 0
                     return {
                         next(): IteratorResult<UserEvent> {
-                            const result = inner.next()
-                            if (result.done) {
+                            if (index >= events.length) {
                                 currentSourceId = -1
-                            } else if (result.value.gate) {
-                                currentSourceId = result.value.id
+                                return {done: true, value: undefined}
                             }
-                            return result
+                            const value = events[index++]
+                            if (value.gate) {currentSourceId = value.id}
+                            return {done: false, value}
                         }
                     }
                 }
             }
-            const userBlock: UserBlock = {from, to, bpm: 0, s0: 0, s1: 0, flags}
+            this.#userBlock.from = from
+            this.#userBlock.to = to
+            this.#userBlock.flags = flags
             try {
                 let noteCount: int = 0
-                for (const yielded of proc.process(userBlock, trackedEvents)) {
+                for (const yielded of proc.process(this.#userBlock, trackedEvents)) {
                     if (++noteCount > MAX_NOTES_PER_BLOCK) {
                         this.#silence(`Note flood: exceeded ${MAX_NOTES_PER_BLOCK} notes per block`)
                         return
@@ -290,10 +298,10 @@ export class SpielwerkDeviceProcessor extends EventProcessor implements MidiEffe
     index(): number {return this.#adapter.indexField.getValue()}
     adapter(): SpielwerkDeviceBoxAdapter {return this.#adapter}
 
-    #tryLoad(update: int): void {
+    #tryLoad(expectedUpdate: int): void {
         const registry = (globalThis as any).openDAW?.spielwerkProcessors?.[this.#uuid]
-        if (isDefined(registry) && registry.update === update) {
-            this.#swapProcessor(registry.create, update)
+        if (isDefined(registry) && registry.update === expectedUpdate) {
+            this.#swapProcessor(registry.create, expectedUpdate)
         }
     }
 

@@ -53,6 +53,9 @@ export class RouteMatcher<R extends Route> {
         if (!path.startsWith("/") || !route.startsWith("/")) {
             return false
         }
+        if (path.length > 1 && path.endsWith("/")) {
+            path = path.slice(0, -1)
+        }
         const routeSegments = route.split("/")
         const pathSegments = path.split("/")
         for (let i = 1; i < pathSegments.length; i++) {

@@ -110,12 +110,12 @@ export const installRegionContextMenu =
                         }
                     }),
                 MenuItem.default({label: "Convert to Clip"})
-                    .setTriggerProcedure(() => editing.modify(() => {
+                    .setTriggerProcedure(() => region.trackBoxAdapter.ifSome(() => editing.modify(() => {
                         service.timeline.clips.visible.setValue(true)
                         const clip = RegionTransformer.toClip(region)
                         vertexSelection.select(clip)
                         project.userEditingManager.timeline.edit(clip)
-                    })),
+                    }))),
                 MenuItem.default({
                     label: "Export to Midi-File",
                     hidden: region.type !== "note-region"

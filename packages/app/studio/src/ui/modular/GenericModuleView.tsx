@@ -1,24 +1,25 @@
 import css from "./GenericModuleView.sass?inline"
-import {ifDefined, Lifecycle, Option, UUID} from "@moises-ai/lib-std"
-import {appendChildren, createElement, Frag, Inject, JsxValue} from "@moises-ai/lib-jsx"
+import {ifDefined, Lifecycle, Option, UUID} from "@opendaw/lib-std"
+import {appendChildren, createElement, Frag, Inject, JsxValue} from "@opendaw/lib-jsx"
 import {
     AutomatableParameterFieldAdapter,
     Direction,
     ModuleAdapter,
     ModuleConnectorAdapter
-} from "@moises-ai/studio-adapters"
+} from "@opendaw/studio-adapters"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
-import {ContextMenu, MenuItem} from "@moises-ai/studio-core"
+import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {ConnectorView} from "@/ui/modular/ConnectorView.tsx"
 import {ModularEnvironment} from "@/ui/modular/ModularEnvironment.ts"
-import {PrimitiveType} from "@moises-ai/lib-box"
+import {PrimitiveType} from "@opendaw/lib-box"
 import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {ParameterLabel} from "@/ui/components/ParameterLabel.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
-import {DeviceInterfaceKnobBox} from "@moises-ai/studio-boxes"
-import {Events, Html} from "@moises-ai/lib-dom"
-import {Colors, IconSymbol} from "@moises-ai/studio-enums"
+import {AutomationControl} from "@/ui/components/AutomationControl"
+import {DeviceInterfaceKnobBox} from "@opendaw/studio-boxes"
+import {Events, Html} from "@opendaw/lib-dom"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "GenericModuleView")
 
@@ -112,14 +113,17 @@ export const GenericModuleView = ({lifecycle, environment, adapter}: Construct) 
                             return (
                                 <Frag>
                                     {label}
-                                    <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing}
-                                                               parameter={parameterAdapter}>
-                                        <ParameterLabel lifecycle={lifecycle}
-                                                        editing={editing}
-                                                        midiLearning={midiLearning}
-                                                        adapter={adapter.modular.device}
-                                                        parameter={parameterAdapter}/>
-                                    </RelativeUnitValueDragging>
+                                    <AutomationControl lifecycle={lifecycle}
+                                                       editing={editing}
+                                                       midiLearning={midiLearning}
+                                                       tracks={adapter.modular.device.deviceHost().audioUnitBoxAdapter().tracks}
+                                                       parameter={parameterAdapter}>
+                                        <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing}
+                                                                   parameter={parameterAdapter}>
+                                            <ParameterLabel lifecycle={lifecycle}
+                                                            parameter={parameterAdapter}/>
+                                        </RelativeUnitValueDragging>
+                                    </AutomationControl>
                                 </Frag>
                             )
                         case PrimitiveType.Boolean:

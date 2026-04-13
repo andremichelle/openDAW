@@ -1,0 +1,54 @@
+component
+  padding: 1em 0
+  display: grid
+  row-gap: 16px
+
+  > p
+    margin: 0
+
+  > .group
+    display: grid
+    row-gap: 6px
+
+    > .input
+      margin-top: 0
+
+      &:disabled
+        opacity: 0.3
+
+      &:invalid
+        outline: 1px solid hsla(354, 100%, 65%, 0.25)
+
+    > .url-preview
+      margin-top: -4px
+      font-size: 0.625rem
+      color: var(--color-shadow)
+      word-break: break-all
+
+      &.copyable
+        cursor: pointer
+
+        &:hover
+          color: var(--color-blue)
+
+    > label
+      font-size: 0.75rem
+      color: var(--color-dark)
+
+    > .color-swatches
+      display: flex
+      gap: 0.5em
+
+      > .swatch
+        width: 1.25rem
+        height: 1.25rem
+        border-radius: 50%
+        cursor: pointer
+        border: 2px solid transparent
+        transition: border-color 0.15s
+
+        &.selected
+          border-color: var(--color-bright)
+
+        &:hover:not(.selected)
+          border-color: var(--color-shadow)

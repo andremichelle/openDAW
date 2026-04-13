@@ -1,0 +1,38 @@
+name: Fetch GitHub Sponsors
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v5
+
+      - name: 🦄 Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: ⭐ Fetch sponsors via GraphQL
+        env:
+          GH_TOKEN: ${{ secrets.SPONSORS_TOKEN }}
+        run: node scripts/fetch-sponsors.mjs
+
+      - name: 💾 Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/app/studio/public/sponsors.json
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "chore: update sponsors.json [skip ci]"
+            git push
+          fi

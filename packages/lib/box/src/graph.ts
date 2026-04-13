@@ -16,6 +16,7 @@ import {
     Procedure,
     SortedSet,
     Subscription,
+    tryCatch,
     UUID
 } from "@moises-ai/lib-std"
 import {Address} from "./address"
@@ -37,7 +38,7 @@ export type BoxFactory<BoxMap> = (name: keyof BoxMap,
 
 export interface TransactionListener {
     onBeginTransaction(): void
-    onEndTransaction(): void
+    onEndTransaction(rolledBack: boolean): void
 }
 
 export interface UpdateListener {
@@ -50,6 +51,8 @@ export class BoxGraph<BoxMap = any> {
     readonly #boxFactory: Option<BoxFactory<BoxMap>>
     readonly #boxes: SortedSet<Readonly<Uint8Array>, Box>
     readonly #deferredPointerUpdates: Array<{ pointerField: PointerField, update: PointerUpdate }>
+    readonly #pendingDeferredNotifications: Array<{ pointerField: PointerField, update: PointerUpdate }>
+    readonly #transactionUpdates: Array<Update>
     readonly #updateListeners: Listeners<UpdateListener>
     readonly #immediateUpdateListeners: Listeners<UpdateListener>
     readonly #transactionListeners: Listeners<TransactionListener>
@@ -66,11 +69,14 @@ export class BoxGraph<BoxMap = any> {
 
     #inTransaction: boolean = false
     #constructingBox: boolean = false
+    #rollingBack: boolean = false
 
     constructor(boxFactory: Option<BoxFactory<BoxMap>> = Option.None) {
         this.#boxFactory = boxFactory
         this.#boxes = UUID.newSet<Box>(box => box.address.uuid)
         this.#deferredPointerUpdates = []
+        this.#pendingDeferredNotifications = []
+        this.#transactionUpdates = []
         this.#dispatchers = Dispatchers.create()
         this.#updateListeners = new Listeners<UpdateListener>()
         this.#immediateUpdateListeners = new Listeners<UpdateListener>()
@@ -84,34 +90,35 @@ export class BoxGraph<BoxMap = any> {
     beginTransaction(): void {
         assert(!this.#inTransaction, "Transaction already in progress")
         this.#inTransaction = true
+        this.#transactionUpdates.length = 0
         this.#transactionListeners.proxy.onBeginTransaction()
+    }
+
+    abortTransaction(): void {
+        assert(this.#inTransaction, "No transaction in progress")
+        this.#rollback()
+        this.#deferredPointerUpdates.length = 0
+        this.#finalizeTransaction()
     }
 
     endTransaction(): void {
         assert(this.#inTransaction, "No transaction in progress")
         if (this.#deferredPointerUpdates.length > 0) {
-            this.#deferredPointerUpdates.forEach(({pointerField, update}) =>
-                this.#processPointerVertexUpdate(pointerField, update))
+            this.#deferredPointerUpdates.forEach(({pointerField, update}) => {
+                this.#transactionUpdates.push(update)
+                this.#prepareDeferredPointerUpdate(pointerField, update)
+            })
             this.#deferredPointerUpdates.length = 0
         }
-        this.#pointerTransactionState.values()
-            .toSorted((a, b) => a.index - b.index)
-            .forEach(({pointer, initial, final}) => {
-                if (!initial.equals(final)) {
-                    initial.ifSome(address => this.findVertex(address).unwrapOrUndefined()?.pointerHub.onRemoved(pointer))
-                    final.ifSome(address => this.findVertex(address).unwrapOrUndefined()?.pointerHub.onAdded(pointer))
-                }
+        if (!this.#rollingBack && this.#boxFactory.nonEmpty()) {
+            this.#edges.tryValidateAffected().ifSome(error => {
+                this.#rollback()
+                this.#finalizeTransaction()
+                throw error
             })
-        this.#pointerTransactionState.clear()
-        this.#inTransaction = false
-        // it is possible that new observers will be added while executing
-        while (this.#finalizeTransactionObservers.length > 0) {
-            this.#finalizeTransactionObservers.splice(0).forEach(observer => observer())
-            if (this.#finalizeTransactionObservers.length > 0) {
-                console.debug(`${this.#finalizeTransactionObservers.length} new observers while notifying`)
-            }
         }
-        this.#transactionListeners.proxy.onEndTransaction()
+        this.#dispatchDeferredNotifications()
+        this.#finalizeTransaction()
     }
 
     inTransaction(): boolean {return this.#inTransaction}
@@ -132,6 +139,7 @@ export class BoxGraph<BoxMap = any> {
         const added = this.#boxes.add(box)
         assert(added, () => `${box.name} ${box.address.toString()} already staged`)
         const update = new NewUpdate(box.address.uuid, box.name, box.toArrayBuffer())
+        if (!this.#rollingBack) {this.#transactionUpdates.push(update)}
         this.#updateListeners.proxy.onUpdate(update)
         this.#immediateUpdateListeners.proxy.onUpdate(update)
         return box
@@ -174,6 +182,7 @@ export class BoxGraph<BoxMap = any> {
         assert(deleted === box, `${box} could not be found to unstage`)
         this.#edges.unwatchVerticesOf(box)
         const update = new DeleteUpdate(box.address.uuid, box.name, box.toArrayBuffer())
+        if (!this.#rollingBack) {this.#transactionUpdates.push(update)}
         this.#deletionListeners.removeByKeyIfExist(box.address.uuid)?.listeners.forEach(listener => listener())
         this.#updateListeners.proxy.onUpdate(update)
         this.#immediateUpdateListeners.proxy.onUpdate(update)
@@ -201,6 +210,7 @@ export class BoxGraph<BoxMap = any> {
         this.#assertTransaction()
         if (field.isAttached() && !this.#constructingBox) {
             const update = new PrimitiveUpdate<V>(field.address, field.serialization(), oldValue, newValue)
+            if (!this.#rollingBack) {this.#transactionUpdates.push(update)}
             this.#dispatchers.dispatch(update)
             this.#updateListeners.proxy.onUpdate(update)
             this.#immediateUpdateListeners.proxy.onUpdate(update)
@@ -215,6 +225,7 @@ export class BoxGraph<BoxMap = any> {
         if (this.#constructingBox) {
             this.#deferredPointerUpdates.push({pointerField, update})
         } else {
+            if (!this.#rollingBack) {this.#transactionUpdates.push(update)}
             this.#processPointerVertexUpdate(pointerField, update)
             this.#immediateUpdateListeners.proxy.onUpdate(update)
         }
@@ -235,6 +246,62 @@ export class BoxGraph<BoxMap = any> {
         })
         this.#dispatchers.dispatch(update)
         this.#updateListeners.proxy.onUpdate(update)
+    }
+
+    #prepareDeferredPointerUpdate(pointerField: PointerField, update: PointerUpdate): void {
+        const {oldAddress, newAddress} = update
+        pointerField.resolvedTo(newAddress.flatMap(address => this.findVertex(address)))
+        const optState = this.#pointerTransactionState.opt(pointerField.address)
+        optState.match<unknown>({
+            none: () => this.#pointerTransactionState.add({
+                pointer: pointerField,
+                initial: oldAddress,
+                final: newAddress,
+                index: this.#pointerTransactionState.size()
+            }),
+            some: state => state.final = newAddress
+        })
+        this.#pendingDeferredNotifications.push({pointerField, update})
+    }
+
+    #dispatchDeferredNotifications(): void {
+        for (const {update} of this.#pendingDeferredNotifications) {
+            this.#dispatchers.dispatch(update)
+            this.#updateListeners.proxy.onUpdate(update)
+        }
+        this.#pendingDeferredNotifications.length = 0
+    }
+
+    #finalizeTransaction(): void {
+        this.#pointerTransactionState.values()
+            .toSorted((a, b) => a.index - b.index)
+            .forEach(({pointer, initial, final}) => {
+                if (!initial.equals(final)) {
+                    initial.ifSome(address => this.findVertex(address).unwrapOrUndefined()?.pointerHub.onRemoved(pointer))
+                    final.ifSome(address => this.findVertex(address).unwrapOrUndefined()?.pointerHub.onAdded(pointer))
+                }
+            })
+        this.#pointerTransactionState.clear()
+        this.#inTransaction = false
+        while (this.#finalizeTransactionObservers.length > 0) {
+            this.#finalizeTransactionObservers.splice(0).forEach(observer => observer())
+            if (this.#finalizeTransactionObservers.length > 0) {
+                console.debug(`${this.#finalizeTransactionObservers.length} new observers while notifying`)
+            }
+        }
+        this.#transactionListeners.proxy.onEndTransaction(this.#rollingBack)
+        this.#rollingBack = false
+    }
+
+    #rollback(): void {
+        this.#rollingBack = true
+        const updates = this.#transactionUpdates.splice(0)
+        for (let i = updates.length - 1; i >= 0; i--) {updates[i].inverse(this)}
+        this.#deferredPointerUpdates.length = 0
+        this.#pendingDeferredNotifications.length = 0
+        this.#edges.clearAffected()
+        this.#pointerTransactionState.clear()
+        this.#transactionUpdates.length = 0
     }
 
     findOrphans(rootBox: Box): ReadonlyArray<Box> {
@@ -406,7 +473,7 @@ export class BoxGraph<BoxMap = any> {
         return output.toArrayBuffer()
     }
 
-    fromArrayBuffer(arrayBuffer: ArrayBufferLike): void {
+    fromArrayBuffer(arrayBuffer: ArrayBufferLike, validate: boolean = true): void {
         assert(this.#boxes.isEmpty(), "Cannot call fromArrayBuffer if boxes is not empty")
         const input = new ByteArrayInput(arrayBuffer)
         const numBoxes = input.readInt()
@@ -430,7 +497,17 @@ export class BoxGraph<BoxMap = any> {
         boxes
             .sort((a, b) => a.creationIndex - b.creationIndex)
             .forEach(({name, uuid, boxStream}) => this.createBox(name, uuid, box => box.read(boxStream)))
-        this.endTransaction()
+        if (validate) {
+            this.endTransaction()
+        } else {
+            if (this.#deferredPointerUpdates.length > 0) {
+                this.#deferredPointerUpdates.forEach(({pointerField, update}) =>
+                    this.#processPointerVertexUpdate(pointerField, update))
+                this.#deferredPointerUpdates.length = 0
+            }
+            this.#edges.clearAffected()
+            this.#finalizeTransaction()
+        }
     }
 
     toJSON(): JSONValue {
@@ -444,7 +521,7 @@ export class BoxGraph<BoxMap = any> {
         return result
     }
 
-    fromJSON(value: JSONValue): void {
+    fromJSON(value: JSONValue, validate: boolean = true): void {
         if (typeof value !== "object" || value === null || Array.isArray(value)) {
             return panic("Expected object")
         }
@@ -452,14 +529,21 @@ export class BoxGraph<BoxMap = any> {
         const entries = Object.entries(value as Record<string, { name: string, fields: JSONValue }>)
         for (const [uuid, {name, fields}] of entries) {
             this.createBox(name as keyof BoxMap, UUID.parse(uuid), box => {
-                try {
-                    box.fromJSON(fields)
-                } catch (reason: unknown) {
-                    console.warn(reason)
-                }
+                const result = tryCatch(() => box.fromJSON(fields))
+                if (result.status === "failure") {console.warn(result.error)}
             })
         }
-        this.endTransaction()
+        if (validate) {
+            this.endTransaction()
+        } else {
+            if (this.#deferredPointerUpdates.length > 0) {
+                this.#deferredPointerUpdates.forEach(({pointerField, update}) =>
+                    this.#processPointerVertexUpdate(pointerField, update))
+                this.#deferredPointerUpdates.length = 0
+            }
+            this.#edges.clearAffected()
+            this.#finalizeTransaction()
+        }
     }
 
     #assertTransaction(): void {

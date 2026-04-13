@@ -1,7 +1,7 @@
 import css from "./ErrorEntry.sass?inline"
-import {Html} from "@moises-ai/lib-dom"
-import {RuntimeNotifier, Strings, TimeSpan} from "@moises-ai/lib-std"
-import {createElement} from "@moises-ai/lib-jsx"
+import {Clipboard, Html} from "@opendaw/lib-dom"
+import {RuntimeNotifier, Strings, TimeSpan} from "@opendaw/lib-std"
+import {createElement} from "@opendaw/lib-jsx"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Stack} from "@/ui/pages/errors/Stack"
 import {Logs} from "@/ui/pages/errors/Logs"
@@ -90,7 +90,7 @@ ${JSON.stringify(errorData, null, 2)}
 Before fixing it, tell me how to reproduce it!
 
 Please analyze the error stack trace and logs to identify the root cause and suggest a fix.`
-                     navigator.clipboard.writeText(prompt).then(() => {
+                     Clipboard.writeText(prompt).then(() => {
                          RuntimeNotifier.info({
                              headline: "Prompt Copied",
                              message: "The error information has been copied to clipboard. Paste it into Claude to get help fixing this error."

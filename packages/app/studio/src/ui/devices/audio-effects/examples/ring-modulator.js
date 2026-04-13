@@ -1,4 +1,4 @@
-// Ring Modulator
+// @label Ring Modulator
 // @param frequency 440 20 2000 exp Hz
 
 class Processor {

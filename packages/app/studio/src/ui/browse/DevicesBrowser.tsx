@@ -65,6 +65,7 @@ const createInstrumentList = (lifecycle: Lifecycle, project: Project) => (
                     <Icon symbol={factory.defaultIcon}/>
                 </div>
                 {factory.defaultName}
+                <span className="brief help-section">{factory.briefDescription}</span>
             </li>
         )
         lifecycle.ownAll(
@@ -129,6 +130,7 @@ const createEffectList = <
                         <Icon symbol={entry.defaultIcon}/>
                     </div>}
                 {entry.defaultName}
+                <span className="brief help-section">{entry.briefDescription}</span>
             </li>
         )
         lifecycle.ownAll(

@@ -19,7 +19,8 @@ import {
     Terminator,
     tryCatch,
     UUID
-} from "@moises-ai/lib-std"
+} from "@opendaw/lib-std"
+import {ChainedSampleProvider, ChainedSoundfontProvider, TrafficMeter} from "@opendaw/studio-p2p"
 import {populateStudioMenu} from "@/service/StudioMenu"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
@@ -34,12 +35,12 @@ import {ProjectProfileService} from "./ProjectProfileService"
 import {StudioSignal} from "./StudioSignal"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {FooterLabel} from "@/service/FooterLabel"
-import {RouteLocation} from "@moises-ai/lib-jsx"
-import {PPQN} from "@moises-ai/lib-dsp"
-import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@moises-ai/lib-dom"
-import {Promises} from "@moises-ai/lib-runtime"
-import {ExportStemsConfiguration, InstrumentFactories, PresetDecoder} from "@moises-ai/studio-adapters"
-import {Address} from "@moises-ai/lib-box"
+import {RouteLocation} from "@opendaw/lib-jsx"
+import {PPQN} from "@opendaw/lib-dsp"
+import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@opendaw/lib-dom"
+import {Promises} from "@opendaw/lib-runtime"
+import {ExportStemsConfiguration, InstrumentFactories, PresetDecoder} from "@opendaw/studio-adapters"
+import {Address} from "@opendaw/lib-box"
 import {
     AudioContentFactory,
     AudioWorklets,
@@ -62,15 +63,17 @@ import {
     SoundfontService,
     StudioPreferences,
     TimelineRange
-} from "@moises-ai/studio-core"
+} from "@opendaw/studio-core"
 import {ProjectDialogs} from "@/project/ProjectDialogs"
-import {AudioFileBox, AudioUnitBox} from "@moises-ai/studio-boxes"
-import {AudioUnitType} from "@moises-ai/studio-enums"
+import {AudioFileBox, AudioUnitBox} from "@opendaw/studio-boxes"
+import {AudioUnitType} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {SoftwareMIDIPanel} from "@/ui/software-midi/SoftwareMIDIPanel"
 import {Mixdowns} from "@/service/Mixdowns"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
-import {CodeEditorState} from "@/ui/werkstatt-editor/CodeEditorState"
+import {CodeEditorState} from "@/ui/code-editor/CodeEditorState"
+import {RoomAwareness} from "@/service/RoomAwareness"
+import {ChatService} from "@/chat/ChatService"
 
 /**
  * I am just piling stuff after stuff in here to boot the environment.
@@ -119,6 +122,9 @@ export class StudioService implements ProjectEnv {
     readonly #activeCodeEditor: MutableObservableOption<CodeEditorState> = new MutableObservableOption()
 
     #factoryFooterLabel: Option<Provider<FooterLabel>> = Option.None
+    readonly #roomAwareness = new DefaultObservableValue<Nullable<RoomAwareness>>(null)
+    readonly #trafficMeter = new DefaultObservableValue<Nullable<TrafficMeter>>(null)
+    readonly #chatService = new MutableObservableOption<ChatService>()
 
     regionModifierInProgress: boolean = false
 
@@ -127,6 +133,8 @@ export class StudioService implements ProjectEnv {
                 readonly audioDevices: AudioOutputDevice,
                 readonly sampleManager: GlobalSampleLoaderManager,
                 readonly soundfontManager: GlobalSoundfontLoaderManager,
+                readonly chainedSampleProvider: ChainedSampleProvider,
+                readonly chainedSoundfontProvider: ChainedSoundfontProvider,
                 readonly cloudAuthManager: CloudAuthManager,
                 readonly buildInfo: BuildInfo) {
         this.#sampleService = new SampleService(audioContext)
@@ -307,17 +315,22 @@ export class StudioService implements ProjectEnv {
             this.#projectProfileService.setValue(Option.wrap(
                 new ProjectProfile(UUID.generate(), Project.new(this), ProjectMeta.init("Untitled"), Option.None)))
         }
-        const {editing, boxGraph} = this.project
-        let dialog = RuntimeNotifier.progress({headline: "Importing Stems..."})
+        const {editing, boxGraph, api} = this.project
+        let aborted = false
+        const onCancel = () => {aborted = true}
+        let dialog = RuntimeNotifier.progress({headline: "Importing Stems...", cancel: onCancel})
         for (let index = 0; index < audioEntries.length; index++) {
+            if (aborted) {break}
             const [path, file] = audioEntries[index]
             const name = path.substring(path.lastIndexOf("/") + 1).replace(/\.wav$/i, "")
             dialog.message = `Importing ${name} (${index + 1}/${audioEntries.length})`
             const arrayBuffer = await file.async("arraybuffer").then(buffer => buffer.slice(0))
+            if (aborted) {break}
             const {status, value: sample, error} = await Promises.tryCatch(this.#sampleService.importFile({
                 name,
                 arrayBuffer
             }))
+            if (aborted) {break}
             if (status === "rejected") {
                 console.warn(`Failed to import '${name}'`, error)
                 dialog.terminate()
@@ -328,13 +341,14 @@ export class StudioService implements ProjectEnv {
                     cancelText: "Cancel Import"
                 })
                 if (!skip) {break}
-                dialog = RuntimeNotifier.progress({headline: "Importing Stems..."})
+                dialog = RuntimeNotifier.progress({headline: "Importing Stems...", cancel: onCancel})
                 continue
             }
             const uuid = UUID.parse(sample.uuid)
             await Promises.tryCatch(this.sampleManager.getAudioData(uuid))
+            if (aborted) {break}
             editing.modify(() => {
-                const {trackBox, instrumentBox} = this.project.api.createInstrument(InstrumentFactories.Tape)
+                const {trackBox, instrumentBox} = api.createInstrument(InstrumentFactories.Tape)
                 instrumentBox.label.setValue(name)
                 const audioFileBox = boxGraph.findBox<AudioFileBox>(uuid)
                     .unwrapOrElse(() => AudioFileBox.create(boxGraph, uuid, box => {
@@ -378,6 +392,12 @@ export class StudioService implements ProjectEnv {
     }
 
     factoryFooterLabel(): Option<Provider<FooterLabel>> {return this.#factoryFooterLabel}
+
+    get roomAwareness(): DefaultObservableValue<Nullable<RoomAwareness>> {return this.#roomAwareness}
+    setRoomAwareness(value: Nullable<RoomAwareness>): void {this.#roomAwareness.setValue(value)}
+    get trafficMeter(): DefaultObservableValue<Nullable<TrafficMeter>> {return this.#trafficMeter}
+    setTrafficMeter(value: Nullable<TrafficMeter>): void {this.#trafficMeter.setValue(value)}
+    get chatService(): MutableObservableOption<ChatService> {return this.#chatService}
 
     get optShadertoyState(): Option<ShadertoyState> {return this.#shadertoyState}
     get activeCodeEditor(): MutableObservableOption<CodeEditorState> {return this.#activeCodeEditor}

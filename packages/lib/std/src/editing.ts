@@ -16,8 +16,8 @@ export interface Editing {
     mark(): void
     canUndo(): boolean
     canRedo(): boolean
-    undo(): void
-    redo(): void
+    undo(): boolean
+    redo(): boolean
     markSaved(): void
     hasUnsavedChanges(): boolean
     hasNoChanges(): boolean
@@ -32,8 +32,8 @@ export namespace Editing {
         mark: () => {},
         canUndo: () => false,
         canRedo: () => false,
-        undo: () => {},
-        redo: () => {},
+        undo: () => false,
+        redo: () => false,
         markSaved: () => {},
         hasUnsavedChanges: () => false,
         hasNoChanges: () => true,

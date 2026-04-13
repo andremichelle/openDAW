@@ -7,7 +7,7 @@ import {TrackType} from "../timeline/TrackType"
 import {TransferRegions} from "./TransferRegions"
 
 const createSkeleton = (): ProjectSkeleton =>
-    ProjectSkeleton.empty({createDefaultUser: true, createOutputCompressor: false})
+    ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
 
 const createTrackWithRegion = (skeleton: ProjectSkeleton, position: number = 100, duration: number = 200): {
     audioUnitBox: AudioUnitBox,

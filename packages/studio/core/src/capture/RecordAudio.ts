@@ -36,6 +36,7 @@ export namespace RecordAudio {
     export const start = (
         {recordingWorklet, sourceNode, sampleManager, project, capture, outputLatency}: RecordAudioContext)
         : Terminable => {
+        console.debug("[RecordAudio] start", {outputLatency})
         const terminator = new Terminator()
         const beats = PPQN.fromSignature(1, project.timelineBox.signature.denominator.getValue())
         const {editing, engine, boxGraph, timelineBox} = project
@@ -63,6 +64,7 @@ export namespace RecordAudio {
 
         const createTakeRegion = (position: ppqn, waveformOffset: number, excludeTrack: Nullable<TrackBox>): TakeData => {
             takeNumber++
+            console.debug("[RecordAudio] createTakeRegion", {takeNumber, position, waveformOffset})
             const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Audio, excludeTrack)
             const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
             const regionBox = AudioRegionBox.create(boxGraph, UUID.generate(), box => {
@@ -81,6 +83,7 @@ export namespace RecordAudio {
         }
 
         const finalizeTake = (take: TakeData, durationInSeconds: number) => {
+            console.debug("[RecordAudio] finalizeTake", {durationInSeconds})
             const {trackBox, regionBox} = take
             if (regionBox.isAttached()) {
                 regionBox.duration.setValue(durationInSeconds)
@@ -126,22 +129,27 @@ export namespace RecordAudio {
 
         recordingWorklet.onSaved = uuid => {
             project.trackUserCreatedSample(uuid)
-            editing.modify(() => {
-                fileBox.ifSome(oldFileBox => {
-                    editing.modify(() => {
-                        const newFileBox = AudioFileBox.create(boxGraph, uuid, box => {
-                            box.fileName.setValue(oldFileBox.fileName.getValue())
-                            box.startInSeconds.setValue(oldFileBox.startInSeconds.getValue())
-                            box.endInSeconds.setValue(oldFileBox.endInSeconds.getValue())
-                        })
-                        for (const pointer of [...oldFileBox.pointerHub.incoming()]) {
-                            pointer.refer(newFileBox)
-                        }
-                        for (const pointer of [...oldFileBox.transientMarkers.pointerHub.incoming()]) {
-                            pointer.refer(newFileBox.transientMarkers)
-                        }
+            fileBox.ifSome(oldFileBox => {
+                if (!oldFileBox.isAttached() || oldFileBox.pointerHub.isEmpty()) {return}
+                editing.modify(() => {
+                    const incomingPointers = [...oldFileBox.pointerHub.incoming()]
+                    const incomingTransientPointers = [...oldFileBox.transientMarkers.pointerHub.incoming()]
+                    if (incomingPointers.length === 0) {
                         oldFileBox.delete()
+                        return
+                    }
+                    const newFileBox = AudioFileBox.create(boxGraph, uuid, box => {
+                        box.fileName.setValue(oldFileBox.fileName.getValue())
+                        box.startInSeconds.setValue(oldFileBox.startInSeconds.getValue())
+                        box.endInSeconds.setValue(oldFileBox.endInSeconds.getValue())
                     })
+                    for (const pointer of incomingPointers) {
+                        pointer.refer(newFileBox)
+                    }
+                    for (const pointer of incomingTransientPointers) {
+                        pointer.refer(newFileBox.transientMarkers)
+                    }
+                    oldFileBox.delete()
                 })
             })
         }
@@ -149,14 +157,33 @@ export namespace RecordAudio {
             Terminable.create(() => {
                 tryCatch(() => sourceNode.disconnect(recordingWorklet))
                 if (recordingWorklet.numberOfFrames === 0 || fileBox.isEmpty()) {
-                    console.debug("Abort recording audio.")
+                    console.debug("[RecordAudio] abort", {
+                        numberOfFrames: recordingWorklet.numberOfFrames,
+                        hasFile: fileBox.nonEmpty()
+                    })
                     sampleManager.remove(originalUuid)
                     recordingWorklet.terminate()
                 } else {
-                    currentTake.ifSome(({regionBox: {duration}}) => {
-                        recordingWorklet.limit(Math.ceil((currentWaveformOffset + duration.getValue()) * sampleRate))
+                    // fixes #840: short recordings (e.g. count-in) can leave zero-duration regions
+                    currentTake.ifSome(({regionBox}) => {
+                        const duration = regionBox.duration.getValue()
+                        if (duration <= 0) {
+                            console.debug("[RecordAudio] stop: deleting zero-duration region", {takeNumber})
+                            editing.modify(() => regionBox.delete(), false)
+                        } else {
+                            console.debug("[RecordAudio] stop", {
+                                takeNumber,
+                                duration,
+                                numberOfFrames: recordingWorklet.numberOfFrames
+                            })
+                            recordingWorklet.limit(Math.ceil((currentWaveformOffset + duration) * sampleRate))
+                        }
                     })
-                    fileBox.ifSome(({endInSeconds}) => endInSeconds.setValue(recordingWorklet.numberOfFrames / sampleRate))
+                    fileBox.ifSome(box => {
+                        if (box.isAttached()) {
+                            box.endInSeconds.setValue(recordingWorklet.numberOfFrames / sampleRate)
+                        }
+                    })
                 }
             }),
             engine.position.catchupAndSubscribe(owner => {
@@ -173,10 +200,17 @@ export namespace RecordAudio {
                     editing.modify(() => {
                         currentTake.ifSome(take => {
                             const actualDurationInSeconds = take.regionBox.duration.getValue()
+                            if (actualDurationInSeconds <= 0) {
+                                take.regionBox.delete()
+                                currentTake = Option.None
+                                return
+                            }
                             finalizeTake(take, actualDurationInSeconds)
                             currentWaveformOffset += actualDurationInSeconds
                         })
-                        startNewTake(loopFrom)
+                        if (currentTake.nonEmpty()) {
+                            startNewTake(loopFrom)
+                        }
                     }, false)
                 }
                 lastPosition = currentPosition

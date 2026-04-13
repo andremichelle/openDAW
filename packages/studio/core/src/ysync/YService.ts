@@ -1,8 +1,8 @@
-import {Errors, Option, panic, RuntimeNotifier, TimeSpan, UUID} from "@moises-ai/lib-std"
-import {BoxEditing, BoxGraph} from "@moises-ai/lib-box"
-import {Promises} from "@moises-ai/lib-runtime"
-import {BoxIO, UserInterfaceBox} from "@moises-ai/studio-boxes"
-import {ProjectSkeleton} from "@moises-ai/studio-adapters"
+import {Errors, Option, panic, RuntimeNotifier, TimeSpan, UUID} from "@opendaw/lib-std"
+import {BoxGraph} from "@opendaw/lib-box"
+import {Promises} from "@opendaw/lib-runtime"
+import {BoxIO, UserInterfaceBox} from "@opendaw/studio-boxes"
+import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {Project, ProjectEnv, ProjectMigration} from "../project"
 import {YSync} from "./YSync"
 import * as Y from "yjs"
@@ -16,9 +16,11 @@ export namespace YService {
     const ONLINE_SERVER_URL = "wss://live.opendaw.studio"
     const serverUrl = USE_LOCAL_SERVER ? LOCAL_SERVER_URL : ONLINE_SERVER_URL
 
+    export type RoomResult = { project: Project, provider: WebsocketProvider }
+
     export const getOrCreateRoom = async (optProject: Option<Project>,
                                           env: ProjectEnv,
-                                          roomName: string): Promise<Project> => {
+                                          roomName: string): Promise<RoomResult> => {
         if (roomName === "signaling") {return panic("Invalid room name: signaling")}
         const doc = new Y.Doc()
         const provider: WebsocketProvider = new WebsocketProvider(serverUrl, roomName, doc)
@@ -48,10 +50,7 @@ export namespace YService {
                 conflict: () => project.invalid()
             })
             project.own(sync)
-            // TODO Remove this cast at some point
-            const editing = project.editing as BoxEditing
-            editing.disable()
-            return project
+            return {project, provider}
         } else {
             if (optProject.nonEmpty()) {
                 const approved = await RuntimeNotifier.approve({
@@ -77,9 +76,7 @@ export namespace YService {
             boxGraph.endTransaction()
             project.follow(userInterfaceBox)
             project.own(sync)
-            const editing = project.editing as BoxEditing
-            editing.disable()
-            return project
+            return {project, provider}
         }
     }
 }

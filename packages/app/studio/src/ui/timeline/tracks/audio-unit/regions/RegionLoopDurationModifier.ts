@@ -1,15 +1,15 @@
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
-import {Arrays, int, Option} from "@moises-ai/lib-std"
-import {ppqn, PPQN, RegionCollection} from "@moises-ai/lib-dsp"
+import {Arrays, int, isNotNull, Option} from "@opendaw/lib-std"
+import {ppqn, PPQN, RegionCollection} from "@opendaw/lib-dsp"
 import {
     AnyLoopableRegionBoxAdapter,
     AnyRegionBoxAdapter,
     TrackBoxAdapter,
     UnionAdapterTypes
-} from "@moises-ai/studio-adapters"
+} from "@opendaw/studio-adapters"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {Project, RegionModifyStrategy} from "@moises-ai/studio-core"
-import {Dragging} from "@moises-ai/lib-dom"
+import {Project, RegionModifyStrategy} from "@opendaw/studio-core"
+import {Dragging} from "@opendaw/lib-dom"
 
 class SelectedModifyStrategy implements RegionModifyStrategy {
     readonly #tool: RegionLoopDurationModifier
@@ -113,8 +113,11 @@ export class RegionLoopDurationModifier implements RegionModifier {
 
     approve(): void {
         const modifiedTracks: ReadonlyArray<TrackBoxAdapter> =
-            Arrays.removeDuplicates(this.#adapters.map(adapter => adapter.trackBoxAdapter.unwrap()))
-        const result = this.#adapters.map<BeforeState>(region =>
+            Arrays.removeDuplicates(this.#adapters
+                .map(adapter => adapter.trackBoxAdapter.unwrapOrNull())
+                .filter(isNotNull))
+        const adapters = this.#adapters.filter(({box}) => box.isAttached())
+        const result = adapters.map<BeforeState>(region =>
             ({
                 region,
                 duration: this.#selectedModifyStrategy.readDuration(region),
@@ -134,7 +137,7 @@ export class RegionLoopDurationModifier implements RegionModifier {
             })),
             trackSnapshots
         })
-        this.#project.overlapResolver.apply(modifiedTracks, this.#adapters, this, 0, (_trackResolver) => {
+        this.#project.overlapResolver.apply(modifiedTracks, adapters, this, 0, (_trackResolver) => {
             result.forEach(({region, duration, loopDuration}) => {
                 region.duration = duration
                 region.loopDuration = loopDuration

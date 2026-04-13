@@ -1,0 +1,36 @@
+@use "@/colors"
+
+component
+  flex: 0 0 1.25rem
+  display: flex
+  align-items: center
+  column-gap: 1rem
+  padding: 0 1rem
+  font-size: 0.625rem
+  color: var(--color-dark)
+  @include colors.panel-background-stripes-dark
+
+  > .room-label
+    display: flex
+    align-items: center
+    color: var(--color-green)
+    column-gap: 0.25em
+
+    > .room-name
+      cursor: pointer
+      white-space: nowrap
+
+  > .user
+    display: flex
+    align-items: center
+    gap: 0.35em
+    white-space: nowrap
+
+    > .dot
+      min-width: 6px
+      min-height: 6px
+      border-radius: 50%
+      flex-shrink: 0
+
+    &.self
+      color: var(--color-bright)

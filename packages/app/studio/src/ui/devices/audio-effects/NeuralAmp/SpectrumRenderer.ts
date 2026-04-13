@@ -1,8 +1,8 @@
-import {int, linear, Nullable, Terminable, Terminator} from "@moises-ai/lib-std"
-import {gainToDb} from "@moises-ai/lib-dsp"
-import {NeuralAmpDeviceBoxAdapter} from "@moises-ai/studio-adapters"
-import {LiveStreamReceiver} from "@moises-ai/lib-fusion"
-import {CanvasPainter} from "@moises-ai/studio-core"
+import {Arrays, int, linear, Nullable, Terminable, Terminator} from "@opendaw/lib-std"
+import {gainToDb} from "@opendaw/lib-dsp"
+import {NeuralAmpDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {LiveStreamReceiver} from "@opendaw/lib-fusion"
+import {CanvasPainter} from "@opendaw/studio-core"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 
 export const createSpectrumRenderer = (canvas: HTMLCanvasElement,
@@ -11,6 +11,9 @@ export const createSpectrumRenderer = (canvas: HTMLCanvasElement,
                                        sampleRate: number): Terminable => {
     const terminator = new Terminator()
     let spectrum: Nullable<Float32Array> = null
+    const gridColor = "hsla(200, 40%, 70%, 0.2)"
+    const gridFreqs = Arrays.create(index => 20 * 2 ** (index + 1), 9)
+    const gridDbs = [-50, -40, -30, -20, -10]
     const painter = terminator.own(new CanvasPainter(canvas, painter => {
         if (spectrum === null) {return}
         const context = painter.context
@@ -31,6 +34,20 @@ export const createSpectrumRenderer = (canvas: HTMLCanvasElement,
             const norm = (db - minDb) / (maxDb - minDb)
             return (1.0 - norm) * height
         }
+        context.lineWidth = 1.0 / painter.devicePixelRatio
+        context.strokeStyle = gridColor
+        context.beginPath()
+        for (const freq of gridFreqs) {
+            const x = Math.round(freqToX(freq))
+            context.moveTo(x, 0)
+            context.lineTo(x, height)
+        }
+        for (const db of gridDbs) {
+            const y = Math.round(dbToY(db))
+            context.moveTo(0, y)
+            context.lineTo(width, y)
+        }
+        context.stroke()
         let x0: int = 0 | 0
         let lastEnergy = spectrum[0]
         let currentEnergy = lastEnergy

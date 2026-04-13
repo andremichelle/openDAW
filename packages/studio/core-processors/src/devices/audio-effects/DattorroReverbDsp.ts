@@ -1,15 +1,19 @@
-import {float, int} from "@moises-ai/lib-std"
-import {StereoMatrix} from "@moises-ai/lib-dsp"
+import {float, int, nextPowOf2} from "@opendaw/lib-std"
+import {StereoMatrix} from "@opendaw/lib-dsp"
 
 // https://github.com/khoin/DattorroReverbNode
 // https://ccrma.stanford.edu/~dattorro/EffectDesignPart1.pdf
 
 export class DattorroReverbDsp {
     readonly #sampleRate: float
-    readonly #delays: Array<[Float32Array, int, int, int]> = []
+    readonly #delayBuffers: Float32Array[]
+    readonly #delayLengths: Int32Array
+    readonly #delayWrites: Int32Array
+    readonly #delayReads: Int32Array
+    readonly #delayMasks: Int32Array
     readonly #preDelayBuffer: Float32Array
+    readonly #preDelayMask: int
     readonly #taps: Int16Array
-    readonly #preDelayLength: int
 
     #preDelayWrite = 0 | 0
     #lp1 = 0.0
@@ -31,65 +35,52 @@ export class DattorroReverbDsp {
 
     constructor(sampleRate: float) {
         this.#sampleRate = sampleRate
-        this.#preDelayLength = sampleRate + 1 // one-second max
-        this.#preDelayBuffer = new Float32Array(this.#preDelayLength)
+        const preDelaySize = nextPowOf2(sampleRate + 1)
+        this.#preDelayBuffer = new Float32Array(preDelaySize)
+        this.#preDelayMask = preDelaySize - 1
         const delayTimes = [
             0.004771345, 0.003595309, 0.012734787, 0.009307483,
             0.022579886, 0.149625349, 0.060481839, 0.1249958,
             0.030509727, 0.141695508, 0.089244313, 0.106280031
         ]
-        delayTimes.forEach(x => this.#makeDelay(x))
+        const numDelays = delayTimes.length
+        this.#delayBuffers = new Array(numDelays)
+        this.#delayLengths = new Int32Array(numDelays)
+        this.#delayWrites = new Int32Array(numDelays)
+        this.#delayReads = new Int32Array(numDelays)
+        this.#delayMasks = new Int32Array(numDelays)
+        delayTimes.forEach((time, index) => {
+            const len = Math.round(time * sampleRate)
+            const size = nextPowOf2(len)
+            this.#delayBuffers[index] = new Float32Array(size)
+            this.#delayLengths[index] = len - 1
+            this.#delayWrites[index] = len - 1
+            this.#delayReads[index] = 0
+            this.#delayMasks[index] = size - 1
+        })
         const tapTimes = [
             0.008937872, 0.099929438, 0.064278754, 0.067067639, 0.066866033, 0.006283391, 0.035818689,
             0.011861161, 0.121870905, 0.041262054, 0.08981553, 0.070931756, 0.011256342, 0.004065724
         ]
-        this.#taps = Int16Array.from(tapTimes, x => Math.round(x * sampleRate))
+        this.#taps = Int16Array.from(tapTimes, time => Math.round(time * sampleRate))
     }
-    #makeDelay(length: float): void {
-        const len = Math.round(length * this.#sampleRate)
-        const nextPow2 = 2 ** Math.ceil(Math.log2(len))
-        this.#delays.push([new Float32Array(nextPow2), len - 1, 0, nextPow2 - 1])
-    }
-    #writeDelay(index: int, data: float): float {
-        return this.#delays[index][0][this.#delays[index][1]] = data
-    }
-    #readDelay(index: int): float {
-        return this.#delays[index][0][this.#delays[index][2]]
-    }
-    #readDelayAt(index: int, offset: int): float {
-        const d = this.#delays[index]
-        return d[0][(d[2] + offset) & d[3]]
-    }
-    #readDelayCAt(index: int, offset: float): float {
-        const d = this.#delays[index]
-        const frac = offset - ~~offset
-        let int = ~~offset + d[2] - 1
-        const mask = d[3]
-        const x0 = d[0][int++ & mask]
-        const x1 = d[0][int++ & mask]
-        const x2 = d[0][int++ & mask]
-        const x3 = d[0][int & mask]
-        const a = (3.0 * (x1 - x2) - x0 + x3) * 0.5
-        const b = 2.0 * x2 + x0 - (5 * x1 + x3) * 0.5
-        const c = (x2 - x0) * 0.5
-        return (((a * frac) + b) * frac + c) * frac + x1
-    }
+
     set preDelayMs(ms: float) {this.#preDelay = Math.floor((ms / 1000) * this.#sampleRate)}
-    set bandwidth(value: float) { this.#bandwidth = value * 0.9999 }
-    set inputDiffusion1(value: float) { this.#inputDiffusion1 = value }
-    set inputDiffusion2(value: float) { this.#inputDiffusion2 = value }
-    set decay(value: float) { this.#decay = value }
-    set decayDiffusion1(value: float) { this.#decayDiffusion1 = value * 0.999999 }
-    set decayDiffusion2(value: float) { this.#decayDiffusion2 = value * 0.999999 }
-    set damping(value: float) { this.#damping = value }
-    set excursionRate(value: float) { this.#excursionRate = value * 2.0 }
-    set excursionDepth(value: float) { this.#excursionDepth = value * 2.0 }
-    set wetGain(value: float) { this.#wet = value }
-    set dryGain(value: float) { this.#dry = value }
+    set bandwidth(value: float) {this.#bandwidth = value * 0.9999}
+    set inputDiffusion1(value: float) {this.#inputDiffusion1 = value}
+    set inputDiffusion2(value: float) {this.#inputDiffusion2 = value}
+    set decay(value: float) {this.#decay = value}
+    set decayDiffusion1(value: float) {this.#decayDiffusion1 = value * 0.999999}
+    set decayDiffusion2(value: float) {this.#decayDiffusion2 = value * 0.999999}
+    set damping(value: float) {this.#damping = value}
+    set excursionRate(value: float) {this.#excursionRate = value * 2.0}
+    set excursionDepth(value: float) {this.#excursionDepth = value * 2.0}
+    set wetGain(value: float) {this.#wet = value}
+    set dryGain(value: float) {this.#dry = value}
 
     reset(): void {
         this.#preDelayBuffer.fill(0)
-        this.#delays.forEach(d => d[0].fill(0))
+        this.#delayBuffers.forEach(buffer => buffer.fill(0))
         this.#preDelayWrite = 0
         this.#lp1 = 0.0
         this.#lp2 = 0.0
@@ -114,48 +105,82 @@ export class DattorroReverbDsp {
         const inpChR = input[1]
         const outChL = output[0]
         const outChR = output[1]
+        const pdBuf = this.#preDelayBuffer
+        const pdMask = this.#preDelayMask
+        const db = this.#delayBuffers
+        const dw = this.#delayWrites
+        const drd = this.#delayReads
+        const dm = this.#delayMasks
+        const taps = this.#taps
+        const db0 = db[0], db1 = db[1], db2 = db[2], db3 = db[3]
+        const db4 = db[4], db5 = db[5], db6 = db[6], db7 = db[7]
+        const db8 = db[8], db9 = db[9], db10 = db[10], db11 = db[11]
+        const dm0 = dm[0], dm1 = dm[1], dm2 = dm[2], dm3 = dm[3]
+        const dm4 = dm[4], dm5 = dm[5], dm6 = dm[6], dm7 = dm[7]
+        const dm8 = dm[8], dm9 = dm[9], dm10 = dm[10], dm11 = dm[11]
+        let pdw = this.#preDelayWrite
+        let lp1 = this.#lp1, lp2 = this.#lp2, lp3 = this.#lp3
+        let excPhase = this.#excPhase
         for (let i = fromIndex; i < toIndex; i++) {
             const inpL = inpChL[i]
             const inpR = inpChR[i]
-            this.#preDelayBuffer[this.#preDelayWrite] = (inpL + inpR) * 0.5
+            pdBuf[pdw] = (inpL + inpR) * 0.5
             outChL[i] = inpL * dr
             outChR[i] = inpR * dr
-            const delayedInput = this.#preDelayBuffer[(this.#preDelayLength + this.#preDelayWrite - pd) % this.#preDelayLength]
-            this.#lp1 += bw * (delayedInput - this.#lp1)
-            let pre = this.#writeDelay(0, this.#lp1 - fi * this.#readDelay(0))
-            pre = this.#writeDelay(1, fi * (pre - this.#readDelay(1)) + this.#readDelay(0))
-            pre = this.#writeDelay(2, fi * pre + this.#readDelay(1) - si * this.#readDelay(2))
-            pre = this.#writeDelay(3, si * (pre - this.#readDelay(3)) + this.#readDelay(2))
-            const split = si * pre + this.#readDelay(3)
-            const exc = ed * (1 + Math.cos(this.#excPhase * 6.28))
-            const exc2 = ed * (1 + Math.sin(this.#excPhase * 6.2847))
-            let temp = this.#writeDelay(4, split + dc * this.#readDelay(11) + ft * this.#readDelayCAt(4, exc))
-            this.#writeDelay(5, this.#readDelayCAt(4, exc) - ft * temp)
-            this.#lp2 += dp * (this.#readDelay(5) - this.#lp2)
-            temp = this.#writeDelay(6, dc * this.#lp2 - st * this.#readDelay(6))
-            this.#writeDelay(7, this.#readDelay(6) + st * temp)
-            temp = this.#writeDelay(8, split + dc * this.#readDelay(7) + ft * this.#readDelayCAt(8, exc2))
-            this.#writeDelay(9, this.#readDelayCAt(8, exc2) - ft * temp)
-            this.#lp3 += dp * (this.#readDelay(9) - this.#lp3)
-            temp = this.#writeDelay(10, dc * this.#lp3 - st * this.#readDelay(10))
-            this.#writeDelay(11, this.#readDelay(10) + st * temp)
-            const lo = this.#readDelayAt(9, this.#taps[0]) + this.#readDelayAt(9, this.#taps[1]) -
-                this.#readDelayAt(10, this.#taps[2]) + this.#readDelayAt(11, this.#taps[3]) -
-                this.#readDelayAt(5, this.#taps[4]) - this.#readDelayAt(6, this.#taps[5]) -
-                this.#readDelayAt(7, this.#taps[6])
-            const ro = this.#readDelayAt(5, this.#taps[7]) + this.#readDelayAt(5, this.#taps[8]) -
-                this.#readDelayAt(6, this.#taps[9]) + this.#readDelayAt(7, this.#taps[10]) -
-                this.#readDelayAt(9, this.#taps[11]) - this.#readDelayAt(10, this.#taps[12]) -
-                this.#readDelayAt(11, this.#taps[13])
+            const delayedInput = pdBuf[(pdw - pd) & pdMask]
+            lp1 += bw * (delayedInput - lp1)
+            let pre = db0[dw[0]] = lp1 - fi * db0[drd[0]]
+            pre = db1[dw[1]] = fi * (pre - db1[drd[1]]) + db0[drd[0]]
+            pre = db2[dw[2]] = fi * pre + db1[drd[1]] - si * db2[drd[2]]
+            pre = db3[dw[3]] = si * (pre - db3[drd[3]]) + db2[drd[2]]
+            const split = si * pre + db3[drd[3]]
+            const exc = ed * (1 + Math.cos(excPhase * 6.28))
+            const exc2 = ed * (1 + Math.sin(excPhase * 6.2847))
+            const r4exc = exc - ~~exc
+            let r4int = ~~exc + drd[4] - 1
+            const r4x0 = db4[r4int++ & dm4], r4x1 = db4[r4int++ & dm4]
+            const r4x2 = db4[r4int++ & dm4], r4x3 = db4[r4int & dm4]
+            const readC4 = (((3.0 * (r4x1 - r4x2) - r4x0 + r4x3) * 0.5 * r4exc
+                + 2.0 * r4x2 + r4x0 - (5 * r4x1 + r4x3) * 0.5) * r4exc
+                + (r4x2 - r4x0) * 0.5) * r4exc + r4x1
+            let temp = db4[dw[4]] = split + dc * db11[drd[11]] + ft * readC4
+            db5[dw[5]] = readC4 - ft * temp
+            lp2 += dp * (db5[drd[5]] - lp2)
+            temp = db6[dw[6]] = dc * lp2 - st * db6[drd[6]]
+            db7[dw[7]] = db6[drd[6]] + st * temp
+            const r8exc = exc2 - ~~exc2
+            let r8int = ~~exc2 + drd[8] - 1
+            const r8x0 = db8[r8int++ & dm8], r8x1 = db8[r8int++ & dm8]
+            const r8x2 = db8[r8int++ & dm8], r8x3 = db8[r8int & dm8]
+            const readC8 = (((3.0 * (r8x1 - r8x2) - r8x0 + r8x3) * 0.5 * r8exc
+                + 2.0 * r8x2 + r8x0 - (5 * r8x1 + r8x3) * 0.5) * r8exc
+                + (r8x2 - r8x0) * 0.5) * r8exc + r8x1
+            temp = db8[dw[8]] = split + dc * db7[drd[7]] + ft * readC8
+            db9[dw[9]] = readC8 - ft * temp
+            lp3 += dp * (db9[drd[9]] - lp3)
+            temp = db10[dw[10]] = dc * lp3 - st * db10[drd[10]]
+            db11[dw[11]] = db10[drd[10]] + st * temp
+            const lo = db9[(drd[9] + taps[0]) & dm9] + db9[(drd[9] + taps[1]) & dm9] -
+                db10[(drd[10] + taps[2]) & dm10] + db11[(drd[11] + taps[3]) & dm11] -
+                db5[(drd[5] + taps[4]) & dm5] - db6[(drd[6] + taps[5]) & dm6] -
+                db7[(drd[7] + taps[6]) & dm7]
+            const ro = db5[(drd[5] + taps[7]) & dm5] + db5[(drd[5] + taps[8]) & dm5] -
+                db6[(drd[6] + taps[9]) & dm6] + db7[(drd[7] + taps[10]) & dm7] -
+                db9[(drd[9] + taps[11]) & dm9] - db10[(drd[10] + taps[12]) & dm10] -
+                db11[(drd[11] + taps[13]) & dm11]
             outChL[i] += lo * we
             outChR[i] += ro * we
-            this.#excPhase += ex
-            this.#preDelayWrite = (this.#preDelayWrite + 1) % this.#preDelayLength
-            for (let i1 = 0; i1 < this.#delays.length; i1++) {
-                const d = this.#delays[i1]
-                d[1] = (d[1] + 1) & d[3]
-                d[2] = (d[2] + 1) & d[3]
+            excPhase += ex
+            pdw = (pdw + 1) & pdMask
+            for (let d = 0; d < 12; d++) {
+                dw[d] = (dw[d] + 1) & dm[d]
+                drd[d] = (drd[d] + 1) & dm[d]
             }
         }
+        this.#preDelayWrite = pdw
+        this.#lp1 = lp1
+        this.#lp2 = lp2
+        this.#lp3 = lp3
+        this.#excPhase = excPhase
     }
 }

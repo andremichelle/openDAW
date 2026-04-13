@@ -1,0 +1,226 @@
+@use "@/colors"
+@use "@/mixins"
+
+$accent-gradient: linear-gradient(135deg, rgba(black, 0.4), rgba(white, 0.1))
+$card-radius: 0.75rem
+
+component
+  flex: 1
+  display: flex
+  flex-direction: column
+  overflow: auto
+  padding: 2rem
+  gap: 2rem
+  @include colors.panel-background
+
+  header.dashboard-head
+    display: flex
+    align-items: center
+    justify-content: space-between
+    gap: 1rem
+    flex-wrap: wrap
+    margin-bottom: 0.25rem
+
+    h1
+      color: var(--color-cream)
+      font-size: 1.25rem
+      margin: 0
+      letter-spacing: 0.04em
+      text-transform: uppercase
+
+    .updated
+      color: var(--color-shadow)
+      font-size: 0.7rem
+
+  .grid
+    display: grid
+    gap: 2rem
+    grid-template-columns: repeat(12, 1fr)
+
+    > .span-3
+      grid-column: span 3
+    > .span-4
+      grid-column: span 4
+    > .span-6
+      grid-column: span 6
+    > .span-8
+      grid-column: span 8
+    > .span-12
+      grid-column: span 12
+
+  @media (max-width: 1100px)
+    .grid > .span-3
+      grid-column: span 6
+    .grid > .span-4
+      grid-column: span 6
+    .grid > .span-8
+      grid-column: span 12
+
+  @media (max-width: 700px)
+    .grid > .span-3, .grid > .span-4, .grid > .span-6
+      grid-column: span 12
+
+  .card
+    border-radius: $card-radius
+    padding: 1rem 1.25rem
+    display: flex
+    flex-direction: column
+    gap: 0.75rem
+    position: relative
+    overflow: hidden
+    flex-shrink: 0
+    background: linear-gradient(0deg, rgba(white, 0.02), rgba(white, 0.08))
+    box-shadow: inset 0 1px 1px 0 rgba(white, 0.1)
+
+    &::before
+      content: ""
+      position: absolute
+      inset: 0
+      pointer-events: none
+      background: radial-gradient(circle at top right, rgba(189, 100, 200, 0.08), transparent 60%)
+
+    .card-head
+      display: flex
+      align-items: center
+      justify-content: space-between
+      gap: 0.5rem
+
+      h2
+        color: var(--color-cream)
+        font-size: 0.85rem
+        margin: 0
+        text-transform: uppercase
+        letter-spacing: 0.05em
+        font-weight: 600
+
+      .card-accent
+        font-size: 0.7rem
+        color: var(--color-shadow)
+
+    .card-body
+      flex: 1
+      display: flex
+      flex-direction: column
+      min-height: 0
+
+  .card.hero .card-body
+    min-height: 18rem
+
+  .card.compact .card-body
+    min-height: 9rem
+
+  .tiles
+    display: grid
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr))
+    gap: 1.25rem
+
+  .chart-slot
+    flex: 1
+    display: flex
+    flex-direction: column
+    min-height: 0
+
+  .chart
+    flex: 1
+    position: relative
+    min-height: 0
+
+    svg
+      position: absolute
+      inset: 0
+      width: 100%
+      height: 100%
+
+  .range-control
+    padding: 0.75rem 16px 0.75rem 40px
+    display: flex
+    flex-direction: column
+    gap: 0.4rem
+
+    .range-labels
+      display: flex
+      justify-content: space-between
+      color: var(--color-cream)
+      font-size: 0.75rem
+      font-variant-numeric: tabular-nums
+
+      .range-label.right
+        text-align: right
+
+    .range-wrap
+      position: relative
+      height: 1.5rem
+
+      .range-track
+        position: absolute
+        left: 0
+        right: 0
+        top: 50%
+        height: 4px
+        transform: translateY(-50%)
+        background-color: rgba(white, 0.06)
+        border-radius: 2px
+
+      .range-selection
+        position: absolute
+        top: 50%
+        height: 6px
+        transform: translateY(-50%)
+        background: $accent-gradient
+        border-radius: 3px
+        cursor: grab
+
+        &:active
+          cursor: grabbing
+
+      .range-handle
+        position: absolute
+        top: 50%
+        width: 14px
+        height: 14px
+        margin-left: -7px
+        transform: translateY(-50%)
+        border-radius: 50%
+        background-color: var(--color-cream)
+        box-shadow: 0 0 0 2px var(--color-blue)
+        cursor: ew-resize
+
+  .sponsors
+    display: grid
+    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr))
+
+    .sponsor
+      display: flex
+      flex-direction: column
+      align-items: center
+      gap: 0.6rem
+      text-decoration: none
+      color: inherit
+      padding: 0.5rem 0
+      border-radius: 0.75rem
+      transition: background-color 0.1s ease
+
+      &:hover
+        background-color: rgba(white, 0.04)
+
+      .sponsor-avatar
+        width: 4.5rem
+        height: 4.5rem
+        border-radius: 50%
+        border: 2px solid rgba(white, 0.08)
+        object-fit: cover
+
+      .sponsor-name
+        color: var(--color-cream)
+        font-size: 0.8rem
+        text-align: center
+        max-width: 100%
+        white-space: nowrap
+        overflow: hidden
+        text-overflow: ellipsis
+
+  .loading, .error
+    color: var(--color-shadow)
+    font-size: 0.75rem
+    text-align: center
+    padding: 1rem
