@@ -1,7 +1,7 @@
 import {Optional, RuntimeNotifier, Terminator, TimeSpan, UUID} from "@moises-ai/lib-std"
 import {Promises, Wait} from "@moises-ai/lib-runtime"
 import {SampleStorage, SoundfontStorage, Workers, YService} from "@moises-ai/studio-core"
-import {P2PSession, type SignalingSocket} from "@opendaw/studio-p2p"
+import {P2PSession, type SignalingSocket} from "@moises-ai/studio-p2p"
 import {StudioService} from "@/service/StudioService"
 import {showConnectRoomDialog} from "@/service/StudioLiveRoomDialog.tsx"
 import {RoomAwareness, writeIdentity} from "@/service/RoomAwareness"

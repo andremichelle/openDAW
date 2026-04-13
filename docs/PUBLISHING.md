@@ -10,7 +10,7 @@ This fork of [andremichelle/openDAW](https://github.com/andremichelle/openDAW) p
 
 ## Package Structure
 
-### Publishable Packages (16 total)
+### Publishable Packages (17 total)
 
 These packages are published to GitHub Package Registry when a release is created:
 
@@ -21,6 +21,7 @@ These packages are published to GitHub Package Registry when a release is create
 - `@moises-ai/studio-boxes` - Box schemas and types
 - `@moises-ai/studio-enums` - Shared enumerations
 - `@moises-ai/studio-scripting` - Scripting support
+- `@moises-ai/studio-p2p` - Peer-to-peer collaboration
 
 **Library packages:**
 - `@moises-ai/lib-std` - Standard library utilities

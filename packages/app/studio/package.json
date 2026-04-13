@@ -22,7 +22,7 @@
         "@moises-ai/studio-boxes": "*",
         "@moises-ai/studio-core": "*",
         "@moises-ai/studio-enums": "*",
-        "@opendaw/studio-p2p": "*",
+        "@moises-ai/studio-p2p": "*",
         "@moises-ai/studio-scripting": "*",
         "@types/d3-force": "^3.0.10",
         "d3-force": "^3.0.0",

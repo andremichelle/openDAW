@@ -20,7 +20,7 @@ import {
     tryCatch,
     UUID
 } from "@moises-ai/lib-std"
-import {ChainedSampleProvider, ChainedSoundfontProvider, TrafficMeter} from "@opendaw/studio-p2p"
+import {ChainedSampleProvider, ChainedSoundfontProvider, TrafficMeter} from "@moises-ai/studio-p2p"
 import {populateStudioMenu} from "@/service/StudioMenu"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
