@@ -1,9 +1,9 @@
-import {Editing, Errors, isDefined, UUID} from "@opendaw/lib-std"
-import {Promises} from "@opendaw/lib-runtime"
-import {NeuralAmpModelBox} from "@opendaw/studio-boxes"
-import {BoxGraph} from "@opendaw/lib-box"
-import {NeuralAmpDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {Workers} from "@opendaw/studio-core"
+import {Editing, Errors, isDefined, UUID} from "@moises-ai/lib-std"
+import {Promises} from "@moises-ai/lib-runtime"
+import {NeuralAmpModelBox} from "@moises-ai/studio-boxes"
+import {BoxGraph} from "@moises-ai/lib-box"
+import {NeuralAmpDeviceBoxAdapter} from "@moises-ai/studio-adapters"
+import {Workers} from "@moises-ai/studio-core"
 import {showTone3000Dialog} from "./Tone3000Dialog"
 
 type ToneModel = { id: number, name: string, size: string, model_url: string }

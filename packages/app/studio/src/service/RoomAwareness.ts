@@ -1,5 +1,5 @@
-import {DefaultObservableValue, MutableObservableValue, Nullable, Terminable, Terminator} from "@opendaw/lib-std"
-import {deferNextFrame} from "@opendaw/lib-dom"
+import {DefaultObservableValue, MutableObservableValue, Nullable, Terminable, Terminator} from "@moises-ai/lib-std"
+import {deferNextFrame} from "@moises-ai/lib-dom"
 import type {Awareness} from "y-protocols/awareness"
 
 const StorageKeyName = "opendaw:user:name"

@@ -6,12 +6,12 @@ import {
     panic,
     RuntimeNotifier,
     TimeSpan
-} from "@opendaw/lib-std"
-import {dbToGain, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
-import {OfflineEngineRenderer, Project} from "@opendaw/studio-core"
+} from "@moises-ai/lib-std"
+import {dbToGain, ppqn, RenderQuantum} from "@moises-ai/lib-dsp"
+import {OfflineEngineRenderer, Project} from "@moises-ai/studio-core"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
-import {ShadertoyBox} from "@opendaw/studio-boxes"
+import {ShadertoyBox} from "@moises-ai/studio-boxes"
 import type {VideoExporter} from "@/video"
 import {
     BufferVideoExporter,
@@ -20,7 +20,7 @@ import {
     VideoOverlay,
     WebCodecsVideoExporter
 } from "@/video"
-import {Promises} from "@opendaw/lib-runtime"
+import {Promises} from "@moises-ai/lib-runtime"
 
 const MAX_DURATION_SECONDS = TimeSpan.hours(1).absSeconds()
 const SILENCE_THRESHOLD_DB = -72.0

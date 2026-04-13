@@ -1,7 +1,7 @@
 import css from "./ChatOverlayBackground.sass?inline"
-import {createElement} from "@opendaw/lib-jsx"
-import {Lifecycle} from "@opendaw/lib-std"
-import {Html} from "@opendaw/lib-dom"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Lifecycle} from "@moises-ai/lib-std"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "ChatOverlayBackground")
 

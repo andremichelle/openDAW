@@ -1,7 +1,7 @@
-import {createElement, Frag, replaceChildren} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
-import {Lifecycle, ObservableValue} from "@opendaw/lib-std"
-import {Colors} from "@opendaw/studio-enums"
+import {createElement, Frag, replaceChildren} from "@moises-ai/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {Lifecycle, ObservableValue} from "@moises-ai/lib-std"
+import {Colors} from "@moises-ai/studio-enums"
 import {DailySeries} from "./data"
 
 type ChartProps = {

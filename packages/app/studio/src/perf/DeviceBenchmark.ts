@@ -1,6 +1,6 @@
-import {Option, UUID} from "@opendaw/lib-std"
-import {AudioUnitType, IconSymbol} from "@opendaw/studio-enums"
-import {AudioUnitFactory, InstrumentFactories, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
+import {Option, UUID} from "@moises-ai/lib-std"
+import {AudioUnitType, IconSymbol} from "@moises-ai/studio-enums"
+import {AudioUnitFactory, InstrumentFactories, ProjectSkeleton, TrackType} from "@moises-ai/studio-adapters"
 import {
     AudioFileBox,
     AudioRegionBox,
@@ -24,11 +24,11 @@ import {
     WaveshaperDeviceBox,
     CaptureAudioBox,
     CaptureMidiBox
-} from "@opendaw/studio-boxes"
-import {AudioData, PPQN, TimeBase} from "@opendaw/lib-dsp"
-import {BoxGraph} from "@opendaw/lib-box"
-import {Project, OfflineEngineRenderer, DefaultSampleLoader} from "@opendaw/studio-core"
-import type {Peaks} from "@opendaw/lib-fusion"
+} from "@moises-ai/studio-boxes"
+import {AudioData, PPQN, TimeBase} from "@moises-ai/lib-dsp"
+import {BoxGraph} from "@moises-ai/lib-box"
+import {Project, OfflineEngineRenderer, DefaultSampleLoader} from "@moises-ai/studio-core"
+import type {Peaks} from "@moises-ai/lib-fusion"
 import {StudioService} from "@/service/StudioService"
 import {BenchmarkCategory, BenchmarkResult} from "./measure"
 

@@ -1,5 +1,5 @@
-import {int, isDefined, Nullable, SortedSet, Terminable, UUID} from "@opendaw/lib-std"
-import {MonitoringMapEntry, EngineCommands} from "@opendaw/studio-adapters"
+import {int, isDefined, Nullable, SortedSet, Terminable, UUID} from "@moises-ai/lib-std"
+import {MonitoringMapEntry, EngineCommands} from "@moises-ai/studio-adapters"
 
 const MAX_MONITORING_CHANNELS = 8
 

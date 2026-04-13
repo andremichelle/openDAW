@@ -1,4 +1,4 @@
-import {Notifier, Observer, Subscription, Terminable} from "@opendaw/lib-std"
+import {Notifier, Observer, Subscription, Terminable} from "@moises-ai/lib-std"
 
 const WINDOW_SECONDS = 5
 

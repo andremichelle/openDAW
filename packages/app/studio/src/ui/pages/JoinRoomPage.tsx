@@ -1,4 +1,4 @@
-import {createElement, PageContext, PageFactory, RouteLocation} from "@opendaw/lib-jsx"
+import {createElement, PageContext, PageFactory, RouteLocation} from "@moises-ai/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {connectRoom} from "@/service/StudioLiveRoomConnect"
 

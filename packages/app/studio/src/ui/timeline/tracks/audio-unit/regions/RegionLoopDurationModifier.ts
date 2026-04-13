@@ -1,15 +1,15 @@
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
-import {Arrays, int, isNotNull, Option} from "@opendaw/lib-std"
-import {ppqn, PPQN, RegionCollection} from "@opendaw/lib-dsp"
+import {Arrays, int, isNotNull, Option} from "@moises-ai/lib-std"
+import {ppqn, PPQN, RegionCollection} from "@moises-ai/lib-dsp"
 import {
     AnyLoopableRegionBoxAdapter,
     AnyRegionBoxAdapter,
     TrackBoxAdapter,
     UnionAdapterTypes
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
-import {Project, RegionModifyStrategy} from "@opendaw/studio-core"
-import {Dragging} from "@opendaw/lib-dom"
+import {Project, RegionModifyStrategy} from "@moises-ai/studio-core"
+import {Dragging} from "@moises-ai/lib-dom"
 
 class SelectedModifyStrategy implements RegionModifyStrategy {
     readonly #tool: RegionLoopDurationModifier

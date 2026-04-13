@@ -1,7 +1,7 @@
-import {asInstanceOf, isDefined, Notifier, Nullable, Observable, Option, StringMapping, Terminable, ValueMapping} from "@opendaw/lib-std"
-import {Field, StringField} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
-import {WerkstattParameterBox} from "@opendaw/studio-boxes"
+import {asInstanceOf, isDefined, Notifier, Nullable, Observable, Option, StringMapping, Terminable, ValueMapping} from "@moises-ai/lib-std"
+import {Field, StringField} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
+import {WerkstattParameterBox} from "@moises-ai/studio-boxes"
 import {ParameterAdapterSet} from "./ParameterAdapterSet"
 
 export type ParamMapping = "unipolar" | "linear" | "exp" | "int" | "bool"

@@ -1,6 +1,6 @@
-import {asDefined, DefaultObservableValue, ObservableValue} from "@opendaw/lib-std"
-import {Files} from "@opendaw/lib-dom"
-import {Promises} from "@opendaw/lib-runtime"
+import {asDefined, DefaultObservableValue, ObservableValue} from "@moises-ai/lib-std"
+import {Files} from "@moises-ai/lib-dom"
+import {Promises} from "@moises-ai/lib-runtime"
 import type {
     AudioSample as AudioSampleClass,
     AudioSampleSource,

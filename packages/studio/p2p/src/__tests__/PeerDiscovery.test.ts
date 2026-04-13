@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest"
-import {UUID} from "@opendaw/lib-std"
+import {UUID} from "@moises-ai/lib-std"
 import {type SignalingMessage, type SignalingSocket, AssetSignaling} from "../AssetSignaling"
 import {PeerAssetProvider} from "../PeerAssetProvider"
 

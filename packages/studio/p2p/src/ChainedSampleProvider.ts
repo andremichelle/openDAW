@@ -1,7 +1,7 @@
-import {Option, Progress, UUID} from "@opendaw/lib-std"
-import {Promises} from "@opendaw/lib-runtime"
-import {AudioData} from "@opendaw/lib-dsp"
-import {SampleMetaData} from "@opendaw/studio-adapters"
+import {Option, Progress, UUID} from "@moises-ai/lib-std"
+import {Promises} from "@moises-ai/lib-runtime"
+import {AudioData} from "@moises-ai/lib-dsp"
+import {SampleMetaData} from "@moises-ai/studio-adapters"
 import {type Fetcher} from "./ChainedProvider"
 
 type SampleResult = [AudioData, SampleMetaData]

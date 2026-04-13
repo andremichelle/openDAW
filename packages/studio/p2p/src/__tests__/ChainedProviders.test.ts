@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest"
-import {UUID} from "@opendaw/lib-std"
-import {AudioData} from "@opendaw/lib-dsp"
-import {SampleMetaData, SoundfontMetaData} from "@opendaw/studio-adapters"
+import {UUID} from "@moises-ai/lib-std"
+import {AudioData} from "@moises-ai/lib-dsp"
+import {SampleMetaData, SoundfontMetaData} from "@moises-ai/studio-adapters"
 import {ChainedSampleProvider, type SampleProvider} from "../ChainedSampleProvider"
 import {ChainedSoundfontProvider, type SoundfontProvider} from "../ChainedSoundfontProvider"
 

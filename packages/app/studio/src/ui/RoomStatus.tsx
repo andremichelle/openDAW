@@ -1,12 +1,12 @@
 import css from "./RoomStatus.sass?inline"
-import {createElement, replaceChildren} from "@opendaw/lib-jsx"
-import {isDefined, Lifecycle, Nullable, Optional, RuntimeNotifier, Terminator} from "@opendaw/lib-std"
-import {Clipboard, Html} from "@opendaw/lib-dom"
+import {createElement, replaceChildren} from "@moises-ai/lib-jsx"
+import {isDefined, Lifecycle, Nullable, Optional, RuntimeNotifier, Terminator} from "@moises-ai/lib-std"
+import {Clipboard, Html} from "@moises-ai/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {AwarenessUserState, RoomAwareness} from "@/service/RoomAwareness"
-import {Promises} from "@opendaw/lib-runtime"
+import {Promises} from "@moises-ai/lib-runtime"
 import {Icon} from "@/ui/components/Icon"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol} from "@moises-ai/studio-enums"
 import {TrafficWatch} from "@/ui/TrafficWatch"
 
 const className = Html.adoptStyleSheet(css, "room-status")

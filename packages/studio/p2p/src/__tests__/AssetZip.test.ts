@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest"
-import {AudioData, WavFile} from "@opendaw/lib-dsp"
-import {SampleMetaData, SoundfontMetaData} from "@opendaw/studio-adapters"
+import {AudioData, WavFile} from "@moises-ai/lib-dsp"
+import {SampleMetaData, SoundfontMetaData} from "@moises-ai/studio-adapters"
 import {AssetZip} from "../AssetZip"
 
 const createTestAudioData = (): AudioData => {

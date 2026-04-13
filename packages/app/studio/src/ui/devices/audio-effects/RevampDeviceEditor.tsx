@@ -1,7 +1,7 @@
 import css from "./RevampDeviceEditor.sass?inline"
-import {DeviceHost, Parameters, RevampDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {asDefined, int, Lifecycle} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {DeviceHost, Parameters, RevampDeviceBoxAdapter} from "@moises-ai/studio-adapters"
+import {asDefined, int, Lifecycle} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {Column} from "@/ui/devices/Column.tsx"
 import {ParameterLabel} from "@/ui/components/ParameterLabel.tsx"
@@ -21,12 +21,12 @@ import {
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
-import {EffectFactories, LinearScale} from "@opendaw/studio-core"
+import {EffectFactories, LinearScale} from "@moises-ai/studio-core"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {AutomationControl} from "@/ui/components/AutomationControl"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 import {StudioService} from "@/service/StudioService"
-import {Colors} from "@opendaw/studio-enums"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "RevampDeviceEditor")
 

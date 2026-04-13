@@ -1,6 +1,6 @@
-import {Option, Progress, UUID} from "@opendaw/lib-std"
-import {Promises} from "@opendaw/lib-runtime"
-import {SoundfontMetaData} from "@opendaw/studio-adapters"
+import {Option, Progress, UUID} from "@moises-ai/lib-std"
+import {Promises} from "@moises-ai/lib-runtime"
+import {SoundfontMetaData} from "@moises-ai/studio-adapters"
 import {type Fetcher} from "./ChainedProvider"
 
 type SoundfontResult = [ArrayBuffer, SoundfontMetaData]

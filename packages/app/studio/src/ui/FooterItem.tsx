@@ -1,6 +1,6 @@
 import css from "./FooterItem.sass?inline"
-import {createElement, JsxValue} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {createElement, JsxValue} from "@moises-ai/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "footer-item")
 

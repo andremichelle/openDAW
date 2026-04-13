@@ -1,11 +1,11 @@
 import css from "./PerformancePage.sass?inline"
-import {createElement, PageFactory} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {createElement, PageFactory} from "@moises-ai/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {BenchmarkCategory, BenchmarkResult, RENDER_SECONDS, runAllBenchmarks, SAMPLE_RATE} from "@/perf/benchmarks"
-import {isDefined} from "@opendaw/lib-std"
+import {isDefined} from "@moises-ai/lib-std"
 import {Button} from "@/ui/components/Button"
-import {Colors} from "@opendaw/studio-enums"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "PerformancePage")
 

@@ -1,4 +1,4 @@
-import {Nullable, Terminable} from "@opendaw/lib-std"
+import {Nullable, Terminable} from "@moises-ai/lib-std"
 import {AssetSignaling} from "./AssetSignaling"
 
 const RTC_CONFIG: RTCConfiguration = {

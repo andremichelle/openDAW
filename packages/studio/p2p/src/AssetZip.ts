@@ -1,6 +1,6 @@
 import JSZip from "jszip"
-import {AudioData, WavFile} from "@opendaw/lib-dsp"
-import {SampleMetaData, SoundfontMetaData} from "@opendaw/studio-adapters"
+import {AudioData, WavFile} from "@moises-ai/lib-dsp"
+import {SampleMetaData, SoundfontMetaData} from "@moises-ai/studio-adapters"
 
 export namespace AssetZip {
     export const packSample = async (wavBytes: ArrayBuffer, meta: SampleMetaData): Promise<ArrayBuffer> => {

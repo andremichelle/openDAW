@@ -55,7 +55,7 @@ import {
 import {ColorCodes, DeviceBoxUtils, InterpolationFieldAdapter, ProjectSkeleton, SampleLoaderManager} from "@moises-ai/studio-adapters"
 import {AudioUnitExportLayout} from "./AudioUnitExportLayout"
 import {DeviceIO} from "./DeviceIO"
-import {WavFile} from "@opendaw/lib-dsp"
+import {WavFile} from "@moises-ai/lib-dsp"
 
 export namespace DawProjectExporter {
     export interface ResourcePacker {write(path: string, buffer: ArrayBufferLike): FileReferenceSchema}

@@ -1,8 +1,8 @@
-import {Lifecycle, unitValue} from "@opendaw/lib-std"
+import {Lifecycle, unitValue} from "@moises-ai/lib-std"
 import {Knob} from "@/ui/components/Knob.tsx"
 import {ParameterLabel} from "@/ui/components/ParameterLabel.tsx"
-import {createElement} from "@opendaw/lib-jsx"
-import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
+import {createElement} from "@moises-ai/lib-jsx"
+import {AutomatableParameterFieldAdapter} from "@moises-ai/studio-adapters"
 
 type Construct = {
     lifecycle: Lifecycle

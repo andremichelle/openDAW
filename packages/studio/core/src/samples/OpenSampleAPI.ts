@@ -8,13 +8,13 @@ import {
     tryCatch,
     unitValue,
     UUID
-} from "@opendaw/lib-std"
-import {network, Promises} from "@opendaw/lib-runtime"
-import {Sample, SampleMetaData} from "@opendaw/studio-adapters"
-import {SampleAPI} from "@opendaw/studio-core"
+} from "@moises-ai/lib-std"
+import {network, Promises} from "@moises-ai/lib-runtime"
+import {Sample, SampleMetaData} from "@moises-ai/studio-adapters"
+import {SampleAPI} from "@moises-ai/studio-core"
 import {base64Credentials, OpenDAWHeaders} from "../OpenDAWHeaders"
 import {z} from "zod"
-import {AudioData, WavFile} from "@opendaw/lib-dsp"
+import {AudioData, WavFile} from "@moises-ai/lib-dsp"
 
 // Standard openDAW samples (considered to be non-removable)
 /** @internal */

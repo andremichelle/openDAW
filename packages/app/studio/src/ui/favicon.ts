@@ -1,4 +1,4 @@
-import {DefaultObservableValue, isDefined, Nullable, Subscription} from "@opendaw/lib-std"
+import {DefaultObservableValue, isDefined, Nullable, Subscription} from "@moises-ai/lib-std"
 
 export const subscribeFavicon = (observable: DefaultObservableValue<Nullable<unknown>>): Subscription => {
     return observable.catchupAndSubscribe(owner => {

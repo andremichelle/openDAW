@@ -11,11 +11,11 @@ import {
     Terminator,
     TimeSpan,
     UUID
-} from "@opendaw/lib-std"
-import {AudioData, ppqn} from "@opendaw/lib-dsp"
-import {ApparatDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
-import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
-import {AnimationFrame} from "@opendaw/lib-dom"
+} from "@moises-ai/lib-std"
+import {AudioData, ppqn} from "@moises-ai/lib-dsp"
+import {ApparatDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox} from "@moises-ai/studio-boxes"
+import {Communicator, Messenger, Wait} from "@moises-ai/lib-runtime"
+import {AnimationFrame} from "@moises-ai/lib-dom"
 import {
     EngineCommands,
     EngineState,
@@ -27,7 +27,7 @@ import {
     OfflineEngineInitializeConfig,
     OfflineEngineProtocol,
     OfflineEngineRenderConfig
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {Project} from "./project"
 import {AudioWorklets} from "./AudioWorklets"
 import {MIDIReceiver} from "./midi"

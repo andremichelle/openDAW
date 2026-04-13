@@ -1,8 +1,8 @@
-import {Arrays, int, linear, Nullable, Terminable, Terminator} from "@opendaw/lib-std"
-import {gainToDb} from "@opendaw/lib-dsp"
-import {NeuralAmpDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {LiveStreamReceiver} from "@opendaw/lib-fusion"
-import {CanvasPainter} from "@opendaw/studio-core"
+import {Arrays, int, linear, Nullable, Terminable, Terminator} from "@moises-ai/lib-std"
+import {gainToDb} from "@moises-ai/lib-dsp"
+import {NeuralAmpDeviceBoxAdapter} from "@moises-ai/studio-adapters"
+import {LiveStreamReceiver} from "@moises-ai/lib-fusion"
+import {CanvasPainter} from "@moises-ai/studio-core"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 
 export const createSpectrumRenderer = (canvas: HTMLCanvasElement,

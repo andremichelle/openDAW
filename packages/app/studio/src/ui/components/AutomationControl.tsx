@@ -1,10 +1,10 @@
 import css from "./AutomationControl.sass?inline"
-import {asDefined, ControlSource, Editing, Lifecycle, Terminable} from "@opendaw/lib-std"
-import {createElement, JsxValue} from "@opendaw/lib-jsx"
+import {asDefined, ControlSource, Editing, Lifecycle, Terminable} from "@moises-ai/lib-std"
+import {createElement, JsxValue} from "@moises-ai/lib-jsx"
 import {attachParameterContextMenu} from "@/ui/menu/automation.ts"
-import {AudioUnitTracks, AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
-import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
-import {MIDILearning} from "@opendaw/studio-core"
+import {AudioUnitTracks, AutomatableParameterFieldAdapter} from "@moises-ai/studio-adapters"
+import {AnimationFrame, Events, Html} from "@moises-ai/lib-dom"
+import {MIDILearning} from "@moises-ai/studio-core"
 
 const className = Html.adoptStyleSheet(css, "AutomationControl")
 

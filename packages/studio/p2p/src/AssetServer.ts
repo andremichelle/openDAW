@@ -1,5 +1,5 @@
-import {UUID} from "@opendaw/lib-std"
-import {SampleMetaData, SoundfontMetaData} from "@opendaw/studio-adapters"
+import {UUID} from "@moises-ai/lib-std"
+import {SampleMetaData, SoundfontMetaData} from "@moises-ai/studio-adapters"
 import {AssetSignaling, type SignalingMessage} from "./AssetSignaling"
 import {AssetPeerConnection} from "./AssetPeerConnection"
 import * as ChunkProtocol from "./ChunkProtocol"

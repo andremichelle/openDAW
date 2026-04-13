@@ -1,4 +1,4 @@
-import {Listeners, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {Listeners, Subscription, Terminable, Terminator, UUID} from "@moises-ai/lib-std"
 import * as Y from "yjs"
 import {ChatMessage} from "@/chat/ChatMessage"
 

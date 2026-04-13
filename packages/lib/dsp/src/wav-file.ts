@@ -1,4 +1,4 @@
-import {Arrays, int, panic} from "@opendaw/lib-std"
+import {Arrays, int, panic} from "@moises-ai/lib-std"
 import {AudioData} from "./audio-data"
 
 export namespace WavFile {

@@ -1,7 +1,7 @@
-import {Arrays, Errors, isDefined, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
-import {AudioData, RegionCollection, WavFile} from "@opendaw/lib-dsp"
-import {Promises} from "@opendaw/lib-runtime"
-import {AudioRegionBoxAdapter, ExportStemsConfiguration} from "@opendaw/studio-adapters"
+import {Arrays, Errors, isDefined, Option, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
+import {AudioData, RegionCollection, WavFile} from "@moises-ai/lib-dsp"
+import {Promises} from "@moises-ai/lib-runtime"
+import {AudioRegionBoxAdapter, ExportStemsConfiguration} from "@moises-ai/studio-adapters"
 import {
     AudioContentFactory,
     AudioFileBoxFactory,

@@ -1,8 +1,8 @@
 import css from "./ParameterLabel.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
-import {Html} from "@opendaw/lib-dom"
+import {Lifecycle} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {AutomatableParameterFieldAdapter} from "@moises-ai/studio-adapters"
+import {Html} from "@moises-ai/lib-dom"
 
 const className = Html.adoptStyleSheet(css, "ParameterLabel")
 

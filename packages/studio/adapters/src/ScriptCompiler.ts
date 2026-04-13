@@ -1,7 +1,7 @@
-import {asInstanceOf, Editing, isDefined, UUID} from "@opendaw/lib-std"
-import {BoxGraph, Field, StringField} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
-import {WerkstattParameterBox, WerkstattSampleBox} from "@opendaw/studio-boxes"
+import {asInstanceOf, Editing, isDefined, UUID} from "@moises-ai/lib-std"
+import {BoxGraph, Field, StringField} from "@moises-ai/lib-box"
+import {Pointers} from "@moises-ai/studio-enums"
+import {WerkstattParameterBox, WerkstattSampleBox} from "@moises-ai/studio-boxes"
 import {ParamDeclaration, SampleDeclaration, ScriptDeclaration} from "./ScriptDeclaration"
 import {DeviceBox} from "./DeviceBox"
 

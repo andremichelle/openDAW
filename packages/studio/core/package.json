@@ -1,66 +1,67 @@
 {
-  "name": "@opendaw/studio-core",
-  "version": "0.0.130",
-  "license": "LGPL-3.0-or-later",
-  "publishConfig": {
-    "access": "public"
-  },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+    "name": "@moises-ai/studio-core",
+    "version": "0.0.130",
+    "license": "LGPL-3.0-or-later",
+    "publishConfig": {
+        "registry": "https://npm.pkg.github.com",
+        "access": "public"
     },
-    "./FFmpegWorker": {
-      "types": "./dist/ffmpeg/FFmpegWorker.d.ts",
-      "default": "./dist/ffmpeg/FFmpegWorker.js"
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./FFmpegWorker": {
+            "types": "./dist/ffmpeg/FFmpegWorker.d.ts",
+            "default": "./dist/ffmpeg/FFmpegWorker.js"
+        },
+        "./workers-main.js": "./dist/workers-main.js",
+        "./processors.js": "./dist/processors.js",
+        "./offline-engine.js": "./dist/offline-engine.js"
     },
-    "./workers-main.js": "./dist/workers-main.js",
-    "./processors.js": "./dist/processors.js",
-    "./offline-engine.js": "./dist/offline-engine.js"
-  },
-  "files": [
-    "dist/**",
-    "dist/workers-main.js",
-    "dist/processors.js",
-    "dist/offline-engine.js",
-    "dist/ffmpeg/FFmpegWorker.js"
-  ],
-  "scripts": {
-    "build": "tsc",
-    "lint": "eslint \"**/*.ts\"",
-    "test": "vitest run --config vitest.config.ts"
-  },
-  "dependencies": {
-    "@opendaw/lib-box": "^0.0.80",
-    "@opendaw/lib-dawproject": "^0.0.65",
-    "@opendaw/lib-dom": "^0.0.79",
-    "@opendaw/lib-dsp": "^0.0.79",
-    "@opendaw/lib-fusion": "^0.0.87",
-    "@opendaw/lib-runtime": "^0.0.75",
-    "@opendaw/lib-std": "^0.0.74",
-    "@opendaw/nam-wasm": "^1.0.3",
-    "@opendaw/studio-adapters": "^0.0.102",
-    "@opendaw/studio-boxes": "^0.0.85",
-    "@opendaw/studio-enums": "^0.0.70",
-    "dropbox": "^10.34.0",
-    "y-websocket": "^1.4.5",
-    "yjs": "^13.6.27",
-    "zod": "^4.1.12"
-  },
-  "peerDependencies": {
-    "@ffmpeg/ffmpeg": "^0.12.15",
-    "@ffmpeg/util": "^0.12.2"
-  },
-  "devDependencies": {
-    "@ffmpeg/ffmpeg": "^0.12.15",
-    "@ffmpeg/util": "^0.12.2",
-    "@opendaw/eslint-config": "^0.0.27",
-    "@opendaw/studio-core-processors": "^0.0.106",
-    "@opendaw/studio-core-workers": "^0.0.97",
-    "@opendaw/studio-forge-boxes": "^0.0.85",
-    "@opendaw/typescript-config": "^0.0.29"
-  },
-  "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
+    "files": [
+        "dist/**",
+        "dist/workers-main.js",
+        "dist/processors.js",
+        "dist/offline-engine.js",
+        "dist/ffmpeg/FFmpegWorker.js"
+    ],
+    "scripts": {
+        "build": "tsc",
+        "lint": "eslint \"**/*.ts\"",
+        "test": "vitest run --config vitest.config.ts"
+    },
+    "dependencies": {
+        "@moises-ai/lib-box": "*",
+        "@moises-ai/lib-dawproject": "*",
+        "@moises-ai/lib-dom": "*",
+        "@moises-ai/lib-dsp": "*",
+        "@moises-ai/lib-fusion": "*",
+        "@moises-ai/lib-runtime": "*",
+        "@moises-ai/lib-std": "*",
+        "@opendaw/nam-wasm": "^1.0.3",
+        "@moises-ai/studio-adapters": "*",
+        "@moises-ai/studio-boxes": "*",
+        "@moises-ai/studio-enums": "*",
+        "dropbox": "^10.34.0",
+        "y-websocket": "^1.4.5",
+        "yjs": "^13.6.27",
+        "zod": "^4.1.12"
+    },
+    "peerDependencies": {
+        "@ffmpeg/ffmpeg": "^0.12.15",
+        "@ffmpeg/util": "^0.12.2"
+    },
+    "devDependencies": {
+        "@ffmpeg/ffmpeg": "^0.12.15",
+        "@ffmpeg/util": "^0.12.2",
+        "@opendaw/eslint-config": "*",
+        "@opendaw/studio-core-processors": "*",
+        "@opendaw/studio-core-workers": "*",
+        "@opendaw/studio-forge-boxes": "*",
+        "@opendaw/typescript-config": "*"
+    },
+    "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

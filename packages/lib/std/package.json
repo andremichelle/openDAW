@@ -1,31 +1,32 @@
 {
-  "name": "@opendaw/lib-std",
-  "version": "0.0.74",
-  "license": "LGPL-3.0-or-later",
-  "sideEffects": false,
-  "publishConfig": {
-    "access": "public"
-  },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist/**/*"
-  ],
-  "scripts": {
-    "build": "tsc",
-    "lint": "eslint \"**/*.ts\"",
-    "test": "vitest run"
-  },
-  "devDependencies": {
-    "@opendaw/eslint-config": "^0.0.27",
-    "@opendaw/typescript-config": "^0.0.29",
-    "zod": "^4.1.12"
-  },
-  "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
+    "name": "@moises-ai/lib-std",
+    "version": "0.0.74",
+    "license": "LGPL-3.0-or-later",
+    "sideEffects": false,
+    "publishConfig": {
+        "registry": "https://npm.pkg.github.com",
+        "access": "public"
+    },
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist/**/*"
+    ],
+    "scripts": {
+        "build": "tsc",
+        "lint": "eslint \"**/*.ts\"",
+        "test": "vitest run"
+    },
+    "devDependencies": {
+        "@opendaw/eslint-config": "*",
+        "@opendaw/typescript-config": "*",
+        "zod": "^4.1.12"
+    },
+    "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
 }

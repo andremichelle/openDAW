@@ -1,5 +1,5 @@
-import {isNull, Lifecycle} from "@opendaw/lib-std"
-import {Events} from "@opendaw/lib-dom"
+import {isNull, Lifecycle} from "@moises-ai/lib-std"
+import {Events} from "@moises-ai/lib-dom"
 import type * as MonacoEditor from "monaco-editor"
 
 type Monaco = typeof MonacoEditor

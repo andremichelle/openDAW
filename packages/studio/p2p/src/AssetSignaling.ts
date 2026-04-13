@@ -1,4 +1,4 @@
-import {Notifier, Observer, Subscription, Terminable} from "@opendaw/lib-std"
+import {Notifier, Observer, Subscription, Terminable} from "@moises-ai/lib-std"
 
 export type SignalingMessage = {
     readonly type: string

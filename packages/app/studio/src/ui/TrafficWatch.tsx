@@ -1,7 +1,7 @@
 import css from "./TrafficWatch.sass?inline"
-import {isDefined, Lifecycle, Nullable} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {isDefined, Lifecycle, Nullable} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
 import {TrafficMeter} from "@opendaw/studio-p2p"
 
 const className = Html.adoptStyleSheet(css, "traffic-watch")

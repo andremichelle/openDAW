@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest"
-import {UUID} from "@opendaw/lib-std"
+import {UUID} from "@moises-ai/lib-std"
 import {
     CHUNK_SIZE, decode, decodeHeader, encode, encodeHeader,
     HEADER_SIZE, MsgType, reassemble, split

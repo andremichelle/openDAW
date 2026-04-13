@@ -1,16 +1,16 @@
-import {CaptureAudio, MenuItem, Project} from "@opendaw/studio-core"
+import {CaptureAudio, MenuItem, Project} from "@moises-ai/studio-core"
 import {MonitoringDialog} from "@/ui/monitoring/MonitoringDialog"
-import {isInstanceOf, Procedure, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {isInstanceOf, Procedure, RuntimeNotifier, UUID} from "@moises-ai/lib-std"
 import {
     AudioUnitBoxAdapter,
     DeviceAccepts,
     TrackBoxAdapter,
     TrackType,
     TransferAudioUnits
-} from "@opendaw/studio-adapters"
+} from "@moises-ai/studio-adapters"
 import {DebugMenus} from "@/ui/menu/debug"
 import {MidiImport} from "@/ui/timeline/MidiImport.ts"
-import {CaptureMidiBox, TrackBox} from "@opendaw/studio-boxes"
+import {CaptureMidiBox, TrackBox} from "@moises-ai/studio-boxes"
 import {StudioService} from "@/service/StudioService"
 import {MenuCapture} from "@/ui/timeline/tracks/audio-unit/menu/capture"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"

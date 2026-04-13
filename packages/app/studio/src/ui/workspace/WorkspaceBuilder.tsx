@@ -3,10 +3,10 @@ import {PanelPlaceholder} from "@/ui/workspace/PanelPlaceholder.tsx"
 import {PanelResizer} from "@/ui/workspace/PanelResizer.tsx"
 import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
 import {ContentGlue} from "@/ui/workspace/ContentGlue.ts"
-import {isDefined, Iterables, Lifecycle, Nullable, ObservableValue, Unhandled} from "@opendaw/lib-std"
+import {isDefined, Iterables, Lifecycle, Nullable, ObservableValue, Unhandled} from "@moises-ai/lib-std"
 import {RoomAwareness} from "@/service/RoomAwareness"
-import {Html} from "@opendaw/lib-dom"
-import {appendChildren, createElement} from "@opendaw/lib-jsx"
+import {Html} from "@moises-ai/lib-dom"
+import {appendChildren, createElement} from "@moises-ai/lib-jsx"
 
 export namespace WorkspaceBuilder {
     export const buildScreen = (lifecycle: Lifecycle,

@@ -1,4 +1,4 @@
-import {Progress, UUID} from "@opendaw/lib-std"
+import {Progress, UUID} from "@moises-ai/lib-std"
 
 export interface Fetcher<RESULT> {
     fetch(uuid: UUID.Bytes, progress: Progress.Handler): Promise<RESULT>

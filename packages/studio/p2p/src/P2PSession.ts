@@ -1,4 +1,4 @@
-import {Terminable} from "@opendaw/lib-std"
+import {Terminable} from "@moises-ai/lib-std"
 import {AssetSignaling, type SignalingSocket} from "./AssetSignaling"
 import {AssetServer, type AssetReader} from "./AssetServer"
 import {PeerAssetProvider} from "./PeerAssetProvider"

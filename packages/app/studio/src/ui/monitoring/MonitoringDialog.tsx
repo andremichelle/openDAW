@@ -1,5 +1,5 @@
 import css from "./MonitoringDialog.sass?inline"
-import {createElement} from "@opendaw/lib-jsx"
+import {createElement} from "@moises-ai/lib-jsx"
 import {
     Color,
     DefaultObservableValue,
@@ -14,18 +14,18 @@ import {
     unitValue,
     ValueGuide,
     ValueMapping
-} from "@opendaw/lib-std"
-import {gainToDb} from "@opendaw/lib-dsp"
-import {CaptureAudio, MonitoringMode} from "@opendaw/studio-core"
+} from "@moises-ai/lib-std"
+import {gainToDb} from "@moises-ai/lib-dsp"
+import {CaptureAudio, MonitoringMode} from "@moises-ai/studio-core"
 import {Dialog} from "@/ui/components/Dialog"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Icon} from "@/ui/components/Icon"
 import {Knob} from "@/ui/components/Knob"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import {HorizontalPeakMeter} from "@/ui/components/HorizontalPeakMeter"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
-import {Html} from "@opendaw/lib-dom"
+import {Html} from "@moises-ai/lib-dom"
 import {AudioDevices} from "@/audio/AudioDevices"
 import {StudioService} from "@/service/StudioService"
 import {SnapCenter} from "@/ui/configs"

@@ -1,6 +1,6 @@
-import {createElement, JsxValue} from "@opendaw/lib-jsx"
-import {DefaultObservableValue, Lifecycle, isDefined} from "@opendaw/lib-std"
-import {Events} from "@opendaw/lib-dom"
+import {createElement, JsxValue} from "@moises-ai/lib-jsx"
+import {DefaultObservableValue, Lifecycle, isDefined} from "@moises-ai/lib-std"
+import {Events} from "@moises-ai/lib-dom"
 
 type CardProps = {
     title?: string
