@@ -31,7 +31,7 @@ import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
 import {AudioData} from "@moises-ai/lib-dsp"
-import {ChainedSampleProvider, ChainedSoundfontProvider} from "@opendaw/studio-p2p"
+import {ChainedSampleProvider, ChainedSoundfontProvider} from "@moises-ai/studio-p2p"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Menu} from "@/ui/components/Menu"
 
