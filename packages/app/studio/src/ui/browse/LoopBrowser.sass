@@ -1,0 +1,160 @@
+.LoopBrowser
+  display: flex
+  flex-direction: column
+  flex: 1 0 0
+  width: 100%
+  height: 100%
+  background: rgba(15, 15, 18, 0.4)
+  overflow: hidden
+  
+  .header
+    display: flex
+    flex-direction: column
+    padding: 12px 16px
+    gap: 12px
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05)
+    
+    .search-input
+      background: rgba(0, 0, 0, 0.3)
+      border: 1px solid rgba(255, 255, 255, 0.1)
+      border-radius: 8px
+      padding: 8px 12px
+      color: #fff
+      font-size: 13px
+      outline: none
+      transition: border-color 0.2s ease
+      
+      &:focus
+        border-color: #00FFFF
+        
+    .categories
+      display: flex
+      gap: 8px
+      overflow-x: auto
+      padding-bottom: 4px
+      
+      &::-webkit-scrollbar
+        display: none
+        
+      .category-btn
+        padding: 4px 10px
+        border-radius: 12px
+        background: rgba(255, 255, 255, 0.05)
+        color: #aaa
+        font-size: 11px
+        cursor: pointer
+        white-space: nowrap
+        transition: all 0.2s ease
+        border: 1px solid transparent
+        
+        &:hover
+          color: #fff
+          background: rgba(255, 255, 255, 0.1)
+          
+        &.active
+          color: #00FFFF
+          background: rgba(0, 255, 255, 0.1)
+          border-color: rgba(0, 255, 255, 0.2)
+
+  .loops-list
+    flex: 1 0 0
+    overflow-y: auto
+    padding: 8px
+    display: flex
+    flex-direction: column
+    gap: 4px
+    
+    &::-webkit-scrollbar
+      width: 6px
+    &::-webkit-scrollbar-thumb
+      background: rgba(255, 255, 255, 0.1)
+      border-radius: 3px
+      
+    .loop-card
+      display: flex
+      align-items: center
+      padding: 8px 12px
+      background: rgba(255, 255, 255, 0.02)
+      border-radius: 6px
+      cursor: grab
+      gap: 12px
+      transition: background 0.2s ease
+      
+      &:hover
+        background: rgba(255, 255, 255, 0.06)
+        
+      &.playing
+        background: rgba(0, 255, 255, 0.05)
+        border-right: 2px solid #00FFFF
+        
+      .play-btn
+        width: 24px
+        height: 24px
+        border-radius: 50%
+        background: rgba(255, 255, 255, 0.1)
+        display: flex
+        align-items: center
+        justify-content: center
+        cursor: pointer
+        color: #ddd
+        transition: all 0.2s ease
+        
+        svg
+          width: 12px
+          height: 12px
+        
+        &:hover
+          background: #8A2BE2
+          color: #fff
+          
+      .loop-info
+        flex: 1 0 0
+        display: flex
+        flex-direction: column
+        gap: 2px
+        overflow: hidden
+        
+        .loop-name
+          color: #eee
+          font-size: 13px
+          white-space: nowrap
+          overflow: hidden
+          text-overflow: ellipsis
+          
+        .loop-meta
+          color: #777
+          font-size: 10px
+          display: flex
+          gap: 8px
+          
+      .loop-waveform
+        width: 48px
+        height: 20px
+        opacity: 0.5
+        display: flex
+        align-items: center
+        gap: 2px
+        
+        div
+          flex: 1
+          background: #8A2BE2
+          border-radius: 1px
+          
+      &.playing .loop-waveform div
+        background: #00FFFF
+        animation: pulse 0.5s infinite alternate ease-in-out
+        
+      &.playing .loop-waveform div:nth-child(2)
+        animation-delay: 0.1s
+      &.playing .loop-waveform div:nth-child(3)
+        animation-delay: 0.2s
+      &.playing .loop-waveform div:nth-child(4)
+        animation-delay: 0.3s
+      &.playing .loop-waveform div:nth-child(5)
+        animation-delay: 0.4s
+
+@keyframes pulse
+  0%
+    height: 20%
+  100%
+    height: 100%

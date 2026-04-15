@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "loops": [
+    {
+      "id": "l-1",
+      "name": "Trap Hi-Hat Roll",
+      "category": "Drums",
+      "bpm": 140,
+      "key": null,
+      "bars": 2,
+      "duration": 3.43,
+      "file": "/assets/loops/audio/drums1.wav"
+    },
+    {
+      "id": "l-2",
+      "name": "808 Sub Boom",
+      "category": "Bass",
+      "bpm": 140,
+      "key": "C",
+      "bars": 2,
+      "duration": 3.43,
+      "file": "/assets/loops/audio/bass1.wav"
+    },
+    {
+      "id": "l-3",
+      "name": "Lo-Fi Rhodes Chords",
+      "category": "Melodic",
+      "bpm": 85,
+      "key": "Fm",
+      "bars": 4,
+      "duration": 11.29,
+      "file": "/assets/loops/audio/keys1.wav"
+    },
+    {
+      "id": "l-4",
+      "name": "Cyberpunk Arp",
+      "category": "Melodic",
+      "bpm": 120,
+      "key": "Am",
+      "bars": 4,
+      "duration": 8.0,
+      "file": "/assets/loops/audio/arp1.wav"
+    },
+    {
+      "id": "l-5",
+      "name": "House Tech Beat",
+      "category": "Drums",
+      "bpm": 126,
+      "key": null,
+      "bars": 4,
+      "duration": 7.62,
+      "file": "/assets/loops/audio/house1.wav"
+    },
+    {
+      "id": "l-6",
+      "name": "Future Bass Pluck",
+      "category": "Melodic",
+      "bpm": 150,
+      "key": "G",
+      "bars": 4,
+      "duration": 6.4,
+      "file": "/assets/loops/audio/synth1.wav"
+    },
+    {
+      "id": "l-7",
+      "name": "Ambient Riser",
+      "category": "FX",
+      "bpm": 120,
+      "key": null,
+      "bars": 4,
+      "duration": 8.0,
+      "file": "/assets/loops/audio/fx1.wav"
+    },
+    {
+      "id": "l-8",
+      "name": "Soulful Vocal Chop",
+      "category": "Vocals",
+      "bpm": 110,
+      "key": "Cm",
+      "bars": 2,
+      "duration": 4.36,
+      "file": "/assets/loops/audio/vox1.wav"
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import {DevicesBrowser} from "@/ui/browse/DevicesBrowser.tsx"
 import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {Html} from "@opendaw/lib-dom"
 import {SoundfontBrowser} from "@/ui/browse/SoundfontBrowser"
+import {LoopBrowser} from "@/ui/browse/LoopBrowser"
 
 const className = Html.adoptStyleSheet(css, "BrowserPanel")
 
@@ -37,6 +38,9 @@ export const BrowserPanel = ({lifecycle, service}: Construct) => {
                                              service={service}
                                              background
                                              fontSize="0.75em"/>
+                case BrowseScope.Loops:
+                    return <LoopBrowser lifecycle={contentLifecycle}
+                                        service={service}/>
                 default:
                     return <span>Unknown</span>
             }
@@ -47,7 +51,8 @@ export const BrowserPanel = ({lifecycle, service}: Construct) => {
             <RadioGroup lifecycle={lifecycle} elements={[
                 {value: BrowseScope.Devices, element: <span>Devices</span>},
                 {value: BrowseScope.Samples, element: <span>Samples</span>},
-                {value: BrowseScope.Soundfonts, element: <span>Soundfonts</span>}
+                {value: BrowseScope.Soundfonts, element: <span>Soundfonts</span>},
+                {value: BrowseScope.Loops, element: <span>Loops</span>}
             ]} model={scope} style={{fontSize: "11px", columnGap: "8px", padding: "0.5em 0.75em"}}/>
             {placeholder}
         </div>

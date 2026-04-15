@@ -32,7 +32,10 @@
     "markdown-it": "^14.1.0",
     "markdown-it-table": "^4.1.1",
     "mediabunny": "^1.0.3",
-    "monaco-editor": "^0.54.0"
+    "monaco-editor": "^0.54.0",
+    "@spotify/basic-pitch": "^1.0.0",
+    "onnxruntime-web": "^1.17.1",
+    "rnnoise-wasm": "^0.3.0"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.27",

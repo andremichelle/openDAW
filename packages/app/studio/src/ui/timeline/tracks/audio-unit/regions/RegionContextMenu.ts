@@ -8,6 +8,7 @@ import {
     TimelineRange
 } from "@opendaw/studio-core"
 import {AnyRegionBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
+import {AIPipeline} from "@/service/ai/AIPipeline"
 import {RegionCaptureTarget} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
 import {TimelineBox} from "@opendaw/studio-boxes"
 import {Surface} from "@/ui/surface/Surface.tsx"
@@ -116,6 +117,18 @@ export const installRegionContextMenu =
                         vertexSelection.select(clip)
                         project.userEditingManager.timeline.edit(clip)
                     }))),
+                MenuItem.default({
+                    label: "✨ AI Processing",
+                    hidden: region.type !== "audio-region",
+                    separatorBefore: true
+                }).setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                    MenuItem.default({ label: "Extract Stems (Demucs)" })
+                        .setTriggerProcedure(() => AIPipeline.extractStems(region as AudioRegionBoxAdapter, service)),
+                    MenuItem.default({ label: "Remove Noise (RNNoise)" })
+                        .setTriggerProcedure(() => AIPipeline.removeNoise(region as AudioRegionBoxAdapter, service)),
+                    MenuItem.default({ label: "Convert to MIDI (Basic Pitch)" })
+                        .setTriggerProcedure(() => AIPipeline.convertToMidi(region as AudioRegionBoxAdapter, service))
+                )),
                 MenuItem.default({
                     label: "Export to Midi-File",
                     hidden: region.type !== "note-region"

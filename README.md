@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://raw.githubusercontent.com/andremichelle/openDAW/refs/heads/main/packages/app/studio/public/favicon.svg" height="120"/>
-  <h1 align="center">openDAW</h1>
+  <h1 align="center">LUCID DAW</h1>
 </p>
 
 <p align="center">
@@ -9,9 +9,9 @@
 <a href="https://github.com/andremichelle/opendaw" rel="nofollow"><img src="https://img.shields.io/github/stars/andremichelle/opendaw" alt="stars"></a>
 </p>
 
-**openDAW** is a next-generation web-based Digital Audio Workstation (DAW) designed to **democratize** music production
+**LUCID DAW** is a next-generation web-based Digital Audio Workstation (DAW) designed to **democratize** music production
 and to **resurface the process of making music** by making **high-quality** creation tools accessible to everyone, with
-a strong focus on **education** and data-privacy.
+a strong focus on **education** and data-privacy. Crystal clear music creation — no limits, no compromises.
 
 Subscribe to our [Newsletter](https://buttondown.com/opendaw) for regular updates.
 

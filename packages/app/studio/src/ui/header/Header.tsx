@@ -79,7 +79,10 @@ export const Header = ({lifecycle, service}: Construct) => {
         <header className={className}>
             <MenuButton root={service.menu}
                         appearance={{color: Colors.gray, activeColor: Colors.bright, tinyTriangle: true}}>
-                <h5>openDAW</h5>
+                <div style={{ display: "flex", alignItems: "center", columnGap: "8px" }}>
+                    <img src="/assets/lucid-logo.svg" alt="LUCID" style={{ height: "1.4em", pointerEvents: "none" }} />
+                    <h5>LUCID</h5>
+                </div>
             </MenuButton>
             <hr/>
             <Group onInit={element => StudioPreferences.catchupAndSubscribe(enabled =>

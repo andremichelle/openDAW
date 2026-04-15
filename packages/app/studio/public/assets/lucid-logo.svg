@@ -1,0 +1,25 @@
+<svg viewBox="0 0 400 120" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="cyan-violet" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00FFFF" />
+      <stop offset="100%" stop-color="#8A2BE2" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <!-- Transparent background so it fits header cleanly if needed, though plan requested dark matte black, we'll keep it transparent to merge well or give it a subtle bg. It's an asset so transparency is best. -->
+  
+  <!-- Waveform / Piano Key 'L' -->
+  <g transform="translate(10, 20)" fill="url(#cyan-violet)" filter="url(#glow)">
+    <rect x="0" y="0" width="12" height="80" rx="4" />
+    <rect x="20" y="40" width="12" height="40" rx="4" />
+    <rect x="40" y="20" width="12" height="60" rx="4" />
+    <rect x="60" y="50" width="12" height="30" rx="4" />
+    <rect x="80" y="30" width="12" height="50" rx="4" />
+  </g>
+  
+  <!-- "UCID" Text -->
+  <text x="110" y="85" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Roboto', sans-serif" font-weight="900" font-size="70" fill="url(#cyan-violet)" filter="url(#glow)" letter-spacing="8">UCID</text>
+</svg>

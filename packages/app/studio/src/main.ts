@@ -8,7 +8,7 @@ import {Browser} from "@opendaw/lib-dom"
 
 if (Browser.isMobile()) {
     document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;padding:2em;text-align:center;font-family:system-ui;color:#ccc;background:#1a1a1a">
-        <div><h1>openDAW</h1><p>openDAW requires a desktop browser.<br>Please visit on a computer.</p></div>
+        <div><h1>LUCID DAW</h1><p>LUCID DAW requires a desktop browser.<br>Please visit on a computer.</p></div>
     </div>`
 } else if (window.crossOriginIsolated) {
     const now = Date.now()
