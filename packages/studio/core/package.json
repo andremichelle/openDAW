@@ -38,6 +38,7 @@
     "@opendaw/lib-dom": "^0.0.79",
     "@opendaw/lib-dsp": "^0.0.79",
     "@opendaw/lib-fusion": "^0.0.87",
+    "@opendaw/lib-midi": "^0.0.61",
     "@opendaw/lib-runtime": "^0.0.75",
     "@opendaw/lib-std": "^0.0.74",
     "@opendaw/nam-wasm": "^1.0.3",

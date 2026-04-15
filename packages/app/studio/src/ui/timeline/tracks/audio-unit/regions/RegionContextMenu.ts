@@ -14,7 +14,7 @@ import {Surface} from "@/ui/surface/Surface.tsx"
 import {RegionTransformer} from "@/ui/timeline/tracks/audio-unit/regions/RegionTransformer.ts"
 import {NameValidator} from "@/ui/validator/name.ts"
 import {DebugMenus} from "@/ui/menu/debug"
-import {exportNotesToMidiFile} from "@/ui/timeline/editors/notes/NoteUtils"
+import {NoteMidiExport} from "@opendaw/studio-core"
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
 import {BPMTools} from "@opendaw/lib-dsp"
 import {Browser} from "@opendaw/lib-dom"
@@ -122,7 +122,7 @@ export const installRegionContextMenu =
                 }).setTriggerProcedure(() => {
                     if (region.type === "note-region") {
                         const label = region.label
-                        exportNotesToMidiFile(region.optCollection.unwrap(),
+                        NoteMidiExport.toFile(region.optCollection.unwrap(),
                             `${label.length === 0 ? "region" : label}.mid`).then(EmptyExec, EmptyExec)
                     }
                 }),
