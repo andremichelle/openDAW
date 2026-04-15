@@ -22,6 +22,7 @@ import {
     TidalDeviceBox,
     SpielwerkDeviceBox,
     VelocityDeviceBox,
+    VocoderDeviceBox,
     WaveshaperDeviceBox,
     WerkstattDeviceBox,
     ZeitgeistDeviceBox
@@ -358,6 +359,23 @@ export namespace EffectFactories {
             })
     }
 
+    export const Vocoder: EffectFactory = {
+        defaultName: "Vocoder",
+        defaultIcon: IconSymbol.EQ,
+        briefDescription: "Vocoder",
+        description: "Classic analysis/synthesis vocoder with independent carrier and modulator ranges.",
+        manualPage: DeviceManualUrls.Vocoder,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index): VocoderDeviceBox =>
+            VocoderDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Vocoder")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
     export const Werkstatt: EffectFactory = {
         defaultName: "Werkstatt",
         defaultIcon: IconSymbol.Code,
@@ -449,6 +467,7 @@ export namespace EffectFactories {
         StereoTool,      // Stereo Tool
         Tidal,
         NeuralAmp,       // Tone3000
+        Vocoder,
         Waveshaper,
         Werkstatt
     }
