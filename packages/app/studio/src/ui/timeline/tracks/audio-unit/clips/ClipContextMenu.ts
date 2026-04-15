@@ -1,11 +1,10 @@
-import {AudioContentModifier, ContextMenu, ElementCapturing, MenuItem, Project} from "@opendaw/studio-core"
+import {AudioContentModifier, ContextMenu, ElementCapturing, MenuItem, NoteMidiExport, Project} from "@opendaw/studio-core"
 import {AnyClipBoxAdapter, AudioClipBoxAdapter} from "@opendaw/studio-adapters"
 import {EmptyExec, Procedure, Selection, UUID} from "@opendaw/lib-std"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {NameValidator} from "@/ui/validator/name.ts"
 import {ClipCaptureTarget} from "@/ui/timeline/tracks/audio-unit/clips/ClipCapturing.ts"
 import {DebugMenus} from "@/ui/menu/debug"
-import {exportNotesToMidiFile} from "@/ui/timeline/editors/notes/NoteUtils"
 import {AudioRegionBox, NoteRegionBox, ValueRegionBox} from "@opendaw/studio-boxes"
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
 import {Promises} from "@opendaw/lib-runtime"
@@ -164,7 +163,7 @@ export const installClipContextMenu = ({element, project, selection, capturing}:
                 }).setTriggerProcedure(() => {
                     if (clip.type === "note-clip") {
                         const label = clip.label
-                        exportNotesToMidiFile(clip.optCollection.unwrap(),
+                        NoteMidiExport.toFile(clip.optCollection.unwrap(),
                             `${label.length === 0 ? "clip" : label}.mid`).then()
                     }
                 }),

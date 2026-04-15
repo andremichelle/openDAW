@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.131](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.130...@opendaw/app-studio@0.0.131) (2026-04-15)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
 ## [0.0.130](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.129...@opendaw/app-studio@0.0.130) (2026-04-01)
 
 **Note:** Version bump only for package @opendaw/app-studio
