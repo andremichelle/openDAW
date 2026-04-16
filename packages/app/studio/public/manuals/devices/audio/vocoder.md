@@ -6,17 +6,16 @@ tracks the modulator's per-band amplitude with envelope followers, and uses thos
 envelopes to drive the gain of the matching carrier bands. The output is the
 carrier "speaking" through the modulator.
 
+![screenshot](vocoder.webp)
+
 Unlike most vocoders, the carrier and modulator frequency ranges are
 **independent parameters**. You can stretch, compress, invert, or completely
-reverse the mapping between them — for example, driving the carrier's high bands
-from the modulator's low bands produces a spectrum-reversed vocoder sound you
-won't find in many plugins.
+reverse the mapping between them.
 
 ## Parameters
 
 ### Carrier Min / Carrier Max
-Low and high frequency bounds of the carrier filter bank. Bands are spread
-exponentially between these two values.
+Low and high frequency bounds of the carrier filter bank. 
 
 ### Mod Min / Mod Max
 Low and high frequency bounds of the modulator filter bank. Swap or reverse
@@ -31,6 +30,9 @@ gives a smoother sound.
 Release time of the envelope follower that tracks each modulator band. Short
 values give a snappier, more intelligible result; long values smear and smooth.
 Attack is fixed at 5 ms.
+
+### Gain
+Output gain applied after the vocoder processing.
 
 ### Mix
 Dry/wet crossfade (equal-power). At 100 % the output is purely the vocoded
