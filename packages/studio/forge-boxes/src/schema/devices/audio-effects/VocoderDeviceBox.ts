@@ -6,7 +6,7 @@ import {ParameterPointerRules} from "../../std/Defaults"
 export const VocoderDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffect("VocoderDeviceBox", {
     10: {
         type: "float32", name: "carrier-min-freq", pointerRules: ParameterPointerRules,
-        value: 80.0, constraints: {min: 20.0, max: 20000.0, scaling: "exponential"}, unit: "Hz"
+        value: 100.0, constraints: {min: 20.0, max: 20000.0, scaling: "exponential"}, unit: "Hz"
     },
     11: {
         type: "float32", name: "carrier-max-freq", pointerRules: ParameterPointerRules,
@@ -14,7 +14,7 @@ export const VocoderDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEf
     },
     12: {
         type: "float32", name: "modulator-min-freq", pointerRules: ParameterPointerRules,
-        value: 80.0, constraints: {min: 20.0, max: 20000.0, scaling: "exponential"}, unit: "Hz"
+        value: 100.0, constraints: {min: 20.0, max: 20000.0, scaling: "exponential"}, unit: "Hz"
     },
     13: {
         type: "float32", name: "modulator-max-freq", pointerRules: ParameterPointerRules,

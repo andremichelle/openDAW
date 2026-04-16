@@ -213,15 +213,15 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                     context.restore()
                 }))
                 lifecycle.ownAll(
-                    AnimationFrame.add(() => painter.requestUpdate()),
-                    adapter.namedParameter.carrierMinFreq.catchupAndSubscribe(() => painter.requestUpdate()),
-                    adapter.namedParameter.carrierMaxFreq.catchupAndSubscribe(() => painter.requestUpdate()),
-                    adapter.namedParameter.modulatorMinFreq.catchupAndSubscribe(() => painter.requestUpdate()),
-                    adapter.namedParameter.modulatorMaxFreq.catchupAndSubscribe(() => painter.requestUpdate()),
-                    adapter.namedParameter.qMin.catchupAndSubscribe(() => painter.requestUpdate()),
-                    adapter.namedParameter.qMax.catchupAndSubscribe(() => painter.requestUpdate()),
-                    adapter.box.bandCount.catchupAndSubscribe(() => painter.requestUpdate()),
-                    displayMode.subscribe(() => painter.requestUpdate())
+                    AnimationFrame.add(painter.requestUpdate),
+                    adapter.namedParameter.carrierMinFreq.catchupAndSubscribe(painter.requestUpdate),
+                    adapter.namedParameter.carrierMaxFreq.catchupAndSubscribe(painter.requestUpdate),
+                    adapter.namedParameter.modulatorMinFreq.catchupAndSubscribe(painter.requestUpdate),
+                    adapter.namedParameter.modulatorMaxFreq.catchupAndSubscribe(painter.requestUpdate),
+                    adapter.namedParameter.qMin.catchupAndSubscribe(painter.requestUpdate),
+                    adapter.namedParameter.qMax.catchupAndSubscribe(painter.requestUpdate),
+                    adapter.box.bandCount.catchupAndSubscribe(painter.requestUpdate),
+                    displayMode.subscribe(painter.requestUpdate)
                 )
             }}/>
         </div>

@@ -14,12 +14,14 @@ import {
     DiscordStats,
     ErrorStats,
     GitHubStats,
+    LatencyStats,
     RoomStats,
     SponsorStats,
     fetchBuildInfo,
     fetchDiscordStats,
     fetchErrorStats,
     fetchGitHubStats,
+    fetchLatencyStats,
     fetchNpmWeeklyDownloads,
     fetchRoomStats,
     fetchSponsorStats,
@@ -82,25 +84,44 @@ const StatsBody = ({lifecycle, data, tiles}: StatsBodyProps) => {
         peakUsersSeries.setValue(peakUsers)
         tiles.peakUsers.textContent = formatNumber(Math.max(0, ...peakUsers.map(([, value]) => value)))
     }))
+    const latencySeries = lifecycle.own(new DefaultObservableValue<DailySeries>([]))
     return (
-        <div className="grid">
-            <div className="span-12">
-                <Card title="Daily Peak Users" accent={<span>concurrent</span>} className="hero">
-                    <LineChart lifecycle={lifecycle} series={peakUsersSeries} color={Colors.green.toString()}/>
-                    <RangeControl lifecycle={lifecycle} dates={dates} range={range}/>
-                </Card>
+        <Frag>
+            <div className="grid">
+                <div className="span-12">
+                    <Card title="Daily Peak Users" accent={<span>concurrent</span>} className="hero">
+                        <LineChart lifecycle={lifecycle} series={peakUsersSeries} color={Colors.green.toString()}/>
+                        <RangeControl lifecycle={lifecycle} dates={dates} range={range}/>
+                    </Card>
+                </div>
+                <div className="span-6">
+                    <Card title="Daily Live Rooms" accent={<span>rooms per day</span>} className="compact">
+                        <LineChart lifecycle={lifecycle} series={liveRoomsSeries} color={Colors.purple.toString()}/>
+                    </Card>
+                </div>
+                <div className="span-6">
+                    <Card title="Daily Live Rooms Hours" accent={<span>hours per day</span>} className="compact">
+                        <BarChart lifecycle={lifecycle} series={liveHoursSeries} color={Colors.blue.toString()}/>
+                    </Card>
+                </div>
             </div>
-            <div className="span-6">
-                <Card title="Daily Live Rooms" accent={<span>rooms per day</span>} className="compact">
-                    <LineChart lifecycle={lifecycle} series={liveRoomsSeries} color={Colors.purple.toString()}/>
-                </Card>
-            </div>
-            <div className="span-6">
-                <Card title="Daily Live Rooms Hours" accent={<span>hours per day</span>} className="compact">
-                    <BarChart lifecycle={lifecycle} series={liveHoursSeries} color={Colors.blue.toString()}/>
-                </Card>
-            </div>
-        </div>
+            <Await
+                factory={() => fetchLatencyStats()}
+                loading={() => null}
+                failure={() => null}
+                success={({distribution, unsupported}: LatencyStats) => {
+                    latencySeries.setValue(distribution)
+                    const subtitle = unsupported > 0
+                        ? `1 ms buckets · ${unsupported} unsupported`
+                        : "1 ms buckets · all users"
+                    return (
+                        <Card title="Audio Output Latency" accent={<span>{subtitle}</span>} className="compact">
+                            <BarChart lifecycle={lifecycle} series={latencySeries} color={Colors.cream.toString()}/>
+                        </Card>
+                    )
+                }}
+            />
+        </Frag>
     )
 }
 
