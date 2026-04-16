@@ -76,7 +76,6 @@ const StatsBody = ({lifecycle, data, tiles}: StatsBodyProps) => {
     const liveRoomsSeries = lifecycle.own(new DefaultObservableValue<DailySeries>([]))
     const liveHoursSeries = lifecycle.own(new DefaultObservableValue<DailySeries>([]))
     const peakUsersSeries = lifecycle.own(new DefaultObservableValue<DailySeries>([]))
-    const visitorsSeries = lifecycle.own(new DefaultObservableValue<DailySeries>([]))
     lifecycle.own(range.catchupAndSubscribe(owner => {
         const [fromIndex, toIndex] = owner.getValue()
         const fromDate = dates[fromIndex]
@@ -84,12 +83,20 @@ const StatsBody = ({lifecycle, data, tiles}: StatsBodyProps) => {
         const liveRooms = sliceSeries(data.rooms.count, fromDate, toDate)
         const liveHours = minutesToHours(sliceSeries(data.rooms.duration, fromDate, toDate))
         const peakUsers = sliceSeries(data.users, fromDate, toDate)
-        const visitors = sliceSeries(data.visitors, fromDate, toDate)
         liveRoomsSeries.setValue(liveRooms)
         liveHoursSeries.setValue(liveHours)
         peakUsersSeries.setValue(peakUsers)
-        visitorsSeries.setValue(visitors)
         tiles.peakUsers.textContent = formatNumber(Math.max(0, ...peakUsers.map(([, value]) => value)))
+    }))
+    const visitorDates = data.visitors.map(([date]) => date)
+    const visitorRange = lifecycle.own(new DefaultObservableValue<readonly [number, number]>([0, Math.max(0, visitorDates.length - 1)]))
+    const visitorsSeries = lifecycle.own(new DefaultObservableValue<DailySeries>([]))
+    lifecycle.own(visitorRange.catchupAndSubscribe(owner => {
+        const [fromIndex, toIndex] = owner.getValue()
+        const fromDate = visitorDates[fromIndex]
+        const toDate = visitorDates[toIndex]
+        const visitors = sliceSeries(data.visitors, fromDate, toDate)
+        visitorsSeries.setValue(visitors)
         tiles.maxVisitors.textContent = formatNumber(Math.max(0, ...visitors.map(([, value]) => value)))
     }))
     const latencySeries = lifecycle.own(new DefaultObservableValue<DailySeries>([]))
@@ -113,8 +120,9 @@ const StatsBody = ({lifecycle, data, tiles}: StatsBodyProps) => {
                     </Card>
                 </div>
                 <div className="span-12">
-                    <Card title="Daily Unique Visitors" accent={<span>unique browsers per day</span>} className="compact">
+                    <Card title="Daily Unique Visitors" accent={<span>unique browsers per day</span>} className="hero">
                         <BarChart lifecycle={lifecycle} series={visitorsSeries} color={Colors.orange.toString()}/>
+                        <RangeControl lifecycle={lifecycle} dates={visitorDates} range={visitorRange}/>
                     </Card>
                 </div>
             </div>
