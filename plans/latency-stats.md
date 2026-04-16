@@ -10,23 +10,26 @@ Two approaches:
 - **A. Bucket on ingest (recommended).** Round the value to a fixed bucket on the server, increment a counter. Lossy but compact, fast, no re-aggregation needed.
 - **B. Store raw, bucket on display.** Append every observation to a log. Dashboard re-buckets at render time. Flexible but bigger file, heavier load.
 
-**Decision: A with 1 ms buckets.** Fine enough to distinguish 20 ms vs 30 ms hardware, coarse enough to collapse 20.1 and 20.2. If the shape later looks too smooth/chunky, change the bucket width server-side.
+**Decision: A with 1 ms buckets, capped at 500 ms.**
 
 Bucket key formula:
 ```
-ms = round(latency_seconds * 1000)
+raw = outputLatency              // seconds, or undefined
+ms  = isDefined(raw) ? min(500, round(raw * 1000)) : -1
 ```
-- `0.0201 → 20`
-- `0.0202 → 20`
-- `0.0205 → 21`
+- `0.0201 → 20`, `0.0202 → 20`, `0.0205 → 21`
+- `0.8 → 500` (capped)
+- `undefined → -1` (browser doesn't support `outputLatency`)
+
+Values above 500 ms are **capped to 500** (not rejected) so they still count — the 500 bucket becomes "500+" on the chart.
+
+Value `-1` means `outputLatency` was `undefined` — displayed as "N/A" on the chart axis.
 
 Storage shape:
 ```json
-{ "20": 142, "21": 87, "22": 54, ... }
+{ "-1": 8, "20": 142, "21": 87, "500": 3 }
 ```
-Key = bucket in ms, value = count.
-
-If sub-ms precision is needed later: `round(latency_seconds * 2000) / 2` for 0.5 ms buckets.
+Key = bucket in ms (or -1 for undefined), value = count.
 
 ## 2. Client
 **Where to hook in**
@@ -34,42 +37,58 @@ Wherever `AudioContext` is constructed — probably one place in the engine / `S
 
 **Detection logic**
 ```ts
-let lastReported: number | undefined
-const reportLatency = () => {
-    const ms = Math.round(ctx.outputLatency * 1000)
-    if (ms === 0 || ms === lastReported) return
-    lastReported = ms
+const reportLatency = (ctx: AudioContext) => {
+    const raw = ctx.outputLatency
+    const ms = isDefined(raw) ? Math.min(500, Math.round(raw * 1000)) : -1
+    const KEY = "reported-latencies"
+    const reported: number[] = JSON.parse(localStorage.getItem(KEY) ?? "[]")
+    if (reported.includes(ms)) return
+    reported.push(ms)
+    localStorage.setItem(KEY, JSON.stringify(reported))
     navigator.sendBeacon(
         "https://api.opendaw.studio/latency.php",
         JSON.stringify({latency: ms})
     )
 }
-ctx.addEventListener("statechange", reportLatency)
-reportLatency()
 ```
 
-- **`navigator.sendBeacon`**: fire-and-forget, survives page unload, no CORS preflight for simple content types, no error handling needed.
-- **In-memory `lastReported`**: avoids spamming on rapid `statechange` bursts within one page load.
-- **Skip `ms === 0`**: AudioContext not warmed up yet.
+- **`navigator.sendBeacon`**: fire-and-forget, survives page unload, no CORS preflight.
+- **localStorage dedup**: each user reports each distinct ms value at most once (including `-1` for undefined).
+- **`-1` for undefined**: some browsers (Safari) don't expose `outputLatency`. These reports are collected and shown as "N/A" on the histogram — important to see how many users lack this API.
+- **Cap at 500 ms**: anything above is capped TO 500 (not dropped). The 500 bucket shows "500+" on the chart.
 
-**When does outputLatency change?**
-- Initial startup (most common — one report per load).
-- After `ctx.close()` + recreation.
-- Device hot-swap (rare; most browsers don't reflect this).
+**When to call `reportLatency`:**
+- On AudioContext creation (initial startup).
+- On `statechange` event.
+- On audio output device change — subscribe to `navigator.mediaDevices.addEventListener("devicechange", ...)` and re-measure after the context settles.
 
-A short poll (every 10 s) could catch device swaps, but `statechange` + initial report covers 99% of cases. Start without polling; add if needed.
+**Device change detection:**
+```ts
+navigator.mediaDevices.addEventListener("devicechange", () => {
+    // outputLatency may take a moment to reflect the new device
+    setTimeout(() => reportLatency(ctx), 1000)
+})
+```
 
 ## 3. Server (PHP)
 Single endpoint: `POST https://api.opendaw.studio/latency.php`.
 
 ```php
 <?php
-header("Access-Control-Allow-Origin: *");
+$origin = $_SERVER["HTTP_ORIGIN"] ?? "";
+$allowed = ["https://opendaw.studio", "http://localhost"];
+$match = false;
+foreach ($allowed as $prefix) {
+    if (str_starts_with($origin, $prefix)) { $match = true; break; }
+}
+if (!$match) { http_response_code(403); exit; }
+header("Access-Control-Allow-Origin: $origin");
+
 $body = json_decode(file_get_contents("php://input"), true);
 $ms = intval($body["latency"] ?? 0);
-if ($ms < 1 || $ms > 5000) { http_response_code(400); exit; }
+if ($ms < -1 || $ms > 500) { http_response_code(400); exit; }
 
-$file = "/var/www/api/latency.json";
+$file = __DIR__ . "/latency.json";
 $fp = fopen($file, "c+");
 flock($fp, LOCK_EX);
 $raw = stream_get_contents($fp);
@@ -86,7 +105,8 @@ http_response_code(204);
 
 Notes:
 - `flock` around read-modify-write — concurrent POSTs don't clobber each other.
-- `intval` + range check `[1, 5000]` — reject 0 (uninitialised), giant outliers (broken hardware), and non-numeric input.
+- `intval` + range check `[-1, 500]` — accepts -1 (undefined/unsupported), 1-500 (capped latency), rejects 0 (uninitialised) and anything above 500.
+- CORS restricted to `opendaw.studio` and `localhost`.
 - Lives next to `status.php` on the same host.
 
 **GET endpoint**: serve `latency.json` statically (no PHP needed for reads). Dashboard fetches it directly.
@@ -125,42 +145,17 @@ Or outside StatsBody (own Await) — the latency data is independent of the room
 ## 5. Deduplication
 Key question: does **every ping** count, or do we only count each user once?
 
-| Option | Description | Pros | Cons |
-|---|---|---|---|
-| A | Every ping = 1 | Simplest | Heavy users (many reloads) skew counts |
-| B | Once per session | `sessionStorage` flag | Reset per tab session |
-| C | Once per user ever | `localStorage` flag | First report only — later device changes lost |
-| **D** | **Once per (user, latency) pair** | `localStorage["latencies-reported"] = [20, 22]` | Each user contributes each distinct value exactly once |
+**Decision: D — once per (user, latency) pair.** Each user contributes each distinct ms value exactly once via `localStorage`. Device changes produce new values which are reported separately. Server just counts; dedup is purely client-side. See client section above for implementation.
 
-**Recommendation: D.** Truest distribution, almost as simple as B on the client. Implementation:
-
-```ts
-const KEY = "reported-latencies"
-const reportLatency = () => {
-    const ms = Math.round(ctx.outputLatency * 1000)
-    if (ms === 0) return
-    const reported: number[] = JSON.parse(localStorage.getItem(KEY) ?? "[]")
-    if (reported.includes(ms)) return
-    reported.push(ms)
-    localStorage.setItem(KEY, JSON.stringify(reported))
-    navigator.sendBeacon(
-        "https://api.opendaw.studio/latency.php",
-        JSON.stringify({latency: ms})
-    )
-}
-```
-
-Server stays the same — it just counts. Dedup is purely client-side.
-
-## 6. Open questions
-1. **Bucket width** — 1 ms? Or 0.5 ms / 2 ms? *Recommend 1 ms.*
-2. **Dedup strategy** — A / B / C / D? *Recommend D.*
-3. **Hook location** — grep for `new AudioContext`; confirm the canonical creation site.
-4. **Server path** — is `/var/www/api/latency.json` the right filesystem path, or is there an existing stats directory convention?
-5. **CORS** — `Access-Control-Allow-Origin: *` or restrict to opendaw.studio?
-6. **Histogram placement** — full-width card in `StatsBody`, or standalone between tiles and charts?
-7. **Color** — yellow, green, purple? (I suggested yellow above because latency is neither good nor bad.)
-8. **Outlier cap** — 5000 ms (5 s) server-side is very permissive. Tighter (e.g., 1000 ms) would reject even more broken hardware reports.
+## 6. Decisions (resolved)
+1. **Bucket width**: 1 ms.
+2. **Dedup**: D — once per (user, latency value). localStorage-based.
+3. **Hook location**: find `new AudioContext` in codebase + `devicechange` listener for output device swaps.
+4. **Server path**: same convention as `api.opendaw.studio/users/` — `api.opendaw.studio/latency.php` + `latency.json`.
+5. **CORS**: restrict to `opendaw.studio` and `localhost`.
+6. **Histogram placement**: last card in `StatsBody` (full-width, after the rooms/hours charts).
+7. **Color**: no preference stated — use whatever fits the palette.
+8. **Outlier cap**: 500 ms. Values above 500 ms are **capped to 500** (still counted, not rejected). `undefined` values are reported as `-1` and displayed as "N/A" on the chart.
 
 ## 7. Implementation checklist (once decisions are locked in)
 - [ ] Server: write `api.opendaw.studio/latency.php` (POST handler with flock).

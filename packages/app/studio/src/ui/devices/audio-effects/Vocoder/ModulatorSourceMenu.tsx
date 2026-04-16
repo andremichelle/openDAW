@@ -30,19 +30,15 @@ const parseMode = (raw: string): ModulatorMode => {
     }
 }
 
-const isDefaultMode = (mode: ModulatorMode): boolean => mode === "noise-pink"
-
 export const ModulatorSourceMenu = ({lifecycle, editing, rootBoxAdapter, adapter}: Construct) => {
     const {box} = adapter
     const createMenu = (parent: MenuItem) => {
         const mode = parseMode(box.modulatorSource.getValue())
-
         const setMode = (next: ModulatorMode, sideChainTarget: Option<Address>) =>
             editing.modify(() => {
                 box.modulatorSource.setValue(next)
                 box.sideChain.targetAddress = sideChainTarget
             })
-
         parent.addMenuItem(MenuItem.header({label: "Noise", icon: IconSymbol.OpenDAW, color: Colors.orange}))
         parent.addMenuItem(MenuItem.default({label: "White", checked: mode === "noise-white"})
             .setTriggerProcedure(() => setMode("noise-white", Option.None)))
@@ -52,7 +48,6 @@ export const ModulatorSourceMenu = ({lifecycle, editing, rootBoxAdapter, adapter
             .setTriggerProcedure(() => setMode("noise-brown", Option.None)))
         parent.addMenuItem(MenuItem.default({separatorBefore: true, label: "Self Modulation", checked: mode === "self"})
             .setTriggerProcedure(() => setMode("self", Option.None)))
-
         parent.addMenuItem(MenuItem.header({label: "Tracks", icon: IconSymbol.OpenDAW, color: Colors.blue}))
         const isSelectedExternal = (address: Address) =>
             mode === "external" && box.sideChain.targetAddress.mapOr(other => other.equals(address), false)
@@ -78,10 +73,14 @@ export const ModulatorSourceMenu = ({lifecycle, editing, rootBoxAdapter, adapter
     const resolveLabel = (): string => {
         const mode = parseMode(box.modulatorSource.getValue())
         switch (mode) {
-            case "noise-white": return "White"
-            case "noise-pink": return "Pink"
-            case "noise-brown": return "Brown"
-            case "self": return "Self"
+            case "noise-white":
+                return "White"
+            case "noise-pink":
+                return "Pink"
+            case "noise-brown":
+                return "Brown"
+            case "self":
+                return "Self"
             case "external": {
                 let label = "External"
                 box.sideChain.targetVertex.ifSome(vertex => {
@@ -99,16 +98,11 @@ export const ModulatorSourceMenu = ({lifecycle, editing, rootBoxAdapter, adapter
     return (
         <MenuButton onInit={button => {
             button.classList.add(className)
-            const update = () => {
-                const mode = parseMode(box.modulatorSource.getValue())
-                button.classList.toggle("has-source", !isDefaultMode(mode))
-                button.textContent = resolveLabel()
-            }
+            const update = () => button.textContent = resolveLabel()
             lifecycle.ownAll(
                 box.modulatorSource.catchupAndSubscribe(update),
                 box.sideChain.catchupAndSubscribe(update)
             )
-        }} root={MenuItem.root().setRuntimeChildrenProcedure(createMenu)}
-                    appearance={{tinyTriangle: true}}>Pink</MenuButton>
+        }} root={MenuItem.root().setRuntimeChildrenProcedure(createMenu)}>Pink</MenuButton>
     )
 }

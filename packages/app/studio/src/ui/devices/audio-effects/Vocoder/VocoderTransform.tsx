@@ -1,5 +1,5 @@
 import css from "./VocoderTransform.sass?inline"
-import {Lifecycle, MutableObservableValue} from "@opendaw/lib-std"
+import {Lifecycle, MutableObservableValue, Nullable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {AnimationFrame, Html} from "@opendaw/lib-dom"
 import {BiquadCoeff, gainToDb} from "@opendaw/lib-dsp"
@@ -37,15 +37,13 @@ type Construct = {
 
 export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spectrum}: Construct) => {
     const sampleRate = service.audioContext.sampleRate
-
     const biquad = new BiquadCoeff()
     const carrierFreq = new Float32Array(MAX_BANDS)
     const modulatorFreq = new Float32Array(MAX_BANDS)
     const qs = new Float32Array(MAX_BANDS)
-    let frequency: Float32Array | null = null
-    let magResponse: Float32Array | null = null
-    let phaseResponse: Float32Array | null = null
-
+    let frequency: Nullable<Float32Array> = null
+    let magResponse: Nullable<Float32Array> = null
+    let phaseResponse: Nullable<Float32Array> = null
     const labels = DIVIDERS.map((hz, index) => {
         const pct = (Math.log(hz / F_MIN) / LOG_RANGE) * 100
         const text = hz < 1000 ? `${hz}` : `${hz / 1000}k`
@@ -65,7 +63,6 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                     const H = actualHeight
                     if (W === 0 || H === 0) return
                     const R = W * OVERSAMPLE
-
                     if (frequency === null || frequency.length !== R + 1 || isResized) {
                         frequency = new Float32Array(R + 1)
                         magResponse = new Float32Array(R + 1)
@@ -75,7 +72,6 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                             frequency[k] = hz / sampleRate
                         }
                     }
-
                     const {carrierMinFreq, carrierMaxFreq, modulatorMinFreq, modulatorMaxFreq, qMin, qMax} = adapter.namedParameter
                     const cfMin = carrierMinFreq.getControlledValue()
                     const cfMax = carrierMaxFreq.getControlledValue()
@@ -84,7 +80,6 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                     const qLo = qMin.getControlledValue()
                     const qHi = qMax.getControlledValue()
                     const N = adapter.box.bandCount.getValue()
-
                     const cfLog = Math.log(cfMax / cfMin)
                     const mfLog = Math.log(mfMax / mfMin)
                     const qLog = Math.log(qHi / qLo)
@@ -95,10 +90,8 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                         modulatorFreq[i] = mfMin * Math.exp(x * mfLog)
                         qs[i] = qLo * Math.exp(x * qLog)
                     }
-
                     context.save()
                     context.clearRect(0, 0, W, H)
-
                     const h2 = H * 0.5
                     const curveRange = h2 * 0.8
                     const dbRange = 18
@@ -108,7 +101,6 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                     }
                     const modulatorPeakY = curveRange
                     const carrierPeakY = H - curveRange
-
                     const mod0dB = curveRange
                     const modMinus9 = curveRange * 0.5
                     const car0dB = H - curveRange
@@ -126,9 +118,7 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                         context.lineTo(dx, H)
                     }
                     context.stroke()
-
                     const mode = displayMode.getValue()
-
                     if (mode === DisplayMode.Modulator || mode === DisplayMode.Carrier) {
                         const numBins = spectrum.length
                         const freqStep = sampleRate / (numBins << 1)
@@ -164,15 +154,11 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                         context.fillStyle = "hsla(200, 83%, 60%, 0.04)"
                         context.fill(spectrumPath)
                     }
-
                     const curveAlpha = mode === DisplayMode.Transform ? 1.0 : 0.3
-
                     context.save()
                     context.globalCompositeOperation = "screen"
                     context.lineWidth = 1
-
                     const step = 1 / OVERSAMPLE
-
                     for (let i = 0; i < N; i++) {
                         biquad.setBandpassParams(carrierFreq[i] / sampleRate, qs[i])
                         biquad.getFrequencyResponse(frequency, magResponse!, phaseResponse!)
@@ -190,7 +176,6 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                         context.fill()
                         context.stroke()
                     }
-
                     for (let i = 0; i < N; i++) {
                         biquad.setBandpassParams(modulatorFreq[i] / sampleRate, qs[i])
                         biquad.getFrequencyResponse(frequency, magResponse!, phaseResponse!)
@@ -209,7 +194,6 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                         context.stroke()
                     }
                     context.restore()
-
                     if (mode === DisplayMode.Transform) {
                         context.save()
                         context.lineWidth = 1
@@ -226,7 +210,6 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                         }
                         context.restore()
                     }
-
                     context.restore()
                 }))
                 lifecycle.ownAll(
