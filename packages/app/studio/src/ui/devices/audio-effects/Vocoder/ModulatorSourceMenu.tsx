@@ -43,17 +43,17 @@ export const ModulatorSourceMenu = ({lifecycle, editing, rootBoxAdapter, adapter
                 box.sideChain.targetAddress = sideChainTarget
             })
 
-        parent.addMenuItem(MenuItem.header({label: "Noise", icon: IconSymbol.OpenDAW, color: Colors.cream}))
+        parent.addMenuItem(MenuItem.header({label: "Noise", icon: IconSymbol.OpenDAW, color: Colors.orange}))
         parent.addMenuItem(MenuItem.default({label: "White", checked: mode === "noise-white"})
             .setTriggerProcedure(() => setMode("noise-white", Option.None)))
         parent.addMenuItem(MenuItem.default({label: "Pink", checked: mode === "noise-pink"})
             .setTriggerProcedure(() => setMode("noise-pink", Option.None)))
         parent.addMenuItem(MenuItem.default({label: "Brown", checked: mode === "noise-brown"})
             .setTriggerProcedure(() => setMode("noise-brown", Option.None)))
-        parent.addMenuItem(MenuItem.default({separatorBefore: true, label: "Self", checked: mode === "self"})
+        parent.addMenuItem(MenuItem.default({separatorBefore: true, label: "Self Modulation", checked: mode === "self"})
             .setTriggerProcedure(() => setMode("self", Option.None)))
 
-        parent.addMenuItem(MenuItem.header({label: "Tracks", icon: IconSymbol.OpenDAW, color: Colors.orange}))
+        parent.addMenuItem(MenuItem.header({label: "Tracks", icon: IconSymbol.OpenDAW, color: Colors.blue}))
         const isSelectedExternal = (address: Address) =>
             mode === "external" && box.sideChain.targetAddress.mapOr(other => other.equals(address), false)
         const createSelectableItem = (output: LabeledAudioOutput): MenuItem => {
