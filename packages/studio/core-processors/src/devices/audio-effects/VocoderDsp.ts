@@ -1,7 +1,5 @@
-import {BiquadCoeff, RenderQuantum} from "@opendaw/lib-dsp"
+import {BiquadCoeff, dbToGain} from "@opendaw/lib-dsp"
 import {int} from "@opendaw/lib-std"
-
-const EMPHASIS_FREQ_HZ = 3000  // classic speech intelligibility center
 
 export type NoiseColor = "white" | "pink" | "brown"
 
@@ -88,9 +86,6 @@ export class NoiseGenerator {
  */
 export class VocoderDsp {
     static readonly MAX_BANDS = 16
-    /** Reference-faithful compensation for narrow-bandpass attenuation.
-     *  Alternative if wide bands sound hot: BAND_GAIN = k / sqrt(q) per band. */
-    static readonly BAND_GAIN = 120.0
     /** Coefficient interpolation stride (2 sub-blocks per 128-sample render quantum). */
     static readonly SUB_BLOCK = 64
     /** Per-sub-block geometric lerp factor.
@@ -134,13 +129,10 @@ export class VocoderDsp {
     #attackCoeff: number = 0.0
     #releaseCoeff: number = 0.0
 
-    // ── Pre-emphasis (high-shelf on modulator path) ──────────────────────
-    readonly #preEmphasisCoeffs = new Float32Array(5)  // [b0, b1, b2, a1, a2]
-    readonly #emphScratchL = new Float32Array(RenderQuantum)
-    readonly #emphScratchR = new Float32Array(RenderQuantum)
-    #emphasisDb: number = 0
-    #emphXL1 = 0; #emphXL2 = 0; #emphYL1 = 0; #emphYL2 = 0
-    #emphXR1 = 0; #emphXR2 = 0; #emphYR1 = 0; #emphYR2 = 0
+    // ── Output level (auto-normalized) ──────────────────────────────────
+    #smoothedRms: number = 1.0
+    #autoGain: number = 1.0
+    #outputGain: number = 1.0
 
     // ── Coefficient storage: flat Float32Array(5 * MAX_BANDS) per side ────
     // Layout per band i: [b0, b1, b2, a1, a2] at offset i*5
@@ -216,7 +208,6 @@ export class VocoderDsp {
         this.#fadeCoeff = Math.exp(-1 / (sampleRate * VocoderDsp.BAND_FADE_SECONDS))
         this.setAttackSeconds(0.005)
         this.setReleaseSeconds(0.030)
-        this.#updateEmphasisCoeffs()
         this.#writeAllCoefficients()
     }
 
@@ -243,21 +234,7 @@ export class VocoderDsp {
         this.#releaseCoeff = Math.exp(-1 / (this.#sampleRate * seconds))
     }
 
-    set emphasis(db: number) {
-        if (this.#emphasisDb === db) return
-        this.#emphasisDb = db
-        this.#updateEmphasisCoeffs()
-    }
-
-    #updateEmphasisCoeffs(): void {
-        const cc = this.#scratchCarrierCoeff  // reuse as scratch
-        cc.setHighShelfParams(EMPHASIS_FREQ_HZ / this.#sampleRate, this.#emphasisDb)
-        this.#preEmphasisCoeffs[0] = cc.b0
-        this.#preEmphasisCoeffs[1] = cc.b1
-        this.#preEmphasisCoeffs[2] = cc.b2
-        this.#preEmphasisCoeffs[3] = cc.a1
-        this.#preEmphasisCoeffs[4] = cc.a2
-    }
+    set gain(db: number) { this.#outputGain = dbToGain(db) }
 
     set bandCount(count: number) {
         // Defensive guard — stray save-file value won't crash the DSP.
@@ -291,8 +268,6 @@ export class VocoderDsp {
             this.#bandGainCurrent[i] = this.#targetActive[i]
         }
         this.#processedBands = this.#targetBandCount
-        this.#emphXL1 = this.#emphXL2 = this.#emphYL1 = this.#emphYL2 = 0
-        this.#emphXR1 = this.#emphXR2 = this.#emphYR1 = this.#emphYR2 = 0
     }
 
     // ── Entry points ──────────────────────────────────────────────────────
@@ -301,11 +276,6 @@ export class VocoderDsp {
                      modL: Float32Array, modR: Float32Array,
                      outL: Float32Array, outR: Float32Array,
                      fromIndex: int, toIndex: int): void {
-        if (this.#emphasisDb > 0.01) {
-            this.#applyEmphasisStereo(modL, modR, fromIndex, toIndex)
-            modL = this.#emphScratchL
-            modR = this.#emphScratchR
-        }
         let from = fromIndex
         while (from < toIndex) {
             const to = Math.min(from + VocoderDsp.SUB_BLOCK, toIndex)
@@ -314,15 +284,12 @@ export class VocoderDsp {
             from = to
         }
         this.#trimProcessedBands()
+        this.#updateAutoGain(outL, outR, fromIndex, toIndex)
     }
 
     processMonoMod(carL: Float32Array, carR: Float32Array, mod: Float32Array,
                    outL: Float32Array, outR: Float32Array,
                    fromIndex: int, toIndex: int): void {
-        if (this.#emphasisDb > 0.01) {
-            this.#applyEmphasisMono(mod, fromIndex, toIndex)
-            mod = this.#emphScratchL
-        }
         let from = fromIndex
         while (from < toIndex) {
             const to = Math.min(from + VocoderDsp.SUB_BLOCK, toIndex)
@@ -331,6 +298,7 @@ export class VocoderDsp {
             from = to
         }
         this.#trimProcessedBands()
+        this.#updateAutoGain(outL, outR, fromIndex, toIndex)
     }
 
     processSelf(carL: Float32Array, carR: Float32Array,
@@ -344,6 +312,7 @@ export class VocoderDsp {
             from = to
         }
         this.#trimProcessedBands()
+        this.#updateAutoGain(outL, outR, fromIndex, toIndex)
     }
 
     // ── Internals: band target spread & coefficient interpolation ────────
@@ -426,39 +395,14 @@ export class VocoderDsp {
         this.#envelope[i] = 0
     }
 
-    #applyEmphasisStereo(inL: Float32Array, inR: Float32Array, from: int, to: int): void {
-        const pe = this.#preEmphasisCoeffs
-        const b0 = pe[0], b1 = pe[1], b2 = pe[2], a1 = pe[3], a2 = pe[4]
-        const outL = this.#emphScratchL
-        const outR = this.#emphScratchR
-        let xL1 = this.#emphXL1, xL2 = this.#emphXL2, yL1 = this.#emphYL1, yL2 = this.#emphYL2
-        let xR1 = this.#emphXR1, xR2 = this.#emphXR2, yR1 = this.#emphYR1, yR2 = this.#emphYR2
-        for (let s = from; s < to; s++) {
-            const xL = inL[s]
-            const yL = (b0 * xL + b1 * xL1 + b2 * xL2 - a1 * yL1 - a2 * yL2) + 1e-18 - 1e-18
-            xL2 = xL1; xL1 = xL; yL2 = yL1; yL1 = yL
-            outL[s] = yL
-            const xR = inR[s]
-            const yR = (b0 * xR + b1 * xR1 + b2 * xR2 - a1 * yR1 - a2 * yR2) + 1e-18 - 1e-18
-            xR2 = xR1; xR1 = xR; yR2 = yR1; yR1 = yR
-            outR[s] = yR
+    #updateAutoGain(outL: Float32Array, outR: Float32Array, from: int, to: int): void {
+        let energy = 0
+        for (let i = from; i < to; i++) {
+            energy += outL[i] * outL[i] + outR[i] * outR[i]
         }
-        this.#emphXL1 = xL1; this.#emphXL2 = xL2; this.#emphYL1 = yL1; this.#emphYL2 = yL2
-        this.#emphXR1 = xR1; this.#emphXR2 = xR2; this.#emphYR1 = yR1; this.#emphYR2 = yR2
-    }
-
-    #applyEmphasisMono(input: Float32Array, from: int, to: int): void {
-        const pe = this.#preEmphasisCoeffs
-        const b0 = pe[0], b1 = pe[1], b2 = pe[2], a1 = pe[3], a2 = pe[4]
-        const out = this.#emphScratchL
-        let x1 = this.#emphXL1, x2 = this.#emphXL2, y1 = this.#emphYL1, y2 = this.#emphYL2
-        for (let s = from; s < to; s++) {
-            const x = input[s]
-            const y = (b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2) + 1e-18 - 1e-18
-            x2 = x1; x1 = x; y2 = y1; y1 = y
-            out[s] = y
-        }
-        this.#emphXL1 = x1; this.#emphXL2 = x2; this.#emphYL1 = y1; this.#emphYL2 = y2
+        const rms = Math.sqrt(energy / (2 * (to - from) + 1e-30))
+        this.#smoothedRms += 0.05 * (rms - this.#smoothedRms)
+        this.#autoGain = 1.0 / Math.max(this.#smoothedRms, 1e-6)
     }
 
     #trimProcessedBands(): void {
@@ -484,7 +428,7 @@ export class VocoderDsp {
         }
 
         const wet = this.#wetGain
-        const bandG = VocoderDsp.BAND_GAIN
+        const bandG = this.#autoGain * this.#outputGain
         const aCoeff = this.#attackCoeff
         const rCoeff = this.#releaseCoeff
         const fade = this.#fadeCoeff
@@ -567,7 +511,7 @@ export class VocoderDsp {
         }
 
         const wet = this.#wetGain
-        const bandG = VocoderDsp.BAND_GAIN
+        const bandG = this.#autoGain * this.#outputGain
         const aCoeff = this.#attackCoeff
         const rCoeff = this.#releaseCoeff
         const fade = this.#fadeCoeff
@@ -641,7 +585,7 @@ export class VocoderDsp {
         }
 
         const wet = this.#wetGain
-        const bandG = VocoderDsp.BAND_GAIN
+        const bandG = this.#autoGain * this.#outputGain
         const aCoeff = this.#attackCoeff
         const rCoeff = this.#releaseCoeff
         const fade = this.#fadeCoeff

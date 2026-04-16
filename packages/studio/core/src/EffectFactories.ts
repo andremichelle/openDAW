@@ -361,7 +361,7 @@ export namespace EffectFactories {
 
     export const Vocoder: EffectFactory = {
         defaultName: "Vocoder",
-        defaultIcon: IconSymbol.EQ,
+        defaultIcon: IconSymbol.Vocoder,
         briefDescription: "Vocoder",
         description: "Classic analysis/synthesis vocoder with independent carrier and modulator ranges.",
         manualPage: DeviceManualUrls.Vocoder,

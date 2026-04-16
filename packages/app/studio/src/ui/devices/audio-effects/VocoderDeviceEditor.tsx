@@ -1,17 +1,18 @@
 import css from "./VocoderDeviceEditor.sass?inline"
 import {DeviceHost, VocoderDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {Lifecycle} from "@opendaw/lib-std"
+import {DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {StudioService} from "@/service/StudioService"
+import {AudioAnalyser} from "@opendaw/lib-dsp"
 import {EffectFactories} from "@opendaw/studio-core"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
-import {VocoderTransform} from "@/ui/devices/audio-effects/Vocoder/VocoderTransform"
+import {DisplayMode, VocoderTransform} from "@/ui/devices/audio-effects/Vocoder/VocoderTransform"
 import {ModulatorSourceMenu} from "@/ui/devices/audio-effects/Vocoder/ModulatorSourceMenu"
 
 const className = Html.adoptStyleSheet(css, "VocoderDeviceEditor")
@@ -28,8 +29,24 @@ export const VocoderDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
     const {editing, midiLearning, rootBoxAdapter} = project
     const {
         carrierMinFreq, carrierMaxFreq, modulatorMinFreq, modulatorMaxFreq,
-        qMin, qMax, envAttack, envRelease, emphasis, mix
+        qMin, qMax, envAttack, envRelease, gain, mix
     } = adapter.namedParameter
+    const displayMode = lifecycle.own(new DefaultObservableValue(DisplayMode.Transform))
+    const spectrum = new Float32Array(AudioAnalyser.DEFAULT_SIZE)
+    const spectrumSubscription = lifecycle.own(new Terminator())
+    const updateSpectrumSubscription = () => {
+        spectrumSubscription.terminate()
+        spectrum.fill(0)
+        const mode = displayMode.getValue()
+        if (mode === DisplayMode.Modulator) {
+            spectrumSubscription.own(project.liveStreamReceiver.subscribeFloats(
+                adapter.modulatorSpectrum, values => spectrum.set(values)))
+        } else if (mode === DisplayMode.Carrier) {
+            spectrumSubscription.own(project.liveStreamReceiver.subscribeFloats(
+                adapter.carrierSpectrum, values => spectrum.set(values)))
+        }
+    }
+    lifecycle.own(displayMode.catchupAndSubscribe(updateSpectrumSubscription))
     return (
         <DeviceEditor lifecycle={lifecycle}
                       project={project}
@@ -37,37 +54,19 @@ export const VocoderDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                       populateMenu={parent => MenuItems.forEffectDevice(parent, service, deviceHost, adapter)}
                       populateControls={() => (
                           <div className={className}>
-                              <div className="display">
+                              <div className="display" style={{gridArea: "1 / 1 / 3 / 7"}}>
                                   <VocoderTransform lifecycle={lifecycle}
                                                     service={service}
-                                                    adapter={adapter}/>
+                                                    adapter={adapter}
+                                                    displayMode={displayMode}
+                                                    spectrum={spectrum}/>
                               </div>
-                              <div className="knob-row">
-                                  {ControlBuilder.createKnob({
-                                      lifecycle, editing, midiLearning, adapter, parameter: carrierMinFreq
-                                  })}
-                                  {ControlBuilder.createKnob({
-                                      lifecycle, editing, midiLearning, adapter, parameter: carrierMaxFreq
-                                  })}
-                                  {ControlBuilder.createKnob({
-                                      lifecycle, editing, midiLearning, adapter, parameter: modulatorMinFreq
-                                  })}
-                                  {ControlBuilder.createKnob({
-                                      lifecycle, editing, midiLearning, adapter, parameter: modulatorMaxFreq
-                                  })}
-                                  {ControlBuilder.createKnob({
-                                      lifecycle, editing, midiLearning, adapter, parameter: qMin
-                                  })}
-                                  {ControlBuilder.createKnob({
-                                      lifecycle, editing, midiLearning, adapter, parameter: qMax
-                                  })}
-                              </div>
-                              <div className="side-panel">
+                              <div className="controls" style={{gridArea: "1 / 7 / 2 / 9"}}>
                                   <ModulatorSourceMenu lifecycle={lifecycle}
                                                        editing={editing}
                                                        rootBoxAdapter={rootBoxAdapter}
                                                        adapter={adapter}/>
-                                  <div className="bands">
+                                  <div className="selector">
                                       <h1>Bands</h1>
                                       <RadioGroup lifecycle={lifecycle}
                                                   appearance={{framed: true}}
@@ -78,21 +77,28 @@ export const VocoderDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                                                       {value: 16, element: (<span>16</span>)}
                                                   ]}/>
                                   </div>
-                                  <div className="mix-knobs">
-                                      {ControlBuilder.createKnob({
-                                          lifecycle, editing, midiLearning, adapter, parameter: envAttack
-                                      })}
-                                      {ControlBuilder.createKnob({
-                                          lifecycle, editing, midiLearning, adapter, parameter: envRelease
-                                      })}
-                                      {ControlBuilder.createKnob({
-                                          lifecycle, editing, midiLearning, adapter, parameter: emphasis
-                                      })}
-                                      {ControlBuilder.createKnob({
-                                          lifecycle, editing, midiLearning, adapter, parameter: mix
-                                      })}
+                                  <div className="selector">
+                                      <h1>Display</h1>
+                                      <RadioGroup lifecycle={lifecycle}
+                                                  appearance={{framed: true}}
+                                                  model={displayMode}
+                                                  elements={[
+                                                      {value: DisplayMode.Transform, element: (<span>T</span>), tooltip: "Transform"},
+                                                      {value: DisplayMode.Modulator, element: (<span>M</span>), tooltip: "Modulator Spectrum"},
+                                                      {value: DisplayMode.Carrier, element: (<span>C</span>), tooltip: "Carrier Spectrum"}
+                                                  ]}/>
                                   </div>
                               </div>
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: carrierMinFreq, style: {gridArea: "3 / 1"}})}
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: carrierMaxFreq, style: {gridArea: "3 / 2"}})}
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: modulatorMinFreq, style: {gridArea: "3 / 3"}})}
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: modulatorMaxFreq, style: {gridArea: "3 / 4"}})}
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: qMin, style: {gridArea: "3 / 5"}})}
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: qMax, style: {gridArea: "3 / 6"}})}
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: envAttack, style: {gridArea: "2 / 7"}})}
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: envRelease, style: {gridArea: "2 / 8"}})}
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: gain, style: {gridArea: "3 / 7"}})}
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: mix, style: {gridArea: "3 / 8"}})}
                           </div>
                       )}
                       populateMeter={() => (

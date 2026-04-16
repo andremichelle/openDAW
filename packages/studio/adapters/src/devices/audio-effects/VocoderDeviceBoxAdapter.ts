@@ -43,6 +43,8 @@ export class VocoderDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     get minimizedField(): BooleanField {return this.#box.minimized}
     get host(): PointerField<Pointers.AudioEffectHost> {return this.#box.host}
     get sideChain(): PointerField<Pointers.SideChain> {return this.#box.sideChain}
+    get modulatorSpectrum(): Address {return this.#box.address.append(0xFFE)}
+    get carrierSpectrum(): Address {return this.#box.address.append(0xFFF)}
 
     deviceHost(): DeviceHost {
         return this.#context.boxAdapters
@@ -85,11 +87,11 @@ export class VocoderDeviceBoxAdapter implements AudioEffectDeviceAdapter {
                 ValueMapping.exponential(1.0, 1000.0),
                 StringMapping.numeric({unit: "ms", fractionDigits: 0}),
                 "Release"),
-            emphasis: this.#parametric.createParameter(
-                box.emphasis,
-                ValueMapping.linear(0.0, 18.0),
+            gain: this.#parametric.createParameter(
+                box.gain,
+                ValueMapping.linear(-20.0, 20.0),
                 StringMapping.decible,
-                "Emphasis"),
+                "Gain"),
             mix: this.#parametric.createParameter(
                 box.mix, ValueMapping.unipolar(), StringMapping.percent(), "Mix")
         } as const

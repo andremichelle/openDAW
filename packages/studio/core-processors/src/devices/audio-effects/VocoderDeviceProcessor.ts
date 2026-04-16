@@ -1,6 +1,6 @@
 import {AudioEffectDeviceAdapter, ModulatorMode, VocoderDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {int, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
-import {AudioBuffer, Event, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioAnalyser, AudioBuffer, Event, RenderQuantum} from "@opendaw/lib-dsp"
 import {EngineContext} from "../../EngineContext"
 import {Block, Processor, ProcessPhase} from "../../processing"
 import {PeakBroadcaster} from "../../PeakBroadcaster"
@@ -23,7 +23,7 @@ export class VocoderDeviceProcessor extends AudioProcessor implements AudioEffec
     readonly parameterQMax: AutomatableParameter<number>
     readonly parameterEnvAttack: AutomatableParameter<number>
     readonly parameterEnvRelease: AutomatableParameter<number>
-    readonly parameterEmphasis: AutomatableParameter<number>
+    readonly parameterGain: AutomatableParameter<number>
     readonly parameterMix: AutomatableParameter<number>
 
     readonly #output: AudioBuffer
@@ -31,8 +31,16 @@ export class VocoderDeviceProcessor extends AudioProcessor implements AudioEffec
     readonly #dsp: VocoderDsp
     readonly #noise: NoiseGenerator
 
+    readonly #modulatorAnalyser: AudioAnalyser
+    readonly #carrierAnalyser: AudioAnalyser
+    readonly #modulatorSpectrum: Float32Array
+    readonly #carrierSpectrum: Float32Array
+
     readonly #modScratchL: Float32Array
     readonly #modScratchR: Float32Array
+
+    #needsModulatorSpectrum: boolean = false
+    #needsCarrierSpectrum: boolean = false
 
     readonly #sideChainConnection: Terminator = new Terminator()
 
@@ -49,12 +57,16 @@ export class VocoderDeviceProcessor extends AudioProcessor implements AudioEffec
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
         this.#dsp = new VocoderDsp(sampleRate)
         this.#noise = new NoiseGenerator()
+        this.#modulatorAnalyser = new AudioAnalyser()
+        this.#carrierAnalyser = new AudioAnalyser()
+        this.#modulatorSpectrum = new Float32Array(this.#modulatorAnalyser.numBins())
+        this.#carrierSpectrum = new Float32Array(this.#carrierAnalyser.numBins())
         this.#modScratchL = new Float32Array(RenderQuantum)
         this.#modScratchR = new Float32Array(RenderQuantum)
 
         const {
             carrierMinFreq, carrierMaxFreq, modulatorMinFreq, modulatorMaxFreq,
-            qMin, qMax, envAttack, envRelease, emphasis, mix
+            qMin, qMax, envAttack, envRelease, gain, mix
         } = adapter.namedParameter
 
         this.parameterCarrierMinFreq = this.own(this.bindParameter(carrierMinFreq))
@@ -65,12 +77,24 @@ export class VocoderDeviceProcessor extends AudioProcessor implements AudioEffec
         this.parameterQMax = this.own(this.bindParameter(qMax))
         this.parameterEnvAttack = this.own(this.bindParameter(envAttack))
         this.parameterEnvRelease = this.own(this.bindParameter(envRelease))
-        this.parameterEmphasis = this.own(this.bindParameter(emphasis))
+        this.parameterGain = this.own(this.bindParameter(gain))
         this.parameterMix = this.own(this.bindParameter(mix))
 
         this.ownAll(
             context.registerProcessor(this),
             context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing),
+            context.broadcaster.broadcastFloats(adapter.modulatorSpectrum, this.#modulatorSpectrum, (hasSubscribers) => {
+                this.#needsModulatorSpectrum = hasSubscribers
+                if (!hasSubscribers) return
+                this.#modulatorSpectrum.set(this.#modulatorAnalyser.bins())
+                this.#modulatorAnalyser.decay = true
+            }),
+            context.broadcaster.broadcastFloats(adapter.carrierSpectrum, this.#carrierSpectrum, (hasSubscribers) => {
+                this.#needsCarrierSpectrum = hasSubscribers
+                if (!hasSubscribers) return
+                this.#carrierSpectrum.set(this.#carrierAnalyser.bins())
+                this.#carrierAnalyser.decay = true
+            }),
             adapter.sideChain.catchupAndSubscribe(() => {
                 this.#sideChainConnection.terminate()
                 this.#sideChain = Option.None
@@ -108,6 +132,8 @@ export class VocoderDeviceProcessor extends AudioProcessor implements AudioEffec
         this.eventInput.clear()
         this.#dsp.reset()
         this.#noise.reset()
+        this.#modulatorAnalyser.clear()
+        this.#carrierAnalyser.clear()
         this.#modScratchL.fill(0.0)
         this.#modScratchR.fill(0.0)
     }
@@ -166,6 +192,27 @@ export class VocoderDeviceProcessor extends AudioProcessor implements AudioEffec
         }
 
         this.#peaks.process(outL, outR, s0, s1)
+        if (this.#needsCarrierSpectrum) {
+            this.#carrierAnalyser.process(srcL, srcR, s0, s1)
+        }
+        if (this.#needsModulatorSpectrum) {
+            switch (this.#modulatorMode) {
+                case "noise-white":
+                case "noise-pink":
+                case "noise-brown":
+                    this.#modulatorAnalyser.process(this.#modScratchL, this.#modScratchL, s0, s1)
+                    break
+                case "self":
+                    this.#modulatorAnalyser.process(srcL, srcR, s0, s1)
+                    break
+                case "external":
+                    if (this.#sideChain.nonEmpty()) {
+                        const sc = this.#sideChain.unwrap()
+                        this.#modulatorAnalyser.process(sc.getChannel(0), sc.getChannel(1), s0, s1)
+                    }
+                    break
+            }
+        }
     }
 
     parameterChanged(parameter: AutomatableParameter): void {
@@ -185,8 +232,8 @@ export class VocoderDeviceProcessor extends AudioProcessor implements AudioEffec
             this.#dsp.setAttackSeconds(this.parameterEnvAttack.getValue() * 0.001)
         } else if (parameter === this.parameterEnvRelease) {
             this.#dsp.setReleaseSeconds(this.parameterEnvRelease.getValue() * 0.001)
-        } else if (parameter === this.parameterEmphasis) {
-            this.#dsp.emphasis = this.parameterEmphasis.getValue()
+        } else if (parameter === this.parameterGain) {
+            this.#dsp.gain = this.parameterGain.getValue()
         } else if (parameter === this.parameterMix) {
             this.#dsp.mix = this.parameterMix.getValue()
         }

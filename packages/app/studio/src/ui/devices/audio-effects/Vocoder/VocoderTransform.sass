@@ -17,8 +17,16 @@ component
     > span
       position: absolute
       bottom: 0
-      transform: translateX(-50%)
       white-space: nowrap
+
+      &.center
+        transform: translateX(-50%)
+
+      &.start
+        transform: none
+
+      &.end
+        transform: translateX(-100%)
 
   > canvas
     flex: 1
