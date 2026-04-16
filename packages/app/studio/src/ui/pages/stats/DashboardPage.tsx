@@ -168,7 +168,7 @@ const ErrorTile = ({stats}: { stats: ErrorStats }) => (
 )
 
 const NpmTile = ({downloads}: { downloads: number }) => (
-    <Tile label="NPM weekly" value={formatNumber(downloads)} icon="⤓"/>
+    <Tile label="SDK weekly" value={formatNumber(downloads)} icon="⤓"/>
 )
 
 const BuildTile = ({info}: { info: BuildInfo }) => (
@@ -186,7 +186,7 @@ const AllTimeTiles = ({data}: { data: DashboardData }) => {
             <Tile label="Rooms Total Create" value={formatNumber(totalRooms)} icon="∑"/>
             <Tile label="Rooms Total Hours" value={formatHours(totalHours)} icon="⏱"/>
             <Tile label="Total Users" value={formatNumber(allTimePeak)} icon="↑"/>
-            <Tile label="Avg session" value={formatHours(avgSession / 60)} icon="x̄"/>
+            <Tile label="Rooms Avg Session" value={formatHours(avgSession / 60)} icon="x̄"/>
         </Frag>
     )
 }
@@ -254,8 +254,8 @@ export const DashboardPage: PageFactory<StudioService> = ({lifecycle}: PageConte
                 />
                 <Await
                     factory={() => fetchNpmWeeklyDownloads(NPM_PACKAGE)}
-                    loading={() => <Tile label="NPM weekly" value="…" icon="⤓"/>}
-                    failure={() => <Tile label="NPM weekly" value="n/a" icon="⤓"/>}
+                    loading={() => <Tile label="SDK weekly" value="…" icon="⤓"/>}
+                    failure={() => <Tile label="SDK weekly" value="n/a" icon="⤓"/>}
                     success={(downloads: number) => <NpmTile downloads={downloads}/>}
                 />
                 <Await
@@ -270,8 +270,8 @@ export const DashboardPage: PageFactory<StudioService> = ({lifecycle}: PageConte
                     failure={() => <Tile label="All-time" value="n/a" icon="∑"/>}
                     success={(data: DashboardData) => <AllTimeTiles data={data}/>}
                 />
-                <Tile label="Peak users (range)" value={tiles.peakUsers} icon="U"/>
-                <Tile label="Max visitors (range)" value={tiles.maxVisitors} icon="V"/>
+                <Tile label="Peak users" value={tiles.peakUsers} icon="U"/>
+                <Tile label="Unique visitors" value={tiles.maxVisitors} icon="V"/>
             </div>
             <Await
                 factory={() => dataPromise}
