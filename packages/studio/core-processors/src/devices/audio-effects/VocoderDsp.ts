@@ -44,8 +44,13 @@ export class NoiseGenerator {
                     target[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11
                     b6 = white * 0.115926
                 }
-                this.#b0 = b0; this.#b1 = b1; this.#b2 = b2; this.#b3 = b3
-                this.#b4 = b4; this.#b5 = b5; this.#b6 = b6
+                this.#b0 = b0
+                this.#b1 = b1
+                this.#b2 = b2
+                this.#b3 = b3
+                this.#b4 = b4
+                this.#b5 = b5
+                this.#b6 = b6
                 break
             }
             case "brown": {
@@ -145,16 +150,24 @@ export class VocoderDsp {
     readonly #scratchModulatorCoeff: BiquadCoeff
 
     // ── Carrier biquad state (stereo, flat arrays) ────────────────────────
-    readonly #carCxL1: Float32Array; readonly #carCxL2: Float32Array
-    readonly #carCyL1: Float32Array; readonly #carCyL2: Float32Array
-    readonly #carCxR1: Float32Array; readonly #carCxR2: Float32Array
-    readonly #carCyR1: Float32Array; readonly #carCyR2: Float32Array
+    readonly #carCxL1: Float32Array
+    readonly #carCxL2: Float32Array
+    readonly #carCyL1: Float32Array
+    readonly #carCyL2: Float32Array
+    readonly #carCxR1: Float32Array
+    readonly #carCxR2: Float32Array
+    readonly #carCyR1: Float32Array
+    readonly #carCyR2: Float32Array
 
     // ── Modulator biquad state (stereo; mono variant uses only L slots) ───
-    readonly #modMxL1: Float32Array; readonly #modMxL2: Float32Array
-    readonly #modMyL1: Float32Array; readonly #modMyL2: Float32Array
-    readonly #modMxR1: Float32Array; readonly #modMxR2: Float32Array
-    readonly #modMyR1: Float32Array; readonly #modMyR2: Float32Array
+    readonly #modMxL1: Float32Array
+    readonly #modMxL2: Float32Array
+    readonly #modMyL1: Float32Array
+    readonly #modMyL2: Float32Array
+    readonly #modMxR1: Float32Array
+    readonly #modMxR2: Float32Array
+    readonly #modMyR1: Float32Array
+    readonly #modMyR2: Float32Array
 
     // ── Derived mix gains ─────────────────────────────────────────────────
     #wetGain: number = 1.0
@@ -184,10 +197,22 @@ export class VocoderDsp {
         this.#scratchCarrierCoeff = new BiquadCoeff()
         this.#scratchModulatorCoeff = new BiquadCoeff()
 
-        this.#carCxL1 = alloc(); this.#carCxL2 = alloc(); this.#carCyL1 = alloc(); this.#carCyL2 = alloc()
-        this.#carCxR1 = alloc(); this.#carCxR2 = alloc(); this.#carCyR1 = alloc(); this.#carCyR2 = alloc()
-        this.#modMxL1 = alloc(); this.#modMxL2 = alloc(); this.#modMyL1 = alloc(); this.#modMyL2 = alloc()
-        this.#modMxR1 = alloc(); this.#modMxR2 = alloc(); this.#modMyR1 = alloc(); this.#modMyR2 = alloc()
+        this.#carCxL1 = alloc()
+        this.#carCxL2 = alloc()
+        this.#carCyL1 = alloc()
+        this.#carCyL2 = alloc()
+        this.#carCxR1 = alloc()
+        this.#carCxR2 = alloc()
+        this.#carCyR1 = alloc()
+        this.#carCyR2 = alloc()
+        this.#modMxL1 = alloc()
+        this.#modMxL2 = alloc()
+        this.#modMyL1 = alloc()
+        this.#modMyL2 = alloc()
+        this.#modMxR1 = alloc()
+        this.#modMxR2 = alloc()
+        this.#modMyR1 = alloc()
+        this.#modMyR2 = alloc()
 
         // Start with all bands active up to the default count, fully faded in.
         for (let i = 0; i < this.#targetBandCount; i++) {
@@ -215,12 +240,30 @@ export class VocoderDsp {
 
     // ── Parameter setters ─────────────────────────────────────────────────
 
-    set carrierMinFreq(hz: number) { this.#targetCarrierMinFreq = hz; this.#coeffsDirty = true }
-    set carrierMaxFreq(hz: number) { this.#targetCarrierMaxFreq = hz; this.#coeffsDirty = true }
-    set modulatorMinFreq(hz: number) { this.#targetModulatorMinFreq = hz; this.#coeffsDirty = true }
-    set modulatorMaxFreq(hz: number) { this.#targetModulatorMaxFreq = hz; this.#coeffsDirty = true }
-    set qMin(q: number) { this.#targetQMin = q; this.#coeffsDirty = true }
-    set qMax(q: number) { this.#targetQMax = q; this.#coeffsDirty = true }
+    set carrierMinFreq(hz: number) {
+        this.#targetCarrierMinFreq = hz
+        this.#coeffsDirty = true
+    }
+    set carrierMaxFreq(hz: number) {
+        this.#targetCarrierMaxFreq = hz
+        this.#coeffsDirty = true
+    }
+    set modulatorMinFreq(hz: number) {
+        this.#targetModulatorMinFreq = hz
+        this.#coeffsDirty = true
+    }
+    set modulatorMaxFreq(hz: number) {
+        this.#targetModulatorMaxFreq = hz
+        this.#coeffsDirty = true
+    }
+    set qMin(q: number) {
+        this.#targetQMin = q
+        this.#coeffsDirty = true
+    }
+    set qMax(q: number) {
+        this.#targetQMax = q
+        this.#coeffsDirty = true
+    }
 
     set mix(value: number) {
         const angle = value * Math.PI * 0.5
@@ -379,10 +422,16 @@ export class VocoderDsp {
             cc.setBandpassParams(this.#curCarrierFreq[i] / sr, this.#curCarrierQ[i])
             mc.setBandpassParams(this.#curModulatorFreq[i] / sr, this.#curModulatorQ[i])
             const o = i * 5
-            carC[o + 0] = cc.b0; carC[o + 1] = cc.b1; carC[o + 2] = cc.b2
-            carC[o + 3] = cc.a1; carC[o + 4] = cc.a2
-            modC[o + 0] = mc.b0; modC[o + 1] = mc.b1; modC[o + 2] = mc.b2
-            modC[o + 3] = mc.a1; modC[o + 4] = mc.a2
+            carC[o + 0] = cc.b0
+            carC[o + 1] = cc.b1
+            carC[o + 2] = cc.b2
+            carC[o + 3] = cc.a1
+            carC[o + 4] = cc.a2
+            modC[o + 0] = mc.b0
+            modC[o + 1] = mc.b1
+            modC[o + 2] = mc.b2
+            modC[o + 3] = mc.a1
+            modC[o + 4] = mc.a2
         }
         if (converged) this.#coeffsDirty = false
     }
@@ -398,18 +447,36 @@ export class VocoderDsp {
             cc.setBandpassParams(this.#curCarrierFreq[i] / sr, this.#curCarrierQ[i])
             mc.setBandpassParams(this.#curModulatorFreq[i] / sr, this.#curModulatorQ[i])
             const o = i * 5
-            carC[o + 0] = cc.b0; carC[o + 1] = cc.b1; carC[o + 2] = cc.b2
-            carC[o + 3] = cc.a1; carC[o + 4] = cc.a2
-            modC[o + 0] = mc.b0; modC[o + 1] = mc.b1; modC[o + 2] = mc.b2
-            modC[o + 3] = mc.a1; modC[o + 4] = mc.a2
+            carC[o + 0] = cc.b0
+            carC[o + 1] = cc.b1
+            carC[o + 2] = cc.b2
+            carC[o + 3] = cc.a1
+            carC[o + 4] = cc.a2
+            modC[o + 0] = mc.b0
+            modC[o + 1] = mc.b1
+            modC[o + 2] = mc.b2
+            modC[o + 3] = mc.a1
+            modC[o + 4] = mc.a2
         }
     }
 
     #resetBandState(i: int): void {
-        this.#carCxL1[i] = 0; this.#carCxL2[i] = 0; this.#carCyL1[i] = 0; this.#carCyL2[i] = 0
-        this.#carCxR1[i] = 0; this.#carCxR2[i] = 0; this.#carCyR1[i] = 0; this.#carCyR2[i] = 0
-        this.#modMxL1[i] = 0; this.#modMxL2[i] = 0; this.#modMyL1[i] = 0; this.#modMyL2[i] = 0
-        this.#modMxR1[i] = 0; this.#modMxR2[i] = 0; this.#modMyR1[i] = 0; this.#modMyR2[i] = 0
+        this.#carCxL1[i] = 0
+        this.#carCxL2[i] = 0
+        this.#carCyL1[i] = 0
+        this.#carCyL2[i] = 0
+        this.#carCxR1[i] = 0
+        this.#carCxR2[i] = 0
+        this.#carCyR1[i] = 0
+        this.#carCyR2[i] = 0
+        this.#modMxL1[i] = 0
+        this.#modMxL2[i] = 0
+        this.#modMyL1[i] = 0
+        this.#modMyL2[i] = 0
+        this.#modMxR1[i] = 0
+        this.#modMxR2[i] = 0
+        this.#modMyR1[i] = 0
+        this.#modMyR2[i] = 0
         this.#envelope[i] = 0
     }
 
@@ -470,10 +537,16 @@ export class VocoderDsp {
                 // Modulator bandpass (stereo)
                 const mxL = modL[s]
                 const myL = (mb0 * mxL + mb1 * mxL1 + mb2 * mxL2 - ma1 * myL1 - ma2 * myL2) + 1e-18 - 1e-18
-                mxL2 = mxL1; mxL1 = mxL; myL2 = myL1; myL1 = myL
+                mxL2 = mxL1
+                mxL1 = mxL
+                myL2 = myL1
+                myL1 = myL
                 const mxR = modR[s]
                 const myR = (mb0 * mxR + mb1 * mxR1 + mb2 * mxR2 - ma1 * myR1 - ma2 * myR2) + 1e-18 - 1e-18
-                mxR2 = mxR1; mxR1 = mxR; myR2 = myR1; myR1 = myR
+                mxR2 = mxR1
+                mxR1 = mxR
+                myR2 = myR1
+                myR1 = myR
 
                 // Envelope follower on max(|L|, |R|)
                 const aL = myL < 0 ? -myL : myL
@@ -486,24 +559,38 @@ export class VocoderDsp {
                 // Carrier bandpass (stereo)
                 const cxL = carL[s]
                 const cyL = (cb0 * cxL + cb1 * cxL1 + cb2 * cxL2 - ca1 * cyL1 - ca2 * cyL2) + 1e-18 - 1e-18
-                cxL2 = cxL1; cxL1 = cxL; cyL2 = cyL1; cyL1 = cyL
+                cxL2 = cxL1
+                cxL1 = cxL
+                cyL2 = cyL1
+                cyL1 = cyL
                 const cxR = carR[s]
                 const cyR = (cb0 * cxR + cb1 * cxR1 + cb2 * cxR2 - ca1 * cyR1 - ca2 * cyR2) + 1e-18 - 1e-18
-                cxR2 = cxR1; cxR1 = cxR; cyR2 = cyR1; cyR1 = cyR
+                cxR2 = cxR1
+                cxR1 = cxR
+                cyR2 = cyR1
+                cyR1 = cyR
 
                 const k = env * bandG * wet * gain
                 outL[s] += cyL * k
                 outR[s] += cyR * k
             }
 
-            this.#carCxL1[i] = cxL1; this.#carCxL2[i] = cxL2
-            this.#carCyL1[i] = cyL1; this.#carCyL2[i] = cyL2
-            this.#carCxR1[i] = cxR1; this.#carCxR2[i] = cxR2
-            this.#carCyR1[i] = cyR1; this.#carCyR2[i] = cyR2
-            this.#modMxL1[i] = mxL1; this.#modMxL2[i] = mxL2
-            this.#modMyL1[i] = myL1; this.#modMyL2[i] = myL2
-            this.#modMxR1[i] = mxR1; this.#modMxR2[i] = mxR2
-            this.#modMyR1[i] = myR1; this.#modMyR2[i] = myR2
+            this.#carCxL1[i] = cxL1
+            this.#carCxL2[i] = cxL2
+            this.#carCyL1[i] = cyL1
+            this.#carCyL2[i] = cyL2
+            this.#carCxR1[i] = cxR1
+            this.#carCxR2[i] = cxR2
+            this.#carCyR1[i] = cyR1
+            this.#carCyR2[i] = cyR2
+            this.#modMxL1[i] = mxL1
+            this.#modMxL2[i] = mxL2
+            this.#modMyL1[i] = myL1
+            this.#modMyL2[i] = myL2
+            this.#modMxR1[i] = mxR1
+            this.#modMxR2[i] = mxR2
+            this.#modMyR1[i] = myR1
+            this.#modMyR2[i] = myR2
             this.#envelope[i] = env
             this.#bandGainCurrent[i] = gain
         }
@@ -552,7 +639,10 @@ export class VocoderDsp {
                 // Single modulator bandpass
                 const mx = mod[s]
                 const my = (mb0 * mx + mb1 * mxL1 + mb2 * mxL2 - ma1 * myL1 - ma2 * myL2) + 1e-18 - 1e-18
-                mxL2 = mxL1; mxL1 = mx; myL2 = myL1; myL1 = my
+                mxL2 = mxL1
+                mxL1 = mx
+                myL2 = myL1
+                myL1 = my
 
                 const peak = my < 0 ? -my : my
                 env = env < peak
@@ -562,22 +652,34 @@ export class VocoderDsp {
                 // Carrier bandpass (stereo)
                 const cxL = carL[s]
                 const cyL = (cb0 * cxL + cb1 * cxL1 + cb2 * cxL2 - ca1 * cyL1 - ca2 * cyL2) + 1e-18 - 1e-18
-                cxL2 = cxL1; cxL1 = cxL; cyL2 = cyL1; cyL1 = cyL
+                cxL2 = cxL1
+                cxL1 = cxL
+                cyL2 = cyL1
+                cyL1 = cyL
                 const cxR = carR[s]
                 const cyR = (cb0 * cxR + cb1 * cxR1 + cb2 * cxR2 - ca1 * cyR1 - ca2 * cyR2) + 1e-18 - 1e-18
-                cxR2 = cxR1; cxR1 = cxR; cyR2 = cyR1; cyR1 = cyR
+                cxR2 = cxR1
+                cxR1 = cxR
+                cyR2 = cyR1
+                cyR1 = cyR
 
                 const k = env * bandG * wet * gain
                 outL[s] += cyL * k
                 outR[s] += cyR * k
             }
 
-            this.#carCxL1[i] = cxL1; this.#carCxL2[i] = cxL2
-            this.#carCyL1[i] = cyL1; this.#carCyL2[i] = cyL2
-            this.#carCxR1[i] = cxR1; this.#carCxR2[i] = cxR2
-            this.#carCyR1[i] = cyR1; this.#carCyR2[i] = cyR2
-            this.#modMxL1[i] = mxL1; this.#modMxL2[i] = mxL2
-            this.#modMyL1[i] = myL1; this.#modMyL2[i] = myL2
+            this.#carCxL1[i] = cxL1
+            this.#carCxL2[i] = cxL2
+            this.#carCyL1[i] = cyL1
+            this.#carCyL2[i] = cyL2
+            this.#carCxR1[i] = cxR1
+            this.#carCxR2[i] = cxR2
+            this.#carCyR1[i] = cyR1
+            this.#carCyR2[i] = cyR2
+            this.#modMxL1[i] = mxL1
+            this.#modMxL2[i] = mxL2
+            this.#modMyL1[i] = myL1
+            this.#modMyL2[i] = myL2
             this.#envelope[i] = env
             this.#bandGainCurrent[i] = gain
         }
@@ -620,10 +722,16 @@ export class VocoderDsp {
                 // Carrier bandpass (stereo) — the envelope follows this directly.
                 const cxL = carL[s]
                 const cyL = (cb0 * cxL + cb1 * cxL1 + cb2 * cxL2 - ca1 * cyL1 - ca2 * cyL2) + 1e-18 - 1e-18
-                cxL2 = cxL1; cxL1 = cxL; cyL2 = cyL1; cyL1 = cyL
+                cxL2 = cxL1
+                cxL1 = cxL
+                cyL2 = cyL1
+                cyL1 = cyL
                 const cxR = carR[s]
                 const cyR = (cb0 * cxR + cb1 * cxR1 + cb2 * cxR2 - ca1 * cyR1 - ca2 * cyR2) + 1e-18 - 1e-18
-                cxR2 = cxR1; cxR1 = cxR; cyR2 = cyR1; cyR1 = cyR
+                cxR2 = cxR1
+                cxR1 = cxR
+                cyR2 = cyR1
+                cyR1 = cyR
 
                 // Envelope follower on the band's own carrier energy — multi-band gate.
                 const aL = cyL < 0 ? -cyL : cyL
@@ -638,10 +746,14 @@ export class VocoderDsp {
                 outR[s] += cyR * k
             }
 
-            this.#carCxL1[i] = cxL1; this.#carCxL2[i] = cxL2
-            this.#carCyL1[i] = cyL1; this.#carCyL2[i] = cyL2
-            this.#carCxR1[i] = cxR1; this.#carCxR2[i] = cxR2
-            this.#carCyR1[i] = cyR1; this.#carCyR2[i] = cyR2
+            this.#carCxL1[i] = cxL1
+            this.#carCxL2[i] = cxL2
+            this.#carCyL1[i] = cyL1
+            this.#carCyL2[i] = cyL2
+            this.#carCxR1[i] = cxR1
+            this.#carCxR2[i] = cxR2
+            this.#carCyR1[i] = cyR1
+            this.#carCyR2[i] = cyR2
             this.#envelope[i] = env
             this.#bandGainCurrent[i] = gain
         }
