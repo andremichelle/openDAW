@@ -58,18 +58,20 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
         <div className={className}>
             <div className="freq-labels">{labels}</div>
             <canvas onInit={canvas => {
+                const OVERSAMPLE = 2
                 const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
                     const {context, actualWidth, actualHeight, isResized} = painter
                     const W = actualWidth
                     const H = actualHeight
                     if (W === 0 || H === 0) return
+                    const R = W * OVERSAMPLE
 
-                    if (frequency === null || frequency.length !== W + 1 || isResized) {
-                        frequency = new Float32Array(W + 1)
-                        magResponse = new Float32Array(W + 1)
-                        phaseResponse = new Float32Array(W + 1)
-                        for (let k = 0; k <= W; k++) {
-                            const hz = F_MIN * Math.exp((k / W) * LOG_RANGE)
+                    if (frequency === null || frequency.length !== R + 1 || isResized) {
+                        frequency = new Float32Array(R + 1)
+                        magResponse = new Float32Array(R + 1)
+                        phaseResponse = new Float32Array(R + 1)
+                        for (let k = 0; k <= R; k++) {
+                            const hz = F_MIN * Math.exp((k / R) * LOG_RANGE)
                             frequency[k] = hz / sampleRate
                         }
                     }
@@ -169,6 +171,8 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                     context.globalCompositeOperation = "screen"
                     context.lineWidth = 1
 
+                    const step = 1 / OVERSAMPLE
+
                     for (let i = 0; i < N; i++) {
                         biquad.setBandpassParams(carrierFreq[i] / sampleRate, qs[i])
                         biquad.getFrequencyResponse(frequency, magResponse!, phaseResponse!)
@@ -178,10 +182,10 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                         context.beginPath()
                         context.moveTo(-1, H + 2)
                         context.lineTo(-1, H - dbToOffset(gainToDb(magResponse![0])))
-                        for (let px = 0; px <= W; px++) {
-                            context.lineTo(px, H - dbToOffset(gainToDb(magResponse![px])))
+                        for (let k = 0; k <= R; k++) {
+                            context.lineTo(k * step, H - dbToOffset(gainToDb(magResponse![k])))
                         }
-                        context.lineTo(W + 1, H - dbToOffset(gainToDb(magResponse![W])))
+                        context.lineTo(W + 1, H - dbToOffset(gainToDb(magResponse![R])))
                         context.lineTo(W + 1, H + 2)
                         context.fill()
                         context.stroke()
@@ -196,10 +200,10 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                         context.beginPath()
                         context.moveTo(-1, -2)
                         context.lineTo(-1, dbToOffset(gainToDb(magResponse![0])))
-                        for (let px = 0; px <= W; px++) {
-                            context.lineTo(px, dbToOffset(gainToDb(magResponse![px])))
+                        for (let k = 0; k <= R; k++) {
+                            context.lineTo(k * step, dbToOffset(gainToDb(magResponse![k])))
                         }
-                        context.lineTo(W + 1, dbToOffset(gainToDb(magResponse![W])))
+                        context.lineTo(W + 1, dbToOffset(gainToDb(magResponse![R])))
                         context.lineTo(W + 1, -2)
                         context.fill()
                         context.stroke()

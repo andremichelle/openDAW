@@ -61,7 +61,7 @@ export const VocoderDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                                                     displayMode={displayMode}
                                                     spectrum={spectrum}/>
                               </div>
-                              <div className="controls" style={{gridArea: "1 / 7 / 2 / 9"}}>
+                              <div className="controls" style={{gridArea: "1 / 8 / 2 / 10"}}>
                                   <ModulatorSourceMenu lifecycle={lifecycle}
                                                        editing={editing}
                                                        rootBoxAdapter={rootBoxAdapter}
@@ -95,10 +95,10 @@ export const VocoderDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                               {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: modulatorMaxFreq, style: {gridArea: "3 / 4"}})}
                               {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: qMin, style: {gridArea: "3 / 5"}})}
                               {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: qMax, style: {gridArea: "3 / 6"}})}
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: envAttack, style: {gridArea: "2 / 7"}})}
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: envRelease, style: {gridArea: "2 / 8"}})}
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: gain, style: {gridArea: "3 / 7"}})}
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: mix, style: {gridArea: "3 / 8"}})}
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: envAttack, style: {gridArea: "2 / 8"}})}
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: envRelease, style: {gridArea: "2 / 9"}})}
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: gain, style: {gridArea: "3 / 8"}})}
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: mix, style: {gridArea: "3 / 9"}})}
                           </div>
                       )}
                       populateMeter={() => (

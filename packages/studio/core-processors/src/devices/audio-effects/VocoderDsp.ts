@@ -129,10 +129,9 @@ export class VocoderDsp {
     #attackCoeff: number = 0.0
     #releaseCoeff: number = 0.0
 
-    // ── Output level ─────────────────────────────────────────────────────
-    static readonly BAND_GAIN_REF = 120.0
-    static readonly BAND_COUNT_REF = 10
-    #bandGain: number = VocoderDsp.BAND_GAIN_REF * VocoderDsp.BAND_COUNT_REF / 16
+    // ── Output level (compensated for bandwidth) ───────────────────────
+    static readonly GAIN_K = 186.0
+    #bandGain: number = 75
     #outputGain: number = 1.0
 
     // ── Coefficient storage: flat Float32Array(5 * MAX_BANDS) per side ────
@@ -209,6 +208,7 @@ export class VocoderDsp {
         this.#fadeCoeff = Math.exp(-1 / (sampleRate * VocoderDsp.BAND_FADE_SECONDS))
         this.setAttackSeconds(0.005)
         this.setReleaseSeconds(0.030)
+        this.#recomputeBandGain()
         this.#writeAllCoefficients()
     }
 
@@ -218,8 +218,8 @@ export class VocoderDsp {
     set carrierMaxFreq(hz: number) { this.#targetCarrierMaxFreq = hz }
     set modulatorMinFreq(hz: number) { this.#targetModulatorMinFreq = hz }
     set modulatorMaxFreq(hz: number) { this.#targetModulatorMaxFreq = hz }
-    set qMin(q: number) { this.#targetQMin = q }
-    set qMax(q: number) { this.#targetQMax = q }
+    set qMin(q: number) { this.#targetQMin = q; this.#recomputeBandGain() }
+    set qMax(q: number) { this.#targetQMax = q; this.#recomputeBandGain() }
 
     set mix(value: number) {
         const angle = value * Math.PI * 0.5
@@ -237,12 +237,25 @@ export class VocoderDsp {
 
     set gain(db: number) { this.#outputGain = dbToGain(db) }
 
+    #recomputeBandGain(): void {
+        const N = this.#targetBandCount
+        const qMax = this.#targetQMax
+        const qLog = Math.log(this.#targetQMax / this.#targetQMin)
+        let sum = 0
+        for (let i = 0; i < N; i++) {
+            const x = N === 1 ? 0 : i / (N - 1)
+            const q = qMax * Math.exp(-x * qLog)
+            sum += 1.0 / q
+        }
+        this.#bandGain = VocoderDsp.GAIN_K / sum
+    }
+
     set bandCount(count: number) {
         // Defensive guard — stray save-file value won't crash the DSP.
         if (count !== 8 && count !== 12 && count !== 16) return
         if (count === this.#targetBandCount) return
         this.#targetBandCount = count
-        this.#bandGain = VocoderDsp.BAND_GAIN_REF * VocoderDsp.BAND_COUNT_REF / count
+        this.#recomputeBandGain()
         for (let i = 0; i < VocoderDsp.MAX_BANDS; i++) {
             this.#targetActive[i] = i < count ? 1 : 0
         }

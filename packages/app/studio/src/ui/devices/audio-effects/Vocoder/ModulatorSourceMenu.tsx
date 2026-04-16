@@ -75,14 +75,40 @@ export const ModulatorSourceMenu = ({lifecycle, editing, rootBoxAdapter, adapter
             parent.addMenuItem(createSelectableItem(output))
         }
     }
+    const resolveLabel = (): string => {
+        const mode = parseMode(box.modulatorSource.getValue())
+        switch (mode) {
+            case "noise-white": return "White"
+            case "noise-pink": return "Pink"
+            case "noise-brown": return "Brown"
+            case "self": return "Self"
+            case "external": {
+                let label = "External"
+                box.sideChain.targetVertex.ifSome(vertex => {
+                    for (const output of rootBoxAdapter.labeledAudioOutputs()) {
+                        if (output.address.equals(vertex.box.address)) {
+                            label = output.label
+                            return
+                        }
+                    }
+                })
+                return label
+            }
+        }
+    }
     return (
         <MenuButton onInit={button => {
             button.classList.add(className)
-            lifecycle.own(box.modulatorSource.catchupAndSubscribe(() => {
+            const update = () => {
                 const mode = parseMode(box.modulatorSource.getValue())
                 button.classList.toggle("has-source", !isDefaultMode(mode))
-            }))
+                button.textContent = resolveLabel()
+            }
+            lifecycle.ownAll(
+                box.modulatorSource.catchupAndSubscribe(update),
+                box.sideChain.catchupAndSubscribe(update)
+            )
         }} root={MenuItem.root().setRuntimeChildrenProcedure(createMenu)}
-                    appearance={{tinyTriangle: true}}>Modulator</MenuButton>
+                    appearance={{tinyTriangle: true}}>Pink</MenuButton>
     )
 }
