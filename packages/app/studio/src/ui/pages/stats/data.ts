@@ -214,6 +214,16 @@ export const fetchLatencyStats = async (): Promise<LatencyStats> => {
     return {distribution, unsupported}
 }
 
+export const fetchVisitorStats = async (): Promise<DailySeries> => {
+    const data = await fetchJson<Record<string, ReadonlyArray<string>>>(
+        "https://api.opendaw.studio/users/visitors.json", {mode: "cors"})
+    const counts: Record<string, number> = {}
+    for (const [date, ids] of Object.entries(data)) {
+        counts[date] = ids.length
+    }
+    return sortByDate(counts)
+}
+
 export const sumValues = (series: DailySeries): number =>
     series.reduce((acc, [, value]) => acc + value, 0)
 
