@@ -31,16 +31,13 @@ export class VocoderDeviceProcessor extends AudioProcessor implements AudioEffec
     readonly #dsp: VocoderDsp
     readonly #noise: NoiseGenerator
 
-    readonly #modulatorAnalyser: AudioAnalyser
-    readonly #carrierAnalyser: AudioAnalyser
-    readonly #modulatorSpectrum: Float32Array
-    readonly #carrierSpectrum: Float32Array
+    readonly #analyser: AudioAnalyser
+    readonly #spectrum: Float32Array
 
     readonly #modScratchL: Float32Array
     readonly #modScratchR: Float32Array
 
-    #needsModulatorSpectrum: boolean = false
-    #needsCarrierSpectrum: boolean = false
+    #spectrumMode: "none" | "modulator" | "carrier" = "none"
 
     readonly #sideChainConnection: Terminator = new Terminator()
 
@@ -57,10 +54,8 @@ export class VocoderDeviceProcessor extends AudioProcessor implements AudioEffec
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
         this.#dsp = new VocoderDsp(sampleRate)
         this.#noise = new NoiseGenerator()
-        this.#modulatorAnalyser = new AudioAnalyser()
-        this.#carrierAnalyser = new AudioAnalyser()
-        this.#modulatorSpectrum = new Float32Array(this.#modulatorAnalyser.numBins())
-        this.#carrierSpectrum = new Float32Array(this.#carrierAnalyser.numBins())
+        this.#analyser = new AudioAnalyser()
+        this.#spectrum = new Float32Array(this.#analyser.numBins())
         this.#modScratchL = new Float32Array(RenderQuantum)
         this.#modScratchR = new Float32Array(RenderQuantum)
 
@@ -83,17 +78,19 @@ export class VocoderDeviceProcessor extends AudioProcessor implements AudioEffec
         this.ownAll(
             context.registerProcessor(this),
             context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing),
-            context.broadcaster.broadcastFloats(adapter.modulatorSpectrum, this.#modulatorSpectrum, (hasSubscribers) => {
-                this.#needsModulatorSpectrum = hasSubscribers
-                if (!hasSubscribers) return
-                this.#modulatorSpectrum.set(this.#modulatorAnalyser.bins())
-                this.#modulatorAnalyser.decay = true
+            context.broadcaster.broadcastFloats(adapter.modulatorSpectrum, this.#spectrum, (hasSubscribers) => {
+                this.#spectrumMode = hasSubscribers ? "modulator" : this.#spectrumMode === "modulator" ? "none" : this.#spectrumMode
+                if (hasSubscribers) {
+                    this.#spectrum.set(this.#analyser.bins())
+                    this.#analyser.decay = true
+                }
             }),
-            context.broadcaster.broadcastFloats(adapter.carrierSpectrum, this.#carrierSpectrum, (hasSubscribers) => {
-                this.#needsCarrierSpectrum = hasSubscribers
-                if (!hasSubscribers) return
-                this.#carrierSpectrum.set(this.#carrierAnalyser.bins())
-                this.#carrierAnalyser.decay = true
+            context.broadcaster.broadcastFloats(adapter.carrierSpectrum, this.#spectrum, (hasSubscribers) => {
+                this.#spectrumMode = hasSubscribers ? "carrier" : this.#spectrumMode === "carrier" ? "none" : this.#spectrumMode
+                if (hasSubscribers) {
+                    this.#spectrum.set(this.#analyser.bins())
+                    this.#analyser.decay = true
+                }
             }),
             adapter.sideChain.catchupAndSubscribe(() => {
                 this.#sideChainConnection.terminate()
@@ -132,8 +129,7 @@ export class VocoderDeviceProcessor extends AudioProcessor implements AudioEffec
         this.eventInput.clear()
         this.#dsp.reset()
         this.#noise.reset()
-        this.#modulatorAnalyser.clear()
-        this.#carrierAnalyser.clear()
+        this.#analyser.clear()
         this.#modScratchL.fill(0.0)
         this.#modScratchR.fill(0.0)
     }
@@ -192,23 +188,22 @@ export class VocoderDeviceProcessor extends AudioProcessor implements AudioEffec
         }
 
         this.#peaks.process(outL, outR, s0, s1)
-        if (this.#needsCarrierSpectrum) {
-            this.#carrierAnalyser.process(srcL, srcR, s0, s1)
-        }
-        if (this.#needsModulatorSpectrum) {
+        if (this.#spectrumMode === "carrier") {
+            this.#analyser.process(srcL, srcR, s0, s1)
+        } else if (this.#spectrumMode === "modulator") {
             switch (this.#modulatorMode) {
                 case "noise-white":
                 case "noise-pink":
                 case "noise-brown":
-                    this.#modulatorAnalyser.process(this.#modScratchL, this.#modScratchL, s0, s1)
+                    this.#analyser.process(this.#modScratchL, this.#modScratchL, s0, s1)
                     break
                 case "self":
-                    this.#modulatorAnalyser.process(srcL, srcR, s0, s1)
+                    this.#analyser.process(srcL, srcR, s0, s1)
                     break
                 case "external":
                     if (this.#sideChain.nonEmpty()) {
                         const sc = this.#sideChain.unwrap()
-                        this.#modulatorAnalyser.process(sc.getChannel(0), sc.getChannel(1), s0, s1)
+                        this.#analyser.process(sc.getChannel(0), sc.getChannel(1), s0, s1)
                     }
                     break
             }

@@ -129,9 +129,10 @@ export class VocoderDsp {
     #attackCoeff: number = 0.0
     #releaseCoeff: number = 0.0
 
-    // ── Output level (auto-normalized) ──────────────────────────────────
-    #smoothedRms: number = 1.0
-    #autoGain: number = 1.0
+    // ── Output level ─────────────────────────────────────────────────────
+    static readonly BAND_GAIN_REF = 120.0
+    static readonly BAND_COUNT_REF = 10
+    #bandGain: number = VocoderDsp.BAND_GAIN_REF * VocoderDsp.BAND_COUNT_REF / 16
     #outputGain: number = 1.0
 
     // ── Coefficient storage: flat Float32Array(5 * MAX_BANDS) per side ────
@@ -241,6 +242,7 @@ export class VocoderDsp {
         if (count !== 8 && count !== 12 && count !== 16) return
         if (count === this.#targetBandCount) return
         this.#targetBandCount = count
+        this.#bandGain = VocoderDsp.BAND_GAIN_REF * VocoderDsp.BAND_COUNT_REF / count
         for (let i = 0; i < VocoderDsp.MAX_BANDS; i++) {
             this.#targetActive[i] = i < count ? 1 : 0
         }
@@ -261,8 +263,6 @@ export class VocoderDsp {
     }
 
     reset(): void {
-        // Clear biquad + envelope + band-fade state but preserve target/current
-        // freq & Q so transport restart doesn't sweep from zero.
         for (let i = 0; i < VocoderDsp.MAX_BANDS; i++) {
             this.#resetBandState(i)
             this.#bandGainCurrent[i] = this.#targetActive[i]
@@ -284,7 +284,6 @@ export class VocoderDsp {
             from = to
         }
         this.#trimProcessedBands()
-        this.#updateAutoGain(outL, outR, fromIndex, toIndex)
     }
 
     processMonoMod(carL: Float32Array, carR: Float32Array, mod: Float32Array,
@@ -298,7 +297,6 @@ export class VocoderDsp {
             from = to
         }
         this.#trimProcessedBands()
-        this.#updateAutoGain(outL, outR, fromIndex, toIndex)
     }
 
     processSelf(carL: Float32Array, carR: Float32Array,
@@ -312,7 +310,6 @@ export class VocoderDsp {
             from = to
         }
         this.#trimProcessedBands()
-        this.#updateAutoGain(outL, outR, fromIndex, toIndex)
     }
 
     // ── Internals: band target spread & coefficient interpolation ────────
@@ -330,7 +327,7 @@ export class VocoderDsp {
             const x = N === 1 ? 0 : i / denom
             this.#tmpTargetCarrierFreq[i] = cfMin * Math.exp(x * cfLog)
             this.#tmpTargetModulatorFreq[i] = mfMin * Math.exp(x * mfLog)
-            this.#tmpTargetQ[i] = qMin * Math.exp(x * qLog)
+            this.#tmpTargetQ[i] = this.#targetQMax * Math.exp(-x * qLog)
         }
         // Slots [N..MAX_BANDS) retain stale targets but are skipped by the
         // interpolation / process loops via the targetActive check.
@@ -395,16 +392,6 @@ export class VocoderDsp {
         this.#envelope[i] = 0
     }
 
-    #updateAutoGain(outL: Float32Array, outR: Float32Array, from: int, to: int): void {
-        let energy = 0
-        for (let i = from; i < to; i++) {
-            energy += outL[i] * outL[i] + outR[i] * outR[i]
-        }
-        const rms = Math.sqrt(energy / (2 * (to - from) + 1e-30))
-        this.#smoothedRms += 0.05 * (rms - this.#smoothedRms)
-        this.#autoGain = 1.0 / Math.max(this.#smoothedRms, 1e-6)
-    }
-
     #trimProcessedBands(): void {
         for (let i = this.#processedBands - 1; i >= 0; i--) {
             if (this.#targetActive[i] === 1 || this.#bandGainCurrent[i] >= VocoderDsp.COLD_THRESHOLD) {
@@ -428,7 +415,7 @@ export class VocoderDsp {
         }
 
         const wet = this.#wetGain
-        const bandG = this.#autoGain * this.#outputGain
+        const bandG = this.#bandGain * this.#outputGain
         const aCoeff = this.#attackCoeff
         const rCoeff = this.#releaseCoeff
         const fade = this.#fadeCoeff
@@ -511,7 +498,7 @@ export class VocoderDsp {
         }
 
         const wet = this.#wetGain
-        const bandG = this.#autoGain * this.#outputGain
+        const bandG = this.#bandGain * this.#outputGain
         const aCoeff = this.#attackCoeff
         const rCoeff = this.#releaseCoeff
         const fade = this.#fadeCoeff
@@ -585,7 +572,7 @@ export class VocoderDsp {
         }
 
         const wet = this.#wetGain
-        const bandG = this.#autoGain * this.#outputGain
+        const bandG = this.#bandGain * this.#outputGain
         const aCoeff = this.#attackCoeff
         const rCoeff = this.#releaseCoeff
         const fade = this.#fadeCoeff
