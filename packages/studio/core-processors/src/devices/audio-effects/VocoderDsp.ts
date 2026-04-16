@@ -112,6 +112,7 @@ export class VocoderDsp {
     #targetModulatorMaxFreq: number = 12000.0
     #targetQMin: number = 2.0
     #targetQMax: number = 20.0
+    #coeffsDirty: boolean = true
 
     // ── Current (lerped) per-band frequencies & Q ─────────────────────────
     readonly #curCarrierFreq: Float32Array
@@ -214,12 +215,12 @@ export class VocoderDsp {
 
     // ── Parameter setters ─────────────────────────────────────────────────
 
-    set carrierMinFreq(hz: number) { this.#targetCarrierMinFreq = hz }
-    set carrierMaxFreq(hz: number) { this.#targetCarrierMaxFreq = hz }
-    set modulatorMinFreq(hz: number) { this.#targetModulatorMinFreq = hz }
-    set modulatorMaxFreq(hz: number) { this.#targetModulatorMaxFreq = hz }
-    set qMin(q: number) { this.#targetQMin = q; this.#recomputeBandGain() }
-    set qMax(q: number) { this.#targetQMax = q; this.#recomputeBandGain() }
+    set carrierMinFreq(hz: number) { this.#targetCarrierMinFreq = hz; this.#coeffsDirty = true }
+    set carrierMaxFreq(hz: number) { this.#targetCarrierMaxFreq = hz; this.#coeffsDirty = true }
+    set modulatorMinFreq(hz: number) { this.#targetModulatorMinFreq = hz; this.#coeffsDirty = true }
+    set modulatorMaxFreq(hz: number) { this.#targetModulatorMaxFreq = hz; this.#coeffsDirty = true }
+    set qMin(q: number) { this.#targetQMin = q; this.#coeffsDirty = true }
+    set qMax(q: number) { this.#targetQMax = q; this.#coeffsDirty = true }
 
     set mix(value: number) {
         const angle = value * Math.PI * 0.5
@@ -255,7 +256,7 @@ export class VocoderDsp {
         if (count !== 8 && count !== 12 && count !== 16) return
         if (count === this.#targetBandCount) return
         this.#targetBandCount = count
-        this.#recomputeBandGain()
+        this.#coeffsDirty = true
         for (let i = 0; i < VocoderDsp.MAX_BANDS; i++) {
             this.#targetActive[i] = i < count ? 1 : 0
         }
@@ -347,6 +348,8 @@ export class VocoderDsp {
     }
 
     #interpolateCoeffs(): void {
+        if (!this.#coeffsDirty) return
+        this.#recomputeBandGain()
         this.#computeBandTargets()
         const alpha = VocoderDsp.COEFF_LERP
         const sr = this.#sampleRate
@@ -355,11 +358,9 @@ export class VocoderDsp {
         const carC = this.#carrierCoeffs
         const modC = this.#modulatorCoeffs
         const upper = this.#processedBands
+        let converged = true
         for (let i = 0; i < upper; i++) {
-            // Leave fading-out bands (target 0) at their last freq/Q. Their wet
-            // contribution is scaled to zero by bandGainCurrent anyway.
             if (this.#targetActive[i] !== 0) {
-                // Geometric lerp: cur *= (target / cur) ** alpha
                 this.#curCarrierFreq[i] *=
                     Math.pow(this.#tmpTargetCarrierFreq[i] / this.#curCarrierFreq[i], alpha)
                 this.#curModulatorFreq[i] *=
@@ -368,6 +369,12 @@ export class VocoderDsp {
                     Math.pow(this.#tmpTargetQ[i] / this.#curCarrierQ[i], alpha)
                 this.#curModulatorQ[i] *=
                     Math.pow(this.#tmpTargetQ[i] / this.#curModulatorQ[i], alpha)
+                const eps = 0.01
+                if (Math.abs(this.#curCarrierFreq[i] - this.#tmpTargetCarrierFreq[i]) > eps
+                    || Math.abs(this.#curModulatorFreq[i] - this.#tmpTargetModulatorFreq[i]) > eps
+                    || Math.abs(this.#curCarrierQ[i] - this.#tmpTargetQ[i]) > eps) {
+                    converged = false
+                }
             }
             cc.setBandpassParams(this.#curCarrierFreq[i] / sr, this.#curCarrierQ[i])
             mc.setBandpassParams(this.#curModulatorFreq[i] / sr, this.#curModulatorQ[i])
@@ -377,6 +384,7 @@ export class VocoderDsp {
             modC[o + 0] = mc.b0; modC[o + 1] = mc.b1; modC[o + 2] = mc.b2
             modC[o + 3] = mc.a1; modC[o + 4] = mc.a2
         }
+        if (converged) this.#coeffsDirty = false
     }
 
     #writeAllCoefficients(): void {
