@@ -202,6 +202,28 @@ None — all logic goes into existing files.
 - `packages/studio/core/src/project/Project.ts` — `commitMidiCapture()`, `subscribeMidiCaptureAvailable()`
 - `packages/app/studio/src/ui/header/TransportGroup.tsx` — rewire button to use `subscribeMidiCaptureAvailable()`
 
+## Known Issues (from implementation)
+
+### 1. Engine `isPlaying` bounced on stop — ROOT-FIXED
+`EngineWorklet.stop()` had a synchronous `this.#isPlaying.setValue(false)` for instant UI feedback before dispatching the async stop command. The SyncStream reader then overwrote it back to `true` (processor hadn't processed the stop yet), causing a `false → true → false` bounce that triggered spurious buffer resets.
+
+**Root fix**: Removed the synchronous `setValue(false)` from `EngineWorklet.stop()`. The `isPlaying` state now comes exclusively from the SyncStream — one clean transition. Minor visual flicker on the play button (~16ms) is acceptable.
+
+### 2. `#captureLastPosition` corruption — FIXED by #1
+With the bounce gone, `isPlaying` transitions are single events. No spurious `true` after stop means no position subscription running during a frozen buffer state. The `pendingReset` guards on `isPlaying` and `position` subscriptions were removed — they were bandaids for the bounce.
+
+### 3. Latency compensation was wrong
+The original implementation added `audioContext.outputLatency` to capture deltas (copied from RecordMidi). But capture is retroactive — we want the timeline position where the MIDI event arrived, not a latency-compensated position. The latency field has been removed.
+
+### 4. `subscribeMidiCaptureAvailable` must react to capture additions
+CaptureDevices creates CaptureMidi instances asynchronously (when audio units are added to the project). The subscription must rebuild when captures are added/removed. Fixed via `CaptureDevices.subscribeChanges()` notifier.
+
+### 5. Region placed on wrong track
+`RecordTrack.findOrCreate` was used to find/create a track for the captured region. This is wrong — the capture is armed on a specific track. The commit should use the focused track (if it matches the armed audio unit) or the first Notes track on the audio unit. Never create a new track.
+
+### 6. No `!` non-null assertions
+Code must abort gracefully if no Notes track exists, not crash with `!`.
+
 ## Files as reference (read-only)
 - `packages/studio/core/src/capture/RecordMidi.ts` — region/note creation pattern
 - `packages/studio/core/src/capture/RecordTrack.ts` — track allocation

@@ -1,13 +1,19 @@
 import {
     Arrays,
+    asInstanceOf,
     Editing,
     Func,
+    isAbsent,
     isDefined,
+    isInstanceOf,
+    Observer,
+    Option,
     panic,
     Procedure,
     RuntimeNotifier,
     safeExecute,
     SortedSet,
+    Subscription,
     Terminable,
     TerminableOwner,
     Terminator,
@@ -22,6 +28,9 @@ import {
     AudioUnitBox,
     BoxIO,
     BoxVisitor,
+    NoteEventBox,
+    NoteEventCollectionBox,
+    NoteRegionBox,
     RootBox,
     SpielwerkDeviceBox,
     TimelineBox,
@@ -35,6 +44,7 @@ import {
     BoxAdapters,
     BoxAdaptersContext,
     ClipSequencing,
+    ColorCodes,
     DeviceBoxAdapter,
     DeviceBoxUtils,
     Devices,
@@ -50,6 +60,8 @@ import {
     ScriptCompiler,
     SoundfontLoaderManager,
     TimelineBoxAdapter,
+    TrackBoxAdapter,
+    TrackType,
     UnionBoxTypes,
     UserEditingManager,
     VaryingTempoMap,
@@ -60,7 +72,7 @@ import {ProjectEnv} from "./ProjectEnv"
 import {Mixer} from "../Mixer"
 import {ProjectApi} from "./ProjectApi"
 import {ProjectMigration} from "./ProjectMigration"
-import {CaptureDevices, Recording} from "../capture"
+import {CaptureDevices, CaptureMidi, Recording, ResolvedNote} from "../capture"
 import {EngineFacade} from "../EngineFacade"
 import {EngineWorklet} from "../EngineWorklet"
 import {MidiDevices, MIDILearning} from "../midi"
@@ -276,6 +288,93 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     }
 
     isRecording(): boolean {return Recording.isRecording}
+
+    commitMidiCapture(): void {
+        if (Recording.isRecording) {return}
+        const armed = this.captureDevices.filterArmed()
+            .filter((capture): capture is CaptureMidi => isInstanceOf(capture, CaptureMidi))
+        if (armed.length === 0) {return}
+        const focusedTrack = this.timelineFocus.track
+        const target = focusedTrack
+            .map(track => track.audioUnit.address.uuid)
+            .flatMap(uuid => Option.wrap(armed.find(
+                capture => UUID.equals(capture.audioUnitBox.address.uuid, uuid))))
+            .unwrapOrElse(armed[0])
+        const result = target.resolveCapture()
+        if (result.isEmpty()) {return}
+        const {mode, origin, notes} = result.unwrap()
+        const firstPosition = notes[0].position
+        const regionPosition: ppqn = mode === "playing"
+            ? origin + firstPosition
+            : this.engine.position.getValue()
+        const regionDuration = notes.reduce(
+            (max, note) => Math.max(max, (note.position - firstPosition) + note.duration), 0)
+        const targetUuid = target.audioUnitBox.address.uuid
+        const focusedMatch = focusedTrack.nonEmpty()
+            && UUID.equals(focusedTrack.unwrap().audioUnit.address.uuid, targetUuid)
+        if (focusedMatch) {
+            const track = focusedTrack.unwrap()
+            this.#commitCapturedNotes(track, regionPosition, regionDuration, firstPosition, notes)
+        } else {
+            const noteTrackBox = target.audioUnitBox.tracks.pointerHub.incoming()
+                .map(({box}) => asInstanceOf(box, TrackBox))
+                .find(trackBox => trackBox.type.getValue() === TrackType.Notes)
+            if (isAbsent(noteTrackBox)) {return}
+            const track = this.boxAdapters.adapterFor(noteTrackBox, TrackBoxAdapter)
+            this.#commitCapturedNotes(track, regionPosition, regionDuration, firstPosition, notes)
+        }
+        target.resetCapture()
+    }
+
+    #commitCapturedNotes(track: TrackBoxAdapter, regionPosition: ppqn,
+                         regionDuration: ppqn, firstPosition: ppqn,
+                         notes: ReadonlyArray<ResolvedNote>): void {
+        this.editing.modify(() => {
+            const solver = this.overlapResolver.fromRange(track, regionPosition, regionPosition + regionDuration)
+            const collection = NoteEventCollectionBox.create(this.boxGraph, UUID.generate())
+            const regionBox = NoteRegionBox.create(this.boxGraph, UUID.generate(), box => {
+                box.regions.refer(track.box.regions)
+                box.events.refer(collection.owners)
+                box.position.setValue(regionPosition)
+                box.duration.setValue(regionDuration)
+                box.loopDuration.setValue(regionDuration)
+                box.hue.setValue(ColorCodes.forTrackType(TrackType.Notes))
+                box.label.setValue("Captured")
+            })
+            for (const note of notes) {
+                NoteEventBox.create(this.boxGraph, UUID.generate(), box => {
+                    box.position.setValue(note.position - firstPosition)
+                    box.duration.setValue(note.duration)
+                    box.pitch.setValue(note.pitch)
+                    box.velocity.setValue(note.velocity)
+                    box.events.refer(collection.events)
+                })
+            }
+            solver()
+            this.selection.select(regionBox)
+        })
+    }
+
+    subscribeMidiCaptureAvailable(observer: Observer<boolean>): Subscription {
+        const terminator = new Terminator()
+        const inner = terminator.own(new Terminator())
+        const rebuild = () => {
+            inner.terminate()
+            const midiCaptures = this.captureDevices.allCaptures()
+                .filter((capture): capture is CaptureMidi => isInstanceOf(capture, CaptureMidi))
+            const update = () => observer(midiCaptures.some(capture =>
+                capture.armed.getValue() && capture.captureNoteOnCount.getValue() > 0))
+            for (const capture of midiCaptures) {
+                inner.ownAll(
+                    capture.armed.subscribe(update),
+                    capture.captureNoteOnCount.subscribe(update))
+            }
+            update()
+        }
+        terminator.own(this.captureDevices.subscribeChanges(rebuild))
+        rebuild()
+        return terminator
+    }
 
     follow(box: UserInterfaceBox): void {
         this.userEditingManager.follow(box)

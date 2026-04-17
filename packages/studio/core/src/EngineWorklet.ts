@@ -241,10 +241,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         this.wake()
         this.#commands.play()
     }
-    stop(reset: boolean = false): void {
-        this.#isPlaying.setValue(false)
-        this.#commands.stop(reset)
-    }
+    stop(reset: boolean = false): void {this.#commands.stop(reset)}
     setPosition(position: ppqn): void {this.#commands.setPosition(position)}
     prepareRecordingState(countIn: boolean): void {this.#commands.prepareRecordingState(countIn)}
     stopRecording(): void {this.#commands.stopRecording()}

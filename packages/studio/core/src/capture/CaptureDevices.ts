@@ -1,4 +1,4 @@
-import {asInstanceOf, isDefined, Maybe, Option, SortedSet, Subscription, Terminable, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, isDefined, Maybe, Notifier, Option, SortedSet, Subscription, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioUnitBox, BoxVisitor, CaptureAudioBox, CaptureMidiBox} from "@opendaw/studio-boxes"
 import {Project} from "../project"
 import {Capture} from "./Capture"
@@ -12,6 +12,7 @@ export class CaptureDevices implements Terminable {
     readonly #subscription: Subscription
     readonly #captures: SortedSet<UUID.Bytes, Capture>
     readonly #captureSubscriptions: SortedSet<UUID.Bytes, CaptureSubscription>
+    readonly #changeNotifier = new Notifier<void>
 
     constructor(project: Project) {
         this.#project = project
@@ -30,6 +31,7 @@ export class CaptureDevices implements Terminable {
                         })
                         if (isDefined(capture)) {
                             this.#captures.add(capture)
+                            this.#changeNotifier.notify()
                         }
                     })
                 })
@@ -38,6 +40,7 @@ export class CaptureDevices implements Terminable {
             onRemoved: ({box: {address: {uuid}}}) => {
                 this.#captures.removeByKeyIfExist(uuid)?.terminate()
                 this.#captureSubscriptions.removeByKeyIfExist(uuid)?.subscription.terminate()
+                this.#changeNotifier.notify()
             }
         })
     }
@@ -56,6 +59,9 @@ export class CaptureDevices implements Terminable {
                 .forEach(capture => capture.armed.setValue(false))
         }
     }
+
+    allCaptures(): ReadonlyArray<Capture> {return this.#captures.values()}
+    subscribeChanges(observer: () => void): Subscription {return this.#changeNotifier.subscribe(observer)}
 
     filterArmed(): ReadonlyArray<Capture> {
         return this.#captures.values()
