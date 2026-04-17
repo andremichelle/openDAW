@@ -1,11 +1,11 @@
 import css from "./ModulatorSourceMenu.sass?inline"
-import {createElement} from "@opendaw/lib-jsx"
-import {Editing, Lifecycle, Option} from "@opendaw/lib-std"
-import {Address} from "@opendaw/lib-box"
-import {Html} from "@opendaw/lib-dom"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {LabeledAudioOutput, ModulatorMode, RootBoxAdapter, VocoderDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {MenuItem} from "@opendaw/studio-core"
+import {createElement} from "@moises-ai/lib-jsx"
+import {Editing, Lifecycle, Option} from "@moises-ai/lib-std"
+import {Address} from "@moises-ai/lib-box"
+import {Html} from "@moises-ai/lib-dom"
+import {Colors, IconSymbol} from "@moises-ai/studio-enums"
+import {LabeledAudioOutput, ModulatorMode, RootBoxAdapter, VocoderDeviceBoxAdapter} from "@moises-ai/studio-adapters"
+import {MenuItem} from "@moises-ai/studio-core"
 import {MenuButton} from "@/ui/components/MenuButton"
 
 const className = Html.adoptStyleSheet(css, "ModulatorSourceMenu")

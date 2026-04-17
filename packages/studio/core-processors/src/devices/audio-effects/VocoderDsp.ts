@@ -1,5 +1,5 @@
-import {BiquadCoeff, dbToGain} from "@opendaw/lib-dsp"
-import {int} from "@opendaw/lib-std"
+import {BiquadCoeff, dbToGain} from "@moises-ai/lib-dsp"
+import {int} from "@moises-ai/lib-std"
 
 export type NoiseColor = "white" | "pink" | "brown"
 

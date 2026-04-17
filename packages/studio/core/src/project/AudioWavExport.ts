@@ -1,7 +1,7 @@
-import {WavFile} from "@opendaw/lib-dsp"
-import {Promises} from "@opendaw/lib-runtime"
-import {Files} from "@opendaw/lib-dom"
-import {AudioClipBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
+import {WavFile} from "@moises-ai/lib-dsp"
+import {Promises} from "@moises-ai/lib-runtime"
+import {Files} from "@moises-ai/lib-dom"
+import {AudioClipBoxAdapter, AudioRegionBoxAdapter} from "@moises-ai/studio-adapters"
 
 export namespace AudioWavExport {
     export const toFile = async (owner: AudioRegionBoxAdapter | AudioClipBoxAdapter,

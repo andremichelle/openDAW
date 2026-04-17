@@ -1,11 +1,11 @@
 import css from "./VocoderTransform.sass?inline"
-import {Lifecycle, MutableObservableValue, Nullable} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
-import {AnimationFrame, Html} from "@opendaw/lib-dom"
-import {BiquadCoeff, gainToDb} from "@opendaw/lib-dsp"
-import {CanvasPainter, LinearScale, LogScale} from "@opendaw/studio-core"
-import {int, linear} from "@opendaw/lib-std"
-import {VocoderDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {Lifecycle, MutableObservableValue, Nullable} from "@moises-ai/lib-std"
+import {createElement} from "@moises-ai/lib-jsx"
+import {AnimationFrame, Html} from "@moises-ai/lib-dom"
+import {BiquadCoeff, gainToDb} from "@moises-ai/lib-dsp"
+import {CanvasPainter, LinearScale, LogScale} from "@moises-ai/studio-core"
+import {int, linear} from "@moises-ai/lib-std"
+import {VocoderDeviceBoxAdapter} from "@moises-ai/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 
 const className = Html.adoptStyleSheet(css, "VocoderTransform")

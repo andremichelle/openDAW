@@ -5,7 +5,7 @@ import {StudioService} from "@/service/StudioService.ts"
 import {Html} from "@moises-ai/lib-dom"
 import {Resources} from "@/ui/dashboard/Resources"
 import {DemoProjects} from "@/ui/dashboard/DemoProjects"
-import {Colors} from "@opendaw/studio-enums"
+import {Colors} from "@moises-ai/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "Dashboard")
 

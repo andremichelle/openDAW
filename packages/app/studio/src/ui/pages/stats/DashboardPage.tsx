@@ -1,8 +1,8 @@
 import css from "./DashboardPage.sass?inline"
-import {Await, createElement, Frag, PageContext, PageFactory} from "@opendaw/lib-jsx"
-import {DefaultObservableValue, int, Lifecycle} from "@opendaw/lib-std"
-import {Html} from "@opendaw/lib-dom"
-import {Colors} from "@opendaw/studio-enums"
+import {Await, createElement, Frag, PageContext, PageFactory} from "@moises-ai/lib-jsx"
+import {DefaultObservableValue, int, Lifecycle} from "@moises-ai/lib-std"
+import {Html} from "@moises-ai/lib-dom"
+import {Colors} from "@moises-ai/studio-enums"
 import type {StudioService} from "@/service/StudioService.ts"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {BarChart, LineChart} from "./charts"
@@ -36,7 +36,7 @@ import {
 
 const className = Html.adoptStyleSheet(css, "DashboardPage")
 
-const NPM_PACKAGE = "@opendaw/lib-std"
+const NPM_PACKAGE = "@moises-ai/lib-std"
 
 type DashboardData = {
     rooms: RoomStats

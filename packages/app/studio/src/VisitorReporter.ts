@@ -1,4 +1,4 @@
-import {Browser} from "@opendaw/lib-dom"
+import {Browser} from "@moises-ai/lib-dom"
 
 const API_URL = "https://api.opendaw.studio/users/visitor-counter.php"
 const STORAGE_KEY = "visitor-reported-date"

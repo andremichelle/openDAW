@@ -1,4 +1,4 @@
-import {isDefined} from "@opendaw/lib-std"
+import {isDefined} from "@moises-ai/lib-std"
 
 const STORAGE_KEY = "reported-latencies"
 const API_URL = "https://api.opendaw.studio/latency/report.php"
