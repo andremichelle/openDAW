@@ -16,7 +16,7 @@ const DEFAULT_PADDING = {top: 16, right: 16, bottom: 28, left: 40}
 const COMPACT_PADDING = {top: 8, right: 8, bottom: 8, left: 8}
 const GRID_LINES = 4
 
-const formatAxisDate = (date: string): string => date.slice(5)
+const formatAxisLabel = (label: string): string => label.includes("-") ? label.slice(5) : label
 
 const buildAreaPath = (points: ReadonlyArray<readonly [number, number]>, baseY: number): string => {
     if (points.length === 0) return ""
@@ -66,19 +66,22 @@ export const LineChart = ({lifecycle, series, color, showAxis = true, showAverag
                                 <stop offset="100%" stop-color={accent} stop-opacity="0"/>
                             </linearGradient>
                         </defs>
-                        {showAxis && Array.from({length: GRID_LINES + 1}, (_, index) => {
-                            const y = padding.top + (chartHeight / GRID_LINES) * index
-                            const value = Math.round(maxValue - (valueRange / GRID_LINES) * index)
-                            return (
-                                <Frag>
-                                    <line x1={padding.left} y1={y} x2={width - padding.right} y2={y}
-                                          stroke={Colors.shadow.toString()} stroke-width="1" stroke-opacity="0.4"/>
-                                    <text x={`${padding.left - 6}`} y={`${y + 4}`}
-                                          fill={Colors.shadow.toString()} font-size="10"
-                                          font-family="sans-serif" text-anchor="end">{value}</text>
-                                </Frag>
-                            )
-                        })}
+                        {showAxis && (() => {
+                            const lines = Math.min(GRID_LINES, Math.max(1, Math.floor(maxValue)))
+                            return Array.from({length: lines + 1}, (_, index) => {
+                                const y = padding.top + (chartHeight / lines) * index
+                                const value = Math.round(maxValue - (valueRange / lines) * index)
+                                return (
+                                    <Frag>
+                                        <line x1={padding.left} y1={y} x2={width - padding.right} y2={y}
+                                              stroke={Colors.shadow.toString()} stroke-width="1" stroke-opacity="0.4"/>
+                                        <text x={`${padding.left - 6}`} y={`${y + 4}`}
+                                              fill={Colors.shadow.toString()} font-size="10"
+                                              font-family="sans-serif" text-anchor="end">{value}</text>
+                                    </Frag>
+                                )
+                            })
+                        })()}
                         <path d={buildAreaPath(points, baseY)} fill={`url(#${gradientId})`}/>
                         <path d={buildLinePath(points)} fill="none" stroke={accent}
                               stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
@@ -86,7 +89,7 @@ export const LineChart = ({lifecycle, series, color, showAxis = true, showAverag
                             <text x={`${padding.left + index * stepX}`}
                                   y={`${baseY + 16}`}
                                   fill={Colors.shadow.toString()} font-size="10"
-                                  font-family="sans-serif" text-anchor="middle">{formatAxisDate(label)}</text>
+                                  font-family="sans-serif" text-anchor="middle">{formatAxisLabel(label)}</text>
                         ))}
                         {showAverage && values.length > 1 && (() => {
                             const total = values.reduce((sum, value) => sum + value, 0)
@@ -131,19 +134,22 @@ export const BarChart = ({lifecycle, series, color, showAxis = true}: ChartProps
                 const dateLabelStep = Math.max(1, Math.ceil(dateLabelMinSpacing / slotWidth))
                 replaceChildren(element, (
                     <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height}>
-                        {showAxis && Array.from({length: GRID_LINES + 1}, (_, index) => {
-                            const y = padding.top + (chartHeight / GRID_LINES) * index
-                            const value = Math.round(maxValue - (maxValue / GRID_LINES) * index)
-                            return (
-                                <Frag>
-                                    <line x1={padding.left} y1={y} x2={width - padding.right} y2={y}
-                                          stroke={Colors.shadow.toString()} stroke-width="1" stroke-opacity="0.4"/>
-                                    <text x={`${padding.left - 6}`} y={`${y + 4}`}
-                                          fill={Colors.shadow.toString()} font-size="10"
-                                          font-family="sans-serif" text-anchor="end">{value}</text>
-                                </Frag>
-                            )
-                        })}
+                        {showAxis && (() => {
+                            const lines = Math.min(GRID_LINES, Math.max(1, Math.floor(maxValue)))
+                            return Array.from({length: lines + 1}, (_, index) => {
+                                const y = padding.top + (chartHeight / lines) * index
+                                const value = Math.round(maxValue - (maxValue / lines) * index)
+                                return (
+                                    <Frag>
+                                        <line x1={padding.left} y1={y} x2={width - padding.right} y2={y}
+                                              stroke={Colors.shadow.toString()} stroke-width="1" stroke-opacity="0.4"/>
+                                        <text x={`${padding.left - 6}`} y={`${y + 4}`}
+                                              fill={Colors.shadow.toString()} font-size="10"
+                                              font-family="sans-serif" text-anchor="end">{value}</text>
+                                    </Frag>
+                                )
+                            })
+                        })()}
                         {values.map((value, index) => {
                             const barHeight = (value / maxValue) * chartHeight
                             const x = padding.left + index * slotWidth + (slotWidth - barWidth) / 2
@@ -157,7 +163,7 @@ export const BarChart = ({lifecycle, series, color, showAxis = true}: ChartProps
                             <text x={`${padding.left + index * slotWidth + slotWidth / 2}`}
                                   y={`${baseY + 16}`}
                                   fill={Colors.shadow.toString()} font-size="10"
-                                  font-family="sans-serif" text-anchor="middle">{formatAxisDate(label)}</text>
+                                  font-family="sans-serif" text-anchor="middle">{formatAxisLabel(label)}</text>
                         ))}
                     </svg>
                 ))

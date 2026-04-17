@@ -150,8 +150,9 @@ export namespace RecordAudio {
                         pointer.refer(newFileBox.transientMarkers)
                     }
                     oldFileBox.delete()
-                })
+                }, false)
             })
+            editing.mark()
         }
         terminator.ownAll(
             Terminable.create(() => {

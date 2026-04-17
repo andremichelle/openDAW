@@ -118,6 +118,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                     },
                     {
                         type: "page",
+                        label: "Vocoder",
+                        path: "/manuals/devices/audio/vocoder",
+                        icon: EffectFactories.AudioNamed.Vocoder.defaultIcon
+                    },
+                    {
+                        type: "page",
                         label: "Waveshaper",
                         path: "/manuals/devices/audio/waveshaper",
                         icon: EffectFactories.AudioNamed.Waveshaper.defaultIcon

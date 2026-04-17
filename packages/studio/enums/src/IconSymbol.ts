@@ -147,6 +147,7 @@ export enum IconSymbol {
     UserFolder,
     Velocity,
     Vinyl,
+    Vocoder,
     Volume,
     VUMeter,
     Waveform,

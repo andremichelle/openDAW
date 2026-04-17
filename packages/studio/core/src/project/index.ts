@@ -1,4 +1,6 @@
 export * from "./audio"
+export * from "./AudioWavExport"
+export * from "./NoteMidiExport"
 export * from "./Project"
 export * from "./ProjectApi"
 export * from "./ProjectBundle"

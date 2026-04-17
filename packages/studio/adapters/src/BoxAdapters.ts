@@ -74,6 +74,7 @@ import {
     ValueRegionBox,
     VaporisateurDeviceBox,
     VelocityDeviceBox,
+    VocoderDeviceBox,
     WarpMarkerBox,
     WaveshaperDeviceBox,
     WerkstattDeviceBox,
@@ -135,6 +136,7 @@ import {FoldDeviceBoxAdapter} from "./devices/audio-effects/FoldDeviceBoxAdapter
 import {MIDIOutputDeviceBoxAdapter} from "./devices/instruments/MIDIOutputDeviceBoxAdapter"
 import {VelocityDeviceBoxAdapter} from "./devices/midi-effects/VelocityDeviceBoxAdapter"
 import {TidalDeviceBoxAdapter} from "./devices/audio-effects/TidalDeviceBoxAdapter"
+import {VocoderDeviceBoxAdapter} from "./devices/audio-effects/VocoderDeviceBoxAdapter"
 import {DattorroReverbDeviceBoxAdapter} from "./devices/audio-effects/DattorroReverbDeviceBoxAdapter"
 import {NeuralAmpDeviceBoxAdapter} from "./devices/audio-effects/NeuralAmpDeviceBoxAdapter"
 import {WaveshaperDeviceBoxAdapter} from "./devices/audio-effects/WaveshaperDeviceBoxAdapter"
@@ -259,6 +261,7 @@ export class BoxAdapters implements Terminable {
             visitValueEventCollectionBox: (box: ValueEventCollectionBox): BoxAdapter => new ValueEventCollectionBoxAdapter(this.#context, box),
             visitValueRegionBox: (box: ValueRegionBox) => new ValueRegionBoxAdapter(this.#context, box),
             visitVaporisateurDeviceBox: (box: VaporisateurDeviceBox) => new VaporisateurDeviceBoxAdapter(this.#context, box),
+            visitVocoderDeviceBox: (box: VocoderDeviceBox) => new VocoderDeviceBoxAdapter(this.#context, box),
             visitWaveshaperDeviceBox: (box: WaveshaperDeviceBox) => new WaveshaperDeviceBoxAdapter(this.#context, box),
             visitWerkstattDeviceBox: (box: WerkstattDeviceBox) => new WerkstattDeviceBoxAdapter(this.#context, box),
             visitVelocityDeviceBox: (box: VelocityDeviceBox) => new VelocityDeviceBoxAdapter(this.#context, box),

@@ -27,6 +27,7 @@ import {
     UnknownMidiEffectDeviceBox,
     VaporisateurDeviceBox,
     VelocityDeviceBox,
+    VocoderDeviceBox,
     WaveshaperDeviceBox,
     WerkstattDeviceBox,
     ZeitgeistDeviceBox
@@ -60,6 +61,7 @@ import {
     UnknownMidiEffectDeviceBoxAdapter,
     VaporisateurDeviceBoxAdapter,
     VelocityDeviceBoxAdapter,
+    VocoderDeviceBoxAdapter,
     WaveshaperDeviceBoxAdapter,
     WerkstattDeviceBoxAdapter,
     ZeitgeistDeviceBoxAdapter
@@ -94,6 +96,7 @@ import {VelocityDeviceProcessor} from "./devices/midi-effects/VelocityDeviceProc
 import {TidalDeviceProcessor} from "./devices/audio-effects/TidalDeviceProcessor"
 import {DattorroReverbDeviceProcessor} from "./devices/audio-effects/DattorroReverbDeviceProcessor"
 import {NeuralAmpDeviceProcessor} from "./devices/audio-effects/NeuralAmpDeviceProcessor"
+import {VocoderDeviceProcessor} from "./devices/audio-effects/VocoderDeviceProcessor"
 import {WaveshaperDeviceProcessor} from "./devices/audio-effects/WaveshaperDeviceProcessor"
 import {WerkstattDeviceProcessor} from "./devices/audio-effects/WerkstattDeviceProcessor"
 import {SpielwerkDeviceProcessor} from "./devices/midi-effects/SpielwerkDeviceProcessor"
@@ -173,6 +176,8 @@ export namespace AudioEffectDeviceProcessorFactory {
                 new NopDeviceProcessor(context, context.boxAdapters.adapterFor(box, ModularDeviceBoxAdapter)),
             visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox): AudioEffectDeviceProcessor =>
                 new NeuralAmpDeviceProcessor(context, context.boxAdapters.adapterFor(box, NeuralAmpDeviceBoxAdapter)),
+            visitVocoderDeviceBox: (box: VocoderDeviceBox): AudioEffectDeviceProcessor =>
+                new VocoderDeviceProcessor(context, context.boxAdapters.adapterFor(box, VocoderDeviceBoxAdapter)),
             visitWaveshaperDeviceBox: (box: WaveshaperDeviceBox): AudioEffectDeviceProcessor =>
                 new WaveshaperDeviceProcessor(context, context.boxAdapters.adapterFor(box, WaveshaperDeviceBoxAdapter)),
             visitWerkstattDeviceBox: (box: WerkstattDeviceBox): AudioEffectDeviceProcessor =>

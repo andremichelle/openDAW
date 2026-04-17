@@ -29,6 +29,7 @@ import {
     UnknownMidiEffectDeviceBox,
     VaporisateurDeviceBox,
     VelocityDeviceBox,
+    VocoderDeviceBox,
     WaveshaperDeviceBox,
     WerkstattDeviceBox,
     ZeitgeistDeviceBox
@@ -64,6 +65,7 @@ import {
     UnknownMidiEffectDeviceBoxAdapter,
     VaporisateurDeviceBoxAdapter,
     VelocityDeviceBoxAdapter,
+    VocoderDeviceBoxAdapter,
     WaveshaperDeviceBoxAdapter,
     WerkstattDeviceBoxAdapter,
     ZeitgeistDeviceBoxAdapter
@@ -97,6 +99,7 @@ import {VelocityDeviceEditor} from "@/ui/devices/midi-effects/VelocityDeviceEdit
 import {TidalDeviceEditor} from "@/ui/devices/audio-effects/TidalDeviceEditor"
 import {DattorroReverbDeviceEditor} from "@/ui/devices/audio-effects/DattorroReverbDeviceEditor"
 import {NeuralAmpDeviceEditor} from "@/ui/devices/audio-effects/NeuralAmpDeviceEditor"
+import {VocoderDeviceEditor} from "@/ui/devices/audio-effects/VocoderDeviceEditor"
 import {WaveshaperDeviceEditor} from "@/ui/devices/audio-effects/WaveshaperDeviceEditor"
 import {SpielwerkDeviceEditor} from "@/ui/devices/midi-effects/SpielwerkDeviceEditor"
 import {WerkstattDeviceEditor} from "@/ui/devices/audio-effects/WerkstattDeviceEditor"
@@ -289,6 +292,12 @@ export namespace DeviceEditorFactory {
                                        service={service}
                                        adapter={service.project.boxAdapters.adapterFor(box, NeuralAmpDeviceBoxAdapter)}
                                        deviceHost={deviceHost}/>
+            ),
+            visitVocoderDeviceBox: (box: VocoderDeviceBox) => (
+                <VocoderDeviceEditor lifecycle={lifecycle}
+                                     service={service}
+                                     adapter={service.project.boxAdapters.adapterFor(box, VocoderDeviceBoxAdapter)}
+                                     deviceHost={deviceHost}/>
             ),
             visitWaveshaperDeviceBox: (box: WaveshaperDeviceBox) => (
                 <WaveshaperDeviceEditor lifecycle={lifecycle}

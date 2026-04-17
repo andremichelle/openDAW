@@ -17,6 +17,7 @@ import {
     UnknownAudioEffectDeviceBox,
     UnknownMidiEffectDeviceBox,
     VelocityDeviceBox,
+    VocoderDeviceBox,
     WaveshaperDeviceBox,
     SpielwerkDeviceBox,
     WerkstattDeviceBox,
@@ -28,5 +29,5 @@ export type EffectBox =
     | SpielwerkDeviceBox
     | MaximizerDeviceBox | DelayDeviceBox | ReverbDeviceBox | RevampDeviceBox | StereoToolDeviceBox | TidalDeviceBox
     | ModularDeviceBox | UnknownAudioEffectDeviceBox | CompressorDeviceBox | GateDeviceBox
-    | CrusherDeviceBox | FoldDeviceBox | DattorroReverbDeviceBox | NeuralAmpDeviceBox | WaveshaperDeviceBox
-    | WerkstattDeviceBox
+    | CrusherDeviceBox | FoldDeviceBox | DattorroReverbDeviceBox | NeuralAmpDeviceBox | VocoderDeviceBox
+    | WaveshaperDeviceBox | WerkstattDeviceBox

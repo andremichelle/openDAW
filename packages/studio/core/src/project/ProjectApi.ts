@@ -38,6 +38,8 @@ import {
 import {
     AnyRegionBox,
     AnyRegionBoxAdapter,
+    AudioClipBoxAdapter,
+    AudioRegionBoxAdapter,
     AudioUnitBoxAdapter,
     AudioUnitFactory,
     CaptureBox,
@@ -48,6 +50,7 @@ import {
     InstrumentFactory,
     InstrumentOptions,
     InstrumentProduct,
+    NoteEventCollectionBoxAdapter,
     ProjectQueries,
     TrackType
 } from "@moises-ai/studio-adapters"
@@ -55,6 +58,8 @@ import {Project} from "./Project"
 import {EffectFactory} from "../EffectFactory"
 import {EffectBox} from "../EffectBox"
 import {AudioContentFactory} from "./audio"
+import {NoteMidiExport} from "./NoteMidiExport"
+import {AudioWavExport} from "./AudioWavExport"
 
 export type ClipRegionOptions = {
     name?: string
@@ -238,6 +243,14 @@ export class ProjectApi {
             solver()
             return Option.wrap(duplicate)
         }
+    }
+
+    async exportMIDI(collection: NoteEventCollectionBoxAdapter, suggestedName: string = "notes.mid") {
+        return NoteMidiExport.toFile(collection, suggestedName)
+    }
+
+    async exportAudio(owner: AudioRegionBoxAdapter | AudioClipBoxAdapter, suggestedName: string = "audio.wav") {
+        return AudioWavExport.toFile(owner, suggestedName)
     }
 
     quantiseNotes(collection: NoteEventCollectionBox,

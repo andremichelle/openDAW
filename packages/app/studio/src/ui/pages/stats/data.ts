@@ -193,6 +193,38 @@ export const fetchErrorStats = async (): Promise<ErrorStats> => {
     return stats
 }
 
+export type LatencyStats = { distribution: DailySeries, unsupported: number, outliers: number }
+
+export const fetchLatencyStats = async (): Promise<LatencyStats> => {
+    const data = await fetchJson<Record<string, number>>(
+        "https://api.opendaw.studio/latency/latency.json", {mode: "cors"})
+    const unsupported = data["-1"] ?? 0
+    const outliers = data["500"] ?? 0
+    const buckets = new Map<number, number>()
+    for (const [key, count] of Object.entries(data)) {
+        const ms = parseInt(key, 10)
+        if (ms > 0 && ms !== 500) buckets.set(ms, count)
+    }
+    if (buckets.size === 0) return {distribution: [], unsupported, outliers}
+    const minMs = Math.min(...buckets.keys())
+    const maxMs = Math.max(...buckets.keys())
+    const distribution: Array<readonly [string, number]> = []
+    for (let ms = minMs; ms <= maxMs; ms++) {
+        distribution.push([`${ms}`, buckets.get(ms) ?? 0] as const)
+    }
+    return {distribution, unsupported, outliers}
+}
+
+export const fetchVisitorStats = async (): Promise<DailySeries> => {
+    const data = await fetchJson<Record<string, ReadonlyArray<string>>>(
+        "https://api.opendaw.studio/users/visitors.json", {mode: "cors"})
+    const counts: Record<string, number> = {}
+    for (const [date, ids] of Object.entries(data)) {
+        counts[date] = ids.length
+    }
+    return sortByDate(counts)
+}
+
 export const sumValues = (series: DailySeries): number =>
     series.reduce((acc, [, value]) => acc + value, 0)
 

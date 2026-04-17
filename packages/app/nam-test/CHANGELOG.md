@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.12](https://github.com/andremichelle/openDAW/compare/@opendaw/nam-test@0.0.11...@opendaw/nam-test@0.0.12) (2026-04-15)
+
+**Note:** Version bump only for package @opendaw/nam-test
+
 ## [0.0.11](https://github.com/andremichelle/openDAW/compare/@opendaw/nam-test@0.0.10...@opendaw/nam-test@0.0.11) (2026-04-01)
 
 **Note:** Version bump only for package @opendaw/nam-test

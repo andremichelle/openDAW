@@ -1,0 +1,36 @@
+@use "@/mixins"
+
+component
+  display: grid
+  grid-template: repeat(3, 3.5em) / repeat(6, 3.5em) 0.5rem repeat(2, 3.5em)
+  column-gap: 0.25em
+  row-gap: 0.25em
+  @include mixins.Control
+
+  > .display
+    display: flex
+
+  > .controls
+    display: flex
+    flex-direction: column
+    justify-content: space-between
+
+    > .selector
+      display: flex
+      font-size: 0.625rem
+      align-items: center
+
+      > h1
+        opacity: 0.66
+        color: var(--color-dark)
+        font-size: 0.625rem
+        margin-left: 1em
+        flex: 1
+
+      label
+        border: 0.5px solid transparent
+
+      span
+        display: inline-block
+        min-width: 1.5em
+        text-align: center

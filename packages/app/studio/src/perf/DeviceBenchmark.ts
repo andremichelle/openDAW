@@ -21,6 +21,7 @@ import {
     TidalDeviceBox,
     TrackBox,
     ValueEventCollectionBox,
+    VocoderDeviceBox,
     WaveshaperDeviceBox,
     CaptureAudioBox,
     CaptureMidiBox
@@ -114,6 +115,13 @@ const audioEffects: ReadonlyArray<DeviceSpec> = [
     {
         name: "Tidal",
         addToUnit: (boxGraph, unit) => TidalDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.host.refer(unit.audioEffects)
+            box.index.setValue(0)
+        })
+    },
+    {
+        name: "Vocoder",
+        addToUnit: (boxGraph, unit) => VocoderDeviceBox.create(boxGraph, UUID.generate(), box => {
             box.host.refer(unit.audioEffects)
             box.index.setValue(0)
         })

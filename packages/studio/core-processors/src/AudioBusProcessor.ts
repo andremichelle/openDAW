@@ -30,7 +30,10 @@ export class AudioBusProcessor extends AbstractProcessor implements InstrumentDe
         this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
         this.#sources = []
 
-        this.own(context.registerProcessor(this))
+        this.ownAll(
+            context.registerProcessor(this),
+            context.audioOutputBufferRegistry.register(adapter.address, this.#audioOutput, this)
+        )
     }
 
     get noteEventTarget(): Option<NoteEventTarget & DeviceProcessor> {return Option.None}
