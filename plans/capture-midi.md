@@ -24,127 +24,107 @@ Silently buffer all incoming MIDI notes on armed tracks and let the user commit 
 
 ### Buffer lifecycle
 - **Playback starts**: Buffer clears. New capture session begins in Scenario 2 mode.
-- **Playback stops**: Buffer clears. New capture session begins in Scenario 1 mode.
+- **Playback stops**: Buffer is **preserved**. The user can still commit notes captured during playback after stopping. The mode stays as-is (Scenario 2 timing data remains valid for region placement).
+- **First note-on after playback stop**: Buffer clears. New capture session begins in Scenario 1 mode. This is the only way a stopped-transport session replaces a previous playback session's buffer.
 - **Capture committed**: Buffer clears. New capture session begins (mode depends on current transport state).
 - **Track disarmed**: Buffer clears.
-- **Recording active**: Buffer is disabled. Commit action is disabled. No buffering while `Recording.isRecording` is true.
+- **Recording active**: Buffer is disabled. Commit action is disabled. Uses `engine.isRecording` (observable) to detect recording state — `Recording.isRecording` is a static boolean and cannot be subscribed to.
 
 ## Architecture
 
-### Where buffering fits in the signal flow
+### Signal flow
 
 ```
 WebMIDI → CaptureMidi.#notifier
                 ├─→ engine.noteSignal()         (existing: real-time monitoring/synthesis)
                 ├─→ RecordMidi subscriber        (existing: only active during recording)
-                └─→ MidiCaptureBuffer            (NEW: owned by CaptureMidi, active when armed, disabled during recording)
+                └─→ CaptureMidi.#bufferNote()    (NEW: buffers into #captureEvents when armed)
 ```
 
-The buffer is owned by `CaptureMidi` and subscribes directly to the private `#notifier`. It runs in parallel with monitoring, not in place of it.
+All buffering logic lives directly inside `CaptureMidi`. No separate buffer class. The `#notifier` subscriber calls a private method that appends to the events array.
 
-### New class: `MidiCaptureBuffer`
+### `CaptureMidi` — extended with capture buffering
 
-**Location**: `packages/studio/core/src/capture/MidiCaptureBuffer.ts`
+**Existing responsibilities** (unchanged): MIDI stream management, device selection, channel filtering, armed state, `startRecording()`.
 
-**Key principle**: The buffer stores only lightweight raw events (plain arrays/objects). No boxes, no graph nodes, no editing transactions. Box creation happens only at commit time, keeping the buffer zero-cost in terms of graph dependencies and memory.
-
-Responsibilities:
-- Subscribe to `CaptureMidi.#notifier` (owned by CaptureMidi, has direct access)
-- Track transport state via `engine.isPlaying` to switch between Scenario 1 and Scenario 2 timing
-- Pause buffering while `Recording.isRecording` is true
-- Buffer raw note-on/note-off events as simple data (no BoxGraph involvement)
-- Resolve note durations from on/off pairs at commit time
-- Clear buffer on transport transitions
-- On commit: convert raw events into NoteRegionBox + NoteEventBoxes via `editing.modify()`
-
+**New capture fields:**
 ```
-// Discriminated union for raw events
-type RawNoteOn = { type: "on", pitch: byte, velocity: unitValue, delta: number }
-type RawNoteOff = { type: "off", pitch: byte, delta: number }
-type RawNoteEvent = RawNoteOn | RawNoteOff
-
-// delta: time elapsed since capture session started
-//   Scenario 1 (stopped): milliseconds (wall clock), converted to ppqn at commit
-//   Scenario 2 (playing): ppqn (engine position minus session start position + accumulated loop offset)
-
-MidiCaptureBuffer
-├── #events: Array<RawNoteEvent>          // raw on/off stream, append-only
-├── #mode: "stopped" | "playing"
-├── #origin: number                       // reference point for delta computation
-│   │                                     //   stopped: performance.now() at first note-on (lazy init)
-│   │                                     //   playing: engine position (ppqn) at playback start
-├── #bpmAtOrigin: bpm                     // BPM snapshot for Scenario 1 ms→ppqn conversion
-├── #loopOffset: ppqn                     // accumulated loop length across loop wraps (Scenario 2)
-├── #lastPosition: ppqn                   // previous engine position, for detecting loop wraps
-│
-├── reset(): void                         // clear events array, reset origin/offsets
-├── commit(project): void                 // resolve durations, create boxes, create region
-├── hasNotes(): boolean                   // does the buffer contain any note-on events?
-└── readonly noteCount: ObservableValue<int>  // for UI feedback (count of note-ons)
+#captureEvents: Array<RawNoteEvent>       // raw on/off stream
+#captureMode: "stopped" | "playing"
+#captureOrigin: number                    // delta reference (ms for stopped, ppqn for playing)
+#captureOriginSet: boolean                // lazy init for Scenario 1
+#capturePendingReset: boolean             // deferred reset after playback stop
+#captureBpmAtOrigin: bpm                  // BPM snapshot for stopped mode conversion
+#captureLoopOffset: ppqn                  // accumulated loop wraps
+#captureLastPosition: ppqn               // for loop wrap detection
+#captureLatency: ppqn                     // output latency in ppqn
+#captureNoteOnCount: DefaultObservableValue<int>  // stable observable for UI
 ```
 
-Every event stores `delta` — the elapsed time since the capture session's origin. This is always relative, never absolute.
+**New capture subscriptions** (added when armed, cleaned up when disarmed):
+- `engine.isPlaying` — mode transitions, buffer reset on play start
+- `engine.isRecording` — disable buffering during recording
+- `engine.position` — track position for loop wrap detection and delta computation
 
-At note-on/off time, the hot path computes `delta` and pushes to the array:
-- **Scenario 1**: `delta = performance.now() - #origin` (milliseconds). `#origin` is lazily set on the first note-on.
-- **Scenario 2**: `delta = (engine.position.getValue() + latency) - #origin + #loopOffset` (ppqn). Latency = `PPQN.secondsToPulses(audioContext.outputLatency, bpm)`.
+**New public API:**
+- `get captureNoteOnCount: ObservableValue<int>` — always accessible, 0 when not armed
+- `resolveCapture(): Option<CaptureResult>` — resolve on/off pairs, return notes + mode + origin. Returns None if empty. Does NOT reset — caller decides when to reset.
+- `resetCapture(): void` — clear buffer, restart session in current transport mode
 
-**Loop handling (Scenario 2)**: On each position update, if `currentPosition < #lastPosition`, a loop wrap occurred. Add the loop length (`loopArea.to - loopArea.from`) to `#loopOffset`. This keeps deltas monotonically increasing across loop boundaries.
+**Private methods:**
+- `#bufferNote(signal: NoteSignal): void` — append to `#captureEvents`, increment count
+- `#captureReset(): void` — clear events, reset timing state
+- `#resolveNotes(): Array<ResolvedNote>` — pair on/off, compute positions and durations
+- `#computeCaptureDelta(): number` — delta from origin based on current mode
 
-At commit time, note-ons are paired with their corresponding note-offs to compute durations (one active note per pitch, last-write-wins). Notes still held at commit time are truncated to the commit delta. Durations are clamped to `MIN_NOTE_DURATION` (`PPQN.fromSignature(1, 128)`).
+**Types returned by `resolveCapture()`:**
+```
+type ResolvedNote = { pitch: byte, velocity: unitValue, position: ppqn, duration: ppqn }
+type CaptureResult = { mode: "stopped" | "playing", origin: number, notes: ReadonlyArray<ResolvedNote> }
+```
 
-This keeps the hot path (every note-on/off while playing) as cheap as a subtraction and an array push — no box allocation, no graph wiring, no editing transactions until the user explicitly commits.
+### `Project` — orchestration and UI subscription
+
+#### `commitMidiCapture(): void`
+- Guards: `Recording.isRecording` → return
+- Finds target `CaptureMidi` (focused track match or first armed)
+- Calls `capture.resolveCapture()` → if None, return
+- Creates boxes inside `editing.modify()`:
+  - `RecordTrack.findOrCreate()` for track
+  - Compute region position (playing: `origin + firstNoteDelta`, stopped: current playhead)
+  - Compute region duration (`max(note.position - firstNote.position + note.duration)`)
+  - `overlapResolver.fromRange()` before creating region
+  - Create `NoteEventCollectionBox`, `NoteRegionBox`, `NoteEventBox` per note
+  - Call solver, select region
+- Calls `capture.resetCapture()` after commit
+
+#### `subscribeMidiCaptureAvailable(observer: Observer<boolean>): Subscription`
+- Single subscription point for the UI
+- Aggregates: any armed CaptureMidi with `captureNoteOnCount > 0`?
+- Fires on arm state changes and note count changes
+- UI calls this once, never touches CaptureDevices or CaptureMidi internals
+
+### Target capture selection
+
+When multiple MIDI captures are armed:
+1. If a track is selected (`project.timelineFocus.track`), find the armed MIDI capture whose `audioUnitBox` matches the focused track's `audioUnit`.
+2. If no track is selected or no match, use the first armed MIDI capture.
 
 ### Timing strategy
 
-**Scenario 1 (stopped)**: No latency compensation. Deltas are in milliseconds. At commit time, convert all deltas to ppqn using `PPQN.secondsToPulses(delta / 1000, #bpmAtOrigin)`. Region position = current playhead. Note positions within the region = converted delta of each note-on, offset so first note lands at position 0.
+**Scenario 1 (stopped)**: No latency compensation. Deltas in milliseconds. At commit, convert to ppqn via `PPQN.secondsToPulses(delta / 1000, bpmAtOrigin)`. Region position = current playhead. First note at position 0.
 
-**Scenario 2 (playing)**: Latency compensated. Deltas are already in ppqn (monotonic across loop wraps). Region position = `#origin + firstNoteDelta`. Note positions within the region = `noteDelta - firstNoteDelta` (so first note lands at position 0).
+**Scenario 2 (playing)**: Latency compensated. Deltas in ppqn (monotonic via `#captureLoopOffset`). Region position = `origin + firstNoteDelta`. First note at position 0.
 
-### Region creation (in `commit()`)
+**Session origin**: Set at session start — playback start or post-commit reset.
 
-All box creation wrapped in a single `editing.modify()` call (default `mark: true` for one undo step).
+**Deferred reset**: Transport stops with data → `#capturePendingReset = true`. Buffer preserved. Next note-on triggers reset → fresh Scenario 1 session.
 
-Uses the same pattern as `RecordMidi`:
-1. `RecordTrack.findOrCreate(editing, audioUnitBox, TrackType.Notes, null)` — find or create a track
-2. `NoteEventCollectionBox.create(boxGraph, UUID.generate())` — create event collection
-3. `NoteRegionBox.create(boxGraph, UUID.generate(), box => { ... })` — create region at correct position
-   - Set `position`, `duration`, `loopDuration` (duration = loopDuration)
-   - Set `hue` via `ColorCodes.forTrackType(TrackType.Notes)`
-   - Set `label` to `"Captured"`
-   - Wire `regions` and `events` pointers
-4. For each resolved note: `NoteEventBox.create(boxGraph, UUID.generate(), box => { ... })` — create note event
-   - Set `position` (relative to region start), `duration` (clamped to MIN_NOTE_DURATION), `pitch`, `velocity`
-   - Wire `events` pointer to collection
-5. `project.selection.select(regionBox)` — select the new region
-
-Region duration = `max(notePosition + noteDuration)` across all notes (covers the full extent of every note).
-
-### Modifications to existing files
-
-#### `CaptureMidi.ts`
-- Create and own a `MidiCaptureBuffer` instance internally (has access to private `#notifier`)
-- Buffer is created when armed, destroyed when disarmed
-- Buffer subscribes to `engine.isPlaying` and `Recording.isRecording` for mode transitions and pausing
-- Expose buffer via a getter for `Project.commitMidiCapture()` to call `commit()`
-
-#### `Project.ts`
-- Add `commitMidiCapture(): void` method
-- Iterates armed MIDI captures, calls `buffer.commit()` on each
-- Disabled when `Recording.isRecording` is true
-
-#### `CaptureDevices.ts`
-- Existing `filterArmed()` + `isInstanceOf(capture, CaptureMidi)` type narrowing is sufficient
+**Loop handling**: Real-time `engine.position` subscription. On wrap (`currentPosition < lastPosition` with loop enabled), increment `#captureLoopOffset` by loop length.
 
 ### UI: "Capture MIDI" button
 
-**Option A — Transport bar button** (recommended):
-Add a dedicated button in `TransportGroup.tsx` next to the record button. Uses an appropriate icon (e.g., `IconSymbol.Midi` or `IconSymbol.Record` with distinct styling). Only visible/enabled when there are armed MIDI captures with notes in the buffer.
-
-**Option B — Keyboard shortcut only**:
-Add a global shortcut (e.g., `Ctrl+Shift+R` or `Ctrl+M`) in `GlobalShortcuts.ts`.
-
-**Option C — Both**: Transport button + keyboard shortcut.
+Button placed in `TransportGroup.tsx` next to the loop checkbox. Uses `IconSymbol.Capture` (new enum entry). Button becomes active (highlighted) when the buffer contains notes that can be committed. Clicking commits the capture. Requires adding `Capture` to `IconSymbol` enum and providing the corresponding SVG icon.
 
 ### Keyboard shortcut
 
@@ -158,19 +138,7 @@ Add to `GlobalShortcuts.ts`:
 
 ## Open Questions
 
-Resolved questions moved to decisions above. Remaining:
-
-1. **Button placement**: Should "Capture MIDI" be a transport bar button, a track-header action, a keyboard-shortcut-only feature, or a combination?
-
-2. **Visual feedback while buffering**: Should there be a visible indicator (e.g., note count badge, pulsing icon) showing that notes are being buffered? Or is the armed state sufficient?
-
-3. **Quantization**: Should captured notes be quantized to the current grid? Or always captured raw (user can quantize after)?
-
-4. **Multiple armed tracks**: If multiple MIDI tracks are armed, should capture commit to all of them (each getting its own region from its own device/channel), or only the focused/selected one?
-
-5. **Buffer size limit**: Should there be a maximum buffer duration or note count to prevent unbounded memory use?
-
-6. **Note held during commit**: If the user is still holding a key when they click "Capture MIDI," should that note be included (truncated at the commit point) or excluded?
+All questions resolved. See Resolved Decisions below.
 
 ## Resolved Decisions
 
@@ -183,8 +151,18 @@ Resolved questions moved to decisions above. Remaining:
 - **Origin init (Scenario 1)**: Lazy — set on first note-on, not at session start
 - **Latency**: Only applied in Scenario 2, not Scenario 1
 - **Loop wrapping**: Accumulate loop length in `#loopOffset` to keep deltas monotonic
-- **During recording**: Buffer disabled, commit disabled
-- **Buffer ownership**: Owned by `CaptureMidi` (direct access to `#notifier`)
+- **During recording**: Buffer disabled, commit disabled. Use `engine.isRecording` (observable), not `Recording.isRecording` (static boolean, not subscribable)
+- **No separate buffer class**: All capture state and logic lives directly in `CaptureMidi`. No `MidiCaptureBuffer`. No Notifier passing.
+- **Loop detection**: Requires real-time `engine.position` subscription, not just per-note checks
+- **Origin after mid-playback commit**: Origin resets to current engine position, not original playback start
+- **Orphan note-offs**: Silently skipped at commit time (no matching note-on in current session)
+- **Buffer on playback stop**: Preserved, not cleared. User can commit after stopping. Cleared only on next note-on (deferred reset → fresh Scenario 1 session)
+- **Visual feedback**: Capture button becomes active when buffer has notes. No additional indicator needed.
+- **Quantization**: Raw capture only. User can quantize afterwards.
+- **Multiple armed tracks**: Use the armed MIDI capture matching the selected track (`project.timelineFocus.track`). If no track selected or no match, use the first armed MIDI capture.
+- **Overlap resolution**: Use `project.overlapResolver.fromRange()` before creating the region, call the returned solver after. Respects user's overlap preference (clip/push/keep).
+- **Buffer size limit**: No bound.
+- **Note held during commit**: Included, truncated to the commit delta.
 - **editing.modify()**: Single call at commit time, default `mark: true` for one undo step
 - **Selection**: Region is selected after commit
 - **MIN_NOTE_DURATION**: Applied at commit time, same as RecordMidi
@@ -193,33 +171,36 @@ Resolved questions moved to decisions above. Remaining:
 
 ## Implementation Steps
 
-### Phase 1 — Core buffer
-1. Create `MidiCaptureBuffer` class in `packages/studio/core/src/capture/`
-2. Implement raw event buffering with `type: "on" | "off"` discriminator
-3. Implement dual timing modes (stopped: wall-clock ms, playing: ppqn with loop offset)
-4. Implement `reset()` for transport state transitions
-5. Implement `commit()` — pair on/off, convert to boxes, create region
+### Phase 1 — Capture in CaptureMidi
+1. Add capture fields, subscriptions, and private methods to `CaptureMidi`
+2. Subscribe to `#notifier` → `#bufferNote()` (alongside existing engine forwarding)
+3. Add engine subscriptions for mode/position tracking (managed per arm lifecycle)
+4. Implement `resolveCapture()` — pair on/off, return `CaptureResult`
+5. Implement `resetCapture()` — clear and restart session
+6. Expose `captureNoteOnCount: ObservableValue<int>`
 
-### Phase 2 — Integration
-6. Wire `MidiCaptureBuffer` into `CaptureMidi` (owned, created when armed, destroyed when disarmed)
-7. Subscribe to `engine.isPlaying` for mode transitions and buffer resets
-8. Subscribe to `Recording.isRecording` to disable buffering during recording
-9. Add `commitMidiCapture()` to `Project`
+### Phase 2 — Project API
+7. Add `CaptureDevices.allCaptures()` for aggregation
+8. Add `Project.commitMidiCapture()` — find target, resolve, create boxes, reset
+9. Add `Project.subscribeMidiCaptureAvailable(observer): Subscription` — single UI subscription
 
 ### Phase 3 — UI
-10. Add keyboard shortcut to `GlobalShortcuts`
-11. Add "Capture MIDI" button to `TransportGroup.tsx` (or chosen location)
-12. Wire button click to `project.commitMidiCapture()`
-13. Disable button when no notes in buffer or when recording is active
+9. Fix TransportGroup capture button — `Button` (not Checkbox), wire to `commitMidiCapture()`, subscribe via `subscribeMidiCaptureAvailable()`
+
+### Existing (keep)
+- `IconSymbol.Capture` — already added
+- Capture button element in `TransportGroup.tsx` — already placed, needs rewiring
+- `GlobalShortcuts.ts` — `capture-midi` shortcut already added
+- `StudioShortcutManager.ts` — shortcut already wired
 
 ## Files to create
-- `packages/studio/core/src/capture/MidiCaptureBuffer.ts`
+None — all logic goes into existing files.
 
 ## Files to modify
-- `packages/studio/core/src/capture/CaptureMidi.ts` — own and manage buffer
-- `packages/studio/core/src/project/Project.ts` — add `commitMidiCapture()`
-- `packages/app/studio/src/ui/header/TransportGroup.tsx` — add capture button
-- `packages/app/studio/src/ui/shortcuts/GlobalShortcuts.ts` — add shortcut
+- `packages/studio/core/src/capture/CaptureMidi.ts` — add capture buffering, `commitCapture()`, `captureNoteOnCount`
+- `packages/studio/core/src/capture/CaptureDevices.ts` — add `allCaptures()`
+- `packages/studio/core/src/project/Project.ts` — `commitMidiCapture()`, `subscribeMidiCaptureAvailable()`
+- `packages/app/studio/src/ui/header/TransportGroup.tsx` — rewire button to use `subscribeMidiCaptureAvailable()`
 
 ## Files as reference (read-only)
 - `packages/studio/core/src/capture/RecordMidi.ts` — region/note creation pattern
@@ -228,3 +209,6 @@ Resolved questions moved to decisions above. Remaining:
 - `packages/studio/core/src/EngineFacade.ts` — transport observables
 - `packages/studio/adapters/src/NoteSignal.ts` — signal types
 - `packages/studio/boxes/src/NoteEventBox.ts`, `NoteRegionBox.ts`, `NoteEventCollectionBox.ts` — box types
+- `packages/studio/core/src/ui/timeline/RegionOverlapResolver.ts` — overlap resolution API (`fromRange()`)
+- `packages/studio/core/src/ui/timeline/RegionClipResolver.ts` — clip resolver implementation
+- `packages/studio/core/src/ui/timeline/TimelineFocus.ts` — focused track access (`project.timelineFocus.track`)

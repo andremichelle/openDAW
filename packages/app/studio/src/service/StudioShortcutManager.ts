@@ -130,6 +130,7 @@ export namespace StudioShortcutManager {
                     document.querySelector<HTMLElement>("[data-scope=\"regions\"]")?.focus()
                 }
             }),
+            gc.register(gs["capture-midi"].shortcut, () => service.runIfProject(project => project.commitMidiCapture())),
             gc.register(gs["toggle-software-keyboard"].shortcut, () => service.toggleSoftwareKeyboard()),
             gc.register(gs["toggle-device-panel"].shortcut, () => panelLayout.getByType(PanelType.DevicePanel).toggleMinimize()),
             gc.register(gs["toggle-content-editor-panel"].shortcut, () => panelLayout.getByType(PanelType.ContentEditor).toggleMinimize()),

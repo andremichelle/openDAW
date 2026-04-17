@@ -130,6 +130,10 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.Digit6, {shift}),
         description: "Go to meter view"
     },
+    "capture-midi": {
+        shortcut: Shortcut.of(Key.KeyM, {ctrl, shift}),
+        description: "Commit captured MIDI notes"
+    },
     "show-preferences": {
         shortcut: Shortcut.of(Key.Comma, {ctrl}),
         description: "Open preferences"
