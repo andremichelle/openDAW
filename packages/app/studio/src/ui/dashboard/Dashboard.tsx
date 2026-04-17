@@ -28,7 +28,8 @@ export const Dashboard = ({lifecycle, service}: Construct) => {
                     href="https://music.opendaw.studio/" target="music">music</a> right away. The studio is still
                     evolving and not production ready yet.
                 </p>
-                <p style={{color: Colors.cream.toString(), margin: "1em 0"}}>Coming from <a href="https://remix.ruhr">remix.ruhr</a>?
+                <p style={{color: Colors.cream.toString(), margin: "1em 0"}}>Coming from <a href="https://remix.ruhr"
+                                                                                            target="remix.ruhr">remix.ruhr</a>?
                     Set the tempo to 156 BPM, then import your zip file via Menu, Import, Stems (Zip). Have fun!</p>
                 <div className="columns">
                     <DemoProjects lifecycle={lifecycle} service={service}/>
