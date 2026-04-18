@@ -1,6 +1,9 @@
 @use "@/colors"
 @use "@/mixins"
 
+$marker-opacity: 0.66
+$guide-left: 5.5px
+
 component
   display: flex
   flex-direction: column
@@ -103,11 +106,13 @@ component
             width: 0
             height: 0
             justify-self: center
+            margin-left: 1px
+            color: var(--color)
             border-left: 5px solid currentColor
             border-top: 3px solid transparent
             border-bottom: 3px solid transparent
             transition: transform 0.12s ease
-            opacity: 0.6
+            opacity: $marker-opacity
 
           > div.icon
             box-sizing: border-box
@@ -154,9 +159,21 @@ component
           grid-template-columns: subgrid
           row-gap: 0.05em
           padding: 0.1em 0 0.25em 0
+          position: relative
 
           &.hidden
             display: none
+
+          &::before
+            content: ""
+            position: absolute
+            left: $guide-left
+            top: 5px
+            bottom: 7px
+            width: 1px
+            background-color: var(--color)
+            opacity: $marker-opacity
+            pointer-events: none
 
           > div.preset-row
             grid-column: 1 / -1
@@ -175,7 +192,8 @@ component
               display: flex
               align-items: center
               justify-content: center
-              opacity: 0.6
+              color: var(--color)
+              opacity: $marker-opacity
 
               > svg
                 width: 12px !important
