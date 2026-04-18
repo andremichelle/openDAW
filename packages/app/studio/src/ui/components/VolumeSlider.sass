@@ -10,6 +10,9 @@ component
 
   @include mixins.controllable
 
+  &:focus, &:focus-visible, :focus, :focus-visible
+    outline: none
+
   > svg
     top: 0
     left: 0

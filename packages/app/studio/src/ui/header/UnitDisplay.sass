@@ -5,6 +5,9 @@ component
   row-gap: 1px
   position: relative
 
+  &:focus, &:focus-visible, :focus, :focus-visible
+    outline: none
+
   .negative &, &.negative
     color: var(--color-red) !important
 
