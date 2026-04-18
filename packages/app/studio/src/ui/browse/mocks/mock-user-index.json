@@ -1,0 +1,65 @@
+[
+    {
+        "uuid": "11111111-aaaa-4000-8000-000000000001",
+        "name": "My Custom Lead",
+        "device": "Vaporisateur",
+        "category": "instrument",
+        "author": "andre",
+        "description": "Bright detuned lead with chorus",
+        "created": 1740000000000
+    },
+    {
+        "uuid": "11111111-aaaa-4000-8000-000000000002",
+        "name": "Warm User Pad",
+        "device": "Vaporisateur",
+        "category": "instrument",
+        "author": "andre",
+        "description": "Personal pad patch",
+        "created": 1740000000000
+    },
+    {
+        "uuid": "22222222-bbbb-4000-8000-000000000001",
+        "name": "Slap Back",
+        "device": "Delay",
+        "category": "audio-effect",
+        "author": "andre",
+        "description": "Short mono slap delay",
+        "created": 1740000000000
+    },
+    {
+        "uuid": "22222222-bbbb-4000-8000-000000000002",
+        "name": "Small Room",
+        "device": "Reverb",
+        "category": "audio-effect",
+        "author": "andre",
+        "description": "Tight small room",
+        "created": 1740000000000
+    },
+    {
+        "uuid": "33333333-cccc-4000-8000-000000000001",
+        "name": "My FM Bass Rack",
+        "device": "Nano",
+        "category": "audio-unit",
+        "author": "andre",
+        "description": "FM bass with sidechain compressor",
+        "created": 1740000000000
+    },
+    {
+        "uuid": "44444444-dddd-4000-8000-000000000001",
+        "name": "My Mastering Chain",
+        "device": "Compressor",
+        "category": "audio-effect-chain",
+        "author": "andre",
+        "description": "Compressor, stereo tool, maximizer",
+        "created": 1740000000000
+    },
+    {
+        "uuid": "44444444-dddd-4000-8000-000000000002",
+        "name": "Lead Polish",
+        "device": "Reverb",
+        "category": "audio-effect-chain",
+        "author": "andre",
+        "description": "Reverb plus delay",
+        "created": 1740000000000
+    }
+]

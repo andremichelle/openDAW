@@ -1,0 +1,205 @@
+[
+    {
+        "uuid": "a1b2c3d4-0001-4000-8000-000000000001",
+        "name": "Fat Bass Lead",
+        "device": "Vaporisateur",
+        "category": "instrument",
+        "author": "openDAW",
+        "description": "Thick sawtooth bass with subtle detune",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "a1b2c3d4-0001-4000-8000-000000000002",
+        "name": "Warm Pad",
+        "device": "Vaporisateur",
+        "category": "instrument",
+        "author": "openDAW",
+        "description": "Soft evolving pad",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "a1b2c3d4-0001-4000-8000-000000000003",
+        "name": "Pluck Arp",
+        "device": "Vaporisateur",
+        "category": "instrument",
+        "author": "openDAW",
+        "description": "Short percussive pluck",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "a1b2c3d4-0001-4000-8000-000000000004",
+        "name": "Glass Bell",
+        "device": "Nano",
+        "category": "instrument",
+        "author": "openDAW",
+        "description": "Bright FM bell tone",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "a1b2c3d4-0001-4000-8000-000000000005",
+        "name": "Metal FM",
+        "device": "Nano",
+        "category": "instrument",
+        "author": "openDAW",
+        "description": "Inharmonic metallic texture",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "a1b2c3d4-0001-4000-8000-000000000007",
+        "name": "Drum Kit 909",
+        "device": "Playfield",
+        "category": "instrument",
+        "author": "openDAW",
+        "description": "Classic electronic drum hits",
+        "created": 1700000000000
+    },
+
+    {
+        "uuid": "b2c3d4e5-0002-4000-8000-000000000001",
+        "name": "Mastering Glue",
+        "device": "Compressor",
+        "category": "audio-effect",
+        "author": "openDAW",
+        "description": "Slow bus compression",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "b2c3d4e5-0002-4000-8000-000000000002",
+        "name": "Drum Bus",
+        "device": "Compressor",
+        "category": "audio-effect",
+        "author": "openDAW",
+        "description": "Punchy parallel compression",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "b2c3d4e5-0002-4000-8000-000000000003",
+        "name": "Ping-Pong Quarter",
+        "device": "Delay",
+        "category": "audio-effect",
+        "author": "openDAW",
+        "description": "Stereo quarter-note delay",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "b2c3d4e5-0002-4000-8000-000000000004",
+        "name": "Dub Slap",
+        "device": "Delay",
+        "category": "audio-effect",
+        "author": "openDAW",
+        "description": "Dotted eighth slap-back",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "b2c3d4e5-0002-4000-8000-000000000005",
+        "name": "Hall",
+        "device": "Reverb",
+        "category": "audio-effect",
+        "author": "openDAW",
+        "description": "Long natural hall",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "b2c3d4e5-0002-4000-8000-000000000006",
+        "name": "Plate",
+        "device": "Reverb",
+        "category": "audio-effect",
+        "author": "openDAW",
+        "description": "Bright vintage plate",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "b2c3d4e5-0002-4000-8000-000000000007",
+        "name": "Wide Stereo",
+        "device": "StereoTool",
+        "category": "audio-effect",
+        "author": "openDAW",
+        "description": "Gentle stereo widening",
+        "created": 1700000000000
+    },
+
+    {
+        "uuid": "c3d4e5f6-0003-4000-8000-000000000001",
+        "name": "Up-Down 1/16",
+        "device": "Arpeggio",
+        "category": "midi-effect",
+        "author": "openDAW",
+        "description": "Classic up-down arp at sixteenth notes",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "c3d4e5f6-0003-4000-8000-000000000002",
+        "name": "Random 1/8",
+        "device": "Arpeggio",
+        "category": "midi-effect",
+        "author": "openDAW",
+        "description": "Random arp at eighth notes",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "c3d4e5f6-0003-4000-8000-000000000003",
+        "name": "Octave Up",
+        "device": "Pitch",
+        "category": "midi-effect",
+        "author": "openDAW",
+        "description": "Transpose incoming notes up one octave",
+        "created": 1700000000000
+    },
+
+    {
+        "uuid": "d4e5f6a7-0004-4000-8000-000000000001",
+        "name": "Clean Piano + Reverb",
+        "device": "Vaporisateur",
+        "category": "audio-unit",
+        "author": "openDAW",
+        "description": "Piano with subtle hall",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "d4e5f6a7-0004-4000-8000-000000000002",
+        "name": "Punch Drum Rack",
+        "device": "Playfield",
+        "category": "audio-unit",
+        "author": "openDAW",
+        "description": "Compressed drum kit with saturation",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "d4e5f6a7-0004-4000-8000-000000000003",
+        "name": "Dub Bass",
+        "device": "Vaporisateur",
+        "category": "audio-unit",
+        "author": "openDAW",
+        "description": "Bass with tape delay and filter",
+        "created": 1700000000000
+    },
+
+    {
+        "uuid": "e5f6a7b8-0005-4000-8000-000000000001",
+        "name": "Vocal Polish",
+        "device": "Compressor",
+        "category": "audio-effect-chain",
+        "author": "openDAW",
+        "description": "Compressor, de-esser, plate reverb",
+        "created": 1700000000000
+    },
+    {
+        "uuid": "e5f6a7b8-0005-4000-8000-000000000002",
+        "name": "Guitar Bus Glue",
+        "device": "Compressor",
+        "category": "audio-effect-chain",
+        "author": "openDAW",
+        "description": "Compressor and stereo tool",
+        "created": 1700000000000
+    },
+
+    {
+        "uuid": "f6a7b8c9-0006-4000-8000-000000000001",
+        "name": "Humanize + Chord",
+        "device": "Velocity",
+        "category": "midi-effect-chain",
+        "author": "openDAW",
+        "description": "Velocity randomization plus chord shaping",
+        "created": 1700000000000
+    }
+]

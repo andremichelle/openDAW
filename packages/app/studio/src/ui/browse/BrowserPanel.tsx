@@ -5,6 +5,7 @@ import {createElement, DomElement, Group, replaceChildren} from "@opendaw/lib-js
 import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
 import {SampleBrowser} from "@/ui/browse/SampleBrowser.tsx"
 import {DevicesBrowser} from "@/ui/browse/DevicesBrowser.tsx"
+import {LibraryBrowser} from "@/ui/browse/LibraryBrowser.tsx"
 import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {Html} from "@opendaw/lib-dom"
 import {SoundfontBrowser} from "@/ui/browse/SoundfontBrowser"
@@ -17,7 +18,7 @@ type Construct = {
 }
 
 export const BrowserPanel = ({lifecycle, service}: Construct) => {
-    const scope = new DefaultObservableValue(BrowseScope.Devices)
+    const scope = new DefaultObservableValue(BrowseScope.Library)
     const placeholder: DomElement = <Group/>
     const contentLifecycle = lifecycle.own(new Terminator())
     lifecycle.own(scope.catchupAndSubscribe(owner => {
@@ -26,6 +27,9 @@ export const BrowserPanel = ({lifecycle, service}: Construct) => {
             switch (owner.getValue()) {
                 case BrowseScope.Devices:
                     return <DevicesBrowser lifecycle={contentLifecycle}
+                                           service={service}/>
+                case BrowseScope.Library:
+                    return <LibraryBrowser lifecycle={contentLifecycle}
                                            service={service}/>
                 case BrowseScope.Samples:
                     return <SampleBrowser lifecycle={contentLifecycle}
@@ -46,6 +50,7 @@ export const BrowserPanel = ({lifecycle, service}: Construct) => {
         <div className={className}>
             <RadioGroup lifecycle={lifecycle} elements={[
                 {value: BrowseScope.Devices, element: <span>Devices</span>},
+                {value: BrowseScope.Library, element: <span>Library</span>},
                 {value: BrowseScope.Samples, element: <span>Samples</span>},
                 {value: BrowseScope.Soundfonts, element: <span>Soundfonts</span>}
             ]} model={scope} style={{fontSize: "11px", columnGap: "8px", padding: "0.5em 0.75em"}}/>

@@ -1,0 +1,194 @@
+@use "@/colors"
+@use "@/mixins"
+
+component
+  display: flex
+  flex-direction: column
+  row-gap: 0.75rem
+  font-size: 0.6875rem
+  padding: 0.75em
+  width: 100%
+  height: 100%
+  overflow: hidden
+  @include colors.panel-background
+
+  > div.filter-bar
+    display: flex
+    column-gap: 0.5em
+    align-items: center
+    padding: 0 0.25em
+
+    > input.search
+      flex: 1
+      background-color: rgba(black, 0.25)
+      color: var(--color-gray)
+      border: 1px solid rgba(white, 0.04)
+      border-radius: 0.25em
+      padding: 0.35em 0.6em
+      font-size: 1em
+      outline: none
+
+      &::placeholder
+        color: rgba(white, 0.2)
+
+      &:focus
+        border-color: rgba(white, 0.15)
+
+    > button.source-toggle
+      box-sizing: border-box
+      width: 22px
+      height: 22px
+      flex: 0 0 22px
+      padding: 0
+      display: inline-flex
+      align-items: center
+      justify-content: center
+      background-color: rgba(black, 0.25)
+      color: rgba(white, 0.35)
+      border: 1px solid rgba(white, 0.04)
+      border-radius: 0.25em
+      cursor: pointer
+
+      &:hover
+        color: rgba(white, 0.65)
+
+      &.active
+        color: var(--color-gray)
+        border-color: rgba(white, 0.15)
+
+  > div.tree
+    display: flex
+    flex-direction: column
+    row-gap: 1.25em
+    overflow: hidden auto
+    padding: 0 0.25em 1em 0.25em
+
+    > section.category
+      display: grid
+      grid-template-columns: 8px 14px 1fr 1fr
+      row-gap: 0.15em
+      column-gap: 0.6em
+      color: var(--color)
+
+      > h1
+        grid-column: 1 / -1
+        justify-self: start
+        white-space: nowrap
+        font-size: 1em
+        padding: 0.25em 0.5em
+        margin: 0 0 0.25em 0
+        border-radius: 0.25em
+        background-color: rgba(black, 0.12)
+
+      > div.device-row,
+      > div.compound-row
+        grid-column: 1 / -1
+        display: grid
+        grid-template-columns: subgrid
+        row-gap: 0.05em
+
+        > div.device-header,
+        > div.compound-header
+          grid-column: 1 / -1
+          display: grid
+          grid-template-columns: subgrid
+          align-items: center
+          column-gap: inherit
+          padding: 0.2em 0.25em
+          cursor: pointer
+          border-radius: 0.2em
+          color: var(--color-dark)
+
+          > span.triangle
+            width: 0
+            height: 0
+            justify-self: center
+            border-left: 5px solid currentColor
+            border-top: 3px solid transparent
+            border-bottom: 3px solid transparent
+            transition: transform 0.12s ease
+            opacity: 0.6
+
+          > div.icon
+            box-sizing: border-box
+            width: 14px
+            height: 14px
+            padding: 1px
+            border-radius: 2px
+            color: rgba(black, 0.86)
+            display: flex
+            align-items: center
+            justify-content: center
+            background-color: var(--color)
+
+            > svg
+              width: 12px !important
+              height: 12px !important
+              min-width: 12px !important
+              min-height: 12px !important
+
+          > span.name
+            font-size: 1em
+            white-space: nowrap
+
+          > span.brief
+            opacity: 0.3
+            overflow: hidden
+            white-space: nowrap
+            text-overflow: ellipsis
+
+        &.empty > div.device-header,
+        &.empty > div.compound-header
+          cursor: default
+
+          > span.triangle
+            visibility: hidden
+
+        &.expanded > div.device-header > span.triangle,
+        &.expanded > div.compound-header > span.triangle
+          transform: rotate(90deg)
+
+        > div.preset-list
+          grid-column: 1 / -1
+          display: grid
+          grid-template-columns: subgrid
+          row-gap: 0.05em
+          padding: 0.1em 0 0.25em 0
+
+          &.hidden
+            display: none
+
+          > div.preset-row
+            grid-column: 1 / -1
+            display: grid
+            grid-template-columns: subgrid
+            align-items: center
+            padding: 0.18em 0.25em
+            border-radius: 0.2em
+            cursor: grab
+            color: var(--color-dark)
+
+            > div.marker
+              grid-column: 2
+              width: 14px
+              height: 14px
+              display: flex
+              align-items: center
+              justify-content: center
+              opacity: 0.6
+
+              > svg
+                width: 12px !important
+                height: 12px !important
+                min-width: 12px !important
+                min-height: 12px !important
+
+            > span.name
+              grid-column: 3 / -1
+              white-space: nowrap
+              overflow: hidden
+              text-overflow: ellipsis
+
+      > div.compound-row > div.compound-header > div.icon
+        background-color: transparent
+        color: var(--color)
