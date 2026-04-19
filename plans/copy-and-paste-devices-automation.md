@@ -1,20 +1,24 @@
 # Device Copy & Paste — Carrying Automation
 
-> **Status**: PARTIALLY IMPLEMENTED. The reported crash and the core
-> "automation travels with the device" behaviour are fixed in
-> `DevicesClipboardHandler.ts`. Copy now uses `stopAtResources: true`
-> and includes `ValueEventCollectionBox`; paste no longer excludes
-> `TrackBox` when the payload has no instrument, always maps
-> `Pointers.TrackCollection`, and reindexes tracks on the target
-> `AudioUnit`. The automation's `TrackBox.target` is remapped automatically
-> because the source device's UUID is in the clipboard — no separate
-> field-path encoding was needed. Open items below (collision handling,
-> automation for effects copied alongside an instrument, Case C orphan
-> risk) remain as follow-ups.
+> **Status**: PARTIALLY IMPLEMENTED. See the index in `copy-and-paste.md`
+> for sibling plans.
 >
-> **Prerequisite**: Builds on `copy-and-paste.md` (resource property,
-> `stopAtResources`, `ClipboardUtils`) and the current
-> `DevicesClipboardHandler` in
+> Shipped: the reported crash and the core "automation travels with the
+> device" behaviour are fixed in `DevicesClipboardHandler.ts`. Copy now
+> uses `stopAtResources: true` and includes `ValueEventCollectionBox`;
+> paste no longer excludes `TrackBox` when the payload has no
+> instrument, always maps `Pointers.TrackCollection`, and reindexes
+> tracks on the target `AudioUnit`. `TrackBox.target` is remapped
+> automatically because the source device's UUID is in the clipboard —
+> no separate field-path encoding was needed.
+>
+> Open items below (collision handling when the target already
+> automates the same parameter, automation for effects copied alongside
+> an instrument, Case C orphan risk when `hasInstrument && !replaceInstrument`)
+> remain as follow-ups.
+>
+> **Prerequisite**: Shared infrastructure in `copy-and-paste.md` —
+> `resource` property, `stopAtResources`, `ClipboardUtils`. Touches
 > `packages/studio/core/src/ui/clipboard/types/DevicesClipboardHandler.ts`.
 
 ## Problem

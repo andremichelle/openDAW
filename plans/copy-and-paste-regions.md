@@ -1,9 +1,11 @@
 # Region Copy & Paste
 
-> **Prerequisite**: This plan builds upon the infrastructure defined in `copy-and-paste.md`, specifically:
-> - `resource` property on BoxSchema (`"external"` | `"internal"`)
-> - `stopAtResources` option in `BoxGraph.dependenciesOf()`
-> - `CopyBuffer` structure for serialization
+> **Status**: IMPLEMENTED. See the index in `copy-and-paste.md` for
+> sibling plans.
+>
+> **Prerequisite**: Shared infrastructure in `copy-and-paste.md` —
+> `resource` property on `BoxSchema`, `stopAtResources` option in
+> `BoxGraph.dependenciesOf`, and `CopyBuffer` / `ClipboardUtils`.
 
 ## Overview
 
