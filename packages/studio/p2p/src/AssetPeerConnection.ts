@@ -98,17 +98,24 @@ export class AssetPeerConnection implements Terminable {
         }
     }
 
-    async sendWithBackpressure(channel: RTCDataChannel, data: ArrayBuffer): Promise<void> {
+    async sendWithBackpressure(channel: RTCDataChannel, data: ArrayBuffer): Promise<boolean> {
+        if (channel.readyState !== "open") {return false}
         if (channel.bufferedAmount > BUFFERED_AMOUNT_HIGH) {
             const {promise, resolve} = Promise.withResolvers<void>()
             channel.bufferedAmountLowThreshold = BUFFERED_AMOUNT_LOW
-            channel.onbufferedamountlow = () => {
-                channel.onbufferedamountlow = null
-                resolve()
-            }
+            const onClose = () => resolve()
+            const onError = () => resolve()
+            channel.onbufferedamountlow = () => resolve()
+            channel.addEventListener("close", onClose, {once: true})
+            channel.addEventListener("error", onError, {once: true})
             await promise
+            channel.onbufferedamountlow = null
+            channel.removeEventListener("close", onClose)
+            channel.removeEventListener("error", onError)
+            if (channel.readyState !== "open") {return false}
         }
         channel.send(data)
+        return true
     }
 
     async #drainPendingCandidates(): Promise<void> {

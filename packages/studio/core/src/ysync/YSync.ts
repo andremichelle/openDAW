@@ -3,6 +3,7 @@ import {
     asInstanceOf,
     assert,
     EmptyExec,
+    isInstanceOf,
     isUndefined,
     JSONValue,
     Option,
@@ -14,7 +15,16 @@ import {
     tryCatch,
     UUID
 } from "@opendaw/lib-std"
-import {ArrayField, BoxGraph, Field, ObjectField, PointerField, PrimitiveField, Update} from "@opendaw/lib-box"
+import {
+    ArrayField,
+    BoxGraph,
+    Field,
+    ObjectField,
+    optimizeUpdates,
+    PointerField,
+    PrimitiveField,
+    Update
+} from "@opendaw/lib-box"
 import {YMapper} from "./YMapper"
 import * as Y from "yjs"
 
@@ -228,53 +238,92 @@ export class YSync<T> implements Terminable {
             this.#boxGraph.subscribeTransaction({
                 onBeginTransaction: EmptyExec,
                 onEndTransaction: (rolledBack) => {
-                    if (this.#ignoreUpdates || rolledBack) {
-                        this.#updates.length = 0
-                        return
+                    const pending = this.#updates.splice(0)
+                    if (this.#ignoreUpdates || rolledBack) {return}
+                    const optimized = optimizeUpdates(pending)
+                    if (optimized.length === 0) {return}
+                    const result = tryCatch(() => this.#getDoc()
+                        .transact(() => optimized.forEach(update => this.#applyUpdate(update)),
+                            "[openDAW] updates"))
+                    if (result.status === "failure") {
+                        console.error("[YSync] flush failed, dropping updates", {
+                            count: optimized.length,
+                            error: result.error
+                        })
+                        throw result.error
                     }
-                    this.#getDoc().transact(() => this.#updates.forEach(update => {
-                        /**
-                         * TRANSFER CHANGES FROM OPENDAW TO YJS
-                         */
-                        if (update.type === "new") {
-                            const uuid = update.uuid
-                            const key = UUID.toString(uuid)
-                            const box = this.#boxGraph.findBox(uuid).unwrap()
-                            this.#boxes.set(key, YMapper.createBoxMap(box))
-                        } else if (update.type === "primitive") {
-                            const key = UUID.toString(update.address.uuid)
-                            const boxObject = asDefined(this.#boxes.get(key),
-                                "Could not find box") as Y.Map<unknown>
-                            const {address: {fieldKeys}, newValue} = update
-                            let field = boxObject.get("fields") as Y.Map<unknown>
-                            for (let i = 0; i < fieldKeys.length - 1; i++) {
-                                field = asDefined(field.get(String(fieldKeys[i])),
-                                    `No field at '${fieldKeys[i]}'`) as Y.Map<unknown>
-                            }
-                            field.set(String(fieldKeys[fieldKeys.length - 1]), newValue)
-                        } else if (update.type === "pointer") {
-                            const key = UUID.toString(update.address.uuid)
-                            const boxObject = asDefined(this.#boxes.get(key),
-                                "Could not find box") as Y.Map<unknown>
-                            const {address: {fieldKeys}, newAddress} = update
-                            let field = boxObject.get("fields") as Y.Map<unknown>
-                            for (let i = 0; i < fieldKeys.length - 1; i++) {
-                                field = asDefined(field.get(String(fieldKeys[i])),
-                                    `No field at '${fieldKeys[i]}'`) as Y.Map<unknown>
-                            }
-                            field.set(String(fieldKeys[fieldKeys.length - 1]),
-                                newAddress.mapOr(address => address.toString(), null))
-                        } else if (update.type === "delete") {
-                            this.#boxes.delete(UUID.toString(update.uuid))
-                        }
-                    }), "[openDAW] updates")
-                    this.#updates.length = 0
                 }
             }),
             this.#boxGraph.subscribeToAllUpdatesImmediate({
                 onUpdate: (update: Update): unknown => this.#updates.push(update)
             })
         )
+    }
+
+    /**
+     * TRANSFER ONE CHANGE FROM OPENDAW TO YJS
+     */
+    #applyUpdate(update: Update): void {
+        if (update.type === "new") {
+            const uuid = update.uuid
+            const key = UUID.toString(uuid)
+            const optBox = this.#boxGraph.findBox(uuid)
+            if (optBox.isEmpty()) {
+                // Phantom box: created and removed in same transaction.
+                // optimizeUpdates should have filtered this, but guard in case.
+                return
+            }
+            this.#boxes.set(key, YMapper.createBoxMap(optBox.unwrap()))
+        } else if (update.type === "primitive") {
+            const key = UUID.toString(update.address.uuid)
+            const boxObject = this.#boxes.get(key)
+            if (!isInstanceOf(boxObject, Y.Map)) {
+                console.warn(`[YSync] primitive update skipped: box '${key}' missing`)
+                return
+            }
+            const field = this.#resolveFieldMap(boxObject, key, update.address.fieldKeys)
+            if (field === undefined) {return}
+            field.set(String(update.address.fieldKeys[update.address.fieldKeys.length - 1]),
+                update.newValue)
+        } else if (update.type === "pointer") {
+            const key = UUID.toString(update.address.uuid)
+            const boxObject = this.#boxes.get(key)
+            if (!isInstanceOf(boxObject, Y.Map)) {
+                console.warn(`[YSync] pointer update skipped: box '${key}' missing`)
+                return
+            }
+            const field = this.#resolveFieldMap(boxObject, key, update.address.fieldKeys)
+            if (field === undefined) {return}
+            field.set(String(update.address.fieldKeys[update.address.fieldKeys.length - 1]),
+                update.newAddress.mapOr(address => address.toString(), null))
+        } else if (update.type === "delete") {
+            this.#boxes.delete(UUID.toString(update.uuid))
+        }
+    }
+
+    /**
+     * Walks from the box map down to the Y.Map that owns `fieldKeys[last]`.
+     * Returns `undefined` (with a warning) instead of throwing if the path
+     * cannot be resolved — protects the yjs transaction from partial writes.
+     */
+    #resolveFieldMap(boxObject: Y.Map<unknown>,
+                     key: string,
+                     fieldKeys: ArrayLike<number>): Y.Map<unknown> | undefined {
+        const fieldsValue = boxObject.get("fields")
+        if (!isInstanceOf(fieldsValue, Y.Map)) {
+            console.warn(`[YSync] box '${key}' missing 'fields' Y.Map; skipping update`)
+            return undefined
+        }
+        let field = fieldsValue as Y.Map<unknown>
+        for (let i = 0; i < fieldKeys.length - 1; i++) {
+            const next = field.get(String(fieldKeys[i]))
+            if (!isInstanceOf(next, Y.Map)) {
+                console.warn(`[YSync] box '${key}' field path broken at '${fieldKeys[i]}'; skipping update`)
+                return undefined
+            }
+            field = next as Y.Map<unknown>
+        }
+        return field
     }
 
     #getDoc(): Y.Doc {

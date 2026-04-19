@@ -1,8 +1,24 @@
 # Copy and Paste Implementation Plan
 
-> **Status**: Core infrastructure IMPLEMENTED. See individual plans for specific clipboard handlers:
-> - `copy-and-paste-regions.md` - Region copy/paste (IMPLEMENTED)
-> - `copy-and-paste-audiounits.md` - AudioUnit copy/paste (PLANNED)
+> **Role**: This is the shared infrastructure plan. It defines the
+> `resource` property on `BoxSchema`, the `stopAtResources` traversal
+> option on `BoxGraph.dependenciesOf`, and the `ClipboardUtils` /
+> `ClipboardManager` / `ClipboardHandler` contracts that the
+> domain-specific plans build on.
+>
+> **Index of domain plans** (each one starts with a prerequisite
+> pointer back here):
+>
+> | Domain | Plan | Status |
+> | --- | --- | --- |
+> | Base infrastructure | `copy-and-paste.md` (this file) | Core IMPLEMENTED |
+> | Regions (audio / note / value) | `copy-and-paste-regions.md` | IMPLEMENTED |
+> | AudioUnits (instruments & buses) | `copy-and-paste-audiounits.md` | PLANNED |
+> | Devices with parameter automation | `copy-and-paste-devices-automation.md` | PARTIALLY IMPLEMENTED — crash fix shipped, open items listed in that doc |
+>
+> If you are implementing in one of the domains above, start in the
+> matching file. Come back here only for the shared primitives or when
+> extending them.
 
 ## Summary
 

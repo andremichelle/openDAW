@@ -241,9 +241,10 @@ describe("DevicesClipboardHandler", () => {
             .map(pointer => pointer.box)
         const mandatoryDeps = Array.from(boxGraph.dependenciesOf(deviceBox, {
             alwaysFollowMandatory: true,
+            stopAtResources: true,
             excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
                 || dep.name === RootBox.ClassName
-        }).boxes).filter(dep => !isDefined(dep.resource))
+        }).boxes).filter(dep => dep.resource !== "preserved")
         const preserved = [deviceBox, ...ownedChildren].flatMap(root =>
             Array.from(boxGraph.dependenciesOf(root, {
                 alwaysFollowMandatory: true,
@@ -262,6 +263,7 @@ describe("DevicesClipboardHandler", () => {
                     trackContent.push(regionPointer.box)
                     const regionDeps = Array.from(boxGraph.dependenciesOf(regionPointer.box, {
                         alwaysFollowMandatory: true,
+                        stopAtResources: true,
                         excludeBox: (dep: Box) => dep.ephemeral
                             || isInstanceOf(dep, TrackBox)
                             || DeviceBoxUtils.isDeviceBox(dep)
@@ -279,7 +281,8 @@ describe("DevicesClipboardHandler", () => {
         })
     }
 
-    const makePasteMapper = (targetAudioUnit: AudioUnitBox, replaceInstrument: boolean) => ({
+    const makePasteMapper = (targetAudioUnit: AudioUnitBox, replaceInstrument: boolean,
+                             hasInstrument: boolean = true) => ({
         mapPointer: (pointer: {pointerType: unknown}) => {
             if (pointer.pointerType === Pointers.InstrumentHost && replaceInstrument) {
                 return Option.wrap(targetAudioUnit.input.address)
@@ -290,7 +293,7 @@ describe("DevicesClipboardHandler", () => {
             if (pointer.pointerType === Pointers.MIDIEffectHost) {
                 return Option.wrap(targetAudioUnit.midiEffects.address)
             }
-            if (pointer.pointerType === Pointers.TrackCollection && replaceInstrument) {
+            if (pointer.pointerType === Pointers.TrackCollection) {
                 return Option.wrap(targetAudioUnit.tracks.address)
             }
             if (pointer.pointerType === Pointers.Automation && replaceInstrument) {
@@ -298,8 +301,12 @@ describe("DevicesClipboardHandler", () => {
             }
             return Option.None
         },
-        excludeBox: (box: Box) =>
-            !replaceInstrument && (DeviceBoxUtils.isInstrumentDeviceBox(box) || isInstanceOf(box, TrackBox))
+        excludeBox: (box: Box) => {
+            if (replaceInstrument) {return false}
+            if (DeviceBoxUtils.isInstrumentDeviceBox(box)) {return true}
+            if (isInstanceOf(box, TrackBox)) {return hasInstrument}
+            return false
+        }
     })
 
     // ─────────────────────────────────────────────────────────
@@ -333,6 +340,117 @@ describe("DevicesClipboardHandler", () => {
                     makePasteMapper(targetAU, false))
             })
             expect(targetAU.audioEffects.pointerHub.incoming().length).toBe(2)
+        })
+    })
+
+    // ─────────────────────────────────────────────────────────
+    // Audio effect with automation: copy scope + paste round-trip
+    // ─────────────────────────────────────────────────────────
+
+    describe("audio effect with automation", () => {
+        it("includes ValueEventCollectionBox when copying effect with automation events", () => {
+            const audioUnit = createAudioUnit(source)
+            const effect = addAudioEffect(source, audioUnit, "Comp", 0)
+            const autoTrack = addAutomationTrack(source, audioUnit, effect.threshold, 0)
+            addValueRegion(source, autoTrack, 0, 960)
+            const deps = collectDeviceDependencies(effect, source.boxGraph)
+            expect(deps.filter(box => isInstanceOf(box, TrackBox)).length).toBe(1)
+            expect(deps.filter(box => isInstanceOf(box, ValueRegionBox)).length).toBe(1)
+            expect(deps.filter(box => isInstanceOf(box, ValueEventCollectionBox)).length).toBe(1)
+        })
+        it("includes mirror regions on different tracks of the same device", () => {
+            const audioUnit = createAudioUnit(source)
+            const effect = addAudioEffect(source, audioUnit, "Comp", 0)
+            const trackA = addAutomationTrack(source, audioUnit, effect.threshold, 0)
+            const trackB = addAutomationTrack(source, audioUnit, effect.ratio, 1)
+            const regionA = addValueRegion(source, trackA, 0, 960)
+            const sharedEvents = regionA.events.targetVertex.unwrap().box as ValueEventCollectionBox
+            let regionB!: ValueRegionBox
+            source.boxGraph.beginTransaction()
+            regionB = ValueRegionBox.create(source.boxGraph, UUID.generate(), box => {
+                box.regions.refer(trackB.regions)
+                box.events.refer(sharedEvents.owners)
+                box.position.setValue(0)
+                box.duration.setValue(960)
+            })
+            source.boxGraph.endTransaction()
+            const deps = collectDeviceDependencies(effect, source.boxGraph)
+            const regions = deps.filter(box => isInstanceOf(box, ValueRegionBox))
+            expect(regions.length).toBe(2)
+            expect(regions).toContain(regionA)
+            expect(regions).toContain(regionB)
+            expect(deps.filter(box => isInstanceOf(box, ValueEventCollectionBox)).length).toBe(1)
+            expect(deps.filter(box => isInstanceOf(box, TrackBox)).length).toBe(2)
+        })
+        it("does not pull in regions from unrelated devices that mirror the same collection", () => {
+            const audioUnitA = createAudioUnit(source, 1)
+            const effectA = addAudioEffect(source, audioUnitA, "CompA", 0)
+            const trackA = addAutomationTrack(source, audioUnitA, effectA.threshold, 0)
+            const regionA = addValueRegion(source, trackA, 0, 960)
+            const sharedEvents = regionA.events.targetVertex.unwrap().box as ValueEventCollectionBox
+            const audioUnitB = createAudioUnit(source, 2)
+            const effectB = addAudioEffect(source, audioUnitB, "CompB", 0)
+            const trackB = addAutomationTrack(source, audioUnitB, effectB.threshold, 0)
+            source.boxGraph.beginTransaction()
+            const unrelatedRegion = ValueRegionBox.create(source.boxGraph, UUID.generate(), box => {
+                box.regions.refer(trackB.regions)
+                box.events.refer(sharedEvents.owners)
+                box.position.setValue(0)
+                box.duration.setValue(960)
+            })
+            source.boxGraph.endTransaction()
+            const deps = collectDeviceDependencies(effectA, source.boxGraph)
+            const regions = deps.filter(box => isInstanceOf(box, ValueRegionBox))
+            expect(regions).toContain(regionA)
+            expect(regions).not.toContain(unrelatedRegion)
+            const tracks = deps.filter(box => isInstanceOf(box, TrackBox))
+            expect(tracks).toContain(trackA)
+            expect(tracks).not.toContain(trackB)
+        })
+        it("round-trip paste of effect with automation events does not throw", () => {
+            const sourceAU = createAudioUnit(source)
+            const effect = addAudioEffect(source, sourceAU, "Comp", 0)
+            const autoTrack = addAutomationTrack(source, sourceAU, effect.threshold, 0)
+            addValueRegion(source, autoTrack, 0, 960)
+            const deps = collectDeviceDependencies(effect, source.boxGraph)
+            const data = ClipboardUtils.serializeBoxes([effect, ...deps])
+            const targetAU = createAudioUnit(target)
+            const editing = new BoxEditing(target.boxGraph)
+            expect(() => {
+                editing.modify(() => {
+                    ClipboardUtils.deserializeBoxes(data, target.boxGraph,
+                        makePasteMapper(targetAU, false, false))
+                })
+            }).not.toThrow()
+            const pastedEffects = targetAU.audioEffects.pointerHub.incoming()
+                .filter(pointer => isInstanceOf(pointer.box, CompressorDeviceBox))
+            expect(pastedEffects.length).toBe(1)
+            const pastedTracks = targetAU.tracks.pointerHub.filter(Pointers.TrackCollection)
+                .filter(pointer => isInstanceOf(pointer.box, TrackBox))
+            expect(pastedTracks.length).toBe(1)
+        })
+        it("pasted automation track targets the pasted device's parameter", () => {
+            const sourceAU = createAudioUnit(source)
+            const effect = addAudioEffect(source, sourceAU, "Comp", 0)
+            const autoTrack = addAutomationTrack(source, sourceAU, effect.threshold, 0)
+            addValueRegion(source, autoTrack, 0, 960)
+            const deps = collectDeviceDependencies(effect, source.boxGraph)
+            const data = ClipboardUtils.serializeBoxes([effect, ...deps])
+            const targetAU = createAudioUnit(target)
+            const editing = new BoxEditing(target.boxGraph)
+            editing.modify(() => {
+                ClipboardUtils.deserializeBoxes(data, target.boxGraph,
+                    makePasteMapper(targetAU, false, false))
+            })
+            const pastedEffect = targetAU.audioEffects.pointerHub.incoming()
+                .filter(pointer => isInstanceOf(pointer.box, CompressorDeviceBox))
+                .map(pointer => pointer.box as CompressorDeviceBox)[0]
+            const pastedTrack = targetAU.tracks.pointerHub.filter(Pointers.TrackCollection)
+                .filter(pointer => isInstanceOf(pointer.box, TrackBox))
+                .map(pointer => pointer.box as TrackBox)[0]
+            expect(pastedTrack).toBeDefined()
+            const targetVertex = pastedTrack.target.targetVertex.unwrap()
+            expect(targetVertex.box).toBe(pastedEffect)
         })
     })
 

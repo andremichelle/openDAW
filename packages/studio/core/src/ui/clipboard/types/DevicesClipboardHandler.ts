@@ -122,9 +122,10 @@ export namespace DevicesClipboard {
                     .map(pointer => pointer.box)
                 const mandatoryDeps = Array.from(boxGraph.dependenciesOf(box, {
                     alwaysFollowMandatory: true,
+                    stopAtResources: true,
                     excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
                         || dep.name === RootBox.ClassName
-                }).boxes).filter(dep => !isDefined(dep.resource))
+                }).boxes).filter(dep => dep.resource !== "preserved")
                 const preserved = [box, ...ownedChildren].flatMap(root =>
                     Array.from(boxGraph.dependenciesOf(root, {
                         alwaysFollowMandatory: true,
@@ -144,6 +145,7 @@ export namespace DevicesClipboard {
                             trackContent.push(regionPointer.box)
                             const regionDeps = Array.from(boxGraph.dependenciesOf(regionPointer.box, {
                                 alwaysFollowMandatory: true,
+                                stopAtResources: true,
                                 excludeBox: (dep: Box) => dep.ephemeral
                                     || isInstanceOf(dep, TrackBox)
                                     || DeviceBoxUtils.isDeviceBox(dep)
@@ -257,7 +259,7 @@ export namespace DevicesClipboard {
                                 if (pointer.pointerType === Pointers.AudioEffectHost) {
                                     return Option.wrap(host.audioEffectsField.address)
                                 }
-                                if (pointer.pointerType === Pointers.TrackCollection && replaceInstrument) {
+                                if (pointer.pointerType === Pointers.TrackCollection) {
                                     return Option.wrap(host.audioUnitBoxAdapter().tracksField.address)
                                 }
                                 if (pointer.pointerType === Pointers.Automation && replaceInstrument) {
@@ -272,8 +274,12 @@ export namespace DevicesClipboard {
                                 }
                                 return Option.None
                             },
-                            excludeBox: box => !replaceInstrument
-                                && (DeviceBoxUtils.isInstrumentDeviceBox(box) || isInstanceOf(box, TrackBox))
+                            excludeBox: box => {
+                                if (replaceInstrument) {return false}
+                                if (DeviceBoxUtils.isInstrumentDeviceBox(box)) {return true}
+                                if (isInstanceOf(box, TrackBox)) {return metadata.hasInstrument}
+                                return false
+                            }
                         }
                     )
                     const deviceBoxes = boxes.filter(box => DeviceBoxUtils.isDeviceBox(box))
@@ -287,14 +293,12 @@ export namespace DevicesClipboard {
                         .sort((a, b) => a.index.getValue() - b.index.getValue())
                     newMidiEffects.forEach((box, idx) => box.index.setValue(midiInsertIndex + idx))
                     newAudioEffects.forEach((box, idx) => box.index.setValue(audioInsertIndex + idx))
-                    if (replaceInstrument) {
-                        const tracksField = host.audioUnitBoxAdapter().tracksField
-                        const allTracks = tracksField.pointerHub.filter(Pointers.TrackCollection)
-                            .filter(pointer => isInstanceOf(pointer.box, TrackBox))
-                            .map(pointer => pointer.box as TrackBox)
-                            .sort((trackA, trackB) => trackA.index.getValue() - trackB.index.getValue())
-                        allTracks.forEach((track, idx) => track.index.setValue(idx))
-                    }
+                    const tracksField = host.audioUnitBoxAdapter().tracksField
+                    const allTracks = tracksField.pointerHub.filter(Pointers.TrackCollection)
+                        .filter(pointer => isInstanceOf(pointer.box, TrackBox))
+                        .map(pointer => pointer.box as TrackBox)
+                        .sort((trackA, trackB) => trackA.index.getValue() - trackB.index.getValue())
+                    allTracks.forEach((track, idx) => track.index.setValue(idx))
                     selection.select(...deviceBoxes.map(box => boxAdapters.adapterFor(box, Devices.isAny)))
                 })
             }
