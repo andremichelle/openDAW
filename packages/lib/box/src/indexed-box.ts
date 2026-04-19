@@ -49,6 +49,30 @@ export namespace IndexedBox {
         }
     }
 
+    export const moveIndices = (field: Field, startIndices: ReadonlyArray<int>, dropIndex: int): void => {
+        const boxes = collectIndexedBoxes(field)
+        const selectedSet = new Set(startIndices)
+        let selectedBeforeDrop = 0
+        while (selectedBeforeDrop < startIndices.length && startIndices[selectedBeforeDrop] < dropIndex) {
+            selectedBeforeDrop++
+        }
+        const leadingCount = dropIndex - selectedBeforeDrop
+        const blockStart = leadingCount
+        const trailingStart = leadingCount + startIndices.length
+        let leadingRank = 0
+        let selectedRank = 0
+        let trailingRank = 0
+        for (let originalIndex = 0; originalIndex < boxes.length; originalIndex++) {
+            const box = boxes[originalIndex]
+            const newIndex = selectedSet.has(originalIndex)
+                ? blockStart + selectedRank++
+                : originalIndex < dropIndex
+                    ? leadingRank++
+                    : trailingStart + trailingRank++
+            box.index.setValue(newIndex)
+        }
+    }
+
     export const isIndexedBox = (box: Box): box is IndexedBox => "index" in box && box.index instanceof Int32Field
 
     export const collectIndexedBoxes = <B extends IndexedBox>(field: Field, type?: Class<B>): ReadonlyArray<B> =>

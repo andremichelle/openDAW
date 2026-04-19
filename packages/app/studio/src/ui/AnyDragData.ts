@@ -9,16 +9,16 @@ export type DragFile = { type: "file", file: File /* This cannot be accessed whi
 export type DragDevice = (
     {
         type: "midi-effect" | "audio-effect"
-        start_index: int
+        start_indices: ReadonlyArray<int>
     } |
     {
         type: "midi-effect"
-        start_index: null
+        start_indices: null
         device: EffectFactories.MidiEffectKeys
     } |
     {
         type: "audio-effect"
-        start_index: null
+        start_indices: null
         device: EffectFactories.AudioEffectKeys
     } |
     {

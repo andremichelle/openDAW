@@ -29,13 +29,21 @@ export namespace DragAndDrop {
         return Arrays.empty()
     }
 
-    export const installSource = (element: HTMLElement, provider: Provider<AnyDragData>, classReceiver?: Element): Terminable => {
+    export const installSource = (element: HTMLElement,
+                                  provider: Provider<AnyDragData>,
+                                  classReceiver?: Element,
+                                  dragImage?: Provider<HTMLElement>): Terminable => {
         classReceiver ??= element
         element.draggable = true
+        let activeImage: Nullable<HTMLElement> = null
         return Terminable.many(
             Events.subscribe(element, "dragend", () => {
                 classReceiver.classList.remove("dragging")
                 dragging = Option.None
+                if (isDefined(activeImage)) {
+                    activeImage.remove()
+                    activeImage = null
+                }
             }),
             Events.subscribe(element, "dragstart",
                 (event: DragEvent) => {
@@ -45,6 +53,16 @@ export namespace DragAndDrop {
                     dataTransfer.effectAllowed = "copyMove"
                     classReceiver.classList.add("dragging")
                     dragging = Option.wrap(provider())
+                    if (isDefined(dragImage)) {
+                        const ghost = dragImage()
+                        ghost.style.position = "fixed"
+                        ghost.style.top = "-9999px"
+                        ghost.style.left = "-9999px"
+                        ghost.style.pointerEvents = "none"
+                        document.body.appendChild(ghost)
+                        dataTransfer.setDragImage(ghost, 0, 0)
+                        activeImage = ghost
+                    }
                 })
         )
     }

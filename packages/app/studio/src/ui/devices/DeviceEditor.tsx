@@ -11,6 +11,7 @@ import {DragAndDrop} from "@/ui/DragAndDrop"
 import {Events, Html} from "@opendaw/lib-dom"
 import {TextScroller} from "@/ui/TextScroller"
 import {StringField} from "@opendaw/lib-box"
+import {Color} from "@opendaw/lib-std"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Promises} from "@opendaw/lib-runtime"
 import {Surface} from "@/ui/surface/Surface"
@@ -27,6 +28,51 @@ const getColorFor = (type: DeviceType) => {
         case "audio-effect":
             return Colors.blue
     }
+}
+
+const collectDragIndices = (project: Project, source: EffectDeviceBoxAdapter): ReadonlyArray<number> => {
+    const sourceHost = source.deviceHost()
+    const sourceIndex = source.indexField.getValue()
+    const sameChain = project.deviceSelection.selected().filter((selected): selected is EffectDeviceBoxAdapter =>
+        (selected.type === "midi-effect" || selected.type === "audio-effect")
+        && selected.type === source.type
+        && selected.deviceHost() === sourceHost)
+    const indices = sameChain.map(effect => effect.indexField.getValue())
+    if (!indices.includes(sourceIndex)) {indices.push(sourceIndex)}
+    return indices.toSorted((a, b) => a - b)
+}
+
+const buildCountGhost = (count: number, color: Color): HTMLElement => {
+    const size = 28
+    const offset = 14
+    const wrapper = document.createElement("div")
+    Object.assign(wrapper.style, {
+        boxSizing: "border-box",
+        width: `${size + offset}px`,
+        height: `${size + offset}px`,
+        padding: `${offset}px 0 0 ${offset}px`,
+        backgroundColor: "transparent",
+        pointerEvents: "none"
+    })
+    const badge = document.createElement("div")
+    badge.textContent = String(count)
+    Object.assign(badge.style, {
+        boxSizing: "border-box",
+        width: `${size}px`,
+        height: `${size}px`,
+        borderRadius: "50%",
+        backgroundColor: color.toString(),
+        color: "rgba(0, 0, 0, 0.85)",
+        fontFamily: "system-ui, sans-serif",
+        fontSize: "13px",
+        fontWeight: "600",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)"
+    })
+    wrapper.appendChild(badge)
+    return wrapper
 }
 
 type Construct = {
@@ -78,26 +124,44 @@ export const DeviceEditor =
                              element.classList.toggle("minimized", owner.getValue()))
                      )
                  }} data-drag>
-                <header tabIndex={0} onpointerdown={event => {
-                    const {deviceSelection} = project
-                    if (event.shiftKey) {
-                        if (deviceSelection.isSelected(adapter)) {
-                            deviceSelection.deselect(adapter)
-                        } else {
-                            deviceSelection.select(adapter)
-                        }
-                    } else {
-                        deviceSelection.deselectAll()
-                        deviceSelection.select(adapter)
-                    }
-                }} onInit={element => {
+                <header tabIndex={0} onInit={element => {
                     const updateSelected = () =>
                         element.classList.toggle("selected", project.deviceSelection.isSelected(adapter))
+                    let pendingCollapseSelection = false
+                    let dragStartedOnHeader = false
+                    const onPointerDown = (event: PointerEvent) => {
+                        const {deviceSelection} = project
+                        dragStartedOnHeader = false
+                        if (event.shiftKey || event.metaKey || event.ctrlKey) {
+                            if (deviceSelection.isSelected(adapter)) {
+                                deviceSelection.deselect(adapter)
+                            } else {
+                                deviceSelection.select(adapter)
+                            }
+                            pendingCollapseSelection = false
+                        } else if (deviceSelection.isSelected(adapter)) {
+                            pendingCollapseSelection = true
+                        } else {
+                            deviceSelection.deselectAll()
+                            deviceSelection.select(adapter)
+                            pendingCollapseSelection = false
+                        }
+                    }
+                    const onPointerUp = () => {
+                        if (pendingCollapseSelection && !dragStartedOnHeader) {
+                            project.deviceSelection.deselectAll()
+                            project.deviceSelection.select(adapter)
+                        }
+                        pendingCollapseSelection = false
+                        dragStartedOnHeader = false
+                    }
                     lifecycle.ownAll(
                         project.deviceSelection.catchupAndSubscribe({
                             onSelected: updateSelected,
                             onDeselected: updateSelected
                         }),
+                        Events.subscribe(element, "pointerdown", onPointerDown),
+                        Events.subscribe(element, "pointerup", onPointerUp),
                         ClipboardManager.install(element, DevicesClipboard.createHandler({
                             getEnabled: () => true,
                             editing: project.editing,
@@ -112,10 +176,11 @@ export const DeviceEditor =
                     )
                     if (type === "midi-effect" || type === "audio-effect") {
                         const effect = adapter as EffectDeviceBoxAdapter
-                        lifecycle.own(DragAndDrop.installSource(element, () => ({
-                            type: effect.type,
-                            start_index: effect.indexField.getValue()
-                        } satisfies DragDevice), element))
+                        lifecycle.own(DragAndDrop.installSource(element, () => {
+                            dragStartedOnHeader = true
+                            const indices = collectDragIndices(project, effect)
+                            return {type: effect.type, start_indices: indices} satisfies DragDevice
+                        }, element, () => buildCountGhost(collectDragIndices(project, effect).length, color)))
                     }
                 }} style={{color: color.toString()}}>
                     <Icon symbol={icon} onInit={element =>

@@ -115,10 +115,10 @@ export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAd
         }),
         DragAndDrop.installTarget(element, {
             drag: (_event: DragEvent, data: AnyDragData): boolean =>
-                (data.type === "midi-effect" || data.type === "audio-effect") && data.start_index === null,
+                (data.type === "midi-effect" || data.type === "audio-effect") && data.start_indices === null,
             drop: (_event: DragEvent, data: AnyDragData) => {
                 if (data.type === "midi-effect") {
-                    if (data.start_index !== null) {return}
+                    if (data.start_indices !== null) {return}
                     const factory = EffectFactories.MidiNamed[data.device]
                     if (factory.type !== audioUnitBoxAdapter.input.adapter().unwrapOrNull()?.accepts) {
                         return
@@ -127,7 +127,7 @@ export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAd
                     project.editing.modify(() =>
                         factory.create(project, effectField, effectField.pointerHub.incoming().length))
                 } else if (data.type === "audio-effect") {
-                    if (data.start_index !== null) {return}
+                    if (data.start_indices !== null) {return}
                     const factory = EffectFactories.AudioNamed[data.device]
                     const effectField = audioUnitBoxAdapter.box.audioEffects
                     project.editing.modify(() =>

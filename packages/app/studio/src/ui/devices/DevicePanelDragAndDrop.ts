@@ -45,15 +45,8 @@ export namespace DevicePanelDragAndDrop {
                 } else {
                     return false
                 }
-                const [index, successor] = DragAndDrop.findInsertLocation(event, container)
-                if (dragData.start_index === null) {
-                    container.insertBefore(insertMarker, successor)
-                } else {
-                    const delta = index - dragData.start_index
-                    if (delta < 0 || delta > 1) {
-                        container.insertBefore(insertMarker, successor)
-                    } else if (insertMarker.isConnected) {insertMarker.remove()}
-                }
+                const [_index, successor] = DragAndDrop.findInsertLocation(event, container)
+                container.insertBefore(insertMarker, successor)
                 return true
             },
             drop: (event: DragEvent, dragData: AnyDragData): void => {
@@ -90,16 +83,15 @@ export namespace DevicePanelDragAndDrop {
                     return panic(`Unknown type: ${type}`)
                 }
                 const [index] = DragAndDrop.findInsertLocation(event, container)
-                if (dragData.start_index === null) {
+                if (dragData.start_indices === null) {
                     editing.modify(() => {
                         const factory = EffectFactories.MergedNamed[dragData.device]
                         project.api.insertEffect(field, factory, index)
                     })
                 } else {
-                    const delta = index - dragData.start_index
-                    if (delta < 0 || delta > 1) { // if delta is zero or one, it has no effect on the order
-                        editing.modify(() => IndexedBox.moveIndex(field, dragData.start_index, delta))
-                    }
+                    const startIndices = dragData.start_indices
+                    if (startIndices.length === 0) {return}
+                    editing.modify(() => IndexedBox.moveIndices(field, startIndices, index))
                 }
             },
             enter: () => {},

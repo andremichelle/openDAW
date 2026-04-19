@@ -136,7 +136,7 @@ const createEffectList = <
         lifecycle.ownAll(
             DragAndDrop.installSource(element, () => ({
                 type: type as any,
-                start_index: null,
+                start_indices: null,
                 device: key as keyof typeof EffectFactories.MergedNamed
             } satisfies DragDevice)),
             TextTooltip.simple(element, () => {
