@@ -125,15 +125,24 @@ export class AssetServer {
             totalChunks: chunks.length,
             zipSize: zipBytes.byteLength
         }))
-        await connection.sendWithBackpressure(channel,
-            ChunkProtocol.encode(ChunkProtocol.MsgType.TransferStart, uuid, 0, startPayload))
+        if (!await connection.sendWithBackpressure(channel,
+            ChunkProtocol.encode(ChunkProtocol.MsgType.TransferStart, uuid, 0, startPayload))) {
+            console.debug("[P2P:Server] channel closed before transfer started for", request.uuid)
+            return
+        }
         for (let index = 0; index < chunks.length; index++) {
             const encoded = ChunkProtocol.encode(ChunkProtocol.MsgType.ChunkData, uuid, index, chunks[index])
-            await connection.sendWithBackpressure(channel, encoded)
+            if (!await connection.sendWithBackpressure(channel, encoded)) {
+                console.debug("[P2P:Server] channel closed at chunk", index, "of", chunks.length, "for", request.uuid)
+                return
+            }
             this.#trafficMeter.recordUpload(encoded.byteLength)
         }
-        await connection.sendWithBackpressure(channel,
-            ChunkProtocol.encode(ChunkProtocol.MsgType.TransferComplete, uuid, 0, new Uint8Array(0)))
+        if (!await connection.sendWithBackpressure(channel,
+            ChunkProtocol.encode(ChunkProtocol.MsgType.TransferComplete, uuid, 0, new Uint8Array(0)))) {
+            console.debug("[P2P:Server] channel closed before transfer-complete for", request.uuid)
+            return
+        }
         console.debug("[P2P:Server] transfer complete for", request.uuid)
     }
 
