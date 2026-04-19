@@ -259,7 +259,6 @@ Both expansion states persist in `localStorage` (`device-browser-open:device:{de
 │         ──────────────────────────────────────────────        │
 │          My Custom Lead                                ◉      │
 │          Warm User Pad                                 ◉      │
-│          + Save Current…                                      │
 │    ▶ [♪] Nano                FM Synth                         │
 │    ▶ [♪] Playfield           Sampler                          │
 │    ▼ ▸  Racks                                                 │
@@ -297,8 +296,8 @@ Filter bar (top):
 
 - Each preset row is draggable (`DragPreset` for single-device presets, `DragEffectChain` for `OPEC` chains, `DragPreset` with `category: "audio-unit"` for racks).
 - Click a preset to apply it to the selected audio unit (`PresetDecoder.replaceAudioUnit` for `OPRE`; `insertEffectChain` for `OPEC`).
-- Cloud presets listed first, then a divider, then user presets (same for Racks and Effect Chains).
-- "Save Current…" row appears as the last entry in a device's expanded preset list only when a matching audio unit is selected. Uses `PresetEncoder.encode` (single device) or `encodeEffectChain` (chain).
+- User presets listed first, then stock presets (no divider).
+- Device rows, `Racks`, and `Effect Chains` nodes also act as **drop targets** for saving presets — see section 9 for the drag-to-save behavior.
 - Stock device rows are always visible even when their triangle is collapsed — this is the "device picker" function carried over from the current browser.
 - Animation: CSS transition on `max-height`, or toggle `.hidden` for simplicity.
 
@@ -320,7 +319,6 @@ Every preset has a **source**: `stock` (shipped by openDAW, metadata from the se
 - The filter only narrows **preset rows**. Stock-device rows stay fully visible regardless — the device picker must always be usable for dropping new empty devices.
 - A stock-device row **auto-expands** while a filter is active and it has ≥ 1 matching preset. When the filter is cleared, expansion reverts to the user's stored preference.
 - `Racks` / `Effect Chains` sections auto-expand the same way, and hide entirely (node + header) if the filter leaves them empty.
-- The `+ Save Current…` row hides while a filter is active.
 - Filter state is **not** persisted across sessions. On reload the browser starts with no filters, so users don't wonder where their presets went.
 
 ### 8. New Drag Data Types
@@ -366,11 +364,49 @@ The drag feedback (insert marker between existing effects) is identical to dragg
 
 ### 9. User Preset Management
 
-- **Save**: "Save Current..." in the expanded preset list, or right-click context menu on a device in the panel
-- **Rename**: right-click context menu on user preset (writes via `PresetStorage.rename`)
-- **Delete**: right-click context menu on user preset (stock presets cannot be deleted)
-- **Export**: right-click context menu -> "Export as .odp" (file picker save)
-- **Import**: right-click context menu on device -> "Import Preset..." (file picker open, saves to user folder)
+**Primary save flow: drag from device panel into a LibraryBrowser folder.** The drop target's category implicitly declares what kind of preset is being saved, so no "choose category" dialog is ever shown.
+
+**Drag sources in the device panel (extension required).** Today the panel only installs a `DragAndDrop` source on single audio-effect devices. We extend this to cover every kind of drag source needed for saving:
+
+| Source | Drag payload `kind` | Produces preset of category |
+|---|---|---|
+| Instrument box | `instrument` | `instrument` (single-device preset) |
+| MIDI effect box | `midi-effect` | `midi-effect` |
+| Audio effect box (already present) | `audio-effect` | `audio-effect` |
+| Audio-unit header drag handle | `audio-unit` | `audio-unit` (full rack: instrument + midi + audio effects) |
+
+The payload carries the UUID of the source box so the drop handler can resolve it in the project's `BoxGraph` and serialize it via `PresetEncoder.encode` (for `audio-unit`) or a new single-device encoder.
+
+**Drop targets in the LibraryBrowser.**
+
+| Target row | Accepts payload `kind` | Behaviour |
+|---|---|---|
+| Stock device row (e.g. `Vaporisateur`, `Compressor`) | Matching single-device `kind` only, AND matching `deviceKey` | Saves under that device row. Drag visual confirms compatibility; incompatible drags get no drop affordance. |
+| `Racks` node (under Instruments) | `audio-unit` | Saves to the rack list. |
+| Audio `Effect Chains` node | `audio-effect` | Saves as a 1-entry effect chain. Multi-effect selection → N-entry chain (deferred, see below). |
+| MIDI `Effect Chains` node | `midi-effect` | Same, MIDI side. |
+
+Dropping a single audio-effect on `Effect Chains` (producing a 1-entry chain) is intentional — user can rename the chain later and append more effects once multi-effect selection-drag lands. Folder names can be renamed later so the "Effect Chains" label is not load-bearing.
+
+**On drop:**
+
+1. Resolve the source box(es) from the payload UUID(s).
+2. Serialize via `PresetEncoder.encode` (audio-unit) or a new `encodeSingleDevice(box)` helper (single device preset) or `encodeEffectChain` (chain).
+3. `PresetStorage.user.save({uuid, name, device, category, data})`. Name defaults to the device's `label` field, or the device's `defaultName` if label is blank.
+4. Immediately open a `Surface.requestFloatingTextInput` positioned over the newly-inserted preset row, pre-filled with the default name. `Enter` commits (calls `PresetStorage.rename`); `Escape` keeps the default.
+5. The new row is visually highlighted until the rename flyout closes so the user can see which row they just created.
+
+**Secondary / later actions** (right-click context menu on user preset):
+- **Rename**: re-opens the floating text input (writes via `PresetStorage.rename`)
+- **Delete**: removes the preset (stock presets cannot be deleted)
+- **Export**: "Export as .odp" (file picker save)
+- **Import** (on any device row or `Racks` / `Effect Chains` node): "Import Preset..." file picker → same save flow as drop.
+
+**Phasing.** Ship in three commits:
+
+1. **PresetStorage** (OPFS layer) + swap the mock user-index for a live `readIndex()`. No drag plumbing yet.
+2. **Drag-to-save** — install the missing drag sources (instrument, midi, audio-unit-header), install drop targets on LibraryBrowser rows, wire the `FloatingTextInput` rename on drop. Single effect onto `Effect Chains` → 1-entry chain.
+3. **Multi-select drag → N-entry chain** — select multiple effects in the device panel, drag as a group, produce a proper chain preset. Deferred until the device panel gets a multi-select UI.
 
 ---
 
@@ -390,7 +426,8 @@ The drag feedback (insert marker between existing effects) is identical to dragg
 - `packages/app/studio/src/ui/browse/DevicesBrowser.sass` - triangle column, collapse animation, preset rows, banner styling
 - `packages/app/studio/src/ui/AnyDragData.ts` - add `DragPreset` and `DragEffectChain` (with `kind`) types
 - `packages/app/studio/src/ui/devices/DevicePanelDragAndDrop.ts` - handle `DragPreset` and `DragEffectChain` drops; route audio chains to `audioEffectsContainer` and MIDI chains to `midiEffectsContainer`
-- `packages/app/studio/src/ui/devices/menu-items.ts` - user preset save/rename/delete/export/import
+- `packages/app/studio/src/ui/devices/DevicePanelDragSources.ts` (or equivalent) - install `DragAndDrop.installSource` on the instrument box, MIDI-effect box, and audio-unit header. Today only audio-effect boxes have a source installed — this is the extension this plan relies on.
+- `packages/app/studio/src/ui/devices/menu-items.ts` - user preset rename/delete/export/import (save is drop-driven, not menu-driven in v1)
 - `packages/app/studio/src/boot.ts` - create `PresetService` and pass to `StudioService`
 - `packages/app/studio/src/service/StudioService.ts` - accept and expose `PresetService`
 
