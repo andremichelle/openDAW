@@ -158,8 +158,7 @@ export class VaryingTempoMap implements TempoMap, Terminable {
     }
 
     intervalToSeconds(fromPPQN: ppqn, toPPQN: ppqn): seconds {
-        if (fromPPQN >= toPPQN) {return 0.0}
-        return this.#ppqnToSecondsPositive(toPPQN) - this.#ppqnToSecondsPositive(fromPPQN)
+        return this.ppqnToSeconds(toPPQN) - this.ppqnToSeconds(fromPPQN)
     }
 
     intervalToPPQN(fromSeconds: seconds, toSeconds: seconds): ppqn {

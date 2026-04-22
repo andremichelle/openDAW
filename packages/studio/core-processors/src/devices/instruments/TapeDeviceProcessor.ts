@@ -210,6 +210,16 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         if (adapter.isPlayModeNoStretch) {
             const elapsedSeconds = this.context.tempoMap.intervalToSeconds(cycle.rawStart, cycle.resultStart)
             const offset = (elapsedSeconds + waveformOffset) * data.sampleRate
+            console.log("[Tape.no-stretch]", JSON.stringify({
+                pos: isInstanceOf(adapter, AudioRegionBoxAdapter) ? adapter.position : null,
+                loopOffset: isInstanceOf(adapter, AudioRegionBoxAdapter) ? adapter.loopOffset : null,
+                rawStart: cycle.rawStart,
+                resultStart: cycle.resultStart,
+                elapsedSeconds,
+                waveformOffset,
+                offset,
+                dataSampleRate: data.sampleRate
+            }))
             this.#updateOrCreatePitchVoice(lane, sourceUuid, data, data.sampleRate / sampleRate, offset, 0)
         } else if (asPlayModePitch.isEmpty()) {
             const audioDurationSamples = data.numberOfFrames
