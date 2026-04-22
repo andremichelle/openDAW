@@ -109,7 +109,16 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             return
         }
         const {p0, p1, s0, s1, flags} = block
-        if (!Bits.every(flags, BlockFlag.transporting | BlockFlag.playing)) {return}
+        if (!Bits.every(flags, BlockFlag.transporting | BlockFlag.playing)) {
+            this.#fadeOutAllPitchVoices(lane)
+            lane.sequencer.reset()
+            const sn = s1 - s0
+            for (const voice of lane.fadingVoices) {
+                voice.process(s0, sn, this.#unitGainBuffer)
+            }
+            lane.fadingVoices = lane.fadingVoices.filter(voice => !voice.done())
+            return
+        }
         if (Bits.some(flags, BlockFlag.discontinuous)) {
             this.#fadeOutAllPitchVoices(lane)
             lane.sequencer.reset()
