@@ -262,7 +262,7 @@ export const DashboardPage: PageFactory<StudioService> = ({lifecycle}: PageConte
                     success={(data: DashboardData) => <AllTimeTiles data={data}/>}
                 />
                 <Tile label="Peak users" value={tiles.peakUsers} icon="U"/>
-                <Tile label="Unique visitors" value={tiles.maxVisitors} icon="V"/>
+                <Tile label="Max unique visitors" value={tiles.maxVisitors} icon="V"/>
             </div>
             <Await
                 factory={() => dataPromise}

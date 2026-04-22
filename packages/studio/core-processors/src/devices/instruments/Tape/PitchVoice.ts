@@ -15,6 +15,7 @@ export class PitchVoice {
     #playbackRate: number
     #blockOffset: int
     #fadeOutBlockOffset: int = 0
+    #lastFinalAmplitude: number = 1.0
 
     constructor(sourceUuid: UUID.Bytes, output: AudioBuffer, data: AudioData, fadeLength: number, playbackRate: number,
                 offset: number = 0.0, blockOffset: int = 0) {
@@ -46,7 +47,7 @@ export class PitchVoice {
         if (this.#state !== VoiceState.Done && !(this.#state === VoiceState.Fading && this.#fadeDirection < 0)) {
             this.#state = VoiceState.Fading
             this.#fadeDirection = -1.0
-            this.#fadeProgress = 0.0
+            this.#fadeProgress = this.#fadeLength * (1.0 - this.#lastFinalAmplitude)
             this.#fadeOutBlockOffset = blockOffset
         }
     }
@@ -69,6 +70,7 @@ export class PitchVoice {
         let fadeDirection = this.#fadeDirection
         let readPosition = this.#readPosition
         let fadeProgress = this.#fadeProgress
+        let lastFinalAmplitude = this.#lastFinalAmplitude
         for (let i = 0; i < bufferCount; i++) {
             if (state === VoiceState.Done) {break}
             if (i < blockOffset) {continue}
@@ -94,12 +96,13 @@ export class PitchVoice {
             } else {
                 amplitude = 1.0
             }
+            const finalAmplitude = amplitude * fadingGainBuffer[i]
+            lastFinalAmplitude = finalAmplitude
             const readInt = readPosition | 0
             if (readInt >= 0 && readInt < numberOfFrames - 1) {
                 const alpha = readPosition - readInt
                 const sL = framesL[readInt]
                 const sR = framesR[readInt]
-                const finalAmplitude = amplitude * fadingGainBuffer[i]
                 outL[j] += (sL + alpha * (framesL[readInt + 1] - sL)) * finalAmplitude
                 outR[j] += (sR + alpha * (framesR[readInt + 1] - sR)) * finalAmplitude
             }
@@ -114,6 +117,7 @@ export class PitchVoice {
         this.#fadeDirection = fadeDirection
         this.#readPosition = readPosition
         this.#fadeProgress = fadeProgress
+        this.#lastFinalAmplitude = lastFinalAmplitude
         this.#blockOffset = 0
         this.#fadeOutBlockOffset = 0
     }
