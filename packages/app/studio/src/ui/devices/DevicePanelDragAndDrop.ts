@@ -9,10 +9,12 @@ import {
     InstrumentBox,
     InstrumentFactories,
     InstrumentFactory,
-    PresetDecoder
+    PresetDecoder,
+    PresetHeader
 } from "@opendaw/studio-adapters"
 import {InsertMarker} from "@/ui/components/InsertMarker"
-import {EffectFactories, PresetStorage, Project} from "@opendaw/studio-core"
+import {EffectFactories, PresetSource, Project} from "@opendaw/studio-core"
+import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {IndexedBox} from "@opendaw/lib-box"
 
 export namespace DevicePanelDragAndDrop {
@@ -31,7 +33,6 @@ export namespace DevicePanelDragAndDrop {
                 const deviceHost = boxAdapters.adapterFor(editingDeviceChain.unwrap().box, Devices.isHost)
                 const {type} = dragData
                 if (type === "preset") {
-                    if (dragData.source !== "user") {return false}
                     if (dragData.category === "audio-unit" && deviceHost.isAudioUnit) {
                         instrumentContainer.style.opacity = "0.5"
                         return true
@@ -147,17 +148,13 @@ export namespace DevicePanelDragAndDrop {
     }
 
     const handlePresetDrop = async (project: Project,
-                                    dragData: { category: string, source: string, uuid: UUID.String },
+                                    dragData: { category: string, source: PresetSource, uuid: UUID.String },
                                     dropIndex: number): Promise<void> => {
-        if (dragData.source !== "user") {
-            console.debug("Stock presets not yet available for drop")
-            return
-        }
         const editing = project.userEditingManager.audioUnit.get()
         if (editing.isEmpty()) {return}
         const targetAudioUnit = project.boxAdapters
             .adapterFor(editing.unwrap().box, Devices.isHost).audioUnitBoxAdapter().box
-        const load = await Promises.tryCatch(PresetStorage.load(UUID.parse(dragData.uuid)))
+        const load = await Promises.tryCatch(PresetApplication.loadBytes(dragData.uuid, dragData.source))
         if (load.status === "rejected") {
             await RuntimeNotifier.info({
                 headline: "Could Not Load Preset",
@@ -167,7 +164,7 @@ export namespace DevicePanelDragAndDrop {
         }
         if (dragData.category === "audio-unit") {
             project.editing.modify(() => {
-                const attempt = PresetDecoder.replaceAudioUnit(load.value as ArrayBuffer, targetAudioUnit)
+                const attempt = PresetDecoder.replaceAudioUnit(load.value, targetAudioUnit)
                 if (attempt.isFailure()) {
                     RuntimeNotifier.info({
                         headline: "Can't Apply Preset",
@@ -180,7 +177,7 @@ export namespace DevicePanelDragAndDrop {
         }
         if (dragData.category === "instrument") {
             project.editing.modify(() => {
-                const attempt = PresetDecoder.replaceAudioUnit(load.value as ArrayBuffer, targetAudioUnit,
+                const attempt = PresetDecoder.replaceAudioUnit(load.value, targetAudioUnit,
                     {keepMIDIEffects: true, keepAudioEffects: true})
                 if (attempt.isFailure()) {
                     RuntimeNotifier.info({
@@ -194,8 +191,11 @@ export namespace DevicePanelDragAndDrop {
         }
         if (dragData.category === "audio-effect" || dragData.category === "midi-effect"
             || dragData.category === "audio-effect-chain" || dragData.category === "midi-effect-chain") {
+            const chainKind = dragData.category === "midi-effect" || dragData.category === "midi-effect-chain"
+                ? PresetHeader.ChainKind.Midi
+                : PresetHeader.ChainKind.Audio
             project.editing.modify(() => {
-                const attempt = PresetDecoder.insertEffectChain(load.value, targetAudioUnit, dropIndex)
+                const attempt = PresetDecoder.insertEffectChain(load.value, targetAudioUnit, dropIndex, chainKind)
                 if (attempt.isFailure()) {
                     RuntimeNotifier.info({
                         headline: "Can't Apply Preset",

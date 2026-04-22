@@ -31,7 +31,7 @@ export const HeadersArea = ({lifecycle, service, scrollModel}: Construct) => (
                  DragAndDrop.installTarget(element, {
                      drag: (_event: DragEvent, data: AnyDragData): boolean => {
                          if (data.type === "instrument" && data.device !== null) {return true}
-                         if (data.type === "preset" && data.source === "user"
+                         if (data.type === "preset"
                              && (data.category === "instrument" || data.category === "audio-unit")) {
                              return true
                          }
@@ -43,13 +43,13 @@ export const HeadersArea = ({lifecycle, service, scrollModel}: Construct) => (
                              editing.modify(() => DefaultInstrumentFactory.create(api, factory))
                              return
                          }
-                         if (data.type === "preset" && data.source === "user") {
+                         if (data.type === "preset") {
                              if (data.category === "audio-unit") {
-                                 PresetApplication.createNewAudioUnitFromRack(project, data.uuid)
+                                 PresetApplication.createNewAudioUnitFromRack(project, data.uuid, data.source)
                                      .catch(console.warn)
                              } else if (data.category === "instrument" && isNotNull(data.device)) {
-                                 PresetApplication.createNewAudioUnitFromInstrument(project, data.uuid, data.device)
-                                     .catch(console.warn)
+                                 PresetApplication.createNewAudioUnitFromInstrument(
+                                     project, data.uuid, data.device, data.source).catch(console.warn)
                              }
                          }
                      },

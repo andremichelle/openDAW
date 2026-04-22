@@ -10,6 +10,7 @@ import {
     isInstanceOf,
     Option,
     RuntimeNotifier,
+    tryCatch,
     UUID
 } from "@opendaw/lib-std"
 import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
@@ -56,11 +57,15 @@ export namespace PresetDecoder {
             }).then()
             return []
         }
+        const summary: Record<string, number> = {}
+        for (const box of sourceBoxGraph.boxes()) {
+            summary[box.name] = (summary[box.name] ?? 0) + 1
+        }
+        console.info(`PresetDecoder.decode: source graph boxes`, summary)
         const sourceAudioUnitBoxes = sourceBoxGraph.boxes()
             .filter(box => isInstanceOf(box, AudioUnitBox))
             .filter(box => box.type.getValue() !== AudioUnitType.Output)
-        const excludeBox = (box: Box): boolean =>
-            TransferUtils.shouldExclude(box) || TransferUtils.excludeTimelinePredicate(box)
+        const excludeBox = (box: Box): boolean => TransferUtils.shouldExclude(box)
         const dependencies = Array.from(sourceBoxGraph.dependenciesOf(sourceAudioUnitBoxes, {
             alwaysFollowMandatory: true,
             stopAtResources: true,
@@ -78,25 +83,27 @@ export namespace PresetDecoder {
             .filter(box => box.type.getValue() !== AudioUnitType.Output)
         importedAudioUnits.forEach((audioUnitBox) => {
             const inputBox = audioUnitBox.input.pointerHub.incoming().at(0)?.box
-            if (isDefined(inputBox)) {
-                audioUnitBox.capture.targetVertex.ifSome(({box: captureBox}) => {
-                    if (captureBox instanceof CaptureMidiBox) {
-                        TrackBox.create(target.boxGraph, UUID.generate(), box => {
-                            box.index.setValue(0)
-                            box.type.setValue(TrackType.Notes)
-                            box.target.refer(audioUnitBox)
-                            box.tracks.refer(audioUnitBox.tracks)
-                        })
-                    } else if (captureBox instanceof CaptureAudioBox) {
-                        TrackBox.create(target.boxGraph, UUID.generate(), box => {
-                            box.index.setValue(0)
-                            box.type.setValue(TrackType.Audio)
-                            box.target.refer(audioUnitBox)
-                            box.tracks.refer(audioUnitBox.tracks)
-                        })
-                    }
-                })
-            }
+            if (!isDefined(inputBox)) {return}
+            const existingTrackCount = audioUnitBox.tracks.pointerHub.incoming().length
+            console.info(`PresetDecoder.decode: AudioUnit ${UUID.toString(audioUnitBox.address.uuid)} has ${existingTrackCount} pre-copied track(s)`)
+            if (existingTrackCount > 0) {return}
+            audioUnitBox.capture.targetVertex.ifSome(({box: captureBox}) => {
+                if (captureBox instanceof CaptureMidiBox) {
+                    TrackBox.create(target.boxGraph, UUID.generate(), box => {
+                        box.index.setValue(0)
+                        box.type.setValue(TrackType.Notes)
+                        box.target.refer(audioUnitBox)
+                        box.tracks.refer(audioUnitBox.tracks)
+                    })
+                } else if (captureBox instanceof CaptureAudioBox) {
+                    TrackBox.create(target.boxGraph, UUID.generate(), box => {
+                        box.index.setValue(0)
+                        box.type.setValue(TrackType.Audio)
+                        box.target.refer(audioUnitBox)
+                        box.tracks.refer(audioUnitBox.tracks)
+                    })
+                }
+            })
         })
         return importedAudioUnits
     }
@@ -150,9 +157,13 @@ export namespace PresetDecoder {
             sourceBoxGraph.endTransaction()
         }
 
-        // We do not take track or capture boxes into account
+        const sourceHasTracks = sourceAudioUnitBox.tracks.pointerHub.incoming().length > 0
+        if (sourceHasTracks) {
+            targetAudioUnitBox.tracks.pointerHub.incoming().forEach(({box}) => box.delete())
+        }
+
+        // Capture boxes live on the target's AudioUnit already and must not be duplicated.
         const excludeBox = (box: Box) => box.accept<BoxVisitor<boolean>>({
-            visitTrackBox: (_box: TrackBox): boolean => true,
             visitCaptureMidiBox: (_box: CaptureMidiBox): boolean => true,
             visitCaptureAudioBox: (_box: CaptureAudioBox): boolean => true
         }) === true
@@ -162,7 +173,8 @@ export namespace PresetDecoder {
 
         const dependencies = Array.from(sourceBoxGraph.dependenciesOf(sourceAudioUnitBox, {
             excludeBox,
-            alwaysFollowMandatory: false
+            alwaysFollowMandatory: true,
+            stopAtResources: true
         }).boxes)
         uuidMap.addMany([
             {
@@ -189,9 +201,9 @@ export namespace PresetDecoder {
         })
         PointerField.decodeWith({
             map: (_pointer: PointerField, newAddress: Option<Address>): Option<Address> =>
-                newAddress.map(address => uuidMap.opt(address.uuid).match({
-                    none: () => address,
-                    some: ({target}) => address.moveTo(target)
+                newAddress.flatMap(address => uuidMap.opt(address.uuid).match({
+                    some: ({target}) => Option.wrap(address.moveTo(target)),
+                    none: () => targetBoxGraph.findBox(address.uuid).nonEmpty() ? Option.wrap(address) : Option.None
                 }))
         }, () => {
             dependencies
@@ -214,27 +226,43 @@ export namespace PresetDecoder {
     export const insertEffectChain = (
         bytes: ArrayBufferLike,
         targetAudioUnit: AudioUnitBox,
-        insertIndex: int
+        insertIndex: int,
+        kind: PresetHeader.ChainKind
     ): Attempt<void, string> => {
-        const input = new ByteArrayInput(bytes)
-        if (input.readInt() !== PresetHeader.MAGIC_HEADER_EFFECT_CHAIN) {
-            return Attempts.err("Invalid effect chain preset header")
+        const headerInput = new ByteArrayInput(bytes.slice(0, 8))
+        if (headerInput.readInt() !== PresetHeader.MAGIC_HEADER_OPEN) {
+            return Attempts.err("Invalid preset header")
         }
-        if (input.readInt() !== PresetHeader.FORMAT_VERSION) {
-            return Attempts.err("Unsupported effect chain preset version")
+        if (headerInput.readInt() !== PresetHeader.FORMAT_VERSION) {
+            return Attempts.err("Unsupported preset version")
         }
-        const kind = input.readInt() as PresetHeader.ChainKind
-        const count = input.readInt()
-        if (count <= 0) {return Attempts.err("Preset is empty")}
-        const field = kind === PresetHeader.ChainKind.Audio
+        const sourceGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
+        const loaded = tryCatch(() => sourceGraph.fromArrayBuffer(bytes.slice(8), false))
+        if (loaded.status === "failure") {
+            return Attempts.err(`Failed to decode preset: ${String(loaded.error)}`)
+        }
+        const sourceAudioUnit = sourceGraph.boxes()
+            .filter(box => isInstanceOf(box, AudioUnitBox))
+            .map(box => asInstanceOf(box, AudioUnitBox))
+            .find(box => box.type.getValue() !== AudioUnitType.Output)
+        if (isAbsent(sourceAudioUnit)) {
+            return Attempts.err("Preset contains no audio unit")
+        }
+        const sourceField = kind === PresetHeader.ChainKind.Audio
+            ? sourceAudioUnit.audioEffects
+            : sourceAudioUnit.midiEffects
+        const effects = IndexedBox.collectIndexedBoxes(sourceField)
+        if (effects.length === 0) {return Attempts.err("Preset contains no effects of the requested kind")}
+        const targetField = kind === PresetHeader.ChainKind.Audio
             ? targetAudioUnit.audioEffects
             : targetAudioUnit.midiEffects
-        const targetFieldAddress = field.address
+        const targetFieldAddress = targetField.address
         const hostPointerType: Pointers = kind === PresetHeader.ChainKind.Audio
             ? Pointers.AudioEffectHost
             : Pointers.MIDIEffectHost
-        const graph = targetAudioUnit.graph
-        const existing = IndexedBox.collectIndexedBoxes(field)
+        const targetGraph = targetAudioUnit.graph
+        const count = effects.length
+        const existing = IndexedBox.collectIndexedBoxes(targetField)
         for (let i = existing.length - 1; i >= 0; i--) {
             const box = existing[i]
             const current = box.index.getValue()
@@ -242,26 +270,55 @@ export namespace PresetDecoder {
                 box.index.setValue(current + count)
             }
         }
+        const excludeBox = (box: Box): boolean =>
+            TransferUtils.shouldExclude(box)
+            || TransferUtils.excludeTimelinePredicate(box)
+            || box instanceof AudioUnitBox
+        const effectSet = new Set<Box>(effects)
+        const dependencies = Array.from(sourceGraph.dependenciesOf(effects, {
+            alwaysFollowMandatory: true,
+            stopAtResources: true,
+            excludeBox
+        }).boxes).filter(box => !effectSet.has(box))
+        const existingPreservedUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        dependencies.forEach(source => {
+            if (source.resource === "preserved" && targetGraph.findBox(source.address.uuid).nonEmpty()) {
+                existingPreservedUuids.add(source.address.uuid)
+            }
+        })
+        const uuidMap = UUID.newSet<TransferUtils.UUIDMapper>(({source}) => source)
+        uuidMap.addMany([
+            ...effects.map(box => ({source: box.address.uuid, target: UUID.generate()})),
+            ...dependencies.map(box => ({
+                source: box.address.uuid,
+                target: box.resource === "preserved" ? box.address.uuid : UUID.generate()
+            }))
+        ])
         PointerField.decodeWith({
             map: (pointer: PointerField, address: Option<Address>): Option<Address> => {
                 if (pointer.pointerType === hostPointerType) {
                     return Option.wrap(targetFieldAddress)
                 }
-                return address
+                return address.flatMap(addr => uuidMap.opt(addr.uuid).match({
+                    some: ({target}) => Option.wrap(addr.moveTo(target)),
+                    none: () => targetGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None
+                }))
             }
         }, () => {
-            for (let i = 0; i < count; i++) {
-                const className = input.readString() as keyof BoxIO.TypeMap
-                const payloadLen = input.readInt()
-                const payloadView = new Int8Array(payloadLen)
-                input.readBytes(payloadView)
-                const payloadInput = new ByteArrayInput(payloadView.buffer)
-                const uuid = UUID.generate()
-                graph.createBox(className, uuid, box => {
-                    box.read(payloadInput)
+            effects.forEach((source, i) => {
+                const input = new ByteArrayInput(source.toArrayBuffer())
+                const uuid = uuidMap.get(source.address.uuid).target
+                targetGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => {
+                    box.read(input)
                     if (IndexedBox.isIndexedBox(box)) {box.index.setValue(insertIndex + i)}
                 })
-            }
+            })
+            dependencies.forEach(source => {
+                if (existingPreservedUuids.hasKey(source.address.uuid)) {return}
+                const input = new ByteArrayInput(source.toArrayBuffer())
+                const uuid = uuidMap.get(source.address.uuid).target
+                targetGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))
+            })
         })
         return Attempts.Ok
     }

@@ -1,27 +1,34 @@
 import {Dialog} from "@/ui/components/Dialog"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
-import {createElement} from "@opendaw/lib-jsx"
-import {Errors} from "@opendaw/lib-std"
+import {createElement, Frag} from "@opendaw/lib-jsx"
+import {DefaultObservableValue, Errors, Terminator} from "@opendaw/lib-std"
+import {Checkbox} from "@/ui/components/Checkbox"
+import {Icon} from "@/ui/components/Icon"
 
 export namespace PresetDialogs {
     export type SaveInput = {
         headline: string
         suggestedName?: string
         suggestedDescription?: string
+        showTimelineToggle?: boolean
     }
 
     export type SaveResult = {
         name: string
         description: string
+        includeTimeline: boolean
     }
 
     export const showSavePresetDialog = async ({
                                                    headline,
                                                    suggestedName = "",
-                                                   suggestedDescription = ""
+                                                   suggestedDescription = "",
+                                                   showTimelineToggle = true
                                                }: SaveInput): Promise<SaveResult> => {
+        const lifecycle = new Terminator()
         const {resolve, reject, promise} = Promise.withResolvers<SaveResult>()
+        promise.finally(() => lifecycle.terminate())
         const nameField: HTMLInputElement = (
             <input className="default" type="text" placeholder="Preset name" value={suggestedName}/>
         )
@@ -30,13 +37,18 @@ export namespace PresetDialogs {
                       rows={3}
                       placeholder="Optional description">{suggestedDescription}</textarea>
         )
+        const includeTimelineModel = new DefaultObservableValue(false)
         const approve = () => {
             const name = nameField.value.trim()
             if (name.length === 0) {
                 nameField.focus()
                 return false
             }
-            resolve({name, description: descriptionField.value.trim()})
+            resolve({
+                name,
+                description: descriptionField.value.trim(),
+                includeTimeline: includeTimelineModel.getValue()
+            })
             return true
         }
         const dialog: HTMLDialogElement = (
@@ -63,6 +75,16 @@ export namespace PresetDialogs {
                     {nameField}
                     <div style={{paddingTop: "0.35em"}}>Description:</div>
                     {descriptionField}
+                    {showTimelineToggle && (
+                        <Frag>
+                            <div style={{paddingTop: "0.15em"}}>Include timeline:</div>
+                            <Checkbox lifecycle={lifecycle}
+                                      model={includeTimelineModel}
+                                      appearance={{framed: true}}>
+                                <Icon symbol={IconSymbol.Checkbox}/>
+                            </Checkbox>
+                        </Frag>
+                    )}
                 </div>
             </Dialog>
         )
@@ -81,9 +103,18 @@ export namespace PresetDialogs {
 
     export type RackCompositionChoice = "entire-chain" | "only-instrument"
 
+    export type RackCompositionResult = {
+        choice: RackCompositionChoice
+        includeTimeline: boolean
+    }
+
     export const showRackCompositionDialog = async (headline: string,
-                                                    message: string): Promise<RackCompositionChoice> => {
-        const {resolve, reject, promise} = Promise.withResolvers<RackCompositionChoice>()
+                                                    message: string,
+                                                    showTimelineToggle: boolean = false): Promise<RackCompositionResult> => {
+        const lifecycle = new Terminator()
+        const {resolve, reject, promise} = Promise.withResolvers<RackCompositionResult>()
+        promise.finally(() => lifecycle.terminate())
+        const includeTimelineModel = new DefaultObservableValue(false)
         const dialog: HTMLDialogElement = (
             <Dialog headline={headline}
                     icon={IconSymbol.Box}
@@ -99,7 +130,7 @@ export namespace PresetDialogs {
                         {
                             text: "Only Instrument",
                             onClick: handler => {
-                                resolve("only-instrument")
+                                resolve({choice: "only-instrument", includeTimeline: includeTimelineModel.getValue()})
                                 handler.close()
                             }
                         },
@@ -107,12 +138,78 @@ export namespace PresetDialogs {
                             text: "Entire Chain",
                             primary: true,
                             onClick: handler => {
-                                resolve("entire-chain")
+                                resolve({choice: "entire-chain", includeTimeline: includeTimelineModel.getValue()})
                                 handler.close()
                             }
                         }
                     ]}>
-                <div style={{padding: "1em 0", minWidth: "20em"}}>{message}</div>
+                <div style={{padding: "1em 0", minWidth: "20em", display: "flex",
+                    flexDirection: "column", rowGap: "0.75em"}}>
+                    <div>{message}</div>
+                    {showTimelineToggle && (
+                        <label style={{display: "flex", alignItems: "center", columnGap: "0.5em"}}>
+                            <Checkbox lifecycle={lifecycle} model={includeTimelineModel}
+                                      appearance={{framed: true}}>
+                                <Icon symbol={IconSymbol.Checkbox}/>
+                            </Checkbox>
+                            <span>Include timeline</span>
+                        </label>
+                    )}
+                </div>
+            </Dialog>
+        )
+        dialog.oncancel = () => reject(Errors.AbortError)
+        Surface.get().flyout.appendChild(dialog)
+        dialog.showModal()
+        return promise
+    }
+
+    export type ReplaceInput = {
+        headline: string
+        message: string
+    }
+
+    export type ReplaceResult = {
+        includeTimeline: boolean
+    }
+
+    export const showReplacePresetDialog = async ({headline, message}: ReplaceInput): Promise<ReplaceResult> => {
+        const lifecycle = new Terminator()
+        const {resolve, reject, promise} = Promise.withResolvers<ReplaceResult>()
+        promise.finally(() => lifecycle.terminate())
+        const includeTimelineModel = new DefaultObservableValue(false)
+        const dialog: HTMLDialogElement = (
+            <Dialog headline={headline}
+                    icon={IconSymbol.Box}
+                    cancelable={true}
+                    buttons={[
+                        {
+                            text: "Cancel",
+                            onClick: handler => {
+                                reject(Errors.AbortError)
+                                handler.close()
+                            }
+                        },
+                        {
+                            text: "Replace",
+                            primary: true,
+                            onClick: handler => {
+                                resolve({includeTimeline: includeTimelineModel.getValue()})
+                                handler.close()
+                            }
+                        }
+                    ]}>
+                <div style={{padding: "1em 0", minWidth: "20em", display: "flex",
+                    flexDirection: "column", rowGap: "0.75em"}}>
+                    <div>{message}</div>
+                    <label style={{display: "flex", alignItems: "center", columnGap: "0.5em"}}>
+                        <Checkbox lifecycle={lifecycle} model={includeTimelineModel}
+                                  appearance={{framed: true}}>
+                            <Icon symbol={IconSymbol.Checkbox}/>
+                        </Checkbox>
+                        <span>Include timeline</span>
+                    </label>
+                </div>
             </Dialog>
         )
         dialog.oncancel = () => reject(Errors.AbortError)

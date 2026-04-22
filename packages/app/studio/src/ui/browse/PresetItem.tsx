@@ -1,6 +1,7 @@
 import css from "./PresetItem.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
+import {StringComparator} from "@opendaw/lib-std"
 import {ContextMenu, MenuItem, PresetEntry} from "@opendaw/studio-core"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {DragAndDrop} from "@/ui/DragAndDrop"
@@ -46,18 +47,25 @@ export const PresetItem = ({entry, actions}: Construct): HTMLElement => {
             enter: allowDrop => item.classList.toggle("accept-drop", allowDrop),
             leave: () => item.classList.remove("accept-drop")
         })
-        ContextMenu.subscribe(item, collector => collector.addItems(
-            MenuItem.default({label: "Edit…"})
-                .setTriggerProcedure(() => actions.editPreset(entry).catch(console.warn)),
-            MenuItem.default({label: "Delete"})
-                .setTriggerProcedure(() => actions.deletePreset(entry).catch(console.warn))
-        ))
+        ContextMenu.subscribe(item, collector => {
+            const canUpload = new URLSearchParams(location.search).has("access-key")
+            collector.addItems(
+                MenuItem.default({label: "Edit…"})
+                    .setTriggerProcedure(() => actions.editPreset(entry).catch(console.warn)),
+                ...(canUpload ? [MenuItem.default({label: "Upload"})
+                    .setTriggerProcedure(() => actions.uploadPreset(entry).catch(console.warn))] : []),
+                MenuItem.default({label: "Delete"})
+                    .setTriggerProcedure(() => actions.deletePreset(entry).catch(console.warn))
+            )
+        })
     }
     return item
 }
 
 export const PresetItems = (presets: ReadonlyArray<PresetEntry>, actions: LibraryActions): ReadonlyArray<HTMLElement> => {
-    const user = presets.filter(entry => entry.source === "user")
-    const stock = presets.filter(entry => entry.source === "stock")
+    const byName = (left: PresetEntry, right: PresetEntry) =>
+        StringComparator(left.name.toLowerCase(), right.name.toLowerCase())
+    const user = presets.filter(entry => entry.source === "user").toSorted(byName)
+    const stock = presets.filter(entry => entry.source === "stock").toSorted(byName)
     return [...user, ...stock].map(entry => PresetItem({entry, actions}))
 }

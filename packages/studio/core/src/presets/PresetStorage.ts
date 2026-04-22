@@ -89,9 +89,9 @@ export namespace PresetStorage {
         await writeAndCache(next)
     }
 
-    export const load = async (uuid: UUID.Bytes): Promise<ArrayBufferLike> => {
+    export const load = async (uuid: UUID.Bytes): Promise<ArrayBuffer> => {
         const bytes = await Workers.Opfs.read(fileFor(uuid))
-        return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+        return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
     }
 
     export const updateMeta = async (uuid: UUID.Bytes,

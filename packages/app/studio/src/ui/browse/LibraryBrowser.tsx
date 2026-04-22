@@ -7,16 +7,18 @@ import {InstrumentFactories, PresetHeader} from "@opendaw/studio-adapters"
 import {
     EffectFactories,
     EffectFactory,
+    OpenPresetAPI,
     PresetEntry,
     PresetMeta,
     PresetSource,
     PresetStorage
 } from "@opendaw/studio-core"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService.ts"
 import {LibraryActions, LibraryCategoryKey} from "@/ui/browse/LibraryActions"
 import {DeviceDropKind, DeviceItem, StockDeviceMeta} from "@/ui/browse/DeviceItem"
 import {CompoundItem} from "@/ui/browse/CompoundItem"
+import {Checkbox} from "../components/Checkbox"
 import {Icon} from "../components/Icon"
 
 const className = Html.adoptStyleSheet(css, "LibraryBrowser")
@@ -56,6 +58,7 @@ export const LibraryBrowser = ({lifecycle, service}: Construct) => {
     const showStock = new DefaultObservableValue(true)
     const showUser = new DefaultObservableValue(true)
     const userIndex = PresetStorage.observable()
+    const cloudIndex = new DefaultObservableValue<ReadonlyArray<PresetMeta>>([])
     const tree: HTMLElement = <div className="tree"/>
     const render = () => {
         const query = search.getValue().trim().toLowerCase()
@@ -63,7 +66,10 @@ export const LibraryBrowser = ({lifecycle, service}: Construct) => {
         const user = showUser.getValue()
         const searching = query.length > 0
         const filterActive = searching || !stock || !user
-        const allPresets: ReadonlyArray<PresetEntry> = tagSource(userIndex.getValue(), "user")
+        const allPresets: ReadonlyArray<PresetEntry> = [
+            ...tagSource(userIndex.getValue(), "user"),
+            ...tagSource(cloudIndex.getValue(), "stock")
+        ]
         const matches = (entry: PresetEntry): boolean => {
             if (entry.source === "stock" && !stock) {return false}
             if (entry.source === "user" && !user) {return false}
@@ -104,29 +110,39 @@ export const LibraryBrowser = ({lifecycle, service}: Construct) => {
         )
     }
     PresetStorage.readIndex().catch(reason => console.warn("PresetStorage.readIndex failed", reason))
-    const stockToggle: HTMLButtonElement = (
-        <button className="source-toggle" title="Show stock presets">
+    OpenPresetAPI.get().list().then(
+        value => cloudIndex.setValue(value),
+        reason => console.warn("OpenPresetAPI.list failed", reason))
+    const enforceAtLeastOne = (target: DefaultObservableValue<boolean>, other: DefaultObservableValue<boolean>) =>
+        target.subscribe(() => {
+            if (!target.getValue() && !other.getValue()) {target.setValue(true)}
+        })
+    const stockToggle: HTMLElement = (
+        <Checkbox lifecycle={lifecycle}
+                  model={showStock}
+                  className="source-toggle"
+                  appearance={{tooltip: "Show stock presets", activeColor: Colors.blue}}>
             <Icon symbol={IconSymbol.CloudFolder}/>
-        </button>
+        </Checkbox>
     )
-    const userToggle: HTMLButtonElement = (
-        <button className="source-toggle" title="Show user presets">
+    const userToggle: HTMLElement = (
+        <Checkbox lifecycle={lifecycle}
+                  model={showUser}
+                  className="source-toggle"
+                  appearance={{tooltip: "Show user presets", activeColor: Colors.blue}}>
             <Icon symbol={IconSymbol.UserFolder}/>
-        </button>
+        </Checkbox>
     )
-    const toggle = (target: DefaultObservableValue<boolean>, other: DefaultObservableValue<boolean>) => () => {
-        if (target.getValue() && !other.getValue()) {return}
-        target.setValue(!target.getValue())
-    }
-    stockToggle.onclick = toggle(showStock, showUser)
-    userToggle.onclick = toggle(showUser, showStock)
     lifecycle.ownAll(
+        enforceAtLeastOne(showStock, showUser),
+        enforceAtLeastOne(showUser, showStock),
         search.subscribe(render),
         showStock.catchupAndSubscribe(value => stockToggle.classList.toggle("active", value.getValue())),
         showUser.catchupAndSubscribe(value => userToggle.classList.toggle("active", value.getValue())),
         showStock.subscribe(render),
         showUser.subscribe(render),
         userIndex.subscribe(render),
+        cloudIndex.subscribe(render),
         lifecycle.own(new Terminator())
     )
     render()

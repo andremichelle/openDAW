@@ -43,7 +43,7 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
             if (adapter.isEmpty() || adapter.unwrap().type !== TrackType.Audio) {return Option.None}
         }
         if (data.type !== "sample" && data.type !== "instrument" && data.type !== "file") {
-            if (data.type === "preset" && data.source === "user"
+            if (data.type === "preset"
                 && (data.category === "instrument" || data.category === "audio-unit")) {
                 return Option.wrap(target ?? "instrument")
             }
@@ -86,13 +86,14 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
                 editing.modify(() => api.createAnyInstrument(InstrumentFactories[factoryKey]))
             }
             return
-        } else if (data.type === "preset" && data.source === "user") {
+        } else if (data.type === "preset") {
             subscription.terminate()
             if (data.category === "audio-unit") {
-                PresetApplication.createNewAudioUnitFromRack(project, data.uuid).catch(console.warn)
-            } else if (data.category === "instrument" && isNotNull(data.device)) {
-                PresetApplication.createNewAudioUnitFromInstrument(project, data.uuid, data.device)
+                PresetApplication.createNewAudioUnitFromRack(project, data.uuid, data.source)
                     .catch(console.warn)
+            } else if (data.category === "instrument" && isNotNull(data.device)) {
+                PresetApplication.createNewAudioUnitFromInstrument(
+                    project, data.uuid, data.device, data.source).catch(console.warn)
             }
             return
         } else {

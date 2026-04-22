@@ -9,6 +9,7 @@ import {
     InstrumentPresetMeta,
     MidiEffectChainPresetMeta,
     MidiEffectPresetMeta,
+    OpenPresetAPI,
     PresetEntry,
     PresetStorage,
     Project,
@@ -108,7 +109,7 @@ export class LibraryActions {
             throw dialog.error
         }
         const kind = category === "audio-effect" ? PresetHeader.ChainKind.Audio : PresetHeader.ChainKind.Midi
-        const bytes = PresetEncoder.encodeEffectChain([effect], kind)
+        const bytes = PresetEncoder.encodeEffects([effect], kind)
         const now = Date.now()
         const meta = category === "audio-effect"
             ? {
@@ -146,7 +147,7 @@ export class LibraryActions {
             if (Errors.isAbort(dialog.error)) {return}
             throw dialog.error
         }
-        const bytes = PresetEncoder.encodeEffectChain(effects, kind)
+        const bytes = PresetEncoder.encodeEffects(effects, kind)
         const now = Date.now()
         const meta = isAudio
             ? {
@@ -195,7 +196,9 @@ export class LibraryActions {
             created: now,
             modified: now
         }
-        await PresetStorage.save(meta, PresetEncoder.encode(audioUnitBox))
+        console.info(`saveAsInstrumentPreset: includeTimeline=${dialog.value.includeTimeline}`)
+        await PresetStorage.save(meta, PresetEncoder.encode(audioUnitBox,
+            {includeTimeline: dialog.value.includeTimeline}))
     }
 
     async handleRackDrop(instrumentUuid: UUID.String,
@@ -211,7 +214,7 @@ export class LibraryActions {
             if (Errors.isAbort(choice.error)) {return}
             throw choice.error
         }
-        if (choice.value === "entire-chain") {
+        if (choice.value.choice === "entire-chain") {
             await this.saveAsRackPreset(instrumentUuid, [])
             return
         }
@@ -260,9 +263,12 @@ export class LibraryActions {
             modified: now
         }
         const keep = new Set(effectUuids)
+        const includeTimeline = dialog.value.includeTimeline
+        console.info(`saveAsRackPreset: includeTimeline=${includeTimeline}, effectUuids=${effectUuids.length}`)
         const bytes = effectUuids.length === 0
-            ? PresetEncoder.encode(audioUnitBox)
+            ? PresetEncoder.encode(audioUnitBox, {includeTimeline})
             : PresetEncoder.encode(audioUnitBox, {
+                includeTimeline,
                 excludeEffect: (box: Box) =>
                     DeviceBoxUtils.isEffectDeviceBox(box) && !keep.has(UUID.toString(box.address.uuid))
             })
@@ -333,7 +339,7 @@ export class LibraryActions {
             })
             if (!approved) {return}
             const kind = isAudio ? PresetHeader.ChainKind.Audio : PresetHeader.ChainKind.Midi
-            const bytes = PresetEncoder.encodeEffectChain(effects, kind)
+            const bytes = PresetEncoder.encodeEffects(effects, kind)
             await PresetStorage.save(meta, bytes)
             return
         }
@@ -341,14 +347,16 @@ export class LibraryActions {
             if (dragData.type !== "instrument" || dragData.device !== null) {return}
             const audioUnitBox = this.#audioUnitBoxForInstrumentUuid(dragData.uuid)
             if (isAbsent(audioUnitBox)) {return}
-            const approved = await RuntimeNotifier.approve({
+            const confirm = await Promises.tryCatch(PresetDialogs.showReplacePresetDialog({
                 headline: "Replace Preset?",
-                message: `Replace '${entry.name}' with the dragged instrument?`,
-                approveText: "Replace",
-                cancelText: "Cancel"
-            })
-            if (!approved) {return}
-            await PresetStorage.save(meta, PresetEncoder.encode(audioUnitBox))
+                message: `Replace '${entry.name}' with the dragged instrument?`
+            }))
+            if (confirm.status === "rejected") {
+                if (Errors.isAbort(confirm.error)) {return}
+                throw confirm.error
+            }
+            await PresetStorage.save(meta, PresetEncoder.encode(audioUnitBox,
+                {includeTimeline: confirm.value.includeTimeline}))
             return
         }
         if (entry.category === "audio-unit") {
@@ -357,28 +365,34 @@ export class LibraryActions {
             const audioUnitBox = this.#audioUnitBoxForInstrumentUuid(candidate.instrumentUuid)
             if (isAbsent(audioUnitBox)) {return}
             let keepEntireChain = true
+            let includeTimeline = false
             if (candidate.effectUuids.length === 0) {
                 const choice = await Promises.tryCatch(PresetDialogs.showRackCompositionDialog(
                     `Replace '${entry.name}'?`,
-                    "Replace with the entire audio chain, or just the instrument?"))
+                    "Replace with the entire audio chain, or just the instrument?",
+                    true))
                 if (choice.status === "rejected") {
                     if (Errors.isAbort(choice.error)) {return}
                     throw choice.error
                 }
-                keepEntireChain = choice.value === "entire-chain"
+                keepEntireChain = choice.value.choice === "entire-chain"
+                includeTimeline = choice.value.includeTimeline
             } else {
-                const approved = await RuntimeNotifier.approve({
+                const confirm = await Promises.tryCatch(PresetDialogs.showReplacePresetDialog({
                     headline: "Replace Preset?",
-                    message: `Replace '${entry.name}' with the dragged rack?`,
-                    approveText: "Replace",
-                    cancelText: "Cancel"
-                })
-                if (!approved) {return}
+                    message: `Replace '${entry.name}' with the dragged rack?`
+                }))
+                if (confirm.status === "rejected") {
+                    if (Errors.isAbort(confirm.error)) {return}
+                    throw confirm.error
+                }
+                includeTimeline = confirm.value.includeTimeline
             }
             const keep = new Set(candidate.effectUuids)
             const bytes = keepEntireChain && candidate.effectUuids.length === 0
-                ? PresetEncoder.encode(audioUnitBox)
+                ? PresetEncoder.encode(audioUnitBox, {includeTimeline})
                 : PresetEncoder.encode(audioUnitBox, {
+                    includeTimeline,
                     excludeEffect: (box: Box) =>
                         DeviceBoxUtils.isEffectDeviceBox(box) && !keep.has(UUID.toString(box.address.uuid))
                 })
@@ -400,7 +414,8 @@ export class LibraryActions {
         const dialog = await Promises.tryCatch(PresetDialogs.showSavePresetDialog({
             headline: "Edit Preset",
             suggestedName: entry.name,
-            suggestedDescription: entry.description
+            suggestedDescription: entry.description,
+            showTimelineToggle: false
         }))
         if (dialog.status === "rejected") {
             if (Errors.isAbort(dialog.error)) {return}
@@ -408,6 +423,19 @@ export class LibraryActions {
         }
         await PresetStorage.updateMeta(UUID.parse(entry.uuid),
             {name: dialog.value.name, description: dialog.value.description})
+    }
+
+    async uploadPreset(entry: PresetEntry): Promise<void> {
+        if (entry.source !== "user") {return}
+        const loaded = await Promises.tryCatch(PresetStorage.load(UUID.parse(entry.uuid)))
+        if (loaded.status === "rejected") {
+            await RuntimeNotifier.info({
+                headline: "Could Not Load Preset",
+                message: String(loaded.error)
+            })
+            return
+        }
+        await OpenPresetAPI.get().upload(loaded.value, entry)
     }
 
     async deletePreset(entry: PresetEntry): Promise<void> {
@@ -431,10 +459,9 @@ export class LibraryActions {
     }
 
     async activatePreset(entry: PresetEntry): Promise<void> {
-        if (entry.source !== "user") {return}
         if (entry.category === "audio-unit") {
             const result = await Promises.tryCatch(
-                PresetApplication.createNewAudioUnitFromRack(this.project, entry.uuid))
+                PresetApplication.createNewAudioUnitFromRack(this.project, entry.uuid, entry.source))
             if (result.status === "rejected") {
                 await RuntimeNotifier.info({
                     headline: "Could Not Load Preset", message: String(result.error)
@@ -444,7 +471,8 @@ export class LibraryActions {
         }
         if (entry.category === "instrument") {
             const result = await Promises.tryCatch(
-                PresetApplication.createNewAudioUnitFromInstrument(this.project, entry.uuid, entry.device))
+                PresetApplication.createNewAudioUnitFromInstrument(
+                    this.project, entry.uuid, entry.device, entry.source))
             if (result.status === "rejected") {
                 await RuntimeNotifier.info({
                     headline: "Could Not Load Preset", message: String(result.error)
@@ -454,7 +482,7 @@ export class LibraryActions {
         }
         if (entry.category === "audio-effect" || entry.category === "midi-effect"
             || entry.category === "audio-effect-chain" || entry.category === "midi-effect-chain") {
-            const loaded = await Promises.tryCatch(PresetStorage.load(UUID.parse(entry.uuid)))
+            const loaded = await Promises.tryCatch(PresetApplication.loadBytes(entry.uuid, entry.source))
             if (loaded.status === "rejected") {
                 await RuntimeNotifier.info({
                     headline: "Could Not Load Preset",
@@ -481,9 +509,10 @@ export class LibraryActions {
             }
             const field = isMidi ? host.midiEffects.field() : host.audioEffects.field()
             const insertIndex = field.pointerHub.incoming().length
+            const chainKind = isMidi ? PresetHeader.ChainKind.Midi : PresetHeader.ChainKind.Audio
             this.project.editing.modify(() => {
                 const attempt = PresetDecoder.insertEffectChain(
-                    loaded.value, host.audioUnitBoxAdapter().box, insertIndex)
+                    loaded.value, host.audioUnitBoxAdapter().box, insertIndex, chainKind)
                 if (attempt.isFailure()) {
                     RuntimeNotifier.info({
                         headline: "Can't Apply Preset",

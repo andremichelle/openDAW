@@ -80,9 +80,9 @@ export namespace TransferUtils {
         }
         PointerField.decodeWith({
             map: (_pointer: PointerField, address: Option<Address>): Option<Address> =>
-                address.map(addr => uuidMap.opt(addr.uuid).match({
-                    none: () => addr,
-                    some: ({target}) => addr.moveTo(target)
+                address.flatMap(addr => uuidMap.opt(addr.uuid).match({
+                    some: ({target}) => Option.wrap(addr.moveTo(target)),
+                    none: () => targetBoxGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None
                 }))
         }, () => {
             audioUnitBoxes.forEach((source: AudioUnitBox) => {
