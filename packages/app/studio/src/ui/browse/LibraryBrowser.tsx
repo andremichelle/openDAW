@@ -1,55 +1,79 @@
 import css from "./LibraryBrowser.sass?inline"
-import {DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, isDefined, Lifecycle, Nullable, Predicate, Terminator, UUID} from "@opendaw/lib-std"
 import {Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
-import {InstrumentFactories} from "@opendaw/studio-adapters"
-import {EffectFactories, EffectFactory} from "@opendaw/studio-core"
+import {IndexedBox} from "@opendaw/lib-box"
+import {InstrumentFactories, PresetHeader} from "@opendaw/studio-adapters"
+import {
+    EffectFactories,
+    EffectFactory,
+    PresetEntry,
+    PresetMeta,
+    PresetSource,
+    PresetStorage
+} from "@opendaw/studio-core"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService.ts"
+import {LibraryActions, LibraryCategoryKey} from "@/ui/browse/LibraryActions"
+import {DeviceDropKind, DeviceItem, StockDeviceMeta} from "@/ui/browse/DeviceItem"
+import {CompoundItem} from "@/ui/browse/CompoundItem"
 import {Icon} from "../components/Icon"
-import {PresetEntry, PresetMeta, PresetSource} from "./PresetMeta"
-import mockStockIndexRaw from "./mocks/mock-stock-index.json"
-import mockUserIndexRaw from "./mocks/mock-user-index.json"
 
 const className = Html.adoptStyleSheet(css, "LibraryBrowser")
-
-const mockStockIndex: ReadonlyArray<PresetMeta> = mockStockIndexRaw as ReadonlyArray<PresetMeta>
-const mockUserIndex: ReadonlyArray<PresetMeta> = mockUserIndexRaw as ReadonlyArray<PresetMeta>
 
 const tagSource = (list: ReadonlyArray<PresetMeta>, source: PresetSource): ReadonlyArray<PresetEntry> =>
     list.map(meta => ({...meta, source}))
 
-const allPresets: ReadonlyArray<PresetEntry> = [
-    ...tagSource(mockStockIndex, "stock"),
-    ...tagSource(mockUserIndex, "user")
-]
+const deviceKeyOf = (entry: PresetMeta): string => {
+    switch (entry.category) {
+        case "instrument":
+        case "audio-effect":
+        case "midi-effect":
+            return entry.device
+        case "audio-unit":
+            return entry.instrument
+        case "audio-effect-chain":
+        case "midi-effect-chain":
+            return ""
+    }
+}
 
-type SourceToggles = {stock: boolean, user: boolean}
-
-type CategoryKey = "instrument" | "audio-effect" | "midi-effect"
+const effectDevices = (records: Record<string, EffectFactory>): ReadonlyArray<StockDeviceMeta> =>
+    Object.entries(records).map(([key, factory]) => ({
+        key, name: factory.defaultName, icon: factory.defaultIcon, brief: factory.briefDescription
+    }))
 
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
 }
 
-export const LibraryBrowser = ({lifecycle}: Construct) => {
+export const LibraryBrowser = ({lifecycle, service}: Construct) => {
+    const {project} = service
+    const actions = new LibraryActions(project)
+    const expandedKeys = new Set<string>()
     const search = new DefaultObservableValue("")
-    const toggles = new DefaultObservableValue<SourceToggles>({stock: true, user: true})
-    const tree = <div className="tree"/> as HTMLElement
+    const showStock = new DefaultObservableValue(true)
+    const showUser = new DefaultObservableValue(true)
+    const userIndex = PresetStorage.observable()
+    const tree: HTMLElement = <div className="tree"/>
     const render = () => {
         const query = search.getValue().trim().toLowerCase()
-        const {stock, user} = toggles.getValue()
-        const filterActive = query.length > 0 || !stock || !user
+        const stock = showStock.getValue()
+        const user = showUser.getValue()
+        const searching = query.length > 0
+        const filterActive = searching || !stock || !user
+        const allPresets: ReadonlyArray<PresetEntry> = tagSource(userIndex.getValue(), "user")
         const matches = (entry: PresetEntry): boolean => {
             if (entry.source === "stock" && !stock) {return false}
             if (entry.source === "user" && !user) {return false}
-            if (query.length === 0) {return true}
+            if (!searching) {return true}
             return entry.name.toLowerCase().includes(query)
-                || entry.device.toLowerCase().includes(query)
+                || deviceKeyOf(entry).toLowerCase().includes(query)
         }
         tree.replaceChildren(
             renderCategory({
+                actions, expandedKeys, allPresets, query, matches, filterActive, searching,
                 label: "Instruments",
                 colorVar: "--color-green",
                 categoryKey: "instrument",
@@ -57,53 +81,52 @@ export const LibraryBrowser = ({lifecycle}: Construct) => {
                 compoundCategory: "audio-unit",
                 stockDevices: Object.entries(InstrumentFactories.Named).map(([key, factory]) => ({
                     key, name: factory.defaultName, icon: factory.defaultIcon, brief: factory.briefDescription
-                })),
-                matches,
-                filterActive
+                }))
             }),
             renderCategory({
+                actions, expandedKeys, allPresets, query, matches, filterActive, searching,
                 label: "Audio Effects",
                 colorVar: "--color-blue",
                 categoryKey: "audio-effect",
-                compoundLabel: "Effect Chains",
+                compoundLabel: "Stash",
                 compoundCategory: "audio-effect-chain",
-                stockDevices: effectDevices(EffectFactories.AudioNamed),
-                matches,
-                filterActive
+                stockDevices: effectDevices(EffectFactories.AudioNamed)
             }),
             renderCategory({
+                actions, expandedKeys, allPresets, query, matches, filterActive, searching,
                 label: "MIDI Effects",
                 colorVar: "--color-orange",
                 categoryKey: "midi-effect",
-                compoundLabel: "Effect Chains",
+                compoundLabel: "Stash",
                 compoundCategory: "midi-effect-chain",
-                stockDevices: effectDevices(EffectFactories.MidiNamed),
-                matches,
-                filterActive
+                stockDevices: effectDevices(EffectFactories.MidiNamed)
             })
         )
     }
-    const stockToggle = (
-        <button className="source-toggle active" title="Show stock presets">
+    PresetStorage.readIndex().catch(reason => console.warn("PresetStorage.readIndex failed", reason))
+    const stockToggle: HTMLButtonElement = (
+        <button className="source-toggle" title="Show stock presets">
             <Icon symbol={IconSymbol.CloudFolder}/>
         </button>
-    ) as HTMLButtonElement
-    const userToggle = (
-        <button className="source-toggle active" title="Show user presets">
+    )
+    const userToggle: HTMLButtonElement = (
+        <button className="source-toggle" title="Show user presets">
             <Icon symbol={IconSymbol.UserFolder}/>
         </button>
-    ) as HTMLButtonElement
-    const applyToggles = (next: SourceToggles) => {
-        const safe = !next.stock && !next.user ? {stock: true, user: true} : next
-        stockToggle.classList.toggle("active", safe.stock)
-        userToggle.classList.toggle("active", safe.user)
-        toggles.setValue(safe)
+    )
+    const toggle = (target: DefaultObservableValue<boolean>, other: DefaultObservableValue<boolean>) => () => {
+        if (target.getValue() && !other.getValue()) {return}
+        target.setValue(!target.getValue())
     }
-    stockToggle.onclick = () => applyToggles({...toggles.getValue(), stock: !toggles.getValue().stock})
-    userToggle.onclick = () => applyToggles({...toggles.getValue(), user: !toggles.getValue().user})
+    stockToggle.onclick = toggle(showStock, showUser)
+    userToggle.onclick = toggle(showUser, showStock)
     lifecycle.ownAll(
         search.subscribe(render),
-        toggles.subscribe(render),
+        showStock.catchupAndSubscribe(value => stockToggle.classList.toggle("active", value.getValue())),
+        showUser.catchupAndSubscribe(value => userToggle.classList.toggle("active", value.getValue())),
+        showStock.subscribe(render),
+        showUser.subscribe(render),
+        userIndex.subscribe(render),
         lifecycle.own(new Terminator())
     )
     render()
@@ -113,7 +136,7 @@ export const LibraryBrowser = ({lifecycle}: Construct) => {
                 <input
                     type="search"
                     className="search"
-                    placeholder="Search presets…"
+                    placeholder="Search devices"
                     oninput={(event: Event) => search.setValue((event.target as HTMLInputElement).value)}/>
                 {stockToggle}
                 {userToggle}
@@ -123,123 +146,78 @@ export const LibraryBrowser = ({lifecycle}: Construct) => {
     )
 }
 
-type StockDeviceMeta = {key: string, name: string, icon: IconSymbol, brief: string}
-
-const effectDevices = (records: Record<string, EffectFactory>): ReadonlyArray<StockDeviceMeta> =>
-    Object.entries(records).map(([key, factory]) => ({
-        key, name: factory.defaultName, icon: factory.defaultIcon, brief: factory.briefDescription
-    }))
-
 type RenderCategoryArgs = {
+    actions: LibraryActions
+    expandedKeys: Set<string>
+    allPresets: ReadonlyArray<PresetEntry>
+    query: string
+    matches: Predicate<PresetEntry>
+    filterActive: boolean
+    searching: boolean
     label: string
     colorVar: string
-    categoryKey: CategoryKey
+    categoryKey: LibraryCategoryKey
     compoundLabel: string
     compoundCategory: "audio-unit" | "audio-effect-chain" | "midi-effect-chain"
     stockDevices: ReadonlyArray<StockDeviceMeta>
-    matches: (entry: PresetEntry) => boolean
-    filterActive: boolean
 }
 
 const renderCategory = (args: RenderCategoryArgs): HTMLElement => {
-    const {label, colorVar, categoryKey, compoundLabel, compoundCategory, stockDevices, matches, filterActive} = args
-    const section = <section className="category" style={{"--color": `var(${colorVar})`}}/> as HTMLElement
+    const {
+        actions, expandedKeys, allPresets, query, matches, filterActive, searching,
+        label, colorVar, categoryKey, compoundLabel, compoundCategory, stockDevices
+    } = args
+    const section: HTMLElement = <section className="category" style={{"--color": `var(${colorVar})`}}/>
     section.appendChild(<h1>{label}</h1>)
+    const dropKind: Nullable<DeviceDropKind> = categoryKey === "audio-effect" || categoryKey === "midi-effect"
+        ? categoryKey
+        : null
     stockDevices.forEach(device => {
         const devicePresets = allPresets
-            .filter(entry => entry.category === categoryKey && entry.device === device.key)
+            .filter(entry => entry.category === categoryKey && deviceKeyOf(entry) === device.key)
             .filter(matches)
-        section.appendChild(renderDeviceRow(device, devicePresets, filterActive))
+        if (query.length > 0) {
+            const deviceMatchesQuery = device.name.toLowerCase().includes(query)
+            if (!deviceMatchesQuery && devicePresets.length === 0) {return}
+        }
+        const onDrop: Nullable<(effects: ReadonlyArray<IndexedBox>) => Promise<void>> = isDefined(dropKind)
+            ? effects => actions.saveAsSingleEffectPreset(dropKind, device.key, effects[0])
+            : null
+        const instrumentKey: Nullable<InstrumentFactories.Keys> = categoryKey === "instrument"
+            && Object.hasOwn(InstrumentFactories.Named, device.key)
+            ? device.key as InstrumentFactories.Keys
+            : null
+        const deviceExpandKey = `device:${categoryKey}:${device.key}`
+        section.appendChild(DeviceItem({
+            actions, expandedKeys, device, presets: devicePresets,
+            expandOnRender: searching && devicePresets.length > 0,
+            onCreate: () => actions.createDevice(categoryKey, device.key),
+            dropKind, onDrop, instrumentKey, expandKey: deviceExpandKey
+        }))
     })
     const compoundPresets = allPresets
         .filter(entry => entry.category === compoundCategory)
         .filter(matches)
     if (!filterActive || compoundPresets.length > 0) {
-        section.appendChild(renderCompoundRow(compoundLabel, compoundPresets, filterActive))
+        const chainKind = compoundCategory === "audio-effect-chain"
+            ? PresetHeader.ChainKind.Audio
+            : compoundCategory === "midi-effect-chain"
+                ? PresetHeader.ChainKind.Midi
+                : null
+        const onStashDrop: Nullable<(effects: ReadonlyArray<IndexedBox>) => Promise<void>> =
+            isDefined(dropKind) && isDefined(chainKind)
+                ? effects => actions.saveAsChainPreset(chainKind, effects)
+                : null
+        const onRackDrop = compoundCategory === "audio-unit"
+            ? (instrumentUuid: UUID.String, effectUuids: ReadonlyArray<UUID.String>) =>
+                actions.handleRackDrop(instrumentUuid, effectUuids)
+            : null
+        const compoundExpandKey = `compound:${categoryKey}:${compoundCategory}`
+        section.appendChild(CompoundItem({
+            actions, expandedKeys, label: compoundLabel, presets: compoundPresets,
+            expandOnRender: searching && compoundPresets.length > 0,
+            dropKind, onDrop: onStashDrop, onRackDrop, expandKey: compoundExpandKey
+        }))
     }
     return section
 }
-
-const renderDeviceRow = (
-    device: StockDeviceMeta,
-    presets: ReadonlyArray<PresetEntry>,
-    filterActive: boolean
-): HTMLElement => {
-    const empty = presets.length === 0
-    const row = <div className={`device-row ${empty ? "empty" : ""}`}/> as HTMLElement
-    const header = (
-        <div className="device-header">
-            <span className="triangle"/>
-            <div className="icon">
-                <Icon symbol={device.icon}/>
-            </div>
-            <span className="name">{device.name}</span>
-            <span className="brief">{device.brief}</span>
-        </div>
-    ) as HTMLElement
-    const presetList = <div className="preset-list hidden"/> as HTMLElement
-    renderPresetRows(presetList, presets)
-    if (!empty) {
-        header.onclick = () => {
-            const open = presetList.classList.toggle("hidden") === false
-            row.classList.toggle("expanded", open)
-        }
-    }
-    if (filterActive && presets.length > 0) {
-        presetList.classList.remove("hidden")
-        row.classList.add("expanded")
-    }
-    row.appendChild(header)
-    row.appendChild(presetList)
-    return row
-}
-
-const renderCompoundRow = (
-    label: string,
-    presets: ReadonlyArray<PresetEntry>,
-    filterActive: boolean
-): HTMLElement => {
-    const empty = presets.length === 0
-    const row = <div className={`compound-row ${empty ? "empty" : ""}`}/> as HTMLElement
-    const header = (
-        <div className="compound-header">
-            <span className="triangle"/>
-            <div className="icon">
-                <Icon symbol={IconSymbol.Cube}/>
-            </div>
-            <span className="name">{label}</span>
-            <span className="brief"/>
-        </div>
-    ) as HTMLElement
-    const presetList = <div className="preset-list hidden"/> as HTMLElement
-    renderPresetRows(presetList, presets)
-    if (!empty) {
-        header.onclick = () => {
-            const open = presetList.classList.toggle("hidden") === false
-            row.classList.toggle("expanded", open)
-        }
-    }
-    if (filterActive && presets.length > 0) {
-        presetList.classList.remove("hidden")
-        row.classList.add("expanded")
-    }
-    row.appendChild(header)
-    row.appendChild(presetList)
-    return row
-}
-
-const renderPresetRows = (container: HTMLElement, presets: ReadonlyArray<PresetEntry>) => {
-    const user = presets.filter(entry => entry.source === "user")
-    const stock = presets.filter(entry => entry.source === "stock")
-    user.forEach(entry => container.appendChild(renderPresetRow(entry)))
-    stock.forEach(entry => container.appendChild(renderPresetRow(entry)))
-}
-
-const renderPresetRow = (entry: PresetEntry): HTMLElement => (
-    <div className={`preset-row source-${entry.source}`} title={entry.description}>
-        <div className="marker">
-            <Icon symbol={entry.source === "stock" ? IconSymbol.CloudFolder : IconSymbol.UserFolder}/>
-        </div>
-        <span className="name">{entry.name}</span>
-    </div>
-) as HTMLElement

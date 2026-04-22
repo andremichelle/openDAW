@@ -1,0 +1,49 @@
+@use "@/mixins"
+
+component
+  grid-column: 1 / -1
+  display: grid
+  grid-template-columns: subgrid
+  align-items: center
+  padding: 0 0.25em
+  border-radius: 0.2em
+  color: var(--color-dark)
+
+  &.accept-drop
+    background-color: rgba(white, 0.05)
+    outline: 1px dashed var(--color)
+    outline-offset: -1px
+
+  > div.marker
+    grid-column: 2
+    width: 18px
+    height: 18px
+    display: flex
+    align-items: center
+    justify-content: center
+    color: var(--color)
+    opacity: mixins.$library-marker-opacity
+
+    > svg
+      width: 16px !important
+      height: 16px !important
+      min-width: 16px !important
+      min-height: 16px !important
+
+    > svg.swap
+      display: none
+
+  &.accept-drop > div.marker
+    opacity: 1
+
+    > svg.source
+      display: none
+
+    > svg.swap
+      display: block
+
+  > span.name
+    grid-column: 3 / -1
+    white-space: nowrap
+    overflow: hidden
+    text-overflow: ellipsis

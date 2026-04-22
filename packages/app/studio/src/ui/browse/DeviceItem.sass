@@ -1,0 +1,11 @@
+@use "@/mixins"
+
+component
+  @include mixins.library-item-outer
+  @include mixins.library-item-states("div.device-header")
+
+  > div.device-header
+    @include mixins.library-item-header
+
+  > div.preset-list
+    @include mixins.library-preset-list

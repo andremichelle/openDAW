@@ -4,14 +4,12 @@ import {createElement, Group, JsxValue} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {ClipboardManager, DevicesClipboard, MenuItem, Project} from "@opendaw/studio-core"
-import {DeviceBoxAdapter, DeviceHost, Devices, DeviceType, EffectDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {DeviceBoxAdapter, DeviceHost, Devices, DeviceType} from "@opendaw/studio-adapters"
 import {DebugMenus} from "@/ui/menu/debug.ts"
-import {DragDevice} from "@/ui/AnyDragData"
-import {DragAndDrop} from "@/ui/DragAndDrop"
+import {DeviceDragging} from "@/ui/devices/DeviceDragging"
 import {Events, Html} from "@opendaw/lib-dom"
 import {TextScroller} from "@/ui/TextScroller"
 import {StringField} from "@opendaw/lib-box"
-import {Color} from "@opendaw/lib-std"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Promises} from "@opendaw/lib-runtime"
 import {Surface} from "@/ui/surface/Surface"
@@ -28,51 +26,6 @@ const getColorFor = (type: DeviceType) => {
         case "audio-effect":
             return Colors.blue
     }
-}
-
-const collectDragIndices = (project: Project, source: EffectDeviceBoxAdapter): ReadonlyArray<number> => {
-    const sourceHost = source.deviceHost()
-    const sourceIndex = source.indexField.getValue()
-    const sameChain = project.deviceSelection.selected().filter((selected): selected is EffectDeviceBoxAdapter =>
-        (selected.type === "midi-effect" || selected.type === "audio-effect")
-        && selected.type === source.type
-        && selected.deviceHost() === sourceHost)
-    const indices = sameChain.map(effect => effect.indexField.getValue())
-    if (!indices.includes(sourceIndex)) {indices.push(sourceIndex)}
-    return indices.toSorted((a, b) => a - b)
-}
-
-const buildCountGhost = (count: number, color: Color): HTMLElement => {
-    const size = 28
-    const offset = 14
-    const wrapper = document.createElement("div")
-    Object.assign(wrapper.style, {
-        boxSizing: "border-box",
-        width: `${size + offset}px`,
-        height: `${size + offset}px`,
-        padding: `${offset}px 0 0 ${offset}px`,
-        backgroundColor: "transparent",
-        pointerEvents: "none"
-    })
-    const badge = document.createElement("div")
-    badge.textContent = String(count)
-    Object.assign(badge.style, {
-        boxSizing: "border-box",
-        width: `${size}px`,
-        height: `${size}px`,
-        borderRadius: "50%",
-        backgroundColor: color.toString(),
-        color: "rgba(0, 0, 0, 0.85)",
-        fontFamily: "system-ui, sans-serif",
-        fontSize: "13px",
-        fontWeight: "600",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)"
-    })
-    wrapper.appendChild(badge)
-    return wrapper
 }
 
 type Construct = {
@@ -174,14 +127,8 @@ export const DeviceEditor =
                             }
                         }))
                     )
-                    if (type === "midi-effect" || type === "audio-effect") {
-                        const effect = adapter as EffectDeviceBoxAdapter
-                        lifecycle.own(DragAndDrop.installSource(element, () => {
-                            dragStartedOnHeader = true
-                            const indices = collectDragIndices(project, effect)
-                            return {type: effect.type, start_indices: indices} satisfies DragDevice
-                        }, element, () => buildCountGhost(collectDragIndices(project, effect).length, color)))
-                    }
+                    lifecycle.own(DeviceDragging.install(project, element, adapter, color,
+                        () => {dragStartedOnHeader = true}))
                 }} style={{color: color.toString()}}>
                     <Icon symbol={icon} onInit={element =>
                         lifecycle.ownAll(

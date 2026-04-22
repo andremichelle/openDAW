@@ -155,6 +155,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     readonly #rootBoxAdapter: RootBoxAdapter
     readonly #timelineBoxAdapter: TimelineBoxAdapter
+    readonly #loadedScriptUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
 
     private constructor(env: ProjectEnv, boxGraph: BoxGraph, {
         rootBox,
@@ -223,33 +224,28 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         }))
     }
 
-    startAudioWorklet(restart?: RestartWorklet, options?: ProcessorOptions): EngineWorklet {
-        console.debug(`start AudioWorklet`)
+    loadScriptDevices(): void {
         const audioContext = this.#env.audioWorklets.context
-        const loadScript = (config: ScriptCompiler.Config, deviceBox: ScriptCompiler.ScriptDeviceBox) =>
+        const loadScript = (config: ScriptCompiler.Config, deviceBox: ScriptCompiler.ScriptDeviceBox) => {
+            if (this.#loadedScriptUuids.opt(deviceBox.address.uuid).nonEmpty()) {return}
+            this.#loadedScriptUuids.add(deviceBox.address.uuid)
             ScriptCompiler.create(config).load(audioContext, deviceBox).catch(reason =>
                 console.warn(`Failed to load script device ${UUID.toString(deviceBox.address.uuid)}:`, reason))
+        }
         for (const box of this.boxGraph.boxes()) {
             if (box instanceof ApparatDeviceBox) {
-                loadScript({
-                    headerTag: "apparat",
-                    registryName: "apparatProcessors",
-                    functionName: "apparat"
-                }, box).finally()
+                loadScript({headerTag: "apparat", registryName: "apparatProcessors", functionName: "apparat"}, box)
             } else if (box instanceof WerkstattDeviceBox) {
-                loadScript({
-                    headerTag: "werkstatt",
-                    registryName: "werkstattProcessors",
-                    functionName: "werkstatt"
-                }, box).finally()
+                loadScript({headerTag: "werkstatt", registryName: "werkstattProcessors", functionName: "werkstatt"}, box)
             } else if (box instanceof SpielwerkDeviceBox) {
-                loadScript({
-                    headerTag: "spielwerk",
-                    registryName: "spielwerkProcessors",
-                    functionName: "spielwerk"
-                }, box).finally()
+                loadScript({headerTag: "spielwerk", registryName: "spielwerkProcessors", functionName: "spielwerk"}, box)
             }
         }
+    }
+
+    startAudioWorklet(restart?: RestartWorklet, options?: ProcessorOptions): EngineWorklet {
+        console.debug(`start AudioWorklet`)
+        this.loadScriptDevices()
         const lifecycle = this.#terminator.spawn()
         const worklet: EngineWorklet = lifecycle.own(this.#env.audioWorklets.createEngine({project: this, options}))
         const handler = async (event: unknown) => {

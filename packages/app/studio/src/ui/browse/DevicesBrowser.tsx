@@ -133,12 +133,19 @@ const createEffectList = <
                 <span className="brief help-section">{entry.briefDescription}</span>
             </li>
         )
+        const dragSource = type === "audio-effect"
+            ? DragAndDrop.installSource(element, () => ({
+                type: "audio-effect",
+                uuids: null,
+                device: key as EffectFactories.AudioEffectKeys
+            } satisfies DragDevice))
+            : DragAndDrop.installSource(element, () => ({
+                type: "midi-effect",
+                uuids: null,
+                device: key as EffectFactories.MidiEffectKeys
+            } satisfies DragDevice))
         lifecycle.ownAll(
-            DragAndDrop.installSource(element, () => ({
-                type: type as any,
-                start_indices: null,
-                device: key as keyof typeof EffectFactories.MergedNamed
-            } satisfies DragDevice)),
+            dragSource,
             TextTooltip.simple(element, () => {
                 const {bottom, left} = element.getBoundingClientRect()
                 return {clientX: left, clientY: bottom + 12, text: entry.description}

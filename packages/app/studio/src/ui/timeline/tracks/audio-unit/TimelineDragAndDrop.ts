@@ -1,10 +1,11 @@
-import {isDefined, Nullable, Option, panic, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {isAbsent, isNotNull, Nullable, Option, panic, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, Sample, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {AudioFileBoxFactory, ElementCapturing, Project, Workers} from "@opendaw/studio-core"
 import {ClipCaptureTarget} from "@/ui/timeline/tracks/audio-unit/clips/ClipCapturing.ts"
 import {AnyDragData} from "@/ui/AnyDragData.ts"
+import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {StudioService} from "@/service/StudioService"
 import {RegionCaptureTarget} from "./regions/RegionCapturing"
 
@@ -42,6 +43,10 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
             if (adapter.isEmpty() || adapter.unwrap().type !== TrackType.Audio) {return Option.None}
         }
         if (data.type !== "sample" && data.type !== "instrument" && data.type !== "file") {
+            if (data.type === "preset" && data.source === "user"
+                && (data.category === "instrument" || data.category === "audio-unit")) {
+                return Option.wrap(target ?? "instrument")
+            }
             return Option.None
         }
         return Option.wrap(target ?? "instrument")
@@ -56,11 +61,13 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
         let aborted = false
         const subscription = this.#service.projectProfileService.subscribe(() => {aborted = true})
         let sample: Sample
+        let sampleType: "sample" | "file"
         if (data.type === "sample") {
             sample = data.sample
+            sampleType = "sample"
         } else if (data.type === "file") {
             const file = data.file
-            if (!isDefined(file)) {subscription.terminate(); return}
+            if (isAbsent(file)) {subscription.terminate(); return}
             const {status, value, error} = await Promises.tryCatch(file.arrayBuffer()
                 .then(arrayBuffer => this.#service.sampleService.importFile({name: file.name, arrayBuffer})))
             if (aborted) {subscription.terminate(); return}
@@ -71,9 +78,22 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
             }
             project.trackUserCreatedSample(UUID.parse(value.uuid))
             sample = value
+            sampleType = "file"
         } else if (data.type === "instrument") {
             subscription.terminate()
-            editing.modify(() => api.createAnyInstrument(InstrumentFactories[data.device]))
+            const factoryKey = data.device
+            if (factoryKey !== null) {
+                editing.modify(() => api.createAnyInstrument(InstrumentFactories[factoryKey]))
+            }
+            return
+        } else if (data.type === "preset" && data.source === "user") {
+            subscription.terminate()
+            if (data.category === "audio-unit") {
+                PresetApplication.createNewAudioUnitFromRack(project, data.uuid).catch(console.warn)
+            } else if (data.category === "instrument" && isNotNull(data.device)) {
+                PresetApplication.createNewAudioUnitFromInstrument(project, data.uuid, data.device)
+                    .catch(console.warn)
+            }
             return
         } else {
             subscription.terminate()
@@ -119,7 +139,7 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
                 return panic("Illegal State")
             }
             const audioFileBox: AudioFileBox = audioFileBoxFactory()
-            this.handleSample({event, trackBoxAdapter, audioFileBox, sample, type: data.type as "sample" | "file"})
+            this.handleSample({event, trackBoxAdapter, audioFileBox, sample, type: sampleType})
         })
     }
 

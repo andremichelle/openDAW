@@ -56,7 +56,7 @@ presets/user/
 type PresetMeta = {
     uuid: UUID.String
     name: string
-    device: string           // device key (e.g. "Vaporisateur", "Delay")
+    device: string           // device key (e.g. "Vaporisateur", "Delay") — for racks the contained instrument; for single-device presets the device itself
     category: "instrument" | "audio-effect" | "midi-effect" | "audio-unit" | "audio-effect-chain" | "midi-effect-chain"
     author: string
     description: string
@@ -68,7 +68,7 @@ Whether a preset is **stock** or **user** is not a field on `PresetMeta` — it'
 
 **New class:** `PresetStorage` (user presets only, OPFS-backed):
 - `readIndex(): Promise<ReadonlyArray<PresetMeta>>` — reads `presets/user/index.json` (single OPFS read). Returns `[]` if the file is missing (fresh install).
-- `save(preset: { uuid, name, device, category, data: ArrayBuffer }): Promise<void>` — writes `{uuid}.odp`, then rewrites `index.json` with the new/updated entry appended.
+- `save(preset: { uuid, name, instrument, category, data: ArrayBuffer }): Promise<void>` — writes `{uuid}.odp`, then rewrites `index.json` with the new/updated entry appended.
 - `load(uuid: UUID.Bytes): Promise<ArrayBuffer>` — reads `{uuid}.odp`.
 - `rename(uuid: UUID.Bytes, name: string): Promise<void>` — rewrites `index.json` with the patched name. Binary is untouched.
 - `delete(uuid: UUID.Bytes): Promise<void>` — removes `{uuid}.odp`, then rewrites `index.json` without the entry.
@@ -131,7 +131,7 @@ const bytes = source === "user"
     : await OpenPresetAPI.load(uuid)      // browser HTTP cache hits after first fetch
 ```
 
-**Size budget.** Assuming ~100 presets × ~200 bytes per `PresetMeta` JSON row (name, device, category, author, description, 36-char UUID, epoch) the index comes in well under 20kb. If it ever exceeds 20kb, we can compact field names (`n`/`d`/`c`/…) or switch to `index.json.gz` — the endpoint already supports gzip via standard HTTP.
+**Size budget.** Assuming ~100 presets × ~200 bytes per `PresetMeta` JSON row (name, instrument, category, author, description, 36-char UUID, epoch) the index comes in well under 20kb. If it ever exceeds 20kb, we can compact field names (`n`/`d`/`c`/…) or switch to `index.json.gz` — the endpoint already supports gzip via standard HTTP.
 
 **Why no OPFS mirror of stock binaries.** A preset binary is typically ≤ 20kb. At 100 presets that's 2MB — not burdensome, but the user almost never touches every preset. Fetching on demand with `Cache-Control: immutable` means first-time use hits the CDN once, subsequent uses come from the browser cache, and we never pre-pay a 2MB download cost.
 
@@ -329,7 +329,7 @@ type DragPreset = {
     type: "preset"
     category: "instrument" | "audio-effect" | "midi-effect" | "audio-unit"
     uuid: UUID.String
-    device: string
+    instrument: string
 }
 ```
 
@@ -454,3 +454,90 @@ Dropping a single audio-effect on `Effect Chains` (producing a 1-entry chain) is
 - Should the "Audio Units" category show presets grouped by instrument type, or flat?
 - How to handle preset compatibility when device schemas evolve (version mismatch)?
 - Should cloud preset metadata include a preview/thumbnail or tags for filtering?
+
+---
+
+## Current Implementation Status
+
+### Shipped
+
+- **`LibraryBrowser`** (`packages/app/studio/src/ui/browse/LibraryBrowser.tsx`) replaces the old flat `DevicesBrowser`.
+  - Three category sections (Instruments green / Audio Effects blue / MIDI Effects orange), each containing one entry per stock device plus a compound row (`Racks` for audio-unit, `Stash` for effect-chain).
+  - Collapsible rows with rotating triangle hit area; state persists in `expandedKeys` across renders.
+  - Filter bar: text search (name + device-key), source toggles (Cloud/User) — exactly one of the two is allowed off at a time. Text search auto-expands matching nodes; source toggles preserve the user's manual expansion state.
+  - Components split: `DeviceItem.tsx` / `CompoundItem.tsx` / `PresetItem.tsx`, each with its own adopted stylesheet. Shared layout fragments live in `packages/app/studio/src/mixins.sass` (`library-item-outer`, `library-item-header`, `library-item-states`, `library-preset-list`, `triangle-toggle`, `color-icon-tile`).
+
+- **`PresetStorage`** (`packages/studio/core/src/presets/PresetStorage.ts`)
+  - Flat OPFS layout: `presets/user/index.json` + `presets/user/{uuid}.odp`.
+  - `save` stamps `modified = Date.now()` on every write; `updateMeta` bumps `modified` on rename/description edit; `rebuildIndex` logs a warning (should never happen in normal use).
+  - `cache: DefaultObservableValue<PresetMeta[]>` drives reactive UI updates.
+
+- **`PresetMeta`** (`packages/studio/core/src/presets/PresetMeta.ts`) discriminated union: `instrument` | `audio-effect` | `midi-effect` | `audio-unit` | `audio-effect-chain` | `midi-effect-chain`. Common fields: `uuid`, `name`, `description`, `created`, `modified`. No `author` (removed).
+
+- **`PresetEncoder`** / **`PresetDecoder`**
+  - Two binary formats: `OPRE` (full audio unit, via BoxGraph serialization) and `OPEC` (effect chain, raw box bytes + `ChainKind` enum).
+  - `PresetEncoder.encode(audioUnitBox, {excludeEffect?})` supports subset encoding — used by rack save when only some effects are selected.
+  - `PresetDecoder.decode` re-registers script device processors via `Project.loadScriptDevices()` (idempotent via `#loadedScriptUuids` SortedSet).
+
+- **Drag-and-drop rules** (`AnyDragData.DragDevice`, `DeviceDragging.ts`, `DevicePanelDragAndDrop.ts`, `LibraryActions.ts`)
+  - Payloads carry UUIDs snapshotted at dragstart (race-immune against mid-drag `userEditingManager.audioUnit` changes).
+  - Selection-driven target routing:
+    - 1 instrument → Instrument slot (save as instrument preset).
+    - 1 effect → its Device slot (save as single effect preset).
+    - N effects (same kind) → Stash compound (save as chain preset).
+    - instrument + ≥1 effect → Rack compound (save as rack preset with subset via `excludeEffect`).
+  - `handleRackDrop` and rack-replace share the same `showRackCompositionDialog` for the bare-instrument case (Entire Chain / Only Instrument / Cancel).
+  - Rack preset replace ignores instrument-type (racks can legitimately swap instrument); the stored `meta.instrument` field is updated to the dragged instrument's key so `rebuildIndex` stays consistent.
+
+- **Ghost count badge** (`GhostCount.tsx` + sass) — dragged-count indicator during multi-device drag.
+
+- **Preset CRUD from UI** — user preset rows have a context menu (Edit… / Delete). Edit reuses the save dialog pre-filled with current name/description. Delete prompts for approval.
+
+- **History consolidation** — `PresetApplication.createNewAudioUnitFromRack` wraps both the decode and the subsequent `userEditingManager.audioUnit.edit` in one `editing.modify(...)` call so activating a rack preset is a single undo step.
+
+- **Old "Save as Rack…" menu item removed** — superseded by the drag-to-Rack flow.
+
+### Not yet wired
+
+- Cloud/stock preset loading (section below).
+- Backup / portability (section below).
+- `DevicesBrowser` (old component) still exists as a fallback; remove once the Library UI is confirmed stable.
+
+---
+
+## To Think About
+
+### Backup system
+
+Presets must hook into the existing `CloudBackup` flow (Dropbox sync) alongside projects, samples, and soundfonts. Pattern is already set in `packages/studio/core/src/cloud/`:
+
+- `CloudBackup.backupWithHandler` runs `CloudBackupSamples` → `CloudBackupProjects` → `CloudBackupSoundfonts` under a single `lock.json`, with progress split across them.
+- Each of those modules owns a remote path (`samples/`, `projects/`, `soundfonts/`), a `RemoteCatalogPath` (`index.json` on the cloud side), and an upload/trash/download cycle that diffs local OPFS vs cloud catalog by UUID.
+
+**To add:** `CloudBackupPresets` in the same directory, mirroring `CloudBackupSamples`:
+
+- `RemotePath = "presets"`, `RemoteCatalogPath = "presets/index.json"`, `pathFor(uuid) = "presets/{uuid}.odp"`.
+- Local source is `PresetStorage.readIndex()` + `PresetStorage.load(uuid)`; remote catalog is `PresetMeta[]` just like `presets/user/index.json` on disk.
+- Diff by `uuid`; upload missing, download missing, delete trashed. `PresetStorage` currently has no trash (unlike `SampleStorage.loadTrashedIds()`) — either add a trashed-ids list on delete, or accept that deletes are local-only until added.
+- Wire into `CloudBackup.backupWithHandler` as a fourth step with its own progress slice (`Progress.split(..., 4)`).
+- Conflict rule: use `modified: number` — the newer timestamp wins when the same UUID exists on both sides with different `modified` values.
+
+Open: whether preset backup should be gated behind the same Dropbox auth dialog or piggyback silently on the combined sync action the user already triggers.
+
+### Stock preset delivery (`OpenPresetAPI`?)
+
+Stock presets need a delivery channel. Pattern to mirror from `OpenSampleAPI`:
+
+```
+https://api.opendaw.studio/presets/        → index.json (ReadonlyArray<PresetMeta & {source: "stock"}>)
+https://assets.opendaw.studio/presets/{uuid}.odp
+```
+
+Open items before building this:
+
+- **Authoring workflow.** How do stock presets get produced? Option A: in-app "Export as stock preset" for curated contributors, then manual PR to a preset repo. Option B: openDAW core contributors save presets from a dev project and commit the `.odp` + index entry.
+- **Versioning.** Device schemas will evolve. Presets need to either carry a schema version (we have `PresetHeader.FORMAT_VERSION` = 1 but nothing advances it on device changes) or go through an on-load migration. Recommend: bump format version per breaking device change, decoder refuses mismatched versions with a specific error.
+- **Caching.** Stock presets are immutable per-UUID. A simple `Cache-Control: immutable` on assets + `stale-while-revalidate` on the index would avoid hammering the API. Could reuse the sample asset pattern directly.
+- **Offline.** If index fetch fails, the browser should still render user presets (current implementation already handles this — `PresetStorage.readIndex` is independent).
+- **`LibraryBrowser` integration.** `tagSource(list, "stock")` already exists; wiring is just "fetch index → merge into `allPresets` → render". Source toggle already filters by `entry.source`.
+- **Source-gated load paths.** `LibraryActions.activatePreset` and `TimelineDragAndDrop` (`ui/timeline/tracks/audio-unit/TimelineDragAndDrop.ts:86`) both short-circuit on `data.source !== "user"` because `PresetApplication.loadBytes` → `PresetStorage.load` only reads `presets/user/` in OPFS. Once the stock channel exists, extend `loadBytes` to dispatch by source (user → OPFS, stock → cached network fetch) and drop both gates.

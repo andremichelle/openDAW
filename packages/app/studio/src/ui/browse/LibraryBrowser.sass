@@ -1,15 +1,12 @@
 @use "@/colors"
 @use "@/mixins"
 
-$marker-opacity: 0.66
-$guide-left: 5.5px
-
 component
   display: flex
   flex-direction: column
   row-gap: 0.75rem
   font-size: 0.6875rem
-  padding: 0.75em
+  padding: 0.75em 0.75em 0.75em 0
   width: 100%
   height: 100%
   overflow: hidden
@@ -19,7 +16,7 @@ component
     display: flex
     column-gap: 0.5em
     align-items: center
-    padding: 0 0.25em
+    padding: 0 0.25em 0 1em
 
     > input.search
       flex: 1
@@ -68,9 +65,9 @@ component
 
     > section.category
       display: grid
-      grid-template-columns: 8px 14px 1fr 1fr
-      row-gap: 0.15em
-      column-gap: 0.6em
+      grid-template-columns: #{mixins.$library-triangle-hit} 18px 1fr 1fr
+      row-gap: 0.375em
+      column-gap: 0.75em
       color: var(--color)
 
       > h1
@@ -79,134 +76,6 @@ component
         white-space: nowrap
         font-size: 1em
         padding: 0.25em 0.5em
-        margin: 0 0 0.25em 0
+        margin: 0 0 0.25em 0.75em
         border-radius: 0.25em
         background-color: rgba(black, 0.12)
-
-      > div.device-row,
-      > div.compound-row
-        grid-column: 1 / -1
-        display: grid
-        grid-template-columns: subgrid
-        row-gap: 0.05em
-
-        > div.device-header,
-        > div.compound-header
-          grid-column: 1 / -1
-          display: grid
-          grid-template-columns: subgrid
-          align-items: center
-          column-gap: inherit
-          padding: 0.2em 0.25em
-          cursor: pointer
-          border-radius: 0.2em
-          color: var(--color-dark)
-
-          > span.triangle
-            width: 0
-            height: 0
-            justify-self: center
-            margin-left: 1px
-            color: var(--color)
-            border-left: 5px solid currentColor
-            border-top: 3px solid transparent
-            border-bottom: 3px solid transparent
-            transition: transform 0.12s ease
-            opacity: $marker-opacity
-
-          > div.icon
-            box-sizing: border-box
-            width: 14px
-            height: 14px
-            padding: 1px
-            border-radius: 2px
-            color: rgba(black, 0.86)
-            display: flex
-            align-items: center
-            justify-content: center
-            background-color: var(--color)
-
-            > svg
-              width: 12px !important
-              height: 12px !important
-              min-width: 12px !important
-              min-height: 12px !important
-
-          > span.name
-            font-size: 1em
-            white-space: nowrap
-
-          > span.brief
-            opacity: 0.3
-            overflow: hidden
-            white-space: nowrap
-            text-overflow: ellipsis
-
-        &.empty > div.device-header,
-        &.empty > div.compound-header
-          cursor: default
-
-          > span.triangle
-            visibility: hidden
-
-        &.expanded > div.device-header > span.triangle,
-        &.expanded > div.compound-header > span.triangle
-          transform: rotate(90deg)
-
-        > div.preset-list
-          grid-column: 1 / -1
-          display: grid
-          grid-template-columns: subgrid
-          row-gap: 0.05em
-          padding: 0.1em 0 0.25em 0
-          position: relative
-
-          &.hidden
-            display: none
-
-          &::before
-            content: ""
-            position: absolute
-            left: $guide-left
-            top: 5px
-            bottom: 7px
-            width: 1px
-            background-color: var(--color)
-            opacity: $marker-opacity
-            pointer-events: none
-
-          > div.preset-row
-            grid-column: 1 / -1
-            display: grid
-            grid-template-columns: subgrid
-            align-items: center
-            padding: 0.18em 0.25em
-            border-radius: 0.2em
-            cursor: grab
-            color: var(--color-dark)
-
-            > div.marker
-              grid-column: 2
-              width: 14px
-              height: 14px
-              display: flex
-              align-items: center
-              justify-content: center
-              color: var(--color)
-              opacity: $marker-opacity
-
-              > svg
-                width: 12px !important
-                height: 12px !important
-                min-width: 12px !important
-                min-height: 12px !important
-
-            > span.name
-              grid-column: 3 / -1
-              white-space: nowrap
-              overflow: hidden
-              text-overflow: ellipsis
-
-      > div.compound-row > div.compound-header > div.icon
-        background-color: transparent
-        color: var(--color)

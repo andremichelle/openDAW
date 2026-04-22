@@ -202,6 +202,122 @@
   @else
     background-color: var(--color-panel-background-dark)
 
+$library-triangle-hit: 6px
+$library-marker-opacity: 0.66
+$library-guide-left: 5px
+
+@mixin triangle-toggle
+  box-sizing: content-box
+  width: $library-triangle-hit
+  padding-left: 0.5em
+  padding-right: 0.5em
+  margin-left: -0.5em
+  align-self: stretch
+  justify-self: start
+  display: flex
+  align-items: center
+  justify-content: center
+
+  &::before
+    content: ""
+    width: 0
+    height: 0
+    border-left: 5px solid currentColor
+    border-top: 3px solid transparent
+    border-bottom: 3px solid transparent
+    transition: transform 0.12s ease
+
+@mixin color-icon-tile($size: 18px)
+  box-sizing: border-box
+  width: $size
+  height: $size
+  padding: 1px
+  border-radius: 2px
+  color: rgba(black, 0.86)
+  display: flex
+  align-items: center
+  justify-content: center
+  background-color: var(--color)
+
+  > svg
+    width: $size - 2 !important
+    height: $size - 2 !important
+    min-width: $size - 2 !important
+    min-height: $size - 2 !important
+
+@mixin library-item-outer
+  grid-column: 1 / -1
+  display: grid
+  grid-template-columns: subgrid
+  row-gap: 0.375em
+
+@mixin library-item-header
+  grid-column: 1 / -1
+  display: grid
+  grid-template-columns: subgrid
+  align-items: center
+  column-gap: inherit
+  padding: 0 0.25em
+  cursor: pointer
+  border-radius: 0.2em
+  color: var(--color-dark)
+
+  &.accept-drop
+    background-color: rgba(white, 0.05)
+    outline: 1px dashed var(--color)
+    outline-offset: -1px
+
+  > span.triangle
+    @include triangle-toggle
+    color: var(--color)
+    opacity: $library-marker-opacity
+
+  > div.icon
+    @include color-icon-tile(18px)
+
+  > span.name
+    font-size: 1em
+    white-space: nowrap
+
+  > span.brief
+    opacity: 0.3
+    overflow: hidden
+    white-space: nowrap
+    text-overflow: ellipsis
+
+@mixin library-item-states($header-selector)
+  &.empty > #{$header-selector} > span.triangle
+    cursor: default
+    pointer-events: auto
+
+    &::before
+      visibility: hidden
+
+  &.expanded > #{$header-selector} > span.triangle::before
+    transform: rotate(90deg)
+
+@mixin library-preset-list
+  grid-column: 1 / -1
+  display: grid
+  grid-template-columns: subgrid
+  row-gap: 0.375em
+  padding: 0
+  position: relative
+
+  &.hidden
+    display: none
+
+  &::before
+    content: ""
+    position: absolute
+    left: $library-guide-left
+    top: 3px
+    bottom: 3px
+    width: 1px
+    background-color: var(--color)
+    opacity: $library-marker-opacity
+    pointer-events: none
+
 @mixin corner-frame($color: rgba(white, 0.06))
   position: relative
 

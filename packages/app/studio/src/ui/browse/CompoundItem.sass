@@ -1,0 +1,18 @@
+@use "@/mixins"
+
+component
+  @include mixins.library-item-outer
+  @include mixins.library-item-states("div.compound-header")
+
+  &.empty > div.compound-header
+    cursor: default
+
+  > div.compound-header
+    @include mixins.library-item-header
+
+    > div.icon
+      background-color: transparent
+      color: var(--color)
+
+  > div.preset-list
+    @include mixins.library-preset-list

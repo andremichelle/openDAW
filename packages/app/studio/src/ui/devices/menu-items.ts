@@ -1,12 +1,10 @@
-import {DeviceHost, Devices, EffectDeviceBoxAdapter, PresetDecoder, PresetEncoder} from "@opendaw/studio-adapters"
-import {EffectFactories, FilePickerAcceptTypes, MenuItem, Project} from "@opendaw/studio-core"
+import {DeviceHost, Devices, EffectDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {EffectFactories, MenuItem} from "@opendaw/studio-core"
 import {PrimitiveField, PrimitiveValues, StringField} from "@opendaw/lib-box"
-import {Editing, EmptyExec, isInstanceOf, panic, RuntimeNotifier} from "@opendaw/lib-std"
+import {Editing, EmptyExec, panic} from "@opendaw/lib-std"
 import {Surface} from "@/ui/surface/Surface"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
 import {StudioService} from "@/service/StudioService"
-import {VaporisateurDeviceBox} from "@opendaw/studio-boxes"
-import {Files} from "@opendaw/lib-dom"
 import {RouteLocation} from "@opendaw/lib-jsx"
 
 export namespace MenuItems {
@@ -43,61 +41,7 @@ export namespace MenuItems {
                         separatorBefore: entry.separatorBefore
                     }).setTriggerProcedure(() => editing.modify(() =>
                         api.insertEffect(deviceHost.audioEffects.field(), entry, 0))))
-                )),
-            MenuItem.default({label: "Save Preset..."})
-                .setTriggerProcedure(async () => {
-                    const presetBytes = PresetEncoder.encode(audioUnit.box)
-                    await Files.save(presetBytes as ArrayBuffer, {
-                        types: [FilePickerAcceptTypes.PresetFileType],
-                        suggestedName: `${audioUnit.label}.odp`
-                    }).catch(console.warn)
-                }),
-            MenuItem.default({label: "Load Preset..."})
-                .setTriggerProcedure(async () => {
-                    const keepEffects = !(await RuntimeNotifier.approve({
-                        headline: "Load Preset",
-                        message: "Replace current effects?",
-                        approveText: "Yes",
-                        cancelText: "No"
-                    }))
-                    const files = await Files.open({types: [FilePickerAcceptTypes.PresetFileType], multiple: false})
-                    if (files.length === 0) {return}
-                    const arrayBuffer = await files[0].arrayBuffer()
-                    editing.modify(() => {
-                        const attempt = PresetDecoder.replaceAudioUnit(arrayBuffer, audioUnit.box, {
-                            keepMIDIEffects: keepEffects,
-                            keepAudioEffects: keepEffects
-                        })
-                        if (attempt.isFailure()) {
-                            RuntimeNotifier.info({headline: "Can't do...", message: attempt.failureReason()}).then()
-                        }
-                    })
-                }),
-            MenuItem.default({
-                label: "Load Deprecated Preset...",
-                hidden: location.hash !== "#riffle"
-            }).setTriggerProcedure(async () => {
-                const files = await Files.open({types: [FilePickerAcceptTypes.JsonFileType]})
-                if (files.length === 0) {return}
-                const string = new TextDecoder().decode(await files[0].arrayBuffer())
-                const json = JSON.parse(string)
-                if (json["2"] !== "Vaporisateur") {
-                    await RuntimeNotifier.info({
-                        headline: "Cannot Load Preset",
-                        message: "This feature is deprecated (code: 0)."
-                    })
-                }
-                delete json["1"]
-                const input = audioUnit.box.input.pointerHub.incoming().at(0)?.box
-                if (!isInstanceOf(input, VaporisateurDeviceBox)) {
-                    await RuntimeNotifier.info({
-                        headline: "Cannot Load Preset",
-                        message: "This feature is deprecated (code: 1)."
-                    })
-                    return
-                }
-                editing.modify(() => input.fromJSON(json))
-            })
+                ))
         )
     }
 
@@ -117,8 +61,7 @@ export namespace MenuItems {
         parent.addMenuItem(
             populateMenuItemToNavigateToManual(device.manualUrl, device.labelField.getValue()),
             populateMenuItemToDeleteDevice(editing, device),
-            populateMenuItemToCreateEffect(service, host, device),
-            populateMenuItemToMoveEffect(project, host, device)
+            populateMenuItemToCreateEffect(service, host, device)
         )
     }
 
@@ -170,31 +113,5 @@ export namespace MenuItems {
                             }).setTriggerProcedure(() => editing.modify(() => api
                                 .insertEffect(host.midiEffects.field(), factory, adapter.indexField.getValue() + 1))))
                         )) : panic(`Unknown accepts value: ${adapter.accepts}`)
-    }
-
-    const populateMenuItemToMoveEffect = ({editing}: Project, host: DeviceHost, adapter: EffectDeviceBoxAdapter) => {
-        const adapters: ReadonlyArray<EffectDeviceBoxAdapter> =
-            adapter.accepts === "audio"
-                ? host.audioEffects.adapters()
-                : adapter.accepts === "midi"
-                    ? host.midiEffects.adapters()
-                    : panic(`Unknown accept type: ${adapter.accepts}`)
-        const index = adapter.indexField.getValue()
-        return MenuItem.default({label: "Move Effect", selectable: index > 0 || index < adapters.length - 1})
-            .setRuntimeChildrenProcedure(parent => {
-                    return parent.addMenuItem(
-                        MenuItem.default({label: "Left", selectable: index > 0})
-                            .setTriggerProcedure(() => editing.modify(() => {
-                                adapter.indexField.setValue(index - 1)
-                                adapters[index - 1].indexField.setValue(index)
-                            })),
-                        MenuItem.default({label: "Right", selectable: index < adapters.length - 1})
-                            .setTriggerProcedure(() => editing.modify(() => {
-                                adapter.indexField.setValue(index + 1)
-                                adapters[index + 1].indexField.setValue(index)
-                            }))
-                    )
-                }
-            )
     }
 }
