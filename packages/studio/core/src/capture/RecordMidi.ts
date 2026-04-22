@@ -140,10 +140,17 @@ export namespace RecordMidi {
                 editing.modify(() => {
                     currentTake.ifSome(take => {
                         const actualDurationPPQN = take.regionBox.duration.getValue()
+                        if (actualDurationPPQN <= 0) {
+                            take.regionBox.delete()
+                            currentTake = Option.None
+                            return
+                        }
                         finalizeTake(take, actualDurationPPQN)
                         positionOffset += actualDurationPPQN
                     })
-                    startNewTake(loopFrom)
+                    if (currentTake.nonEmpty()) {
+                        startNewTake(loopFrom)
+                    }
                 }, false)
             }
             lastPosition = currentPosition
@@ -209,6 +216,13 @@ export namespace RecordMidi {
                     activeNotes.delete(signal.pitch)
                 }
             }
+        }))
+        terminator.own(Terminable.create(() => {
+            currentTake.ifSome(({regionBox}) => {
+                if (regionBox.isAttached() && regionBox.duration.getValue() <= 0) {
+                    editing.modify(() => regionBox.delete(), false)
+                }
+            })
         }))
         return terminator
     }
