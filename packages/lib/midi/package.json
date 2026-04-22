@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/lib-midi",
-  "version": "0.0.62",
+  "version": "0.0.63",
   "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -23,7 +23,7 @@
     "test": "echo \"No tests to run\""
   },
   "dependencies": {
-    "@opendaw/lib-dsp": "^0.0.80",
+    "@opendaw/lib-dsp": "^0.0.81",
     "@opendaw/lib-std": "^0.0.75"
   },
   "devDependencies": {
