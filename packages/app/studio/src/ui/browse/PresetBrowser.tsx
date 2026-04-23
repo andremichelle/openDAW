@@ -1,4 +1,4 @@
-import css from "./LibraryBrowser.sass?inline"
+import css from "./PresetBrowser.sass?inline"
 import {
     Arrays,
     Color,
@@ -32,7 +32,7 @@ import {Checkbox} from "../components/Checkbox"
 import {Icon} from "../components/Icon"
 import {SearchInput} from "@/ui/components/SearchInput"
 
-const className = Html.adoptStyleSheet(css, "LibraryBrowser")
+const className = Html.adoptStyleSheet(css, "PresetBrowser")
 
 const tagSource = (list: ReadonlyArray<PresetMeta>, source: PresetSource): ReadonlyArray<PresetEntry> =>
     list.map(meta => ({...meta, source}))
@@ -65,7 +65,7 @@ type Construct = {
     service: StudioService
 }
 
-export const LibraryBrowser = ({lifecycle, service}: Construct) => {
+export const PresetBrowser = ({lifecycle, service}: Construct) => {
     const {project} = service
     const actions = new LibraryActions(project)
     const expandedKeys = new Set<string>()

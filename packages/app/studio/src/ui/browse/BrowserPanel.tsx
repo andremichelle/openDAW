@@ -4,7 +4,7 @@ import {StudioService} from "@/service/StudioService.ts"
 import {createElement, DomElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
 import {SampleBrowser} from "@/ui/browse/SampleBrowser.tsx"
-import {LibraryBrowser} from "@/ui/browse/LibraryBrowser.tsx"
+import {PresetBrowser} from "@/ui/browse/PresetBrowser.tsx"
 import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {Html} from "@opendaw/lib-dom"
 import {SoundfontBrowser} from "@/ui/browse/SoundfontBrowser"
@@ -17,16 +17,16 @@ type Construct = {
 }
 
 export const BrowserPanel = ({lifecycle, service}: Construct) => {
-    const scope = new DefaultObservableValue(BrowseScope.Library)
+    const scope = new DefaultObservableValue(BrowseScope.Presets)
     const placeholder: DomElement = <Group/>
     const contentLifecycle = lifecycle.own(new Terminator())
     lifecycle.own(scope.catchupAndSubscribe(owner => {
         contentLifecycle.terminate()
         replaceChildren(placeholder, (() => {
             switch (owner.getValue()) {
-                case BrowseScope.Library:
-                    return <LibraryBrowser lifecycle={contentLifecycle}
-                                           service={service}/>
+                case BrowseScope.Presets:
+                    return <PresetBrowser lifecycle={contentLifecycle}
+                                          service={service}/>
                 case BrowseScope.Samples:
                     return <SampleBrowser lifecycle={contentLifecycle}
                                           service={service}
@@ -45,7 +45,7 @@ export const BrowserPanel = ({lifecycle, service}: Construct) => {
     return (
         <div className={className}>
             <RadioGroup lifecycle={lifecycle} elements={[
-                {value: BrowseScope.Library, element: <span>Presets</span>},
+                {value: BrowseScope.Presets, element: <span>Presets</span>},
                 {value: BrowseScope.Samples, element: <span>Samples</span>},
                 {value: BrowseScope.Soundfonts, element: <span>Soundfonts</span>}
             ]} model={scope} style={{fontSize: "11px", columnGap: "8px", padding: "0.5em 0.75em"}}/>
