@@ -8,6 +8,7 @@ type PresetCommon = {
     description: string
     created: number
     modified: number
+    hasTimeline?: boolean
 }
 
 export type InstrumentPresetMeta = PresetCommon & {

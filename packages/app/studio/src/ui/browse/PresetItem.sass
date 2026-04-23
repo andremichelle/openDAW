@@ -43,7 +43,22 @@ component
       display: block
 
   > span.name
-    grid-column: 3 / -1
+    grid-column: 3
     white-space: nowrap
     overflow: hidden
     text-overflow: ellipsis
+
+  > span.timeline-badge
+    grid-column: 4
+    justify-self: end
+    display: flex
+    align-items: center
+    justify-content: center
+    color: var(--color-dark)
+    opacity: mixins.$library-marker-opacity
+
+    > svg
+      width: 12px !important
+      height: 12px !important
+      min-width: 12px !important
+      min-height: 12px !important

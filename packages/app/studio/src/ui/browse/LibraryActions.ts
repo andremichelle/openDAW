@@ -102,7 +102,8 @@ export class LibraryActions {
         const dialog = await Promises.tryCatch(PresetDialogs.showSavePresetDialog({
             headline: `Save ${deviceKey} Preset`,
             suggestedName: this.#effectLabelFromBox(effect),
-            suggestedDescription: ""
+            suggestedDescription: "",
+            showTimelineToggle: false
         }))
         if (dialog.status === "rejected") {
             if (Errors.isAbort(dialog.error)) {return}
@@ -141,7 +142,8 @@ export class LibraryActions {
         const dialog = await Promises.tryCatch(PresetDialogs.showSavePresetDialog({
             headline: isAudio ? "Save Audio Stash" : "Save MIDI Stash",
             suggestedName: defaultName,
-            suggestedDescription: ""
+            suggestedDescription: "",
+            showTimelineToggle: false
         }))
         if (dialog.status === "rejected") {
             if (Errors.isAbort(dialog.error)) {return}
@@ -194,9 +196,9 @@ export class LibraryActions {
             device: deviceKey,
             description: dialog.value.description,
             created: now,
-            modified: now
+            modified: now,
+            hasTimeline: dialog.value.includeTimeline
         }
-        console.info(`saveAsInstrumentPreset: includeTimeline=${dialog.value.includeTimeline}`)
         await PresetStorage.save(meta, PresetEncoder.encode(audioUnitBox,
             {includeTimeline: dialog.value.includeTimeline}))
     }
@@ -253,6 +255,7 @@ export class LibraryActions {
             throw dialog.error
         }
         const now = Date.now()
+        const includeTimeline = dialog.value.includeTimeline
         const meta: RackPresetMeta = {
             category: "audio-unit",
             uuid: UUID.toString(UUID.generate()),
@@ -260,11 +263,10 @@ export class LibraryActions {
             instrument,
             description: dialog.value.description,
             created: now,
-            modified: now
+            modified: now,
+            hasTimeline: includeTimeline
         }
         const keep = new Set(effectUuids)
-        const includeTimeline = dialog.value.includeTimeline
-        console.info(`saveAsRackPreset: includeTimeline=${includeTimeline}, effectUuids=${effectUuids.length}`)
         const bytes = effectUuids.length === 0
             ? PresetEncoder.encode(audioUnitBox, {includeTimeline})
             : PresetEncoder.encode(audioUnitBox, {
