@@ -101,6 +101,17 @@ export class Arrays {
         array.length = index
         return array
     }
+    static partition<T>(array: ReadonlyArray<T>,
+                        ...predicates: ReadonlyArray<Predicate<T>>): Array<Array<T>> {
+        const buckets: Array<Array<T>> = predicates.map(() => [])
+        for (const item of array) {
+            for (let i = 0; i < predicates.length; i++) {
+                if (predicates[i](item)) {buckets[i].push(item)}
+            }
+        }
+        return buckets
+    }
+
     static subtract<T, U>(array: ReadonlyArray<T>,
                           excludeArray: ReadonlyArray<U>,
                           compareFn: (a: T, b: U) => boolean): Array<T> {

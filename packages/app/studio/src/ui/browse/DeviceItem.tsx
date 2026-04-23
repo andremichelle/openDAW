@@ -14,7 +14,13 @@ import {Icon} from "../components/Icon"
 
 const className = Html.adoptStyleSheet(css, "DeviceItem")
 
-export type StockDeviceMeta = {key: string, name: string, icon: IconSymbol, brief: string}
+export type StockDeviceMeta = {
+    key: string
+    name: string
+    icon: IconSymbol
+    brief: string
+    externalIconUrl?: string
+}
 export type DeviceDropKind = "audio-effect" | "midi-effect"
 
 type Construct = {
@@ -40,9 +46,13 @@ export const DeviceItem = ({
     const header: HTMLElement = (
         <div className="device-header">
             {triangle}
-            <div className="icon">
-                <Icon symbol={device.icon}/>
-            </div>
+            {isDefined(device.externalIconUrl)
+                ? <div className="icon external">
+                    <img src={device.externalIconUrl} alt=""/>
+                </div>
+                : <div className="icon">
+                    <Icon symbol={device.icon}/>
+                </div>}
             <span className="name">{device.name}</span>
             <span className="brief">{device.brief}</span>
         </div>

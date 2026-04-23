@@ -277,4 +277,45 @@ describe("Arrays", () => {
             })
         })
     })
+
+    describe("partition()", () => {
+        it("splits by mutually-exclusive predicates", () => {
+            const [evens, odds] = Arrays.partition([1, 2, 3, 4, 5],
+                (value: number) => value % 2 === 0,
+                (value: number) => value % 2 !== 0)
+            expect(evens).toEqual([2, 4])
+            expect(odds).toEqual([1, 3, 5])
+        })
+
+        it("puts each item into every matching bucket (independent filters)", () => {
+            const [positive, even] = Arrays.partition([-2, -1, 0, 1, 2, 3],
+                (value: number) => value > 0,
+                (value: number) => value % 2 === 0)
+            expect(positive).toEqual([1, 2, 3])
+            expect(even).toEqual([-2, 0, 2])
+        })
+
+        it("returns empty buckets when nothing matches", () => {
+            const [evens] = Arrays.partition([1, 3, 5],
+                (value: number) => value % 2 === 0)
+            expect(evens).toEqual([])
+        })
+
+        it("returns an empty array of buckets when no predicates are given", () => {
+            expect(Arrays.partition([1, 2, 3])).toEqual([])
+        })
+
+        it("returns empty buckets when the source array is empty", () => {
+            const buckets = Arrays.partition<number>([],
+                (value: number) => value > 0,
+                (value: number) => value < 0)
+            expect(buckets).toEqual([[], []])
+        })
+
+        it("preserves source order within each bucket", () => {
+            const [matched] = Arrays.partition(["c", "a", "b", "a", "c"],
+                (value: string) => value !== "b")
+            expect(matched).toEqual(["c", "a", "a", "c"])
+        })
+    })
 })

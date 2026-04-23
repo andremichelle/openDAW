@@ -1,5 +1,15 @@
 import css from "./LibraryBrowser.sass?inline"
-import {DefaultObservableValue, isDefined, Lifecycle, Nullable, Predicate, Terminator, UUID} from "@opendaw/lib-std"
+import {
+    Arrays,
+    DefaultObservableValue,
+    isAbsent,
+    isDefined,
+    Lifecycle,
+    Nullable,
+    Predicate,
+    Terminator,
+    UUID
+} from "@opendaw/lib-std"
 import {Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {IndexedBox} from "@opendaw/lib-box"
@@ -42,7 +52,8 @@ const deviceKeyOf = (entry: PresetMeta): string => {
 
 const effectDevices = (records: Record<string, EffectFactory>): ReadonlyArray<StockDeviceMeta> =>
     Object.entries(records).map(([key, factory]) => ({
-        key, name: factory.defaultName, icon: factory.defaultIcon, brief: factory.briefDescription
+        key, name: factory.defaultName, icon: factory.defaultIcon, brief: factory.briefDescription,
+        externalIconUrl: factory.external ? "/images/tone3000.svg" : undefined
     }))
 
 const userIndex = PresetStorage.observable()
@@ -189,7 +200,7 @@ const renderCategory = (args: RenderCategoryArgs): HTMLElement => {
     const dropKind: Nullable<DeviceDropKind> = categoryKey === "audio-effect" || categoryKey === "midi-effect"
         ? categoryKey
         : null
-    stockDevices.forEach(device => {
+    const renderDevice = (device: StockDeviceMeta): void => {
         const devicePresets = allPresets
             .filter(entry => entry.category === categoryKey && deviceKeyOf(entry) === device.key)
             .filter(matches)
@@ -211,7 +222,11 @@ const renderCategory = (args: RenderCategoryArgs): HTMLElement => {
             onCreate: () => actions.createDevice(categoryKey, device.key),
             dropKind, onDrop, instrumentKey, expandKey: deviceExpandKey
         }))
-    })
+    }
+    const [internalDevices, externalDevices] = Arrays.partition(stockDevices,
+        device => isAbsent(device.externalIconUrl),
+        device => isDefined(device.externalIconUrl))
+    internalDevices.forEach(renderDevice)
     const compoundPresets = allPresets
         .filter(entry => entry.category === compoundCategory)
         .filter(matches)
@@ -235,6 +250,10 @@ const renderCategory = (args: RenderCategoryArgs): HTMLElement => {
             expandOnRender: searching && compoundPresets.length > 0,
             dropKind, onDrop: onStashDrop, onRackDrop, expandKey: compoundExpandKey
         }))
+    }
+    if (externalDevices.length > 0) {
+        section.appendChild(<hr/>)
+        externalDevices.forEach(renderDevice)
     }
     return section
 }
