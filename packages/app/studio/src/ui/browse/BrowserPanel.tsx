@@ -4,7 +4,6 @@ import {StudioService} from "@/service/StudioService.ts"
 import {createElement, DomElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
 import {SampleBrowser} from "@/ui/browse/SampleBrowser.tsx"
-import {DevicesBrowser} from "@/ui/browse/DevicesBrowser.tsx"
 import {LibraryBrowser} from "@/ui/browse/LibraryBrowser.tsx"
 import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {Html} from "@opendaw/lib-dom"
@@ -25,9 +24,6 @@ export const BrowserPanel = ({lifecycle, service}: Construct) => {
         contentLifecycle.terminate()
         replaceChildren(placeholder, (() => {
             switch (owner.getValue()) {
-                case BrowseScope.Devices:
-                    return <DevicesBrowser lifecycle={contentLifecycle}
-                                           service={service}/>
                 case BrowseScope.Library:
                     return <LibraryBrowser lifecycle={contentLifecycle}
                                            service={service}/>
@@ -49,7 +45,6 @@ export const BrowserPanel = ({lifecycle, service}: Construct) => {
     return (
         <div className={className}>
             <RadioGroup lifecycle={lifecycle} elements={[
-                {value: BrowseScope.Devices, element: <span>Devices</span>},
                 {value: BrowseScope.Library, element: <span>Library</span>},
                 {value: BrowseScope.Samples, element: <span>Samples</span>},
                 {value: BrowseScope.Soundfonts, element: <span>Soundfonts</span>}
