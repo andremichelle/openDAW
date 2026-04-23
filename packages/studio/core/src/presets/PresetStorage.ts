@@ -130,8 +130,10 @@ export namespace PresetStorage {
         await Workers.Opfs.write(TRASH_PATH, ENC.encode(JSON.stringify(ids)))
     }
 
-    export const listUsedAssets = async (type: Class<AudioFileBox | SoundfontFileBox>): Promise<Set<UUID.String>> => {
-        const uuids: Array<UUID.String> = []
+    export const listUsedAssets = async (
+        type: Class<AudioFileBox | SoundfontFileBox>
+    ): Promise<Map<UUID.String, Array<string>>> => {
+        const result = new Map<UUID.String, Array<string>>()
         const entries = await readIndex()
         for (const entry of entries) {
             const read = await Promises.tryCatch(Workers.Opfs.read(fileFor(UUID.parse(entry.uuid))))
@@ -147,10 +149,14 @@ export namespace PresetStorage {
                 bytes.buffer.slice(bytes.byteOffset + 8, bytes.byteOffset + bytes.byteLength), false))
             if (decoded.status === "failure") {continue}
             for (const box of graph.boxes() as Iterable<Box>) {
-                if (box instanceof type) {uuids.push(UUID.toString(box.address.uuid))}
+                if (!(box instanceof type)) {continue}
+                const key = UUID.toString(box.address.uuid)
+                const list = result.get(key) ?? []
+                if (!list.includes(entry.name)) {list.push(entry.name)}
+                result.set(key, list)
             }
         }
-        return new Set<UUID.String>(uuids)
+        return result
     }
 
     export const rebuildIndex = async (): Promise<ReadonlyArray<PresetMeta>> => {

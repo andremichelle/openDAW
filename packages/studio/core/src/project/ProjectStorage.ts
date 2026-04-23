@@ -49,20 +49,35 @@ export namespace ProjectStorage {
             .then(array => Option.wrap(array.buffer as ArrayBuffer), () => Option.None)
     }
 
-    export const listUsedAssets = async (type: Class<AudioFileBox | SoundfontFileBox>): Promise<Set<string>> => {
+    export const listUsedAssets = async (
+        type: Class<AudioFileBox | SoundfontFileBox>
+    ): Promise<Map<UUID.String, Array<string>>> => {
         console.debug("listUsedAssets", type.name)
-        const uuids: Array<string> = []
+        const result = new Map<UUID.String, Array<string>>()
+        const exactBuffer = (bytes: Uint8Array): ArrayBuffer =>
+            bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
         const files = await Workers.Opfs.list(ProjectPaths.Folder)
-        for (const {name} of files.filter(file => file.kind === "directory")) {
-            const result = await Workers.Opfs.read(ProjectPaths.projectFile(UUID.parse(name)))
-            tryCatch(() => {
-                const {boxGraph} = ProjectSkeleton.decode(result.buffer)
-                uuids.push(...boxGraph.boxes()
-                    .filter(box => box instanceof type)
-                    .map((box) => UUID.toString(box.address.uuid)))
-            })
+        for (const {name: folder} of files.filter(file => file.kind === "directory")) {
+            const uuid = UUID.parse(folder)
+            const projectBytes = await Promises.tryCatch(Workers.Opfs.read(ProjectPaths.projectFile(uuid)))
+            if (projectBytes.status === "rejected") {continue}
+            const metaBytes = await Promises.tryCatch(Workers.Opfs.read(ProjectPaths.projectMeta(uuid)))
+            const projectName = metaBytes.status === "rejected" ? folder
+                : (JSON.parse(new TextDecoder().decode(metaBytes.value)) as ProjectMeta).name
+            const decoded = tryCatch(() => ProjectSkeleton.decode(exactBuffer(projectBytes.value)))
+            if (decoded.status === "failure") {
+                console.warn(`listUsedAssets: failed to decode project '${projectName}'`, decoded.error)
+                continue
+            }
+            for (const box of decoded.value.boxGraph.boxes()) {
+                if (!(box instanceof type)) {continue}
+                const key = UUID.toString(box.address.uuid)
+                const list = result.get(key) ?? []
+                if (!list.includes(projectName)) {list.push(projectName)}
+                result.set(key, list)
+            }
         }
-        return new Set<string>(uuids)
+        return result
     }
 
     export const deleteProject = async (uuid: UUID.Bytes) => {
