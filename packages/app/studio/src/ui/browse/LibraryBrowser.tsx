@@ -45,6 +45,9 @@ const effectDevices = (records: Record<string, EffectFactory>): ReadonlyArray<St
         key, name: factory.defaultName, icon: factory.defaultIcon, brief: factory.briefDescription
     }))
 
+const userIndex = PresetStorage.observable()
+const cloudIndex = new DefaultObservableValue<ReadonlyArray<PresetMeta>>([])
+
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
@@ -57,8 +60,6 @@ export const LibraryBrowser = ({lifecycle, service}: Construct) => {
     const search = new DefaultObservableValue("")
     const showStock = new DefaultObservableValue(true)
     const showUser = new DefaultObservableValue(true)
-    const userIndex = PresetStorage.observable()
-    const cloudIndex = new DefaultObservableValue<ReadonlyArray<PresetMeta>>([])
     const tree: HTMLElement = <div className="tree"/>
     const render = () => {
         const query = search.getValue().trim().toLowerCase()
@@ -113,10 +114,10 @@ export const LibraryBrowser = ({lifecycle, service}: Construct) => {
     OpenPresetAPI.get().list().then(
         value => cloudIndex.setValue(value),
         reason => console.warn("OpenPresetAPI.list failed", reason))
-    const enforceAtLeastOne = (target: DefaultObservableValue<boolean>, other: DefaultObservableValue<boolean>) =>
-        target.subscribe(() => {
-            if (!target.getValue() && !other.getValue()) {target.setValue(true)}
-        })
+    const enforceAtLeastOne = (target: DefaultObservableValue<boolean>,
+                               other: DefaultObservableValue<boolean>) => target.subscribe(() => {
+        if (!target.getValue() && !other.getValue()) {target.setValue(true)}
+    })
     const stockToggle: HTMLElement = (
         <Checkbox lifecycle={lifecycle}
                   model={showStock}
@@ -200,7 +201,7 @@ const renderCategory = (args: RenderCategoryArgs): HTMLElement => {
             ? effects => actions.saveAsSingleEffectPreset(dropKind, device.key, effects[0])
             : null
         const instrumentKey: Nullable<InstrumentFactories.Keys> = categoryKey === "instrument"
-            && Object.hasOwn(InstrumentFactories.Named, device.key)
+        && Object.hasOwn(InstrumentFactories.Named, device.key)
             ? device.key as InstrumentFactories.Keys
             : null
         const deviceExpandKey = `device:${categoryKey}:${device.key}`

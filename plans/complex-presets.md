@@ -237,3 +237,10 @@ Phase 1 is the immediate bug-fix priority — ships on its own without any of Ph
 - **Multi-track AudioUnits.** A future AudioUnit might have more than one `TrackBox` (separate MIDI + audio tracks on one unit). The encoder should walk `AudioUnitBox.tracks` as a collection; the decoder's default-track creation already needs to become a "create only the track types that were absent in the preset" pass.
 - **Audio region trimming past `AudioFileBox` duration.** If the decoder later auto-fetches the missing sample and the fetched file is a different length, the region's `loopDuration` / `trim` fields may reference ranges that don't exist. Decide at fetch time: clamp or warn?
 - **Peer box identity across chains.** If a dep peer is shared between two effects in the same chain save (theoretically possible if ever introduced), the current design copies it once (the dep walk dedupes by box identity). Pointer remap handles both effects referencing the same new peer UUID.
+- **Tone3000 (`NeuralAmpDeviceBox`).** This device loads its state from an external service (see `NamTone3000.ts`, `Tone3000Dialog.tsx`) rather than from pointer-reachable peer boxes. Its serialized box fields may not fully describe the sound without the fetched neural model. Decide: (a) refuse to include Tone3000 in presets, (b) include the box with a warning that the model must be re-selected on load, or (c) embed the model identifier and re-trigger the fetch on preset apply. Needs a dedicated place in the plan once the approach is chosen.
+
+---
+
+## Future enhancements
+
+- **Per-device preset pager.** When a device is selected/edited, expose prev/next controls (arrows or a dropdown) that cycle through the device's matching presets in the library — rapid A/B auditioning without opening the library panel. Scoped to the device's `category` + `device`/`instrument` key; source-agnostic (user + cloud). UI lives on the device header. Load via the existing `activatePreset` path so all replace semantics (timeline handling, effect-chain extraction) still apply.

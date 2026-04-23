@@ -1,5 +1,5 @@
 import {Dialog} from "@/ui/components/Dialog"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {createElement, Frag} from "@opendaw/lib-jsx"
 import {DefaultObservableValue, Errors, Terminator} from "@opendaw/lib-std"
@@ -69,7 +69,8 @@ export namespace PresetDialogs {
                     columnGap: "1em",
                     rowGap: "0.5em",
                     alignItems: "start",
-                    minWidth: "24em"
+                    minWidth: "24em",
+                    color: Colors.dark.toString()
                 }}>
                     <div>Name:</div>
                     {nameField}
@@ -80,7 +81,7 @@ export namespace PresetDialogs {
                             <div style={{paddingTop: "0.15em"}}>Include timeline:</div>
                             <Checkbox lifecycle={lifecycle}
                                       model={includeTimelineModel}
-                                      appearance={{framed: true}}>
+                                      appearance={{framed: true, color: Colors.black}}>
                                 <Icon symbol={IconSymbol.Checkbox}/>
                             </Checkbox>
                         </Frag>
@@ -143,13 +144,13 @@ export namespace PresetDialogs {
                             }
                         }
                     ]}>
-                <div style={{padding: "1em 0", minWidth: "20em", display: "flex",
+                <div style={{padding: "1em 0", minWidth: "20em", display: "flex", color: Colors.dark.toString(),
                     flexDirection: "column", rowGap: "0.75em"}}>
                     <div>{message}</div>
                     {showTimelineToggle && (
                         <label style={{display: "flex", alignItems: "center", columnGap: "0.5em"}}>
                             <Checkbox lifecycle={lifecycle} model={includeTimelineModel}
-                                      appearance={{framed: true}}>
+                                      appearance={{framed: true, color: Colors.black}}>
                                 <Icon symbol={IconSymbol.Checkbox}/>
                             </Checkbox>
                             <span>Include timeline</span>
@@ -199,12 +200,12 @@ export namespace PresetDialogs {
                             }
                         }
                     ]}>
-                <div style={{padding: "1em 0", minWidth: "20em", display: "flex",
+                <div style={{padding: "1em 0", minWidth: "20em", display: "flex", color: Colors.dark.toString(),
                     flexDirection: "column", rowGap: "0.75em"}}>
                     <div>{message}</div>
                     <label style={{display: "flex", alignItems: "center", columnGap: "0.5em"}}>
                         <Checkbox lifecycle={lifecycle} model={includeTimelineModel}
-                                  appearance={{framed: true}}>
+                                  appearance={{framed: true, color: Colors.black}}>
                             <Icon symbol={IconSymbol.Checkbox}/>
                         </Checkbox>
                         <span>Include timeline</span>
