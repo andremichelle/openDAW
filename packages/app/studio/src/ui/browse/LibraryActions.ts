@@ -351,14 +351,15 @@ export class LibraryActions {
             if (isAbsent(audioUnitBox)) {return}
             const confirm = await Promises.tryCatch(PresetDialogs.showReplacePresetDialog({
                 headline: "Replace Preset?",
-                message: `Replace '${entry.name}' with the dragged instrument?`
+                message: `Replace '${entry.name}' with the dragged instrument?`,
+                initialIncludeTimeline: entry.hasTimeline === true
             }))
             if (confirm.status === "rejected") {
                 if (Errors.isAbort(confirm.error)) {return}
                 throw confirm.error
             }
-            await PresetStorage.save(meta, PresetEncoder.encode(audioUnitBox,
-                {includeTimeline: confirm.value.includeTimeline}))
+            await PresetStorage.save({...meta, hasTimeline: confirm.value.includeTimeline},
+                PresetEncoder.encode(audioUnitBox, {includeTimeline: confirm.value.includeTimeline}))
             return
         }
         if (entry.category === "audio-unit") {
@@ -372,7 +373,8 @@ export class LibraryActions {
                 const choice = await Promises.tryCatch(PresetDialogs.showRackCompositionDialog(
                     `Replace '${entry.name}'?`,
                     "Replace with the entire audio chain, or just the instrument?",
-                    true))
+                    true,
+                    entry.hasTimeline === true))
                 if (choice.status === "rejected") {
                     if (Errors.isAbort(choice.error)) {return}
                     throw choice.error
@@ -382,7 +384,8 @@ export class LibraryActions {
             } else {
                 const confirm = await Promises.tryCatch(PresetDialogs.showReplacePresetDialog({
                     headline: "Replace Preset?",
-                    message: `Replace '${entry.name}' with the dragged rack?`
+                    message: `Replace '${entry.name}' with the dragged rack?`,
+                    initialIncludeTimeline: entry.hasTimeline === true
                 }))
                 if (confirm.status === "rejected") {
                     if (Errors.isAbort(confirm.error)) {return}
@@ -405,7 +408,8 @@ export class LibraryActions {
                 description: entry.description,
                 created: entry.created,
                 modified: entry.modified,
-                instrument: candidate.instrumentKey
+                instrument: candidate.instrumentKey,
+                hasTimeline: includeTimeline
             }
             await PresetStorage.save(rackMeta, bytes)
         }

@@ -1,13 +1,13 @@
 import css from "./LibraryBrowser.sass?inline"
 import {
     Arrays,
+    Color,
     DefaultObservableValue,
     isAbsent,
     isDefined,
     Lifecycle,
     Nullable,
     Predicate,
-    Terminator,
     UUID
 } from "@opendaw/lib-std"
 import {Html} from "@opendaw/lib-dom"
@@ -30,6 +30,7 @@ import {DeviceDropKind, DeviceItem, StockDeviceMeta} from "@/ui/browse/DeviceIte
 import {CompoundItem} from "@/ui/browse/CompoundItem"
 import {Checkbox} from "../components/Checkbox"
 import {Icon} from "../components/Icon"
+import {SearchInput} from "@/ui/components/SearchInput"
 
 const className = Html.adoptStyleSheet(css, "LibraryBrowser")
 
@@ -93,7 +94,7 @@ export const LibraryBrowser = ({lifecycle, service}: Construct) => {
             renderCategory({
                 actions, expandedKeys, allPresets, query, matches, filterActive, searching,
                 label: "Instruments",
-                colorVar: "--color-green",
+                color: Colors.green,
                 categoryKey: "instrument",
                 compoundLabel: "Racks",
                 compoundCategory: "audio-unit",
@@ -104,7 +105,7 @@ export const LibraryBrowser = ({lifecycle, service}: Construct) => {
             renderCategory({
                 actions, expandedKeys, allPresets, query, matches, filterActive, searching,
                 label: "Audio Effects",
-                colorVar: "--color-blue",
+                color: Colors.blue,
                 categoryKey: "audio-effect",
                 compoundLabel: "Stash",
                 compoundCategory: "audio-effect-chain",
@@ -113,7 +114,7 @@ export const LibraryBrowser = ({lifecycle, service}: Construct) => {
             renderCategory({
                 actions, expandedKeys, allPresets, query, matches, filterActive, searching,
                 label: "MIDI Effects",
-                colorVar: "--color-orange",
+                color: Colors.orange,
                 categoryKey: "midi-effect",
                 compoundLabel: "Stash",
                 compoundCategory: "midi-effect-chain",
@@ -132,16 +133,14 @@ export const LibraryBrowser = ({lifecycle, service}: Construct) => {
     const stockToggle: HTMLElement = (
         <Checkbox lifecycle={lifecycle}
                   model={showStock}
-                  className="source-toggle"
-                  appearance={{tooltip: "Show stock presets", activeColor: Colors.blue}}>
+                  appearance={{tooltip: "Show stock presets", activeColor: Colors.blue, framed: true, landscape: true}}>
             <Icon symbol={IconSymbol.CloudFolder}/>
         </Checkbox>
     )
     const userToggle: HTMLElement = (
         <Checkbox lifecycle={lifecycle}
                   model={showUser}
-                  className="source-toggle"
-                  appearance={{tooltip: "Show user presets", activeColor: Colors.blue}}>
+                  appearance={{tooltip: "Show user presets", activeColor: Colors.blue, framed: true, landscape: true}}>
             <Icon symbol={IconSymbol.UserFolder}/>
         </Checkbox>
     )
@@ -149,25 +148,18 @@ export const LibraryBrowser = ({lifecycle, service}: Construct) => {
         enforceAtLeastOne(showStock, showUser),
         enforceAtLeastOne(showUser, showStock),
         search.subscribe(render),
-        showStock.catchupAndSubscribe(value => stockToggle.classList.toggle("active", value.getValue())),
-        showUser.catchupAndSubscribe(value => userToggle.classList.toggle("active", value.getValue())),
         showStock.subscribe(render),
         showUser.subscribe(render),
         userIndex.subscribe(render),
-        cloudIndex.subscribe(render),
-        lifecycle.own(new Terminator())
+        cloudIndex.subscribe(render)
     )
     render()
     return (
         <div className={className}>
             <div className="filter-bar">
-                <input
-                    type="search"
-                    className="search"
-                    placeholder="Search devices"
-                    oninput={(event: Event) => search.setValue((event.target as HTMLInputElement).value)}/>
                 {stockToggle}
                 {userToggle}
+                <SearchInput lifecycle={lifecycle} model={search}/>
             </div>
             {tree}
         </div>
@@ -183,7 +175,7 @@ type RenderCategoryArgs = {
     filterActive: boolean
     searching: boolean
     label: string
-    colorVar: string
+    color: Color
     categoryKey: LibraryCategoryKey
     compoundLabel: string
     compoundCategory: "audio-unit" | "audio-effect-chain" | "midi-effect-chain"
@@ -193,9 +185,9 @@ type RenderCategoryArgs = {
 const renderCategory = (args: RenderCategoryArgs): HTMLElement => {
     const {
         actions, expandedKeys, allPresets, query, matches, filterActive, searching,
-        label, colorVar, categoryKey, compoundLabel, compoundCategory, stockDevices
+        label, color, categoryKey, compoundLabel, compoundCategory, stockDevices
     } = args
-    const section: HTMLElement = <section className="category" style={{"--color": `var(${colorVar})`}}/>
+    const section: HTMLElement = <section className="category" style={{"--color": color.toString()}}/>
     section.appendChild(<h1>{label}</h1>)
     const dropKind: Nullable<DeviceDropKind> = categoryKey === "audio-effect" || categoryKey === "midi-effect"
         ? categoryKey

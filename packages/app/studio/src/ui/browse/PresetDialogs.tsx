@@ -111,11 +111,12 @@ export namespace PresetDialogs {
 
     export const showRackCompositionDialog = async (headline: string,
                                                     message: string,
-                                                    showTimelineToggle: boolean = false): Promise<RackCompositionResult> => {
+                                                    showTimelineToggle: boolean = false,
+                                                    initialIncludeTimeline: boolean = false): Promise<RackCompositionResult> => {
         const lifecycle = new Terminator()
         const {resolve, reject, promise} = Promise.withResolvers<RackCompositionResult>()
         promise.finally(() => lifecycle.terminate())
-        const includeTimelineModel = new DefaultObservableValue(false)
+        const includeTimelineModel = new DefaultObservableValue(initialIncludeTimeline)
         const dialog: HTMLDialogElement = (
             <Dialog headline={headline}
                     icon={IconSymbol.Box}
@@ -148,13 +149,18 @@ export namespace PresetDialogs {
                     flexDirection: "column", rowGap: "0.75em"}}>
                     <div>{message}</div>
                     {showTimelineToggle && (
-                        <label style={{display: "flex", alignItems: "center", columnGap: "0.5em"}}>
+                        <div style={{
+                            display: "grid",
+                            gridTemplateColumns: "auto 1fr",
+                            columnGap: "1em",
+                            alignItems: "center"
+                        }}>
+                            <div>Include timeline:</div>
                             <Checkbox lifecycle={lifecycle} model={includeTimelineModel}
                                       appearance={{framed: true, color: Colors.black}}>
                                 <Icon symbol={IconSymbol.Checkbox}/>
                             </Checkbox>
-                            <span>Include timeline</span>
-                        </label>
+                        </div>
                     )}
                 </div>
             </Dialog>
@@ -168,17 +174,22 @@ export namespace PresetDialogs {
     export type ReplaceInput = {
         headline: string
         message: string
+        initialIncludeTimeline?: boolean
     }
 
     export type ReplaceResult = {
         includeTimeline: boolean
     }
 
-    export const showReplacePresetDialog = async ({headline, message}: ReplaceInput): Promise<ReplaceResult> => {
+    export const showReplacePresetDialog = async ({
+                                                       headline,
+                                                       message,
+                                                       initialIncludeTimeline = false
+                                                   }: ReplaceInput): Promise<ReplaceResult> => {
         const lifecycle = new Terminator()
         const {resolve, reject, promise} = Promise.withResolvers<ReplaceResult>()
         promise.finally(() => lifecycle.terminate())
-        const includeTimelineModel = new DefaultObservableValue(false)
+        const includeTimelineModel = new DefaultObservableValue(initialIncludeTimeline)
         const dialog: HTMLDialogElement = (
             <Dialog headline={headline}
                     icon={IconSymbol.Box}
@@ -203,13 +214,18 @@ export namespace PresetDialogs {
                 <div style={{padding: "1em 0", minWidth: "20em", display: "flex", color: Colors.dark.toString(),
                     flexDirection: "column", rowGap: "0.75em"}}>
                     <div>{message}</div>
-                    <label style={{display: "flex", alignItems: "center", columnGap: "0.5em"}}>
+                    <div style={{
+                        display: "grid",
+                        gridTemplateColumns: "auto 1fr",
+                        columnGap: "1em",
+                        alignItems: "center"
+                    }}>
+                        <div>Include timeline:</div>
                         <Checkbox lifecycle={lifecycle} model={includeTimelineModel}
                                   appearance={{framed: true, color: Colors.black}}>
                             <Icon symbol={IconSymbol.Checkbox}/>
                         </Checkbox>
-                        <span>Include timeline</span>
-                    </label>
+                    </div>
                 </div>
             </Dialog>
         )

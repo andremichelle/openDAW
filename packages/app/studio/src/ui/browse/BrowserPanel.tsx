@@ -45,7 +45,7 @@ export const BrowserPanel = ({lifecycle, service}: Construct) => {
     return (
         <div className={className}>
             <RadioGroup lifecycle={lifecycle} elements={[
-                {value: BrowseScope.Library, element: <span>Library</span>},
+                {value: BrowseScope.Library, element: <span>Presets</span>},
                 {value: BrowseScope.Samples, element: <span>Samples</span>},
                 {value: BrowseScope.Soundfonts, element: <span>Soundfonts</span>}
             ]} model={scope} style={{fontSize: "11px", columnGap: "8px", padding: "0.5em 0.75em"}}/>
