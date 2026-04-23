@@ -40,10 +40,11 @@ export namespace PresetDecoder {
             }).then()
             return []
         }
-        if (header.readInt() !== PresetHeader.FORMAT_VERSION) {
+        const version = header.readInt()
+        if (version !== PresetHeader.FORMAT_VERSION) {
             RuntimeNotifier.info({
                 headline: "Could Not Import Preset",
-                message: "Invalid preset version"
+                message: `Unsupported preset version ${version} (this build supports ${PresetHeader.FORMAT_VERSION}).`
             }).then()
             return []
         }
@@ -233,8 +234,10 @@ export namespace PresetDecoder {
         if (headerInput.readInt() !== PresetHeader.MAGIC_HEADER_OPEN) {
             return Attempts.err("Invalid preset header")
         }
-        if (headerInput.readInt() !== PresetHeader.FORMAT_VERSION) {
-            return Attempts.err("Unsupported preset version")
+        const version = headerInput.readInt()
+        if (version !== PresetHeader.FORMAT_VERSION) {
+            return Attempts.err(
+                `Unsupported preset version ${version} (this build supports ${PresetHeader.FORMAT_VERSION}).`)
         }
         const sourceGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
         const loaded = tryCatch(() => sourceGraph.fromArrayBuffer(bytes.slice(8), false))

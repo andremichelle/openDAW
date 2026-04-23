@@ -1,7 +1,7 @@
-import {ByteArrayInput, DefaultObservableValue, isAbsent, ObservableValue, Option, tryCatch, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, Class, DefaultObservableValue, isAbsent, ObservableValue, Option, tryCatch, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
-import {BoxGraph} from "@opendaw/lib-box"
-import {AudioUnitBox, BoxIO} from "@opendaw/studio-boxes"
+import {Box, BoxGraph} from "@opendaw/lib-box"
+import {AudioFileBox, AudioUnitBox, BoxIO, SoundfontFileBox} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {DeviceBoxUtils, InstrumentFactories, PresetHeader} from "@opendaw/studio-adapters"
 import {Workers} from "../Workers"
@@ -128,6 +128,29 @@ export namespace PresetStorage {
 
     export const saveTrashedIds = async (ids: ReadonlyArray<UUID.String>): Promise<void> => {
         await Workers.Opfs.write(TRASH_PATH, ENC.encode(JSON.stringify(ids)))
+    }
+
+    export const listUsedAssets = async (type: Class<AudioFileBox | SoundfontFileBox>): Promise<Set<UUID.String>> => {
+        const uuids: Array<UUID.String> = []
+        const entries = await readIndex()
+        for (const entry of entries) {
+            const read = await Promises.tryCatch(Workers.Opfs.read(fileFor(UUID.parse(entry.uuid))))
+            if (read.status === "rejected") {continue}
+            const bytes = read.value
+            if (bytes.byteLength < 8) {continue}
+            const headerBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + 8)
+            const header = new ByteArrayInput(headerBuffer)
+            if (header.readInt() !== PresetHeader.MAGIC_HEADER_OPEN) {continue}
+            if (header.readInt() !== PresetHeader.FORMAT_VERSION) {continue}
+            const graph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
+            const decoded = tryCatch(() => graph.fromArrayBuffer(
+                bytes.buffer.slice(bytes.byteOffset + 8, bytes.byteOffset + bytes.byteLength), false))
+            if (decoded.status === "failure") {continue}
+            for (const box of graph.boxes() as Iterable<Box>) {
+                if (box instanceof type) {uuids.push(UUID.toString(box.address.uuid))}
+            }
+        }
+        return new Set<UUID.String>(uuids)
     }
 
     export const rebuildIndex = async (): Promise<ReadonlyArray<PresetMeta>> => {

@@ -536,7 +536,7 @@ https://assets.opendaw.studio/presets/{uuid}.odp
 Open items before building this:
 
 - **Authoring workflow.** How do stock presets get produced? Option A: in-app "Export as stock preset" for curated contributors, then manual PR to a preset repo. Option B: openDAW core contributors save presets from a dev project and commit the `.odp` + index entry.
-- **Versioning.** Device schemas will evolve. Presets need to either carry a schema version (we have `PresetHeader.FORMAT_VERSION` = 1 but nothing advances it on device changes) or go through an on-load migration. Recommend: bump format version per breaking device change, decoder refuses mismatched versions with a specific error.
+- **Versioning.** Decoder-side rejection is shipped: `PresetDecoder.decode` and `insertEffectChain` both bail out on any `FORMAT_VERSION` mismatch, now with the actual version number surfaced in the error. Policy: bump `PresetHeader.FORMAT_VERSION` for any breaking box-schema change. No on-load migration; old presets are rejected, not silently mis-loaded.
 - **Caching.** Stock presets are immutable per-UUID. A simple `Cache-Control: immutable` on assets + `stale-while-revalidate` on the index would avoid hammering the API. Could reuse the sample asset pattern directly.
 - **Offline.** If index fetch fails, the browser should still render user presets (current implementation already handles this — `PresetStorage.readIndex` is independent).
 - **`LibraryBrowser` integration.** `tagSource(list, "stock")` already exists; wiring is just "fetch index → merge into `allPresets` → render". Source toggle already filters by `entry.source`.

@@ -1,6 +1,6 @@
 import {asDefined, isAbsent, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {InstrumentFactories, Soundfont} from "@opendaw/studio-adapters"
-import {OpenSoundfontAPI, ProjectStorage, SoundfontStorage} from "@opendaw/studio-core"
+import {OpenSoundfontAPI, PresetStorage, ProjectStorage, SoundfontStorage} from "@opendaw/studio-core"
 import {HTMLSelection} from "@/ui/HTMLSelection"
 import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "../components/dialogs"
@@ -30,8 +30,12 @@ export class SoundfontSelection implements ResourceSelection {
 
     async deleteSoundfonts(...soundfonts: ReadonlyArray<Soundfont>) {
         const dialog = RuntimeNotifier.progress({headline: "Checking Soundfont Usages"})
-        const used = await ProjectStorage.listUsedAssets(SoundfontFileBox)
-        const online = new Set<string>((await OpenSoundfontAPI.get().all()).map(({uuid}) => uuid))
+        const [usedByProjects, usedByPresets, onlineList] = await Promise.all([
+            ProjectStorage.listUsedAssets(SoundfontFileBox),
+            PresetStorage.listUsedAssets(SoundfontFileBox),
+            OpenSoundfontAPI.get().all()
+        ])
+        const online = new Set<string>(onlineList.map(({uuid}) => uuid))
         dialog.terminate()
         const approved = await Dialogs.approve({
             headline: "Remove Soundfont(s)?",
@@ -40,10 +44,15 @@ export class SoundfontSelection implements ResourceSelection {
         })
         if (!approved) {return}
         for (const {uuid, name} of soundfonts) {
-            const isUsed = used.has(uuid)
             const isOnline = online.has(uuid)
-            if (isUsed && !isOnline) {
+            if (isOnline) {
+                await SoundfontStorage.get().deleteItem(UUID.parse(uuid))
+                continue
+            }
+            if (usedByProjects.has(uuid)) {
                 await Dialogs.info({headline: "Cannot Delete Soundfont", message: `${name} is used by a project.`})
+            } else if (usedByPresets.has(uuid)) {
+                await Dialogs.info({headline: "Cannot Delete Soundfont", message: `${name} is used by a preset.`})
             } else {
                 await SoundfontStorage.get().deleteItem(UUID.parse(uuid))
             }

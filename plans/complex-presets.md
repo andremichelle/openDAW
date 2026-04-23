@@ -194,24 +194,38 @@ Call sites to thread the new field through:
 
 ## Metadata tagging (optional, low priority)
 
-`PresetMeta` gains two optional flags:
+`PresetMeta` gains one optional flag:
 
 ```ts
-hasPeers?: boolean       // Phase 1: preset carries param/sample peers
 hasTimeline?: boolean    // Phase 2: preset carries automation, notes, and/or audio clips
 ```
 
-`LibraryBrowser` renders a small badge on preset rows that carry either flag so users can spot "loaded" presets at a glance. Purely cosmetic; skip for v1 if it adds noise.
+(`hasPeers` was considered but dropped — Phase 1 includes peer boxes unconditionally in every effect preset, so the flag has no discriminative value.)
+
+`LibraryBrowser` renders a small badge on preset rows with `hasTimeline: true` so users can spot timeline-bearing presets at a glance. Purely cosmetic; skip for v1 if it adds noise.
 
 ---
 
 ## Non-goals
 
-- **Cross-track automation.** Automation targeting parameters outside the saved AudioUnit is dropped at encode time with a warning.
+- **Cross-track automation.** Resolved by the existing `stopAtResources` + resource-type schema: `ValueEventCollectionBox` and `NoteEventCollectionBox` are tagged `"shared"`, so the dep walk does not climb through them into other owners. No extra handling needed at encode time.
+- **Region position normalization.** Out of scope — we respect the user's saved `ppqn` positions and do not rewrite them on decode. Saved-with-timeline presets reconstruct regions at the positions they were saved at.
+- **Preset-side graceful degradation for missing samples.** Out of scope. Policy: samples referenced by a preset must be on the local machine. Sample deletion is a global scan (see the new requirement below) — presets get scanned alongside projects so a sample can't be deleted while a preset still references it.
 - **Capture boxes.** `CaptureMidiBox` / `CaptureAudioBox` stay excluded (input routing, not content).
 - **Effect-chain timeline content.** Automation on a single effect's parameter would require saving a detached `ValueEventCollectionBox` + re-wiring to a per-target track on load. Separate problem; not addressed here.
 - **Tempo / time signature.** Project-level, not preset-level.
-- **Auto-fetching missing samples.** If an audio region references an `AudioFileBox` the user doesn't have locally, the region is dropped with a warning. A future extension can wire this into the cloud sample fetch path — not in v1.
+
+---
+
+## New requirement: sample-deletion scans presets
+
+Samples referenced by a preset must stay on the local machine. The project-deletion scanner that prevents deleting a sample in use by a project must be extended to scan the user preset index as well:
+
+- On `SampleStorage.deleteItem(uuid)`: walk every entry in `PresetStorage.readIndex()`, load the `.odp`, inspect its graph for `AudioFileBox` references matching the sample's UUID.
+- If any preset references the sample, refuse the delete (or prompt the user with the list of referring preset names).
+- Symmetrical with the existing projects-scan path — add `PresetStorage` as a second data source to whatever existing scanner drives the projects check.
+
+Stock presets do not need the scan (they live remote and reference samples the user already opted into when downloading the preset).
 
 ---
 
@@ -237,7 +251,7 @@ Phase 1 is the immediate bug-fix priority — ships on its own without any of Ph
 - **Multi-track AudioUnits.** A future AudioUnit might have more than one `TrackBox` (separate MIDI + audio tracks on one unit). The encoder should walk `AudioUnitBox.tracks` as a collection; the decoder's default-track creation already needs to become a "create only the track types that were absent in the preset" pass.
 - **Audio region trimming past `AudioFileBox` duration.** If the decoder later auto-fetches the missing sample and the fetched file is a different length, the region's `loopDuration` / `trim` fields may reference ranges that don't exist. Decide at fetch time: clamp or warn?
 - **Peer box identity across chains.** If a dep peer is shared between two effects in the same chain save (theoretically possible if ever introduced), the current design copies it once (the dep walk dedupes by box identity). Pointer remap handles both effects referencing the same new peer UUID.
-- **Tone3000 (`NeuralAmpDeviceBox`).** This device loads its state from an external service (see `NamTone3000.ts`, `Tone3000Dialog.tsx`) rather than from pointer-reachable peer boxes. Its serialized box fields may not fully describe the sound without the fetched neural model. Decide: (a) refuse to include Tone3000 in presets, (b) include the box with a warning that the model must be re-selected on load, or (c) embed the model identifier and re-trigger the fetch on preset apply. Needs a dedicated place in the plan once the approach is chosen.
+- **Tone3000 (`NeuralAmpDeviceBox`).** This device loads its state from an external service (see `NamTone3000.ts`, `Tone3000Dialog.tsx`) rather than from pointer-reachable peer boxes. Its serialized box fields may not fully describe the sound without the fetched neural model. **Decision:** treat it as a special device in the library / device header — render its icon in the coloured variant without the button frame so it reads visually distinct from regular stock devices. Preset-save semantics unchanged (the model identifier is a regular box field, so the model id is already persisted; the user re-fetches on load if the cache is cold). The visual treatment signals "this one is special, mind the network dependency".
 
 ---
 

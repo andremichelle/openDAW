@@ -1,7 +1,7 @@
 import {asDefined, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, Sample} from "@opendaw/studio-adapters"
-import {AudioContentFactory, OpenSampleAPI, ProjectStorage, SampleStorage} from "@opendaw/studio-core"
+import {AudioContentFactory, OpenSampleAPI, PresetStorage, ProjectStorage, SampleStorage} from "@opendaw/studio-core"
 import {HTMLSelection} from "@/ui/HTMLSelection"
 import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "../components/dialogs"
@@ -59,8 +59,12 @@ export class SampleSelection implements ResourceSelection {
 
     async deleteSamples(...samples: ReadonlyArray<Sample>) {
         const dialog = RuntimeNotifier.progress({headline: "Checking Sample Usages"})
-        const used = await ProjectStorage.listUsedAssets(AudioFileBox)
-        const online = new Set<string>((await OpenSampleAPI.get().all()).map(({uuid}) => uuid))
+        const [usedByProjects, usedByPresets, onlineList] = await Promise.all([
+            ProjectStorage.listUsedAssets(AudioFileBox),
+            PresetStorage.listUsedAssets(AudioFileBox),
+            OpenSampleAPI.get().all()
+        ])
+        const online = new Set<string>(onlineList.map(({uuid}) => uuid))
         dialog.terminate()
         const approved = await Dialogs.approve({
             headline: "Remove Sample(s)?",
@@ -69,10 +73,15 @@ export class SampleSelection implements ResourceSelection {
         })
         if (!approved) {return}
         for (const {uuid, name} of samples) {
-            const isUsed = used.has(uuid)
             const isOnline = online.has(uuid)
-            if (isUsed && !isOnline) {
+            if (isOnline) {
+                await SampleStorage.get().deleteItem(UUID.parse(uuid))
+                continue
+            }
+            if (usedByProjects.has(uuid)) {
                 await Dialogs.info({headline: "Cannot Delete Sample", message: `${name} is used by a project.`})
+            } else if (usedByPresets.has(uuid)) {
+                await Dialogs.info({headline: "Cannot Delete Sample", message: `${name} is used by a preset.`})
             } else {
                 await SampleStorage.get().deleteItem(UUID.parse(uuid))
             }
