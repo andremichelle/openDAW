@@ -24,12 +24,14 @@ export const PresetItem = ({entry, actions}: Construct): HTMLElement => {
                       symbol={entry.source === "stock" ? IconSymbol.CloudFolder : IconSymbol.UserFolder}/>
                 <Icon className="swap" symbol={IconSymbol.Swap}/>
             </div>
-            <span className="name">{entry.name}</span>
-            {entry.hasTimeline === true && (
-                <span className="timeline-badge" title="Including timeline data">
-                    <Icon symbol={IconSymbol.Timeline}/>
-                </span>
-            )}
+            <div className="title">
+                <span className="name">{entry.name}</span>
+                {entry.hasTimeline === true && (
+                    <span className="timeline-badge" title="Including timeline data">
+                        <Icon symbol={IconSymbol.Timeline}/>
+                    </span>
+                )}
+            </div>
         </div>
     )
     item.onclick = () => actions.activatePreset(entry)

@@ -42,23 +42,30 @@ component
     > svg.swap
       display: block
 
-  > span.name
-    grid-column: 3
-    white-space: nowrap
-    overflow: hidden
-    text-overflow: ellipsis
-
-  > span.timeline-badge
-    grid-column: 4
-    justify-self: end
+  > div.title
+    grid-column: 3 / -1
     display: flex
     align-items: center
-    justify-content: center
-    color: var(--color-dark)
-    opacity: mixins.$library-marker-opacity
+    column-gap: 0.5em
+    overflow: hidden
 
-    > svg
-      width: 12px !important
-      height: 12px !important
-      min-width: 12px !important
-      min-height: 12px !important
+    > span.name
+      flex: 1
+      min-width: 0
+      white-space: nowrap
+      overflow: hidden
+      text-overflow: ellipsis
+
+    > span.timeline-badge
+      flex-shrink: 0
+      display: flex
+      align-items: center
+      justify-content: center
+      color: var(--color-dark)
+      opacity: mixins.$library-marker-opacity
+
+      > svg
+        width: 12px !important
+        height: 12px !important
+        min-width: 12px !important
+        min-height: 12px !important
