@@ -205,8 +205,14 @@ export class CaptureMidi extends Capture<CaptureMidiBox> {
                 this.#capturePendingReset = false
             }
             if (!this.#captureOriginSet) {
-                this.#captureOrigin = performance.now()
-                this.#captureBpmAtOrigin = this.manager.project.timelineBox.bpm.getValue()
+                if (this.#captureMode === "playing") {
+                    const currentPosition = this.manager.project.engine.position.getValue()
+                    this.#captureOrigin = currentPosition
+                    this.#captureLastPosition = currentPosition
+                } else {
+                    this.#captureOrigin = performance.now()
+                    this.#captureBpmAtOrigin = this.manager.project.timelineBox.bpm.getValue()
+                }
                 this.#captureOriginSet = true
             }
             const delta = this.#computeCaptureDelta()
