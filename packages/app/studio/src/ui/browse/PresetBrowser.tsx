@@ -11,7 +11,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {Html} from "@opendaw/lib-dom"
-import {createElement} from "@opendaw/lib-jsx"
+import {Await, createElement} from "@opendaw/lib-jsx"
 import {IndexedBox} from "@opendaw/lib-box"
 import {InstrumentFactories, PresetHeader} from "@opendaw/studio-adapters"
 import {
@@ -31,6 +31,7 @@ import {CompoundItem} from "@/ui/browse/CompoundItem"
 import {Checkbox} from "../components/Checkbox"
 import {Icon} from "../components/Icon"
 import {SearchInput} from "@/ui/components/SearchInput"
+import {ThreeDots} from "@/ui/spinner/ThreeDots"
 
 const className = Html.adoptStyleSheet(css, "PresetBrowser")
 
@@ -59,6 +60,9 @@ const effectDevices = (records: Record<string, EffectFactory>): ReadonlyArray<St
 
 const userIndex = PresetStorage.observable()
 const cloudIndex = new DefaultObservableValue<ReadonlyArray<PresetMeta>>([])
+const cloudReady: Promise<void> = OpenPresetAPI.get().list().then(
+    value => {cloudIndex.setValue(value)},
+    reason => {console.warn("OpenPresetAPI.list failed", reason)})
 
 type Construct = {
     lifecycle: Lifecycle
@@ -123,9 +127,6 @@ export const PresetBrowser = ({lifecycle, service}: Construct) => {
         )
     }
     PresetStorage.readIndex().catch(reason => console.warn("PresetStorage.readIndex failed", reason))
-    OpenPresetAPI.get().list().then(
-        value => cloudIndex.setValue(value),
-        reason => console.warn("OpenPresetAPI.list failed", reason))
     const enforceAtLeastOne = (target: DefaultObservableValue<boolean>,
                                other: DefaultObservableValue<boolean>) => target.subscribe(() => {
         if (!target.getValue() && !other.getValue()) {target.setValue(true)}
@@ -161,7 +162,11 @@ export const PresetBrowser = ({lifecycle, service}: Construct) => {
                 {userToggle}
                 <SearchInput lifecycle={lifecycle} model={search}/>
             </div>
-            {tree}
+            <Await
+                factory={() => cloudReady}
+                loading={() => <div className="loading"><ThreeDots/></div>}
+                success={() => tree}
+                failure={() => tree}/>
         </div>
     )
 }
