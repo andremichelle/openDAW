@@ -20,6 +20,7 @@ export type StockDeviceMeta = {
     icon: IconSymbol
     brief: string
     externalIconUrl?: string
+    presetless?: boolean
 }
 export type DeviceDropKind = "audio-effect" | "midi-effect"
 

@@ -31,6 +31,7 @@ export const Manuals: ReadonlyArray<Manual> = [
             {type: "page", label: "Live Rooms", path: "/manuals/live-rooms"},
             {type: "page", label: "Mixer", path: "/manuals/mixer"},
             {type: "page", label: "Permissions", path: "/manuals/permissions"},
+            {type: "page", label: "Presets", path: "/manuals/presets"},
             {type: "page", label: "Private File System", path: "/manuals/private-file-system"},
             {type: "page", label: "Recording", path: "/manuals/recording"},
             {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"}

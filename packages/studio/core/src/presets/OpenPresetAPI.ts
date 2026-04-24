@@ -18,9 +18,8 @@ export class OpenPresetAPI {
     @Lazy
     async list(): Promise<ReadonlyArray<PresetMeta>> {
         const url = `${OpenPresetAPI.FileRoot}/index.json?t=${Date.now()}`
-        const result = await Promises.tryCatch(
-            network.defaultFetch(url, OpenDAWHeaders).then(response => response.json())
-        )
+        const result = await Promises.tryCatch(Promises.retry(() =>
+            network.defaultFetch(url, OpenDAWHeaders).then(response => response.json())))
         if (result.status === "rejected") {
             console.warn("OpenPresetAPI.list fetch failed", url, result.error)
             return []

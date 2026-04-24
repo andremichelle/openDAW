@@ -103,7 +103,8 @@ export const PresetBrowser = ({lifecycle, service}: Construct) => {
                 compoundLabel: "Racks",
                 compoundCategory: "audio-unit",
                 stockDevices: Object.entries(InstrumentFactories.Named).map(([key, factory]) => ({
-                    key, name: factory.defaultName, icon: factory.defaultIcon, brief: factory.briefDescription
+                    key, name: factory.defaultName, icon: factory.defaultIcon, brief: factory.briefDescription,
+                    presetless: key === "Tape"
                 }))
             }),
             renderCategory({
@@ -198,17 +199,19 @@ const renderCategory = (args: RenderCategoryArgs): HTMLElement => {
         ? categoryKey
         : null
     const renderDevice = (device: StockDeviceMeta): void => {
-        const devicePresets = allPresets
+        const devicePresets = device.presetless === true ? [] : allPresets
             .filter(entry => entry.category === categoryKey && deviceKeyOf(entry) === device.key)
             .filter(matches)
         if (query.length > 0) {
             const deviceMatchesQuery = device.name.toLowerCase().includes(query)
             if (!deviceMatchesQuery && devicePresets.length === 0) {return}
         }
-        const onDrop: Nullable<(effects: ReadonlyArray<IndexedBox>) => Promise<void>> = isDefined(dropKind)
-            ? effects => actions.saveAsSingleEffectPreset(dropKind, device.key, effects[0])
-            : null
+        const onDrop: Nullable<(effects: ReadonlyArray<IndexedBox>) => Promise<void>> =
+            isDefined(dropKind) && device.presetless !== true
+                ? effects => actions.saveAsSingleEffectPreset(dropKind, device.key, effects[0])
+                : null
         const instrumentKey: Nullable<InstrumentFactories.Keys> = categoryKey === "instrument"
+        && device.presetless !== true
         && Object.hasOwn(InstrumentFactories.Named, device.key)
             ? device.key as InstrumentFactories.Keys
             : null
