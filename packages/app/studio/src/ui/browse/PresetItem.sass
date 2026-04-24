@@ -10,9 +10,9 @@ component
   color: var(--color-dark)
 
   &.accept-drop
-    background-color: rgba(white, 0.05)
-    outline: 1px dashed var(--color)
-    outline-offset: -1px
+    background-color: rgba(white, 0.04)
+    outline: 0.5px dashed var(--color)
+    outline-offset: -0.5px
 
   > div.marker
     grid-column: 2
@@ -22,7 +22,7 @@ component
     align-items: center
     justify-content: center
     color: var(--color)
-    opacity: mixins.$library-marker-opacity
+    scale: 95%
 
     > svg
       width: 16px !important
