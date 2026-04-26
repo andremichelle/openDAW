@@ -21,3 +21,4 @@ lerna-debug.log
 /packages/app/soundfont/public/soundfonts/
 /packages/studio/scripting/src/api.declaration.d.ts
 tsconfig.tsbuildinfo
+/packages/server/presets/upload.php
