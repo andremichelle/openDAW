@@ -134,7 +134,7 @@ export class CaptureMidi extends Capture<CaptureMidiBox> {
             if (MidiDevices.canRequestMidiAccess()) {
                 await MidiDevices.requestPermission()
             } else {
-                return Errors.warn("MIDI not available")
+                console.warn("MIDI not available")
             }
         }
         const inputs = MidiDevices.inputDevices()
