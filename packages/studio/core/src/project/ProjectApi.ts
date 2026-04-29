@@ -253,14 +253,16 @@ export class ProjectApi {
         return AudioWavExport.toFile(owner, suggestedName)
     }
 
-    quantiseNotes(collection: NoteEventCollectionBox,
+    quantiseNotes(notes: NoteEventCollectionBox | ReadonlyArray<NoteEventBox>,
                   {positionQuantisation, durationQuantisation}: QuantiseNotesOptions): void {
         if (isAbsent(positionQuantisation) && isAbsent(durationQuantisation)) {
             console.warn("Nothing to quantise: both quantisation parameters are absent")
             return
         }
-        collection.events.pointerHub.incoming().forEach(({box}) => {
-            const event = asInstanceOf(box, NoteEventBox)
+        const array = notes instanceof NoteEventCollectionBox
+            ? notes.events.pointerHub.incoming().map(({box}) => asInstanceOf(box, NoteEventBox))
+            : notes
+        array.forEach(event => {
             let position = event.position.getValue()
             let duration = event.duration.getValue()
             if (isDefined(positionQuantisation)) {

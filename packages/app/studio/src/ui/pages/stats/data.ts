@@ -70,12 +70,26 @@ const fetchJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
     return await response.json() as T
 }
 
+type RoomResultBreakdown = {
+    success?: number
+    sync_timeout?: number
+    socket_error?: number
+    abort?: number
+    unknown?: number
+}
+
 export const fetchRoomStats = async (): Promise<RoomStats> => {
-    const [count, duration] = await Promise.all([
-        fetchJson<Record<string, number>>("https://live.opendaw.studio/stats/rooms-count.json", {mode: "cors"}),
-        fetchJson<Record<string, number>>("https://live.opendaw.studio/stats/rooms-duration.json", {mode: "cors"})
+    const [results, duration] = await Promise.all([
+        fetchJson<Record<string, RoomResultBreakdown>>(
+            "https://api.opendaw.studio/rooms/rooms-result.json", {mode: "cors"}).catch(() => ({})),
+        fetchJson<Record<string, number>>(
+            "https://api.opendaw.studio/rooms/rooms-duration.json", {mode: "cors"}).catch(() => ({}))
     ])
-    return {count: sortByDate(count), duration: sortByDate(duration)}
+    const counts: Record<string, number> = {}
+    for (const [date, breakdown] of Object.entries(results)) {
+        counts[date] = breakdown.success ?? 0
+    }
+    return {count: sortByDate(counts), duration: sortByDate(duration)}
 }
 
 export const fetchUserStats = async (): Promise<DailySeries> => {

@@ -9,7 +9,7 @@ type ChartProps = {
     series: ObservableValue<DailySeries>
     color?: string
     showAxis?: boolean
-    showAverage?: boolean
+    showTrend?: boolean
 }
 
 const DEFAULT_PADDING = {top: 16, right: 16, bottom: 28, left: 40}
@@ -29,7 +29,7 @@ const buildAreaPath = (points: ReadonlyArray<readonly [number, number]>, baseY: 
 const buildLinePath = (points: ReadonlyArray<readonly [number, number]>): string =>
     points.map(([x, y], index) => `${index === 0 ? "M" : "L"} ${x} ${y}`).join(" ")
 
-export const LineChart = ({lifecycle, series, color, showAxis = true, showAverage = true}: ChartProps) => {
+export const LineChart = ({lifecycle, series, color, showAxis = true, showTrend = true}: ChartProps) => {
     const accent = color ?? Colors.blue.toString()
     const padding = showAxis ? DEFAULT_PADDING : COMPACT_PADDING
     return (
@@ -91,14 +91,26 @@ export const LineChart = ({lifecycle, series, color, showAxis = true, showAverag
                                   fill={Colors.shadow.toString()} font-size="10"
                                   font-family="sans-serif" text-anchor="middle">{formatAxisLabel(label)}</text>
                         ))}
-                        {showAverage && values.length > 1 && (() => {
-                            const total = values.reduce((sum, value) => sum + value, 0)
-                            const avg = total / values.length
-                            const y = padding.top + chartHeight - ((avg - minValue) / valueRange) * chartHeight
+                        {showTrend && values.length > 1 && (() => {
+                            const count = values.length
+                            const sumX = (count - 1) * count / 2
+                            const sumY = values.reduce((sum, value) => sum + value, 0)
+                            const sumXY = values.reduce((sum, value, index) => sum + index * value, 0)
+                            const sumXX = values.reduce((sum, _, index) => sum + index * index, 0)
+                            const denominator = count * sumXX - sumX * sumX
+                            if (denominator === 0) return null
+                            const slope = (count * sumXY - sumX * sumY) / denominator
+                            const intercept = (sumY - slope * sumX) / count
+                            const trendStart = intercept
+                            const trendEnd = slope * (count - 1) + intercept
+                            const [firstX] = points[0]
+                            const [lastX] = points[points.length - 1]
+                            const yStart = padding.top + chartHeight - ((trendStart - minValue) / valueRange) * chartHeight
+                            const yEnd = padding.top + chartHeight - ((trendEnd - minValue) / valueRange) * chartHeight
                             return (
-                                <line x1={padding.left} y1={y} x2={width - padding.right} y2={y}
-                                      stroke={Colors.orange.toString()} stroke-width="1"
-                                      stroke-dasharray="4 3" stroke-opacity="0.7"/>
+                                <line x1={firstX} y1={yStart} x2={lastX} y2={yEnd}
+                                      stroke={Colors.blue.toString()} stroke-width="1"
+                                      stroke-dasharray="4 3" stroke-opacity="0.8"/>
                             )
                         })()}
                     </svg>

@@ -8,42 +8,7 @@ import * as map from 'lib0/map'
 
 import * as eventloop from 'lib0/eventloop'
 
-import fs from 'fs'
-import path from 'path'
-import {fileURLToPath} from 'url'
-
 import {callbackHandler, isCallbackSet} from './callback.js'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-export const dataDir = path.join(__dirname, 'data')
-
-/** @type {Map<string, {origin: string, started: number}>} */
-const roomSessions = new Map()
-
-const statsAllowedOrigins = [
-    'https://opendaw.studio',
-    'https://dev.opendaw.studio',
-    'https://localhost:8080'
-]
-
-/**
- * @param {string} day
- * @param {number} durationMinutes
- */
-const appendToStats = (day, durationMinutes) => {
-    try {
-        const countFile = path.join(dataDir, 'rooms-count.json')
-        const durationFile = path.join(dataDir, 'rooms-duration.json')
-        const counts = JSON.parse(fs.readFileSync(countFile, 'utf8'))
-        counts[day] = (counts[day] || 0) + 1
-        fs.writeFileSync(countFile, JSON.stringify(counts))
-        const durations = JSON.parse(fs.readFileSync(durationFile, 'utf8'))
-        durations[day] = (durations[day] || 0) + durationMinutes
-        fs.writeFileSync(durationFile, JSON.stringify(durations))
-    } catch (err) {
-        console.error('Failed to write room stats:', err)
-    }
-}
 
 export const ROOM_CLEANUP_DELAY_MS = 60_000
 
@@ -253,13 +218,6 @@ const closeConn = (doc, conn) => {
                     } else {
                         doc.destroy()
                     }
-                    const session = roomSessions.get(doc.name)
-                    if (session) {
-                        const durationMinutes = Math.max(1, Math.round((Date.now() - session.started) / 60_000))
-                        const day = new Date(session.started).toISOString().slice(0, 10)
-                        appendToStats(day, durationMinutes)
-                        roomSessions.delete(doc.name)
-                    }
                     docs.delete(doc.name)
                 }
             }, ROOM_CLEANUP_DELAY_MS)
@@ -312,12 +270,7 @@ export const setupWSConnection = (conn, req, {docName = (req.url || '').slice(1)
         return
     }
     conn.binaryType = 'arraybuffer'
-    // get doc, initialize if it does not exist yet
-    const isNewRoom = !docs.has(docName)
     const doc = getYDoc(docName, gc)
-    if (isNewRoom && origin && statsAllowedOrigins.includes(origin)) {
-        roomSessions.set(docName, {origin, started: Date.now()})
-    }
     doc.conns.set(conn, new Set())
     if (docCleanupTimers.has(docName)) {
         console.log(`Cancelled cleanup for room: ${docName} (user reconnected)`)
