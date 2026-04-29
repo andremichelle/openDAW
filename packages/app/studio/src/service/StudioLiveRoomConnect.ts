@@ -1,13 +1,21 @@
-import {Optional, RuntimeNotifier, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
+import {Errors, Optional, RuntimeNotifier, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
 import {Promises, Wait} from "@opendaw/lib-runtime"
 import {SampleStorage, SoundfontStorage, Workers, YService} from "@opendaw/studio-core"
 import {P2PSession, type SignalingSocket} from "@opendaw/studio-p2p"
 import {StudioService} from "@/service/StudioService"
 import {showConnectRoomDialog} from "@/service/StudioLiveRoomDialog.tsx"
 import {RoomAwareness, writeIdentity} from "@/service/RoomAwareness"
+import {newRoomSessionId, reportRoomResult, RoomResultStatus, startRoomDurationHeartbeat} from "@/service/RoomStatsReporter"
 import {ChatService} from "@/chat/ChatService"
 import {Events} from "@opendaw/lib-dom"
 import {RouteLocation} from "@opendaw/lib-jsx"
+
+const classifyConnectError = (error: unknown): RoomResultStatus => {
+    if (Errors.isAbort(error)) {return "abort"}
+    const message = error instanceof Error ? error.message : String(error)
+    if (message.includes("Timeout")) {return "sync_timeout"}
+    return "unknown"
+}
 
 export const connectRoom = async (service: StudioService, prefillRoomName?: Optional<string>): Promise<void> => {
     const result = await showConnectRoomDialog(prefillRoomName).catch(() => null)
@@ -18,10 +26,15 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
         headline: "Connecting to Room...",
         message: "Please wait while we connect to the room..."
     })
+    const sessionId = newRoomSessionId()
     const {status, value: roomResult, error} = await Promises.tryCatch(
         YService.getOrCreateRoom(service.projectProfileService.getValue()
             .map(profile => profile.project), service, roomName))
     if (status === "resolved") {
+        reportRoomResult(sessionId, "success")
+        const heartbeat = startRoomDurationHeartbeat(sessionId)
+        const pagehideHandler = () => heartbeat.finalize()
+        window.addEventListener("pagehide", pagehideHandler)
         const {project, provider} = roomResult
         const p2pSession = new P2PSession({
             chainedSampleProvider: service.chainedSampleProvider,
@@ -45,6 +58,8 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
         project.own(p2pSession)
         const terminator = new Terminator()
         project.own(terminator)
+        terminator.own({terminate: () => heartbeat.finalize()})
+        terminator.own({terminate: () => window.removeEventListener("pagehide", pagehideHandler)})
         const roomAwareness = new RoomAwareness(provider.awareness, roomName, userName, userColor)
         terminator.own(roomAwareness)
         terminator.own(Events.subscribe(window, "pointermove", (event: PointerEvent) => {
@@ -78,6 +93,7 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
         terminator.own({terminate: () => service.chatService.clear()})
         await Wait.timeSpan(TimeSpan.seconds(1))
     } else {
+        reportRoomResult(sessionId, classifyConnectError(error))
         await RuntimeNotifier.info({
             headline: "Failed Connecting Room",
             message: String(error)

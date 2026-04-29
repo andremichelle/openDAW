@@ -105,7 +105,7 @@ const StatsBody = ({lifecycle, data, tiles}: StatsBodyProps) => {
             <div className="grid">
                 <div className="span-12">
                     <Card title="Daily Unique Visitors" accent={<span>unique visitors per day</span>} className="hero">
-                        <BarChart lifecycle={lifecycle} series={visitorsSeries} color={Colors.orange.toString()}/>
+                        <LineChart lifecycle={lifecycle} series={visitorsSeries} color={Colors.orange.toString()}/>
                         <RangeControl lifecycle={lifecycle} dates={visitorDates} range={visitorRange}/>
                     </Card>
                 </div>

@@ -92,6 +92,7 @@ export type NoteRegionParams = {
 export type QuantiseNotesOptions = {
     positionQuantisation?: ppqn
     durationQuantisation?: ppqn
+    offset?: ppqn
 }
 
 // noinspection JSUnusedGlobalSymbols
@@ -253,18 +254,21 @@ export class ProjectApi {
         return AudioWavExport.toFile(owner, suggestedName)
     }
 
-    quantiseNotes(collection: NoteEventCollectionBox,
-                  {positionQuantisation, durationQuantisation}: QuantiseNotesOptions): void {
+    quantiseNotes(notes: NoteEventCollectionBox | ReadonlyArray<NoteEventBox>,
+                  {positionQuantisation, durationQuantisation, offset}: QuantiseNotesOptions): void {
         if (isAbsent(positionQuantisation) && isAbsent(durationQuantisation)) {
             console.warn("Nothing to quantise: both quantisation parameters are absent")
             return
         }
-        collection.events.pointerHub.incoming().forEach(({box}) => {
-            const event = asInstanceOf(box, NoteEventBox)
+        const array = notes instanceof NoteEventCollectionBox
+            ? notes.events.pointerHub.incoming().map(({box}) => asInstanceOf(box, NoteEventBox))
+            : notes
+        offset ??= 0.0
+        array.forEach(event => {
             let position = event.position.getValue()
             let duration = event.duration.getValue()
             if (isDefined(positionQuantisation)) {
-                position = quantizeRound(position, positionQuantisation)
+                position = quantizeRound(position + offset, positionQuantisation) - offset
             }
             if (isDefined(durationQuantisation)) {
                 duration = Math.max(quantizeRound(duration, durationQuantisation), durationQuantisation)

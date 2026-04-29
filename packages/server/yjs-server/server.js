@@ -3,9 +3,8 @@
 import {WebSocketServer} from "ws"
 import https from "https"
 import fs from "fs"
-import path from "path"
 import * as number from "lib0/number"
-import {setupWSConnection, ROOM_CLEANUP_DELAY_MS, dataDir} from "./utils.js"
+import {setupWSConnection, ROOM_CLEANUP_DELAY_MS} from "./utils.js"
 import * as map from 'lib0/map'
 
 const host = process.env.HOST || "0.0.0.0"
@@ -30,18 +29,6 @@ const server = https.createServer(certConfig, (req, res) => {
     const origin = req.headers.origin
     if (origin && corsAllowedOrigins.includes(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin)
-    }
-    if (req.url === '/stats/rooms-count.json' || req.url === '/stats/rooms-duration.json') {
-        const filename = req.url === '/stats/rooms-count.json' ? 'rooms-count.json' : 'rooms-duration.json'
-        try {
-            const content = fs.readFileSync(path.join(dataDir, filename), 'utf8')
-            res.writeHead(200, {"Content-Type": "application/json"})
-            res.end(content)
-        } catch (err) {
-            res.writeHead(200, {"Content-Type": "application/json"})
-            res.end('{}')
-        }
-        return
     }
     res.writeHead(200, {"Content-Type": "text/plain"})
     res.end("okay")
