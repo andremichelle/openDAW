@@ -81,9 +81,9 @@ type RoomResultBreakdown = {
 export const fetchRoomStats = async (): Promise<RoomStats> => {
     const [results, duration] = await Promise.all([
         fetchJson<Record<string, RoomResultBreakdown>>(
-            "https://api.opendaw.studio/rooms/rooms-result.json", {mode: "cors"}).catch(() => ({})),
+            "https://api.opendaw.studio/rooms/rooms-result.json", {mode: "cors", cache: "no-store"}).catch(() => ({})),
         fetchJson<Record<string, number>>(
-            "https://api.opendaw.studio/rooms/rooms-duration.json", {mode: "cors"}).catch(() => ({}))
+            "https://api.opendaw.studio/rooms/rooms-duration.json", {mode: "cors", cache: "no-store"}).catch(() => ({}))
     ])
     const counts: Record<string, number> = {}
     for (const [date, breakdown] of Object.entries(results)) {
