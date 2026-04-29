@@ -24,15 +24,25 @@ import {ControlType, MidiFile} from "@opendaw/lib-midi"
 
 export namespace MidiImport {
     export const toTracks = async (project: Project, audioUnitBoxAdapter: AudioUnitBoxAdapter) => {
-        const fileResult = await Promises.tryCatch(Files.open().then(([file]) => file.arrayBuffer()))
-        if (fileResult.status === "rejected") {
-            if (!Errors.isAbort(fileResult.error)) {throw fileResult.error}
+        const browseResult = await Promises.tryCatch(Files.open())
+        if (browseResult.status === "rejected") {
+            if (Errors.isAbort(browseResult.error) || Errors.isNotAllowed(browseResult.error)) {return}
+            await Dialogs.info({headline: "File Access Error", message: String(browseResult.error)})
+            return
+        }
+        const [file] = browseResult.value
+        const readResult = await Promises.tryCatch(file.arrayBuffer())
+        if (readResult.status === "rejected") {
+            await Dialogs.info({
+                headline: "File Read Error",
+                message: `'${file.name}' could not be read. The file may be on an inaccessible location.`
+            })
             return
         }
         const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({headline: "Import Midi", progress})
         await Wait.frame()
-        const formatResult = tryCatch(() => MidiFile.decoder(fileResult.value).decode())
+        const formatResult = tryCatch(() => MidiFile.decoder(readResult.value).decode())
         if (formatResult.status === "failure") {
             dialog.terminate()
             Dialogs.info({message: String(formatResult.error)}).then()
