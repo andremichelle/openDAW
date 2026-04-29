@@ -87,13 +87,6 @@ export class CaptureMidi extends Capture<CaptureMidiBox> {
     }
 
     async prepareRecording(): Promise<void> {
-        if (MidiDevices.get().isEmpty()) {
-            if (MidiDevices.canRequestMidiAccess()) {
-                await MidiDevices.requestPermission()
-            } else {
-                console.warn("MIDI not available")
-            }
-        }
         const inputs = MidiDevices.inputDevices()
         if (inputs.length === 0) {return}
         const option = this.deviceId.getValue()
@@ -110,7 +103,6 @@ export class CaptureMidi extends Capture<CaptureMidiBox> {
     }
 
     async #updateStream() {
-        if (MidiDevices.get().isEmpty() && MidiDevices.canRequestMidiAccess()) {await MidiDevices.requestPermission()}
         const inputs = MidiDevices.inputDevices()
         const explicit = this.deviceId.getValue().match({
             none: () => inputs,

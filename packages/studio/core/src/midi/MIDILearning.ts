@@ -1,7 +1,6 @@
 import {
     asDefined,
     asInstanceOf,
-    EmptyExec,
     Errors,
     isNotNull,
     Nullable,
@@ -53,9 +52,6 @@ export class MIDILearning implements Terminable {
         this.#optMIDIContollers = Option.wrap(field)
         this.#optFieldSubscription = Option.wrap(field.pointerHub.catchupAndSubscribe({
             onAdded: ({box: anyBox}) => {
-                if (MidiDevices.get().isEmpty() && MidiDevices.canRequestMidiAccess()) {
-                    MidiDevices.requestPermission().then(EmptyExec, EmptyExec)
-                }
                 const box = asInstanceOf(anyBox, MIDIControllerBox)
                 const {subscription, handleEvent} = this.#registerMIDIControllerBox(box)
                 this.#connections.add({box, subscription, handleEvent})
