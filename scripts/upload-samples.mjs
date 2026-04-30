@@ -1,5 +1,5 @@
 import {readFileSync, readdirSync, statSync} from "node:fs"
-import {basename, extname, join, resolve} from "node:path"
+import {basename, extname, join, relative, resolve} from "node:path"
 
 const API_URL = "https://api.opendaw.studio/samples/upload.php"
 const USERNAME = "openDAW"
@@ -114,9 +114,22 @@ if (!statSync(dirAbs).isDirectory()) {
 }
 
 const nameMap = namesPath ? JSON.parse(readFileSync(resolve(namesPath), "utf8")) : {}
-const files = readdirSync(dirAbs).filter(entry => extname(entry).toLowerCase() === ".wav")
+
+function walkWavs(dir) {
+    const out = []
+    for (const entry of readdirSync(dir)) {
+        if (entry.startsWith(".")) continue
+        const full = join(dir, entry)
+        const st = statSync(full)
+        if (st.isDirectory()) out.push(...walkWavs(full))
+        else if (st.isFile() && extname(entry).toLowerCase() === ".wav") out.push(full)
+    }
+    return out
+}
+
+const files = walkWavs(dirAbs).sort()
 if (files.length === 0) {
-    console.error(`No .wav files found in ${dirAbs}`)
+    console.error(`No .wav files found under ${dirAbs}`)
     process.exit(1)
 }
 
@@ -124,9 +137,9 @@ console.log(`Uploading ${files.length} sample(s) from ${dirAbs}  bpm=${bpm}  ori
 
 let uploaded = 0
 let failed = 0
-for (const file of files) {
-    const filePath = join(dirAbs, file)
-    const name = nameMap[file] ?? basename(file, extname(file))
+for (const filePath of files) {
+    const rel = relative(dirAbs, filePath)
+    const name = nameMap[rel] ?? nameMap[basename(filePath)] ?? basename(filePath, extname(filePath))
     try {
         const result = await uploadSample({filePath, name, bpm, origin, accessCode, dryRun})
         if (result.ok) {
@@ -134,7 +147,7 @@ for (const file of files) {
             uploaded++
         }
     } catch (error) {
-        console.error(`  ✗ ${file}: ${error.message}`)
+        console.error(`  ✗ ${rel}: ${error.message}`)
         failed++
     }
 }
