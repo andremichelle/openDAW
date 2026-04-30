@@ -233,26 +233,68 @@ export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}
         results.length = 0
         updateTable()
         statusEl.textContent = "Starting memory benchmarks..."
-        await runMemoryBenchmarks(
-            progress => {
-                statusEl.textContent = `[memory ${progress.index + 1}/${progress.total}] ${progress.current}...`
-            },
-            memoryResult => {
-                results.push(memoryToBenchmark(memoryResult))
-                updateTable()
-            }
-        )
+        try {
+            await runMemoryBenchmarks(
+                progress => {
+                    statusEl.textContent = `[memory ${progress.index + 1}/${progress.total}] ${progress.current}...`
+                },
+                memoryResult => {
+                    results.push(memoryToBenchmark(memoryResult))
+                    updateTable()
+                },
+                workerError => {
+                    results.push({
+                        category: "Memory",
+                        name: "Memory worker",
+                        renderMs: 0,
+                        marginalMs: 0,
+                        perQuantumUs: 0,
+                        durationSeconds: 0,
+                        error: workerError.message
+                    })
+                    updateTable()
+                }
+            )
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error)
+            console.warn("Memory benchmark failed:", message)
+            results.push({
+                category: "Memory",
+                name: "Memory benchmark",
+                renderMs: 0,
+                marginalMs: 0,
+                perQuantumUs: 0,
+                durationSeconds: 0,
+                error: message
+            })
+            updateTable()
+        }
         statusEl.textContent = "Starting device benchmarks..."
-        await runAllBenchmarks(
-            service,
-            progress => {
-                statusEl.textContent = `[${progress.index + 1}/${progress.total}] ${progress.current}...`
-            },
-            result => {
-                results.push(result)
-                updateTable()
-            }
-        )
+        try {
+            await runAllBenchmarks(
+                service,
+                progress => {
+                    statusEl.textContent = `[${progress.index + 1}/${progress.total}] ${progress.current}...`
+                },
+                result => {
+                    results.push(result)
+                    updateTable()
+                }
+            )
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error)
+            console.warn("Device benchmarks failed:", message)
+            results.push({
+                category: "Baseline",
+                name: "Device benchmarks",
+                renderMs: 0,
+                marginalMs: 0,
+                perQuantumUs: 0,
+                durationSeconds: 0,
+                error: message
+            })
+            updateTable()
+        }
         setRunning(false)
         statusEl.textContent = `Done. ${results.length} benchmarks completed.`
     }
