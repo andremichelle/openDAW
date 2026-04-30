@@ -47,7 +47,7 @@ export class NoteEventInstrument implements Terminable {
         this.#buffer.length = 0
     }
 
-    clear(): void {}
+    clear(): void {this.#broadcaster.clear()}
 
     terminate(): void {this.#terminator.terminate()}
 
