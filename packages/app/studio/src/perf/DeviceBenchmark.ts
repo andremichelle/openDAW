@@ -307,7 +307,20 @@ const injectSample = (service: StudioService, sampleData: AudioData): void => {
     service.sampleManager.record(loader)
 }
 
-type RenderResult = { elapsed: number, audio: Float32Array[] }
+type RenderResult = { elapsed: number, audio: Float32Array[], peak: number }
+
+const SILENCE_THRESHOLD = 1e-6
+
+const computePeak = (audio: ReadonlyArray<Float32Array>): number => {
+    let peak = 0
+    for (const channel of audio) {
+        for (let i = 0; i < channel.length; i++) {
+            const value = Math.abs(channel[i])
+            if (value > peak) {peak = value}
+        }
+    }
+    return peak
+}
 
 const renderAndMeasure = async (service: StudioService, skeleton: ProjectSkeleton,
                                 sampleData: AudioData | null): Promise<RenderResult> => {
@@ -324,7 +337,7 @@ const renderAndMeasure = async (service: StudioService, skeleton: ProjectSkeleto
     renderer.stop()
     renderer.terminate()
     project.terminate()
-    return {elapsed, audio}
+    return {elapsed, audio, peak: computePeak(audio)}
 }
 
 export type BenchmarkProgress = {
@@ -353,10 +366,14 @@ export const runAllBenchmarks = async (
     const totalQuanta = RENDER_SECONDS * SAMPLE_RATE / 128
     let step = 0
     const emitResult = (result: RenderResult | string, category: BenchmarkCategory,
-                        name: string, baselineMs: number) => {
+                        name: string, baselineMs: number, expectAudio: boolean) => {
         if (typeof result === "string") {
             onResult({category, name, renderMs: 0, marginalMs: 0, perQuantumUs: 0,
                 durationSeconds: RENDER_SECONDS, error: result})
+        } else if (expectAudio && result.peak < SILENCE_THRESHOLD) {
+            onResult({category, name, renderMs: result.elapsed, marginalMs: 0, perQuantumUs: 0,
+                durationSeconds: RENDER_SECONDS,
+                error: `silent — no audio produced (peak ${result.peak.toExponential(2)})`})
         } else {
             const marginalMs = result.elapsed - baselineMs
             onResult({category, name, renderMs: result.elapsed, marginalMs,
@@ -372,23 +389,23 @@ export const runAllBenchmarks = async (
     const emptySkeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
     const emptyResult = await tryRender(service, emptySkeleton, null)
     const emptyMs = typeof emptyResult === "string" ? 0 : emptyResult.elapsed
-    emitResult(emptyResult, "Baseline", "Empty engine", emptyMs)
+    emitResult(emptyResult, "Baseline", "Empty engine", emptyMs, false)
     step++
     onProgress({current: "Tape only", index: step, total: totalDevices})
     const baselineResult = await tryRender(service, createTapeSkeleton(null), sampleData)
     const baselineMs = typeof baselineResult === "string" ? 0 : baselineResult.elapsed
-    emitResult(baselineResult, "Baseline", "Tape only", emptyMs)
+    emitResult(baselineResult, "Baseline", "Tape only", emptyMs, true)
     step++
     for (const effect of audioEffects) {
         onProgress({current: effect.name, index: step, total: totalDevices})
         emitResult(await tryRender(service, createTapeSkeleton(effect), sampleData),
-            "Audio Effect", effect.name, baselineMs)
+            "Audio Effect", effect.name, baselineMs, true)
         step++
     }
     for (const instrument of instruments) {
         onProgress({current: instrument.name, index: step, total: totalDevices})
         emitResult(await tryRender(service, createInstrumentSkeleton(instrument),
-            instrument.needsSample ? sampleData : null), "Instrument", instrument.name, baselineMs)
+            instrument.needsSample ? sampleData : null), "Instrument", instrument.name, baselineMs, true)
         step++
     }
     await service.audioContext.resume()
