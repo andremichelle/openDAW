@@ -27,12 +27,12 @@ export type MemoryResult = {
 export const MEMORY_TESTS: ReadonlyArray<MemoryTest> = [
     {id: "seq-1-ab",    label: "Seq read 1 MB AB",    backing: "AB",  sizeMB: 1,  pattern: "seq"},
     {id: "seq-1-sab",   label: "Seq read 1 MB SAB",   backing: "SAB", sizeMB: 1,  pattern: "seq"},
-    {id: "seq-64-ab",   label: "Seq read 64 MB AB",   backing: "AB",  sizeMB: 64, pattern: "seq"},
-    {id: "seq-64-sab",  label: "Seq read 64 MB SAB",  backing: "SAB", sizeMB: 64, pattern: "seq"},
-    {id: "rnd-64-ab",   label: "Random 64 MB AB",     backing: "AB",  sizeMB: 64, pattern: "random"},
-    {id: "rnd-64-sab",  label: "Random 64 MB SAB",    backing: "SAB", sizeMB: 64, pattern: "random"},
-    {id: "ipl-64-ab",   label: "Interp 1.5x 64 MB AB",  backing: "AB",  sizeMB: 64, pattern: "interp"},
-    {id: "ipl-64-sab",  label: "Interp 1.5x 64 MB SAB", backing: "SAB", sizeMB: 64, pattern: "interp"}
+    {id: "seq-32-ab",   label: "Seq read 32 MB AB",   backing: "AB",  sizeMB: 32, pattern: "seq"},
+    {id: "seq-32-sab",  label: "Seq read 32 MB SAB",  backing: "SAB", sizeMB: 32, pattern: "seq"},
+    {id: "rnd-32-ab",   label: "Random 32 MB AB",     backing: "AB",  sizeMB: 32, pattern: "random"},
+    {id: "rnd-32-sab",  label: "Random 32 MB SAB",    backing: "SAB", sizeMB: 32, pattern: "random"},
+    {id: "ipl-32-ab",   label: "Interp 1.5x 32 MB AB",  backing: "AB",  sizeMB: 32, pattern: "interp"},
+    {id: "ipl-32-sab",  label: "Interp 1.5x 32 MB SAB", backing: "SAB", sizeMB: 32, pattern: "interp"}
 ]
 
 const WARMUP_RUNS = 5

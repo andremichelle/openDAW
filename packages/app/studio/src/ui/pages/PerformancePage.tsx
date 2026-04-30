@@ -232,17 +232,6 @@ export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}
         setRunning(true)
         results.length = 0
         updateTable()
-        statusEl.textContent = "Starting benchmarks..."
-        await runAllBenchmarks(
-            service,
-            progress => {
-                statusEl.textContent = `[${progress.index + 1}/${progress.total}] ${progress.current}...`
-            },
-            result => {
-                results.push(result)
-                updateTable()
-            }
-        )
         statusEl.textContent = "Starting memory benchmarks..."
         await runMemoryBenchmarks(
             progress => {
@@ -250,6 +239,17 @@ export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}
             },
             memoryResult => {
                 results.push(memoryToBenchmark(memoryResult))
+                updateTable()
+            }
+        )
+        statusEl.textContent = "Starting device benchmarks..."
+        await runAllBenchmarks(
+            service,
+            progress => {
+                statusEl.textContent = `[${progress.index + 1}/${progress.total}] ${progress.current}...`
+            },
+            result => {
+                results.push(result)
                 updateTable()
             }
         )
