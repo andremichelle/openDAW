@@ -264,8 +264,9 @@ export class OfflineEngineRenderer {
     get numberOfChannels(): int {return this.#numberOfChannels}
     get totalFrames(): int {return this.#totalFrames}
 
-    play(): void {
+    async play(): Promise<void> {
         this.#engineCommands.play()
+        await this.#engineCommands.queryLoadingComplete()
     }
 
     stop(): void {
@@ -320,7 +321,7 @@ export class OfflineEngineRenderer {
         while (!await this.#engineCommands.queryLoadingComplete()) {
             await Wait.timeSpan(TimeSpan.millis(100))
         }
-        this.play()
+        await this.play()
         this.#protocol.render(config).then(channels => {
             polling.terminate()
             if (cancelled) {return}

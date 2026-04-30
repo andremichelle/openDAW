@@ -330,7 +330,7 @@ const renderAndMeasure = async (service: StudioService, skeleton: ProjectSkeleto
     const project = Project.fromSkeleton(service, skeleton, false)
     const renderer = await OfflineEngineRenderer.create(project, Option.None, SAMPLE_RATE)
     await renderer.waitForLoading()
-    renderer.play()
+    await renderer.play()
     const start = performance.now()
     const audio = await renderer.step(RENDER_SECONDS * SAMPLE_RATE)
     const elapsed = performance.now() - start
