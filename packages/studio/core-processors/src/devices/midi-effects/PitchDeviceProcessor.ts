@@ -1,4 +1,4 @@
-import {assert, int, Objects, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {assert, int, isDefined, Objects, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {NoteBroadcaster, PitchDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {Event, NoteEvent, ppqn} from "@opendaw/lib-dsp"
 import {EngineContext} from "../../EngineContext"
@@ -12,6 +12,7 @@ export class PitchDeviceProcessor extends EventProcessor implements MidiEffectPr
     readonly #adapter: PitchDeviceBoxAdapter
 
     readonly #noteBroadcaster: NoteBroadcaster
+    readonly #startShifts = new Map<int, int>()
     // TODO We do not need this system in midi-effects, but we cannot remove it without losing ui-updates
     readonly #octavesParameter: AutomatableParameter<int>
     readonly #semiTonesParameter: AutomatableParameter<int>
@@ -48,13 +49,17 @@ export class PitchDeviceProcessor extends EventProcessor implements MidiEffectPr
             if (NoteLifecycleEvent.isStart(event)) {
                 this.#noteBroadcaster.noteOn(event.pitch)
                 const {cent, octaves, semiTones} = this.#adapter.namedParameter
+                const shiftedPitch = event.pitch + octaves.valueAt(event.position) * 12 + semiTones.valueAt(event.position)
+                this.#startShifts.set(event.id, shiftedPitch)
                 yield Objects.overwrite(event, {
-                    pitch: event.pitch + octaves.valueAt(event.position) * 12 + semiTones.valueAt(event.position),
+                    pitch: shiftedPitch,
                     cent: event.cent + cent.valueAt(event.position)
                 })
             } else {
                 this.#noteBroadcaster.noteOff(event.pitch)
-                yield event
+                const shiftedPitch = this.#startShifts.get(event.id)
+                this.#startShifts.delete(event.id)
+                yield isDefined(shiftedPitch) ? Objects.overwrite(event, {pitch: shiftedPitch}) : event
             }
         }
     }
@@ -74,6 +79,7 @@ export class PitchDeviceProcessor extends EventProcessor implements MidiEffectPr
 
     reset(): void {
         this.eventInput.clear()
+        this.#startShifts.clear()
     }
 
     processEvents(_block: Block, _from: ppqn, _to: ppqn): void {}

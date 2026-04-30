@@ -30,7 +30,7 @@ export class NoteBroadcaster implements Terminable {
         }
     }
 
-    reset(): void {}
+    reset(): void {this.#bits.clear()}
     clear(): void {this.#bits.clear()}
     terminate(): void {this.#terminator.terminate()}
     toString(): string {return `{${this.constructor.name}}`}
