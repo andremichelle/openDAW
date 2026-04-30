@@ -137,6 +137,18 @@ Available colors: `blue`, `green`, `yellow`, `cream`, `orange`, `red`, `purple`,
 
 Parameters before any `@group` appear ungrouped.
 
+#### Prefix stripping
+
+When a parameter's name starts with the group's name (case-insensitive) followed by an uppercase letter, the group prefix is stripped from the displayed control label. The full parameter name is still used for automation, MIDI learn, and tooltips.
+
+```javascript
+// @group Filter blue
+// @param filterCutoff    1000  20  20000  exp  Hz   // shown as "Cutoff"
+// @param filterResonance 0.5                        // shown as "Resonance"
+```
+
+If the next character is lowercase or the parameter name does not start with the group name, the label is shown unchanged.
+
 ---
 
 ## 4. Keyboard Shortcuts

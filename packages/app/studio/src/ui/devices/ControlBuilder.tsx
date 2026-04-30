@@ -20,6 +20,7 @@ type Creation<T extends PrimitiveValues> = {
     color?: Color
     style?: Partial<CSSStyleDeclaration>
     disableAutomation?: boolean
+    label?: string
 }
 
 export namespace ControlBuilder {
@@ -34,7 +35,8 @@ export namespace ControlBuilder {
          anchor,
          color,
          style,
-         disableAutomation
+         disableAutomation,
+         label
      }: Creation<T>) => {
         const tracks = adapter.deviceHost().audioUnitBoxAdapter().tracks
         return (
@@ -45,7 +47,7 @@ export namespace ControlBuilder {
                                parameter={parameter}
                                disableAutomation={disableAutomation}>
                 <Column ems={LKR} color={color ?? Colors.cream} style={style}>
-                    <h5>{parameter.name}</h5>
+                    <h5>{label ?? parameter.name}</h5>
                     <ParameterLabelKnob lifecycle={lifecycle}
                                         editing={editing}
                                         parameter={parameter}

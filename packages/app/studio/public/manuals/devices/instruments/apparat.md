@@ -169,6 +169,18 @@ Available colors: `blue`, `green`, `yellow`, `cream`, `orange`, `red`, `purple`,
 
 Parameters and samples before any `@group` appear ungrouped.
 
+#### Prefix stripping
+
+When a parameter's name starts with the group's name (case-insensitive) followed by an uppercase letter, the group prefix is stripped from the displayed control label. The full parameter name is still used for automation, MIDI learn, and tooltips. Sample labels are not affected.
+
+```javascript
+// @group Envelope green
+// @param envelopeAttack  0.01  0.001  1.0  exp  s   // shown as "Attack"
+// @param envelopeRelease 0.5   0      5.0  exp  s   // shown as "Release"
+```
+
+If the next character is lowercase or the parameter name does not start with the group name, the label is shown unchanged.
+
 ---
 
 ## 5. Keyboard Shortcuts
