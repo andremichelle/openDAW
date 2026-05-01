@@ -13,6 +13,7 @@ export enum IconSymbol {
     Browse,
     Bug,
     Capture,
+    Chain,
     ChatEmpty,
     ChatMessage,
     Copy,

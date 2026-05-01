@@ -1,9 +1,7 @@
 import css from "./PresetBrowser.sass?inline"
 import {
-    Arrays,
     Color,
     DefaultObservableValue,
-    isAbsent,
     isDefined,
     Lifecycle,
     Nullable,
@@ -112,7 +110,7 @@ export const PresetBrowser = ({lifecycle, service}: Construct) => {
                 label: "Audio Effects",
                 color: Colors.blue,
                 categoryKey: "audio-effect",
-                compoundLabel: "Stash",
+                compoundLabel: "Chains",
                 compoundCategory: "audio-effect-chain",
                 stockDevices: effectDevices(EffectFactories.AudioNamed)
             }),
@@ -121,7 +119,7 @@ export const PresetBrowser = ({lifecycle, service}: Construct) => {
                 label: "MIDI Effects",
                 color: Colors.orange,
                 categoryKey: "midi-effect",
-                compoundLabel: "Stash",
+                compoundLabel: "Chains",
                 compoundCategory: "midi-effect-chain",
                 stockDevices: effectDevices(EffectFactories.MidiNamed)
             })
@@ -223,10 +221,7 @@ const renderCategory = (args: RenderCategoryArgs): HTMLElement => {
             dropKind, onDrop, instrumentKey, expandKey: deviceExpandKey
         }))
     }
-    const [internalDevices, externalDevices] = Arrays.partition(stockDevices,
-        device => isAbsent(device.externalIconUrl),
-        device => isDefined(device.externalIconUrl))
-    internalDevices.forEach(renderDevice)
+    stockDevices.forEach(renderDevice)
     const compoundPresets = allPresets
         .filter(entry => entry.category === compoundCategory)
         .filter(matches)
@@ -236,7 +231,7 @@ const renderCategory = (args: RenderCategoryArgs): HTMLElement => {
             : compoundCategory === "midi-effect-chain"
                 ? PresetHeader.ChainKind.Midi
                 : null
-        const onStashDrop: Nullable<(effects: ReadonlyArray<IndexedBox>) => Promise<void>> =
+        const onChainDrop: Nullable<(effects: ReadonlyArray<IndexedBox>) => Promise<void>> =
             isDefined(dropKind) && isDefined(chainKind)
                 ? effects => actions.saveAsChainPreset(chainKind, effects)
                 : null
@@ -245,15 +240,13 @@ const renderCategory = (args: RenderCategoryArgs): HTMLElement => {
                 actions.handleRackDrop(instrumentUuid, effectUuids)
             : null
         const compoundExpandKey = `compound:${categoryKey}:${compoundCategory}`
-        section.appendChild(CompoundItem({
-            actions, expandedKeys, label: compoundLabel, presets: compoundPresets,
-            expandOnRender: searching && compoundPresets.length > 0,
-            dropKind, onDrop: onStashDrop, onRackDrop, expandKey: compoundExpandKey
-        }))
-    }
-    if (externalDevices.length > 0) {
+        const compoundIcon = compoundCategory === "audio-unit" ? IconSymbol.Cube : IconSymbol.Chain
         section.appendChild(<hr/>)
-        externalDevices.forEach(renderDevice)
+        section.appendChild(CompoundItem({
+            actions, expandedKeys, label: compoundLabel, icon: compoundIcon, presets: compoundPresets,
+            expandOnRender: searching && compoundPresets.length > 0,
+            dropKind, onDrop: onChainDrop, onRackDrop, expandKey: compoundExpandKey
+        }))
     }
     return section
 }

@@ -140,7 +140,7 @@ export class LibraryActions {
             ? this.#effectLabelFromBox(effects[0])
             : `${this.#effectLabelFromBox(effects[0])} chain`
         const dialog = await Promises.tryCatch(PresetDialogs.showSavePresetDialog({
-            headline: isAudio ? "Save Audio Stash" : "Save MIDI Stash",
+            headline: isAudio ? "Save Audio Effect Chain" : "Save MIDI Effect Chain",
             suggestedName: defaultName,
             suggestedDescription: "",
             showTimelineToggle: false
@@ -171,7 +171,9 @@ export class LibraryActions {
         await PresetStorage.save(meta, bytes)
     }
 
-    async saveAsInstrumentPreset(deviceKey: InstrumentFactories.Keys, sourceUuid: UUID.String): Promise<void> {
+    async saveAsInstrumentPreset(deviceKey: InstrumentFactories.Keys,
+                                 sourceUuid: UUID.String,
+                                 options?: {excludeEffects?: boolean}): Promise<void> {
         const audioUnitBox = this.#audioUnitBoxForInstrumentUuid(sourceUuid)
         if (isAbsent(audioUnitBox)) {return}
         const inputBox = audioUnitBox.input.pointerHub.incoming().at(0)?.box
@@ -199,8 +201,11 @@ export class LibraryActions {
             modified: now,
             hasTimeline: dialog.value.includeTimeline
         }
-        await PresetStorage.save(meta, PresetEncoder.encode(audioUnitBox,
-            {includeTimeline: dialog.value.includeTimeline}))
+        const encodeOptions: Parameters<typeof PresetEncoder.encode>[1] =
+            options?.excludeEffects === true
+                ? {includeTimeline: dialog.value.includeTimeline, excludeEffect: DeviceBoxUtils.isEffectDeviceBox}
+                : {includeTimeline: dialog.value.includeTimeline}
+        await PresetStorage.save(meta, PresetEncoder.encode(audioUnitBox, encodeOptions))
     }
 
     async handleRackDrop(instrumentUuid: UUID.String,

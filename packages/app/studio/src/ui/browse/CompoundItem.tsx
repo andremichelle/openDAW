@@ -37,6 +37,7 @@ type Construct = {
     actions: LibraryActions
     expandedKeys: Set<string>
     label: string
+    icon: IconSymbol
     presets: ReadonlyArray<PresetEntry>
     expandOnRender: boolean
     dropKind: Nullable<DeviceDropKind>
@@ -46,7 +47,7 @@ type Construct = {
 }
 
 export const CompoundItem = ({
-                                 actions, expandedKeys, label, presets, expandOnRender,
+                                 actions, expandedKeys, label, icon, presets, expandOnRender,
                                  dropKind, onDrop, onRackDrop, expandKey
                              }: Construct): HTMLElement => {
     const empty = presets.length === 0
@@ -55,7 +56,7 @@ export const CompoundItem = ({
         <div className="compound-header">
             <span className="triangle"/>
             <div className="icon">
-                <Icon symbol={IconSymbol.Cube}/>
+                <Icon symbol={icon}/>
             </div>
             <span className="name">{label}</span>
             <span className="brief"/>
