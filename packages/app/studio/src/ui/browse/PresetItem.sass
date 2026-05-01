@@ -69,3 +69,31 @@ component
         height: 12px !important
         min-width: 12px !important
         min-height: 12px !important
+
+    > span.menu
+      flex-shrink: 0
+      display: flex
+      align-items: center
+      justify-content: center
+      color: var(--color-dark)
+      opacity: mixins.$library-marker-opacity
+      margin-left: auto
+
+      > button
+        background: transparent
+        border: none
+        padding: 0
+        cursor: pointer
+        color: inherit
+        display: flex
+        align-items: center
+        justify-content: center
+
+      > button:hover
+        opacity: 1
+
+      svg
+        width: 12px !important
+        height: 12px !important
+        min-width: 12px !important
+        min-height: 12px !important

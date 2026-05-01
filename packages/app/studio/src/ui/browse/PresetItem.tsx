@@ -1,13 +1,14 @@
 import css from "./PresetItem.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
-import {StringComparator} from "@opendaw/lib-std"
-import {ContextMenu, MenuItem, PresetEntry} from "@opendaw/studio-core"
+import {isDefined, Nullable, StringComparator} from "@opendaw/lib-std"
+import {MenuItem, PresetEntry} from "@opendaw/studio-core"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {DragPreset} from "@/ui/AnyDragData"
 import {LibraryActions} from "@/ui/browse/LibraryActions"
 import {Icon} from "../components/Icon"
+import {MenuButton} from "@/ui/components/MenuButton"
 
 const className = Html.adoptStyleSheet(css, "PresetItem")
 
@@ -17,6 +18,19 @@ type Construct = {
 }
 
 export const PresetItem = ({entry, actions}: Construct): HTMLElement => {
+    const userMenuRoot: Nullable<MenuItem> = entry.source === "user"
+        ? MenuItem.root().setRuntimeChildrenProcedure(parent => {
+            const canUpload = new URLSearchParams(location.search).has("access-key")
+            parent.addMenuItem(
+                MenuItem.default({label: "Edit…"})
+                    .setTriggerProcedure(() => actions.editPreset(entry).catch(console.warn)),
+                ...(canUpload ? [MenuItem.default({label: "Upload"})
+                    .setTriggerProcedure(() => actions.uploadPreset(entry).catch(console.warn))] : []),
+                MenuItem.default({label: "Delete"})
+                    .setTriggerProcedure(() => actions.deletePreset(entry).catch(console.warn))
+            )
+        })
+        : null
     const item: HTMLElement = (
         <div className={className} title={entry.description}>
             <div className="marker">
@@ -29,6 +43,13 @@ export const PresetItem = ({entry, actions}: Construct): HTMLElement => {
                 {entry.hasTimeline === true && (
                     <span className="timeline-badge" title="Including timeline data">
                         <Icon symbol={IconSymbol.Timeline}/>
+                    </span>
+                )}
+                {isDefined(userMenuRoot) && (
+                    <span className="menu" onclick={(event: MouseEvent) => event.stopPropagation()}>
+                        <MenuButton root={userMenuRoot} appearance={{tooltip: "Preset actions"}}>
+                            <Icon symbol={IconSymbol.Menu}/>
+                        </MenuButton>
                     </span>
                 )}
             </div>
@@ -53,17 +74,6 @@ export const PresetItem = ({entry, actions}: Construct): HTMLElement => {
             },
             enter: allowDrop => item.classList.toggle("accept-drop", allowDrop),
             leave: () => item.classList.remove("accept-drop")
-        })
-        ContextMenu.subscribe(item, collector => {
-            const canUpload = new URLSearchParams(location.search).has("access-key")
-            collector.addItems(
-                MenuItem.default({label: "Edit…"})
-                    .setTriggerProcedure(() => actions.editPreset(entry).catch(console.warn)),
-                ...(canUpload ? [MenuItem.default({label: "Upload"})
-                    .setTriggerProcedure(() => actions.uploadPreset(entry).catch(console.warn))] : []),
-                MenuItem.default({label: "Delete"})
-                    .setTriggerProcedure(() => actions.deletePreset(entry).catch(console.warn))
-            )
         })
     }
     return item
