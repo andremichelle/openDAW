@@ -15,7 +15,7 @@ export namespace MonacoFactory {
 
     export const create = ({monaco, language, uri, initialCode, lifecycle}: Options) => {
         const container = document.createElement("div")
-        container.className = "monaco-editor"
+        container.className = "monaco-host"
         const modelUri = monaco.Uri.parse(uri)
         let model = monaco.editor.getModel(modelUri)
         if (isNull(model)) {

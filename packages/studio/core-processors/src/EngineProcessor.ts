@@ -17,7 +17,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {BoxGraph, createSyncTarget, DeleteUpdate, NewUpdate} from "@opendaw/lib-box"
-import {AudioFileBox, BoxIO, BoxVisitor} from "@opendaw/studio-boxes"
+import {AudioFileBox, BoxIO, BoxVisitor, SoundfontFileBox} from "@opendaw/studio-boxes"
 import {EngineContext} from "./EngineContext"
 import {TimeInfo} from "./TimeInfo"
 import {
@@ -228,7 +228,9 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
                     Promise.all(this.#pendingResources).then(() =>
                         this.#boxGraph.boxes().every(box => box.accept<BoxVisitor<boolean>>({
                             visitAudioFileBox: (box: AudioFileBox) =>
-                                this.#sampleManager.getOrCreate(box.address.uuid).data.nonEmpty() && box.pointerHub.nonEmpty()
+                                this.#sampleManager.getOrCreate(box.address.uuid).data.nonEmpty() && box.pointerHub.nonEmpty(),
+                            visitSoundfontFileBox: (box: SoundfontFileBox) =>
+                                this.#soundfontManager.getOrCreate(box.address.uuid).soundfont.nonEmpty() && box.pointerHub.nonEmpty()
                         }) ?? true)),
                 panic: () => this.#panic = true,
                 loadClickSound: (index: 0 | 1, data: AudioData): void => this.#metronome.loadClickSound(index, data),
