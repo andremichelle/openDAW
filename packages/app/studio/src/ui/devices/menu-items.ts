@@ -1,9 +1,8 @@
 import {DeviceHost, Devices, EffectDeviceBoxAdapter, InstrumentFactories, PresetHeader} from "@opendaw/studio-adapters"
 import {EffectFactories, MenuItem} from "@opendaw/studio-core"
-import {IndexedBox, PrimitiveField, PrimitiveValues, StringField} from "@opendaw/lib-box"
-import {Editing, EmptyExec, isDefined, panic, UUID} from "@opendaw/lib-std"
-import {Surface} from "@/ui/surface/Surface"
-import {FloatingTextInput} from "@/ui/components/FloatingTextInput"
+import {IndexedBox, PrimitiveField, PrimitiveValues} from "@opendaw/lib-box"
+import {Editing, isDefined, panic, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
 import {StudioService} from "@/service/StudioService"
 import {RouteLocation} from "@opendaw/lib-jsx"
 import {LibraryActions, LibraryEffectKind} from "@/ui/browse/LibraryActions"
@@ -20,11 +19,6 @@ export namespace MenuItems {
         }), {canProcessMidi: false, manualUrl: "manuals", name: "Unknown"})
         parent.addMenuItem(
             populateMenuItemToNavigateToManual(manualUrl, name),
-            MenuItem.default({
-                label: `Delete '${audioUnit.label}'`,
-                hidden: audioUnit.isOutput
-            }).setTriggerProcedure(() => editing.modify(() => project.api.deleteAudioUnit(audioUnit.box))),
-            populateMenuItemToRenameDevice(editing, audioUnit.inputAdapter.unwrap().labelField),
             MenuItem.default({label: "Add Midi-Effect", separatorBefore: true, selectable: canProcessMidi})
                 .setRuntimeChildrenProcedure(parent => parent.addMenuItem(...EffectFactories.MidiList
                     .map(entry => MenuItem.default({
@@ -45,6 +39,11 @@ export namespace MenuItems {
                 ))
         )
         populatePresetSubmenu(parent, service, deviceHost, {kind: "instrument-context"})
+        parent.addMenuItem(MenuItem.default({
+            label: `Delete '${audioUnit.label}'`,
+            hidden: audioUnit.isOutput,
+            separatorBefore: true
+        }).setTriggerProcedure(() => editing.modify(() => project.api.deleteAudioUnit(audioUnit.box))))
     }
 
     export const createForValue = <V extends PrimitiveValues>(editing: Editing,
@@ -62,33 +61,23 @@ export namespace MenuItems {
         const {editing} = project
         parent.addMenuItem(
             populateMenuItemToNavigateToManual(device.manualUrl, device.labelField.getValue()),
-            populateMenuItemToDeleteDevice(editing, device),
             populateMenuItemToCreateEffect(service, host, device)
         )
         populatePresetSubmenu(parent, service, host, {kind: "effect-context", device})
+        parent.addMenuItem(populateMenuItemToDeleteDevice(editing, device, {separatorBefore: true}))
     }
-
-    const populateMenuItemToRenameDevice = (editing: Editing, labelField: StringField) =>
-        MenuItem.default({label: "Rename..."}).setTriggerProcedure(() => {
-            const resolvers = Promise.withResolvers<string>()
-            const surface = Surface.get()
-            surface.flyout.appendChild(FloatingTextInput({
-                position: surface.pointer,
-                value: labelField.getValue(),
-                resolvers
-            }))
-            resolvers.promise.then(newName => editing.modify(() => labelField.setValue(newName)), EmptyExec)
-        })
 
     const populateMenuItemToNavigateToManual = (path: string, name: string) => {
         return MenuItem.default({label: `Visit '${name}' Manual...`})
             .setTriggerProcedure(() => RouteLocation.get().navigateTo(path))
     }
 
-    const populateMenuItemToDeleteDevice = (editing: Editing, ...devices: ReadonlyArray<EffectDeviceBoxAdapter>) => {
-        const label = `Delete '${devices.map(device => device.labelField.getValue()).join(", ")}'`
-        return MenuItem.default({label})
-            .setTriggerProcedure(() => editing.modify(() => Devices.deleteEffectDevices(devices)))
+    const populateMenuItemToDeleteDevice = (editing: Editing,
+                                             device: EffectDeviceBoxAdapter,
+                                             options?: {separatorBefore?: boolean}) => {
+        const label = `Delete '${device.labelField.getValue()}'`
+        return MenuItem.default({label, separatorBefore: options?.separatorBefore})
+            .setTriggerProcedure(() => editing.modify(() => Devices.deleteEffectDevices([device])))
     }
 
     type PresetContext =
@@ -111,11 +100,44 @@ export namespace MenuItems {
                 entry.type === kind && entry.deviceHost() === host)
             .toSorted((a, b) => a.indexField.getValue() - b.indexField.getValue())
 
+    const allEffectsInHost = (service: StudioService,
+                              host: DeviceHost,
+                              kind: LibraryEffectKind): ReadonlyArray<EffectDeviceBoxAdapter> => {
+        const field = kind === "audio-effect" ? host.audioEffects.field() : host.midiEffects.field()
+        return field.pointerHub.incoming()
+            .map(({box}) => service.project.boxAdapters.adapterFor(box, Devices.isAny))
+            .filter((adapter): adapter is EffectDeviceBoxAdapter =>
+                adapter.type === "audio-effect" || adapter.type === "midi-effect")
+            .toSorted((a, b) => a.indexField.getValue() - b.indexField.getValue())
+    }
+
+    const saveSingleOrChain = async (actions: LibraryActions,
+                                     kind: LibraryEffectKind,
+                                     chainKind: PresetHeader.ChainKind,
+                                     kindLabel: string,
+                                     effect: EffectDeviceBoxAdapter): Promise<void> => {
+        const choice = await Promises.tryCatch(RuntimeNotifier.approve({
+            headline: "Save as Effect Chain or Device Preset?",
+            message: `Only one ${kindLabel} effect on this audio unit. `
+                + `Save it as a single device preset or as an Effect Chain?`,
+            approveText: "Effect Chain",
+            cancelText: "Device Preset"
+        }))
+        if (choice.status === "rejected") {return}
+        const effectBox = effect.box as IndexedBox
+        if (choice.value) {
+            await actions.saveAsChainPreset(chainKind, [effectBox])
+        } else {
+            const deviceKey = effect.box.name.replace(/DeviceBox$/, "")
+            await actions.saveAsSingleEffectPreset(kind, deviceKey, effectBox)
+        }
+    }
+
     const populatePresetSubmenu = (parent: MenuItem,
                                    service: StudioService,
                                    host: DeviceHost,
                                    context: PresetContext): void => {
-        const actions = new LibraryActions(service.project)
+        const libraryActions = service.libraryActions
         const instrumentTarget = resolveInstrumentTarget(host)
         parent.addMenuItem(
             MenuItem.default({label: "Preset", separatorBefore: true})
@@ -124,7 +146,7 @@ export namespace MenuItems {
                         const labeled = host.inputAdapter.mapOr(input => input.labelField.getValue(), "")
                         const deviceName = labeled.length > 0 ? labeled : instrumentTarget.key
                         submenu.addMenuItem(MenuItem.default({label: `Save '${deviceName}' as Preset`})
-                            .setTriggerProcedure(() => actions.saveAsInstrumentPreset(
+                            .setTriggerProcedure(() => libraryActions.saveAsInstrumentPreset(
                                 instrumentTarget.key, instrumentTarget.uuid, {excludeEffects: true})
                                 .catch(console.warn)))
                     } else if (context.kind === "effect-context") {
@@ -135,29 +157,48 @@ export namespace MenuItems {
                         const labeled = context.device.labelField.getValue()
                         const deviceName = labeled.length > 0 ? labeled : deviceKey
                         submenu.addMenuItem(MenuItem.default({label: `Save '${deviceName}' as Preset`})
-                            .setTriggerProcedure(() => actions.saveAsSingleEffectPreset(
+                            .setTriggerProcedure(() => libraryActions.saveAsSingleEffectPreset(
                                 effectKind, deviceKey, effectBox).catch(console.warn)))
                     }
                     if (isDefined(instrumentTarget)) {
                         submenu.addMenuItem(MenuItem.default({label: "Save Entire Audio-Unit Chain"})
-                            .setTriggerProcedure(() => actions.saveAsRackPreset(instrumentTarget.uuid, [])
+                            .setTriggerProcedure(() => libraryActions.saveAsRackPreset(instrumentTarget.uuid, [])
                                 .catch(console.warn)))
                     }
                     const chainKindCandidates: ReadonlyArray<LibraryEffectKind> = context.kind === "effect-context"
                         ? [context.device.type === "audio-effect" ? "audio-effect" : "midi-effect"]
                         : ["audio-effect", "midi-effect"]
                     for (const kind of chainKindCandidates) {
-                        const effects = sameKindEffectsInHost(service, host, kind)
                         const chainKind = kind === "audio-effect" ? PresetHeader.ChainKind.Audio : PresetHeader.ChainKind.Midi
                         const kindLabel = kind === "audio-effect" ? "Audio" : "MIDI"
-                        const selectable = effects.length >= 2
-                        const label = selectable
-                            ? `Save ${kindLabel} Effect Chain (${effects.length})`
-                            : `Save ${kindLabel} Effect Chain`
-                        submenu.addMenuItem(MenuItem.default({label, selectable})
-                            .setTriggerProcedure(() => actions.saveAsChainPreset(
-                                chainKind, effects.map(adapter => adapter.box as IndexedBox))
-                                .catch(console.warn)))
+                        if (context.kind === "effect-context") {
+                            const effects = sameKindEffectsInHost(service, host, kind)
+                            const selectable = effects.length >= 2
+                            const label = selectable
+                                ? `Save ${kindLabel} Effect Chain (${effects.length})`
+                                : `Save ${kindLabel} Effect Chain`
+                            submenu.addMenuItem(MenuItem.default({label, selectable})
+                                .setTriggerProcedure(() => libraryActions.saveAsChainPreset(
+                                    chainKind, effects.map(adapter => adapter.box as IndexedBox))
+                                    .catch(console.warn)))
+                        } else {
+                            const effects = allEffectsInHost(service, host, kind)
+                            const selectable = effects.length >= 1
+                            const label = effects.length >= 2
+                                ? `Save ${kindLabel} Effect Chain (${effects.length})`
+                                : `Save ${kindLabel} Effect Chain`
+                            submenu.addMenuItem(MenuItem.default({label, selectable})
+                                .setTriggerProcedure(() => {
+                                    if (effects.length === 1) {
+                                        saveSingleOrChain(libraryActions, kind, chainKind, kindLabel, effects[0])
+                                            .catch(console.warn)
+                                    } else {
+                                        libraryActions.saveAsChainPreset(chainKind,
+                                            effects.map(adapter => adapter.box as IndexedBox))
+                                            .catch(console.warn)
+                                    }
+                                }))
+                        }
                     }
                 })
         )

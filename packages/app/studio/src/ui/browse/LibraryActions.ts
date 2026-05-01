@@ -20,12 +20,15 @@ import {DefaultInstrumentFactory} from "@/ui/defaults/DefaultInstrumentFactory"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {PresetDialogs} from "@/ui/browse/PresetDialogs"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
+import type {StudioService} from "@/service/StudioService"
 
 export type LibraryCategoryKey = "instrument" | "audio-effect" | "midi-effect"
 export type LibraryEffectKind = "audio-effect" | "midi-effect"
 
 export class LibraryActions {
-    constructor(readonly project: Project) {}
+    constructor(readonly service: StudioService) {}
+
+    get project(): Project {return this.service.project}
 
     createInstrument(key: InstrumentFactories.Keys): void {
         const factory = InstrumentFactories.Named[key]

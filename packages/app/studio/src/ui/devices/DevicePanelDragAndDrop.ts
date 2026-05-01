@@ -16,6 +16,7 @@ import {InsertMarker} from "@/ui/components/InsertMarker"
 import {EffectFactories, PresetSource, Project} from "@opendaw/studio-core"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {IndexedBox} from "@opendaw/lib-box"
+import {AudioUnitBox} from "@opendaw/studio-boxes"
 
 export namespace DevicePanelDragAndDrop {
     export const install = (project: Project,
@@ -147,6 +148,22 @@ export namespace DevicePanelDragAndDrop {
         })
     }
 
+    const resolveKeepTimeline = async (bytes: ArrayBuffer, targetAudioUnit: AudioUnitBox): Promise<boolean | "abort"> => {
+        const sourceHasTimeline = PresetDecoder.peekHasTimeline(bytes)
+        const targetHasTimeline = targetAudioUnit.tracks.pointerHub.incoming().length > 0
+        if (!sourceHasTimeline) {return true}
+        if (!targetHasTimeline) {return false}
+        const replace = await Promises.tryCatch(RuntimeNotifier.approve({
+            headline: "Replace Timeline?",
+            message: "This preset includes timeline content (clips, regions, automation). "
+                + "Replace the existing timeline on this audio unit, or keep your current one?",
+            approveText: "Replace",
+            cancelText: "Keep"
+        }))
+        if (replace.status === "rejected") {return "abort"}
+        return !replace.value
+    }
+
     const handlePresetDrop = async (project: Project,
                                     dragData: { category: string, source: PresetSource, uuid: UUID.String },
                                     dropIndex: number): Promise<void> => {
@@ -163,8 +180,10 @@ export namespace DevicePanelDragAndDrop {
             return
         }
         if (dragData.category === "audio-unit") {
+            const keepTimeline = await resolveKeepTimeline(load.value, targetAudioUnit)
+            if (keepTimeline === "abort") {return}
             project.editing.modify(() => {
-                const attempt = PresetDecoder.replaceAudioUnit(load.value, targetAudioUnit)
+                const attempt = PresetDecoder.replaceAudioUnit(load.value, targetAudioUnit, {keepTimeline})
                 if (attempt.isFailure()) {
                     RuntimeNotifier.info({
                         headline: "Can't Apply Preset",
@@ -176,9 +195,11 @@ export namespace DevicePanelDragAndDrop {
             return
         }
         if (dragData.category === "instrument") {
+            const keepTimeline = await resolveKeepTimeline(load.value, targetAudioUnit)
+            if (keepTimeline === "abort") {return}
             project.editing.modify(() => {
                 const attempt = PresetDecoder.replaceAudioUnit(load.value, targetAudioUnit,
-                    {keepMIDIEffects: true, keepAudioEffects: true})
+                    {keepMIDIEffects: true, keepAudioEffects: true, keepTimeline})
                 if (attempt.isFailure()) {
                     RuntimeNotifier.info({
                         headline: "Can't Apply Preset",

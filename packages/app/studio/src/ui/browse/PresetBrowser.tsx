@@ -68,8 +68,7 @@ type Construct = {
 }
 
 export const PresetBrowser = ({lifecycle, service}: Construct) => {
-    const {project} = service
-    const actions = new LibraryActions(project)
+    const actions = service.libraryActions
     const expandedKeys = new Set<string>()
     const search = new DefaultObservableValue("")
     const showStock = new DefaultObservableValue(true)

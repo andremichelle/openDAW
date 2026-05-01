@@ -109,9 +109,24 @@ export namespace PresetDecoder {
         return importedAudioUnits
     }
 
+    export const peekHasTimeline = (arrayBuffer: ArrayBuffer): boolean => {
+        if (arrayBuffer.byteLength < 8) {return false}
+        const header = new ByteArrayInput(arrayBuffer.slice(0, 8))
+        if (header.readInt() !== PresetHeader.MAGIC_HEADER_OPEN) {return false}
+        if (header.readInt() !== PresetHeader.FORMAT_VERSION) {return false}
+        const sourceBoxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
+        const decoded = tryCatch(() => sourceBoxGraph.fromArrayBuffer(arrayBuffer.slice(8), false))
+        if (decoded.status === "failure") {return false}
+        for (const box of sourceBoxGraph.boxes()) {
+            if (isInstanceOf(box, TrackBox)) {return true}
+        }
+        return false
+    }
+
     export const replaceAudioUnit = (arrayBuffer: ArrayBuffer, targetAudioUnitBox: AudioUnitBox, options?: {
         keepMIDIEffects?: boolean
         keepAudioEffects?: boolean
+        keepTimeline?: boolean
     }): Attempt<void, string> => {
         console.debug("ReplaceAudioUnit with preset...")
         const skeleton = ProjectSkeleton.empty({
@@ -137,9 +152,11 @@ export namespace PresetDecoder {
         }
         const replaceMIDIEffects = options?.keepMIDIEffects !== true
         const replaceAudioEffects = options?.keepAudioEffects !== true
+        const replaceTimeline = options?.keepTimeline !== true
 
         console.debug("replaceMIDIEffects", replaceMIDIEffects)
         console.debug("replaceAudioEffects", replaceAudioEffects)
+        console.debug("replaceTimeline", replaceTimeline)
 
         asDefined(targetAudioUnitBox.input.pointerHub.incoming().at(0)?.box, "Target has no input").delete()
 
@@ -159,15 +176,21 @@ export namespace PresetDecoder {
         }
 
         const sourceHasTracks = sourceAudioUnitBox.tracks.pointerHub.incoming().length > 0
-        if (sourceHasTracks) {
+        if (sourceHasTracks && replaceTimeline) {
             targetAudioUnitBox.tracks.pointerHub.incoming().forEach(({box}) => box.delete())
         }
 
         // Capture boxes live on the target's AudioUnit already and must not be duplicated.
-        const excludeBox = (box: Box) => box.accept<BoxVisitor<boolean>>({
-            visitCaptureMidiBox: (_box: CaptureMidiBox): boolean => true,
-            visitCaptureAudioBox: (_box: CaptureAudioBox): boolean => true
-        }) === true
+        // When the caller wants to keep the target's existing timeline, also exclude TrackBox
+        // (and everything reached through it) so source tracks aren't copied in.
+        const excludeBox = (box: Box) => {
+            if (box.accept<BoxVisitor<boolean>>({
+                visitCaptureMidiBox: (_box: CaptureMidiBox): boolean => true,
+                visitCaptureAudioBox: (_box: CaptureAudioBox): boolean => true
+            }) === true) {return true}
+            if (!replaceTimeline && TransferUtils.excludeTimelinePredicate(box)) {return true}
+            return false
+        }
 
         type UUIDMapper = { source: UUID.Bytes, target: UUID.Bytes }
         const uuidMap = UUID.newSet<UUIDMapper>(({source}) => source)
