@@ -73,18 +73,18 @@ export namespace MenuItems {
     }
 
     const populateMenuItemToDeleteDevice = (editing: Editing,
-                                             device: EffectDeviceBoxAdapter,
-                                             options?: {separatorBefore?: boolean}) => {
+                                            device: EffectDeviceBoxAdapter,
+                                            options?: { separatorBefore?: boolean }) => {
         const label = `Delete '${device.labelField.getValue()}'`
         return MenuItem.default({label, separatorBefore: options?.separatorBefore})
             .setTriggerProcedure(() => editing.modify(() => Devices.deleteEffectDevices([device])))
     }
 
     type PresetContext =
-        | {kind: "instrument-context"}
-        | {kind: "effect-context", device: EffectDeviceBoxAdapter}
+        | { kind: "instrument-context" }
+        | { kind: "effect-context", device: EffectDeviceBoxAdapter }
 
-    const resolveInstrumentTarget = (host: DeviceHost): {key: InstrumentFactories.Keys, uuid: UUID.String} | null => {
+    const resolveInstrumentTarget = (host: DeviceHost): { key: InstrumentFactories.Keys, uuid: UUID.String } | null => {
         const inputBox = host.audioUnitBoxAdapter().box.input.pointerHub.incoming().at(0)?.box
         if (!isDefined(inputBox)) {return null}
         const stripped = inputBox.name.replace(/DeviceBox$/, "")
@@ -169,7 +169,9 @@ export namespace MenuItems {
                         ? [context.device.type === "audio-effect" ? "audio-effect" : "midi-effect"]
                         : ["audio-effect", "midi-effect"]
                     for (const kind of chainKindCandidates) {
-                        const chainKind = kind === "audio-effect" ? PresetHeader.ChainKind.Audio : PresetHeader.ChainKind.Midi
+                        const chainKind = kind === "audio-effect"
+                            ? PresetHeader.ChainKind.Audio
+                            : PresetHeader.ChainKind.Midi
                         const kindLabel = kind === "audio-effect" ? "Audio" : "MIDI"
                         if (context.kind === "effect-context") {
                             const effects = sameKindEffectsInHost(service, host, kind)

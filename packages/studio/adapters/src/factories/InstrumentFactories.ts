@@ -31,16 +31,15 @@ export namespace InstrumentFactories {
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
                  name: string,
                  icon: IconSymbol,
-                 _attachment?: void): TapeDeviceBox =>
-            TapeDeviceBox.create(boxGraph, UUID.generate(), box => {
-                box.label.setValue(name)
-                box.icon.setValue(IconSymbol.toName(icon))
-                box.flutter.setValue(0.2)
-                box.wow.setValue(0.05)
-                box.noise.setValue(0.02)
-                box.saturation.setValue(0.5)
-                box.host.refer(host)
-            })
+                 _attachment?: void): TapeDeviceBox => TapeDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.label.setValue(name)
+            box.icon.setValue(IconSymbol.toName(icon))
+            box.flutter.setValue(0.2)
+            box.wow.setValue(0.05)
+            box.noise.setValue(0.02)
+            box.saturation.setValue(0.5)
+            box.host.refer(host)
+        })
     }
 
     export const Nano: InstrumentFactory<AudioFileBox, NanoDeviceBox> = {
@@ -54,26 +53,12 @@ export namespace InstrumentFactories {
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
                  name: string,
                  icon: IconSymbol,
-                 attachment?: AudioFileBox): NanoDeviceBox => {
-            let audioFileBox: AudioFileBox
-            if (isDefined(attachment)) {
-                audioFileBox = attachment
-            } else {
-                const fileUUID = UUID.parse("c1678daa-4a47-4cba-b88f-4f4e384663c3")
-                const fileDuration = 5.340
-                audioFileBox = boxGraph.findBox<AudioFileBox>(fileUUID)
-                    .unwrapOrElse(() => AudioFileBox.create(boxGraph, fileUUID, box => {
-                        box.fileName.setValue("Rhode")
-                        box.endInSeconds.setValue(fileDuration)
-                    }))
-            }
-            return NanoDeviceBox.create(boxGraph, UUID.generate(), box => {
-                box.label.setValue(name)
-                box.icon.setValue(IconSymbol.toName(icon))
-                box.file.refer(audioFileBox)
-                box.host.refer(host)
-            })
-        }
+                 attachment?: AudioFileBox): NanoDeviceBox => NanoDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.label.setValue(name)
+            box.icon.setValue(IconSymbol.toName(icon))
+            if (isDefined(attachment)) {box.file.refer(attachment)}
+            box.host.refer(host)
+        })
     }
 
     export type PlayfieldAttachment = ReadonlyArray<{
@@ -131,7 +116,6 @@ export namespace InstrumentFactories {
             VaporisateurDeviceBox.create(boxGraph, UUID.generate(), box => {
                 box.label.setValue(name)
                 box.icon.setValue(IconSymbol.toName(icon))
-                box.tune.setInitValue(0.0)
                 box.cutoff.setInitValue(8000.0)
                 box.resonance.setInitValue(0.1)
                 box.attack.setInitValue(0.005)
@@ -178,19 +162,11 @@ export namespace InstrumentFactories {
         create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
                  name: string,
-                 icon: IconSymbol,
-                 attachment?: { uuid: UUID.String, name: string }): SoundfontDeviceBox => {
-            attachment ??= {uuid: "d9f51577-2096-4671-9067-27ca2e12b329", name: "Upright Piano KW"}
-            const soundFontUUIDAsString = attachment.uuid
-            const soundfontUUID = UUID.parse(soundFontUUIDAsString)
-            const soundfontBox = useSoundfontFile(boxGraph, soundfontUUID, attachment.name)
-            return SoundfontDeviceBox.create(boxGraph, UUID.generate(), box => {
-                box.label.setValue(name)
-                box.icon.setValue(IconSymbol.toName(icon))
-                box.host.refer(host)
-                box.file.refer(soundfontBox)
-            })
-        }
+                 icon: IconSymbol): SoundfontDeviceBox => SoundfontDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.label.setValue(name)
+            box.icon.setValue(IconSymbol.toName(icon))
+            box.host.refer(host)
+        })
     }
 
     export const Apparat: InstrumentFactory<void, ApparatDeviceBox> = {
@@ -203,13 +179,11 @@ export namespace InstrumentFactories {
         create: (boxGraph: BoxGraph,
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
                  name: string,
-                 icon: IconSymbol,
-                 _attachment?: void): ApparatDeviceBox =>
-            ApparatDeviceBox.create(boxGraph, UUID.generate(), box => {
-                box.label.setValue(name)
-                box.icon.setValue(IconSymbol.toName(icon))
-                box.host.refer(host)
-            })
+                 icon: IconSymbol): ApparatDeviceBox => ApparatDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.label.setValue(name)
+            box.icon.setValue(IconSymbol.toName(icon))
+            box.host.refer(host)
+        })
     }
 
     export const Named = {Apparat, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
