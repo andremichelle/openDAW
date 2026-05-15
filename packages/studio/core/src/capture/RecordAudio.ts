@@ -3,7 +3,6 @@ import {
     int,
     Nullable,
     Option,
-    quantizeFloor,
     Terminable,
     Terminator,
     tryCatch,
@@ -236,14 +235,19 @@ export namespace RecordAudio {
                 lastPosition = currentPosition
                 // Create fileBox and region together when recording starts.
                 if (fileBox.isEmpty()) {
-                    // The count-in length is computed deterministically from
-                    // engine state (bars × signature × bpm) instead of reading
-                    // recordingWorklet.numberOfFrames in JS. The JS read varied
-                    // run-to-run by an event-loop / SAB-visibility lag of a few
-                    // ms, which made any closed-form offset chase a moving
-                    // target. Both branches now compensate the same way: skip
-                    // the count-in portion of the take (if any) and add
-                    // outputLatency for the engine→speaker delay.
+                    // Three terms make up the file_time of audio captured at engine timeline
+                    // = currentPosition (mic case):
+                    //   L                  — worklet head-start: wall-clock between the worklet
+                    //                        being connected (in prepareRecording) and the engine
+                    //                        actually beginning count-in. Cannot be derived from
+                    //                        BPM/signature alone.
+                    //   countInSeconds     — deterministic from bars × signature × bpm.
+                    //   outputLatency      — engine→speaker compensation.
+                    // L is recovered once, here, by reading numberOfFrames at the moment we first
+                    // see isRecording=true and subtracting the BPM-derived countInSeconds. Earlier
+                    // attempts that omitted L put a systematic ~30 ms (one render dispatch) bias
+                    // on every take; earlier attempts that used numberOfFrames as the whole offset
+                    // were noisy by the same ~few ms but never wildly wrong.
                     const countedIn = Recording.wasCountingIn()
                     const barPPQN = PPQN.fromSignature(
                         timelineBox.signature.nominator.getValue(),
@@ -251,11 +255,14 @@ export namespace RecordAudio {
                     const countInSeconds = countedIn
                         ? PPQN.pulsesToSeconds(recording.countInBars * barPPQN, timelineBox.bpm.getValue())
                         : 0
-                    const waveformOffset = countInSeconds + outputLatency
+                    const wallclockSinceWorklet = recordingWorklet.numberOfFrames / sampleRate
+                    const headStartSeconds = countedIn
+                        ? Math.max(0, wallclockSinceWorklet - countInSeconds)
+                        : wallclockSinceWorklet
+                    const waveformOffset = headStartSeconds + countInSeconds + outputLatency
                     editing.modify(() => {
                         fileBox = Option.wrap(createFileBox())
-                        const position = countedIn ? quantizeFloor(currentPosition, beats) : currentPosition
-                        currentTake = Option.wrap(createTakeRegion(position, waveformOffset, null))
+                        currentTake = Option.wrap(createTakeRegion(currentPosition, waveformOffset, null))
                     }, false)
                     currentWaveformOffset = waveformOffset
                 }
