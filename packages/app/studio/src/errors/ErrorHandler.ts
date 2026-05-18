@@ -7,7 +7,7 @@ import {Surface} from "@/ui/surface/Surface.tsx"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo"
 
-const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP", "Zotero Connector"]
+const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP", "Zotero Connector", "hintMode", "handleHint"]
 const IgnoredErrors = [
     "ResizeObserver loop completed with undelivered notifications.",
     "Request timeout appSettingsDistributor.getValue",
@@ -30,9 +30,18 @@ export class ErrorHandler {
     }
 
     #looksLikeExtension(error: ErrorInfo): boolean {
-        return document.scripts.length > 1
-            || ExtensionPatterns.some(pattern =>
-                error.message?.includes(pattern) || error.stack?.includes(pattern))
+        if (document.scripts.length > 1) {return true}
+        if (ExtensionPatterns.some(pattern =>
+            error.message?.includes(pattern) || error.stack?.includes(pattern))) {return true}
+        // Safari content scripts (Vimari et al.) inject into an isolated world,
+        // so document.scripts.length stays at 1. Their stacks carry function
+        // names but no source URLs — our own minified bundle always emits URLs
+        // in the stack, so a non-empty stack with zero URLs is a reliable
+        // "this didn't come from our code" signal. (UrlPattern has the g flag,
+        // so reuse .match() rather than .test() to avoid the lastIndex gotcha.)
+        const stack = error.stack
+        if (stack !== undefined && stack.trim().length > 0 && stack.match(UrlPattern) === null) {return true}
+        return false
     }
 
     #extractForeignOrigin(error: ErrorInfo): string | null {
