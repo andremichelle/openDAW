@@ -23,6 +23,13 @@ component
   &.active
     color: var(--color-active)
 
+  &.disabled
+    opacity: 0.3
+    pointer-events: none
+
+    > label
+      pointer-events: none
+
   > label
     padding: 0 0.25em
     min-width: 1.5em

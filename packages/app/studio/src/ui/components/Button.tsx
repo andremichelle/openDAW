@@ -1,4 +1,4 @@
-import {Lifecycle, Procedure} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, ObservableValue, Procedure} from "@opendaw/lib-std"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {Appearance, ButtonCheckboxRadio} from "@/ui/components/ButtonCheckboxRadio"
 import {Html} from "@opendaw/lib-dom"
@@ -10,6 +10,7 @@ export type ButtonParameters = {
     style?: Partial<CSSStyleDeclaration>
     className?: string
     appearance?: Appearance
+    disabled?: ObservableValue<boolean>
 }
 
 export const Button = ({
@@ -18,11 +19,12 @@ export const Button = ({
                            onInit,
                            style,
                            className,
-                           appearance
+                           appearance,
+                           disabled
                        }: ButtonParameters, children: JsxValue) => {
     const id = Html.nextID()
     const input: HTMLInputElement = <input type="button" id={id} onclick={onClick} onInit={onInit}/>
-    return (
+    const wrapper: HTMLElement = (
         <ButtonCheckboxRadio lifecycle={lifecycle}
                              style={style}
                              className={className}
@@ -32,4 +34,9 @@ export const Button = ({
             <label htmlFor={id} style={{cursor: appearance?.cursor ?? "auto"}}>{children}</label>
         </ButtonCheckboxRadio>
     )
+    if (isDefined(disabled)) {
+        lifecycle.own(disabled.catchupAndSubscribe(owner =>
+            wrapper.classList.toggle("disabled", owner.getValue())))
+    }
+    return wrapper
 }

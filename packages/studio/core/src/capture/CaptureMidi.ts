@@ -249,7 +249,10 @@ export class CaptureMidi extends Capture<CaptureMidiBox> {
             const duration = Math.max(MIN_NOTE_DURATION, toPosition(commitDelta) - position)
             resolved.push({pitch, velocity: open.velocity, position, duration})
         }
-        return resolved
+        // Sort by position so notes[0] is the earliest press, not the first note-off.
+        // commitMidiCapture relies on this to anchor firstPosition and place chord
+        // notes at non-negative relative positions.
+        return resolved.sort((left, right) => left.position - right.position)
     }
 
     async #updateStream() {

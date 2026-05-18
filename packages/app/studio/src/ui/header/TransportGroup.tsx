@@ -55,14 +55,15 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                     }
                 }}><Icon symbol={IconSymbol.Play}/></Button>
     )
+    const captureDisabled = new DefaultObservableValue<boolean>(true)
     const captureButton: HTMLElement = (
         <Button lifecycle={lifecycle}
+                disabled={captureDisabled}
                 appearance={{
                     color: Colors.shadow,
                     activeColor: Colors.white,
                     tooltip: "Create region from captured notes."
                 }}
-                style={{display: "none"}}
                 onClick={() => service.runIfProject(project => project.commitMidiCapture())}>
             <Icon symbol={IconSymbol.Capture}/>
         </Button>)
@@ -97,6 +98,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
             loopLifecycle.terminate()
             captureLifecycle.terminate()
             captureButton.classList.remove("active")
+            captureDisabled.setValue(true)
             optProfile.match({
                 none: () => loop.setValue(false),
                 some: ({project}) => {
@@ -108,8 +110,10 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                         }),
                         enabled.subscribe(owner => loop.setValue(owner.getValue()))
                     )
-                    captureLifecycle.own(project.subscribeMidiCaptureAvailable(
-                        available => captureButton.classList.toggle("active", available)))
+                    captureLifecycle.own(project.subscribeMidiCaptureAvailable(available => {
+                        captureButton.classList.toggle("active", available)
+                        captureDisabled.setValue(!available)
+                    }))
                 }
             })
         })
