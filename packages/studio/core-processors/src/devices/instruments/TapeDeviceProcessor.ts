@@ -273,10 +273,20 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
             lane.pitchVoices.add(
                 new PitchVoice(sourceUuid, this.#audioOutput, data, fadeLengthSamples, playbackRate, offset, blockOffset), true)
         } else if (existing.isFadingOut()) {
-            // Voice is mid-internal-end-of-file-fade. Don't evict to fadingVoices —
-            // that path uses unit gain and would drop the region's fade buffer for
-            // the remaining ~20 ms, producing an audible pop at the region end.
-            existing.setPlaybackRate(playbackRate)
+            // Voice is mid-internal-end-of-file-fade. If the new cycle continues
+            // the same playback (small drift), keep the voice so the region's
+            // fade buffer keeps applying — evicting it to fadingVoices uses unit
+            // gain and produces an audible pop at the region end. Replace only
+            // when the new cycle jumps elsewhere (loop wrap, seek), which the
+            // drift check below also uses for the non-fading case.
+            const drift = Math.abs(existing.readPosition - offset)
+            if (drift > fadeLengthSamples) {
+                lane.fadingVoices.push(existing)
+                lane.pitchVoices.add(
+                    new PitchVoice(sourceUuid, this.#audioOutput, data, fadeLengthSamples, playbackRate, offset, blockOffset), true)
+            } else {
+                existing.setPlaybackRate(playbackRate)
+            }
         } else {
             const drift = Math.abs(existing.readPosition - offset)
             if (drift > fadeLengthSamples) {
