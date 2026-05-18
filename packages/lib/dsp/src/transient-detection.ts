@@ -71,7 +71,12 @@ export class TransientDetector {
         const candidates = this.#collectCandidates()
         // Phase 2: Refine each candidate to the valley between it and previous
         const refined = this.#refineToValleys(candidates)
-        return refined.map(x => x / this.#sampleRate)
+        // Strict-increasing invariant. Degenerate inputs (zero-length audio
+        // → candidates = [0, 0]) or valley searches that don't advance can
+        // produce equal samples; the downstream EventCollection panics on
+        // equal positions, so we collapse duplicates here at the source.
+        const seconds = refined.map(x => x / this.#sampleRate)
+        return seconds.filter((value, index) => index === 0 || value > seconds[index - 1])
     }
 
     #collectCandidates(): number[] {
