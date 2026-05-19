@@ -59,6 +59,7 @@ export enum IconSymbol {
     Film,
     Flask,
     Focus,
+    Fullscreen,
     Gate,
     Generator,
     GoogleDrive,

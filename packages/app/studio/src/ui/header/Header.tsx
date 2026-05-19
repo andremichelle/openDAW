@@ -22,6 +22,7 @@ import {UndoRedoButtons} from "@/ui/header/UndoRedoButtons"
 import {MetronomeControl} from "@/ui/header/MetronomeControl"
 import {PerformanceStats} from "@/ui/header/PerformanceStats"
 import {BaseFrequencyControl} from "@/ui/header/BaseFrequencyControl"
+import {CaptureMidiButton} from "@/ui/header/CaptureMidiButton"
 
 const className = Html.adoptStyleSheet(css, "Header")
 
@@ -82,6 +83,14 @@ export const Header = ({lifecycle, service}: Construct) => {
                         appearance={{color: Colors.gray, activeColor: Colors.bright, tinyTriangle: true}}>
                 <h5>openDAW</h5>
             </MenuButton>
+            <MenuButton root={MenuItem.root()
+                .setRuntimeChildrenProcedure(parent =>
+                    parent.addMenuItem(
+                        MenuItem.header({label: "Manuals", icon: IconSymbol.OpenDAW, color: Colors.green}),
+                        ...addManualMenuItems(Manuals)
+                    ))} appearance={{color: Colors.green, tinyTriangle: true}}>
+                <Icon symbol={IconSymbol.Help}/>
+            </MenuButton>
             <hr/>
             <Group onInit={element => StudioPreferences.catchupAndSubscribe(enabled =>
                 element.classList.toggle("hidden", !enabled), "visibility", "enable-history-buttons")}>
@@ -94,14 +103,7 @@ export const Header = ({lifecycle, service}: Construct) => {
                           appearance={{activeColor: Colors.orange, tooltip: "Midi Access", cursor: "pointer"}}>
                     <Icon symbol={IconSymbol.Midi}/>
                 </Checkbox>
-                <MenuButton root={MenuItem.root()
-                    .setRuntimeChildrenProcedure(parent =>
-                        parent.addMenuItem(
-                            MenuItem.header({label: "Manuals", icon: IconSymbol.OpenDAW, color: Colors.green}),
-                            ...addManualMenuItems(Manuals)
-                        ))} appearance={{color: Colors.green, tinyTriangle: true}}>
-                    <Icon symbol={IconSymbol.Help}/>
-                </MenuButton>
+                <CaptureMidiButton lifecycle={lifecycle} service={service}/>
             </div>
             <hr/>
             <TransportGroup lifecycle={lifecycle} service={service}/>
