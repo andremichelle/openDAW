@@ -13,5 +13,6 @@ export enum PanelType {
     ShadertoyPreview,
     ShadertoyEditor,
     CodeEditor,
-    EmptyFlexSpace
+    EmptyFlexSpace,
+    TapTempo
 }
