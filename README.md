@@ -68,7 +68,7 @@ To everyone who has contributed feedback, reported bugs, suggested improvements,
 Your support is shaping openDAW into something truly powerful!
 
 Thank
-you [@ccswdavidson](https://github.com/ccswdavidson), [@Chaosmeister](https://github.com/Chaosmeister), [@jeffreylouden](https://github.com/jeffreylouden), [@solsos](https://github.com/solsos), [@TheRealSyler](https://github.com/TheRealSyler), [@Trinitou](https://github.com/Trinitou),
+you [@ccswdavidson](https://github.com/ccswdavidson), [@Chaosmeister](https://github.com/Chaosmeister), [@jeffreylouden](https://github.com/jeffreylouden), [@solsos](https://github.com/solsos), [@TheRealSyler](https://github.com/TheRealSyler), [@Trinitou](https://github.com/Trinitou), [@Robert Anthony](https://github.com/RobertAnthonyDevelopment)
 and [@xnstad](https://github.com/xnstad) for testing the repositories and identifying issues during the installation of
 openDAW!
 
