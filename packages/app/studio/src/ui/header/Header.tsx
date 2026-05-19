@@ -38,7 +38,8 @@ const ScreenShortcutKeys: Record<Workspace.ScreenKeys, keyof typeof GlobalShortc
     "project": "workspace-screen-project",
     "shadertoy": "workspace-screen-shadertoy",
     "meter": "workspace-screen-meter",
-    "code": "workspace-screen-default"
+    "code": "workspace-screen-default",
+    "tap": "workspace-screen-tap"
 }
 
 export const Header = ({lifecycle, service}: Construct) => {

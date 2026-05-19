@@ -1,0 +1,187 @@
+@use "@/colors"
+@use "@/mixins"
+
+component
+  flex: 1
+  padding: 1.5em
+  display: flex
+  flex-direction: column
+  row-gap: 1em
+  overflow: hidden
+  position: relative
+  color: var(--color-dark)
+  outline: none
+  @include colors.panel-background
+
+  > p.help
+    position: absolute
+    top: 1.25em
+    left: 1.25em
+    margin: 0
+    max-width: 18em
+    font-size: 0.75em
+    line-height: 1.5
+    color: rgba(white, 0.45)
+    letter-spacing: 0.02em
+    pointer-events: none
+
+  > h1
+    color: var(--color-blue)
+
+  > p.hint
+    font-size: 0.875em
+    color: rgba(white, 0.4)
+
+  > div.content
+    flex: 1
+    display: flex
+    flex-direction: row
+    align-items: center
+    justify-content: center
+    column-gap: 1em
+    overflow: hidden
+
+    > div.balancer
+      flex: 0 0 10em
+      visibility: hidden
+
+    > svg.tap-svg
+      flex: 0 1 auto
+      height: 100%
+      aspect-ratio: 1
+      min-width: 0
+      min-height: 0
+      max-width: 100%
+      user-select: none
+      touch-action: manipulation
+      overflow: visible
+
+      text
+        pointer-events: none
+        user-select: none
+        text-anchor: middle
+        dominant-baseline: central
+
+      > text.axis-label
+        fill: rgba(white, 0.4)
+        font-size: 7px
+        font-weight: 600
+        letter-spacing: 0.18em
+        text-transform: lowercase
+
+      > text.axis-label.axis-end
+        text-anchor: end
+
+      > circle.hex
+        fill: var(--color-blue)
+        cursor: pointer
+        transition: fill 80ms ease-out
+
+        &:hover
+          fill: var(--color-bright)
+
+        &:active, &.pressed
+          fill: var(--color-orange)
+
+      > path.arrow
+        cursor: pointer
+        transition: color 80ms ease-out
+        fill: currentColor
+
+        &.up, &.down
+          --arrow-base: var(--color-green)
+          color: var(--arrow-base)
+
+        &.left, &.right
+          --arrow-base: var(--color-orange)
+          color: var(--arrow-base)
+
+        &:hover
+          color: color-mix(in srgb, var(--arrow-base), white 50%)
+
+        &:active, &.pressed
+          color: white
+
+      > text.circle-sign
+        fill: rgba(black, 0.85)
+        font-size: 16px
+        font-weight: 900
+
+      > text.hex-label
+        fill: rgba(black, 0.85)
+        font-size: 28px
+        font-weight: 900
+        letter-spacing: 0.1em
+
+      > text.hex-shortcut
+        fill: rgba(black, 0.5)
+        font-size: 9px
+        font-weight: 700
+        letter-spacing: 0.25em
+
+    > div.readout
+      flex: 0 0 10em
+      display: flex
+      flex-direction: column
+      justify-content: center
+      row-gap: 0.75em
+      font-variant-numeric: tabular-nums
+
+      > div.line
+        display: flex
+        align-items: baseline
+        column-gap: 0.4em
+
+        > span.unit
+          color: rgba(white, 0.3)
+          font-size: 0.8em
+          letter-spacing: 0.1em
+
+      > div.bpm-line
+        > span.bpm-value
+          font-size: 2.5em
+          font-weight: 700
+          color: var(--color-orange)
+          line-height: 1
+
+      > div.line > span.state-value
+        color: var(--color-blue)
+        font-size: 1em
+        letter-spacing: 0.05em
+
+      > div.line > span.count-value
+        color: rgba(white, 0.5)
+        font-size: 0.9em
+
+      > div.line > button.reset
+        appearance: none
+        background: transparent
+        border: 1px solid rgba(white, 0.2)
+        color: var(--color-dark)
+        font: inherit
+        font-size: 0.75em
+        letter-spacing: 0.1em
+        padding: 0.4em 1em
+        border-radius: 4px
+        cursor: pointer
+        display: inline-flex
+        align-items: center
+        column-gap: 0.6em
+        transition: color 80ms ease-out, border-color 80ms ease-out
+
+        &:hover
+          color: var(--color-orange)
+          border-color: var(--color-orange)
+
+        &:active, &.pressed
+          color: var(--color-orange)
+          border-color: var(--color-orange)
+          background: rgba(255, 121, 63, 0.15)
+
+        > span.hotkey
+          font-size: 0.85em
+          padding: 0.1em 0.35em
+          border: 1px solid rgba(white, 0.2)
+          border-radius: 2px
+          color: rgba(white, 0.5)
+          letter-spacing: 0

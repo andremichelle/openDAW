@@ -248,6 +248,19 @@ export const DefaultWorkspace = Object.freeze({
             ],
             constrains: {type: "flex", minSize: 20, flex: 1}
         }
+    },
+    "tap": {
+        name: "Match Tempo",
+        icon: IconSymbol.Time,
+        content: PanelState.create({
+            type: "panel",
+            name: "Match Tempo",
+            icon: IconSymbol.Time,
+            panelType: PanelType.TapTempo,
+            notMinimizable: true,
+            notPopoutable: true,
+            constrains: {type: "flex", minSize: 0, flex: 1}
+        })
     }
 } satisfies Record<string, Workspace.Screen>)
 

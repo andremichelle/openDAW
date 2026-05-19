@@ -18,6 +18,7 @@ import {PianoModePanel} from "@/ui/piano-panel/PianoModePanel.tsx"
 import {ShadertoyPreview} from "@/ui/shadertoy/ShadertoyPreview"
 import {ShadertoyEditor} from "@/ui/shadertoy/ShadertoyEditor"
 import {CodeEditorPanel} from "@/ui/code-editor/CodeEditorPanel"
+import {TapTempo} from "@/ui/pages/TapTempo"
 
 export const createPanelFactory = (service: StudioService): PanelContentFactory => ({
     create: (lifecycle: Lifecycle, type: PanelType): JsxValue => {
@@ -50,6 +51,8 @@ export const createPanelFactory = (service: StudioService): PanelContentFactory 
                 return (<ShadertoyEditor lifecycle={lifecycle} service={service}/>)
             case PanelType.CodeEditor:
                 return (<CodeEditorPanel lifecycle={lifecycle} service={service}/>)
+            case PanelType.TapTempo:
+                return (<TapTempo lifecycle={lifecycle} service={service}/>)
             case PanelType.EmptyFlexSpace:
                 return (<FlexSpace/>)
             default:
