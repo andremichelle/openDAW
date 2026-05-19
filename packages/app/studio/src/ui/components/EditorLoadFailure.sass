@@ -1,0 +1,29 @@
+@use "@/colors"
+
+component
+  display: flex
+  flex-direction: column
+  gap: 0.75em
+  padding: 2em
+  font-size: 12px
+  color: rgba(white, 0.8)
+
+  .headline
+    font-weight: 500
+    color: hsl(0, 80%, 70%)
+
+  .reason
+    font-family: monospace
+    font-size: 11px
+    color: rgba(white, 0.5)
+    white-space: pre-wrap
+    user-select: text
+
+  .actions
+    display: flex
+    gap: 0.5em
+
+    button
+      padding: 0.4em 1em
+      font-size: 11px
+      cursor: pointer

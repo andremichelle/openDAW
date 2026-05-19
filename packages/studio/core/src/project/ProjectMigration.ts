@@ -1,7 +1,9 @@
 import {
     AudioClipBox,
     AudioFileBox,
+    AudioPitchStretchBox,
     AudioRegionBox,
+    AudioTimeStretchBox,
     AudioUnitBox,
     BoxVisitor,
     DelayDeviceBox,
@@ -32,6 +34,7 @@ import {
     migrateValueEventBox,
     migrateValueEventCollection,
     migrateVaporisateurDeviceBox,
+    migrateWarpMarkers,
     migrateZeitgeistDeviceBox
 } from "./migration"
 
@@ -87,6 +90,8 @@ export class ProjectMigration {
         boxGraph.boxes().slice().forEach(box => box.accept<BoxVisitor>({
             visitAudioRegionBox: (box: AudioRegionBox) => migrateAudioRegionBox(boxGraph, box, bpmValue),
             visitAudioClipBox: (box: AudioClipBox) => migrateAudioClipBox(boxGraph, box),
+            visitAudioPitchStretchBox: (box: AudioPitchStretchBox) => migrateWarpMarkers(boxGraph, box),
+            visitAudioTimeStretchBox: (box: AudioTimeStretchBox) => migrateWarpMarkers(boxGraph, box),
             visitTimelineBox: (box: TimelineBox) => migrateTimelineBox(boxGraph, box),
             visitMIDIOutputDeviceBox: (box: MIDIOutputDeviceBox) => migrateMIDIOutputDeviceBox(boxGraph, box, outputMidiDevices),
             visitZeitgeistDeviceBox: (box: ZeitgeistDeviceBox) => migrateZeitgeistDeviceBox(boxGraph, box, grooveTarget),

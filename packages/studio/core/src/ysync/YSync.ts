@@ -144,8 +144,13 @@ export class YSync<T> implements Terminable {
                 if (this.#boxGraph.inTransaction()) {
                     this.#boxGraph.abortTransaction()
                 }
-                console.warn(`[YSync] Transaction rejected, rolling back:`, result.error)
-                this.#rollbackTransaction(events)
+                // Local revert only; do not publish inverse ops back into Yjs.
+                // Writing inverse ops would race with the same remote update
+                // still in flight and pump Yjs into a retry/corruption loop.
+                // Local state stays as it was before this batch; the doc on
+                // Yjs's side keeps the remote update and converges via the
+                // next legitimate operation (e.g. our delete propagating).
+                console.warn(`[YSync] Transaction rejected, reverted locally:`, result.error)
                 return
             }
             const highLevelConflict = this.#conflict.mapOr(check => check(), false)

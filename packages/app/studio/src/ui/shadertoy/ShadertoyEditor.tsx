@@ -14,18 +14,21 @@ import {
 import {Await, createElement} from "@opendaw/lib-jsx"
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {MonacoFactory} from "@/monaco/factory"
-import {Promises} from "@opendaw/lib-runtime"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {ShadertoyBox} from "@opendaw/studio-boxes"
 import {StudioService} from "@/service/StudioService"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
+import {EditorLoadFailure} from "@/ui/components/EditorLoadFailure"
+import {dynamicImportWithRetry} from "@/ui/components/dynamicImportWithRetry"
 import Example from "./example.glsl?raw"
 import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
 import {Checkbox} from "@/ui/components/Checkbox"
 
 const className = Html.adoptStyleSheet(css, "ShadertoyEditor")
+
+const loadMonacoSetup = dynamicImportWithRetry(() => import("./monaco-setup"))
 
 type Construct = {
     lifecycle: Lifecycle
@@ -40,11 +43,8 @@ export const ShadertoyEditor = ({service, lifecycle}: Construct) => {
     return (
         <div className={className}>
             <Await
-                factory={() => Promise.all([
-                    Promises.guardedRetry(() => import("./monaco-setup"), (_error, count) => count < 10)
-                        .then(({monaco}) => monaco)
-                ])}
-                failure={({retry, reason}) => (<p onclick={retry}>{reason}</p>)}
+                factory={() => Promise.all([loadMonacoSetup().then(({monaco}) => monaco)])}
+                failure={(props) => EditorLoadFailure(props)}
                 loading={() => ThreeDots()}
                 success={([monaco]) => {
                     const initialCode = rootBox.shadertoy.targetVertex.mapOr((box) =>

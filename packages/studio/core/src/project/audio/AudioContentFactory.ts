@@ -50,7 +50,10 @@ export namespace AudioContentFactory {
             return durationInSeconds
         }
         const pulses = PPQN.secondsToPulses(durationInSeconds, bpm)
-        return disableQuantize ? pulses : quantizeRound(pulses, PPQN.SemiQuaver)
+        if (disableQuantize || pulses < PPQN.SemiQuaver) {
+            return pulses
+        }
+        return quantizeRound(pulses, PPQN.SemiQuaver)
     }
 
     // --- Region Creation --- //
@@ -126,7 +129,8 @@ export namespace AudioContentFactory {
         }
         const {name, duration: durationInSeconds, bpm} = sample
         const pulses = PPQN.secondsToPulses(durationInSeconds, bpm)
-        const durationInPPQN = props.duration ?? (!props.disableQuantize ? quantizeRound(pulses, PPQN.SemiQuaver) : pulses)
+        const quantize = !props.disableQuantize && pulses >= PPQN.SemiQuaver
+        const durationInPPQN = props.duration ?? (quantize ? quantizeRound(pulses, PPQN.SemiQuaver) : pulses)
         if (isDefined(props.warpMarkers)) {
             AudioContentHelpers.addWarpMarkers(boxGraph, playMode, props.warpMarkers)
         } else {
@@ -157,7 +161,8 @@ export namespace AudioContentFactory {
         }
         const {name, duration: durationInSeconds, bpm} = sample
         const pulses = PPQN.secondsToPulses(durationInSeconds, bpm)
-        const durationInPPQN = props.duration ?? (!props.disableQuantize ? quantizeRound(pulses, PPQN.SemiQuaver) : pulses)
+        const quantize = !props.disableQuantize && pulses >= PPQN.SemiQuaver
+        const durationInPPQN = props.duration ?? (quantize ? quantizeRound(pulses, PPQN.SemiQuaver) : pulses)
         if (isDefined(props.warpMarkers)) {
             AudioContentHelpers.addWarpMarkers(boxGraph, playMode, props.warpMarkers)
         } else {

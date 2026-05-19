@@ -207,6 +207,15 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         }
         this.#preparedWorklet = null
         const {recordGainNode} = audioChain
+        const track = this.#stream.unwrapOrNull()?.getAudioTracks().at(0)
+        const trackSettings = track?.getSettings()
+        console.debug("[CaptureAudio] latency report", {
+            outputLatency: audioContext.outputLatency,
+            baseLatency: audioContext.baseLatency,
+            inputLatencyReported: trackSettings?.latency,
+            deviceId: trackSettings?.deviceId,
+            deviceLabel: track?.label
+        })
         return RecordAudio.start({
             recordingWorklet,
             sourceNode: recordGainNode,

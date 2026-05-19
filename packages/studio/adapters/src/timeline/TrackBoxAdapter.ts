@@ -152,7 +152,9 @@ export class TrackBoxAdapter implements BoxAdapter {
 
     terminate() {this.#terminator.terminate()}
 
-    get audioUnit(): AudioUnitBox {return asInstanceOf(this.#box.tracks.targetVertex.unwrap().box, AudioUnitBox)}
+    get audioUnit(): AudioUnitBox {
+        return asInstanceOf(this.#box.tracks.targetVertex.unwrap("track has no audioUnit").box, AudioUnitBox)
+    }
 
     get target(): PointerField<Pointers.Automation> {return this.#box.target}
 

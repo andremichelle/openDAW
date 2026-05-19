@@ -3,7 +3,6 @@ import {
     int,
     Nullable,
     Option,
-    quantizeFloor,
     Terminable,
     Terminator,
     tryCatch,
@@ -39,7 +38,7 @@ export namespace RecordAudio {
         console.debug("[RecordAudio] start", {outputLatency})
         const terminator = new Terminator()
         const beats = PPQN.fromSignature(1, project.timelineBox.signature.denominator.getValue())
-        const {editing, engine, boxGraph, timelineBox} = project
+        const {editing, engine, boxGraph, timelineBox, tempoMap} = project
         const originalUuid = recordingWorklet.uuid
         // Note: sampleManager.record() and sourceNode.connect() are called in prepareRecording
         let fileBox: Option<AudioFileBox> = Option.None
@@ -138,10 +137,19 @@ export namespace RecordAudio {
                         oldFileBox.delete()
                         return
                     }
+                    // endInSeconds must reflect the *imported sample's* actual
+                    // frame count, not the live `numberOfFrames` snapshot kept
+                    // on `oldFileBox`. The worklet's ring buffer can overshoot
+                    // the recording `limit` by up to one quantum before
+                    // `#finalize` truncates it, so oldFileBox.endInSeconds is
+                    // inflated. Copying it would stretch the rendered waveform
+                    // by that overshoot, causing a linear visual drift along
+                    // the file (audio playback is unaffected).
+                    const audioData = recordingWorklet.data.unwrap("Recorded audio data missing")
                     const newFileBox = AudioFileBox.create(boxGraph, uuid, box => {
                         box.fileName.setValue(oldFileBox.fileName.getValue())
-                        box.startInSeconds.setValue(oldFileBox.startInSeconds.getValue())
-                        box.endInSeconds.setValue(oldFileBox.endInSeconds.getValue())
+                        box.startInSeconds.setValue(0)
+                        box.endInSeconds.setValue(audioData.numberOfFrames / audioData.sampleRate)
                     })
                     for (const pointer of incomingPointers) {
                         pointer.refer(newFileBox)
@@ -198,16 +206,26 @@ export namespace RecordAudio {
                 const loopFrom = loopArea.from.getValue()
                 const allowTakes = project.engine.preferences.settings.recording.allowTakes
                 if (loopEnabled && allowTakes && currentTake.nonEmpty() && currentPosition < lastPosition) {
+                    // Compute the take's length from its own start position to
+                    // loopTo, not from loopFrom. When recording begins mid-loop,
+                    // the first take only spans [takePosition, loopTo]; using
+                    // the full loop length would overshoot by (takePosition - loopFrom).
+                    // Stays deterministic (avoids the latency-lagged live
+                    // regionBox.duration that previously caused peak drift):
+                    // subsequent takes start at loopFrom, so this evaluates to
+                    // the full loop length exactly as before.
+                    const loopTo = loopArea.to.getValue()
                     editing.modify(() => {
                         currentTake.ifSome(take => {
-                            const actualDurationInSeconds = take.regionBox.duration.getValue()
-                            if (actualDurationInSeconds <= 0) {
+                            if (take.regionBox.duration.getValue() <= 0) {
                                 take.regionBox.delete()
                                 currentTake = Option.None
                                 return
                             }
-                            finalizeTake(take, actualDurationInSeconds)
-                            currentWaveformOffset += actualDurationInSeconds
+                            const takeDurationSeconds = tempoMap.intervalToSeconds(
+                                take.regionBox.position.getValue(), loopTo)
+                            finalizeTake(take, takeDurationSeconds)
+                            currentWaveformOffset += takeDurationSeconds
                         })
                         if (currentTake.nonEmpty()) {
                             startNewTake(loopFrom)
@@ -215,37 +233,53 @@ export namespace RecordAudio {
                     }, false)
                 }
                 lastPosition = currentPosition
-                // Create fileBox and region together when recording starts
+                // Create fileBox and region together when recording starts.
                 if (fileBox.isEmpty()) {
-                    // Capture all frames recorded before actual recording (including count-in)
-                    const preRecordingFrames = recordingWorklet.numberOfFrames
-                    const preRecordingSeconds = preRecordingFrames / sampleRate
-                    // If there was count-in, use pre-recording frames as offset; otherwise use outputLatency
+                    // Three terms make up the file_time of audio captured at engine timeline
+                    // = currentPosition (mic case):
+                    //   L                  — worklet head-start: wall-clock between the worklet
+                    //                        being connected (in prepareRecording) and the engine
+                    //                        actually beginning count-in. Cannot be derived from
+                    //                        BPM/signature alone.
+                    //   countInSeconds     — deterministic from bars × signature × bpm.
+                    //   outputLatency      — engine→speaker compensation.
+                    // L is recovered once, here, by reading numberOfFrames at the moment we first
+                    // see isRecording=true and subtracting the BPM-derived countInSeconds. Earlier
+                    // attempts that omitted L put a systematic ~30 ms (one render dispatch) bias
+                    // on every take; earlier attempts that used numberOfFrames as the whole offset
+                    // were noisy by the same ~few ms but never wildly wrong.
                     const countedIn = Recording.wasCountingIn()
-                    const waveformOffset = countedIn ? preRecordingSeconds : outputLatency
+                    const barPPQN = PPQN.fromSignature(
+                        timelineBox.signature.nominator.getValue(),
+                        timelineBox.signature.denominator.getValue())
+                    const countInSeconds = countedIn
+                        ? PPQN.pulsesToSeconds(recording.countInBars * barPPQN, timelineBox.bpm.getValue())
+                        : 0
+                    const wallclockSinceWorklet = recordingWorklet.numberOfFrames / sampleRate
+                    const headStartSeconds = countedIn
+                        ? Math.max(0, wallclockSinceWorklet - countInSeconds)
+                        : wallclockSinceWorklet
+                    const waveformOffset = headStartSeconds + countInSeconds + outputLatency
                     editing.modify(() => {
                         fileBox = Option.wrap(createFileBox())
-                        const position = countedIn ? quantizeFloor(currentPosition, beats) : currentPosition
-                        currentTake = Option.wrap(createTakeRegion(position, waveformOffset, null))
+                        currentTake = Option.wrap(createTakeRegion(currentPosition, waveformOffset, null))
                     }, false)
                     currentWaveformOffset = waveformOffset
                 }
-                currentTake.ifSome(({regionBox}) => {
-                    editing.modify(() => {
-                        if (regionBox.isAttached()) {
-                            const {duration, loopDuration} = regionBox
-                            const totalSeconds = recordingWorklet.numberOfFrames / sampleRate
-                            const takeSeconds = totalSeconds - currentWaveformOffset
-                            duration.setValue(takeSeconds)
-                            loopDuration.setValue(takeSeconds)
-                            recordingWorklet.setFillLength(recordingWorklet.numberOfFrames)
-                            fileBox.ifSome(box => box.endInSeconds.setValue(totalSeconds))
-                        } else {
-                            terminator.terminate()
-                            currentTake = Option.None
-                        }
-                    }, false)
-                })
+                currentTake.ifSome(({regionBox}) => editing.modify(() => {
+                    if (regionBox.isAttached()) {
+                        const {duration, loopDuration} = regionBox
+                        const totalSeconds = recordingWorklet.numberOfFrames / sampleRate
+                        const takeSeconds = totalSeconds - currentWaveformOffset
+                        duration.setValue(takeSeconds)
+                        loopDuration.setValue(takeSeconds)
+                        recordingWorklet.setFillLength(recordingWorklet.numberOfFrames)
+                        fileBox.ifSome(box => box.endInSeconds.setValue(totalSeconds))
+                    } else {
+                        terminator.terminate()
+                        currentTake = Option.None
+                    }
+                }, false))
             })
         )
         return terminator

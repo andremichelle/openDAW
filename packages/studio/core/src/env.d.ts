@@ -21,3 +21,8 @@ declare namespace NodeJS {
         readonly VITE_VJS_ONLINE_SERVER_URL: string
     }
 }
+
+// `latency` is in the MediaCapture spec but missing from lib.dom MediaTrackSettings.
+interface MediaTrackSettings {
+    readonly latency?: number
+}
