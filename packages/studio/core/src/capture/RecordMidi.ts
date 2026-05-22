@@ -77,6 +77,7 @@ export namespace RecordMidi {
                 regionBox.loopDuration.setValue(loopDurationPPQN)
             }
             const {olderTakeAction, olderTakeScope} = recording
+            if (olderTakeScope === "none") {return}
             if (olderTakeScope === "all") {
                 for (const track of capture.audioUnitBox.tracks.pointerHub.incoming()
                     .map(({box}) => asInstanceOf(box, TrackBox))) {

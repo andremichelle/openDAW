@@ -129,7 +129,7 @@ export namespace PreferencesPageLabels {
             })),
             olderTakeScope: EngineSettings.OlderTakeScopeOptions.map(value => ({
                 value,
-                label: value === "all" ? "All takes" : "Previous only"
+                label: value === "all" ? "All takes" : value === "previous-only" ? "Previous only" : "None"
             }))
         }
     }
