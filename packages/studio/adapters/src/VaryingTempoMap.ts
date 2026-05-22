@@ -6,6 +6,7 @@ import {
     NumberComparator,
     Observer,
     quantizeCeil,
+    quantizeFloor,
     Subscription,
     Terminable,
     Terminator
@@ -15,9 +16,11 @@ import {TimelineBoxAdapter} from "./timeline/TimelineBoxAdapter"
 type CacheEntry = { ppqn: ppqn, seconds: seconds, bpm: bpm }
 
 /**
- * Allocation-free cursor that reproduces {@link ValueEvent.valueAt} for monotonically non-decreasing ppqn.
- * Tracks the current segment and the recurrence coefficients m, q so that a step of exactly
- * TempoChangeGrid within the same zone can be resolved as v = m * v + q.
+ * Allocation-free cursor that walks the TempoChangeGrid as a step function: tempo is constant within
+ * each grid cell and sampled at the cell's grid-aligned start (matching BlockRenderer). Tracks the
+ * current segment and the recurrence coefficients m, q so a step of exactly TempoChangeGrid within the
+ * same zone resolves as v = m * v + q. Because every cell is sampled at its grid origin, the walk is
+ * additive: integrate(a, c) === integrate(a, b) + integrate(b, c) for any b.
  */
 export class TempoGridCursor {
     #events: ReadonlyArray<ValueEvent> = []
@@ -36,7 +39,7 @@ export class TempoGridCursor {
         let acc: seconds = 0.0
         let current: ppqn = fromPPQN
         while (current < toPPQN) {
-            const currentBpm = this.#bpmAt(current)
+            const currentBpm = this.#bpmAt(quantizeFloor(current, TempoChangeGrid))
             const nextGrid = quantizeCeil(current, TempoChangeGrid)
             const segmentEnd = nextGrid <= current ? nextGrid + TempoChangeGrid : nextGrid
             const actualEnd = Math.min(segmentEnd, toPPQN)
@@ -59,7 +62,7 @@ export class TempoGridCursor {
         let accumulatedSeconds: seconds = fromSeconds
         let accumulatedPPQN: ppqn = fromPPQN
         while (accumulatedSeconds < targetSeconds) {
-            const currentBpm = this.#bpmAt(accumulatedPPQN)
+            const currentBpm = this.#bpmAt(quantizeFloor(accumulatedPPQN, TempoChangeGrid))
             const nextGrid = quantizeCeil(accumulatedPPQN, TempoChangeGrid)
             const segmentEnd = nextGrid <= accumulatedPPQN ? nextGrid + TempoChangeGrid : nextGrid
             const segmentPPQN = segmentEnd - accumulatedPPQN
@@ -154,6 +157,10 @@ export class VaryingTempoMap implements TempoMap, Terminable {
     readonly #secondsCache: Array<CacheEntry> = []
     readonly #cursor: TempoGridCursor = new TempoGridCursor()
 
+    #ivFrom: ppqn = Number.NaN
+    #ivTo: ppqn = 0.0
+    #ivSeconds: seconds = 0.0
+
     constructor(adapter: TimelineBoxAdapter) {
         this.#adapter = adapter
         this.#terminator.ownAll(
@@ -169,6 +176,7 @@ export class VaryingTempoMap implements TempoMap, Terminable {
     #rebuildCache(): void {
         this.#ppqnCache.length = 0
         this.#secondsCache.length = 0
+        this.#ivFrom = Number.NaN
         const tempoEvents = this.#adapter.tempoTrackEvents
         if (tempoEvents.isEmpty()) {return}
         const collection = tempoEvents.unwrap()
@@ -260,7 +268,24 @@ export class VaryingTempoMap implements TempoMap, Terminable {
     }
 
     intervalToSeconds(fromPPQN: ppqn, toPPQN: ppqn): seconds {
-        return this.ppqnToSeconds(toPPQN) - this.ppqnToSeconds(fromPPQN)
+        if (fromPPQN < 0 || toPPQN < fromPPQN) {
+            return this.ppqnToSeconds(toPPQN) - this.ppqnToSeconds(fromPPQN)
+        }
+        const storageBpm = this.#adapter.box.bpm.getValue()
+        const tempoEvents = this.#adapter.tempoTrackEvents
+        if (tempoEvents.isEmpty()) {return PPQN.pulsesToSeconds(toPPQN - fromPPQN, storageBpm)}
+        const collection = tempoEvents.unwrap()
+        if (collection.events.isEmpty()) {return PPQN.pulsesToSeconds(toPPQN - fromPPQN, storageBpm)}
+        const events = collection.events.asArray()
+        if (fromPPQN === this.#ivFrom && toPPQN >= this.#ivTo) {
+            this.#ivSeconds += this.#cursor.integrate(events, this.#ivTo, toPPQN, storageBpm)
+            this.#ivTo = toPPQN
+            return this.#ivSeconds
+        }
+        this.#ivFrom = fromPPQN
+        this.#ivTo = toPPQN
+        this.#ivSeconds = this.#cursor.integrate(events, fromPPQN, toPPQN, storageBpm)
+        return this.#ivSeconds
     }
 
     intervalToPPQN(fromSeconds: seconds, toSeconds: seconds): ppqn {
