@@ -68,6 +68,9 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
 
     #isSelected: boolean
 
+    #cachedDuration: ppqn = Number.NaN
+    #cachedLoopDuration: ppqn = Number.NaN
+
     constructor(context: BoxAdaptersContext, box: AudioRegionBox) {
         this.#context = context
         this.#box = box
@@ -160,10 +163,16 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get position(): ppqn {return this.#box.position.getValue()}
-    get duration(): ppqn {return this.#durationConverter.toPPQN(this.position)}
+    get duration(): ppqn {
+        if (Number.isNaN(this.#cachedDuration)) {this.#cachedDuration = this.#durationConverter.toPPQN(this.position)}
+        return this.#cachedDuration
+    }
     get complete(): ppqn {return this.position + this.duration}
     get loopOffset(): ppqn {return this.#box.loopOffset.getValue()}
-    get loopDuration(): ppqn {return this.#loopDurationConverter.toPPQN(this.position)}
+    get loopDuration(): ppqn {
+        if (Number.isNaN(this.#cachedLoopDuration)) {this.#cachedLoopDuration = this.#loopDurationConverter.toPPQN(this.position)}
+        return this.#cachedLoopDuration
+    }
 
     isNoteRegion(): this is NoteRegionBoxAdapter {return false}
     isAudioRegion(): this is AudioRegionBoxAdapter {return true}
@@ -295,6 +304,8 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
     toString(): string {return `{AudioRegionBoxAdapter ${UUID.toString(this.#box.address.uuid)}}`}
 
     #dispatchChange(): void {
+        this.#cachedDuration = Number.NaN
+        this.#cachedLoopDuration = Number.NaN
         if (this.#constructing) {return}
         this.#changeNotifier.notify()
         this.trackBoxAdapter.unwrapOrNull()?.regions?.dispatchChange()

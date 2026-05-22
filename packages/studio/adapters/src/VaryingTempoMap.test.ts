@@ -8,7 +8,7 @@ import {
     ValueEvent
 } from "@opendaw/lib-dsp"
 import {bpm, ppqn, seconds} from "@opendaw/lib-dsp"
-import {quantizeCeil} from "@opendaw/lib-std"
+import {quantizeCeil, quantizeFloor} from "@opendaw/lib-std"
 import {TempoGridCursor} from "./VaryingTempoMap"
 
 describe("intervalToSeconds across ppqn=0", () => {
@@ -51,7 +51,7 @@ describe("VaryingTempoMap grid helpers", () => {
         let acc: seconds = 0.0
         let current: ppqn = fromPPQN
         while (current < toPPQN) {
-            const currentBpm = ValueEvent.valueAt(collection, current, storageBpm)
+            const currentBpm = ValueEvent.valueAt(collection, quantizeFloor(current, TempoChangeGrid), storageBpm)
             const nextGrid = quantizeCeil(current, TempoChangeGrid)
             const segmentEnd = nextGrid <= current ? nextGrid + TempoChangeGrid : nextGrid
             const actualEnd = Math.min(segmentEnd, toPPQN)
@@ -69,7 +69,7 @@ describe("VaryingTempoMap grid helpers", () => {
         let accumulatedSeconds: seconds = fromSeconds
         let accumulatedPPQN: ppqn = fromPPQN
         while (accumulatedSeconds < targetSeconds) {
-            const currentBpm = ValueEvent.valueAt(collection, accumulatedPPQN, storageBpm)
+            const currentBpm = ValueEvent.valueAt(collection, quantizeFloor(accumulatedPPQN, TempoChangeGrid), storageBpm)
             const nextGrid = quantizeCeil(accumulatedPPQN, TempoChangeGrid)
             const segmentEnd = nextGrid <= accumulatedPPQN ? nextGrid + TempoChangeGrid : nextGrid
             const segmentPPQN = segmentEnd - accumulatedPPQN
@@ -169,6 +169,24 @@ describe("VaryingTempoMap grid helpers", () => {
         for (const [from, to] of pairs) {
             expect(cursor.integrate(events,from, to, storageBpm))
                 .toBeCloseTo(naiveIntegrate(collection, from, to, storageBpm), 9)
+        }
+    })
+
+    it("integrate is additive across arbitrary split points", () => {
+        const events = buildLongFixture()
+        const last = events[events.length - 1].position
+        const splits: ReadonlyArray<[ppqn, ppqn, ppqn]> = [
+            [0, events[10].position + 13, last],
+            [events[5].position + 7, events[30].position, events[70].position - 19],
+            [13, 4001, 95271],
+            [events[40].position, events[40].position + 40, events[41].position + 5],
+            [last - 200, last + 37, last + PPQN.Bar * 2]
+        ]
+        for (const [a, b, c] of splits) {
+            const whole = cursor.integrate(events, a, c, storageBpm)
+            const part1 = cursor.integrate(events, a, b, storageBpm)
+            const part2 = cursor.integrate(events, b, c, storageBpm)
+            expect(part1 + part2).toBeCloseTo(whole, 9)
         }
     })
 
