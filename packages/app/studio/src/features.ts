@@ -1,4 +1,4 @@
-import {requireProperty} from "@opendaw/lib-std"
+import {asInstanceOf, EmptyExec, requireProperty} from "@opendaw/lib-std"
 
 export const testFeatures = async (): Promise<void> => {
     requireProperty(Promise, "withResolvers")
@@ -11,4 +11,5 @@ export const testFeatures = async (): Promise<void> => {
     requireProperty(crypto, "randomUUID")
     requireProperty(crypto, "subtle")
     requireProperty(crypto.subtle, "digest")
+    asInstanceOf(new Audio().play(), Promise).catch(EmptyExec)
 }
