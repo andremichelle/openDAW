@@ -41,6 +41,11 @@ export class ErrorHandler {
         // so reuse .match() rather than .test() to avoid the lastIndex gotcha.)
         const stack = error.stack
         if (stack !== undefined && stack.trim().length > 0 && stack.match(UrlPattern) === null) {return true}
+        // Stack-less SyntaxError means a script failed to *parse*, not execute. Our own bundle
+        // would never reach production with parse errors, so this signature is overwhelmingly
+        // a third-party content script (Firefox extensions / userscripts live in isolated
+        // worlds and don't show up in document.scripts).
+        if (error.name === "SyntaxError" && (stack === undefined || stack.trim().length === 0)) {return true}
         return false
     }
 
