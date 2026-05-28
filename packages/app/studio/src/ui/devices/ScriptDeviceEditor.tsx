@@ -215,6 +215,7 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
             </div>
         )
         const sampleSelector = new SampleSelector(service, {
+            isAttached: () => sample.isAttached(),
             hasSample: () => sample.file.nonEmpty(),
             replace: (replacement) => replacement.match({
                 none: () => sample.file.targetVertex.ifSome(({box: fileBox}) => {
