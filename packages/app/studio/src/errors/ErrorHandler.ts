@@ -1,4 +1,4 @@
-import {EmptyExec, Errors, Option, Provider, Terminable, Terminator} from "@opendaw/lib-std"
+import {EmptyExec, Errors, isDefined, Option, Optional, Provider, Terminable, Terminator} from "@opendaw/lib-std"
 import {AnimationFrame, Browser, Events} from "@opendaw/lib-dom"
 import {LogBuffer} from "@/errors/LogBuffer.ts"
 import {ErrorLog} from "@/errors/ErrorLog.ts"
@@ -68,6 +68,16 @@ export class ErrorHandler {
         return MonacoPatterns.some(pattern => sources.includes(pattern))
     }
 
+    #messageOf(reason: unknown): Optional<string> {
+        if (typeof reason === "string") {return reason}
+        if (reason instanceof Error) {return reason.message}
+        if (typeof reason === "object" && isDefined(reason)) {
+            const message = (reason as Record<string, unknown>).message
+            if (typeof message === "string") {return message}
+        }
+        return undefined
+    }
+
     #tryIgnore(event: Event): boolean {
         if (event instanceof ErrorEvent && IgnoredErrors.includes(event.message)) {
             console.warn(event.message)
@@ -98,8 +108,9 @@ export class ErrorHandler {
         }
         if (!(event instanceof PromiseRejectionEvent)) {return false}
         const {reason} = event
-        if (reason instanceof Error && IgnoredErrors.some(ignored => reason.message.includes(ignored))) {
-            console.warn(reason.message)
+        const message = this.#messageOf(reason)
+        if (isDefined(message) && IgnoredErrors.some(ignored => message.includes(ignored))) {
+            console.warn(message)
             event.preventDefault()
             return true
         }
