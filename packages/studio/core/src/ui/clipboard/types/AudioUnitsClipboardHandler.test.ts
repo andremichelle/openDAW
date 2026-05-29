@@ -1,0 +1,146 @@
+import {beforeEach, describe, expect, it} from "vitest"
+import {isInstanceOf, Option, UUID} from "@opendaw/lib-std"
+import {Address, Box, BoxEditing, PointerField} from "@opendaw/lib-box"
+import {
+    AudioBusBox,
+    AudioUnitBox,
+    AuxSendBox,
+    CaptureAudioBox,
+    CaptureMidiBox,
+    MIDIControllerBox,
+    MIDIOutputDeviceBox,
+    MIDIOutputParameterBox,
+    RootBox,
+    TrackBox
+} from "@opendaw/studio-boxes"
+import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
+import {ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
+import {ClipboardUtils} from "../ClipboardUtils"
+
+describe("AudioUnitsClipboardHandler", () => {
+    let source: ProjectSkeleton
+    let target: ProjectSkeleton
+
+    beforeEach(() => {
+        source = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+        target = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+    })
+
+    const createAudioUnit = (skeleton: ProjectSkeleton, index: number = 1): AudioUnitBox => {
+        const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}} = skeleton
+        let audioUnitBox!: AudioUnitBox
+        boxGraph.beginTransaction()
+        audioUnitBox = AudioUnitBox.create(boxGraph, UUID.generate(), box => {
+            box.type.setValue(AudioUnitType.Instrument)
+            box.collection.refer(rootBox.audioUnits)
+            box.output.refer(primaryAudioBusBox.input)
+            box.index.setValue(index)
+        })
+        boxGraph.endTransaction()
+        return audioUnitBox
+    }
+
+    // Builds a MIDI-Output instrument with one CC parameter and its Value automation lane,
+    // mirroring AddParameterButton.tsx (the parameter box and its track are born as a pair).
+    const addMidiOutputWithCC = (skeleton: ProjectSkeleton, audioUnit: AudioUnitBox): {
+        device: MIDIOutputDeviceBox, parameter: MIDIOutputParameterBox, instrumentTrack: TrackBox, ccTrack: TrackBox
+    } => {
+        const {boxGraph} = skeleton
+        let device!: MIDIOutputDeviceBox
+        let parameter!: MIDIOutputParameterBox
+        let instrumentTrack!: TrackBox
+        let ccTrack!: TrackBox
+        boxGraph.beginTransaction()
+        device = MIDIOutputDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.label.setValue("MIDI Output")
+            box.host.refer(audioUnit.input)
+        })
+        instrumentTrack = TrackBox.create(boxGraph, UUID.generate(), box => {
+            box.type.setValue(TrackType.Notes)
+            box.tracks.refer(audioUnit.tracks)
+            box.target.refer(audioUnit)
+            box.index.setValue(0)
+        })
+        parameter = MIDIOutputParameterBox.create(boxGraph, UUID.generate(), box => {
+            box.label.setValue("CC")
+            box.owner.refer(device.parameters)
+            box.controller.setValue(64)
+        })
+        ccTrack = TrackBox.create(boxGraph, UUID.generate(), box => {
+            box.type.setValue(TrackType.Value)
+            box.tracks.refer(audioUnit.tracks)
+            box.target.refer(parameter.value)
+            box.index.setValue(1)
+        })
+        boxGraph.endTransaction()
+        return {device, parameter, instrumentTrack, ccTrack}
+    }
+
+    // Mirrors AudioUnitsClipboard.copyAudioUnit dependency collection for a non-output unit.
+    const collectAudioUnitDependencies = (audioUnitBox: AudioUnitBox): ReadonlyArray<Box> =>
+        Array.from(audioUnitBox.graph.dependenciesOf(audioUnitBox, {
+            alwaysFollowMandatory: true,
+            stopAtResources: true,
+            excludeBox: (box: Box) => {
+                if (box.ephemeral) {return true}
+                if (box.name === RootBox.ClassName) {return true}
+                if (box.name === AudioBusBox.ClassName) {return true}
+                if (box.name === AuxSendBox.ClassName) {return true}
+                if (box.name === MIDIControllerBox.ClassName) {return true}
+                return false
+            }
+        }).boxes)
+
+    // Mirrors AudioUnitsClipboard.pasteNewAudioUnit pointer remapping.
+    const makePasteMapper = (rootBox: RootBox, primaryBusUuid: UUID.Bytes) => ({
+        mapPointer: (pointer: PointerField, address: Option<Address>): Option<Address> => {
+            if (address.isEmpty()) {return Option.None}
+            if (pointer.pointerType === Pointers.AudioUnits) {return Option.wrap(rootBox.audioUnits.address)}
+            if (pointer.pointerType === Pointers.AudioOutput) {return address.map(addr => addr.moveTo(primaryBusUuid))}
+            if (pointer.pointerType === Pointers.MIDIDevice) {return Option.wrap(rootBox.outputMidiDevices.address)}
+            return Option.None
+        }
+    })
+
+    it("includes the MIDIOutputParameterBox when copying a MIDI-output unit with a CC automation lane", () => {
+        const audioUnit = createAudioUnit(source)
+        const {parameter, ccTrack} = addMidiOutputWithCC(source, audioUnit)
+        const deps = collectAudioUnitDependencies(audioUnit)
+        expect(deps).toContain(parameter)
+        expect(deps).toContain(ccTrack)
+    })
+
+    it("round-trip paste of a MIDI-output unit with a CC automation lane does not throw", () => {
+        const sourceAU = createAudioUnit(source)
+        addMidiOutputWithCC(source, sourceAU)
+        const data = ClipboardUtils.serializeBoxes([sourceAU, ...collectAudioUnitDependencies(sourceAU)])
+        const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}} = target
+        const editing = new BoxEditing(boxGraph)
+        expect(() => {
+            editing.modify(() => {
+                ClipboardUtils.deserializeBoxes(data, boxGraph,
+                    makePasteMapper(rootBox, primaryAudioBusBox.address.uuid))
+            })
+        }).not.toThrow()
+    })
+
+    it("rewires the pasted automation lane to the pasted parameter and keeps its value edge", () => {
+        const sourceAU = createAudioUnit(source)
+        addMidiOutputWithCC(source, sourceAU)
+        const data = ClipboardUtils.serializeBoxes([sourceAU, ...collectAudioUnitDependencies(sourceAU)])
+        const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}} = target
+        const editing = new BoxEditing(boxGraph)
+        editing.modify(() => {
+            ClipboardUtils.deserializeBoxes(data, boxGraph,
+                makePasteMapper(rootBox, primaryAudioBusBox.address.uuid))
+        })
+        const pastedParameter = boxGraph.boxes().find(box => isInstanceOf(box, MIDIOutputParameterBox)) as MIDIOutputParameterBox
+        expect(pastedParameter).toBeDefined()
+        const pastedCCTrack = boxGraph.boxes()
+            .filter((box): box is TrackBox => isInstanceOf(box, TrackBox))
+            .find(track => track.type.getValue() === TrackType.Value)
+        expect(pastedCCTrack).toBeDefined()
+        expect(pastedCCTrack!.target.targetVertex.unwrap().box).toBe(pastedParameter)
+        expect(pastedParameter.value.pointerHub.incoming().length).toBe(1)
+    })
+})
