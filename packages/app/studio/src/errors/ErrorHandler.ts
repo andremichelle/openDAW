@@ -7,10 +7,9 @@ import {Surface} from "@/ui/surface/Surface.tsx"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo"
 
-const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP", "Zotero Connector", "hintMode", "handleHint"]
+const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP", "Zotero Connector", "hintMode", "handleHint", "Distributor.getValue"]
 const IgnoredErrors = [
     "ResizeObserver loop completed with undelivered notifications.",
-    "Request timeout appSettingsDistributor.getValue",
     "Script error."
 ]
 const BrowserInternalPatterns = ["feature named", "window.__firefox__"]
@@ -23,6 +22,7 @@ export class ErrorHandler {
     readonly #buildInfo: BuildInfo
     readonly #recover: Provider<Option<Provider<Promise<void>>>>
     #errorThrown: boolean = false
+    #extensionWarningShown: boolean = false
 
     constructor(buildInfo: BuildInfo, recover: Provider<Option<Provider<Promise<void>>>>) {
         this.#buildInfo = buildInfo
@@ -173,13 +173,16 @@ export class ErrorHandler {
         // Warn about extension errors but don't crash
         if (looksLikeExtension && !this.#errorThrown) {
             event.preventDefault()
-            const originInfo = foreignOrigin !== null
-                ? `This error originated from external code (${new URL(foreignOrigin).hostname}).`
-                : "A browser extension may have caused an error."
-            Dialogs.info({
-                headline: "Warning",
-                message: `${originInfo} Consider disabling extensions for a more stable experience.`
-            }).then(EmptyExec)
+            if (!this.#extensionWarningShown) {
+                this.#extensionWarningShown = true
+                const originInfo = foreignOrigin !== null
+                    ? `This error originated from external code (${new URL(foreignOrigin).hostname}).`
+                    : "A browser extension caused this error, not openDAW."
+                Dialogs.info({
+                    headline: "Warning",
+                    message: `${originInfo} Consider disabling extensions for a more stable experience.`
+                }).then(EmptyExec)
+            }
             return false
         }
         console.debug("processError", scope, event)
