@@ -20,6 +20,10 @@ type Construct = {
 export const Slot = (
     {lifecycle, service, noteReceiver, adapter, sample, octave, semitone}: Construct) => {
     const sampleSelector = new SampleSelector(service, {
+        isAttached: (): boolean => sample.getValue().match({
+            none: () => adapter.box.isAttached(),
+            some: ({box}) => box.isAttached()
+        }),
         hasSample: (): boolean => sample.getValue().mapOr(sample => sample.box.file.nonEmpty(), false),
         replace: (replacement: Option<AudioFileBox>) => {
             sample.getValue().match<unknown>({

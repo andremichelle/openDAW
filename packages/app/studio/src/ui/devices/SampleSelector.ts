@@ -12,6 +12,7 @@ import {DragAndDrop} from "@/ui/DragAndDrop"
 import {Sample} from "@opendaw/studio-adapters"
 
 export interface SampleSelectStrategy {
+    isAttached(): boolean
     hasSample(): boolean
     replace(replacement: Option<AudioFileBox>): void
 }
@@ -40,6 +41,7 @@ export namespace SampleSelectStrategy {
     }
 
     export const forPointerField = (filePointer: PointerField<Pointers.AudioFile>): SampleSelectStrategy => ({
+        isAttached: (): boolean => filePointer.box.isAttached(),
         hasSample: (): boolean => filePointer.nonEmpty(),
         replace: (replacement: Option<AudioFileBox>): void => changePointer(filePointer, replacement)
     })
@@ -56,6 +58,7 @@ export class SampleSelector {
 
     newSample(sample: Sample) {
         if (!this.#service.hasProfile) {return}
+        if (!this.#strategy.isAttached()) {return}
         const {project: {boxGraph, editing}} = this.#service
         const {uuid: uuidAsString, name} = sample
         const uuid = UUID.parse(uuidAsString)

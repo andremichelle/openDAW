@@ -83,7 +83,7 @@ Huge thanks to our [ambassadors](https://opendaw.org/ambassadors), whose dedicat
 
 ### openDAW Visionary — $25.00
 
-Stephen Tai, Pathfinder, One Sound Every Day (santino), kanaris, Oli Larkin
+Stephen Tai, Pathfinder, One Sound Every Day (santino), kanaris, Oli Larkin, [@Robert Anthony](https://github.com/RobertAnthonyDevelopment)
 
 ### openDAW Supporter — $5.00
 
