@@ -9,6 +9,7 @@ import {DemoProjectJson} from "@/ui/dashboard/DemoProjectJson"
 import {DemoProject} from "@/ui/dashboard/DemoProject"
 import {network, Promises} from "@opendaw/lib-runtime"
 import {ProjectBundle} from "@opendaw/studio-core"
+import {connectRoom} from "@/service/StudioLiveRoomConnect"
 
 const className = Html.adoptStyleSheet(css, "DemoProjects")
 
@@ -49,9 +50,24 @@ const NewProjectJson: DemoProjectJson = {
     bundleSize: 0,
     metadata: {
         name: "New Project",
-        artist: "openDAW",
+        artist: "",
         description: "",
         tags: ["clean slate"],
+        created: "",
+        modified: "",
+        coverMimeType: ""
+    }
+}
+
+const LiveRoomJson: DemoProjectJson = {
+    id: "",
+    hasCover: false,
+    bundleSize: 0,
+    metadata: {
+        name: "New Live Room",
+        artist: "",
+        description: "",
+        tags: ["collaborate"],
         created: "",
         modified: "",
         coverMimeType: ""
@@ -94,7 +110,10 @@ export const DemoProjects = ({service}: Construct) => (
     <div className={className}>
         <h3 style={{color: Colors.orange.toString()}}>Start</h3>
         <div className="projects">
-            <DemoProject json={NewProjectJson} load={() => service.newProject()}/>
+            <DemoProject json={NewProjectJson} load={() => service.newProject()} extraClassName="tinted-blue"
+                         cover="./favicon.svg"/>
+            <DemoProject json={LiveRoomJson} load={() => connectRoom(service)} extraClassName="tinted-green"
+                         cover="./favicon-live.svg"/>
             <hr/>
             <Await
                 factory={() => fetch(listUrl)

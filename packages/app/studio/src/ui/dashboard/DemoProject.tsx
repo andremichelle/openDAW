@@ -9,20 +9,23 @@ const className = Html.adoptStyleSheet(css, "DemoProject")
 type Construct = {
     json: DemoProjectJson
     load: Exec
+    extraClassName?: string
+    cover?: string
 }
 
-export const DemoProject = ({json, load}: Construct) => {
-    const coverUrl = json.hasCover
+export const DemoProject = ({json, load, extraClassName, cover}: Construct) => {
+    const coverUrl = cover ?? (json.hasCover
         ? `https://api.opendaw.studio/music/cover.php?id=${json.id}&preview=true`
-        : "./empty.svg"
+        : "./empty.svg")
     return (
-        <div className={className} onclick={load}>
+        <div className={Html.buildClassList(className, extraClassName)} onclick={load}>
             <img src={coverUrl} alt="cover" crossOrigin="anonymous"/>
             <div className="meta">
                 <div className="title">
                     <span className="name">{json.metadata.name}</span>
-                    <span> by </span>
-                    <span className="artist">{json.metadata.artist}</span>
+                    {Strings.nonEmpty(json.metadata.artist) && <span> by </span>}
+                    {Strings.nonEmpty(json.metadata.artist) &&
+                        <span className="artist">{json.metadata.artist}</span>}
                     {
                         json.bundleSize > 0 && (
                             <span className="size">({Bytes.toString(json.bundleSize)})</span>
