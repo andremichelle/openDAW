@@ -167,7 +167,14 @@ export const ProjectProfileInfo = ({lifecycle, service}: Construct) => {
             () => profile.updateMetaData("tags", inputTags.value.split(",").map(x => x.trim()))),
         Events.subscribe(inputName, "input", () => Html.limitChars(inputDescription, "value", 128)),
         Events.subscribe(inputDescription, "input", () => Html.limitChars(inputDescription, "value", 512)),
-        coverModel.subscribe(owner => profile.updateCover(owner))
+        coverModel.subscribe(owner => profile.updateCover(owner)),
+        profile.subscribeCover(cover => coverModel.wrapOption(cover)),
+        profile.subscribeMetaData(meta => {
+            if (document.activeElement !== inputName) {inputName.value = meta.name}
+            if (document.activeElement !== inputArtist) {inputArtist.value = meta.artist}
+            if (document.activeElement !== inputDescription) {inputDescription.value = meta.description}
+            if (document.activeElement !== inputTags) {inputTags.value = meta.tags.join(", ")}
+        })
     )
     return (
         <div className={className}>

@@ -9,8 +9,10 @@ import {TrafficMeter} from "./TrafficMeter"
 export type AssetReader = {
     readonly hasSample: (uuid: UUID.Bytes) => Promise<boolean>
     readonly hasSoundfont: (uuid: UUID.Bytes) => Promise<boolean>
+    readonly hasCover: (uuid: UUID.Bytes) => Promise<boolean>
     readonly readSample: (uuid: UUID.Bytes) => Promise<[ArrayBuffer, SampleMetaData]>
     readonly readSoundfont: (uuid: UUID.Bytes) => Promise<[ArrayBuffer, SoundfontMetaData]>
+    readonly readCover: (uuid: UUID.Bytes) => Promise<ArrayBuffer>
 }
 
 export class AssetServer {
@@ -58,6 +60,9 @@ export class AssetServer {
                     have.push(asset.uuid)
                 } else if (asset.assetType === "soundfont" && await this.#assetReader.hasSoundfont(uuid)) {
                     console.debug("[P2P:Server] have soundfont", asset.uuid)
+                    have.push(asset.uuid)
+                } else if (asset.assetType === "cover" && await this.#assetReader.hasCover(uuid)) {
+                    console.debug("[P2P:Server] have cover", asset.uuid)
                     have.push(asset.uuid)
                 } else {
                     console.debug("[P2P:Server] do NOT have", asset.assetType, asset.uuid)
@@ -113,11 +118,15 @@ export class AssetServer {
             const [wavBytes, meta] = await this.#assetReader.readSample(uuid)
             console.debug("[P2P:Server] sample read, wav size:", wavBytes.byteLength, "packing zip...")
             zipBytes = await AssetZip.packSample(wavBytes, meta)
-        } else {
+        } else if (assetType === "soundfont") {
             console.debug("[P2P:Server] reading soundfont from OPFS...")
             const [sf2Bytes, meta] = await this.#assetReader.readSoundfont(uuid)
             console.debug("[P2P:Server] soundfont read, sf2 size:", sf2Bytes.byteLength, "packing zip...")
             zipBytes = await AssetZip.packSoundfont(sf2Bytes, meta)
+        } else {
+            console.debug("[P2P:Server] reading cover...")
+            // The cover is already a compressed WebP and carries no metadata, so it is transferred as raw bytes.
+            zipBytes = await this.#assetReader.readCover(uuid)
         }
         const chunks = ChunkProtocol.split(zipBytes)
         console.debug("[P2P:Server] sending", chunks.length, "chunks, zip size:", zipBytes.byteLength)

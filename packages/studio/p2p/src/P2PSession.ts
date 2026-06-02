@@ -1,4 +1,4 @@
-import {Terminable} from "@opendaw/lib-std"
+import {Progress, Terminable, UUID} from "@opendaw/lib-std"
 import {AssetSignaling, type SignalingSocket} from "./AssetSignaling"
 import {AssetServer, type AssetReader} from "./AssetServer"
 import {PeerAssetProvider} from "./PeerAssetProvider"
@@ -39,6 +39,10 @@ export class P2PSession implements Terminable {
 
     get signaling(): AssetSignaling {return this.#signaling}
     get trafficMeter(): TrafficMeter {return this.#trafficMeter}
+
+    fetchCover(uuid: UUID.Bytes, progress: Progress.Handler): Promise<ArrayBuffer> {
+        return this.#provider.fetchCover(uuid, progress)
+    }
 
     terminate(): void {
         if (this.#terminated) {return}

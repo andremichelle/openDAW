@@ -69,6 +69,7 @@ export const RootBox: BoxSchema<Pointers> = {
                 }
             },
             100: {type: "pointer", name: "shadertoy", pointerType: Pointers.Shadertoy, mandatory: false},
+            101: {type: "pointer", name: "project-meta", pointerType: Pointers.ProjectMeta, mandatory: false},
 
             // TODO Move to UserInterfaceBox
             111: {type: "pointer", name: "editing-channel", pointerType: Pointers.Editing, mandatory: false}

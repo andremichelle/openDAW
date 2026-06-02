@@ -109,12 +109,14 @@ const publishEnvelope = (topic: string, message: Record<string, unknown>): strin
 const createMockAssetReader = (sf2Size: number): AssetReader => ({
     hasSample: async () => false,
     hasSoundfont: async () => true,
+    hasCover: async () => false,
     readSample: async () => {throw new Error("not used")},
     readSoundfont: async (uuid: UUID.Bytes) => [new ArrayBuffer(sf2Size), {
         uuid: UUID.toString(uuid),
         name: "test-font",
         type: "soundfont" as const
-    } as never]
+    } as never],
+    readCover: async () => {throw new Error("not used")}
 })
 
 const openConnection = async (

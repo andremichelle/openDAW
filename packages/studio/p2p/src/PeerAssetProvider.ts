@@ -13,7 +13,7 @@ export const MAX_RETRIES = 3
 type PendingRequest = {
     readonly uuid: UUID.Bytes
     readonly uuidString: string
-    readonly assetType: "sample" | "soundfont"
+    readonly assetType: "sample" | "soundfont" | "cover"
     readonly progress: Progress.Handler
     readonly resolve: (zipBytes: ArrayBuffer) => void
     readonly reject: (error: Error) => void
@@ -56,7 +56,13 @@ export class PeerAssetProvider {
         return AssetZip.unpackSoundfont(zipBytes)
     }
 
-    #requestAsset(uuid: UUID.Bytes, assetType: "sample" | "soundfont", progress: Progress.Handler): Promise<ArrayBuffer> {
+    async fetchCover(uuid: UUID.Bytes, progress: Progress.Handler): Promise<ArrayBuffer> {
+        console.debug("[P2P:Provider] fetchCover", UUID.toString(uuid))
+        // The cover is transferred as raw bytes (no zip), so the received payload is the image itself.
+        return this.#requestAsset(uuid, "cover", progress)
+    }
+
+    #requestAsset(uuid: UUID.Bytes, assetType: "sample" | "soundfont" | "cover", progress: Progress.Handler): Promise<ArrayBuffer> {
         const uuidString = UUID.toString(uuid)
         const {promise, resolve, reject} = Promise.withResolvers<ArrayBuffer>()
         this.#pendingRequests.set(uuidString, {

@@ -6,6 +6,7 @@ import {IconSymbol} from "@opendaw/studio-enums"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Events, Files, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
+import {encodeCover} from "./CoverImage"
 
 const className = Html.adoptStyleSheet(css, "Cover")
 
@@ -33,17 +34,14 @@ export const Cover = ({lifecycle, model}: Construct) => {
             }
             const file = value?.at(0)
             if (!isDefined(file)) {return}
-            if (file.size > (1 << 20) * 4) {
-                Dialogs.info({headline: "Cover", message: "Image is too large. Keep it below 4mb."}).finally()
+            // Large uploads are shrunk (fit within CoverMaxSize and re-encoded as WebP), not rejected.
+            const {status: encodeStatus, value: encoded} =
+                await Promises.tryCatch(encodeCover(await file.arrayBuffer()))
+            if (encodeStatus === "rejected") {
+                Dialogs.info({headline: "Cover", message: `Unknown image format (${file.type}).`}).finally()
                 return
             }
-            const fallback = image.src
-            image.onerror = () => {
-                image.onerror = null
-                image.src = fallback
-                Dialogs.info({headline: "Cover", message: `Unknown image format (${file.type}).`}).finally()
-            }
-            model.wrap(await file.arrayBuffer())
+            model.wrap(encoded)
         })
     )
     return (

@@ -37,6 +37,7 @@ export enum Pointers {
     Parameter,
     ParameterController,
     PianoMode,
+    ProjectMeta,
     RegionCollection,
     Sample,
     Selection,
