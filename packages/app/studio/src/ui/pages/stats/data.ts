@@ -1,4 +1,4 @@
-import {Nullable, Option, isAbsent} from "@opendaw/lib-std"
+import {isAbsent, Nullable, Option} from "@opendaw/lib-std"
 
 export type DailySeries = ReadonlyArray<readonly [date: string, value: number]>
 
@@ -150,10 +150,10 @@ export const fetchDiscordStats = async (): Promise<DiscordStats> => {
 }
 
 export const fetchSponsorStats = async (): Promise<SponsorStats> =>
-    fetchJson<SponsorStats>("/sponsors.json")
+    fetchJson<SponsorStats>(`/sponsors.json?t=${Date.now()}`)
 
 export const fetchBuildInfo = async (): Promise<BuildInfo> =>
-    fetchJson<BuildInfo>("/build-info.json")
+    fetchJson<BuildInfo>(`/build-info.json?t=${Date.now()}`)
 
 export const formatRelativeDate = (timestamp: number): string => {
     const diff = Date.now() - timestamp

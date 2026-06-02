@@ -1,4 +1,4 @@
-import {EmptyExec, Errors, Option, Provider, Terminable, Terminator} from "@opendaw/lib-std"
+import {EmptyExec, Errors, isDefined, Option, Provider, Terminable, Terminator} from "@opendaw/lib-std"
 import {AnimationFrame, Browser, Events} from "@opendaw/lib-dom"
 import {LogBuffer} from "@/errors/LogBuffer.ts"
 import {ErrorLog} from "@/errors/ErrorLog.ts"
