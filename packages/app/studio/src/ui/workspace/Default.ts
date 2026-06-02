@@ -16,7 +16,7 @@ const DevicesPanel = PanelState.create({
     icon: IconSymbol.Flask,
     panelType: PanelType.DevicePanel,
     notPopoutable: true,
-    constrains: {type: "fixed", fixedSize: 240}
+    constrains: {type: "fixed", fixedSize: 248}
 })
 const NotepadPanel = PanelState.create({
     type: "panel",
