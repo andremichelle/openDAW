@@ -10,7 +10,8 @@ import {BuildInfo} from "@/BuildInfo"
 const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP", "Zotero Connector", "hintMode", "handleHint"]
 const IgnoredErrors = [
     "ResizeObserver loop completed with undelivered notifications.",
-    "Request timeout appSettingsDistributor.getValue",
+    "Distributor.getValue",
+    "getDictionariesByLanguageId",
     "Script error."
 ]
 const BrowserInternalPatterns = ["feature named", "window.__firefox__"]
@@ -93,8 +94,9 @@ export class ErrorHandler {
         }
         if (!(event instanceof PromiseRejectionEvent)) {return false}
         const {reason} = event
-        if (reason instanceof Error && IgnoredErrors.some(ignored => reason.message.includes(ignored))) {
-            console.warn(reason.message)
+        const reasonMessage = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : undefined
+        if (isDefined(reasonMessage) && IgnoredErrors.some(ignored => reasonMessage.includes(ignored))) {
+            console.warn(reasonMessage)
             event.preventDefault()
             return true
         }
