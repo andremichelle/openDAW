@@ -44,6 +44,7 @@ import {LKR} from "@/ui/devices/constants"
 import {CodeEditorExample} from "@/ui/code-editor/CodeEditorState"
 import {SampleSelector, SampleSelectStrategy} from "@/ui/devices/SampleSelector"
 import {MenuItem} from "@opendaw/studio-core"
+import {Dialogs} from "@/ui/components/dialogs"
 
 const className = Html.adoptStyleSheet(css, "ScriptDeviceEditor")
 
@@ -164,7 +165,14 @@ export const ScriptDeviceEditor = ({lifecycle, service, adapter, deviceHost, con
     const errorIcon: HTMLElement = (
         <div className="error hidden"
              style={{cursor: "pointer"}}
-             onclick={() => Clipboard.writeText(lastErrorMessage)}>
+             onclick={() => Dialogs.info({
+                 headline: "Script Error",
+                 message: lastErrorMessage,
+                 buttons: [{
+                     text: "Copy to Clipboard",
+                     onClick: handler => Clipboard.writeText(lastErrorMessage).finally(() => handler.close())
+                 }]
+             })}>
             <Icon symbol={IconSymbol.Bug}/>
         </div>
     )

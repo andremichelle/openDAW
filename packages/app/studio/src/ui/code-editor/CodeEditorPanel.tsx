@@ -27,13 +27,26 @@ type Construct = {
 }
 
 export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
-    const statusLabel: HTMLDivElement = (<div className="status idle">Idle</div>)
+    let statusText = "Idle"
+    let statusType: "idle" | "success" | "error" = "idle"
+    const statusLabel: HTMLDivElement = (
+        <div className="status idle"
+             onclick={() => {
+                 if (statusType !== "error") {return}
+                 Clipboard.writeText(statusText).then(() => Dialogs.info({
+                     headline: "Copied to Clipboard",
+                     message: "The error message has been copied to your clipboard."
+                 }))
+             }}>Idle</div>
+    )
     const state = service.activeCodeEditor.unwrapOrNull()
     const handler: Nullable<CodeEditorHandler> = isDefined(state) ? state.handler : null
     const initialCode = isDefined(state) ? state.initialCode : defaultCode
     const examples: ReadonlyArray<CodeEditorExample> = isDefined(state) ? state.examples : []
     const starterPrompt = isDefined(state) ? state.starterPrompt : ""
     const setStatus = (text: string, type: "idle" | "success" | "error") => {
+        statusText = text
+        statusType = type
         statusLabel.textContent = text
         statusLabel.className = `status ${type}`
     }
