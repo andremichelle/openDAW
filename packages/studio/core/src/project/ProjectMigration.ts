@@ -11,6 +11,7 @@ import {
     MIDIOutputDeviceBox,
     NeuralAmpDeviceBox,
     RevampDeviceBox,
+    SelectionBox,
     TimelineBox,
     ValueEventBox,
     ValueEventCollectionBox,
@@ -30,6 +31,7 @@ import {
     migrateMIDIOutputDeviceBox,
     migrateNeuralAmpDeviceBox,
     migrateRevampDeviceBox,
+    migrateSelectionBox,
     migrateTimelineBox,
     migrateValueEventBox,
     migrateValueEventCollection,
@@ -100,7 +102,8 @@ export class ProjectMigration {
             visitRevampDeviceBox: (box: RevampDeviceBox) => migrateRevampDeviceBox(boxGraph, box),
             visitVaporisateurDeviceBox: (box: VaporisateurDeviceBox) => migrateVaporisateurDeviceBox(boxGraph, box),
             visitValueEventCollectionBox: (box: ValueEventCollectionBox) => migrateValueEventCollection(boxGraph, box),
-            visitDelayDeviceBox: (box: DelayDeviceBox) => migrateDelayDeviceBox(boxGraph, box)
+            visitDelayDeviceBox: (box: DelayDeviceBox) => migrateDelayDeviceBox(boxGraph, box),
+            visitSelectionBox: (box: SelectionBox) => migrateSelectionBox(boxGraph, box)
         }))
     }
 }
