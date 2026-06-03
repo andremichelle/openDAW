@@ -48,6 +48,7 @@ import {
     DeviceBoxAdapter,
     DeviceBoxUtils,
     Devices,
+    FilteredRemoteSelection,
     FilteredSelection,
     isVertexOfBox,
     ParameterFieldAdapters,
@@ -55,6 +56,7 @@ import {
     ProjectMandatoryBoxes,
     ProjectSkeleton,
     RegionAdapters,
+    RemoteSelections,
     RootBoxAdapter,
     SampleLoaderManager,
     ScriptCompiler,
@@ -141,6 +143,9 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly selection: VertexSelection
     readonly deviceSelection: FilteredSelection<DeviceBoxAdapter>
     readonly regionSelection: FilteredSelection<AnyRegionBoxAdapter>
+    readonly remoteSelections: RemoteSelections
+    readonly remoteDeviceSelection: FilteredRemoteSelection<DeviceBoxAdapter>
+    readonly remoteRegionSelection: FilteredRemoteSelection<AnyRegionBoxAdapter>
     readonly boxAdapters: BoxAdapters
     readonly userEditingManager: UserEditingManager
     readonly parameterFieldAdapters: ParameterFieldAdapters
@@ -185,6 +190,21 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
             }
         ))
         this.regionSelection = this.#terminator.own(this.selection.createFilteredSelection(
+            isVertexOfBox(UnionBoxTypes.isRegionBox),
+            {
+                fx: (adapter: AnyRegionBoxAdapter) => adapter.box,
+                fy: vertex => RegionAdapters.for(this.boxAdapters, vertex.box)
+            }
+        ))
+        this.remoteSelections = this.#terminator.own(new RemoteSelections(this.rootBox, this.selection.user))
+        this.remoteDeviceSelection = this.#terminator.own(this.remoteSelections.createFilteredSelection(
+            isVertexOfBox(DeviceBoxUtils.isDeviceBox),
+            {
+                fx: (adapter: DeviceBoxAdapter) => adapter.box,
+                fy: vertex => this.boxAdapters.adapterFor(vertex.box, Devices.isAny)
+            }
+        ))
+        this.remoteRegionSelection = this.#terminator.own(this.remoteSelections.createFilteredSelection(
             isVertexOfBox(UnionBoxTypes.isRegionBox),
             {
                 fx: (adapter: AnyRegionBoxAdapter) => adapter.box,

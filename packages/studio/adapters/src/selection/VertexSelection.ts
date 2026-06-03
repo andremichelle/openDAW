@@ -5,6 +5,8 @@ import {
     Editing,
     int,
     Listeners,
+    MutableObservableOption,
+    ObservableOption,
     Option,
     Predicate,
     Selection,
@@ -16,7 +18,7 @@ import {
 } from "@opendaw/lib-std"
 import {Address, Addressable, BoxGraph, Field, PointerField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {SelectionBox} from "@opendaw/studio-boxes"
+import {SelectionBox, UserInterfaceBox} from "@opendaw/studio-boxes"
 import {SelectableVertex} from "./SelectableVertex"
 import {SelectionEntry} from "./SelectionEntry"
 import {FilteredSelection} from "./FilteredSelection"
@@ -30,6 +32,7 @@ export class VertexSelection implements Selection<SelectableVertex> {
     readonly #entityMap: SortedSet<UUID.Bytes, SelectionEntry> // sorted on entity
     readonly #selectableMap: SortedSet<Address, SelectionEntry> // sorted on selectable
     readonly #listeners: Listeners<SelectionListener<SelectableVertex>>
+    readonly #user: MutableObservableOption<UserInterfaceBox>
 
     #target: Option<Field> = Option.None
 
@@ -38,13 +41,18 @@ export class VertexSelection implements Selection<SelectableVertex> {
         this.#entityMap = UUID.newSet(entry => entry.box.address.uuid)
         this.#selectableMap = Address.newSet(entry => entry.selectable.address)
         this.#listeners = new Listeners<SelectionListener<SelectableVertex>>()
+        this.#user = new MutableObservableOption<UserInterfaceBox>()
     }
+
+    /** The currently followed user, observable so remote views can react to {@link switch}/{@link release}. */
+    get user(): ObservableOption<UserInterfaceBox> {return this.#user}
 
     switch(target: Field<Pointers.Selection>): this {
         this.release()
         console.debug(`VertexSelection.switch(${target.address.toString()})`)
         this.#target = Option.wrap(target)
         this.#lifeTime.own(this.#watch(target))
+        this.#user.wrap(asInstanceOf(target.box, UserInterfaceBox))
         return this
     }
 
@@ -55,6 +63,7 @@ export class VertexSelection implements Selection<SelectableVertex> {
         this.#selectableMap.forEach(entry => this.#listeners.proxy.onDeselected(entry.selectable))
         this.#selectableMap.clear()
         this.#entityMap.clear()
+        this.#user.clear()
     }
 
     createFilteredSelection<T extends Addressable>(affiliate: Predicate<SelectableVertex>,
