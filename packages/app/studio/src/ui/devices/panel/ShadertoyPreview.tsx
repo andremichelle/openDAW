@@ -57,6 +57,10 @@ export const ShadertoyPreview = ({lifecycle, service}: Construct) => {
                             const runner = new ShadertoyRunner(service.optShadertoyState.unwrap("no state"), gl)
                             shaderLifecycle.ownAll(
                                 visible.catchupAndSubscribe(owner => canvas.classList.toggle("hidden", !owner.getValue())),
+                                Html.watchResize(element, () => {
+                                    if (canvas.clientHeight === 0) {return}
+                                    canvas.style.width = `${canvas.clientHeight * 1280 / 720}px`
+                                }),
                                 Events.subscribe(canvas, "click", async () => {
                                     try {
                                         if (document.fullscreenElement) {
