@@ -11,7 +11,9 @@ import {
     MIDIOutputDeviceBox,
     MIDIOutputParameterBox,
     RootBox,
-    TrackBox
+    TrackBox,
+    ValueEventCollectionBox,
+    ValueRegionBox
 } from "@opendaw/studio-boxes"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
@@ -142,5 +144,44 @@ describe("AudioUnitsClipboardHandler", () => {
         expect(pastedCCTrack).toBeDefined()
         expect(pastedCCTrack!.target.targetVertex.unwrap().box).toBe(pastedParameter)
         expect(pastedParameter.value.pointerHub.incoming().length).toBe(1)
+    })
+
+    // Reproduces error #983: an automation (Value) lane targets an aux-send level (`AuxSendBox.sendGain`).
+    // `AuxSendBox` is in copyAudioUnit's excludeBox list, so the aux-send is NOT copied even though the
+    // lane's mandatory `target` reaches it — leaving the pasted TrackBox.target unwired. Paste then
+    // panics at endTransaction with "Pointer {…TrackBox… (target) …/2 requires an edge." This asserts
+    // the paste should succeed (RED until the copy/paste preserves or rewires the lane's target).
+    it("round-trip paste of a unit whose automation lane targets an aux-send level does not throw (#983)", () => {
+        const sourceAU = createAudioUnit(source)
+        const {boxGraph: sg, mandatoryBoxes: {primaryAudioBusBox: srcBus}} = source
+        sg.beginTransaction()
+        const auxSend = AuxSendBox.create(sg, UUID.generate(), box => {
+            box.index.setValue(0)
+            box.audioUnit.refer(sourceAU.auxSends)
+            box.targetBus.refer(srcBus.input)
+        })
+        const autoTrack = TrackBox.create(sg, UUID.generate(), box => {
+            box.type.setValue(TrackType.Value)
+            box.tracks.refer(sourceAU.tracks)
+            box.target.refer(auxSend.sendGain)
+            box.index.setValue(0)
+        })
+        const events = ValueEventCollectionBox.create(sg, UUID.generate())
+        ValueRegionBox.create(sg, UUID.generate(), box => {
+            box.regions.refer(autoTrack.regions)
+            box.events.refer(events.owners)
+            box.position.setValue(0)
+            box.duration.setValue(15600)
+        })
+        sg.endTransaction()
+        const data = ClipboardUtils.serializeBoxes([sourceAU, ...collectAudioUnitDependencies(sourceAU)])
+        const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}} = target
+        const editing = new BoxEditing(boxGraph)
+        expect(() => {
+            editing.modify(() => {
+                ClipboardUtils.deserializeBoxes(data, boxGraph,
+                    makePasteMapper(rootBox, primaryAudioBusBox.address.uuid))
+            })
+        }).not.toThrow()
     })
 })
