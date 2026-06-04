@@ -10,6 +10,7 @@ import {BuildInfo} from "@/BuildInfo"
 const ExtensionPatterns = ["script-src blocked eval", "extension", "chrome-extension://", "blocked by CSP", "Zotero Connector", "hintMode", "handleHint"]
 const IgnoredErrors = [
     "ResizeObserver loop completed with undelivered notifications.",
+    "Request timeout",
     "Distributor.getValue",
     "getDictionariesByLanguageId",
     "Script error."
