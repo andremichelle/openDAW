@@ -2,7 +2,7 @@ import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {Colors} from "@opendaw/studio-enums"
 import {NamModel} from "@opendaw/nam-wasm"
-import {isNull, Lifecycle} from "@opendaw/lib-std"
+import {isDefined, isNull, Lifecycle} from "@opendaw/lib-std"
 
 type Construct = {
     lifecycle: Lifecycle
@@ -11,8 +11,8 @@ type Construct = {
 
 export const ArchitectureCanvas = ({lifecycle, model}: Construct) => {
     const layers = model.config.layers
-    if (layers.length === 0) return <div className="empty">No layers</div>
-    const canvas: HTMLCanvasElement = <canvas/>
+    if (!isDefined(layers) || layers.length === 0) return (<div className="empty">No layers</div>)
+    const canvas: HTMLCanvasElement = (<canvas/>)
     lifecycle.own(Html.watchResize(canvas, () => {
         if (!canvas.isConnected) return
         const width = canvas.clientWidth
