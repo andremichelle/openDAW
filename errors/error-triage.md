@@ -2,7 +2,7 @@
 
 Snapshot of https://logs.opendaw.studio. **57 unresolved** reports across **33 signatures**, grouped into **23 error-groups** (one file each). Scanned 914 rows, ids 1..1001.
 
-Each error-group has its own file in this folder. Priority: **P1** highest-value real bugs · **P2** real bugs · **P3** lower/needs-context · **ENV** environmental/transient · **RESOLVED** message already gone from source.
+Each error-group has its own file in this folder. Priority: **P1** highest-value real bugs · **P2** real bugs · **P3** lower/needs-context · **ENV** environmental/transient. (Nothing is marked RESOLVED — see note below; a silenced/reworded panic is not a fix.)
 
 > Per-error workflow (proven on #995–#1001): pull full logs+stack -> root-cause -> reproduce (unit test where feasible) -> fix the root cause (no band-aids) -> regression test -> branch->main -> mark `fixed=1`.
 
@@ -18,6 +18,8 @@ Each error-group has its own file in this folder. Priority: **P1** highest-value
 - [Box-graph requires-an-edge](P2-box-graph-requires-an-edge.md) — OPEN · 2× · ids [820, 983]
 - [Box-graph already-staged](P2-box-graph-already-staged.md) — OPEN · 2× · ids [662, 903]
 - [Automation Already-assigned](P2-automation-already-assigned.md) — OPEN · 1× · ids [915]
+- [Timeline overlap-after-clipping](P2-timeline-overlap-after-clipping.md) — OPEN (band-aided, not fixed) · 5× · ids [738, 740, 745, 748, 758]
+- [Timeline region-split zero-duration](P2-timeline-region-split-zero-duration.md) — OPEN (reworded panic, not fixed) · 1× · ids [667]
 
 ## P3
 
@@ -40,14 +42,11 @@ Each error-group has its own file in this folder. Priority: **P1** highest-value
 - [External btn-comment-mode-click](ENV-external-btn-comment-mode-click.md) — ENV · 1× · ids [957]
 - [File-picker not-allowed](ENV-file-picker-not-allowed.md) — ENV · 1× · ids [814]
 
-## RESOLVED
-
-- [Timeline overlap-after-clipping](RESOLVED-timeline-overlap-after-clipping.md) — RESOLVED · 5× · ids [738, 740, 745, 748, 758]
-- [Timeline duration zero-or-negative](RESOLVED-timeline-duration-zero-or-negative.md) — RESOLVED · 1× · ids [667]
+> **No truly-resolved groups.** The two previously labeled RESOLVED were band-aids, not fixes: overlap-after-clipping (panic→`console.error`) and region-split zero-duration (panic reworded). Both are now OPEN under P2. Nothing has been marked `fixed=1`.
 
 ## Strategy — address one by one
 
-- **Phase 0 — Reconcile (no code):** verify the RESOLVED group on a current build, flip `fixed=1` (#667, #738/#740/#745/#748/#758).
+- **Phase 0 — none.** There are no genuinely-resolved reports to reconcile; do not mark anything `fixed=1` until its root cause is actually fixed (verified by repro/test).
 - **Phase 1 — Timeline duration family (#933/#982/#998):** find & fix the 0-duration creation site (recording suspect). No band-aids.
 - **Phase 2 — Mixer 'Unknown key' (5x):** registerChannelStrip -> SortedSet.get miss; getOrNull + guard.
 - **Phase 3 — Box-graph integrity:** requires-an-edge / already-staged / Already-assigned; reproduce per op.
