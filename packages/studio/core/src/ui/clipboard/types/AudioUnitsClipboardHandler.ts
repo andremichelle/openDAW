@@ -1,4 +1,4 @@
-import {ByteArrayInput, ByteArrayOutput, Editing, int, Option, Optional, Provider} from "@opendaw/lib-std"
+import {ByteArrayInput, ByteArrayOutput, Editing, int, isDefined, Option, Optional, Provider} from "@opendaw/lib-std"
 import {Box, BoxGraph, IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
@@ -8,7 +8,8 @@ import {
     CaptureAudioBox,
     CaptureMidiBox,
     MIDIControllerBox,
-    RootBox
+    RootBox,
+    TrackBox
 } from "@opendaw/studio-boxes"
 import {AudioUnitBoxAdapter, AudioUnitOrdering, RootBoxAdapter, UserEditing} from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
@@ -41,6 +42,35 @@ export namespace AudioUnitsClipboard {
         return {type: input.readString() as AudioUnitType}
     }
 
+    // Box types that copyAudioUnit never includes (routing/global boxes that stay with the project).
+    const isExcludedTargetBox = (box: Box): boolean =>
+        box.name === RootBox.ClassName
+        || box.name === AudioBusBox.ClassName
+        || box.name === AuxSendBox.ClassName
+        || box.name === MIDIControllerBox.ClassName
+
+    // The exact box set copyAudioUnit serializes (excluding the audio unit itself). Exported so tests
+    // exercise the real exclusion logic rather than a drifting copy.
+    export const collectDependencies = (audioUnitBox: AudioUnitBox, isOutput: boolean): ReadonlyArray<Box> =>
+        Array.from(audioUnitBox.graph.dependenciesOf(audioUnitBox, {
+            alwaysFollowMandatory: true,
+            stopAtResources: true,
+            excludeBox: (box: Box) => {
+                if (box.ephemeral) {return true}
+                if (isExcludedTargetBox(box)) {return true}
+                if (isOutput && box.name === CaptureAudioBox.ClassName) {return true}
+                if (isOutput && box.name === CaptureMidiBox.ClassName) {return true}
+                // An automation lane whose target lives in an excluded box (e.g. an aux-send level)
+                // can't be pasted standalone: the target box is dropped, leaving the mandatory
+                // TrackBox.target unwired (error #983). Drop the orphaned lane from the copy.
+                if (box instanceof TrackBox) {
+                    const targetBox = box.target.targetVertex.unwrapOrNull()?.box
+                    if (isDefined(targetBox) && isExcludedTargetBox(targetBox)) {return true}
+                }
+                return false
+            }
+        }).boxes)
+
     export const createHandler = ({
                                       getEnabled,
                                       editing,
@@ -55,20 +85,7 @@ export namespace AudioUnitsClipboard {
             const audioUnitAdapter = optAudioUnit.unwrap()
             const audioUnitBox = audioUnitAdapter.box
             const isOutput = audioUnitAdapter.type === AudioUnitType.Output
-            const dependencies = Array.from(audioUnitBox.graph.dependenciesOf(audioUnitBox, {
-                alwaysFollowMandatory: true,
-                stopAtResources: true,
-                excludeBox: (box: Box) => {
-                    if (box.ephemeral) {return true}
-                    if (box.name === RootBox.ClassName) {return true}
-                    if (box.name === AudioBusBox.ClassName) {return true}
-                    if (box.name === AuxSendBox.ClassName) {return true}
-                    if (box.name === MIDIControllerBox.ClassName) {return true}
-                    if (isOutput && box.name === CaptureAudioBox.ClassName) {return true}
-                    if (isOutput && box.name === CaptureMidiBox.ClassName) {return true}
-                    return false
-                }
-            }).boxes)
+            const dependencies = collectDependencies(audioUnitBox, isOutput)
             const metadata: AudioUnitMetadata = {type: audioUnitAdapter.type}
             const allBoxes = [audioUnitBox, ...dependencies]
             const data = ClipboardUtils.serializeBoxes(allBoxes, encodeMetadata(metadata))

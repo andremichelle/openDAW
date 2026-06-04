@@ -2,12 +2,9 @@ import {beforeEach, describe, expect, it} from "vitest"
 import {isInstanceOf, Option, UUID} from "@opendaw/lib-std"
 import {Address, Box, BoxEditing, PointerField} from "@opendaw/lib-box"
 import {
-    AudioBusBox,
     AudioUnitBox,
     AuxSendBox,
-    CaptureAudioBox,
-    CaptureMidiBox,
-    MIDIControllerBox,
+    CompressorDeviceBox,
     MIDIOutputDeviceBox,
     MIDIOutputParameterBox,
     RootBox,
@@ -18,6 +15,7 @@ import {
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {ClipboardUtils} from "../ClipboardUtils"
+import {AudioUnitsClipboard} from "./AudioUnitsClipboardHandler"
 
 describe("AudioUnitsClipboardHandler", () => {
     let source: ProjectSkeleton
@@ -78,20 +76,9 @@ describe("AudioUnitsClipboardHandler", () => {
         return {device, parameter, instrumentTrack, ccTrack}
     }
 
-    // Mirrors AudioUnitsClipboard.copyAudioUnit dependency collection for a non-output unit.
+    // Use the real copyAudioUnit dependency collection so tests exercise its exclusion logic.
     const collectAudioUnitDependencies = (audioUnitBox: AudioUnitBox): ReadonlyArray<Box> =>
-        Array.from(audioUnitBox.graph.dependenciesOf(audioUnitBox, {
-            alwaysFollowMandatory: true,
-            stopAtResources: true,
-            excludeBox: (box: Box) => {
-                if (box.ephemeral) {return true}
-                if (box.name === RootBox.ClassName) {return true}
-                if (box.name === AudioBusBox.ClassName) {return true}
-                if (box.name === AuxSendBox.ClassName) {return true}
-                if (box.name === MIDIControllerBox.ClassName) {return true}
-                return false
-            }
-        }).boxes)
+        AudioUnitsClipboard.collectDependencies(audioUnitBox, false)
 
     // Mirrors AudioUnitsClipboard.pasteNewAudioUnit pointer remapping.
     const makePasteMapper = (rootBox: RootBox, primaryBusUuid: UUID.Bytes) => ({
@@ -183,5 +170,55 @@ describe("AudioUnitsClipboardHandler", () => {
                     makePasteMapper(rootBox, primaryAudioBusBox.address.uuid))
             })
         }).not.toThrow()
+        // Behaviour: the unit pastes (target now has its own output unit + the pasted one), but the
+        // aux-send-targeting automation lane and its region are dropped, since the aux-send it
+        // automated is not copied.
+        expect(boxGraph.boxes().filter(box => isInstanceOf(box, AudioUnitBox)).length).toBe(2)
+        expect(boxGraph.boxes().filter(box => isInstanceOf(box, TrackBox)).length).toBe(0)
+        expect(boxGraph.boxes().filter(box => isInstanceOf(box, ValueRegionBox)).length).toBe(0)
+    })
+
+    // Only the orphan (excluded-target) lane is dropped: a local automation lane that targets an
+    // in-unit device parameter must survive paste and have its target rewired to the pasted device.
+    it("keeps a device-parameter automation lane while dropping the aux-send lane (#983)", () => {
+        const sourceAU = createAudioUnit(source)
+        const {boxGraph: sg, mandatoryBoxes: {primaryAudioBusBox: srcBus}} = source
+        sg.beginTransaction()
+        const effect = CompressorDeviceBox.create(sg, UUID.generate(), box => {
+            box.label.setValue("Comp")
+            box.host.refer(sourceAU.audioEffects)
+            box.index.setValue(0)
+        })
+        TrackBox.create(sg, UUID.generate(), box => { // local lane -> device parameter (must survive)
+            box.type.setValue(TrackType.Value)
+            box.tracks.refer(sourceAU.tracks)
+            box.target.refer(effect.threshold)
+            box.index.setValue(0)
+        })
+        const auxSend = AuxSendBox.create(sg, UUID.generate(), box => {
+            box.index.setValue(0)
+            box.audioUnit.refer(sourceAU.auxSends)
+            box.targetBus.refer(srcBus.input)
+        })
+        TrackBox.create(sg, UUID.generate(), box => { // orphan lane -> aux-send level (must be dropped)
+            box.type.setValue(TrackType.Value)
+            box.tracks.refer(sourceAU.tracks)
+            box.target.refer(auxSend.sendGain)
+            box.index.setValue(1)
+        })
+        sg.endTransaction()
+        const data = ClipboardUtils.serializeBoxes([sourceAU, ...collectAudioUnitDependencies(sourceAU)])
+        const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}} = target
+        const editing = new BoxEditing(boxGraph)
+        editing.modify(() => {
+            ClipboardUtils.deserializeBoxes(data, boxGraph,
+                makePasteMapper(rootBox, primaryAudioBusBox.address.uuid))
+        })
+        const pastedTracks = boxGraph.boxes().filter((box): box is TrackBox => isInstanceOf(box, TrackBox))
+        const pastedCompressor = boxGraph.boxes()
+            .find((box): box is CompressorDeviceBox => isInstanceOf(box, CompressorDeviceBox))
+        expect(pastedCompressor).toBeDefined()
+        expect(pastedTracks.length).toBe(1) // local lane kept, aux-send lane dropped
+        expect(pastedTracks[0].target.targetVertex.unwrap().box).toBe(pastedCompressor) // target rewired
     })
 })
