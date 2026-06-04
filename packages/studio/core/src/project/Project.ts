@@ -182,6 +182,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.selection = new VertexSelection(this.editing, this.boxGraph)
         this.parameterFieldAdapters = new ParameterFieldAdapters()
         this.boxAdapters = this.#terminator.own(new BoxAdapters(this))
+        this.#timelineBoxAdapter = this.boxAdapters.adapterFor(this.timelineBox, TimelineBoxAdapter)
+        this.tempoMap = this.#terminator.own(new VaryingTempoMap(this.#timelineBoxAdapter))
         this.deviceSelection = this.#terminator.own(this.selection.createFilteredSelection(
             isVertexOfBox(DeviceBoxUtils.isDeviceBox),
             {
@@ -211,8 +213,6 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                 fy: vertex => RegionAdapters.for(this.boxAdapters, vertex.box)
             }
         ))
-        this.#timelineBoxAdapter = this.boxAdapters.adapterFor(this.timelineBox, TimelineBoxAdapter)
-        this.tempoMap = this.#terminator.own(new VaryingTempoMap(this.#timelineBoxAdapter))
         this.userEditingManager = new UserEditingManager(this.editing)
         this.liveStreamReceiver = this.#terminator.own(new LiveStreamReceiver())
         this.midiLearning = this.#terminator.own(new MIDILearning(this))
