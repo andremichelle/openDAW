@@ -332,3 +332,29 @@ Priority: **P1** highest-value real bugs · **P2** real bugs · **P3** lower/nee
 **Phase 6 — Environmental noise (ENV, 27 reports).** Mostly not code bugs. (a) graceful handling + dialogs for storage/audio/network; (b) extend `ErrorHandler` ignore-list / reload-prompt for benign transient cases (same pattern as the #997 'Request timeout' fix). Biggest report-volume reduction for least code.
 
 **Ordering rationale:** Phase 0 is free; 1–2 are the highest-occurrence *real* bugs with concrete leads; 3 is data-model integrity (highest severity if it corrupts projects); 4–5 are smaller real bugs; 6 is noise reduction. One phase per session; mark `fixed=1` as each ships.
+
+---
+
+## Investigation log — 0-duration region origin (#933 / #982 / #998 / #667)
+
+**Status: root cause NOT yet fixed — strong hypothesis, no safe fix shipped (no band-aids).**
+
+The symptom across #933 (`Invalid duration` in `RegionClipResolver.createTasksFromMasks:134`), #982/#998 (`duration must be positive` in `validateTrack`), and #667 is the same: a region reaches `duration === 0` and a post-commit invariant check panics. The validators run *after* the edit commits, so softening them is a band-aid — the real fix is to stop 0-duration regions from being created.
+
+**Ruled out — interactive resize modifiers (all clamp to a positive minimum):**
+- `RegionDurationModifier` — floors at `Math.max(Math.min(snap, duration), …)`.
+- `RegionLoopDurationModifier` — floors at `Math.min(SemiQuaver, loopDuration)`.
+- `RegionStartModifier.computeClampedDelta` — new duration ≥ `min(duration, snap)`.
+- `RegionContentStartModifier` — `update()` clamps delta to `duration - SemiQuaver` (`#computeMaxDelta`).
+None can turn a positive region into 0; they only preserve an existing 0.
+
+**Strong suspect — the recording path (`packages/studio/core/src/capture/RecordAudio.ts`):**
+- `createTakeRegion` (lines 69–78) creates an `AudioRegionBox` **without setting duration/loopDuration** → it starts at the `Float32Field` default until the first live update.
+- The live update (lines 270–283) writes `duration.setValue(takeSeconds)` where `takeSeconds = totalSeconds - currentWaveformOffset`. Early in a take, or with a large count-in/latency `currentWaveformOffset`, this is **≤ 0**.
+- Recording writes the box field **directly**, bypassing the clamped adapter `set duration`.
+- This is a known-fragile area: line 177 comment "fixes #840: short recordings (e.g. count-in) can leave zero-duration regions", with delete-guards on stop (178–191) and loop-take transition (221–225) that evidently don't cover every slip-through.
+- Corroboration: #998's session log is full of `createTakeRegion` calls + a `[RecordAudio] abort`, and the offending `d:0` region predated the modifier that surfaced it.
+
+**Why no fix shipped:** the recording timing/latency-compensation logic is delicate; a clamp there could mask the real slip-through or break offset compensation, and the exact escaping branch isn't proven without a reproduction.
+
+**Recommended next step (do before fixing):** reproduce by recording very short / count-in / looped takes and inspecting region duration, **or** add low-noise instrumentation that captures `new Error().stack` only when a non-positive duration is written/persisted (e.g. at `finalizeTake`/the live update, or guarding take regions at finalize). Once the escaping branch is confirmed, fix at that source (refuse to persist a take with `duration ≤ 0`, or clamp `takeSeconds` to a positive minimum at the recording source). Tracked in memory `project-zero-duration-region-origin`.
