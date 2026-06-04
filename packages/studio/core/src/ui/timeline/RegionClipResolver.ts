@@ -1,4 +1,4 @@
-import {asDefined, Exec, int, mod, panic} from "@opendaw/lib-std"
+import {asDefined, assert, Exec, int, mod, panic} from "@opendaw/lib-std"
 import {Event, EventCollection, ppqn, TimeBase} from "@opendaw/lib-dsp"
 import {
     AnyRegionBoxAdapter,
@@ -75,10 +75,10 @@ export class RegionClipResolver {
         const array = track.regions.collection.asArray()
         if (array.length === 0) {return}
         let prev = array[0]
-        if (prev.duration <= 0) {return this.#logNonPositiveDuration(track, prev, array)}
+        assert(prev.duration > 0, `duration(${prev.duration}) must be positive`)
         for (let i = 1; i < array.length; i++) {
             const next = array[i]
-            if (next.duration <= 0) {return this.#logNonPositiveDuration(track, next, array)}
+            assert(next.duration > 0, `duration(${next.duration}) must be positive`)
             if (!allowOverlap(prev) && prev.complete > next.position) {
                 console.error("[validateTrack] OVERLAP", JSON.stringify({
                     track: TrackType[track.type],
@@ -95,32 +95,6 @@ export class RegionClipResolver {
             }
             prev = next
         }
-    }
-
-    // A non-positive duration indicates a region was created/edited into a degenerate state upstream.
-    // This validation runs after the edit has already been committed, so panicking would only crash the
-    // session without undoing it. Log a diagnostic and continue, mirroring the overlap branch above.
-    static #logNonPositiveDuration(track: TrackBoxAdapter,
-                                   region: AnyRegionBoxAdapter,
-                                   array: ReadonlyArray<AnyRegionBoxAdapter>): void {
-        console.error("[validateTrack] NON_POSITIVE_DURATION", JSON.stringify({
-            track: TrackType[track.type],
-            region: {
-                p: region.position,
-                d: region.duration,
-                c: region.complete,
-                sel: region.isSelected,
-                type: region.toString()
-            },
-            regions: array.map(entry => ({
-                p: entry.position,
-                d: entry.duration,
-                c: entry.complete,
-                sel: entry.isSelected,
-                type: entry.toString()
-            })),
-            stack: new Error().stack
-        }))
     }
 
     static createTasksFromMasks(regionIterator: Iterable<AnyRegionBoxAdapter>,
@@ -235,6 +209,7 @@ export class RegionClipResolver {
         })
         sorted.forEach(task => {
             const {type, region} = task
+            const before = {p: region.position, d: region.duration, c: region.complete}
             switch (type) {
                 case "delete":
                     region.box.delete()
