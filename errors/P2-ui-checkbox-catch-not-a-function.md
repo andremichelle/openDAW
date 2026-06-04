@@ -17,3 +17,11 @@
   - `requestPermission@../../../studio/core/dist/midi/MidiDevices.js:52:86 (#memoizedRequest)`
   - `requestPermission@../../../studio/core/dist/midi/MidiDevices.js:66:4`
   - `setValue@../../../studio/core/dist/midi/MidiDevices.js:132:39`
+
+## Investigation (root cause + recommended fix)
+
+**Root cause:** `Promises.memoizeAsync` assumes `factory()` returns a real Promise and calls `.catch` on the result without guarding: `resolving = factory(); resolving.catch(...)` at `packages/lib/runtime/src/promises.ts:146-147`. The minified error `l.catch(p=>(l=null,p))` maps exactly to that `resolving.catch(error => { resolving = null; return error })`. The factory here is `MidiDevices.#memoizedRequest` (`packages/studio/core/src/midi/MidiDevices.ts:61-67`), whose body awaits `navigator.requestMIDIAccess({sysex: false})`. The build target is `esnext` (`packages/app/studio/vite.config.ts:38,56`), so the `async` wrapper is NOT down-levelled and would normally always yield a native Promise. The only way `resolving.catch` is `undefined` is that `factory()` itself returned a non-Promise, i.e. `navigator.requestMIDIAccess` is present (`canRequestMidiAccess()` passes at `MidiDevices.ts:25` via `"requestMIDIAccess" in navigator`) but a polyfill/extension/uncommon browser (report browser is "?") replaced it with a thenable/non-Promise. `memoizeAsync` then propagates that non-Promise and crashes when it touches `.catch`. The defect is the missing normalization in `memoizeAsync`, not in MidiDevices.
+
+**Evidence:** Stack: `Checkbox.tsx:21 model.setValue` → `MidiDevices.ts:162 scope.requestPermission().finally(...)` → `requestPermission` → `#memoizedRequest()` → `promises.js:126 resolving.catch (error)`. Dist `promises.js` (lines 124-126) is identical to src `promises.ts:146-147`.
+
+**Recommended fix:** In `memoizeAsync` wrap the factory result so it is always a real Promise: `resolving = Promise.resolve(factory())` before `resolving.catch(...)` (`promises.ts:146`). This makes the memoizer robust to factories/host APIs that return non-Promise thenables and removes the only line that can throw `.catch is not a function`. If confirmation of the offending browser is wanted, add a one-time `console.debug` in `MidiDevices.#memoizedRequest` logging `typeof navigator.requestMIDIAccess` and the constructor name of its return value.

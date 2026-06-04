@@ -20,3 +20,11 @@
   - `at async a (src/service/Mixdowns.ts:182:31)`
   - `at async t (src/service/Mixdowns.ts:99:23)`
   - `at async src/service/StudioService.ts:202:16`
+
+## Investigation (root cause + recommended fix)
+
+**Root cause:** Stale-release / environmental chunk fetch. The release-pinned URLs (`.../releases/<uuid>/typescript.<uuid>.js`, `FFmpegWorker.<uuid>.js`) 404 once a new deploy replaces that release directory, or fail on a flaky connection. 810 is a one-shot `import()` (Monaco/typescript worker) with no retry wrapper. 623 went through `dynamicImportWithRetry` (`ui/components/dynamicImportWithRetry.ts`) which retried 60x cache-busting the URL (`?t=Date.now()`) and still failed, then threw `Failed after 60 retries`.
+
+**Evidence:** 623 logtail is `retry after failure (online: true)` x60 then the throw; its stack is `Mixdowns.ts:182` (`Promises.guardedRetry(() => ... FFmpegWorker)`) -> `Mixdowns.ts:99/loadFFmepg` -> `StudioService.ts:202 exportMixdown`. 810 has no retry frames. `online:true` confirms the network was up, so the cause is the missing chunk (stale deploy), not offline.
+
+**Recommended fix:** On a `Failed to fetch dynamically imported module` / `Failed after N retries` rejection, show a "A new version is available, reload to continue" prompt that calls `location.reload()` (cache-busted) rather than the generic crash dialog. Wire this into `ErrorHandler.#tryIgnore` (`ErrorHandler.ts`): match `reasonMessage.includes("Failed to fetch dynamically imported module")` and offer a `Dialogs.approve` reload instead of `preventDefault`-and-swallow, since a bare ignore would leave the user with a non-functional feature.

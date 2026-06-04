@@ -16,3 +16,11 @@
   - `at Go.validateTrack (main.78908086-47bc-4635-a6d3-e2b707d061fc.js:43:130980)`
   - `at Go.validateTracks (main.78908086-47bc-4635-a6d3-e2b707d061fc.js:43:130668)`
   - `at T1.apply (main.78908086-47bc-4635-a6d3-e2b707d061fc.js:43:138585)`
+
+## Investigation (root cause + recommended fix)
+
+**Root cause:** Message removed from source. The fatal `panic("Overlapping detected after clipping")` in `validateTrack` was replaced by a non-fatal `console.error("[validateTrack] OVERLAP", ...)` + early `return` at `packages/studio/core/src/ui/timeline/RegionClipResolver.ts:82-94`.
+
+**Evidence:** `grep -rni` across `packages` (excluding node_modules/dist/test) finds no occurrence of "Overlapping detected after clipping". The overlap branch now logs and returns instead of throwing.
+
+**Recommended fix:** Verify on a current build (perform clip/overlap edits, confirm no crash), then mark `fixed=1` on the server.

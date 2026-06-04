@@ -16,3 +16,11 @@
   - `at n.clip (main.beb15c10-6f4e-4c78-954e-24a3e1de3eec.js:43:71792)`
   - `at main.beb15c10-6f4e-4c78-954e-24a3e1de3eec.js:53:20544`
   - `at Array.forEach (<anonymous>)`
+
+## Investigation (root cause + recommended fix)
+
+**Root cause:** The exact message "duration will zero or negative" is gone from source. The `clip` panic in `packages/studio/adapters/src/timeline/RegionEditing.ts:27-28` was reworded and split into two specific guards ("first/second part duration will **be** zero or negative").
+
+**Evidence:** `grep -rni "zero or negative\|will zero"` matches only the reworded strings at `RegionEditing.ts:27-28`; the original wording no longer exists.
+
+**Recommended fix:** Verify on a current build, then mark `fixed=1` on the server.
