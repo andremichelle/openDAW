@@ -39,6 +39,7 @@ export const showNamModelDialog = (model: NamModel): void => {
     const stats = hasWeights ? computeStats(weights) : null
     const meta = model.metadata
     const training = model.training
+    const generation = model.architecture === "WaveNet" ? (NamModel.isArchitecture2(model) ? "A2" : "A1") : undefined
     const dialog = (
         <Dialog headline="NAM Properties"
                 icon={IconSymbol.NeuralAmp}
@@ -61,6 +62,7 @@ export const showNamModelDialog = (model: NamModel): void => {
                     <h2>Architecture</h2>
                     <div className="stats single-column">
                         <StatRow label="Type" value={model.architecture}/>
+                        <StatRow label="Generation" value={generation}/>
                         <StatRow label="Version" value={model.version}/>
                         <StatRow label="Layers" value={model.config.layers?.length}/>
                         <StatRow label="Weights" value={stats?.count.toLocaleString()}/>

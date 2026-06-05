@@ -16,7 +16,7 @@
     "@opendaw/lib-jsx": "^0.0.68",
     "@opendaw/lib-runtime": "^0.0.79",
     "@opendaw/lib-std": "^0.0.78",
-    "@opendaw/nam-wasm": "^1.1.0"
+    "@opendaw/nam-wasm": "^1.2.0"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",
