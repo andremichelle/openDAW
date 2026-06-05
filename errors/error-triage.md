@@ -14,10 +14,10 @@ Each error-group has its own file in this folder. Priority: **P1** highest-value
 
 ## P2
 
-- [UI Checkbox catch-not-a-function](P2-ui-checkbox-catch-not-a-function.md) — OPEN · 2× · ids [815, 816]
+- [UI Checkbox catch-not-a-function](P2-ui-checkbox-catch-not-a-function.md) — ALREADY FIXED (7cac185c6) · 2× · ids [815, 816]
 - [Box-graph requires-an-edge](P2-box-graph-requires-an-edge.md) — OPEN · 2× · ids [820, 983]
 - [Box-graph already-staged](P2-box-graph-already-staged.md) — OPEN · 2× · ids [662, 903]
-- [Automation Already-assigned](P2-automation-already-assigned.md) — OPEN · 1× · ids [915]
+- [Automation Already-assigned](P2-automation-already-assigned.md) — FIXED (menu path) · 1× · ids [915]
 - [Timeline overlap-after-clipping](P2-timeline-overlap-after-clipping.md) — OPEN (band-aided, not fixed) · 5× · ids [738, 740, 745, 748, 758]
 - [Timeline region-split zero-duration](P2-timeline-region-split-zero-duration.md) — OPEN (reworded panic, not fixed) · 1× · ids [667]
 

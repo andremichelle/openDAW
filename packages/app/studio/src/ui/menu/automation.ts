@@ -15,11 +15,13 @@ export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: E
         collector.addItems(
             automation.isEmpty()
                 ? MenuItem.default({label: "Create Automation", hidden: disableAutomation})
-                    .setTriggerProcedure(() => editing.modify(() =>
-                        tracks.create(TrackType.Value, field)))
+                    .setTriggerProcedure(() => editing.modify(() => {
+                        if (parameter.track.nonEmpty()) {return}
+                        tracks.create(TrackType.Value, field)
+                    }))
                 : MenuItem.default({label: "Remove Automation", hidden: disableAutomation})
                     .setTriggerProcedure(() => editing.modify(() =>
-                        tracks.delete(automation.unwrap()))),
+                        parameter.track.ifSome(track => tracks.delete(track)))),
             MenuItem.default({
                 label: midiDevices.hasMidiConnection(field.address)
                     ? "Forget Midi"

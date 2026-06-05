@@ -1,9 +1,9 @@
 # Automation Already-assigned
 
-- **status:** OPEN · **priority:** P2
+- **status:** FIXED (menu path) · **priority:** P2
 - **occurrences:** 1 · **ids:** [915]
-- **assessment:** AutomatableParameterFieldAdapter.ts:77 assert (trackBoxAdapter must be empty) - parameter assigned to two tracks.
-- **action:** Guard double-assignment in automation-track creation path.
+- **assessment:** `AutomatableParameterFieldAdapter.ts:77` asserts `#trackBoxAdapter.isEmpty()` "Already assigned" when a 2nd `TrackBox.target` (Pointers.Automation) edge reaches a parameter field. The "Create Automation" context menu (`automation.ts`) decided whether to offer creation at menu **build time** (`tracks.controls(field)` when the menu opens) but created the track at **click time without re-checking**, so a track created meanwhile (another open menu / a record / a stale click) led to a 2nd create → panic at commit.
+- **fix:** `automation.ts` trigger now re-checks the authoritative `parameter.track` at execution time inside the transaction; bails if already assigned. Regression test `AutomationDoubleAssign.test.ts` (RED without guard → GREEN with it).
 
 [< back to index](error-triage.md)
 
@@ -23,4 +23,14 @@
 
 **Evidence:** `assert(this.#trackBoxAdapter.isEmpty(), "Already assigned")` at `AutomatableParameterFieldAdapter.ts:77` inside `pointerHub.catchupAndSubscribe.onAdded` → `visitTrackBox`. `controls()` reads `this.#collection.adapters().find(...)` (`AudioUnitTracks.ts:46-47`), a cache that is not guaranteed current inside the editing transaction, while the assert reads the live pointerHub.
 
-**Recommended fix:** Move the guard *into* `AudioUnitTracks.create()` and make it authoritative: before `box.target.refer(target)`, bail (return the existing track) if the live `field.pointerHub.filter(Pointers.Automation)` already has an incoming TrackBox, instead of relying on the cached `controls()` collection. This closes the bypass and the stale-cache window for all callers. If a reproduction is still needed, add a low-noise diagnostic at the `create` call logging `target.address` + existing pointerHub edge count when a second referrer is detected, to confirm whether the second track comes from paste/undo/record vs. the menu path.
+**Correction to the earlier theory (verified by test).** The earlier "stale cache within a transaction" framing was imprecise, and the proposed "move guard into `AudioUnitTracks.create()`" is wrong for two reasons:
+- `create()` is shared by Notes/Audio tracks too, where **multiple** tracks per unit are legal (they target the audioUnitBox, not a parameter field). Deduping there would block legitimate 2nd audio/note tracks. The one-per-target invariant only holds for automation (Value) tracks.
+- Pointer updates are **deferred to `endTransaction`** (`graph.ts:106-120` `#deferredPointerUpdates` → `#dispatchDeferredNotifications`). So *within* a transaction, neither `controls()` nor `parameter.track` nor the assert have fired yet — a guard reading them mid-transaction sees nothing. They all become authoritative only **after commit**. (Confirmed empirically in `AutomationDoubleAssign.test.ts`.)
+
+Because the menu trigger runs as its own `editing.modify` (one transaction per click), the correct guard reads **prior-committed** state at the start of that transaction. The authoritative source is `parameter.track` (the field adapter's `#trackBoxAdapter`, the exact state the assert checks), not the `controls()` collection cache.
+
+**Fix shipped:** `automation.ts` "Create Automation" trigger now does `if (parameter.track.nonEmpty()) {return}` before `tracks.create(...)`, inside the transaction. This closes the stale-menu race (decision made at build time, executed at click time).
+
+**Symmetric fix — "Remove Automation".** Same stale-menu race in the other direction: the Remove item captured the track adapter at build time and the trigger did `tracks.delete(automation.unwrap())` at click time. If the track was removed meanwhile, `AudioUnitTracks.delete` panics `Cannot delete … Does not exist` (`AudioUnitTracks.ts:53`, `indexOf === -1`). Fixed to re-read the authoritative current track and no-op if gone: `parameter.track.ifSome(track => tracks.delete(track))`. Both directions covered by `AutomationDoubleAssign.test.ts` (4 tests: 2 panic repros + 2 idempotency/guard tests, each RED without its guard).
+
+The deeper "two automation tracks for one field added inside a single transaction" case (paste/undo/collab replay) is not reachable from the menu and is out of scope here; if a future report shows it, capture the creating op with a low-noise diagnostic at `AutomatableParameterFieldAdapter.ts:77` (`new Error().stack` + box/field address) gated on the panic branch.

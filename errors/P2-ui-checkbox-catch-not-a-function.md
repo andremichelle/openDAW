@@ -1,9 +1,10 @@
 # UI Checkbox catch-not-a-function
 
-- **status:** OPEN · **priority:** P2
-- **occurrences:** 2 · **ids:** [815, 816]
-- **assessment:** Checkbox.tsx:21 calls .catch on a non-Promise (stack: MidiDevices.requestPermission memoizedRequest).
-- **action:** Wrap value in Promise.resolve() or type-guard before .catch.
+- **status:** ALREADY FIXED (commit `7cac185c6`, 2026-03-23) · **priority:** P2
+- **occurrences:** 2 · **ids:** [815, 816] (reported 2026-03-16, one week before the fix)
+- **root cause:** At the report build the MIDI factory was a **non-async** arrow `Promises.memoizeAsync(() => navigator.requestMIDIAccess({sysex: false}))`, so `factory()` returned `requestMIDIAccess`'s value *directly*. On the reporting host that value was a non-Promise/thenable lacking `.catch`, so `memoizeAsync`'s `resolving.catch(...)` (`promises.ts:147`) threw `l.catch is not a function`.
+- **fix (already shipped):** `7cac185c6 "may fix 863"` wrapped the factory in `async () => { const result = await navigator.requestMIDIAccess(...); ... }` (`MidiDevices.ts:61-67`). An async function always returns a native Promise regardless of what `requestMIDIAccess` yields, so `resolving.catch` is always defined. Crash eliminated at the call site, where the contract violation actually was.
+- **no change to `memoizeAsync`:** its `Provider<Promise<T>>` contract already requires a real Promise; wrapping the result in `Promise.resolve()` would be a band-aid masking caller contract violations. The real bug was the non-async caller, now corrected.
 
 [< back to index](error-triage.md)
 
