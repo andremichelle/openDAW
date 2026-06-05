@@ -36,13 +36,15 @@ export const EngineSettingsSchema = z.object({
         allowTakes: z.boolean(),
         automationEnabled: z.boolean(),
         olderTakeAction: z.union(_OlderTakeActionOptions.map(value => z.literal(value))),
-        olderTakeScope: z.union(_OlderTakeScopeOptions.map(value => z.literal(value)))
+        olderTakeScope: z.union(_OlderTakeScopeOptions.map(value => z.literal(value))),
+        inputLatency: z.number().min(-1)
     }).default({
         countInBars: 1,
         allowTakes: true,
         automationEnabled: true,
         olderTakeAction: "mute-region",
-        olderTakeScope: "previous-only"
+        olderTakeScope: "previous-only",
+        inputLatency: 0
     })
 })
 

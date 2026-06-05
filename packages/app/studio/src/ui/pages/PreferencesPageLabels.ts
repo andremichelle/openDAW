@@ -112,7 +112,8 @@ export namespace PreferencesPageLabels {
                 allowTakes: "Allow takes",
                 automationEnabled: "Record automation",
                 olderTakeAction: "Older take action",
-                olderTakeScope: "Older take scope"
+                olderTakeScope: "Older take scope",
+                inputLatency: "Input latency"
             }
         }
     }

@@ -13,6 +13,7 @@ import {Promises} from "@opendaw/lib-runtime"
 import {AudioUnitBox, CaptureAudioBox} from "@opendaw/studio-boxes"
 import {Capture} from "./Capture"
 import {CaptureDevices} from "./CaptureDevices"
+import {InputLatency} from "./InputLatency"
 import {RecordAudio} from "./RecordAudio"
 import {AudioDevices} from "../AudioDevices"
 import {RenderQuantum} from "../RenderQuantum"
@@ -198,7 +199,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
 
     startRecording(): Terminable {
         const {project} = this.manager
-        const {env: {audioContext, sampleManager}} = project
+        const {env: {audioContext, sampleManager}, engine} = project
         const audioChain = this.#audioChain
         const recordingWorklet = this.#preparedWorklet
         if (!isDefined(audioChain) || !isDefined(recordingWorklet)) {
@@ -209,10 +210,16 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         const {recordGainNode} = audioChain
         const track = this.#stream.unwrapOrNull()?.getAudioTracks().at(0)
         const trackSettings = track?.getSettings()
+        const outputLatency = audioContext.outputLatency ?? 0
+        const inputLatency = InputLatency.resolve(
+            this.captureBox.inputLatency.getValue(),
+            engine.preferences.settings.recording.inputLatency,
+            outputLatency)
         console.debug("[CaptureAudio] latency report", {
             outputLatency: audioContext.outputLatency,
             baseLatency: audioContext.baseLatency,
             inputLatencyReported: trackSettings?.latency,
+            inputLatencyApplied: inputLatency,
             deviceId: trackSettings?.deviceId,
             deviceLabel: track?.label
         })
@@ -222,7 +229,8 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             sampleManager,
             project,
             capture: this,
-            outputLatency: audioContext.outputLatency ?? 0
+            outputLatency,
+            inputLatency
         })
     }
 

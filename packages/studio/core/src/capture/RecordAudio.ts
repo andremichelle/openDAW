@@ -25,6 +25,7 @@ export namespace RecordAudio {
         project: Project
         capture: Capture
         outputLatency: number
+        inputLatency: number
     }
 
     type TakeData = {
@@ -33,9 +34,9 @@ export namespace RecordAudio {
     }
 
     export const start = (
-        {recordingWorklet, sourceNode, sampleManager, project, capture, outputLatency}: RecordAudioContext)
+        {recordingWorklet, sourceNode, sampleManager, project, capture, outputLatency, inputLatency}: RecordAudioContext)
         : Terminable => {
-        console.debug("[RecordAudio] start", {outputLatency})
+        console.debug("[RecordAudio] start", {outputLatency, inputLatency})
         const terminator = new Terminator()
         const beats = PPQN.fromSignature(1, project.timelineBox.signature.denominator.getValue())
         const {editing, engine, boxGraph, timelineBox, tempoMap} = project
@@ -44,7 +45,7 @@ export namespace RecordAudio {
         let fileBox: Option<AudioFileBox> = Option.None
         let currentTake: Option<TakeData> = Option.None
         let lastPosition: ppqn = 0
-        let currentWaveformOffset: number = outputLatency
+        let currentWaveformOffset: number = outputLatency + inputLatency
         let takeNumber: int = 0
 
         const {env: {audioContext: {sampleRate}}, engine: {preferences: {settings: {recording}}}} = project
@@ -244,6 +245,8 @@ export namespace RecordAudio {
                     //                        BPM/signature alone.
                     //   countInSeconds     — deterministic from bars × signature × bpm.
                     //   outputLatency      — engine→speaker compensation.
+                    //   inputLatency       — manual mic→engine compensation (engine preferences,
+                    //                        optionally overridden per track in the CaptureAudioBox).
                     // L is recovered once, here, by reading numberOfFrames at the moment we first
                     // see isRecording=true and subtracting the BPM-derived countInSeconds. Earlier
                     // attempts that omitted L put a systematic ~30 ms (one render dispatch) bias
@@ -260,7 +263,7 @@ export namespace RecordAudio {
                     const headStartSeconds = countedIn
                         ? Math.max(0, wallclockSinceWorklet - countInSeconds)
                         : wallclockSinceWorklet
-                    const waveformOffset = headStartSeconds + countInSeconds + outputLatency
+                    const waveformOffset = headStartSeconds + countInSeconds + outputLatency + inputLatency
                     editing.modify(() => {
                         fileBox = Option.wrap(createFileBox())
                         currentTake = Option.wrap(createTakeRegion(currentPosition, waveformOffset, null))

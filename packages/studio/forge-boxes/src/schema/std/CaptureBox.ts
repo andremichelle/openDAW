@@ -19,6 +19,11 @@ export const CaptureAudioBox: BoxSchema<Pointers> = {
             11: {
                 type: "float32", name: "gain-db",
                 value: 0.0, constraints: "decibel", unit: "dB"
+            },
+            // -2 = inherit engine preferences, -1 = equals output latency, >=0 = added to output latency
+            12: {
+                type: "float32", name: "input-latency",
+                value: -2.0, constraints: "any", unit: "s"
             }
         })
     }, pointerRules: {accepts: [Pointers.Capture], mandatory: true}
