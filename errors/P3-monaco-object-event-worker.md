@@ -1,9 +1,9 @@
 # Monaco object-Event worker
 
-- **status:** OPEN · **priority:** P3
+- **status:** FIXED · **priority:** P3
 - **occurrences:** 2 · **ids:** [642, 703]
-- **assessment:** Worker load failure surfaced as Event. ErrorHandler filters some; these slipped.
-- **action:** Extend Monaco event filtering in ErrorHandler.
+- **assessment:** Monaco worker-load failure throws a raw `Event`; the main-thread fallback keeps the editor working, so the surfaced error is benign noise. The two `#tryIgnore` Monaco guards missed it: `MonacoPatterns` lacked the production chunk name, and `event.error instanceof Event` was false (`event.error` is null; the signal is `event.message === "Uncaught [object Event]"`).
+- **fix:** `ErrorHandler.ts` — added `"editor.main"`/`"editor.worker"` to `MonacoPatterns` (matches the minified `[name].<uuid>.js` filename, vite.config:49-50), and added `event.message === "Uncaught [object Event]"` to the Monaco `ErrorEvent` ignore branch.
 
 [< back to index](error-triage.md)
 

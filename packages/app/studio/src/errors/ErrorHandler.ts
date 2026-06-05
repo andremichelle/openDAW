@@ -16,7 +16,7 @@ const IgnoredErrors = [
     "Script error."
 ]
 const BrowserInternalPatterns = ["feature named", "window.__firefox__"]
-const MonacoPatterns = ["monaco-editor", "vs/base/common/errors"]
+const MonacoPatterns = ["monaco-editor", "vs/base/common/errors", "editor.main", "editor.worker"]
 const ThirdPartyAppPatterns = ["_callback_receiveMIDIMessage", "_callback_addSource"]
 const UrlPattern = /https?:\/\/[^\s)]+/g
 
@@ -82,7 +82,8 @@ export class ErrorHandler {
         // arriving as ErrorEvent where event.error is a raw Event (not an Error).
         if (event instanceof ErrorEvent
             && (this.#looksLikeMonacoError(event.message, event.error?.stack, event.filename)
-                || event.error instanceof Event)) {
+                || event.error instanceof Event
+                || event.message === "Uncaught [object Event]")) {
             console.warn("Monaco editor error:", event.message, event.filename)
             event.preventDefault()
             return true

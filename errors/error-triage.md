@@ -25,7 +25,7 @@ Each error-group has its own file in this folder. Priority: **P1** highest-value
 
 - [Mixdown offline-render OOM](P3-mixdown-offline-render-oom.md) — OPEN · 4× · ids [70, 71, 291, 302]
 - [Option unwrap-failed](P3-option-unwrap-failed.md) — OPEN · 2× · ids [811, 950]
-- [Monaco object-Event worker](P3-monaco-object-event-worker.md) — OPEN · 2× · ids [642, 703]
+- [Monaco object-Event worker](P3-monaco-object-event-worker.md) — FIXED · 2× · ids [642, 703]
 - [Monaco factory null-deref](P3-monaco-factory-null-deref.md) — OPEN · 1× · ids [975]
 
 ## ENV
