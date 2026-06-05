@@ -1,9 +1,8 @@
 # Network chunk-load
 
-- **status:** ENV · **priority:** ENV
+- **status:** FIXED (infra-mitigated, stale reports) · **priority:** ENV
 - **occurrences:** 2 · **ids:** [623, 810]
-- **assessment:** Stale release / dynamic-import chunk failure.
-- **action:** Reload prompt on chunk-load error.
+- **assessment:** Stale-release dynamic-import chunk 404. Mitigated by infra: released builds now persist >=24h (so a session's chunks survive), plus the boot BUILD_UUID check (`Dialogs.cache()`) and the 5s `checkUpdates` poll (`UpdateMessage` banner) in `boot.ts`. No recurrence since 2026-03-14 (~3 months); last reports predate the 24h retention. No runtime ErrorHandler change shipped (a per-message handler was prototyped then reverted as unnecessary for this now-rare tail).
 
 [< back to index](error-triage.md)
 

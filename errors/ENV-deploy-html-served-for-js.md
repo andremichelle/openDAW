@@ -1,9 +1,8 @@
 # Deploy html-served-for-js
 
-- **status:** ENV · **priority:** ENV
+- **status:** FIXED (infra-mitigated, stale reports) · **priority:** ENV
 - **occurrences:** 2 · **ids:** [160, 237]
-- **assessment:** Stale/misrouted release returning index.html ('got <').
-- **action:** Reload prompt; cache-bust.
+- **assessment:** Stale/misrouted release returning index.html for a JS module ('got <'). Same stale-deploy family as [[ENV-network-chunk-load]]. Both reports are old (2025-09-24, 2025-10-16) and predate the boot `checkUpdates`/`UpdateMessage` mitigation (2025-10-15) and the 24h release retention. No recurrence in ~8 months. No runtime change shipped.
 
 [< back to index](error-triage.md)
 
