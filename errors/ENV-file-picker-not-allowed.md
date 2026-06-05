@@ -1,9 +1,9 @@
 # File-picker not-allowed
 
-- **status:** ENV · **priority:** ENV
+- **status:** FIXED (graceful handling) · **priority:** ENV
 - **occurrences:** 1 · **ids:** [814]
-- **assessment:** showOpenFilePicker blocked (NotAllowedError - not allowed / outside a user gesture).
-- **action:** Invoke from a user gesture; catch NotAllowedError gracefully.
+- **assessment:** `showOpenFilePicker` blocked (`NotAllowedError` - not allowed / outside a user gesture). Environmental; benign.
+- **fix:** `ErrorHandler.#tryIgnore` PromiseRejectionEvent branch now treats `DOMException` `NotAllowedError` as benign alongside the existing `SecurityError` (warn + `preventDefault` + brief info dialog) instead of crashing. Optional follow-up (not shipped): invoke `FileApi.open` synchronously inside the click handler on the "Load Preset..." path so transient activation survives.
 
 [< back to index](error-triage.md)
 

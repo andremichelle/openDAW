@@ -113,9 +113,10 @@ export class ErrorHandler {
             Dialogs.info({headline: "Warning", message: reason.message}).then(EmptyExec)
             return true
         }
-        // Handle SecurityError from File System Access API (e.g., showDirectoryPicker denied)
-        if (reason instanceof DOMException && reason.name === "SecurityError") {
-            console.warn(`SecurityError: ${reason.message}`)
+        // Handle SecurityError/NotAllowedError from File System Access API (e.g., showOpenFilePicker
+        // denied, or called outside a live user gesture so transient activation was lost).
+        if (reason instanceof DOMException && (reason.name === "SecurityError" || reason.name === "NotAllowedError")) {
+            console.warn(`${reason.name}: ${reason.message}`)
             event.preventDefault()
             Dialogs.info({
                 headline: "Access Denied",
