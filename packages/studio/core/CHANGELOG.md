@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.151](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.0.150...@opendaw/studio-core@0.0.151) (2026-06-05)
+
+### Reverts
+
+- Revert "Don't crash on regions with non-positive duration (error 998)" ([88b0fc6](https://github.com/andremichelle/openDAW/commit/88b0fc6a5c0dc7e9db187f01c7f79a04257c23cc))
+
 ## [0.0.150](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.0.149...@opendaw/studio-core@0.0.150) (2026-06-03)
 
 **Note:** Version bump only for package @opendaw/studio-core
