@@ -1,9 +1,9 @@
 # External btn-comment-mode-click
 
-- **status:** ENV · **priority:** ENV
+- **status:** FIXED (classified external, generic) · **priority:** ENV
 - **occurrences:** 1 · **ids:** [957]
-- **assessment:** document.getElementById(...).click null - external/injected script.
-- **action:** Confirm not first-party; ignore-list.
+- **assessment:** `document.getElementById('btn-comment-mode').click()` null deref - external/injected script (`btn-comment-mode` absent from all source; stack is document-inline `@https://opendaw.studio/:4:46` / `global code@.../:28:3`, not our bundle).
+- **fix:** Generalised `#looksLikeExtension` in `ErrorHandler.ts` (not a per-id pattern): our own frames always reference a script *module* file (`.js`/`.mjs` in prod, `.ts`/`.tsx`/`.jsx` served by Vite in dev, via `ModuleUrlPattern`); an injected inline script runs from the bare document URL (`.../:line:col`). So a stack that has source URLs but **no** module-file frame did not originate in our code → classified external (warning) instead of crashing. Catches any injected/inline page script, not just this id. Conservative: a mixed stack with any real module frame is treated as ours (cannot mask a genuine first-party error). Verified across prod/dev/injected/mixed cases. (`index.html` has no inline `<script>`, so a document-URL frame is reliably foreign.)
 
 [< back to index](error-triage.md)
 

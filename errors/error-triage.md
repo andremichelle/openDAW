@@ -39,7 +39,7 @@ Each error-group has its own file in this folder. Priority: **P1** highest-value
 - [Storage transient-cached-state](ENV-storage-transient-cached-state.md) — ENV · 2× · ids [870, 981]
 - [Network chunk-load](ENV-network-chunk-load.md) — ENV · 2× · ids [623, 810]
 - [Audio device-init](ENV-audio-device-init.md) — ENV · 2× · ids [704, 765]
-- [External btn-comment-mode-click](ENV-external-btn-comment-mode-click.md) — ENV · 1× · ids [957]
+- [External btn-comment-mode-click](ENV-external-btn-comment-mode-click.md) — FIXED (generic external) · 1× · ids [957]
 - [File-picker not-allowed](ENV-file-picker-not-allowed.md) — FIXED (graceful) · 1× · ids [814]
 
 > **No truly-resolved groups.** The two previously labeled RESOLVED were band-aids, not fixes: overlap-after-clipping (panic→`console.error`) and region-split zero-duration (panic reworded). Both are now OPEN under P2. Nothing has been marked `fixed=1`.

@@ -19,11 +19,16 @@ const BrowserInternalPatterns = ["feature named", "window.__firefox__"]
 const MonacoPatterns = ["monaco-editor", "vs/base/common/errors", "editor.main", "editor.worker"]
 const ThirdPartyAppPatterns = ["_callback_receiveMIDIMessage", "_callback_addSource"]
 const UrlPattern = /https?:\/\/[^\s)]+/g
+// A stack frame that belongs to our code references a script module file: a built ".js"/".mjs"
+// chunk in production, or a ".ts"/".tsx"/".jsx" source served by Vite in dev. The HTML document
+// frame of an injected inline script (".../:line:col") matches none of these.
+const ModuleUrlPattern = /\.(?:m?jsx?|tsx?)(?:[?:#]|$)/
 
 export class ErrorHandler {
     readonly #terminator = new Terminator()
     readonly #buildInfo: BuildInfo
     readonly #recover: Provider<Option<Provider<Promise<void>>>>
+
     #errorThrown: boolean = false
 
     constructor(buildInfo: BuildInfo, recover: Provider<Option<Provider<Promise<void>>>>) {
@@ -42,8 +47,15 @@ export class ErrorHandler {
         // "this didn't come from our code" signal. (UrlPattern has the g flag,
         // so reuse .match() rather than .test() to avoid the lastIndex gotcha.)
         const stack = error.stack
-        if (stack !== undefined && stack.trim().length > 0 && stack.match(UrlPattern) === null) {return true}
-        return false
+        if (stack === undefined || stack.trim().length === 0) {return false}
+        const urls = stack.match(UrlPattern)
+        if (urls === null) {return true}
+        // Injected/inline page scripts run from the document URL itself
+        // (e.g. "@https://opendaw.studio/:4:46", "global code@.../:28:3"); our own
+        // code only ever appears in frames that reference a script module file.
+        // So a stack with source URLs but no module frame (the HTML document only)
+        // did not originate in our code — generalises beyond any single injected id.
+        return !urls.some(url => ModuleUrlPattern.test(url))
     }
 
     #extractForeignOrigin(error: ErrorInfo): string | null {
