@@ -1,9 +1,9 @@
 # Timeline duration family
 
-- **status:** OPEN · **priority:** P1
-- **occurrences:** 3 · **ids:** [933, 982, 998]
-- **assessment:** Same 0-duration corruption surfacing at two panics: validateTrack ('duration must be positive', #982/#998) and createTasksFromMasks:134 ('Invalid duration', #933). #998's softening was reverted on purpose - validators panic by design so reports keep surfacing. Root cause unproven; band-aids forbidden.
-- **action:** Find the 0-duration creation site (recording suspect) and fix there. See investigation below.
+- **status:** #1003 FIXED (confirmed) · recording origin guarded · detectors kept · **priority:** P1
+- **occurrences:** 4 · **ids:** [933, 982, 998, 1003]
+- **assessment:** TWO distinct origins, both now closed (see 2026-06 update). (1) **Clip-resolver float boundary (#1003, confirmed):** seconds-based audio regions carry double-precision ppqn drift; a duration-drag whose end lands on a neighbour's drifted boundary made `createTasksFromMasks` emit a `start`/`complete` task with a sub-ulp remainder that float32-truncates to 0 → `validateTrack` panic. (2) **Recording (#998 suspect):** `RecordAudio.finalizeTake` could persist a non-positive recomputed take length. The detector panics (validateTrack / createTasksFromMasks / RegionEditing.clip) are kept as safety nets (softening them is a band-aid).
+- **note:** the stale memory claiming "validateTrack non-fatal" is wrong — it still panics (softening was reverted).
 
 [< back to index](error-triage.md)
 
@@ -48,3 +48,15 @@ None can turn a positive region into 0; they only preserve an existing 0.
 **Why no fix shipped:** the recording timing/latency logic is delicate; a clamp could mask the real slip-through or break offset compensation, and the exact escaping branch is unproven.
 
 **Next step before fixing:** reproduce short/count-in/looped takes, or add low-noise instrumentation capturing `new Error().stack` only on a non-positive duration write (e.g. at finalizeTake / the live update), to confirm the branch. Then fix at source (refuse to persist a take with duration<=0, or clamp takeSeconds). Tracked in memory project-zero-duration-region-origin.
+
+## Update (2026-06) — #1003 confirmed & fixed; recording origin guarded
+
+**#1003 root cause CONFIRMED from its logtail (id 1003, `error.php?id=1003`).** Fresh project, drag-resizing audio regions (not recording). Track 1 had 8 packed audio regions with double-precision ppqn drift (`2080.0000000000005`, `2079.999999999999`, `2080.000000000002`, …). User dragged the selected region's end to exactly `15520`; the last region ended at `15520.000000000002` (2e-12 past). `RegionClipResolver.createTasksFromMasks` used **exact** `region.complete <= complete`, so the last region was judged to extend past the mask → a `start` task moved its start to `15520`, leaving `duration = 15520.000000000002 − 15520 ≈ 2e-12`, stored in a **float32** field → **exactly 0.0** → `validateTrack` panic `duration(0) must be positive`. Stack: `validateTrack ← RegionOverlapResolver.apply ← RuntimeNotifier.approve ← keydown capture`.
+
+Why not rounding: ppqn is integer only for *musical* regions; seconds-audio ppqn is genuinely fractional and sample-meaningful (1 ppqn ≈ 25 samples @120bpm/48k). Rounding stored ppqn would shift audio by up to ~0.5 ppqn and not scale with project length.
+
+**Fix shipped (clip resolver):** `RegionClipResolver` `positionIn`/`completeIn` now use a magnitude-aware `boundaryTolerance(value) = |value|·2⁻²³ + 1e-3` (≈ one float32 ulp at the boundary, scales with project length, musically nil). A region within tolerance of fully covered → `delete` instead of a zero-width `start`/`complete`. This also keeps the `separate` parts > tolerance, so the `RegionEditing.clip` `<=0` panic (#667 path via the resolver) can't fire either. Regression test `RegionClipResolver.test.ts` › "float boundary tolerance (#1003)" — RED (`start` → float32 0) → GREEN (`delete`); all 56 existing clip tests unaffected.
+
+**Fix shipped (recording, defensive):** `RecordAudio.finalizeTake` now drops (deletes) a take whose recomputed `durationInSeconds <= 0` (loop-wrap path that bypasses the live-update pre-check) instead of persisting a 0-duration region. This is the suspected #982/#998 origin — defensive, not reproduced.
+
+**Status:** #1003 fixed+tested. #933/#982/#998 are detector panics whose two known creation paths (clip-FP, recording-finalize) are now closed; residual unknown creators would still surface them (kept as safety nets). #667 addressed via the resolver path; `RegionEditing.clip` retains its own exact `<=0` check for any direct caller.

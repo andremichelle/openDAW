@@ -36,6 +36,15 @@ export interface Mask extends Event {complete: ppqn}
 const allowOverlap = (region: AnyRegionBoxAdapter) =>
     region instanceof AudioRegionBoxAdapter && region.timeBase !== TimeBase.Musical
 
+// A region's duration is stored as float32, and seconds-based audio regions carry double-precision
+// ppqn drift (their ppqn is derived from seconds via the tempo map, e.g. complete = mask.complete + 2e-12).
+// So a clip whose remainder falls below ~one float32 ulp truncates to duration 0, and later trips
+// validateTrack / createTasksFromMasks (#1003). Treat a region within this tolerance of a mask boundary
+// as touching it, so it is deleted rather than clipped to a zero-width sliver. The tolerance tracks
+// float32 precision at the boundary magnitude (so it scales with project length) and is musically nil.
+const Float32RelativeEpsilon = 2 ** -23 // float32 has 23 mantissa bits
+const boundaryTolerance = (value: ppqn): ppqn => Math.abs(value) * Float32RelativeEpsilon + 1e-3
+
 export class RegionClipResolver {
     static fromSelection(tracks: ReadonlyArray<TrackBoxAdapter>,
                          adapters: ReadonlyArray<AnyRegionBoxAdapter>,
@@ -110,8 +119,8 @@ export class RegionClipResolver {
             if (overlapping.length === 0) {continue}
             for (let i = overlapping.length - 1; i >= 0; i--) {
                 const {position, complete} = overlapping[i]
-                const positionIn: boolean = region.position >= position
-                const completeIn: boolean = region.complete <= complete
+                const positionIn: boolean = region.position >= position - boundaryTolerance(position)
+                const completeIn: boolean = region.complete <= complete + boundaryTolerance(complete)
                 if (positionIn && completeIn) {
                     tasks.push({type: "delete", region})
                     break

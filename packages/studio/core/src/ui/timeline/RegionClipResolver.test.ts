@@ -737,4 +737,26 @@ describe("RegionClipResolver.createTasksFromMasks", () => {
             expect(tasks[0].type).toBe("delete")
         })
     })
+
+    describe("float boundary tolerance (#1003)", () => {
+        it("deletes a region whose complete pokes a float-epsilon past the mask, not a zero-width start", () => {
+            // Seconds-based audio regions carry ppqn drift, so the last region's complete sits a hair
+            // past the resized region's end (e.g. 15520.000000001 vs 15520). Exact comparison made it a
+            // `start` task -> duration ~1e-9 -> float32 0 -> validateTrack panic "duration(0) must be positive".
+            const region = createRegion(13440, 2080 + 1e-9) // complete = 15520.000000001
+            const tasks = runCreateTasks([region], [createMask(0, 15520)])
+
+            expect(tasks).toHaveLength(1)
+            expect(tasks[0].type).toBe("delete")
+        })
+
+        it("still trims (start) a region that genuinely extends past the mask", () => {
+            const region = createRegion(13440, 2080 + 5) // complete = 15525, clearly past 15520
+            const tasks = runCreateTasks([region], [createMask(0, 15520)])
+
+            expect(tasks).toHaveLength(1)
+            expect(tasks[0].type).toBe("start")
+            if (tasks[0].type === "start") {expect(tasks[0].position).toBe(15520)}
+        })
+    })
 })

@@ -12,7 +12,7 @@ Each error-group has its own file in this folder. Priority: **P1** highest-value
 ## P1
 
 - [Mixer Unknown-key channel-strip](P1-mixer-unknown-key-channel-strip.md) — OPEN · 5× · ids [924, 925, 926, 984, 985]
-- [Timeline duration family](P1-timeline-duration-family.md) — OPEN · 3× · ids [933, 982, 998]
+- [Timeline duration family](P1-timeline-duration-family.md) — #1003 FIXED · recording guarded · 4× · ids [933, 982, 998, 1003]
 
 ## P2
 
