@@ -33,12 +33,12 @@ Each error-group has its own file in this folder. Priority: **P1** highest-value
 ## ENV
 
 - [Storage quota-exceeded](ENV-storage-quota-exceeded.md) — FIXED (graceful) · 5× · ids [839, 951, 952, 953, 954]
-- [Storage file-not-found](ENV-storage-file-not-found.md) — ENV · 4× · ids [631, 766, 971, 974]
-- [Network failed-to-fetch](ENV-network-failed-to-fetch.md) — ENV · 4× · ids [604, 624, 761, 813]
+- [Storage file-not-found](ENV-storage-file-not-found.md) — FIXED (non-fatal) · 4× · ids [631, 766, 971, 974]
+- [Network failed-to-fetch](ENV-network-failed-to-fetch.md) — FIXED (non-fatal) · 4× · ids [604, 624, 761, 813]
 - [Generic unhandledrejection](ENV-generic-unhandledrejection.md) — FIXED (synthetic/old) · 2× · ids [807, 809]
 - [Storage io-read-failed](ENV-storage-io-read-failed.md) — FIXED (graceful) · 2× · ids [697, 698]
 - [Deploy html-served-for-js](ENV-deploy-html-served-for-js.md) — FIXED (infra-mitigated) · 2× · ids [160, 237]
-- [Storage transient-cached-state](ENV-storage-transient-cached-state.md) — ENV · 2× · ids [870, 981]
+- [Storage transient-cached-state](ENV-storage-transient-cached-state.md) — FIXED (non-fatal) · 2× · ids [870, 981]
 - [Network chunk-load](ENV-network-chunk-load.md) — FIXED (infra-mitigated) · 2× · ids [623, 810]
 - [Audio device-init](ENV-audio-device-init.md) — FIXED (handled/old) · 2× · ids [704, 765]
 - [External btn-comment-mode-click](ENV-external-btn-comment-mode-click.md) — FIXED (generic external) · 1× · ids [957]

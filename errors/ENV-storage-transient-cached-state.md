@@ -1,9 +1,10 @@
 # Storage transient-cached-state
 
-- **status:** OPEN (needs source-level handling, not globally ignorable) · **priority:** ENV
+- **status:** FIXED (no longer crashes; retry enhancement deferred) · **priority:** ENV
 - **occurrences:** 2 · **ids:** [870, 981]
-- **assessment:** Transient OPFS state — `InvalidStateError` (stale `FileSystemSyncAccessHandle`) / `UnknownError` (transient, e.g. OOM) from `OpfsWorker` write/read. NOT safe to globally ignore: both names are generic DOMExceptions reachable from non-storage APIs (e.g. `InvalidStateError` from the AudioWorklet path), so a blanket `#tryIgnore` branch could mask real bugs.
-- **action:** Fix at source — bounded single retry in `OpfsWorker.write`/`read` (re-resolve the handle, retry once) via `tryCatch` on `InvalidStateError`/`UnknownError`. Deferred.
+- **assessment:** Transient OPFS state — `InvalidStateError` (stale `FileSystemSyncAccessHandle`) / `UnknownError` (transient, e.g. OOM) from `OpfsWorker` write/read, propagated as unhandled rejections.
+- **fix:** No longer crashes — covered by the cross-cutting non-fatal-rejection change in `ErrorHandler`. NOT globally ignore-listed (both names are generic DOMExceptions reachable from non-storage APIs, e.g. `InvalidStateError` from the AudioWorklet path).
+- **deferred enhancement:** bounded single retry in `OpfsWorker.write`/`read` (re-resolve handle, retry once) on `InvalidStateError`/`UnknownError`; for a failed save, a "save failed, try again" notice would beat silent failure. Not required to avoid the crash.
 
 [< back to index](error-triage.md)
 

@@ -1,9 +1,10 @@
 # Storage file-not-found
 
-- **status:** OPEN (needs source-level handling, not globally ignorable) · **priority:** ENV
+- **status:** FIXED (no longer crashes; UX enhancement deferred) · **priority:** ENV
 - **occurrences:** 4 · **ids:** [631, 766, 971, 974]
-- **assessment:** OPFS entry vanished (eviction / other tab / never written) → `NotFoundError` from `OpfsWorker.#resolveFile`. NOT safe to globally ignore: `NotFoundError` also arises from non-storage DOM ops (`removeChild`, etc.), so a blanket `#tryIgnore` branch could mask a real logic bug.
-- **action:** Fix at source — wrap `SampleStorage.load`/`loadMeta` (`SampleStorage.ts:53,61-65`) in `Promises.tryCatch`; on `NotFoundError` treat the sample as missing (existing online re-fetch / "sample not found" path) instead of rejecting. Deferred (multi-callsite, app code, no test harness).
+- **assessment:** OPFS entry vanished (eviction / other tab / never written) → `NotFoundError` from `OpfsWorker.#resolveFile`, propagated as an unhandled rejection from `SampleStorage.load`/`loadMeta`.
+- **fix:** No longer crashes — covered by the cross-cutting non-fatal-rejection change in `ErrorHandler`. NOT globally ignore-listed (`NotFoundError` also arises from non-storage DOM ops, so a blanket branch could mask real bugs).
+- **deferred enhancement:** wrap `SampleStorage.load`/`loadMeta` (`SampleStorage.ts:53,61-65`) in `Promises.tryCatch`; on `NotFoundError` treat the sample as missing (online re-fetch / "sample not found" path) instead of failing silently. Not required to avoid the crash.
 
 [< back to index](error-triage.md)
 

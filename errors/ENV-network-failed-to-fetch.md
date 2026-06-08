@@ -1,9 +1,9 @@
 # Network failed-to-fetch
 
-- **status:** ENV · **priority:** ENV
+- **status:** FIXED (non-fatal via cross-cutting rejection fix) · **priority:** ENV
 - **occurrences:** 4 · **ids:** [604, 624, 761, 813]
-- **assessment:** Offline/transient network.
-- **action:** Ignore-list transient fetch; offline indicator.
+- **assessment:** Transient/environmental fetch failures (`TypeError: Failed to fetch` / `network error`), stackless, no first-party frame — background fetches (heartbeat already self-catches in `UserCounter`; FFmpeg core CDN download). All arrive as unhandled promise rejections.
+- **fix:** Covered by the cross-cutting `ErrorHandler` change — unhandled rejections are now non-fatal (reported once, app stays alive). Deliberately did NOT add `"Failed to fetch"` to `IgnoredErrors` (too broad; would mask real first-party fetch failures); the non-fatal path stops the crash without that risk.
 
 [< back to index](error-triage.md)
 
