@@ -106,7 +106,7 @@ export namespace PresetEncoder {
             }, () => {
                 effects.forEach((source, i) => {
                     const input = new ByteArrayInput(source.toArrayBuffer())
-                    const uuid = uuidMap.get(source.address.uuid).target
+                    const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target
                     boxGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => {
                         box.read(input)
                         if (IndexedBox.isIndexedBox(box)) {box.index.setValue(i)}
@@ -114,7 +114,7 @@ export namespace PresetEncoder {
                 })
                 dependencies.forEach(source => {
                     const input = new ByteArrayInput(source.toArrayBuffer())
-                    const uuid = uuidMap.get(source.address.uuid).target
+                    const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target
                     boxGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))
                 })
             })

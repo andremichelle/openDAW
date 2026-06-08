@@ -86,7 +86,7 @@ export namespace ClipboardUtils {
             }
         }, () => sourceBoxes.forEach(sourceBox => {
             const inputStream = new ByteArrayInput(sourceBox.toArrayBuffer())
-            const targetUuid = uuidMap.get(sourceBox.address.uuid).target
+            const targetUuid = uuidMap.get(sourceBox.address.uuid, "uuid mapping").target
             targetGraph.createBox(sourceBox.name as keyof BoxIO.TypeMap, targetUuid, box => {
                 box.read(inputStream)
                 options.modifyBox?.(box as T)

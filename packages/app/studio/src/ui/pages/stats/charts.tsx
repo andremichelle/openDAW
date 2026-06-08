@@ -10,13 +10,36 @@ type ChartProps = {
     color?: string
     showAxis?: boolean
     showTrend?: boolean
+    peakLabels?: boolean
 }
 
 const DEFAULT_PADDING = {top: 16, right: 16, bottom: 28, left: 40}
 const COMPACT_PADDING = {top: 8, right: 8, bottom: 8, left: 8}
 const GRID_LINES = 4
+const LABEL_MIN_DISTANCE = 24
+const X_LABEL_MIN_DISTANCE = 32
 
 const formatAxisLabel = (label: string): string => label.includes("-") ? label.slice(5) : label
+
+const latencyBarColor = (label: string): string => {
+    if (label.startsWith(">")) {return Colors.red.toString()}
+    const ms = parseInt(label, 10)
+    if (ms < 10) {return Colors.green.toString()}
+    if (ms < 50) {return Colors.yellow.toString()}
+    return Colors.orange.toString()
+}
+
+const niceStep = (rawStep: number): number => {
+    const exponent = Math.floor(Math.log10(Math.max(1, rawStep)))
+    for (let magnitudeExp = exponent; magnitudeExp <= exponent + 3; magnitudeExp++) {
+        const magnitude = Math.pow(10, magnitudeExp)
+        for (const mantissa of [1, 2.5, 5, 10]) {
+            const candidate = mantissa * magnitude
+            if (Number.isInteger(candidate) && candidate >= 1 && candidate >= rawStep) {return candidate}
+        }
+    }
+    return Math.max(1, Math.ceil(rawStep))
+}
 
 const buildAreaPath = (points: ReadonlyArray<readonly [number, number]>, baseY: number): string => {
     if (points.length === 0) return ""
@@ -74,7 +97,7 @@ export const LineChart = ({lifecycle, series, color, showAxis = true, showTrend 
                                 return (
                                     <Frag>
                                         <line x1={padding.left} y1={y} x2={width - padding.right} y2={y}
-                                              stroke={Colors.shadow.toString()} stroke-width="1" stroke-opacity="0.4"/>
+                                              stroke="rgba(255, 255, 255, 0.2)" stroke-width="1" stroke-opacity="0.4"/>
                                         <text x={`${padding.left - 6}`} y={`${y + 4}`}
                                               fill={Colors.shadow.toString()} font-size="10"
                                               font-family="sans-serif" text-anchor="end">{value}</text>
@@ -122,7 +145,7 @@ export const LineChart = ({lifecycle, series, color, showAxis = true, showTrend 
     )
 }
 
-export const BarChart = ({lifecycle, series, color, showAxis = true}: ChartProps) => {
+export const BarChart = ({lifecycle, series, color, showAxis = true, peakLabels = false}: ChartProps) => {
     const accent = color ?? Colors.purple.toString()
     const padding = showAxis ? DEFAULT_PADDING : COMPACT_PADDING
     return (
@@ -142,19 +165,41 @@ export const BarChart = ({lifecycle, series, color, showAxis = true}: ChartProps
                 const slotWidth = chartWidth / values.length
                 const barWidth = Math.max(1, slotWidth * 0.7)
                 const baseY = padding.top + chartHeight
-                const dateLabelMinSpacing = 64
-                const dateLabelStep = Math.max(1, Math.ceil(dateLabelMinSpacing / slotWidth))
+                const valueStep = niceStep(LABEL_MIN_DISTANCE / 2 * maxValue / chartHeight)
+                const axisMax = Math.max(valueStep, Math.ceil(maxValue / valueStep) * valueStep)
+                const centerX = (index: number): number => padding.left + index * slotWidth + slotWidth / 2
+                const xLabelIndices = (() => {
+                    if (peakLabels) {
+                        const selected: Array<number> = []
+                        const placedX: Array<number> = []
+                        const tryPlace = (index: number): void => {
+                            const x = centerX(index)
+                            if (placedX.every(placed => Math.abs(placed - x) >= X_LABEL_MIN_DISTANCE)) {
+                                placedX.push(x)
+                                selected.push(index)
+                            }
+                        }
+                        values
+                            .map((value, index) => ({value, index}))
+                            .sort((left, right) => right.value - left.value)
+                            .forEach(({index}) => tryPlace(index))
+                        for (let index = 0; index < values.length; index++) {tryPlace(index)}
+                        return selected
+                    }
+                    const dateLabelStep = Math.max(1, Math.ceil(64 / slotWidth))
+                    return values.map((_, index) => index).filter(index => index % dateLabelStep === 0)
+                })()
                 replaceChildren(element, (
                     <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height}>
                         {showAxis && (() => {
-                            const lines = Math.min(GRID_LINES, Math.max(1, Math.floor(maxValue)))
-                            return Array.from({length: lines + 1}, (_, index) => {
-                                const y = padding.top + (chartHeight / lines) * index
-                                const value = Math.round(maxValue - (maxValue / lines) * index)
+                            const ticks: Array<number> = []
+                            for (let value = 0; value <= axisMax; value += valueStep) {ticks.push(value)}
+                            return ticks.map(value => {
+                                const y = padding.top + (1 - value / axisMax) * chartHeight
                                 return (
                                     <Frag>
                                         <line x1={padding.left} y1={y} x2={width - padding.right} y2={y}
-                                              stroke={Colors.shadow.toString()} stroke-width="1" stroke-opacity="0.4"/>
+                                              stroke={"rgba(255, 255, 255, 0.2)"} stroke-width="1" stroke-opacity="0.4"/>
                                         <text x={`${padding.left - 6}`} y={`${y + 4}`}
                                               fill={Colors.shadow.toString()} font-size="10"
                                               font-family="sans-serif" text-anchor="end">{value}</text>
@@ -163,19 +208,20 @@ export const BarChart = ({lifecycle, series, color, showAxis = true}: ChartProps
                             })
                         })()}
                         {values.map((value, index) => {
-                            const barHeight = (value / maxValue) * chartHeight
+                            const barHeight = (value / axisMax) * chartHeight
                             const x = padding.left + index * slotWidth + (slotWidth - barWidth) / 2
                             const y = baseY - barHeight
+                            const fill = peakLabels ? latencyBarColor(labels[index]) : accent
                             return (
                                 <rect x={x} y={y} width={barWidth} height={barHeight}
-                                      fill={accent} rx="2" ry="2" opacity="0.85"/>
+                                      fill={fill} rx="2" ry="2" opacity="0.85"/>
                             )
                         })}
-                        {showAxis && labels.map((label, index) => index % dateLabelStep === 0 && (
-                            <text x={`${padding.left + index * slotWidth + slotWidth / 2}`}
+                        {showAxis && xLabelIndices.map(index => (
+                            <text x={`${centerX(index)}`}
                                   y={`${baseY + 16}`}
                                   fill={Colors.shadow.toString()} font-size="10"
-                                  font-family="sans-serif" text-anchor="middle">{formatAxisLabel(label)}</text>
+                                  font-family="sans-serif" text-anchor="middle">{formatAxisLabel(labels[index])}</text>
                         ))}
                     </svg>
                 ))

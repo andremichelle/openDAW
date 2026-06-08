@@ -32,7 +32,7 @@ export class ParameterFieldAdapters {
         return {terminate: () => this.#set.removeByValue(adapter)}
     }
 
-    get(address: Address): AutomatableParameterFieldAdapter {return this.#set.get(address)}
+    get(address: Address): AutomatableParameterFieldAdapter {return this.#set.get(address, "parameter field adapter")}
     opt(address: Address): Option<AutomatableParameterFieldAdapter> {return this.#set.opt(address)}
 
     registerTracks(address: Address, tracks: AudioUnitTracks): Terminable {

@@ -96,7 +96,7 @@ export class MIDILearning implements Terminable {
                     box.deviceChannel.setValue(MidiData.readChannel(data))
                     box.controlId.setValue(MidiData.readParam1(data))
                 }))
-                this.#connections.get(optBox.unwrap("Could not create MIDIControllerBox").address).handleEvent(event)
+                this.#connections.get(optBox.unwrap("Could not create MIDIControllerBox").address, "midi connection").handleEvent(event)
             }
         }))
         return RuntimeNotifier.info({

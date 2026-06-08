@@ -122,7 +122,7 @@ export class ModularEnvironment implements Terminable {
         return {terminate: () => this.#connectors.removeByKey(view.adapter.address)}
     }
 
-    findConnectorByViewAddress(address: Address): ConnectorViewAdapter {return this.#connectors.get(address)}
+    findConnectorByViewAddress(address: Address): ConnectorViewAdapter {return this.#connectors.get(address, "No connector view")}
 
     findConnectorViewByEventTarget(target: Nullable<EventTarget>): Nullable<ConnectorViewAdapter> {
         if (target === null) {return null}
@@ -146,7 +146,7 @@ export class ModularEnvironment implements Terminable {
             terminate: () => matchingConnectors.forEach(connector => connector.element.classList.remove("accepting"))
         })
         const preview = runtime.own(this.#wiringPreview.unwrap("No preview set.")
-            .begin(this.#connectors.get(adapter.address), pointer))
+            .begin(this.#connectors.get(adapter.address, "No connector view"), pointer))
         let lock: Option<ConnectorViewAdapter> = Option.None
         const owner = Surface.get().owner // TODO we need a reference to the owner
         runtime.own(Events.subscribe(owner, "pointerover", event => {

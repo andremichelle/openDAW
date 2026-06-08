@@ -13,6 +13,17 @@ $DARKENER: rgba(black, 0.04)
 @mixin panel-background
   background-color: var(--color-panel-background)
 
+@mixin hud-frame($len: 10px, $width: 1px, $color: var(--color-bright), $opacity: 0.6)
+  content: ""
+  position: absolute
+  inset: 0
+  pointer-events: none
+  opacity: $opacity
+  background-image: linear-gradient($color, $color), linear-gradient($color, $color), linear-gradient($color, $color), linear-gradient($color, $color), linear-gradient($color, $color), linear-gradient($color, $color), linear-gradient($color, $color), linear-gradient($color, $color)
+  background-repeat: no-repeat
+  background-size: $len $width, $width $len, $len $width, $width $len, $len $width, $width $len, $len $width, $width $len
+  background-position: left top, left top, right top, right top, left bottom, left bottom, right bottom, right bottom
+
 @mixin panel-background-dark
   background-color: var(--color-panel-background-dark) !important
 

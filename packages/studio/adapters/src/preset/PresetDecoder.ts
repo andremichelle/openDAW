@@ -79,7 +79,7 @@ export namespace PresetDecoder {
         TransferUtils.reorderAudioUnits(uuidMap, sourceAudioUnitBoxes, rootBox)
         const importedAudioUnits = sourceAudioUnitBoxes
             .map(source => asInstanceOf(rootBox.graph
-                .findBox(uuidMap.get(source.address.uuid).target)
+                .findBox(uuidMap.get(source.address.uuid, "uuid mapping").target)
                 .unwrap("Target AudioUnit has not been copied"), AudioUnitBox))
             .filter(box => box.type.getValue() !== AudioUnitType.Output)
         importedAudioUnits.forEach((audioUnitBox) => {
@@ -240,7 +240,7 @@ export namespace PresetDecoder {
                     }
                     const input = new ByteArrayInput(source.toArrayBuffer())
                     const key = source.name as keyof BoxIO.TypeMap
-                    const uuid = uuidMap.get(source.address.uuid).target
+                    const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target
                     targetBoxGraph.createBox(key, uuid, box => box.read(input))
                 })
         })
@@ -333,7 +333,7 @@ export namespace PresetDecoder {
         }, () => {
             effects.forEach((source, i) => {
                 const input = new ByteArrayInput(source.toArrayBuffer())
-                const uuid = uuidMap.get(source.address.uuid).target
+                const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target
                 targetGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => {
                     box.read(input)
                     if (IndexedBox.isIndexedBox(box)) {box.index.setValue(insertIndex + i)}
@@ -342,7 +342,7 @@ export namespace PresetDecoder {
             dependencies.forEach(source => {
                 if (existingPreservedUuids.hasKey(source.address.uuid)) {return}
                 const input = new ByteArrayInput(source.toArrayBuffer())
-                const uuid = uuidMap.get(source.address.uuid).target
+                const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target
                 targetGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))
             })
         })

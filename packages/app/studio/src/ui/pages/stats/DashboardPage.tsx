@@ -6,7 +6,7 @@ import {Colors} from "@opendaw/studio-enums"
 import type {StudioService} from "@/service/StudioService.ts"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {BarChart, LineChart} from "./charts"
-import {Card, RangeControl} from "./components"
+import {Card} from "./components"
 import {Tile} from "./Tile"
 import {
     BuildInfo,
@@ -50,9 +50,6 @@ type LiveTiles = {
     maxVisitors: HTMLSpanElement
 }
 
-const sliceSeries = (series: DailySeries, fromDate: string, toDate: string): DailySeries =>
-    series.filter(([date]) => date >= fromDate && date <= toDate)
-
 const unionDates = (data: DashboardData): ReadonlyArray<string> => {
     const set = new Set<string>()
     data.rooms.count.forEach(([date]) => set.add(date))
@@ -78,33 +75,12 @@ const StatsBody = ({lifecycle, data: rawData, tiles}: StatsBodyProps) => {
     if (dates.length === 0) {
         return <div className="loading">No statistics available yet.</div>
     }
-    const range = lifecycle.own(new DefaultObservableValue<readonly [number, number]>([0, dates.length - 1]))
-    const liveRoomsSeries = lifecycle.own(new DefaultObservableValue<DailySeries>([]))
-    const liveHoursSeries = lifecycle.own(new DefaultObservableValue<DailySeries>([]))
-    const peakUsersSeries = lifecycle.own(new DefaultObservableValue<DailySeries>([]))
-    lifecycle.own(range.catchupAndSubscribe(owner => {
-        const [fromIndex, toIndex] = owner.getValue()
-        const fromDate = dates[fromIndex]
-        const toDate = dates[toIndex]
-        const liveRooms = sliceSeries(data.rooms.count, fromDate, toDate)
-        const liveHours = minutesToHours(sliceSeries(data.rooms.duration, fromDate, toDate))
-        const peakUsers = sliceSeries(data.users, fromDate, toDate)
-        liveRoomsSeries.setValue(liveRooms)
-        liveHoursSeries.setValue(liveHours)
-        peakUsersSeries.setValue(peakUsers)
-        tiles.peakUsers.textContent = formatNumber(Math.max(0, ...peakUsers.map(([, value]) => value)))
-    }))
-    const visitorDates = data.visitors.map(([date]) => date)
-    const visitorRange = lifecycle.own(new DefaultObservableValue<readonly [number, number]>([0, Math.max(0, visitorDates.length - 1)]))
-    const visitorsSeries = lifecycle.own(new DefaultObservableValue<DailySeries>([]))
-    lifecycle.own(visitorRange.catchupAndSubscribe(owner => {
-        const [fromIndex, toIndex] = owner.getValue()
-        const fromDate = visitorDates[fromIndex]
-        const toDate = visitorDates[toIndex]
-        const visitors = sliceSeries(data.visitors, fromDate, toDate)
-        visitorsSeries.setValue(visitors)
-        tiles.maxVisitors.textContent = formatNumber(Math.max(0, ...visitors.map(([, value]) => value)))
-    }))
+    const liveRoomsSeries = lifecycle.own(new DefaultObservableValue<DailySeries>(data.rooms.count))
+    const liveHoursSeries = lifecycle.own(new DefaultObservableValue<DailySeries>(minutesToHours(data.rooms.duration)))
+    const peakUsersSeries = lifecycle.own(new DefaultObservableValue<DailySeries>(data.users))
+    const visitorsSeries = lifecycle.own(new DefaultObservableValue<DailySeries>(data.visitors))
+    tiles.peakUsers.textContent = formatNumber(Math.max(0, ...data.users.map(([, value]) => value)))
+    tiles.maxVisitors.textContent = formatNumber(Math.max(0, ...data.visitors.map(([, value]) => value)))
     const latencySeries = lifecycle.own(new DefaultObservableValue<DailySeries>([]))
     return (
         <Frag>
@@ -112,13 +88,11 @@ const StatsBody = ({lifecycle, data: rawData, tiles}: StatsBodyProps) => {
                 <div className="span-12">
                     <Card title="Daily Unique Visitors" accent={<span>unique visitors per day</span>} className="hero">
                         <LineChart lifecycle={lifecycle} series={visitorsSeries} color={Colors.orange.toString()}/>
-                        <RangeControl lifecycle={lifecycle} dates={visitorDates} range={visitorRange}/>
                     </Card>
                 </div>
                 <div className="span-12">
                     <Card title="Daily Peak Users" accent={<span>peak concurrent users</span>} className="hero">
                         <LineChart lifecycle={lifecycle} series={peakUsersSeries} color={Colors.green.toString()}/>
-                        <RangeControl lifecycle={lifecycle} dates={dates} range={range}/>
                     </Card>
                 </div>
                 <div className="span-6">
@@ -136,15 +110,15 @@ const StatsBody = ({lifecycle, data: rawData, tiles}: StatsBodyProps) => {
                 factory={() => fetchLatencyStats()}
                 loading={() => null}
                 failure={() => null}
-                success={({distribution, unsupported, outliers}: LatencyStats) => {
+                success={({distribution, unsupported}: LatencyStats) => {
                     latencySeries.setValue(distribution)
                     const parts = ["1 ms buckets"]
-                    if (unsupported > 0) parts.push(`${unsupported} unsupported`)
-                    if (outliers > 0) parts.push(`${outliers} outliers`)
+                    if (unsupported > 0) {parts.push(`${unsupported} unsupported`)}
                     const subtitle = parts.join(" · ")
                     return (
                         <Card title="Audio Output Latency" accent={<span>{subtitle}</span>} className="compact">
-                            <BarChart lifecycle={lifecycle} series={latencySeries} color={Colors.cream.toString()}/>
+                            <BarChart lifecycle={lifecycle} series={latencySeries} color={Colors.cream.toString()}
+                                      peakLabels={true}/>
                         </Card>
                     )
                 }}
@@ -155,18 +129,18 @@ const StatsBody = ({lifecycle, data: rawData, tiles}: StatsBodyProps) => {
 
 const GitHubTiles = ({stats}: { stats: GitHubStats }) => (
     <Frag>
-        <Tile label="GitHub stars" value={formatNumber(stats.stars)} icon="★"/>
-        <Tile label="GitHub forks" value={formatNumber(stats.forks)} icon="⑂"/>
-        <Tile label="GitHub watchers" value={formatNumber(stats.watchers)} icon="◉"/>
-        <Tile label="GitHub Open issues" value={formatNumber(stats.openIssues)} icon="◈"/>
-        <Tile label="GitHub Last commit" value={formatRelativeDate(stats.lastCommit)} icon="↗"/>
+        <Tile label="GitHub stars" value={formatNumber(stats.stars)}/>
+        <Tile label="GitHub forks" value={formatNumber(stats.forks)}/>
+        <Tile label="GitHub watchers" value={formatNumber(stats.watchers)}/>
+        <Tile label="GitHub Open issues" value={formatNumber(stats.openIssues)}/>
+        <Tile label="GitHub Last commit" value={formatRelativeDate(stats.lastCommit)}/>
     </Frag>
 )
 
 const DiscordTiles = ({stats}: { stats: DiscordStats }) => (
     <Frag>
-        <Tile label="Discord members" value={formatNumber(stats.total)} icon="D"/>
-        <Tile label="Discord online" value={formatNumber(stats.online)} icon="●"/>
+        <Tile label="Discord members" value={formatNumber(stats.total)}/>
+        <Tile label="Discord online" value={formatNumber(stats.online)}/>
     </Frag>
 )
 
@@ -176,8 +150,8 @@ const AllTimeTiles = ({data}: { data: DashboardData }) => {
     const totalHours = totalMinutes / 60
     return (
         <Frag>
-            <Tile label="Rooms Total Create" value={formatNumber(totalRooms)} icon="∑"/>
-            <Tile label="Rooms Total Hours" value={formatHours(totalHours)} icon="⏱"/>
+            <Tile label="Rooms Total Create" value={formatNumber(totalRooms)}/>
+            <Tile label="Rooms Total Hours" value={formatHours(totalHours)}/>
         </Frag>
     )
 }
@@ -227,48 +201,48 @@ export const DashboardPage: PageFactory<StudioService> = ({lifecycle}: PageConte
             <div className="tiles">
                 <Await
                     factory={() => fetchGitHubStats()}
-                    loading={() => <Tile label="GitHub" value="…" icon="★"/>}
-                    failure={() => <Tile label="GitHub" value="n/a" icon="★"/>}
+                    loading={() => <Tile label="GitHub" value="…"/>}
+                    failure={() => <Tile label="GitHub" value="n/a"/>}
                     success={(stats: GitHubStats) => <GitHubTiles stats={stats}/>}
                 />
                 <Await
                     factory={() => fetchDiscordStats()}
-                    loading={() => <Tile label="Discord" value="…" icon="D"/>}
-                    failure={() => <Tile label="Discord" value="n/a" icon="D"/>}
+                    loading={() => <Tile label="Discord" value="…"/>}
+                    failure={() => <Tile label="Discord" value="n/a"/>}
                     success={(stats: DiscordStats) => <DiscordTiles stats={stats}/>}
                 />
                 <Await
                     factory={() => fetchErrorStats()}
-                    loading={() => <Tile label="Errors" value="…" icon="!"/>}
-                    failure={() => <Tile label="Errors" value="n/a" icon="!"/>}
+                    loading={() => <Tile label="Errors" value="…"/>}
+                    failure={() => <Tile label="Errors" value="n/a"/>}
                     success={(stats: ErrorStats) => (
-                        <Tile label="Errors fixed" value={stats.ratio} icon="✓"/>
+                        <Tile label="Errors fixed" value={stats.ratio}/>
                     )}
                 />
                 <Await
                     factory={() => fetchNpmWeeklyDownloads(NPM_PACKAGE)}
-                    loading={() => <Tile label="SDK Downloads/Week" value="…" icon="⤓"/>}
-                    failure={() => <Tile label="SDK Downloads/Week" value="n/a" icon="⤓"/>}
+                    loading={() => <Tile label="SDK Downloads/Week" value="…"/>}
+                    failure={() => <Tile label="SDK Downloads/Week" value="n/a"/>}
                     success={(downloads: int) => (
-                        <Tile label="SDK Downloads/Week" value={formatNumber(downloads)} icon="⤓"/>
+                        <Tile label="SDK Downloads/Week" value={formatNumber(downloads)}/>
                     )}
                 />
                 <Await
                     factory={() => fetchBuildInfo()}
-                    loading={() => <Tile label="Last build" value="…" icon="⚙"/>}
-                    failure={() => <Tile label="Last build" value="n/a" icon="⚙"/>}
+                    loading={() => <Tile label="Last build" value="…"/>}
+                    failure={() => <Tile label="Last build" value="n/a"/>}
                     success={(info: BuildInfo) => (
-                        <Tile label="Last build" value={formatRelativeDate(info.date)} icon="⚙"/>
+                        <Tile label="Last build" value={formatRelativeDate(info.date)}/>
                     )}
                 />
                 <Await
                     factory={() => dataPromise}
-                    loading={() => <Tile label="All-time" value="…" icon="∑"/>}
-                    failure={() => <Tile label="All-time" value="n/a" icon="∑"/>}
+                    loading={() => <Tile label="All-time" value="…"/>}
+                    failure={() => <Tile label="All-time" value="n/a"/>}
                     success={(data: DashboardData) => <AllTimeTiles data={data}/>}
                 />
-                <Tile label="Peak users" value={tiles.peakUsers} icon="U"/>
-                <Tile label="Max unique visitors" value={tiles.maxVisitors} icon="V"/>
+                <Tile label="Peak users" value={tiles.peakUsers}/>
+                <Tile label="Max unique visitors" value={tiles.maxVisitors}/>
             </div>
             <Await
                 factory={() => dataPromise}

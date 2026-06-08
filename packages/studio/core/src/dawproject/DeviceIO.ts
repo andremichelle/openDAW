@@ -57,10 +57,10 @@ export namespace DeviceIO {
         }, () => {
             const [main, ...deps] = rawBoxes
             const {key, uuid, input} = main
-            const box = boxGraph.createBox(key, mapping.get(uuid).target, box => box.read(input))
+            const box = boxGraph.createBox(key, mapping.get(uuid, "uuid mapping").target, box => box.read(input))
             if (!DeviceBoxUtils.isDeviceBox(box)) {return panic(`${box.name} is not a DeviceBox`)}
             deps.forEach(({key, uuid, input}) =>
-                boxGraph.createBox(key, mapping.get(uuid).target, box => box.read(input)))
+                boxGraph.createBox(key, mapping.get(uuid, "uuid mapping").target, box => box.read(input)))
             return box
         })
     }

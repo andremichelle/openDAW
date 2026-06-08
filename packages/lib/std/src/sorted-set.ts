@@ -125,7 +125,7 @@ export class SortedSet<K, V> implements Iterable<V> {
         return count
     }
 
-    get(key: K): V {return asDefined(this.#lookup(key), `Unknown key: ${key}`)}
+    get(key: K, fail?: string): V {return asDefined(this.#lookup(key), fail ?? `Unknown key: ${key}`)}
 
     getOrThrow(key: K, provider: Provider<Error>): V {
         const candidate: Maybe<V> = this.#lookup(key)

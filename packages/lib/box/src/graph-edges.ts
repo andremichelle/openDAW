@@ -75,7 +75,7 @@ export class GraphEdges {
 
     disconnect(source: PointerField): void {
         const [, target] = this.#outgoing.removeByKey(source.address)
-        const [, sources] = this.#incoming.get(target)
+        const [, sources] = this.#incoming.get(target, "incoming by address")
         Arrays.remove(sources, source)
         if (sources.length === 0) {this.#incoming.removeByKey(target)}
         this.#affected.add(source.address.uuid)

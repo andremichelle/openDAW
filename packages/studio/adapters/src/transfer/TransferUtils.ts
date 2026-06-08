@@ -87,14 +87,14 @@ export namespace TransferUtils {
         }, () => {
             audioUnitBoxes.forEach((source: AudioUnitBox) => {
                 const input = new ByteArrayInput(source.toArrayBuffer())
-                const uuid = uuidMap.get(source.address.uuid).target
+                const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target
                 targetBoxGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))
             })
             dependencies.forEach((source: Box) => {
                 if (existingPreservedUuids.hasKey(source.address.uuid)) {return}
                 if (isOwnedByExistingPreserved(source)) {return}
                 const input = new ByteArrayInput(source.toArrayBuffer())
-                const uuid = uuidMap.get(source.address.uuid).target
+                const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target
                 targetBoxGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))
             })
         })
@@ -107,7 +107,7 @@ export namespace TransferUtils {
         const targets = audioUnitBoxes
             .toSorted(compareIndex)
             .map(source => asInstanceOf(rootBox.graph
-                .findBox(uuidMap.get(source.address.uuid).target)
+                .findBox(uuidMap.get(source.address.uuid, "uuid mapping").target)
                 .unwrap("Target AudioUnit has not been copied"), AudioUnitBox))
         const targetSet = new Set<AudioUnitBox>(targets)
         const allAudioUnits = IndexedBox.collectIndexedBoxes(rootBox.audioUnits, AudioUnitBox)
@@ -166,7 +166,7 @@ export namespace TransferUtils {
             .sort(compareIndex)
             .forEach((source: TrackBox, index) => {
                 const box = boxGraph
-                    .findBox(uuidMap.get(source.address.uuid).target)
+                    .findBox(uuidMap.get(source.address.uuid, "uuid mapping").target)
                     .unwrap("Target Track has not been copied")
                 asInstanceOf(box, TrackBox).index.setValue(index)
             }))
@@ -175,7 +175,7 @@ export namespace TransferUtils {
         const delta = insertPosition - minPosition
         regionBoxes.forEach((source: AnyRegionBox) => {
             const box = boxGraph
-                .findBox(uuidMap.get(source.address.uuid).target)
+                .findBox(uuidMap.get(source.address.uuid, "uuid mapping").target)
                 .unwrap("Target Track has not been copied")
             const {position} = UnionBoxTypes.asRegionBox(box)
             position.setValue(position.getValue() + delta)

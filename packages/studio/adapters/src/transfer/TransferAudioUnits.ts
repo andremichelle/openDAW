@@ -33,7 +33,7 @@ export namespace TransferAudioUnits {
         TransferUtils.copyBoxes(uuidMap, targetBoxGraph, audioUnitBoxes, dependencies)
         TransferUtils.reorderAudioUnits(uuidMap, audioUnitBoxes, rootBox, options.insertIndex)
         const result = audioUnitBoxes.map(source => asInstanceOf(rootBox.graph
-            .findBox(uuidMap.get(source.address.uuid).target)
+            .findBox(uuidMap.get(source.address.uuid, "uuid mapping").target)
             .unwrap("Target AudioUnit has not been copied"), AudioUnitBox))
         if (options.deleteSource === true) {
             const sourceRootBox = asInstanceOf(
