@@ -111,7 +111,7 @@ export class MIDIOutputDeviceProcessor extends AudioProcessor implements Instrum
     parameterChanged(parameter: AutomatableParameter, relativeBlockTime: number = 0.0): void {
         const {box: {channel, device}} = this.#adapter
         if (device.isEmpty() || !this.#enabled) {return}
-        const {id, delayInMs} = asInstanceOf(device.targetVertex.unwrap().box, MIDIOutputBox)
+        const {id, delayInMs} = asInstanceOf(device.targetVertex.unwrap("device.target").box, MIDIOutputBox)
         const relativeTimeInMs = relativeBlockTime * 1000.0 * delayInMs.getValue()
         const controllerId = asInstanceOf(parameter.adapter.field.box, MIDIOutputParameterBox).controller.getValue()
         const velocityAsByte = Math.round(parameter.getValue() * 127)

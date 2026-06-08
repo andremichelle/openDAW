@@ -37,7 +37,7 @@ export namespace TransferAudioUnits {
             .unwrap("Target AudioUnit has not been copied"), AudioUnitBox))
         if (options.deleteSource === true) {
             const sourceRootBox = asInstanceOf(
-                audioUnitBoxes[0].collection.targetVertex.unwrap().box, RootBox)
+                audioUnitBoxes[0].collection.targetVertex.unwrap("collection.target").box, RootBox)
             audioUnitBoxes.forEach(box => box.delete())
             IndexedBox.collectIndexedBoxes(sourceRootBox.audioUnits, AudioUnitBox)
                 .forEach((box, index) => box.index.setValue(index))

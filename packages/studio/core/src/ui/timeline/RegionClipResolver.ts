@@ -44,7 +44,7 @@ export class RegionClipResolver {
         const clipResolvers: Map<int, RegionClipResolver> =
             new Map(tracks.map(track => ([track.listIndex, new RegionClipResolver(strategy, track)])))
         adapters.forEach(adapter => {
-            const index = adapter.trackBoxAdapter.unwrap().listIndex + deltaIndex
+            const index = adapter.trackBoxAdapter.unwrap("trackBoxAdapter").listIndex + deltaIndex
             asDefined(clipResolvers.get(index), `Cannot find clip resolver for index(${index})`)
                 .addMask(adapter)
         })

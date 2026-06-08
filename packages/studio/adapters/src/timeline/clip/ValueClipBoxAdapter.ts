@@ -76,18 +76,18 @@ export class ValueClipBoxAdapter implements ClipBoxAdapter<ValueEventCollectionB
     accept<R>(visitor: ClipBoxAdapterVisitor<R>): Maybe<R> {return safeExecute(visitor.visitValueClipBoxAdapter, this)}
 
     consolidate(): void {
-        if (this.isMirrowed) {this.#box.events.refer(this.optCollection.unwrap().copy().box.owners)}
+        if (this.isMirrowed) {this.#box.events.refer(this.optCollection.unwrap("optCollection").copy().box.owners)}
     }
 
     clone(consolidate: boolean): void {
-        const events = consolidate ? this.optCollection.unwrap().copy().box.owners : this.#box.events.targetVertex.unwrap()
+        const events = consolidate ? this.optCollection.unwrap("optCollection").copy().box.owners : this.#box.events.targetVertex.unwrap("events.target")
         ValueClipBox.create(this.#context.boxGraph, UUID.generate(), box => {
             box.index.setValue(this.indexField.getValue())
             box.label.setValue(this.label)
             box.hue.setValue(this.hue)
             box.duration.setValue(this.duration)
             box.mute.setValue(this.mute)
-            box.clips.refer(this.#box.clips.targetVertex.unwrap())
+            box.clips.refer(this.#box.clips.targetVertex.unwrap("clips.target"))
             box.events.refer(events)
         })
     }

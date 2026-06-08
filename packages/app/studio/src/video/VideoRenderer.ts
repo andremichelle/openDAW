@@ -73,7 +73,7 @@ export namespace VideoRenderer {
             const shadertoyRunner = new ShadertoyRunner(shadertoyState, shadertoyContext)
             const shadertoy = project.rootBoxAdapter.box.shadertoy
             if (shadertoy.nonEmpty()) {
-                const code = asInstanceOf(shadertoy.targetVertex.unwrap().box, ShadertoyBox).shaderCode.getValue()
+                const code = asInstanceOf(shadertoy.targetVertex.unwrap("shadertoy.target").box, ShadertoyBox).shaderCode.getValue()
                 shadertoyRunner.compile(code)
             } else {
                 shadertoyRunner.compile(

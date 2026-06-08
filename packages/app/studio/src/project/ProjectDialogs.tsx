@@ -93,12 +93,12 @@ export namespace ProjectDialogs {
                     UUID.toString(unit.uuid),
                     {
                         type: unit.type,
-                        label: unit.input.label.unwrap(),
+                        label: unit.input.label.unwrap("input.label"),
                         include: !unit.isOutput,
                         includeAudioEffects: true,
                         includeSends: true,
                         useInstrumentOutput: false,
-                        fileName: ExportConfiguration.sanitizeFileName(unit.input.label.unwrap())
+                        fileName: ExportConfiguration.sanitizeFileName(unit.input.label.unwrap("input.label"))
                     }
                 ])))
         const dialog: HTMLDialogElement = (

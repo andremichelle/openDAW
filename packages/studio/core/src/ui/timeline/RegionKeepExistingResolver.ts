@@ -42,7 +42,7 @@ export class RegionKeepExistingResolver {
         for (const track of tracks) {
             const selectedStrategy = strategy.selectedModifyStrategy()
             for (const adapter of adapters) {
-                const adapterTrackIndex = adapter.trackBoxAdapter.unwrap().listIndex + deltaIndex
+                const adapterTrackIndex = adapter.trackBoxAdapter.unwrap("trackBoxAdapter").listIndex + deltaIndex
                 if (adapterTrackIndex !== track.listIndex) {continue}
                 const position = selectedStrategy.readPosition(adapter)
                 const complete = selectedStrategy.readComplete(adapter)

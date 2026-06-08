@@ -24,7 +24,7 @@ export const installValueContextMenu = ({element, capturing, editing, selection}
         addItems(
             MenuItem.default({label: "Delete"})
                 .setTriggerProcedure(() => editing.modify(() => selection.selected()
-                    .forEach(adapter => ValueEventEditing.deleteEvent(adapter.collection.unwrap(), adapter)))),
+                    .forEach(adapter => ValueEventEditing.deleteEvent(adapter.collection.unwrap("collection"), adapter)))),
             MenuItem.default({label: "Interpolation"})
                 .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                     MenuItem.default({
@@ -49,7 +49,7 @@ export const installValueContextMenu = ({element, capturing, editing, selection}
                 )),
             MenuItem.default({label: "Print events to console"})
                 .setTriggerProcedure(() => {
-                    console.debug(JSON.stringify(target.event.collection.unwrap().events.asArray()
+                    console.debug(JSON.stringify(target.event.collection.unwrap("event.collection").events.asArray()
                         .map(event => Objects.include(event, "position", "value", "interpolation", "index"))))
                 }),
             DebugMenus.debugBox(target.event.box)

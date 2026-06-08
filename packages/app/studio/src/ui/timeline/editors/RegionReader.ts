@@ -56,7 +56,7 @@ export class RegionReader<REGION extends LoopableRegionBoxAdapter<CONTENT>, CONT
     get canLoop(): boolean {return true}
     get hasContent(): boolean {return this.region.hasCollection}
     get isMirrored(): boolean {return this.region.isMirrowed}
-    get content(): CONTENT {return this.region.optCollection.unwrap()}
+    get content(): CONTENT {return this.region.optCollection.unwrap("optCollection")}
     get trackBoxAdapter(): Option<TrackBoxAdapter> {return this.region.trackBoxAdapter}
 
     subscribeChange(observer: Observer<void>): Subscription {return this.region.subscribeChange(observer)}

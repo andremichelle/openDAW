@@ -53,7 +53,7 @@ export class ClipReader<CONTENT> implements EventOwnerReader<CONTENT> {
     get canLoop(): boolean {return true}
     get hasContent(): boolean {return this.clip.hasCollection}
     get isMirrored(): boolean {return this.clip.isMirrowed}
-    get content(): CONTENT {return this.clip.optCollection.unwrap()}
+    get content(): CONTENT {return this.clip.optCollection.unwrap("optCollection")}
     get trackBoxAdapter(): Option<TrackBoxAdapter> {return this.clip.trackBoxAdapter}
 
     subscribeChange(observer: Observer<void>): Subscription {return this.clip.subscribeChange(observer)}

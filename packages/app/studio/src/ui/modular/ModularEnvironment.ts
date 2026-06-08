@@ -210,7 +210,7 @@ export class ModularEnvironment implements Terminable {
         }
         const source = adapter.direction === Direction.Output ? adapter : other
         const target = other.direction === Direction.Input ? other : adapter
-        if (source.connections.some(connection => connection.box.target.targetVertex.unwrap().address.equals(target.address))) {
+        if (source.connections.some(connection => connection.box.target.targetVertex.unwrap("conn.target").address.equals(target.address))) {
             // TODO showInfoDialog("Connection already exists")
             return
         }

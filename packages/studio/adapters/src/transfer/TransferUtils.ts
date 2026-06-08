@@ -134,9 +134,9 @@ export namespace TransferUtils {
         const trackBoxSet = new Set<TrackBox>()
         const audioUnitBoxSet = new SetMultimap<AudioUnitBox, TrackBox>()
         regionBoxes.forEach(regionBox => {
-            const trackBox = asInstanceOf(regionBox.regions.targetVertex.unwrap().box, TrackBox)
+            const trackBox = asInstanceOf(regionBox.regions.targetVertex.unwrap("regions.target").box, TrackBox)
             trackBoxSet.add(trackBox)
-            const audioUnitBox = asInstanceOf(trackBox.tracks.targetVertex.unwrap().box, AudioUnitBox)
+            const audioUnitBox = asInstanceOf(trackBox.tracks.targetVertex.unwrap("tracks.target").box, AudioUnitBox)
             audioUnitBoxSet.add(audioUnitBox, trackBox)
         })
         console.debug(`Found ${audioUnitBoxSet.keyCount()} audioUnits`)

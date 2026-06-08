@@ -50,7 +50,7 @@ export abstract class AbstractModuleAdapter<BOX extends Box & {
     get parameters(): ParameterAdapterSet {return this.#parameters}
     get modular(): ModularAdapter {
         return this.#context.boxAdapters
-            .adapterFor(this.#box.attributes.collection.targetVertex.unwrap().box, ModularAdapter)
+            .adapterFor(this.#box.attributes.collection.targetVertex.unwrap("attributes.target").box, ModularAdapter)
     }
 
     terminate(): void {this.#terminator.terminate()}

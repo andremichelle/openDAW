@@ -24,7 +24,7 @@ export const ClipPlaybackButton = ({lifecycle, engine, adapter, state}: Construc
              ondblclick={event => event.stopPropagation()}
              onclick={() => {
                  if (state.getValue() !== ClipState.Idle) {
-                     engine.scheduleClipStop([adapter.trackBoxAdapter.unwrap().uuid])
+                     engine.scheduleClipStop([adapter.trackBoxAdapter.unwrap("trackBoxAdapter").uuid])
                  } else if (!adapter.box.mute.getValue()) {
                      engine.scheduleClipPlay([adapter.uuid])
                  }

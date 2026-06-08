@@ -393,7 +393,7 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
             }
         }
         if (this.#stemExports.length === 0) {
-            this.#primaryOutput.unwrap().audioOutput().replaceInto(mainOutput)
+            this.#primaryOutput.unwrap("primaryOutput").audioOutput().replaceInto(mainOutput)
             if (metronomeEnabled) {this.#metronome.output.mixInto(mainOutput)}
             this.#peaks.process(mainOutput[0], mainOutput[1])
             this.#analyser.process(mainOutput[0], mainOutput[1], 0, RenderQuantum)

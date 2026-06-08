@@ -106,9 +106,9 @@ export class AudioClipBoxAdapter implements AudioContentBoxAdapter, ClipBoxAdapt
             box.hue.setValue(this.hue)
             box.duration.setValue(this.duration)
             box.mute.setValue(this.mute)
-            box.clips.refer(this.#box.clips.targetVertex.unwrap())
-            box.file.refer(this.#box.file.targetVertex.unwrap())
-            box.events.refer(this.#box.events.targetVertex.unwrap())
+            box.clips.refer(this.#box.clips.targetVertex.unwrap("clips.target"))
+            box.file.refer(this.#box.file.targetVertex.unwrap("file.target"))
+            box.events.refer(this.#box.events.targetVertex.unwrap("events.target"))
             clonedPlayMode.ifSome(mode => box.playMode.refer(mode))
         })
     }

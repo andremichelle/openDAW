@@ -30,7 +30,7 @@ export class RegionPushExistingResolver {
             const selectedStrategy = strategy.selectedModifyStrategy()
             const overlapped: Array<AnyRegionBoxAdapter> = []
             for (const adapter of adapters) {
-                const adapterTrackIndex = adapter.trackBoxAdapter.unwrap().listIndex + deltaIndex
+                const adapterTrackIndex = adapter.trackBoxAdapter.unwrap("trackBoxAdapter").listIndex + deltaIndex
                 if (adapterTrackIndex !== track.listIndex) {continue}
                 const position = selectedStrategy.readPosition(adapter)
                 const complete = selectedStrategy.readComplete(adapter)

@@ -151,7 +151,7 @@ export class NoteMoveModifier implements NoteModifier {
         this.#editing.modify(() => {
             if (this.#copy) {
                 this.#selection.deselectAll()
-                const events = this.#reference.collection.unwrap().box.events
+                const events = this.#reference.collection.unwrap("ref.collection").box.events
                 if (this.#repeat && this.#deltaPosition !== 0) {
                     const numberOfCopies = 1 // TODO Open a dialog and ask for number of copies
                     for (let i = 0; i < numberOfCopies; i++) {

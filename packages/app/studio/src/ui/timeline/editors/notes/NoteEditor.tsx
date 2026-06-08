@@ -57,7 +57,7 @@ export const NoteEditor =
             }
             trackBindings.terminate()
             captureRef.current = resolveCapture()
-            const audioUnitAddress = reader.trackBoxAdapter.unwrap().audioUnit.address
+            const audioUnitAddress = reader.trackBoxAdapter.unwrap("trackBoxAdapter").audioUnit.address
             noteReceiver.bind(project.liveStreamReceiver, audioUnitAddress)
             trackBindings.own(captureRef.current.subscribeNotes(signal => {
                 if (engine.isPlaying.getValue() || !stepRecording.getValue()) {return}
@@ -193,7 +193,7 @@ export const NoteEditor =
             shortcuts.register(NoteEditorShortcuts["duplicate-notes"].shortcut, () => {
                 const selected = selection.selected()
                 if (selected.length === 0) {return false}
-                const copies = editing.modify(() => project.api.duplicateNotes(selected)).unwrap()
+                const copies = editing.modify(() => project.api.duplicateNotes(selected)).unwrap("duplicateNotes")
                 if (copies.length === 0) {return false}
                 selection.deselectAll()
                 copies.forEach(adapter => selection.select(adapter))

@@ -92,7 +92,7 @@ export class ClipMoveModifier implements ClipModifier {
             return clamp(delta, -listIndex, this.#manager.maxClipsIndex.getValue() + 1)
         }, clipIndex - this.#pointerClipIndex)
         const trackDelta = adapters.reduce((delta, adapter) => {
-            const listIndex = adapter.trackBoxAdapter.unwrap().listIndex
+            const listIndex = adapter.trackBoxAdapter.unwrap("trackBoxAdapter").listIndex
             return clamp(delta, -listIndex, maxTrackIndex - listIndex)
         }, trackIndex - this.#pointerTrackIndex)
         let change = false
@@ -122,12 +122,12 @@ export class ClipMoveModifier implements ClipModifier {
         const maxTrackIndex = tracks.length - 1
         const adapters = this.#selection.selected()
         const trackDelta = adapters.reduce((delta, adapter) => {
-            const listIndex = adapter.trackBoxAdapter.unwrap().listIndex
+            const listIndex = adapter.trackBoxAdapter.unwrap("trackBoxAdapter").listIndex
             return clamp(delta, -listIndex, maxTrackIndex - listIndex)
         }, this.#trackDelta)
         if (!adapters.every(adapter => {
-            const trackIndex = adapter.trackBoxAdapter.unwrap().listIndex + trackDelta
-            const trackAdapter = this.#manager.getByIndex(trackIndex).unwrap().trackBoxAdapter
+            const trackIndex = adapter.trackBoxAdapter.unwrap("trackBoxAdapter").listIndex + trackDelta
+            const trackAdapter = this.#manager.getByIndex(trackIndex).unwrap("track@idx").trackBoxAdapter
             return trackAdapter.accepts(adapter)
         })) {
             this.cancel()
@@ -138,7 +138,7 @@ export class ClipMoveModifier implements ClipModifier {
         const moveTasks = adapters
             .map((adapter) => {
                 const {indexField, trackBoxAdapter: optTrackBoxAdapter} = adapter
-                const trackBoxAdapter = optTrackBoxAdapter.unwrap()
+                const trackBoxAdapter = optTrackBoxAdapter.unwrap("trackBoxAdapter")
                 const trackIndex = tracks.findIndex(({trackBoxAdapter: adapter}) => adapter === trackBoxAdapter)
                 const newClipIndex = Math.max(0, indexField.getValue() + this.#clipDelta)
                 const newTrackIndex = trackIndex + trackDelta
@@ -162,7 +162,7 @@ export class ClipMoveModifier implements ClipModifier {
         this.#project.editing.modify(() => {
             if (this.#copy) {
                 adapters.forEach((adapter) => {
-                    const track = adapter.trackBoxAdapter.unwrap()
+                    const track = adapter.trackBoxAdapter.unwrap("trackBoxAdapter")
                     const clipIndex = adapter.indexField.getValue()
                     const trackIndex = this.#manager.tracks().findIndex(({trackBoxAdapter}) => trackBoxAdapter === track)
                     if (trackIndex === -1) {return panic(`Could not find track for ${adapter}`)}
@@ -198,12 +198,12 @@ export class ClipMoveModifier implements ClipModifier {
     }
 
     #dispatchSameTrackChange(): void {
-        this.#selection.selected().forEach(({trackBoxAdapter}) => trackBoxAdapter.unwrap().clips.dispatchChange())
+        this.#selection.selected().forEach(({trackBoxAdapter}) => trackBoxAdapter.unwrap("trackBoxAdapter").clips.dispatchChange())
     }
 
     #dispatchShiftedTrackChange(deltaIndex: int): void {
         this.#selection.selected().forEach(({trackBoxAdapter}) => this.#manager
-            .getByIndex(trackBoxAdapter.unwrap().listIndex + deltaIndex)
+            .getByIndex(trackBoxAdapter.unwrap("trackBoxAdapter").listIndex + deltaIndex)
             .unwrapOrNull()?.trackBoxAdapter?.clips?.dispatchChange())
     }
 }

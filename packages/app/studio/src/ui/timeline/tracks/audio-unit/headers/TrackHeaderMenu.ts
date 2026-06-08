@@ -78,7 +78,7 @@ export const installTrackHeaderMenu = (service: StudioService,
             const copies = editing.modify(() => TransferAudioUnits
                 .transfer([trackBoxAdapter.audioUnit], project.skeleton, {
                     insertIndex: trackBoxAdapter.audioUnit.index.getValue() + 1
-                }), false).unwrap()
+                }), false).unwrap("copyUnit")
             userEditingManager.audioUnit.edit(copies[0].editing)
         }),
         MenuItem.default({

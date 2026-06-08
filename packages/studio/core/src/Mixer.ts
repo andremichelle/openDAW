@@ -108,7 +108,7 @@ export class Mixer implements Terminable {
             visitAudioUnitBox: ({address: {uuid}}: AudioUnitBox) =>
                 this.#states.get(uuid).adapter,
             visitAuxSendBox: ({audioUnit: {targetVertex}}: AuxSendBox) =>
-                this.#states.get(targetVertex.unwrap().address.uuid).adapter
+                this.#states.get(targetVertex.unwrap("auxSend.target").address.uuid).adapter
         }), "Could not resolve entry")
     }
 

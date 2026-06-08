@@ -211,7 +211,7 @@ export class SignatureTrackAdapter implements Terminable {
             .map((bar, i) => ({bar, i}))
             .sort((a, b) => a.bar - b.bar)
             .map(x => x.i)
-        const adapters = allEvents.map(e => this.adapterAt(e.index).unwrap())
+        const adapters = allEvents.map(e => this.adapterAt(e.index).unwrap("adapterAt"))
         for (let newIdx = 0; newIdx < sortedIndices.length; newIdx++) {
             adapters[sortedIndices[newIdx]].box.index.setValue(newIdx)
         }

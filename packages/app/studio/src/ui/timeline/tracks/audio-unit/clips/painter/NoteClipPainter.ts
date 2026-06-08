@@ -14,7 +14,7 @@ export const createNoteClipPainter = (adapter: NoteClipBoxAdapter): Procedure<Ca
     const duration = adapter.duration
     const minRadius = 2 * devicePixelRatio
     const maxRadius = radius - 2 * devicePixelRatio
-    const collection = adapter.optCollection.unwrap()
+    const collection = adapter.optCollection.unwrap("optCollection")
     const {minPitch, maxPitch} = collection
     for (const event of collection.events.asArray()) {
         context.beginPath() // TODO move out of loop with moveTo

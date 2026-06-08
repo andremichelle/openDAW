@@ -16,7 +16,7 @@ export namespace SyncLogService {
         }))
         if (status === "rejected") {return}
         await service.newProject()
-        const label: FooterLabel = asDefined(service.factoryFooterLabel().unwrap()())
+        const label: FooterLabel = asDefined(service.factoryFooterLabel().unwrap("footerLabel")())
         label.setTitle("SyncLog")
         let count = 0 | 0
         SyncLogWriter.attach(service.project, wrapBlockWriter(handle, () => label.setValue(`${++count} commits`)))
@@ -49,7 +49,7 @@ export namespace SyncLogService {
         }
         const {project, lastCommit, numCommits} = await SyncLogReader.unwrap(service, arrayBufferResult.value)
         service.projectProfileService.setProject(project, "SyncLog")
-        const label: FooterLabel = asDefined(service.factoryFooterLabel().unwrap()())
+        const label: FooterLabel = asDefined(service.factoryFooterLabel().unwrap("footerLabel")())
         label.setTitle("SyncLog")
         let count = numCommits
         SyncLogWriter.attach(service.project, wrapBlockWriter(handle, () => label.setValue(`${++count} commits`)), lastCommit)

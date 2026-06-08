@@ -150,7 +150,7 @@ export class RegionMoveModifier implements RegionModifier {
         if (adapters.length === 0) {return}
         if (!adapters.every(adapter => {
             const trackIndex = adapter.trackBoxAdapter.unwrap().listIndex + this.#deltaIndex
-            const trackAdapter = this.#manager.getByIndex(trackIndex).unwrap().trackBoxAdapter
+            const trackAdapter = this.#manager.getByIndex(trackIndex).unwrap("track@idx").trackBoxAdapter
             return trackAdapter.accepts(adapter)
         })) {
             this.cancel()
@@ -159,7 +159,7 @@ export class RegionMoveModifier implements RegionModifier {
         }
         const modifiedTracks: ReadonlyArray<TrackBoxAdapter> = Arrays.removeDuplicates(adapters
             .map(adapter => adapter.trackBoxAdapter.unwrap().listIndex + this.#deltaIndex))
-            .map(index => this.#manager.getByIndex(index).unwrap().trackBoxAdapter)
+            .map(index => this.#manager.getByIndex(index).unwrap("track@idx").trackBoxAdapter)
         const regionSnapshot = (region: AnyRegionBoxAdapter) =>
             ({p: region.position, d: region.duration, c: region.complete, s: region.isSelected})
         const trackSnapshots = modifiedTracks.map(track => ({
@@ -175,7 +175,7 @@ export class RegionMoveModifier implements RegionModifier {
                 const copies: ReadonlyArray<AnyRegionBoxAdapter> = adapters.map(original => {
                     const defaultTrack = this.#manager
                         .getByIndex(original.trackBoxAdapter.unwrap().listIndex + this.#deltaIndex)
-                        .unwrap().trackBoxAdapter
+                        .unwrap("track@idx").trackBoxAdapter
                     const targetTrack = trackResolver(original, defaultTrack)
                     return original.copyTo({
                         position: original.position + this.#deltaPosition,
@@ -190,7 +190,7 @@ export class RegionMoveModifier implements RegionModifier {
                     adapters.forEach(adapter => {
                         const defaultTrack = this.#manager
                             .getByIndex(adapter.trackBoxAdapter.unwrap().listIndex + this.#deltaIndex)
-                            .unwrap().trackBoxAdapter
+                            .unwrap("track@idx").trackBoxAdapter
                         const targetTrack = trackResolver(adapter, defaultTrack)
                         adapter.box.regions.refer(targetTrack.box.regions)
                     })

@@ -55,7 +55,7 @@ export const PianoRoll = ({lifecycle, service, updateNotifier}: Construct) => {
                     if (region === null || !isInstanceOf(region, NoteRegionBoxAdapter) || position >= region.complete) {
                         return
                     }
-                    const collection = region.optCollection.unwrap()
+                    const collection = region.optCollection.unwrap("optCollection")
                     const events = collection.events
                     const loopIterator = LoopableRegion.locateLoops(region, position, position)
                     for (const {resultStart, resultEnd, rawStart} of loopIterator) {

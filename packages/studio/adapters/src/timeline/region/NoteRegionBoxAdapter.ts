@@ -179,7 +179,7 @@ export class NoteRegionBoxAdapter
             box.label.setValue(this.label)
             box.mute.setValue(this.mute)
             box.events.refer(eventTarget)
-            box.regions.refer(params?.target ?? this.#box.regions.targetVertex.unwrap())
+            box.regions.refer(params?.target ?? this.#box.regions.targetVertex.unwrap("regions.target"))
         }), NoteRegionBoxAdapter)
     }
 
@@ -194,7 +194,7 @@ export class NoteRegionBoxAdapter
     }
 
     canFlatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>): boolean {
-        return regions.length > 0 && Arrays.satisfy(regions, (a, b) => a.trackBoxAdapter.contains(b.trackBoxAdapter.unwrap()))
+        return regions.length > 0 && Arrays.satisfy(regions, (a, b) => a.trackBoxAdapter.contains(b.trackBoxAdapter.unwrap("trackBoxAdapter")))
             && regions.every(region => region.isSelected && region instanceof NoteRegionBoxAdapter)
     }
 
@@ -206,7 +206,7 @@ export class NoteRegionBoxAdapter
         const last = Arrays.getLast(sorted, "Internal error (no last)")
         const rangeMin = first.position
         const rangeMax = last.position + last.duration
-        const trackBoxAdapter = first.trackBoxAdapter.unwrap()
+        const trackBoxAdapter = first.trackBoxAdapter.unwrap("trackBoxAdapter")
         const collectionBox = NoteEventCollectionBox.create(graph, UUID.generate())
         const overlapping = Array.from(trackBoxAdapter.regions.collection.iterateRange(rangeMin, rangeMax))
         overlapping
@@ -220,7 +220,7 @@ export class NoteRegionBoxAdapter
                     } of LoopableRegion.locateLoops(region, region.position, region.complete)) {
                         const searchStart = Math.floor(resultStart - rawStart)
                         const searchEnd = Math.floor(resultEnd - rawStart)
-                        for (const event of region.optCollection.unwrap().events.iterateRange(searchStart, searchEnd)) {
+                        for (const event of region.optCollection.unwrap("optCollection").events.iterateRange(searchStart, searchEnd)) {
                             event.copyTo({
                                 position: event.position + rawStart - first.position,
                                 events: collectionBox.events

@@ -31,7 +31,7 @@ export const migrateAudioClipBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box: Audi
     if (box.playback.getValue() === AudioPlayback.Pitch) {
         console.debug("Migrate 'AudioClipBox' to new PitchStretchBox")
         boxGraph.beginTransaction()
-        const file = asInstanceOf(box.file.targetVertex.unwrap(), AudioFileBox)
+        const file = asInstanceOf(box.file.targetVertex.unwrap("file.target"), AudioFileBox)
         const fileDuration = file.endInSeconds.getValue() - file.startInSeconds.getValue()
         const pitchBox = AudioPitchStretchBox.create(boxGraph, UUID.generate())
         AudioContentHelpers.addDefaultWarpMarkers(boxGraph, pitchBox, box.duration.getValue(), fileDuration)

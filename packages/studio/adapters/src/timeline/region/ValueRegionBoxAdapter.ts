@@ -204,7 +204,7 @@ export class ValueRegionBoxAdapter
             box.label.setValue(this.label)
             box.mute.setValue(this.mute)
             box.events.refer(eventTarget)
-            box.regions.refer(params?.target ?? this.#box.regions.targetVertex.unwrap())
+            box.regions.refer(params?.target ?? this.#box.regions.targetVertex.unwrap("regions.target"))
         }), ValueRegionBoxAdapter)
     }
 
@@ -220,7 +220,7 @@ export class ValueRegionBoxAdapter
 
     canFlatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>): boolean {
         return regions.length > 0
-            && Arrays.satisfy(regions, (a, b) => a.trackBoxAdapter.contains(b.trackBoxAdapter.unwrap()))
+            && Arrays.satisfy(regions, (a, b) => a.trackBoxAdapter.contains(b.trackBoxAdapter.unwrap("trackBoxAdapter")))
             && regions.every(region => region.isSelected && region instanceof ValueRegionBoxAdapter)
     }
 
@@ -232,7 +232,7 @@ export class ValueRegionBoxAdapter
         const last = Arrays.getLast(sorted, "Internal error (no last)")
         const rangeMin = first.position
         const rangeMax = last.position + last.duration
-        const trackBoxAdapter = first.trackBoxAdapter.unwrap()
+        const trackBoxAdapter = first.trackBoxAdapter.unwrap("trackBoxAdapter")
         const overlapping = Array.from(trackBoxAdapter.regions.collection.iterateRange(rangeMin, rangeMax))
         type Entry = { position: ppqn, value: unitValue, interpolation: Interpolation }
         const entries: Array<Entry> = []
@@ -240,7 +240,7 @@ export class ValueRegionBoxAdapter
             .filter(region => region.isSelected)
             .forEach(anyRegion => {
                 const region = anyRegion as ValueRegionBoxAdapter
-                const collection = region.optCollection.unwrap()
+                const collection = region.optCollection.unwrap("optCollection")
                 const events = collection.events
                 for (const {
                     rawStart,

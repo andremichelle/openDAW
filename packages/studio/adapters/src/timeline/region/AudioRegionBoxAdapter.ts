@@ -261,8 +261,8 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
             AudioRegionBox.create(this.#context.boxGraph, UUID.generate(), box => {
                 box.timeBase.setValue(this.#box.timeBase.getValue())
                 box.position.setValue(params?.position ?? this.#box.position.getValue())
-                box.regions.refer(params?.target ?? this.#box.regions.targetVertex.unwrap())
-                box.file.refer(this.#box.file.targetVertex.unwrap())
+                box.regions.refer(params?.target ?? this.#box.regions.targetVertex.unwrap("regions.target"))
+                box.file.refer(this.#box.file.targetVertex.unwrap("file.target"))
                 box.events.refer(eventTarget)
                 box.mute.setValue(this.mute)
                 box.hue.setValue(this.hue)
@@ -281,7 +281,7 @@ export class AudioRegionBoxAdapter implements AudioContentBoxAdapter, LoopableRe
     consolidate(): void {}
     canFlatten(regions: ReadonlyArray<RegionBoxAdapter<unknown>>): boolean {
         return regions.length > 0
-            && Arrays.satisfy(regions, (a, b) => a.trackBoxAdapter.contains(b.trackBoxAdapter.unwrap()))
+            && Arrays.satisfy(regions, (a, b) => a.trackBoxAdapter.contains(b.trackBoxAdapter.unwrap("trackBoxAdapter")))
             && regions.every(region => region.isSelected && region instanceof AudioRegionBoxAdapter)
     }
     flatten(_regions: ReadonlyArray<RegionBoxAdapter<unknown>>): Option<AudioRegionBox> {

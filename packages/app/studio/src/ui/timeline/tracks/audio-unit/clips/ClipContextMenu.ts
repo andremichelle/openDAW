@@ -109,7 +109,7 @@ export const installClipContextMenu = ({element, project, selection, capturing}:
                 MenuItem.default({
                     label: "Convert to Region", separatorBefore: true
                 }).setTriggerProcedure(() => {
-                    const trackBoxAdapter = clip.trackBoxAdapter.unwrap()
+                    const trackBoxAdapter = clip.trackBoxAdapter.unwrap("trackBoxAdapter")
                     const regions = trackBoxAdapter.regions
                     const lastRegion = regions.collection.lowerEqual(Number.POSITIVE_INFINITY)
                     const position = lastRegion?.complete ?? 0
@@ -124,7 +124,7 @@ export const installClipContextMenu = ({element, project, selection, capturing}:
                                 box.hue.setValue(clip.hue)
                                 box.label.setValue(clip.label)
                                 box.mute.setValue(clip.mute)
-                                box.events.refer(clip.box.events.targetVertex.unwrap())
+                                box.events.refer(clip.box.events.targetVertex.unwrap("events.target"))
                                 box.regions.refer(trackBoxAdapter.box.regions)
                             })
                         } else if (clip.type === "audio-clip") {
@@ -137,8 +137,8 @@ export const installClipContextMenu = ({element, project, selection, capturing}:
                                 box.label.setValue(clip.label)
                                 box.mute.setValue(clip.mute)
                                 box.timeBase.setValue(clip.timeBase)
-                                box.file.refer(clip.box.file.targetVertex.unwrap())
-                                box.events.refer(clip.box.events.targetVertex.unwrap())
+                                box.file.refer(clip.box.file.targetVertex.unwrap("file.target"))
+                                box.events.refer(clip.box.events.targetVertex.unwrap("events.target"))
                                 box.regions.refer(trackBoxAdapter.box.regions)
                                 clip.box.playMode.ifVertex(vertex => box.playMode.refer(vertex))
                             })
@@ -151,7 +151,7 @@ export const installClipContextMenu = ({element, project, selection, capturing}:
                                 box.hue.setValue(clip.hue)
                                 box.label.setValue(clip.label)
                                 box.mute.setValue(clip.mute)
-                                box.events.refer(clip.box.events.targetVertex.unwrap())
+                                box.events.refer(clip.box.events.targetVertex.unwrap("events.target"))
                                 box.regions.refer(trackBoxAdapter.box.regions)
                             })
                         }
@@ -163,7 +163,7 @@ export const installClipContextMenu = ({element, project, selection, capturing}:
                 }).setTriggerProcedure(() => {
                     if (clip.type === "note-clip") {
                         const label = clip.label
-                        NoteMidiExport.toFile(clip.optCollection.unwrap(),
+                        NoteMidiExport.toFile(clip.optCollection.unwrap("optCollection"),
                             `${label.length === 0 ? "clip" : label}.mid`).then()
                     }
                 }),

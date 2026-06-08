@@ -24,7 +24,7 @@ export const createValueClipPainter = (adapter: ValueClipBoxAdapter): Procedure<
         return {x: sin * r, y: cos * r}
     }
     let move = true
-    for (const {position, value} of ValueEvent.quantise(optCollection.unwrap().events, 0, duration, numRays)) {
+    for (const {position, value} of ValueEvent.quantise(optCollection.unwrap("optCollection").events, 0, duration, numRays)) {
         if (move) {
             const {x, y} = polar(position / duration * TAU, value)
             context.moveTo(x, y)

@@ -1,9 +1,9 @@
 # Option unwrap-failed
 
-- **status:** OPEN · **priority:** P3
+- **status:** OPEN (both root causes unconfirmed; deferred) · **priority:** P3
 - **occurrences:** 2 · **ids:** [811, 950]
-- **assessment:** Generic unwrap panics; need per-stack context.
-- **action:** Pull stacks; replace with guarded handling.
+- **assessment:** Two generic `Option.unwrap()` panics ("unwrap failed", no message). #811 region loop-duration drag — disproven hypothesis, no repro. #950 "Copy AudioUnit" — earlier theory DISPROVEN (see below), unreproducible race, bare-unwrap not locatable in code.
+- **action:** Deferred — revisit on recurrence. Do NOT mark `fixed=1`.
 
 [< back to index](error-triage.md)
 
@@ -21,7 +21,15 @@
 
 Two distinct call sites share the generic `Option.unwrap()` panic (`option.js:39`, `lang.js:49`).
 
-**id 950 — "Copy AudioUnit" menu.** Root cause: `packages/app/studio/src/ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts:77-82`. The trigger does `editing.modify(() => TransferAudioUnits.transfer(...), false).unwrap()`. The stack `audioUnit@…355046` (trigger lambda) → `at@lang.js:90` (the `tryCatch` in `Editing.modify`, `editing.ts:181-186`) → `modify@…95553` → `trigger`. `Editing.modify` returns `Option.wrap(modifier())` (`editing.ts:199`); since `TransferAudioUnits.transfer` (`TransferAudioUnits.ts:20-45`) always returns an array, the only way `modify` yields `None` is the early branch `editing.ts:171-173` returning `Option.wrap(modifier())` while already `#modifying`/in a transaction — or `transfer` itself panics on its own inner unwraps (`TransferAudioUnits.ts:37` `"Target AudioUnit has not been copied"`, `:40`). The outer `.unwrap()` at `TrackHeaderMenu.ts:81` has no message, hence the bare "unwrap failed". Evidence: logtail `MenuItem.trigger: {"label":"Copy AudioUnit",…}` immediately before the panic, plus a burst of `external updates from 'Unknown Origin'` (concurrent/collab edits) that can race the copy. Recommended fix: replace `.unwrap()` at `TrackHeaderMenu.ts:81` with `match`/`ifSome` (no-op + user notice on `None`), and tighten `TransferAudioUnits.transfer` to validate `uuidMap.get(...).target` / `collection.targetVertex` before `.unwrap()` so a missing target produces a guarded result rather than a hard panic.
+**id 950 — "Copy AudioUnit" menu. EARLIER THEORY DISPROVEN — root cause not located; deferred (no fix).**
+
+The earlier claim (the outer `.unwrap()` at `TrackHeaderMenu.ts:81` returns `None`) is **wrong**. Traced the whole Copy path (2026-06):
+- `editing.modify(modifier, false)` returns `Option.wrap(result.value)` / `Option.wrap(modifier())` (`editing.ts:173,199`). `TransferAudioUnits.transfer` always returns a (non-empty) array, so `modify` always yields `Some` — the outer `.unwrap()` at `:81` **cannot** be the None-unwrap.
+- Every bare `.unwrap()` reachable from Copy is either `.filter`-guarded (`TransferUtils.ts:41` `output.targetAddress`), only in the `deleteSource` branch (`TransferAudioUnits.ts:40`, not used by Copy), or carries a message (`"Target AudioUnit has not been copied"`, `TrackBoxAdapter.audioUnit` `"track has no audioUnit"`). None produce a bare "unwrap failed".
+- Line 82 (`userEditingManager.audioUnit.edit(copies[0].editing)`): `audioUnit` is a plain field getter, `.editing` is a `Field` getter, `UserEditing.edit` has no unwrap.
+- `git`: the `false).unwrap()` line is unchanged since 2025-12-17 (report 2026-05-11), so not a since-fixed build.
+
+Conclusion: single occurrence, logtail shows concurrent `external updates from 'Unknown Origin'` (collab/race); the bare unwrap is not locatable from code + minified stack and not reproducible. Per repo policy (no stack-theory band-aids), **no behavioral fix shipped**. Deferred; revisit if it recurs with a clearer signal (a message-bearing unwrap or a non-minified frame). Considered options if it recurs: graceful tryCatch+notice on the trigger, or a menu-trigger error boundary.
 
 **id 811 — region loop-duration drag. ROOT CAUSE NOT CONFIRMED — needs a reproduction (no fix shipped).**
 

@@ -69,7 +69,7 @@ export class Mixer {
                             visitAudioUnitBox: ({address: {uuid}}: AudioUnitBox) =>
                                 this.#channelStrips.get(uuid),
                             visitAuxSendBox: ({audioUnit: {targetVertex}}: AuxSendBox) =>
-                                this.#channelStrips.get(targetVertex.unwrap().address.uuid)
+                                this.#channelStrips.get(targetVertex.unwrap("auxSend.target").address.uuid)
                         }), "Could not resolve channel-strip"))
                         .forEach(channelStrip => {
                             if (!channelStrip.isSolo) {this.#virtualSolo.add(channelStrip)}

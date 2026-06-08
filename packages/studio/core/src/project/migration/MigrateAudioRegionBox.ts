@@ -33,7 +33,7 @@ export const migrateAudioRegionBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box: Au
     if (playback.getValue() === AudioPlayback.AudioFit) {
         console.debug("Migrate 'AudioRegionBox' to AudioPlayback.NoSync")
         boxGraph.beginTransaction()
-        const file = asInstanceOf(box.file.targetVertex.unwrap(), AudioFileBox)
+        const file = asInstanceOf(box.file.targetVertex.unwrap("file.target"), AudioFileBox)
         const fileDuration = file.endInSeconds.getValue() - file.startInSeconds.getValue()
         const currentLoopDurationSeconds = toSeconds(box.loopDuration, bpm)
         const scale = fileDuration / currentLoopDurationSeconds
@@ -48,7 +48,7 @@ export const migrateAudioRegionBox = (boxGraph: BoxGraph<BoxIO.TypeMap>, box: Au
     } else if (playback.getValue() === AudioPlayback.Pitch) {
         console.debug("Migrate 'AudioRegionBox' to new PitchStretchBox")
         boxGraph.beginTransaction()
-        const file = asInstanceOf(box.file.targetVertex.unwrap(), AudioFileBox)
+        const file = asInstanceOf(box.file.targetVertex.unwrap("file.target"), AudioFileBox)
         const fileDuration = file.endInSeconds.getValue() - file.startInSeconds.getValue()
         const pitchBox = AudioPitchStretchBox.create(boxGraph, UUID.generate())
         AudioContentHelpers.addDefaultWarpMarkers(boxGraph, pitchBox, box.loopDuration.getValue(), fileDuration)

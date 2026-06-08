@@ -451,7 +451,7 @@ export class ProjectApi {
         const {boxGraph, boxAdapters} = this.#project
         return notes.map(adapter => {
             const copy = NoteEventBox.create(boxGraph, UUID.generate(), box => {
-                const events = adapter.box.events.targetVertex.unwrap()
+                const events = adapter.box.events.targetVertex.unwrap("events.target")
                 box.events.refer(events)
                 box.position.setValue(adapter.position + shift)
                 box.duration.setValue(adapter.duration)

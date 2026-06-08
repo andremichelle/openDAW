@@ -75,7 +75,7 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
     get inputField(): Field<Pointers.InstrumentHost | Pointers.AudioOutput> {return this.#box.input}
     get audioEffectsField(): Field<Pointers.AudioEffectHost> {return this.#box.audioEffects}
     get tracksField(): Field<Pointers.TrackCollection> {return this.#box.tracks}
-    get minimizedField(): BooleanField {return this.#input.adapter().unwrap().minimizedField}
+    get minimizedField(): BooleanField {return this.#input.adapter().unwrap("input.adapter").minimizedField}
     get isAudioUnit(): boolean {return true}
     get label(): string {return this.#input.adapter().mapOr(input => input.labelField.getValue(), "")}
 

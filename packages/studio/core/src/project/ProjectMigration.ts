@@ -50,7 +50,7 @@ export class ProjectMigration {
             rootBox.groove.refer(GrooveShuffleBox.create(boxGraph, UUID.generate()))
             boxGraph.endTransaction()
         }
-        const globalShuffle = asInstanceOf(rootBox.groove.targetVertex.unwrap(), GrooveShuffleBox).label
+        const globalShuffle = asInstanceOf(rootBox.groove.targetVertex.unwrap("groove.target"), GrooveShuffleBox).label
         if (globalShuffle.getValue() !== "Groove Shuffle") {
             boxGraph.beginTransaction()
             globalShuffle.setValue("Groove Shuffle")
@@ -78,7 +78,7 @@ export class ProjectMigration {
             orphans.forEach(orphan => orphan.delete())
             boxGraph.endTransaction()
         }
-        const grooveTarget = rootBox.groove.targetVertex.unwrap()
+        const grooveTarget = rootBox.groove.targetVertex.unwrap("groove.target")
         const outputMidiDevices = rootBox.outputMidiDevices
         const bpmValue = bpm.getValue()
         // 1st pass (2nd pass might rely on those changes)

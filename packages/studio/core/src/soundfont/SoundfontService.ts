@@ -70,7 +70,7 @@ export class SoundfontService extends AssetService<Soundfont, void> {
             }
             await SoundfontStorage.get().save({uuid, file: arrayBuffer, meta})
             const soundfont = {uuid: UUID.toString(uuid), ...meta}
-            const list = this.#local.unwrap()
+            const list = this.#local.unwrap("local")
             if (!list.some(other => other.uuid === soundfont.uuid)) {
                 list.push(soundfont)
             }

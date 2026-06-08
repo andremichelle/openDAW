@@ -68,7 +68,7 @@ export namespace RecordAudio {
             const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Audio, excludeTrack)
             const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
             const regionBox = AudioRegionBox.create(boxGraph, UUID.generate(), box => {
-                box.file.refer(fileBox.unwrap())
+                box.file.refer(fileBox.unwrap("fileBox"))
                 box.events.refer(collectionBox.owners)
                 box.regions.refer(trackBox.regions)
                 box.position.setValue(position)

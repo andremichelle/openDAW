@@ -107,7 +107,7 @@ export class SoundfontDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
                 this.#loaderSubscription.terminate()
                 this.#loaderSubscription = loader.subscribe(state => {
                     if (state.type === "loaded") {
-                        const soundfont = loader.soundfont.unwrap()
+                        const soundfont = loader.soundfont.unwrap("soundfont")
                         this.#preset.wrap(soundfont.presets[this.presetIndex] ?? soundfont.presets[0])
                         this.#soundfont.wrap(soundfont)
                     } else if (state.type === "error") {

@@ -227,7 +227,7 @@ export class TrackBoxAdapter implements BoxAdapter {
                 return Terminable.Empty
             }
             case TrackType.Value: {
-                const target = this.#box.target.targetVertex.unwrap()
+                const target = this.#box.target.targetVertex.unwrap("target.target")
                 if (target.isField()) {
                     observer(this.#context.parameterFieldAdapters.opt(target.address).map(vertex => vertex.name))
                 } else if (target.isBox()) {

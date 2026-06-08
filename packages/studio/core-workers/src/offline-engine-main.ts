@@ -43,7 +43,7 @@ Communicator.executor<OfflineEngineProtocol>(
             new Function(code)()
         },
         async step(numSamples: int): Promise<Float32Array[]> {
-            const engine = state.unwrap()
+            const engine = state.unwrap("state.step")
             const result: Float32Array[] = Arrays.create(() => new Float32Array(numSamples), engine.numberOfChannels)
             const outputChannels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), engine.numberOfChannels)
             let offset = 0 | 0
@@ -62,7 +62,7 @@ Communicator.executor<OfflineEngineProtocol>(
             return result
         },
         async render(config: OfflineEngineRenderConfig) {
-            const engine = state.unwrap()
+            const engine = state.unwrap("state.render")
             const {silenceThresholdDb, silenceDurationSeconds, maxDurationSeconds} = config
             const threshold = dbToGain(silenceThresholdDb ?? -72.0)
             const silenceFramesNeeded = Math.ceil((silenceDurationSeconds ?? 10) * engine.sampleRate)
@@ -116,6 +116,6 @@ Communicator.executor<OfflineEngineProtocol>(
                 return total
             }, engine.numberOfChannels)
         },
-        stop() { state.unwrap().running = false }
+        stop() { state.unwrap("state.stop").running = false }
     }
 )

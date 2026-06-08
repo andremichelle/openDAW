@@ -94,7 +94,7 @@ export const PitchEditor = ({
         if (!StudioPreferences.settings.engine["note-audition-while-editing"]) {return}
         project.engine.noteSignal({
             type: "note-audition",
-            uuid: reader.trackBoxAdapter.unwrap().audioUnit.address.uuid, pitch, duration, velocity: 1.0
+            uuid: reader.trackBoxAdapter.unwrap("trackBoxAdapter").audioUnit.address.uuid, pitch, duration, velocity: 1.0
         })
     }
     // before selection

@@ -82,7 +82,7 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
     get isAudioUnit(): boolean {return false}
 
     file(): Option<AudioFileBoxAdapter> {return this.#file}
-    fileUUID(): UUID.Bytes {return this.#box.file.targetAddress.unwrap().uuid}
+    fileUUID(): UUID.Bytes {return this.#box.file.targetAddress.unwrap("file.targetAddr").uuid}
 
     resetParameters(): void {
         this.#box.mute.reset()
@@ -99,8 +99,8 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
 
     copyToIndex(index: int): void {
         PlayfieldSampleBox.create(this.#box.graph, UUID.generate(), box => {
-            box.file.refer(this.#box.file.targetVertex.unwrap())
-            box.device.refer(this.#box.device.targetVertex.unwrap())
+            box.file.refer(this.#box.file.targetVertex.unwrap("file.target"))
+            box.device.refer(this.#box.device.targetVertex.unwrap("device.target"))
             box.index.setValue(index)
             box.mute.setValue(this.#box.mute.getValue())
             box.solo.setValue(this.#box.solo.getValue())
@@ -125,13 +125,13 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
         return this.#audioEffects
     }
 
-    get labelField(): StringField {return asInstanceOf(this.#box.file.targetVertex.unwrap().box, AudioFileBox).fileName}
+    get labelField(): StringField {return asInstanceOf(this.#box.file.targetVertex.unwrap("file.target").box, AudioFileBox).fileName}
     get enabledField(): BooleanField {return this.#box.enabled}
     get minimizedField(): BooleanField {return this.#box.minimized}
 
     device(): PlayfieldDeviceBoxAdapter {
         return this.#context.boxAdapters
-            .adapterFor(this.#box.device.targetVertex.unwrap().box, PlayfieldDeviceBoxAdapter)
+            .adapterFor(this.#box.device.targetVertex.unwrap("device.target").box, PlayfieldDeviceBoxAdapter)
     }
 
     deviceHost(): DeviceHost {return this.device().deviceHost()}

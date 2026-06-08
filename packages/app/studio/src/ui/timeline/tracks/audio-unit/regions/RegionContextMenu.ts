@@ -123,7 +123,7 @@ export const installRegionContextMenu =
                 }).setTriggerProcedure(() => {
                     if (region.type === "note-region") {
                         const label = region.label
-                        NoteMidiExport.toFile(region.optCollection.unwrap(),
+                        NoteMidiExport.toFile(region.optCollection.unwrap("optCollection"),
                             `${label.length === 0 ? "region" : label}.mid`).then(EmptyExec, EmptyExec)
                     }
                 }),

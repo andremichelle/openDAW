@@ -89,7 +89,7 @@ export class OfflineEngineRenderer {
                         reject(new Error(state.reason))
                         subscription.terminate()
                     } else if (state.type === "loaded") {
-                        resolve(handler.data.unwrap())
+                        resolve(handler.data.unwrap("handler.data"))
                         subscription.terminate()
                     }
                 })
@@ -101,7 +101,7 @@ export class OfflineEngineRenderer {
                         reject(new Error(state.reason))
                         subscription.terminate()
                     } else if (state.type === "loaded") {
-                        resolve(handler.soundfont.unwrap())
+                        resolve(handler.soundfont.unwrap("handler.soundfont"))
                         subscription.terminate()
                     }
                 })

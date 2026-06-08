@@ -127,7 +127,7 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
                             resolvers.promise.then((value: string) => editing.modify(() => adapter.input.label = value), EmptyExec)
                             return resolvers
                         }
-                    } provider={() => ({value: adapter.input.label.unwrap(), unit: ""})}>
+                    } provider={() => ({value: adapter.input.label.unwrap("input.label"), unit: ""})}>
                         <h5 className="input">{inputLabel}</h5>
                     </DblClckTextInput>
                     <AuxSendGroup lifecycle={lifecycle} project={project} audioUnitAdapter={adapter}/>

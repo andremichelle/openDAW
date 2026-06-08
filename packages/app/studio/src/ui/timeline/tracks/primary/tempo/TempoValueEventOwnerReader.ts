@@ -11,7 +11,7 @@ export class TempoValueEventOwnerReader implements ValueEventOwnerReader {
         this.#adapter = adapter
     }
 
-    get content(): ValueEventCollectionBoxAdapter {return this.#adapter.tempoTrackEvents.unwrap()}
+    get content(): ValueEventCollectionBoxAdapter {return this.#adapter.tempoTrackEvents.unwrap("tempoTrackEvents")}
     get contentDuration(): ppqn {return Number.POSITIVE_INFINITY}
     get hasContent(): boolean {return this.#adapter.tempoTrackEvents.nonEmpty()}
     get hue(): int {return 30}

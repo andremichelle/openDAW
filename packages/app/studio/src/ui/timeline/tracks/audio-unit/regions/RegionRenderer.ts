@@ -123,7 +123,7 @@ export namespace RegionRenderer {
                                 context.fillStyle = loopStrokeColor
                                 context.fillRect(x, labelHeight, 1, height - labelHeight)
                             }
-                            const tempoMap = region.trackBoxAdapter.unwrap().context.tempoMap
+                            const tempoMap = region.trackBoxAdapter.unwrap("trackBoxAdapter").context.tempoMap
                             AudioRenderer.render(context, range, file, tempoMap,
                                 region.observableOptPlayMode, region.waveformOffset.getValue(),
                                 region.gain.getValue(), bound, contentColor, pass,
@@ -143,7 +143,7 @@ export namespace RegionRenderer {
                         context.rect(x0Int + padding, top, x1Int - x0Int - padding, bottom - top + padding)
                         context.clip()
                         const valueToY = (value: unitValue): number => bottom + value * (top - bottom)
-                        const events = region.events.unwrap()
+                        const events = region.events.unwrap("events")
                         for (const pass of LoopableRegion.locateLoops({
                             position, complete,
                             loopOffset: strategy.readLoopOffset(region),

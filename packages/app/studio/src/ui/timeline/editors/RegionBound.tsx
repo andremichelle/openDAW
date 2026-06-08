@@ -34,7 +34,7 @@ export const RegionBound = ({lifecycle, service, range}: Construct) => {
 
         const unitMin = range.unitMin - range.unitPadding
         const unitMax = range.unitMax
-        for (const region of editingRegion.trackBoxAdapter.unwrap().regions.collection.iterateRange(unitMin, unitMax)) {
+        for (const region of editingRegion.trackBoxAdapter.unwrap("trackBoxAdapter").regions.collection.iterateRange(unitMin, unitMax)) {
             for (const pass of LoopableRegion.locateLoops(region, unitMin, unitMax)) {
                 const x0 = Math.floor((range.unitToX(pass.resultStart) + 1) * devicePixelRatio)
                 const x1 = Math.floor(range.unitToX(pass.resultEnd) * devicePixelRatio)
@@ -63,7 +63,7 @@ export const RegionBound = ({lifecycle, service, range}: Construct) => {
 
     const listenToRegion = (region: AnyRegionBoxAdapter): Terminable => {
         return Terminable.many(
-            region.trackBoxAdapter.unwrap().regions.subscribeChanges(requestUpdate),
+            region.trackBoxAdapter.unwrap("trackBoxAdapter").regions.subscribeChanges(requestUpdate),
             region.box.regions.subscribe(() => {
                 if (region.trackBoxAdapter.nonEmpty()) {
                     listenToRegion(region)

@@ -132,7 +132,7 @@ export class ValueEventBoxAdapter implements ValueEvent, BoxAdapter, Selectable 
         const eventBox = ValueEventBox.create(this.#context.boxGraph, UUID.generate(), box => {
             box.position.setValue(position)
             box.index.setValue(index)
-            box.events.refer(options?.events ?? this.collection.unwrap().box.events)
+            box.events.refer(options?.events ?? this.collection.unwrap("collection").box.events)
             box.value.setValue(options?.value ?? this.value)
         })
         InterpolationFieldAdapter.write(eventBox.interpolation, options?.interpolation ?? this.interpolation)
@@ -142,7 +142,7 @@ export class ValueEventBoxAdapter implements ValueEvent, BoxAdapter, Selectable 
     copyFrom(options?: CopyToParams): this {
         this.#box.position.setValue(options?.position ?? this.position)
         this.#box.index.setValue(options?.index ?? this.index)
-        this.#box.events.refer(options?.events ?? this.collection.unwrap().box.events)
+        this.#box.events.refer(options?.events ?? this.collection.unwrap("collection").box.events)
         this.#box.value.setValue(options?.value ?? this.value)
         InterpolationFieldAdapter.write(this.#box.interpolation, options?.interpolation ?? this.interpolation)
         return this

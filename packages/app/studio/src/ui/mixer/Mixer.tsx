@@ -174,7 +174,7 @@ export const Mixer = ({lifecycle, service}: Construct) => {
                 if (type !== "channelstrip") {return}
                 const optAdapter = project.boxGraph.findBox(UUID.parse(dragData.uuid))
                     .map(box => project.boxAdapters.adapterFor(box, AudioUnitBoxAdapter))
-                const [min, max] = optAdapter.unwrap().indicesLimit()
+                const [min, max] = optAdapter.unwrap("optAdapter").indicesLimit()
                 if (min === max) {return}
                 const [index] = DragAndDrop.findInsertLocation(event, element)
                 const delta = clamp(index, min, max) - dragData.start_index

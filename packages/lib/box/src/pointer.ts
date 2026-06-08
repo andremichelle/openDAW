@@ -130,7 +130,7 @@ export class PointerField<P extends PointerTypes = PointerTypes> extends Field<U
     isEmpty(): boolean {return this.targetAddress.isEmpty()}
     nonEmpty(): boolean {return this.targetAddress.nonEmpty()}
     ifVertex(procedure: Procedure<Vertex>): void {
-        if (this.targetVertex.nonEmpty()) {procedure(this.targetVertex.unwrap())}
+        if (this.targetVertex.nonEmpty()) {procedure(this.targetVertex.unwrap("targetVertex"))}
     }
 
     resolvedTo(newTarget: Option<Vertex>): void {this.#targetVertex = newTarget}

@@ -53,7 +53,7 @@ export class AudioUnit implements Terminable {
     input(): Option<InstrumentDeviceProcessor | AudioBusProcessor> {return this.#input}
     inputAsAudioBus(): AudioBusProcessor {return asInstanceOf(this.#input.unwrap("No input available"), AudioBusProcessor)}
     audioOutput(): AudioBuffer {
-        if (this.#useInstrumentOutput) {return this.#input.unwrap().audioOutput}
+        if (this.#useInstrumentOutput) {return this.#input.unwrap("input").audioOutput}
         if (this.#skipChannelStrip && this.#preChannelStripSource.nonEmpty()) {
             return this.#preChannelStripSource.unwrap()
         }

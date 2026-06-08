@@ -170,7 +170,7 @@ const createTapeSkeleton = (effect: DeviceSpec | null): ProjectSkeleton => {
         box.position.setValue(0)
         box.duration.setValue(PPQN.Bar * 16)
         box.loopDuration.setValue(PPQN.Bar * 16)
-        box.file.refer(boxGraph.findBox(sampleUuid).unwrap())
+        box.file.refer(boxGraph.findBox(sampleUuid).unwrap("findBox.sample"))
         box.events.refer(valueEventCollectionBox.owners)
         box.regions.refer(trackBox.regions)
     })
@@ -238,7 +238,7 @@ const instruments: ReadonlyArray<InstrumentSpec> = [
                 box.endInSeconds.setValue(10)
             })
             InstrumentFactories.Nano.create(boxGraph, audioUnitBox.input, "Nano", IconSymbol.NanoWave,
-                boxGraph.findBox<AudioFileBox>(sampleUuid).unwrap())
+                boxGraph.findBox<AudioFileBox>(sampleUuid).unwrap("findBox.file"))
             const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
                 box.target.refer(audioUnitBox)
                 box.type.setValue(TrackType.Notes)

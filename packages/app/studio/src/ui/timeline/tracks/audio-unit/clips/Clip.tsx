@@ -80,7 +80,7 @@ export const Clip = ({lifecycle, project, adapter, gridColumn}: Construct) => {
             painter.requestUpdate()
         }),
         adapter.catchupAndSubscribeSelected(owner => element.classList.toggle("selected", owner.getValue())),
-        adapter.trackBoxAdapter.unwrap().enabled.catchupAndSubscribe(owner =>
+        adapter.trackBoxAdapter.unwrap("trackBoxAdapter").enabled.catchupAndSubscribe(owner =>
             element.classList.toggle("muted", adapter.box.mute.getValue() || !owner.getValue()))
     )
     const running = lifecycle.own(new Terminator())

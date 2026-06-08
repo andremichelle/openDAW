@@ -71,7 +71,7 @@ export const NoteFall = ({lifecycle, service, updateNotifier}: Construct) => {
                 for (const region of trackAdapter.regions.collection.iterateRange(min, max)) {
                     if (!isInstanceOf(region, NoteRegionBoxAdapter)) {continue}
                     const hue = region.hue
-                    const collection = region.optCollection.unwrap()
+                    const collection = region.optCollection.unwrap("optCollection")
                     const events = collection.events
                     for (const {resultStart, resultEnd, rawStart} of LoopableRegion.locateLoops(region, min, max)) {
                         const searchStart = Math.floor(resultStart - rawStart)

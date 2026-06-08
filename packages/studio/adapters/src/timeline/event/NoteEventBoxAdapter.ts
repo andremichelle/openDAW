@@ -96,7 +96,7 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
             box.duration.setValue(options?.duration ?? this.duration)
             box.pitch.setValue(options?.pitch ?? this.pitch)
             box.playCount.setValue(options?.playCount ?? this.playCount)
-            box.events.refer(options?.events ?? this.collection.unwrap().box.events)
+            box.events.refer(options?.events ?? this.collection.unwrap("collection").box.events)
             box.velocity.setValue(this.velocity)
             box.cent.setValue(this.cent)
             box.chance.setValue(this.chance)
@@ -107,7 +107,7 @@ export class NoteEventBoxAdapter implements NoteEvent, BoxAdapter, Selectable {
     canConsolidate(): boolean {return this.playCount > 1}
     consolidate(): ReadonlyArray<NoteEventBoxAdapter> {
         const playCount = this.playCount
-        const events = this.collection.unwrap().box.events
+        const events = this.collection.unwrap("collection").box.events
         const adapters = Arrays.create((index) => {
             const a = Math.floor(this.computeCurveValue(index / playCount) * this.duration)
             const b = Math.floor(this.computeCurveValue((index + 1) / playCount) * this.duration)

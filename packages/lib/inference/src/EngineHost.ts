@@ -170,7 +170,7 @@ export class EngineHost {
 
     async #dispatch<R extends WorkerToMain>(message: MainToWorker): Promise<R> {
         await this.#ensureWorker()
-        const worker = this.#worker.unwrap()
+        const worker = this.#worker.unwrap("worker")
         return new Promise<R>((resolve, reject) => {
             this.#pending.set(message.id, {
                 id: message.id,
