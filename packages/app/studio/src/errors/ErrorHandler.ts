@@ -30,6 +30,7 @@ export class ErrorHandler {
     readonly #recover: Provider<Option<Provider<Promise<void>>>>
 
     #errorThrown: boolean = false
+    #rejectionReported: boolean = false
 
     constructor(buildInfo: BuildInfo, recover: Provider<Option<Provider<Promise<void>>>>) {
         this.#buildInfo = buildInfo
@@ -205,6 +206,18 @@ export class ErrorHandler {
             return false
         }
         console.debug("processError", scope, event)
+        // An unhandled promise rejection means an async task failed; the main render loop is intact,
+        // so it must NOT terminate the whole app. Report it once for visibility, then keep the
+        // session alive (no AnimationFrame.terminate, no fatal recovery dialog). Synchronous "error"
+        // events fall through to the fatal path below, since they can indicate corrupted state.
+        if (event instanceof PromiseRejectionEvent) {
+            event.preventDefault()
+            if (!this.#rejectionReported) {
+                this.#rejectionReported = true
+                this.#report(scope, error)
+            }
+            return false
+        }
         if (this.#errorThrown) {return false}
         this.#errorThrown = true
         AnimationFrame.terminate()

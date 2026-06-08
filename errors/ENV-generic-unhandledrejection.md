@@ -1,9 +1,9 @@
 # Generic unhandledrejection
 
-- **status:** ENV · **priority:** ENV
+- **status:** FIXED (rejections no longer fatal) · **priority:** ENV
 - **occurrences:** 2 · **ids:** [807, 809]
-- **assessment:** Opaque UnknownError.
-- **action:** Pull stacks; likely env.
+- **assessment:** Synthetic injected events: `isTrusted:false`, no `reason`, empty stack, `foreignOrigin:null` — not first-party, nothing to extract. But the deeper bug was the failure MODE, not the diagnosis: `processError` made EVERY non-ignored error fatal (`AnimationFrame.terminate()` + recovery dialog), so any unhandled rejection — even a reason-less one — killed the whole app.
+- **fix:** `ErrorHandler.processError` now treats `PromiseRejectionEvent` as NON-fatal: an async task failed but the render loop is intact, so it `preventDefault`s, reports once for visibility, and keeps the session alive (no terminate, no fatal dialog). Synchronous `error` events stay fatal (possible corrupted state). This is the root fix behind the whole rejection-as-crash class (storage, network, monaco, etc. are defence-in-depth on top). Did NOT ignore-list the opaque `"unhandledrejection"` string (too broad).
 
 [< back to index](error-triage.md)
 

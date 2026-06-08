@@ -6,6 +6,8 @@ Each error-group has its own file in this folder. Priority: **P1** highest-value
 
 > Per-error workflow (proven on #995–#1001): pull full logs+stack -> root-cause -> reproduce (unit test where feasible) -> fix the root cause (no band-aids) -> regression test -> branch->main -> mark `fixed=1`.
 
+> **Cross-cutting fix (ErrorHandler):** `processError` no longer treats an unhandled **promise rejection** as fatal — previously ANY non-ignored rejection ran `AnimationFrame.terminate()` + the recovery dialog, killing the whole app over a single async failure (even a reason-less one). Rejections are now reported once and the session stays alive; only synchronous `error` events remain fatal. This is the root cause behind much of the rejection-based "crash" class below; the per-error `#tryIgnore` handlers (storage, monaco, file-picker, …) remain as defence-in-depth and for friendly messages.
+
 
 ## P1
 
@@ -33,7 +35,7 @@ Each error-group has its own file in this folder. Priority: **P1** highest-value
 - [Storage quota-exceeded](ENV-storage-quota-exceeded.md) — FIXED (graceful) · 5× · ids [839, 951, 952, 953, 954]
 - [Storage file-not-found](ENV-storage-file-not-found.md) — ENV · 4× · ids [631, 766, 971, 974]
 - [Network failed-to-fetch](ENV-network-failed-to-fetch.md) — ENV · 4× · ids [604, 624, 761, 813]
-- [Generic unhandledrejection](ENV-generic-unhandledrejection.md) — ENV · 2× · ids [807, 809]
+- [Generic unhandledrejection](ENV-generic-unhandledrejection.md) — FIXED (synthetic/old) · 2× · ids [807, 809]
 - [Storage io-read-failed](ENV-storage-io-read-failed.md) — FIXED (graceful) · 2× · ids [697, 698]
 - [Deploy html-served-for-js](ENV-deploy-html-served-for-js.md) — FIXED (infra-mitigated) · 2× · ids [160, 237]
 - [Storage transient-cached-state](ENV-storage-transient-cached-state.md) — ENV · 2× · ids [870, 981]
