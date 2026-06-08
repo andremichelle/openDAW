@@ -1,9 +1,9 @@
 # Storage io-read-failed
 
-- **status:** ENV · **priority:** ENV
+- **status:** FIXED (graceful handling) · **priority:** ENV
 - **occurrences:** 2 · **ids:** [697, 698]
-- **assessment:** NotReadableError (disk/IO).
-- **action:** Catch + retry/message.
+- **assessment:** `NotReadableError` from OPFS `handle.read`/`getSize` — underlying disk/IO read failure (logtail also shows concurrent network failure → flaky machine). Environmental, unambiguous.
+- **fix:** `ErrorHandler.#tryIgnore` now catches `DOMException` `NotReadableError` (tight name match) and shows a "Storage Error / temporary disk issue" dialog + `preventDefault` instead of crashing.
 
 [< back to index](error-triage.md)
 

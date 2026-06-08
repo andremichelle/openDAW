@@ -136,6 +136,27 @@ export class ErrorHandler {
             }).then(EmptyExec)
             return true
         }
+        // Storage full: an OPFS write exceeded the browser storage quota / the disk is full.
+        // Environmental (not a logic bug); surface a friendly message instead of crashing.
+        if (reason instanceof DOMException && reason.name === "QuotaExceededError") {
+            console.warn(`QuotaExceededError: ${reason.message}`)
+            event.preventDefault()
+            Dialogs.info({
+                headline: "Storage Full",
+                message: "Your browser ran out of storage. Free up disk space or delete projects/samples, then try again."
+            }).then(EmptyExec)
+            return true
+        }
+        // Storage read failed: a transient OPFS/disk I/O read error. Environmental, not a logic bug.
+        if (reason instanceof DOMException && reason.name === "NotReadableError") {
+            console.warn(`NotReadableError: ${reason.message}`)
+            event.preventDefault()
+            Dialogs.info({
+                headline: "Storage Error",
+                message: "A storage read failed. This is usually a temporary disk or browser issue. Please try again."
+            }).then(EmptyExec)
+            return true
+        }
         // Handle Monaco editor worker errors (throws Event objects when workers fail to load)
         if (reason instanceof Event || (reason instanceof Error && this.#looksLikeMonacoError(reason.message, reason.stack))) {
             console.warn("Monaco editor error (web workers may be unavailable):", reason)

@@ -1,9 +1,9 @@
 # Storage quota-exceeded
 
-- **status:** ENV · **priority:** ENV
+- **status:** FIXED (graceful handling) · **priority:** ENV
 - **occurrences:** 5 · **ids:** [839, 951, 952, 953, 954]
-- **assessment:** OPFS quota / no space. User disk full.
-- **action:** Catch + 'storage full' dialog; not a crash.
+- **assessment:** OPFS write exceeded browser quota / disk full (`OpfsWorker.write` truncate/write/flush). Environmental, unambiguous.
+- **fix:** `ErrorHandler.#tryIgnore` now catches `DOMException` `QuotaExceededError` (tight name match, like the accepted `SecurityError`/`NotAllowedError` branch) and shows a "Storage Full" dialog + `preventDefault` instead of crashing.
 
 [< back to index](error-triage.md)
 

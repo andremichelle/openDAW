@@ -1,9 +1,9 @@
 # Storage transient-cached-state
 
-- **status:** ENV · **priority:** ENV
+- **status:** OPEN (needs source-level handling, not globally ignorable) · **priority:** ENV
 - **occurrences:** 2 · **ids:** [870, 981]
-- **assessment:** Transient OPFS / cached interface state.
-- **action:** Catch; retry or message.
+- **assessment:** Transient OPFS state — `InvalidStateError` (stale `FileSystemSyncAccessHandle`) / `UnknownError` (transient, e.g. OOM) from `OpfsWorker` write/read. NOT safe to globally ignore: both names are generic DOMExceptions reachable from non-storage APIs (e.g. `InvalidStateError` from the AudioWorklet path), so a blanket `#tryIgnore` branch could mask real bugs.
+- **action:** Fix at source — bounded single retry in `OpfsWorker.write`/`read` (re-resolve the handle, retry once) via `tryCatch` on `InvalidStateError`/`UnknownError`. Deferred.
 
 [< back to index](error-triage.md)
 

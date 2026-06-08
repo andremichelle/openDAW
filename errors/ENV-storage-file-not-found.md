@@ -1,9 +1,9 @@
 # Storage file-not-found
 
-- **status:** ENV · **priority:** ENV
+- **status:** OPEN (needs source-level handling, not globally ignorable) · **priority:** ENV
 - **occurrences:** 4 · **ids:** [631, 766, 971, 974]
-- **assessment:** OPFS entry removed out from under us.
-- **action:** Catch NotFoundError; recover/re-init.
+- **assessment:** OPFS entry vanished (eviction / other tab / never written) → `NotFoundError` from `OpfsWorker.#resolveFile`. NOT safe to globally ignore: `NotFoundError` also arises from non-storage DOM ops (`removeChild`, etc.), so a blanket `#tryIgnore` branch could mask a real logic bug.
+- **action:** Fix at source — wrap `SampleStorage.load`/`loadMeta` (`SampleStorage.ts:53,61-65`) in `Promises.tryCatch`; on `NotFoundError` treat the sample as missing (existing online re-fetch / "sample not found" path) instead of rejecting. Deferred (multi-callsite, app code, no test harness).
 
 [< back to index](error-triage.md)
 
