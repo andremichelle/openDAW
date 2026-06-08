@@ -1,15 +1,9 @@
 # Automation Already-assigned
 
-- **status:** FIXED (menu path + load-time repair) · **priority:** P2
-- **occurrences:** 1 · **ids:** [915] (+ a reported load-time variant, no id)
+- **status:** FIXED (menu path) · **priority:** P2
+- **occurrences:** 1 · **ids:** [915]
 - **assessment:** `AutomatableParameterFieldAdapter.ts:77` asserts `#trackBoxAdapter.isEmpty()` "Already assigned" when a 2nd `TrackBox.target` (Pointers.Automation) edge reaches a parameter field. The "Create Automation" context menu (`automation.ts`) decided whether to offer creation at menu **build time** (`tracks.controls(field)` when the menu opens) but created the track at **click time without re-checking**, so a track created meanwhile (another open menu / a record / a stale click) led to a 2nd create → panic at commit.
 - **fix:** `automation.ts` trigger now re-checks the authoritative `parameter.track` at execution time inside the transaction; bails if already assigned. Regression test `AutomationDoubleAssign.test.ts` (RED without guard → GREEN with it).
-
-## Load-time variant — broken project files (2026-06, FIXED via repair)
-
-Same invariant, but the duplicate is already **persisted** in a saved file (created by the old menu race / paste before the dedup guards). On load, `AutomatableParameterFieldAdapter`'s `pointerHub.catchupAndSubscribe` replays both `TrackBox.target` edges of the affected parameter field and the second hits `assert(#trackBoxAdapter.isEmpty(), "Already assigned")` → **the project cannot open**. Reported stack: `Project → RemoteSelections → BoxAdapters.create(TidalDeviceBox) → wrapParameters → AutomatableParameterFieldAdapter → onAdded → visitTrackBox → assert`.
-
-**Fix (repair, not assert-softening):** `ProjectValidation.validate` (runs in every `Project.fromSkeleton` *before* adapters build, already deletes corrupt boxes + notifies) now also groups `TrackType.Value` tracks by their `target` field address and, for any field with more than one, keeps the track holding the most regions and deletes the surplus (`Box.delete()` cascades its regions/event-collections). So the graph is healed before the field adapter ever runs catchup — the assert stays intact for any future violation. Regression test `ProjectValidation.test.ts` (RED → 2 tracks remain; GREEN → 1).
 
 [< back to index](error-triage.md)
 
