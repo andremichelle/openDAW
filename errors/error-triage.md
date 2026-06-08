@@ -38,7 +38,7 @@ Each error-group has its own file in this folder. Priority: **P1** highest-value
 - [Deploy html-served-for-js](ENV-deploy-html-served-for-js.md) — FIXED (infra-mitigated) · 2× · ids [160, 237]
 - [Storage transient-cached-state](ENV-storage-transient-cached-state.md) — ENV · 2× · ids [870, 981]
 - [Network chunk-load](ENV-network-chunk-load.md) — FIXED (infra-mitigated) · 2× · ids [623, 810]
-- [Audio device-init](ENV-audio-device-init.md) — ENV · 2× · ids [704, 765]
+- [Audio device-init](ENV-audio-device-init.md) — FIXED (handled/old) · 2× · ids [704, 765]
 - [External btn-comment-mode-click](ENV-external-btn-comment-mode-click.md) — FIXED (generic external) · 1× · ids [957]
 - [File-picker not-allowed](ENV-file-picker-not-allowed.md) — FIXED (graceful) · 1× · ids [814]
 

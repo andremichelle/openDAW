@@ -1,9 +1,8 @@
 # Audio device-init
 
-- **status:** ENV · **priority:** ENV
+- **status:** FIXED (#765 handled; #704 old environmental) · **priority:** ENV
 - **occurrences:** 2 · **ids:** [704, 765]
-- **assessment:** AudioWorkletNode ctor / device start blocked.
-- **action:** Graceful 'audio unavailable' dialog.
+- **assessment:** #765 (`AudioWorkletNode` ctor `InvalidStateError`) is caught: `startAudioWorklet` is synchronous (`Project.ts:266`, constructs the worklet inline), so the `tryCatch(() => project.startAudioWorklet(...))` at `StudioService.ts:511` shows a graceful "Audio-Engine Error" dialog instead of crashing (verified). #704 ("Failed to start the audio device") is an old (2026-02-08) single-occurrence iOS-Safari device refusal (suspended `AudioContext`) — OS-level/environmental, no recurrence in ~4 months. No new code needed.
 
 [< back to index](error-triage.md)
 
