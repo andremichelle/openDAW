@@ -115,6 +115,9 @@ component
     position: relative
     min-height: 0
 
+    &::before
+      @include colors.diagonal-stripes
+
     &::after
       @include colors.hud-frame
 

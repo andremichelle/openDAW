@@ -13,6 +13,13 @@ $DARKENER: rgba(black, 0.04)
 @mixin panel-background
   background-color: var(--color-panel-background)
 
+@mixin diagonal-stripes($inset: 0.33em, $color: rgba(white, 0.01), $line: 4px, $period: 8px)
+  content: ""
+  position: absolute
+  inset: $inset
+  pointer-events: none
+  background-image: repeating-linear-gradient(45deg, transparent 0, transparent $line, $color $line, $color $period)
+
 @mixin hud-frame($len: 10px, $width: 1px, $color: var(--color-bright), $opacity: 0.6)
   content: ""
   position: absolute

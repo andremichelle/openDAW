@@ -11,11 +11,7 @@ component
   overflow: hidden
 
   &::before
-    content: ""
-    position: absolute
-    inset: 0.33em
-    pointer-events: none
-    background-image: repeating-linear-gradient(45deg, transparent 0, transparent 4px, rgba(white, 0.02) 4px, rgba(white, 0.02) 8px)
+    @include colors.diagonal-stripes
 
   .tile-frame
     @include colors.hud-frame
