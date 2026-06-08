@@ -24,6 +24,7 @@ import {ProgressBar} from "@/ui/components/ProgressBar.tsx"
 import {TextInput} from "../components/TextInput"
 import {SearchInput} from "../components/SearchInput"
 import {Html} from "@opendaw/lib-dom"
+import {ThreeDots} from "@/ui/spinner/ThreeDots"
 
 const className = Html.adoptStyleSheet(css, "ComponentsPage")
 
@@ -43,6 +44,10 @@ export const ComponentsPage: PageFactory<StudioService> = ({lifecycle}: PageCont
             <div>
                 <h1>Components</h1>
                 <div>
+                    <label>ThreeDots</label>
+                    <div style={{position: "relative", display: "flex", alignItems: "center"}}>
+                        <ThreeDots/>
+                    </div>
                     <label>Button</label>
                     <Button lifecycle={lifecycle} onClick={() => {}}
                             appearance={{activeColor: Colors.bright}}>
