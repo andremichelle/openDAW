@@ -1,4 +1,4 @@
-import {Arrays, asDefined, EmptyExec, SortedSet, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {Arrays, asDefined, EmptyExec, panic, SortedSet, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {Pointers} from "@opendaw/studio-enums"
 import {AudioUnitBox, AuxSendBox, BoxVisitor} from "@opendaw/studio-boxes"
 import {AudioUnitBoxAdapter, IndexedBoxAdapterCollection} from "@opendaw/studio-adapters"
@@ -61,8 +61,19 @@ export class Mixer implements Terminable {
         }))
     }
 
-    registerChannelStrip({uuid}: AudioUnitBoxAdapter, view: ChannelStripView): Terminable {
-        const {views} = this.#states.get(uuid)
+    registerChannelStrip(adapter: AudioUnitBoxAdapter, view: ChannelStripView): Terminable {
+        const {uuid} = adapter
+        // Diagnostic for the recurring "Unknown key" panic (#924/925/926/984/985): a ChannelStrip was
+        // requested for a unit that core Mixer never registered in #states. Capture which unit + state
+        // (the bare SortedSet.get only reported "Unknown key: <bytes>"). Strips come from two sites:
+        // the mixer panel (rootBox.audioUnits catchup) and DevicePanel (deviceHost.audioUnitBoxAdapter()).
+        const optState = this.#states.opt(uuid)
+        if (optState.isEmpty()) {
+            return panic(`Mixer has no channel-strip state for audio-unit ${UUID.toString(uuid)} `
+                + `(type=${adapter.type}, attached=${adapter.box.isAttached()}, states=${this.#states.size()}); `
+                + `requested for a unit absent from rootBox.audioUnits`)
+        }
+        const {views} = optState.unwrap("mixer-state")
         views.push(view)
         this.#deferUpdate.request()
         return Terminable.create(() => {

@@ -1,9 +1,9 @@
 # Mixer Unknown-key channel-strip
 
-- **status:** OPEN · **priority:** P1
+- **status:** OPEN (rich diagnostic shipped; root cause unconfirmed) · **priority:** P1
 - **occurrences:** 5 · **ids:** [924, 925, 926, 984, 985]
-- **assessment:** SortedSet.get() (sorted-set.ts:128) misses inside Mixer.registerChannelStrip (Mixer.ts:64). 5x, recent.
-- **action:** Find the by-uuid map queried before insert/after remove; getOrNull + guard. Reproduce add/remove audio-unit while mixer open.
+- **assessment:** `SortedSet.get` miss inside `Mixer.registerChannelStrip` → bare `Unknown key: <bytes>`. A ChannelStrip was requested for an audio-unit absent from core Mixer's `#states`.
+- **action (done):** Replaced the bare `get` with a rich panic capturing uuid/type/attached/#states.size so the next occurrence is locatable. Root cause still unconfirmed (see below) — do NOT mark fixed yet.
 
 [< back to index](error-triage.md)
 
@@ -36,3 +36,13 @@
 **Why no fix shipped:** can't confirm the offending unit/parameter without the project file, and the candidate fixes are all risky guesses (swallow in `onAdd`; roll back `#entries` on listener error; lazy-create `#states` in `registerChannelStrip` — the last is a band-aid that hides the desync).
 
 **Recommended next step (debugging-first):** add low-noise instrumentation — in `registerChannelStrip`'s miss path, throw a richer error capturing `adapter.box.isAttached()`, whether `adapter.namedParameter` has mute/solo, and `#states.size`; and/or wrap the core Mixer `onAdd` mute/solo subscription so a malformed unit **logs** (with uuid) instead of silently throwing. Either confirms the trigger in the next production report. Then fix the migration/parameter gap at its source.
+
+## Update (2026-06) — deeper trace; the earlier onAdd-throw theory is contradicted
+
+**Swallow mechanism CONFIRMED:** `Listeners.proxy` (`lib/std/listeners.ts`) dispatches **object-literal** listeners via `safeExecute` (swallows exceptions); core `Mixer` subscribes with an object literal, so a throw in its live `onAdd` is silently swallowed. But `IndexedBoxAdapterCollection.catchupAndSubscribe` calls `onAdd` **directly** (not via the proxy), so catchup throws propagate. So a desync created on a live add stays hidden until the panel opens.
+
+**BUT the onAdd-throw theory is contradicted:** `#updateChannelStripViews`/`#processChannelStrips` call `getControlledValue()` on every `#states` entry and run via `deferUpdate` on any add/mute/solo change (independent of the mixer panel). If a unit's mute/solo `getControlledValue()` threw, those would crash routinely — but the logs only ever show "Unknown key", never that. So `getControlledValue` does not throw, `onAdd` completes `#states.add`, and `#states` should contain the unit. The desync is NOT core `onAdd` throwing.
+
+**More likely lead — a second render site:** ChannelStrip is rendered from TWO places: the mixer panel (`Mixer.tsx:100`, from `rootBox.audioUnits` catchup) AND `DevicePanel.tsx:136` (`adapter={deviceHost.audioUnitBoxAdapter()}`). DevicePanel resolves the host unit by walking device→host, **independently of the `audioUnits` collection / `#states`**. If a device's host unit is not in `rootBox.audioUnits` (migration leftover, or a unit being detached while its device panel is open), DevicePanel's strip → `registerChannelStrip` → `#states` miss. The doc's earlier "rendered during UI Mixer catchup forEach" was a guess from minified frames; DevicePanel render is also `createElement → ChannelStrip`.
+
+**Shipped:** `registerChannelStrip` now panics with `Mixer has no channel-strip state for audio-unit <uuid> (type=…, attached=…, states=…)` instead of bare "Unknown key". Still panics (not softened to a silent skip — that would hide the desync, per no-band-aids). The next report will name the unit, its type, and whether it is attached → confirming which site/scenario, then fix at source (likely DevicePanel guarding on a non-collection unit, or the migration that leaves a device host outside `rootBox.audioUnits`).
