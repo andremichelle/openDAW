@@ -22,10 +22,10 @@ const X_LABEL_MIN_DISTANCE = 32
 const formatAxisLabel = (label: string): string => label.includes("-") ? label.slice(5) : label
 
 const latencyBarColor = (label: string): string => {
-    if (label.startsWith(">")) {return Colors.red.toString()}
+    if (label.endsWith("+")) {return Colors.red.toString()}
     const ms = parseInt(label, 10)
     if (ms < 10) {return Colors.green.toString()}
-    if (ms < 50) {return Colors.yellow.toString()}
+    if (ms < 20) {return Colors.yellow.toString()}
     return Colors.orange.toString()
 }
 
@@ -85,7 +85,7 @@ export const LineChart = ({lifecycle, series, color, showAxis = true, showTrend 
                     <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height}>
                         <defs>
                             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stop-color={accent} stop-opacity="0.5"/>
+                                <stop offset="0%" stop-color={accent} stop-opacity="0.15"/>
                                 <stop offset="100%" stop-color={accent} stop-opacity="0"/>
                             </linearGradient>
                         </defs>

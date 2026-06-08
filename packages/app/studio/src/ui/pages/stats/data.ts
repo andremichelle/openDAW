@@ -209,7 +209,7 @@ export const fetchErrorStats = async (): Promise<ErrorStats> => {
 
 export type LatencyStats = { distribution: DailySeries, unsupported: number }
 
-const LATENCY_OVERFLOW_MS = 100
+const LATENCY_OVERFLOW_MS = 50
 
 export const fetchLatencyStats = async (): Promise<LatencyStats> => {
     const data = await fetchJson<Record<string, number>>(
@@ -220,15 +220,15 @@ export const fetchLatencyStats = async (): Promise<LatencyStats> => {
     for (const [key, count] of Object.entries(data)) {
         const ms = parseInt(key, 10)
         if (!(ms > 0)) continue
-        if (ms > LATENCY_OVERFLOW_MS) {overflow += count} else {buckets.set(ms, count)}
+        if (ms >= LATENCY_OVERFLOW_MS) {overflow += count} else {buckets.set(ms, count)}
     }
     if (buckets.size === 0 && overflow === 0) return {distribution: [], unsupported}
     const minMs = buckets.size === 0 ? 1 : Math.min(...buckets.keys())
     const distribution: Array<readonly [string, number]> = []
-    for (let ms = minMs; ms <= LATENCY_OVERFLOW_MS; ms++) {
+    for (let ms = minMs; ms < LATENCY_OVERFLOW_MS; ms++) {
         distribution.push([`${ms}`, buckets.get(ms) ?? 0] as const)
     }
-    distribution.push([`>${LATENCY_OVERFLOW_MS}`, overflow] as const)
+    distribution.push([`${LATENCY_OVERFLOW_MS}+`, overflow] as const)
     return {distribution, unsupported}
 }
 
