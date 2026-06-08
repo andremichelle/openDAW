@@ -8,7 +8,8 @@ import {
     CaptureAudioBox,
     TapeDeviceBox,
     TrackBox,
-    TransientMarkerBox
+    TransientMarkerBox,
+    ValueEventCollectionBox
 } from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
@@ -72,9 +73,11 @@ describe("TransferAudioUnits.transfer", () => {
             box.endInSeconds.setValue(10.0)
             box.fileName.setValue("test-audio.wav")
         })
+        const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
         regionBox = AudioRegionBox.create(boxGraph, UUID.generate(), box => {
             box.regions.refer(trackBox.regions)
             box.file.refer(audioFileBox)
+            box.events.refer(events.owners) // events is a mandatory pointer on AudioRegionBox
             box.position.setValue(0)
             box.duration.setValue(1000)
         })
@@ -248,9 +251,10 @@ describe("TransferAudioUnits.transfer", () => {
             skeleton.boxGraph.beginTransaction()
             const [copyA] = TransferAudioUnits.transfer([unitA], skeleton)
             skeleton.boxGraph.endTransaction()
-            expect(copyA.index.getValue()).toBe(3)
-            expect(existingX.index.getValue()).toBe(1)
-            expect(existingY.index.getValue()).toBe(2)
+            // Instruments are ordered before the primary Output unit, which lands last (index 3).
+            expect(copyA.index.getValue()).toBe(2)
+            expect(existingX.index.getValue()).toBe(0)
+            expect(existingY.index.getValue()).toBe(1)
             verifyContiguousIndices(skeleton)
         })
 
@@ -316,10 +320,11 @@ describe("TransferAudioUnits.transfer", () => {
             skeleton.boxGraph.beginTransaction()
             const [copyA, copyB] = TransferAudioUnits.transfer([unitA, unitB], skeleton)
             skeleton.boxGraph.endTransaction()
-            expect(copyA.index.getValue()).toBe(3)
-            expect(copyB.index.getValue()).toBe(4)
-            expect(existingX.index.getValue()).toBe(1)
-            expect(existingY.index.getValue()).toBe(2)
+            // Instruments order before the primary Output unit, which lands last (index 4).
+            expect(copyA.index.getValue()).toBe(2)
+            expect(copyB.index.getValue()).toBe(3)
+            expect(existingX.index.getValue()).toBe(0)
+            expect(existingY.index.getValue()).toBe(1)
             verifyContiguousIndices(skeleton)
         })
 
@@ -329,9 +334,10 @@ describe("TransferAudioUnits.transfer", () => {
             skeleton.boxGraph.beginTransaction()
             const [copyA, copyC] = TransferAudioUnits.transfer([unitA, unitC], skeleton)
             skeleton.boxGraph.endTransaction()
+            // Instruments order before the primary Output unit (index 3); relative order A before C kept.
             expect(copyA.index.getValue()).toBeLessThan(copyC.index.getValue())
-            expect(copyA.index.getValue()).toBe(2)
-            expect(copyC.index.getValue()).toBe(3)
+            expect(copyA.index.getValue()).toBe(1)
+            expect(copyC.index.getValue()).toBe(2)
             verifyContiguousIndices(skeleton)
         })
 

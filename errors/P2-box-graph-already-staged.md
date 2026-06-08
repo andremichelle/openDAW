@@ -1,9 +1,9 @@
 # Box-graph already-staged
 
-- **status:** OPEN · **priority:** P2
+- **status:** OPEN (mechanism identified, NOT reproducible; deferred) · **priority:** P2
 - **occurrences:** 2 · **ids:** [662, 903]
-- **assessment:** graph.ts:140 assert; box staged twice (load/import/collab race or duplicate UUID).
-- **action:** Reproduce import/restore; dedupe staging / guard re-add.
+- **assessment:** `BoxGraph.stageBox` `#boxes.add` returns false inside `TransferUtils.copyBoxes` — a `createBox(name, uuid)` where `uuid = uuidMap.get(source).target` already exists in the target graph. For #903 the duplicated box is the source RootBox.
+- **action:** Deferred — see 2026-06 update. A safe idempotent-staging guard exists but could not be validated against the real report (no faithful repro); not shipped.
 
 [< back to index](error-triage.md)
 
@@ -37,3 +37,17 @@
 
 **Recommended fix:** in `TransferUtils.copyBoxes`, make staging idempotent against the target graph for ALL resources, not just `preserved`: before `targetBoxGraph.createBox(..., uuid, ...)` check `targetBoxGraph.findBox(uuid).nonEmpty()` and skip (the box already exists and should be shared/remapped). Additionally, `generateMap` must never leave a structural/singleton box (RootBox, primary AudioBus, output AudioUnit) mapped to its source UUID when the target already has its own — these should be remapped to the target skeleton's mandatory-box UUIDs or excluded from `dependencies` up front (extend the `excludeBox` predicate passed to `dependenciesOf` in `TransferAudioUnits.ts:23-30` / `TransferUtils.ts:145-148` to drop RootBox and the skeleton singletons). Do NOT soften the assert.
 - Because the exact offending dependency box is not pinned from a single report, add a low-noise diagnostic at `graph.ts:139` gated on `added === false`: capture `new Error().stack`, `box.name`, `box.address.toString()`, and whether the resident box is the same object reference, so the next occurrence names the duplicated class and the staging call site exactly.
+
+## Update (2026-06) — could not reproduce; speculative fix reverted
+
+Tried to ship the idempotent-staging guard (`if (targetBoxGraph.findBox(uuid).nonEmpty()) return` in `copyBoxes`, generalising the existing `existingPreservedUuids` skip) with a regression test, and **reverted it** because the collision could not be faithfully reproduced:
+- **Structural singletons do not enter `dependencies` from a well-formed graph.** `dependenciesOf` only follows an outgoing edge when the *target field* is a mandatory pointer target (`graph.ts` trace: `targetVertex.pointerRules.mandatory`). RootBox/primary-bus receiving fields (`audioUnits`, bus `input`) are NOT mandatory targets, so they are never pulled in. The existing `copies to target graph in cross-project scenario` test confirms a normal cross-project transfer does not collide. So #903 needs a malformed/migrated source graph (its logtail showed region-move activity) that I cannot construct.
+- A synthetic test that *forces* the source RootBox into `deps` does not reproduce the exact collision: `generateMap`'s `addMany` keeps both the collection-mapping entry (source-root→target-root) and the deps entry (source-root→fresh) for the same key, so the RootBox resolves to a fresh uuid (an extra RootBox), not the target's uuid (the collision). Not faithful.
+
+The guard is safe and correct (it only skips when the target already owns the mapped uuid), but per repro-first it was not shipped without a valid reproduction. Recommend the `graph.ts:139` `added===false` diagnostic instead, to pin the offending box + dependency-walk path on the next occurrence, then fix at source (likely a migration leaving a structural box reachable via an unexpected mandatory edge).
+
+**Tangential finds (both fixed; `TransferAudioUnits.test.ts` now 18/18 green):**
+1. `createAudioRegion` helper did not set the now-mandatory `AudioRegionBox.events`, so 5 region tests failed at source creation with "events requires an edge". Fixed the helper (`box.events.refer(ValueEventCollectionBox.create(...).owners)`).
+2. **Real `reorderAudioUnits` bug.** Its no-`insertIndex` branch placed copies via `existing.findIndex(order > maxOrder)` on an array sorted by *index*. The primary Output unit has the highest order (3) but can hold a low index, so `findIndex` returned its position and the copy was inserted before it — an ordering-inconsistent result (an instrument landing ahead of the Output unit). Fixed by sorting `existing` by `AudioUnitOrdering` before placement. Production-safe (no-op when Output is already last, which `AudioUnitFactory` always maintains); only the test's manual setup exposed it. Updated the 3 index-test expectations to the correct instruments-before-Output values.
+
+(Separately, `studio/adapters` `EnginePreferences.test.ts` has 2 pre-existing failures, unrelated to transfer.)
