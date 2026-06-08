@@ -126,8 +126,13 @@ component
       height: 100%
 
   .sponsors
+    position: relative
     display: grid
     grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr))
+    padding: 0.75rem
+
+    &::after
+      @include colors.hud-frame
 
     .sponsor
       display: flex
