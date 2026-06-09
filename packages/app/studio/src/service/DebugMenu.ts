@@ -8,6 +8,7 @@ import {StudioService} from "@/service/StudioService"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {SyncLogService} from "@/service/SyncLogService"
 import {Dialogs} from "@/ui/components/dialogs"
+import {NextcloudDebug} from "@/service/NextcloudDebug"
 
 export const createDebugMenu = (service: StudioService) => MenuItem.default({
     label: "Debug",
@@ -64,6 +65,8 @@ export const createDebugMenu = (service: StudioService) => MenuItem.default({
     }).setTriggerProcedure(() => service.panicEngine()),
     MenuItem.default({label: "List Supported Codecs...", separatorBefore: true})
         .setTriggerProcedure(() => CodecsUtils.listSupportedCodecs()),
+    MenuItem.default({label: "Validate Nextcloud Access...", separatorBefore: true})
+        .setTriggerProcedure(() => NextcloudDebug.validateAccess()),
     MenuItem.default({label: "Clear Local Storage", separatorBefore: true})
         .setTriggerProcedure(async () => {
             const approved = await RuntimeNotifier.approve({

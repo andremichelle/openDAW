@@ -164,11 +164,18 @@ From the openDAW dev origin's devtools console, run a `fetch` `PROPFIND` against
 If the preflight passes and the listing returns, the whole approach is proven end to end. Do
 not write feature code before this succeeds.
 
-### Step 4: Transport (`NextcloudHandler implements CloudHandler`)
-WebDAV over `fetch` (`PUT`/`GET`/`PROPFIND`/`DELETE`, auto-`MKCOL` parents). Add `"Nextcloud"`
-to `CloudService` and a credential dialog (server URL + user + app password) in
-`CloudAuthManager`. Follow project rules (`Promises.tryCatch`, lib-std `Option`, no `as any`).
-Ship a throwaway upload/download/list test to prove it.
+### ✅ Step 4: Transport (`NextcloudHandler implements CloudHandler`)
+Done: `packages/studio/core/src/cloud/NextcloudHandler.ts`, WebDAV over `fetch`
+(`PUT`/`GET`/`PROPFIND`/`DELETE`, auto-`MKCOL` parents, 404 -> `Errors.FileNotFound`, multistatus
+parsed via `DOMParser`), constructed from `{baseUrl, username, appPassword}` with Basic auth.
+Exported from `cloud/index.ts`. **Verified** by a debug-menu entry **"Validate Nextcloud
+Access..."** (`packages/app/studio/src/service/NextcloudDebug.tsx`): prompts for credentials,
+then runs a live connect -> upload -> download (byte-verified) -> list -> delete round-trip and
+reports the result.
+
+Deferred to Step 6 (belongs with the persisted connection UI, not a one-off dialog): adding
+`"Nextcloud"` to `CloudService` and a `CloudAuthManager` branch. The debug entry constructs the
+handler directly, so the transport is fully exercised without that wiring.
 
 ### Step 5: Shared-folder sync
 New module implementing §4 (read/write `index.json`, exists-then-upload assets, open downloads
