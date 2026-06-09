@@ -110,15 +110,15 @@ const StatsBody = ({lifecycle, data: rawData, tiles}: StatsBodyProps) => {
                 factory={() => fetchLatencyStats()}
                 loading={() => null}
                 failure={() => null}
-                success={({distribution, unsupported}: LatencyStats) => {
+                success={({distribution, unsupported, total}: LatencyStats) => {
                     latencySeries.setValue(distribution)
-                    const parts = ["1 ms buckets"]
-                    if (unsupported > 0) {parts.push(`${unsupported} unsupported`)}
+                    const parts = [`${formatNumber(total)} measurements`]
+                    if (unsupported > 0) {parts.push(`${formatNumber(unsupported)} unsupported`)}
                     const subtitle = parts.join(" · ")
                     return (
                         <Card title="Audio Output Latency" accent={<span>{subtitle}</span>} className="compact">
                             <BarChart lifecycle={lifecycle} series={latencySeries} color={Colors.cream.toString()}
-                                      peakLabels={true}/>
+                                      peakLabels={true} unit="%"/>
                         </Card>
                     )
                 }}

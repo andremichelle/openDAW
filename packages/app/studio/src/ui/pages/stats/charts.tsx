@@ -11,6 +11,7 @@ type ChartProps = {
     showAxis?: boolean
     showTrend?: boolean
     peakLabels?: boolean
+    unit?: string
 }
 
 const DEFAULT_PADDING = {top: 16, right: 16, bottom: 28, left: 40}
@@ -145,7 +146,7 @@ export const LineChart = ({lifecycle, series, color, showAxis = true, showTrend 
     )
 }
 
-export const BarChart = ({lifecycle, series, color, showAxis = true, peakLabels = false}: ChartProps) => {
+export const BarChart = ({lifecycle, series, color, showAxis = true, peakLabels = false, unit = ""}: ChartProps) => {
     const accent = color ?? Colors.purple.toString()
     const padding = showAxis ? DEFAULT_PADDING : COMPACT_PADDING
     return (
@@ -202,7 +203,7 @@ export const BarChart = ({lifecycle, series, color, showAxis = true, peakLabels 
                                               stroke={"rgba(255, 255, 255, 0.2)"} stroke-width="1" stroke-opacity="0.4"/>
                                         <text x={`${padding.left - 6}`} y={`${y + 4}`}
                                               fill={Colors.shadow.toString()} font-size="10"
-                                              font-family="sans-serif" text-anchor="end">{value}</text>
+                                              font-family="sans-serif" text-anchor="end">{value}{unit}</text>
                                     </Frag>
                                 )
                             })
