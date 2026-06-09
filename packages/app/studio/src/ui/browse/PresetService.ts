@@ -10,6 +10,7 @@ import {
     Option,
     panic,
     RuntimeNotifier,
+    Strings,
     UUID
 } from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
@@ -705,6 +706,33 @@ export class PresetService {
         })
     }
 
+    async duplicatePreset(entry: PresetEntry): Promise<void> {
+        if (entry.source !== "user") {return}
+        const loaded = await Promises.tryCatch(PresetStorage.load(UUID.parse(entry.uuid)))
+        if (loaded.status === "rejected") {
+            await RuntimeNotifier.info({headline: "Could Not Load Preset", message: String(loaded.error)})
+            return
+        }
+        const {source: _source, ...meta} = entry
+        const now = Date.now()
+        await PresetStorage.save({
+            ...meta,
+            uuid: UUID.toString(UUID.generate()),
+            name: Strings.getUniqueName(this.#existingUserNamesFor(meta), entry.name),
+            created: now,
+            modified: now
+        }, loaded.value)
+    }
+
+    // User preset names within the same category and device as the given meta —
+    // the slice the browser groups together, used to derive a unique copy name.
+    #existingUserNamesFor(meta: PresetMeta): ReadonlyArray<string> {
+        const deviceKey = deviceKeyOf(meta)
+        return this.userIndex.getValue()
+            .filter(preset => preset.category === meta.category && deviceKeyOf(preset) === deviceKey)
+            .map(preset => preset.name)
+    }
+
     async loadBundleFromDisk(): Promise<void> {
         const opened = await Promises.tryCatch(Files.open({types: [FilePickerAcceptTypes.PresetBundleFileType]}))
         if (opened.status === "rejected") {return}
@@ -716,6 +744,19 @@ export class PresetService {
             return
         }
         const {meta, data} = decoded.value
+        const existing = await PresetStorage.readIndex()
+        if (existing.some(entry => entry.uuid === meta.uuid)) {
+            const choice = await Promises.tryCatch(PresetDialogs.showPresetConflictDialog(meta.name))
+            if (choice.status === "rejected") {return}
+            if (choice.value === "copy") {
+                await PresetStorage.save({
+                    ...meta,
+                    uuid: UUID.toString(UUID.generate()),
+                    name: Strings.getUniqueName(this.#existingUserNamesFor(meta), meta.name)
+                }, data)
+                return
+            }
+        }
         await PresetStorage.save(meta, data)
     }
 

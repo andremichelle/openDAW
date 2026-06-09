@@ -26,6 +26,8 @@ export const PresetItem = ({entry, presetService, lifecycle}: Construct): HTMLEl
             parent.addMenuItem(
                 MenuItem.default({label: "Edit…"})
                     .setTriggerProcedure(() => presetService.editPreset(entry).catch(console.warn)),
+                MenuItem.default({label: "Duplicate"})
+                    .setTriggerProcedure(() => presetService.duplicatePreset(entry).catch(console.warn)),
                 ...(canUpload ? [MenuItem.default({label: "Upload"})
                     .setTriggerProcedure(() => presetService.uploadPreset(entry).catch(console.warn))] : []),
                 MenuItem.default({label: "Delete"})

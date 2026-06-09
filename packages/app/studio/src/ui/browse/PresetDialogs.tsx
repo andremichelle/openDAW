@@ -234,4 +234,47 @@ export namespace PresetDialogs {
         dialog.showModal()
         return promise
     }
+
+    export type ConflictChoice = "override" | "copy"
+
+    export const showPresetConflictDialog = async (name: string): Promise<ConflictChoice> => {
+        const {resolve, reject, promise} = Promise.withResolvers<ConflictChoice>()
+        const dialog: HTMLDialogElement = (
+            <Dialog headline="Preset Already Exists"
+                    icon={IconSymbol.Box}
+                    cancelable={true}
+                    buttons={[
+                        {
+                            text: "Cancel",
+                            onClick: handler => {
+                                reject(Errors.AbortError)
+                                handler.close()
+                            }
+                        },
+                        {
+                            text: "Override",
+                            onClick: handler => {
+                                resolve("override")
+                                handler.close()
+                            }
+                        },
+                        {
+                            text: "Copy",
+                            primary: true,
+                            onClick: handler => {
+                                resolve("copy")
+                                handler.close()
+                            }
+                        }
+                    ]}>
+                <div style={{padding: "1em 0", minWidth: "20em", color: Colors.dark.toString()}}>
+                    A preset with the same id as '{name}' already exists. Override it, or import as a copy?
+                </div>
+            </Dialog>
+        )
+        dialog.oncancel = () => reject(Errors.AbortError)
+        Surface.get().flyout.appendChild(dialog)
+        dialog.showModal()
+        return promise
+    }
 }

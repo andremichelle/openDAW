@@ -20,16 +20,17 @@ export namespace Strings {
         return buffer
     }
 
+    // Returns desiredName if free, otherwise appends/increments a numeric suffix
+    // until unique. A trailing " <number>" in desiredName is treated as the
+    // counter, so getUniqueName(["Foo 2"], "Foo 2") yields "Foo 3", not "Foo 2 2".
     export const getUniqueName = (existingNames: ReadonlyArray<string>, desiredName: string): string => {
-        const existingSet = new Set(existingNames)
-        let test = desiredName
-        let counter = 1
-        if (existingSet.has(desiredName) || existingSet.has(`${desiredName} 1`)) {
-            counter = 2
-        } else {
-            return desiredName
-        }
-        while (existingSet.has(test = `${desiredName} ${counter++}`)) {}
-        return test
+        const existing = new Set(existingNames)
+        if (!existing.has(desiredName)) {return desiredName}
+        const match = desiredName.match(/^(.*\S)\s+(\d+)$/)
+        const base = isDefined(match) ? match[1] : desiredName
+        let counter = isDefined(match) ? parseInt(match[2], 10) + 1 : 2
+        let candidate = `${base} ${counter}`
+        while (existing.has(candidate)) {candidate = `${base} ${++counter}`}
+        return candidate
     }
 }
