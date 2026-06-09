@@ -207,25 +207,25 @@ export class ProjectProfile {
 
     #writeMetaFields(box: ProjectMetaBox): void {
         const meta = this.#meta
-        box.projectName.setValue(meta.name)
-        box.artist.setValue(meta.artist)
-        box.description.setValue(meta.description)
-        box.tagList.setValue(JSON.stringify(meta.tags))
+        box.projectName.setValue(meta.name ?? "")
+        box.artist.setValue(meta.artist ?? "")
+        box.description.setValue(meta.description ?? "")
+        box.tagList.setValue(JSON.stringify(meta.tags ?? []))
         box.notepad.setValue(meta.notepad ?? "")
-        box.created.setValue(meta.created)
-        box.modified.setValue(meta.modified)
+        box.created.setValue(meta.created ?? "")
+        box.modified.setValue(meta.modified ?? "")
     }
 
     #writeMetaField<KEY extends keyof ProjectMeta>(box: ProjectMetaBox, key: KEY): void {
         const meta = this.#meta
         switch (key) {
-            case "name": return box.projectName.setValue(meta.name)
-            case "artist": return box.artist.setValue(meta.artist)
-            case "description": return box.description.setValue(meta.description)
-            case "tags": return box.tagList.setValue(JSON.stringify(meta.tags))
+            case "name": return box.projectName.setValue(meta.name ?? "")
+            case "artist": return box.artist.setValue(meta.artist ?? "")
+            case "description": return box.description.setValue(meta.description ?? "")
+            case "tags": return box.tagList.setValue(JSON.stringify(meta.tags ?? []))
             case "notepad": return box.notepad.setValue(meta.notepad ?? "")
-            case "created": return box.created.setValue(meta.created)
-            case "modified": return box.modified.setValue(meta.modified)
+            case "created": return box.created.setValue(meta.created ?? "")
+            case "modified": return box.modified.setValue(meta.modified ?? "")
         }
     }
 
