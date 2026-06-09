@@ -11,32 +11,38 @@ type PresetCommon = {
     hasTimeline?: boolean
 }
 
+export const CATEGORIES = [
+    "instrument", "audio-effect", "midi-effect", "audio-unit", "audio-effect-chain", "midi-effect-chain"
+] as const
+
+export type PresetCategory = typeof CATEGORIES[number]
+
 export type InstrumentPresetMeta = PresetCommon & {
-    category: "instrument"
+    category: typeof CATEGORIES[0]
     device: InstrumentFactories.Keys
 }
 
 export type AudioEffectPresetMeta = PresetCommon & {
-    category: "audio-effect"
+    category: typeof CATEGORIES[1]
     device: EffectFactories.AudioEffectKeys
 }
 
 export type MidiEffectPresetMeta = PresetCommon & {
-    category: "midi-effect"
+    category: typeof CATEGORIES[2]
     device: EffectFactories.MidiEffectKeys
 }
 
 export type RackPresetMeta = PresetCommon & {
-    category: "audio-unit"
+    category: typeof CATEGORIES[3]
     instrument: InstrumentFactories.Keys
 }
 
 export type AudioEffectChainPresetMeta = PresetCommon & {
-    category: "audio-effect-chain"
+    category: typeof CATEGORIES[4]
 }
 
 export type MidiEffectChainPresetMeta = PresetCommon & {
-    category: "midi-effect-chain"
+    category: typeof CATEGORIES[5]
 }
 
 export type PresetMeta =
@@ -47,8 +53,6 @@ export type PresetMeta =
     | AudioEffectChainPresetMeta
     | MidiEffectChainPresetMeta
 
-export type PresetCategory = PresetMeta["category"]
-
 export type PresetSource = "stock" | "user"
 
-export type PresetEntry = PresetMeta & {source: PresetSource}
+export type PresetEntry = PresetMeta & { source: PresetSource }

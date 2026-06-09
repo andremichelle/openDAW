@@ -51,10 +51,10 @@ export const populateStudioMenu = (service: StudioService) => {
                                 .setTriggerProcedure(() => service.soundfontService.browse(true)),
                             MenuItem.default({label: "Project Bundle..."})
                                 .setTriggerProcedure(() => service.importBundle()),
+                            MenuItem.default({label: "Preset Bundle..."})
+                                .setTriggerProcedure(() => service.importPreset().then(EmptyExec)),
                             MenuItem.default({label: "DAWproject..."})
-                                .setTriggerProcedure(() => service.importDawproject().then(EmptyExec, EmptyExec)),
-                            MenuItem.default({label: "Preset..."})
-                                .setTriggerProcedure(() => service.importPreset().then(EmptyExec))
+                                .setTriggerProcedure(() => service.importDawproject().then(EmptyExec, EmptyExec))
                         )),
                     MenuItem.default({label: "Export", selectable: service.hasProfile})
                         .setRuntimeChildrenProcedure(parent => parent.addMenuItem(

@@ -13,16 +13,19 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
+import {Files} from "@opendaw/lib-dom"
 import {Box, IndexedBox} from "@opendaw/lib-box"
 import {DeviceBoxAdapter, DeviceBoxUtils, Devices, EffectDeviceBoxAdapter, InstrumentFactories, PresetDecoder, PresetEncoder, PresetHeader} from "@opendaw/studio-adapters"
 import {
     AudioEffectChainPresetMeta,
     AudioEffectPresetMeta,
     EffectFactories,
+    FilePickerAcceptTypes,
     InstrumentPresetMeta,
     MidiEffectChainPresetMeta,
     MidiEffectPresetMeta,
     OpenPresetAPI,
+    PresetBundle,
     PresetCategory,
     PresetEntry,
     PresetMeta,
@@ -684,6 +687,36 @@ export class PresetService {
         })
         if (!approved) {return}
         await PresetStorage.remove(UUID.parse(entry.uuid))
+    }
+
+    async savePresetToDisk(entry: PresetEntry): Promise<void> {
+        if (entry.source !== "user") {return}
+        const loaded = await Promises.tryCatch(PresetStorage.load(UUID.parse(entry.uuid)))
+        if (loaded.status === "rejected") {
+            await RuntimeNotifier.info({headline: "Could Not Load Preset", message: String(loaded.error)})
+            return
+        }
+        const {source: _source, ...meta} = entry
+        const bundle = await Promises.tryCatch(PresetBundle.encode(meta, loaded.value))
+        if (bundle.status === "rejected") {return}
+        await Files.save(bundle.value, {
+            suggestedName: `${entry.name}.opb`,
+            types: [FilePickerAcceptTypes.PresetBundleFileType]
+        })
+    }
+
+    async loadBundleFromDisk(): Promise<void> {
+        const opened = await Promises.tryCatch(Files.open({types: [FilePickerAcceptTypes.PresetBundleFileType]}))
+        if (opened.status === "rejected") {return}
+        const file = opened.value.at(0)
+        if (isAbsent(file)) {return}
+        const decoded = await Promises.tryCatch(PresetBundle.decode(await file.arrayBuffer()))
+        if (decoded.status === "rejected") {
+            await RuntimeNotifier.info({headline: "Could Not Load Preset", message: String(decoded.error)})
+            return
+        }
+        const {meta, data} = decoded.value
+        await PresetStorage.save(meta, data)
     }
 
     #audioUnitBoxForInstrumentUuid(uuid: UUID.String): Nullable<AudioUnitBox> {

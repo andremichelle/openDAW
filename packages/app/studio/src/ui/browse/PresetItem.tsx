@@ -29,7 +29,9 @@ export const PresetItem = ({entry, presetService, lifecycle}: Construct): HTMLEl
                 ...(canUpload ? [MenuItem.default({label: "Upload"})
                     .setTriggerProcedure(() => presetService.uploadPreset(entry).catch(console.warn))] : []),
                 MenuItem.default({label: "Delete"})
-                    .setTriggerProcedure(() => presetService.deletePreset(entry).catch(console.warn))
+                    .setTriggerProcedure(() => presetService.deletePreset(entry).catch(console.warn)),
+                MenuItem.default({label: "Save to Disk…", separatorBefore: true})
+                    .setTriggerProcedure(() => presetService.savePresetToDisk(entry).catch(console.warn))
             )
         })
         : null
