@@ -1,11 +1,12 @@
 import {createElement} from "@opendaw/lib-jsx"
 import {Errors, panic, RuntimeNotifier} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
-import {NextcloudCredentials, NextcloudHandler} from "@opendaw/studio-core"
+import {NextcloudCredentials, NextcloudHandler, SharedFolderSync} from "@opendaw/studio-core"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Dialog} from "@/ui/components/Dialog"
 import {Surface} from "@/ui/surface/Surface"
 import {Dialogs} from "@/ui/components/dialogs"
+import type {StudioService} from "@/service/StudioService"
 
 export namespace NextcloudDebug {
     export const validateAccess = async (): Promise<void> => {
@@ -36,6 +37,35 @@ export namespace NextcloudDebug {
             })
         } else {
             await RuntimeNotifier.info({headline: "Nextcloud access failed", message: String(result.error)})
+        }
+    }
+
+    export const validateSharedFolder = async (service: StudioService): Promise<void> => {
+        if (!service.hasProfile) {
+            await RuntimeNotifier.info({headline: "Nextcloud", message: "Open or create a project first."})
+            return
+        }
+        const credentials = await Promises.tryCatch(showCredentialsDialog())
+        if (credentials.status === "rejected") {return}
+        const handler = new NextcloudHandler(credentials.value)
+        const profile = service.profile
+        const notifier = RuntimeNotifier.progress({headline: "Nextcloud Shared Folder", message: "Saving project..."})
+        const result = await Promises.tryCatch((async () => {
+            await SharedFolderSync.saveProject(handler, profile, () => {})
+            notifier.message = "Listing shared projects..."
+            const listing = await SharedFolderSync.listProjects(handler)
+            notifier.message = "Re-opening project..."
+            const reopened = await SharedFolderSync.openProject(service, handler, profile.uuid, () => {})
+            return {count: listing.length, name: reopened.meta.name}
+        })())
+        notifier.terminate()
+        if (result.status === "resolved") {
+            await RuntimeNotifier.info({
+                headline: "Shared folder OK",
+                message: `Saved project + deduplicated assets.\nCatalog holds ${result.value.count} project(s); re-opened "${result.value.name}".`
+            })
+        } else {
+            await RuntimeNotifier.info({headline: "Shared folder failed", message: String(result.error)})
         }
     }
 

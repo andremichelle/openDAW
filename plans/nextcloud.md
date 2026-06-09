@@ -177,9 +177,20 @@ Deferred to Step 6 (belongs with the persisted connection UI, not a one-off dial
 `"Nextcloud"` to `CloudService` and a `CloudAuthManager` branch. The debug entry constructs the
 handler directly, so the transport is fully exercised without that wiring.
 
-### Step 5: Shared-folder sync
-New module implementing §4 (read/write `index.json`, exists-then-upload assets, open downloads
-only missing assets). Reuse encode/decode from `ProjectBundle.ts` / `CloudBackupSamples.ts`.
+### Step 5: Shared-folder sync (implemented, verify in-app)
+Done: `packages/studio/core/src/cloud/SharedFolderSync.ts` (exported from `cloud/index.ts`).
+Implements §4 against a `CloudHandler`:
+- `saveProject(handler, profile, progress)` -> uploads `projects/<uuid>/{project.od,meta.json,
+  image.bin}`, enumerates the project's `AudioFileBox`/`SoundfontFileBox` references, and
+  **exists-then-upload** dedup uploads each asset once into `assets/samples/<uuid>/` and
+  `assets/soundfonts/<uuid>/` (waits on the sample/soundfont loader, then copies the OPFS files,
+  same convention as `ProjectBundle`). Updates `index.json` catalog.
+- `listProjects(handler)` -> reads `index.json` into `{uuid, meta}` entries.
+- `openProject(env, handler, uuid, progress)` -> downloads `project.od`, decodes it, and
+  downloads **only the assets missing from local OPFS**, returns a `ProjectProfile`.
+Verify with a new debug-menu entry **"Sync Project to Nextcloud..."**
+(`NextcloudDebug.validateSharedFolder`): saves the active project, lists the catalog, re-opens
+it, and reports. Type-checks clean; not yet run in-app.
 
 ### Step 6: UI
 "Open from / Save to Nextcloud" in `StudioMenu.ts`, plus the connection dialog and an
