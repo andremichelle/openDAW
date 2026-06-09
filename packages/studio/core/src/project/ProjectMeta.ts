@@ -1,4 +1,4 @@
-import {JSONValue} from "@opendaw/lib-std"
+import {isDefined, JSONValue} from "@opendaw/lib-std"
 
 export type ProjectMeta = {
     name: string
@@ -23,4 +23,11 @@ export namespace ProjectMeta {
     })
 
     export const copy = (meta: ProjectMeta): ProjectMeta => Object.assign({}, meta)
+
+    // Stored meta from older projects can lack fields (e.g. artist). A bare cast leaves them undefined,
+    // which later writes undefined into ProjectMetaBox StringFields and breaks serialization. Merge over defaults.
+    export const fromJSON = (json: JSONValue): ProjectMeta => {
+        if (!isDefined(json) || typeof json !== "object" || Array.isArray(json)) {return init()}
+        return Object.assign(init(), json) as ProjectMeta
+    }
 }

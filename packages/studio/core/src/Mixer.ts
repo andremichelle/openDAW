@@ -17,12 +17,14 @@ interface ChannelStripState {
 
 export class Mixer implements Terminable {
     readonly #terminator: Terminator = new Terminator()
+    readonly #audioUnits: IndexedBoxAdapterCollection<AudioUnitBoxAdapter, Pointers.AudioUnits>
     readonly #states: SortedSet<UUID.Bytes, ChannelStripState>
     readonly #solo: Set<AudioUnitBoxAdapter>
     readonly #virtualSolo: Set<AudioUnitBoxAdapter>
     readonly #deferUpdate: DeferExec
 
     constructor(audioUnits: IndexedBoxAdapterCollection<AudioUnitBoxAdapter, Pointers.AudioUnits>) {
+        this.#audioUnits = audioUnits
         this.#states = UUID.newSet(({adapter: {uuid}}) => uuid)
         this.#solo = new Set()
         this.#virtualSolo = new Set()
@@ -53,6 +55,10 @@ export class Mixer implements Terminable {
                 })
             },
             onRemove: (adapter: AudioUnitBoxAdapter) => {
+                if (adapter.isOutput) {
+                    console.warn(`[Mixer] OUTPUT unit ${UUID.toString(adapter.uuid)} removed from rootBox.audioUnits`,
+                        new Error().stack)
+                }
                 this.#solo.delete(adapter)
                 this.#states.removeByKey(adapter.uuid).subscription.terminate()
                 this.#deferUpdate.request()
@@ -69,8 +75,11 @@ export class Mixer implements Terminable {
         // the mixer panel (rootBox.audioUnits catchup) and DevicePanel (deviceHost.audioUnitBoxAdapter()).
         const optState = this.#states.opt(uuid)
         if (optState.isEmpty()) {
+            const inCollection = this.#audioUnits.getAdapterById(uuid).nonEmpty()
+            const collectionEdge = adapter.box.collection.targetVertex.mapOr(vertex => vertex.address.toString(), "EMPTY")
             return panic(`Mixer has no channel-strip state for audio-unit ${UUID.toString(uuid)} `
-                + `(type=${adapter.type}, attached=${adapter.box.isAttached()}, states=${this.#states.size()}); `
+                + `(type=${adapter.type}, attached=${adapter.box.isAttached()}, states=${this.#states.size()}, `
+                + `inCollection=${inCollection}, collectionEdge=${collectionEdge}); `
                 + `requested for a unit absent from rootBox.audioUnits`)
         }
         const {views} = optState.unwrap("mixer-state")
