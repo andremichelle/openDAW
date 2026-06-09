@@ -207,7 +207,7 @@ export const fetchErrorStats = async (): Promise<ErrorStats> => {
     return stats
 }
 
-export type LatencyStats = { distribution: DailySeries, unsupported: number }
+export type LatencyStats = { distribution: DailySeries, unsupported: number, total: number }
 
 const LATENCY_OVERFLOW_MS = 50
 
@@ -222,14 +222,16 @@ export const fetchLatencyStats = async (): Promise<LatencyStats> => {
         if (!(ms > 0)) continue
         if (ms >= LATENCY_OVERFLOW_MS) {overflow += count} else {buckets.set(ms, count)}
     }
-    if (buckets.size === 0 && overflow === 0) return {distribution: [], unsupported}
+    const total = overflow + [...buckets.values()].reduce((sum, count) => sum + count, 0)
+    if (total === 0) return {distribution: [], unsupported, total: 0}
     const minMs = buckets.size === 0 ? 1 : Math.min(...buckets.keys())
-    const distribution: Array<readonly [string, number]> = []
+    const counts: Array<readonly [string, number]> = []
     for (let ms = minMs; ms < LATENCY_OVERFLOW_MS; ms++) {
-        distribution.push([`${ms}`, buckets.get(ms) ?? 0] as const)
+        counts.push([`${ms}`, buckets.get(ms) ?? 0] as const)
     }
-    distribution.push([`${LATENCY_OVERFLOW_MS}+`, overflow] as const)
-    return {distribution, unsupported}
+    counts.push([`${LATENCY_OVERFLOW_MS}+`, overflow] as const)
+    const distribution = counts.map(([label, count]) => [label, (count / total) * 100] as const)
+    return {distribution, unsupported, total}
 }
 
 export const fetchVisitorStats = async (): Promise<DailySeries> => {
