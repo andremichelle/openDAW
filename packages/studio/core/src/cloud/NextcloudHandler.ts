@@ -37,6 +37,7 @@ export class NextcloudHandler implements CloudHandler {
     async alive(): Promise<void> {
         const response = await this.#request("", {method: "PROPFIND", headers: {Depth: "0"}})
         if (response.status === 207 || response.ok) {return}
+        if (response.status === 401) {return panic("Authentication failed. Check the username and app password.")}
         return panic(`Nextcloud not reachable (${response.status})`)
     }
 
@@ -44,7 +45,7 @@ export class NextcloudHandler implements CloudHandler {
         if (data.byteLength > ChunkSize) {return this.#uploadChunked(path, data, progress)}
         await this.#ensureParents(path)
         const status = await this.#put(this.#url(path), data, {}, progress)
-        if (status < 200 || status >= 300) {return panic(`Nextcloud upload failed (${status}) for '${path}'`)}
+        if (status < 200 || status >= 300) {return panic(NextcloudHandler.#uploadError(status, path))}
         progress?.(1.0)
     }
 
@@ -65,7 +66,7 @@ export class NextcloudHandler implements CloudHandler {
             const name = String(index + 1).padStart(5, "0")
             const status = await this.#put(`${session}/${name}`, data.slice(start, end), {Destination: destination},
                 (fraction: unitValue) => progress?.((start + fraction * (end - start)) / total))
-            if (status < 200 || status >= 300) {return panic(`Nextcloud chunk upload failed (${status}) for '${path}'`)}
+            if (status < 200 || status >= 300) {return panic(NextcloudHandler.#uploadError(status, path))}
         }
         const assembled = await this.#fetch(`${session}/.file`,
             {method: "MOVE", headers: {Destination: destination, "OC-Total-Length": String(total)}})
@@ -86,22 +87,30 @@ export class NextcloudHandler implements CloudHandler {
     #putOnce(url: string, data: ArrayBuffer, headers: Record<string, string>,
              progress?: Progress.Handler): Promise<number> {
         const {promise, resolve, reject} = Promise.withResolvers<number>()
+        const signal = this.#signal
         const xhr = new XMLHttpRequest()
+        const onAbort = () => xhr.abort()
+        // Detach the abort listener once the request settles, so listeners do not accumulate on the
+        // shared signal across many sequential uploads.
+        const cleanup = () => {if (isDefined(signal)) {signal.removeEventListener("abort", onAbort)}}
         xhr.open("PUT", url)
         xhr.setRequestHeader("Authorization", this.#authHeader)
         for (const [key, value] of Object.entries(headers)) {xhr.setRequestHeader(key, value)}
         if (isDefined(progress)) {
             xhr.upload.onprogress = event => {if (event.lengthComputable) {progress(event.loaded / event.total)}}
         }
-        xhr.onload = () => NextcloudHandler.#isTransient(xhr.status)
-            ? reject(new Error(`Nextcloud transient status ${xhr.status} for '${url}'`))
-            : resolve(xhr.status)
-        xhr.onerror = () => reject(new Error(`Upload network error for '${url}'`))
-        xhr.onabort = () => reject(Errors.AbortError)
-        if (isDefined(this.#signal)) {
-            if (this.#signal.aborted) {xhr.abort()} else {
-                this.#signal.addEventListener("abort", () => xhr.abort(), {once: true})
+        xhr.onload = () => {
+            cleanup()
+            if (NextcloudHandler.#isTransient(xhr.status)) {
+                reject(new Error(`Nextcloud transient status ${xhr.status} for '${url}'`))
+            } else {
+                resolve(xhr.status)
             }
+        }
+        xhr.onerror = () => {cleanup(); reject(new Error(`Upload network error for '${url}'`))}
+        xhr.onabort = () => {cleanup(); reject(Errors.AbortError)}
+        if (isDefined(signal)) {
+            if (signal.aborted) {xhr.abort()} else {signal.addEventListener("abort", onAbort, {once: true})}
         }
         xhr.send(data)
         return promise
@@ -201,6 +210,12 @@ export class NextcloudHandler implements CloudHandler {
     // are transient server hiccups. All are safe to retry.
     static #isTransient(status: number): boolean {
         return status === 423 || status === 502 || status === 503 || status === 504
+    }
+
+    static #uploadError(status: number, path: string): string {
+        return status === 507
+            ? "Nextcloud storage is full (quota exceeded)."
+            : `Nextcloud upload failed (${status}) for '${path}'`
     }
 
     #url(path: string): string {

@@ -40,6 +40,11 @@ of your Nextcloud is free for other apps. Please do not rename or edit those fil
 
 Do this once for the whole school.
 
+> **Heads-up on the name:** the app you install below is called **WebAppPassword**, but despite the
+> name it has nothing to do with per-user "app passwords". It is the small bridge that lets a browser
+> app (openDAW) talk to your Nextcloud, by allowing requests from `opendaw.studio`. You install and
+> configure it once, and students never need to create any kind of app password (see Part C).
+
 1. Sign in as the admin. Click your avatar (top right), then **Apps**.
 2. Open the **Security** category, find **WebAppPassword**, then click **Download and enable**.
    If it is not listed (some locked down hosting blocks the app store), install it manually:
@@ -61,19 +66,18 @@ openDAW has a hidden tester that confirms the setup works before any student use
    **Enable Debug Menu**.
 2. A new **Debug** entry now appears in the openDAW menu. Open it and click
    **Validate Nextcloud Access...**.
-3. Enter the server URL, a username, and an app password (see Part C for how to create one), then
-   confirm. openDAW runs a connect, upload, download, list, and delete round trip and reports
-   whether it succeeded. A success message means WebAppPassword and the allowed origin are set up
-   correctly.
+3. Enter the server URL, a username, and that account's password (your admin account works fine for
+   this test), then confirm. openDAW runs a connect, upload, download, list, and delete round trip
+   and reports whether it succeeded. A success message means WebAppPassword and the allowed origin
+   are set up correctly.
 
 ---
 
 ## Part B: create a student account
 
-Repeat this for every student. Each student needs their **own** account. This is what stops one
-student from changing or deleting another student's work. A Nextcloud app password grants the full
-access of its account, so handing out different passwords for one shared account would **not**
-isolate anyone.
+Repeat this for every student. Each student needs their **own** account with their own password.
+That is what keeps one student from changing or deleting another student's work; the isolation comes
+from separate accounts, nothing in openDAW is involved.
 
 1. Sign in as the admin.
 2. Click your avatar (top right), then **Users**.
@@ -81,15 +85,18 @@ isolate anyone.
 4. Fill in:
    1. **Username** (the login name), for example `student-anna`. Keep it short, lowercase, no spaces.
    2. **Display name**, for example `Anna M.`.
-   3. **Password**. Set an initial one. The student can change it later in their own settings.
-   4. **Email** (optional). Lets the student reset their own password.
-   5. **Quota** (optional), for example `2 GB`, to cap how much each student can store.
+   3. **Password**. Set one for the student. This username and password are exactly the credentials
+      the student enters in openDAW (Part C).
+   4. **Quota** (optional), for example `2 GB`, to cap how much each student can store.
 5. Click **Add new account**.
 6. Repeat for every student.
 
 **Whole class at once:** on the **Users** page, open the {icon:MainMenu} menu (top left) and choose
 **Import accounts**, then upload a CSV file with one row per student
-(`username,displayname,password,email,quota`).
+(`username,displayname,password,quota`).
+
+The student can change this password later in their own Nextcloud settings (**avatar**, then
+**Settings**, then **Security**), if they want to or you advise them to. The username stays the same.
 
 That is all the isolation you need. Signed in as their own account, each student only ever sees and
 writes their own openDAW folder.
@@ -101,23 +108,23 @@ writes their own openDAW folder.
 Each student does this on their own computer (and again whenever they sit down at a shared computer,
 because openDAW never stores the username or password).
 
-1. Sign in to Nextcloud as your own account.
-2. Click your avatar, then **Settings**, then **Security**. Scroll to **Devices & sessions**, type a
-   name such as `openDAW`, then click **Create new app password**. Nextcloud shows a one time app
-   password. Copy it now, it is not shown again.
-3. In openDAW, open the **Nextcloud** menu, then **Browse projects...** (to open) or
+1. In openDAW, open the **Nextcloud** menu, then **Browse projects...** (to open) or
    **Upload project...** (to save the current project).
-4. In the connect dialog enter:
+2. In the connect dialog enter:
    1. **Server URL**, for example `https://nextcloud.your-school.org`.
-   2. **Username**, your login name.
-   3. **App password**, the value you copied in step 2.
-5. Click **Connect**.
+   2. **Username**, the student's Nextcloud account name (the one the admin created in Part B).
+   3. **Password**, the account password the admin set in Part B.
+3. Click **Connect**.
 
 openDAW now lists and saves projects in your own Nextcloud space. The connect dialog appears every
 time, so different students can use the same computer in turn. Only the server URL is remembered
-(to save retyping); the username and app password are never stored.
+(to save retyping); the username and password are never stored.
 
----
+**Only exception:** if an account has **two factor authentication** turned on, Nextcloud will not
+accept the normal password here. That student then creates a one time **app password** in Nextcloud
+(**avatar**, then **Settings**, then **Security**, then **Create new app password**) and uses that in
+the **Password** field. Freshly created school accounts do not have two factor login, so this rarely
+comes up.
 
 ## Using openDAW with Nextcloud
 

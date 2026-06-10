@@ -91,7 +91,8 @@ export namespace NextcloudDialogs {
         const result = await Promises.tryCatch(handler.alive())
         notifier.terminate()
         if (result.status === "rejected") {
-            await RuntimeNotifier.info({headline: "Nextcloud", message: `Could not connect: ${String(result.error)}`})
+            const reason = result.error instanceof Error ? result.error.message : String(result.error)
+            await RuntimeNotifier.info({headline: "Nextcloud", message: `Could not connect: ${reason}`})
             return false
         }
         return true
@@ -244,7 +245,7 @@ export namespace NextcloudDialogs {
                     {inputUrl}
                     <div>Username:</div>
                     {inputUser}
-                    <div>App password:</div>
+                    <div>Password:</div>
                     {inputPassword}
                 </form>
             </Dialog>

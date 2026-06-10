@@ -1,4 +1,4 @@
-import {Errors, isDefined, Option, panic, Procedure, Progress, TimeSpan, unitValue, UUID} from "@opendaw/lib-std"
+import {Errors, isDefined, Option, panic, Procedure, Progress, TimeSpan, tryCatch, unitValue, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioFileBox, SoundfontFileBox} from "@opendaw/studio-boxes"
 import {SampleLoader, SoundfontLoader} from "@opendaw/studio-adapters"
@@ -56,7 +56,18 @@ export namespace SharedFolderSync {
         if (result.status === "rejected") {
             return result.error instanceof Errors.FileNotFound ? emptyCatalog() : panic(String(result.error))
         }
-        return JSON.parse(new TextDecoder().decode(result.value)) as Catalog
+        return decodeCatalog(result.value)
+    }
+
+    // Parses index.json defensively: a malformed or unexpected shape (e.g. a missing `projects` map)
+    // degrades to an empty catalog instead of throwing and breaking browse/save/delete.
+    const decodeCatalog = (bytes: ArrayBuffer): Catalog => {
+        const parsed = tryCatch(() => JSON.parse(new TextDecoder().decode(bytes)) as Partial<Catalog>)
+        if (parsed.status === "failure") {return emptyCatalog()}
+        const value = parsed.value
+        return isDefined(value) && isDefined(value.projects)
+            ? {version: CatalogVersion, projects: value.projects}
+            : emptyCatalog()
     }
 
     export const listProjects = async (cloudHandler: CloudHandler): Promise<ReadonlyArray<Listing>> => {
@@ -123,39 +134,48 @@ export namespace SharedFolderSync {
             some: buffer => cloudHandler.upload(`${base}/${ProjectPaths.ProjectCoverFile}`, buffer)
         })
         unit = 1
-        const sharedSamples = await listShared(cloudHandler, SamplesFolder)
-        const sharedSoundfonts = await listShared(cloudHandler, SoundfontsFolder)
+        // index.json is the source of truth for what is already uploaded, so dedup against it rather
+        // than probing folders. An asset is recorded in the project entry only once it is actually
+        // present (already known, or uploaded just now); a failed upload is left out and re-attempted
+        // on the next save (self-healing), and never makes the catalog claim an asset that is not there.
+        const catalog = await readCatalog(cloudHandler)
+        const key = UUID.toString(uuid)
+        const previous = catalog.projects[key]
+        const known = collectLiveAssets(catalog)
         let failed = 0
+        const presentSamples = new Set<UUID.String>()
         for (const box of audioFileBoxes) {
             checkAbort()
             const id = UUID.toString(box.address.uuid)
             const label = `Uploading sample ${unit}/${assetCount}: ${box.fileName.getValue()}`
-            if (!sharedSamples.has(id)) {
-                const loader = project.sampleManager.getOrCreate(box.address.uuid)
-                if (!await uploadSample(cloudHandler, loader, value => report(value, label))) {
-                    failed++
-                    console.warn(`[SharedFolderSync] could not upload sample '${box.fileName.getValue()}' (${id})`)
-                }
+            if (known.samples.has(id) || presentSamples.has(id)) {
+                presentSamples.add(id)
+            } else if (await uploadSample(cloudHandler, project.sampleManager.getOrCreate(box.address.uuid),
+                value => report(value, label))) {
+                presentSamples.add(id)
+            } else {
+                failed++
+                console.warn(`[SharedFolderSync] could not upload sample '${box.fileName.getValue()}' (${id})`)
             }
             unit++
         }
+        const presentSoundfonts = new Set<UUID.String>()
         for (const box of soundfontFileBoxes) {
             checkAbort()
             const id = UUID.toString(box.address.uuid)
             const label = `Uploading soundfont ${unit}/${assetCount}: ${box.fileName.getValue()}`
-            if (!sharedSoundfonts.has(id)) {
-                const loader = project.soundfontManager.getOrCreate(box.address.uuid)
-                if (!await uploadSoundfont(cloudHandler, loader, value => report(value, label))) {
-                    failed++
-                    console.warn(`[SharedFolderSync] could not upload soundfont (${id})`)
-                }
+            if (known.soundfonts.has(id) || presentSoundfonts.has(id)) {
+                presentSoundfonts.add(id)
+            } else if (await uploadSoundfont(cloudHandler, project.soundfontManager.getOrCreate(box.address.uuid),
+                value => report(value, label))) {
+                presentSoundfonts.add(id)
+            } else {
+                failed++
+                console.warn(`[SharedFolderSync] could not upload soundfont (${id})`)
             }
             unit++
         }
         onProgress({value: 1.0, label: "Updating catalog"})
-        const catalog = await readCatalog(cloudHandler)
-        const key = UUID.toString(uuid)
-        const previous = catalog.projects[key]
         catalog.projects[key] = {
             meta: {
                 name: meta.name,
@@ -164,8 +184,8 @@ export namespace SharedFolderSync {
                 tags: meta.tags,
                 description: meta.description
             },
-            samples: audioFileBoxes.map(box => UUID.toString(box.address.uuid)),
-            soundfonts: soundfontFileBoxes.map(box => UUID.toString(box.address.uuid))
+            samples: [...presentSamples],
+            soundfonts: [...presentSoundfonts]
         }
         // Re-saving may drop an asset the project used to reference; GC it if no project keeps it alive.
         if (isDefined(previous)) {await deleteOrphans(cloudHandler, previous, collectLiveAssets(catalog))}
@@ -220,6 +240,8 @@ export namespace SharedFolderSync {
         })())
         if (result.status === "rejected") {
             console.warn(`[SharedFolderSync] sample ${UUID.toString(loader.uuid)} upload failed:`, result.error)
+            // Remove the partially-written folder so it is not mistaken for a complete asset later.
+            await Promises.tryCatch(cloudHandler.delete(remote))
         }
         return result.status === "resolved"
     }
@@ -235,6 +257,8 @@ export namespace SharedFolderSync {
         })())
         if (result.status === "rejected") {
             console.warn(`[SharedFolderSync] soundfont ${UUID.toString(loader.uuid)} upload failed:`, result.error)
+            // Remove the partially-written folder so it is not mistaken for a complete asset later.
+            await Promises.tryCatch(cloudHandler.delete(remote))
         }
         return result.status === "resolved"
     }

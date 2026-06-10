@@ -195,20 +195,26 @@ Implements §4 against a `CloudHandler`:
   image.bin}`, enumerates the project's `AudioFileBox`/`SoundfontFileBox` references, and
   uploads each asset once into `assets/samples/<uuid>/` and `assets/soundfonts/<uuid>/`
   (reads the files straight from local storage; only a sample not present locally is fetched via
-  the loader). Dedup is by a one-time listing of the shared asset folders. Updates `index.json`.
+  the loader). **Dedup uses `index.json` as the source of truth** (the union of all projects' asset
+  refs), not folder probing; an asset is recorded in the project's entry **only once it is actually
+  present** (already known or uploaded this run), so a failed upload is left out and re-attempted on
+  the next save (self-healing) and the catalog never claims an absent asset. A failed asset upload
+  also deletes its partially-written folder. Updates `index.json`.
 - `listProjects(handler)` -> reads `index.json` into `{uuid, meta}` entries.
 - `openProject(env, handler, uuid, progress)` -> downloads `project.od`, decodes it, and
   downloads **only the assets missing from local OPFS**, returns a `ProjectProfile`.
-Verified in-app via the debug-menu entry **"Sync Project to Nextcloud..."**
-(`NextcloudDebug.validateSharedFolder`): saves the active project, lists the catalog, re-opens
-it, reports. Robustness learned during testing and folded in:
+Reachable in-app via **Nextcloud > Browse projects... / Upload project...** (Step 6). The debug
+menu keeps only **"Validate Nextcloud Access..."** (`NextcloudDebug.validateAccess`), a connect ->
+upload -> download -> list -> delete round-trip into a visible `openDAW/opendaw-connection-test/`
+folder that is removed afterwards. Robustness learned during testing and folded in:
 - WebDAV PUT to a missing parent returns **404** (not 409); `NextcloudHandler.upload` retries
   after creating parents on 404/409, and caches created collections to avoid MKCOL spam.
 - Local asset presence is checked by **listing the parent folder**, not by opening the file
   (opening takes an exclusive OPFS handle that can hang when the engine holds the sample).
 - Only the library **fetch** is time-bounded (60s); uploads are not, a 57 MB soundfont
-  legitimately took ~1 min as a single PUT. Dedup **lists** the shared asset folders once rather
-  than probing each asset, to avoid a 404-per-asset in the browser console.
+  legitimately took ~1 min as a single PUT. (Dedup originally listed the shared asset folders; it
+  now uses `index.json` as the source of truth instead, see `saveProject` above. Folder listing
+  remains only for GC existence checks, `existingOrphans`.)
 - The shared project is **self-contained**: every referenced sample is materialized (library
   samples are downloaded into local storage on demand via the loader) and uploaded,
   deduplicated by UUID. A sample that cannot be materialized (e.g. the openDAW library is
@@ -257,6 +263,13 @@ aborts are never retried and surface as `AbortError`. Prompted by an intermitten
 during delete, both of which succeed on retry. Delete's orphan-asset GC (`deleteOrphans`) also lists
 each shared asset folder once and only DELETEs assets that exist, so a stale catalog reference no
 longer logs a 404.
+
+**Pre-launch hardening (review pass):** dedup now trusts `index.json` and only records present assets
+(self-healing, see Step 5); a failed asset upload deletes its partial folder; `readCatalog` parses
+defensively (malformed/missing `projects` -> empty catalog instead of throwing); `alive()` reports a
+clear message on **401** (bad credentials) and uploads report a clear message on **507** (quota
+full); the per-request abort listener in `#putOnce` is detached on settle so it cannot accumulate on
+the shared signal across a multi-asset upload.
 
 **Connection (always prompt, per-user):** `ensureConnection` **always shows** the credentials
 dialog and validates with an `alive()` check before each browse/upload, so a different Nextcloud
