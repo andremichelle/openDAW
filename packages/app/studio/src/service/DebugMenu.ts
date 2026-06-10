@@ -67,8 +67,6 @@ export const createDebugMenu = (service: StudioService) => MenuItem.default({
         .setTriggerProcedure(() => CodecsUtils.listSupportedCodecs()),
     MenuItem.default({label: "Validate Nextcloud Access...", separatorBefore: true})
         .setTriggerProcedure(() => NextcloudDebug.validateAccess()),
-    MenuItem.default({label: "Sync Project to Nextcloud...", selectable: service.hasProfile})
-        .setTriggerProcedure(() => NextcloudDebug.validateSharedFolder(service)),
     MenuItem.default({label: "Clear Local Storage", separatorBefore: true})
         .setTriggerProcedure(async () => {
             const approved = await RuntimeNotifier.approve({

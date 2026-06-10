@@ -30,10 +30,11 @@ export namespace NextcloudDialogs {
         const credentials = await ensureConnection()
         if (credentials.isEmpty()) {return}
         const handler = new NextcloudHandler(credentials.unwrap())
+        const {username} = credentials.unwrap()
         // Deleting a project tears down the browse dialog (the delete-progress dialog clears the
         // flyout), so the browser asks us to recreate it. Loop until the user selects or cancels.
         const loop = async (): Promise<void> => {
-            const result = await Promises.tryCatch(showBrowseDialog(handler))
+            const result = await Promises.tryCatch(showBrowseDialog(handler, username))
             if (result.status === "rejected") {return}
             if (result.value.type === "reopen") {return loop()}
             await openProject(service, credentials.unwrap(), result.value.listing)
@@ -176,17 +177,17 @@ export namespace NextcloudDialogs {
         return promise
     }
 
-    const showBrowseDialog = async (cloudHandler: NextcloudHandler): Promise<BrowseResult> => {
+    const showBrowseDialog = async (cloudHandler: NextcloudHandler, username: string): Promise<BrowseResult> => {
         const {resolve, reject, promise} = Promise.withResolvers<BrowseResult>()
         const lifecycle = new Terminator()
         const dialog: HTMLDialogElement = (
             <Dialog headline="Open from Nextcloud"
-                    icon={IconSymbol.FileList}
+                    icon={IconSymbol.Nextcloud}
                     onCancel={() => reject(Errors.AbortError)}
                     buttons={[{text: "Cancel", onClick: dialogHandler => dialogHandler.close()}]}
                     cancelable={true} style={{height: "30em"}}>
                 <div style={{height: "2em"}}/>
-                <NextcloudBrowser lifecycle={lifecycle} handler={cloudHandler}
+                <NextcloudBrowser lifecycle={lifecycle} handler={cloudHandler} username={username}
                                   select={listing => {resolve({type: "select", listing}); dialog.close()}}
                                   reopen={() => {resolve({type: "reopen"}); dialog.close()}}/>
             </Dialog>

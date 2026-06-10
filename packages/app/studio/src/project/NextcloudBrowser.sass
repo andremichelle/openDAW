@@ -3,7 +3,7 @@ component
   padding: 0 0 0 0.25em
   display: grid
   grid-template-columns: 1fr auto auto
-  grid-template-rows: auto auto auto 1fr
+  grid-template-rows: auto auto auto auto 1fr
   column-gap: 1em
   overflow: hidden
   position: relative
@@ -16,6 +16,19 @@ component
     column-gap: 4px
     margin-bottom: 8px
     grid-column: 1 / -1
+
+  div.user
+    font-size: 14px
+    display: flex
+    align-items: center
+    column-gap: 0.4em
+    color: var(--color-orange)
+    grid-column: 1 / -1
+    padding: 0 6px 10px 4px
+
+    .icon
+      width: 1.1em
+      height: 1.1em
 
   div.info
     font-size: 11px

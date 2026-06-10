@@ -25,6 +25,7 @@ const className = Html.adoptStyleSheet(css, "NextcloudBrowser")
 type Construct = {
     lifecycle: Lifecycle
     handler: CloudHandler
+    username: string
     select: Procedure<SharedFolderSync.Listing>
     // Called after deletion (which tears this dialog down) so the host can recreate the browser.
     reopen: Exec
@@ -32,7 +33,7 @@ type Construct = {
 
 const plural = (count: number, noun: string): string => count === 1 ? noun : `${noun}s`
 
-export const NextcloudBrowser = ({lifecycle, handler, select, reopen}: Construct) => {
+export const NextcloudBrowser = ({lifecycle, handler, username, select, reopen}: Construct) => {
     const now = new Date().getTime()
     const filter = new DefaultObservableValue("")
     return (
@@ -40,6 +41,7 @@ export const NextcloudBrowser = ({lifecycle, handler, select, reopen}: Construct
             <div className="filter">
                 <SearchInput lifecycle={lifecycle} model={filter} style={{gridColumn: "1 / -1"}}/>
             </div>
+            <div className="user"><Icon symbol={IconSymbol.UserFolder} className="icon"/>{username}</div>
             <Await factory={() => SharedFolderSync.readCatalog(handler)}
                    loading={() => (<div className="loader"><ThreeDots/></div>)}
                    failure={({reason, retry}) => (

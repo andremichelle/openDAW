@@ -1,8 +1,21 @@
 # {icon:Nextcloud} Nextcloud
 
+## What is Nextcloud?
+
+[Nextcloud](https://nextcloud.com) is free, open source software for your own private cloud. Think
+of it as a self hosted alternative to Dropbox or Google Drive: it runs on a server you (or your
+school) control, gives every person their own account, and stores files you can reach from any
+device.
+
+A school typically runs one Nextcloud for many classes and students. The administrator creates an
+account per student, and openDAW connects to each account to store that student's projects.
+
+## How openDAW uses it
+
 openDAW can read and write your projects directly in a **Nextcloud** instance you control, using
-**WebDAV**. Samples and soundfonts are stored once in a shared `assets/` folder and reused across
-projects, so they are never uploaded twice.
+**WebDAV** (the standard protocol Nextcloud speaks for file access). Samples and soundfonts are
+stored once in a shared `assets/` folder and reused across projects, so they are never uploaded
+twice.
 
 openDAW talks to your Nextcloud straight from the browser. Your files and credentials never pass
 through an openDAW server.
@@ -39,6 +52,19 @@ Do this once for the whole school.
    ```php
    'webapppassword.origins' => ['https://opendaw.studio'],
    ```
+
+### Test the connection (optional)
+
+openDAW has a hidden tester that confirms the setup works before any student uses it.
+
+1. In openDAW, open the menu, then **Preferences**, open the **Debug** section, and turn on
+   **Enable Debug Menu**.
+2. A new **Debug** entry now appears in the openDAW menu. Open it and click
+   **Validate Nextcloud Access...**.
+3. Enter the server URL, a username, and an app password (see Part C for how to create one), then
+   confirm. openDAW runs a connect, upload, download, list, and delete round trip and reports
+   whether it succeeded. A success message means WebAppPassword and the allowed origin are set up
+   correctly.
 
 ---
 
