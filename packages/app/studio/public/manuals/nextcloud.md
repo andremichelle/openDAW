@@ -116,6 +116,12 @@ because openDAW never stores the username or password).
    3. **Password**, the account password the admin set in Part B.
 3. Click **Connect**.
 
+For normal use that is all: openDAW stores everything in your own account. The only extra option is
+a **Folder** field under **Advanced** in the dialog; leave it untouched unless your school uses the
+shared-classroom (Group Folder) setup, where each student enters their assigned path (e.g.
+`Classroom/anna`). Setting a folder by mistake just puts your projects in a different sub-folder, so
+leave it empty if unsure.
+
 openDAW now lists and saves projects in your own Nextcloud space. The connect dialog appears every
 time, so different students can use the same computer in turn. Only the server URL is remembered
 (to save retyping); the username and password are never stored.

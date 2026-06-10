@@ -6,6 +6,9 @@ export type NextcloudCredentials = {
     baseUrl: string
     username: string
     appPassword: string
+    // Optional sub-folder to scope every read/write under (e.g. a Group Folder path like
+    // "Classroom/anna"). Empty or absent = the account root, which is the original behaviour.
+    baseFolder?: string
 }
 
 // Files larger than this are uploaded in chunks (Nextcloud chunked upload v2). Chunk size must be
@@ -19,16 +22,18 @@ export class NextcloudHandler implements CloudHandler {
     readonly #davBase: string
     readonly #uploadsBase: string
     readonly #authHeader: string
+    readonly #base: string
     readonly #knownCollections: Set<string>
     readonly #collectionChildren: Map<string, Set<string>>
     readonly #signal: Optional<AbortSignal>
 
-    constructor({baseUrl, username, appPassword}: NextcloudCredentials, signal?: AbortSignal) {
+    constructor({baseUrl, username, appPassword, baseFolder}: NextcloudCredentials, signal?: AbortSignal) {
         const root = baseUrl.trim().replace(/\/+$/, "")
         const user = encodeURIComponent(username)
         this.#davBase = `${root}/remote.php/dav/files/${user}`
         this.#uploadsBase = `${root}/remote.php/dav/uploads/${user}`
         this.#authHeader = `Basic ${btoa(`${username}:${appPassword}`)}`
+        this.#base = (baseFolder ?? "").trim().replace(/^\/+|\/+$/g, "")
         this.#knownCollections = new Set<string>()
         this.#collectionChildren = new Map<string, Set<string>>()
         this.#signal = signal
@@ -42,10 +47,11 @@ export class NextcloudHandler implements CloudHandler {
     }
 
     async upload(path: string, data: ArrayBuffer, progress?: Progress.Handler): Promise<void> {
-        if (data.byteLength > ChunkSize) {return this.#uploadChunked(path, data, progress)}
-        await this.#ensureParents(path)
-        const status = await this.#put(this.#url(path), data, {}, progress)
-        if (status < 200 || status >= 300) {return panic(NextcloudHandler.#uploadError(status, path))}
+        const full = this.#resolve(path)
+        if (data.byteLength > ChunkSize) {return this.#uploadChunked(full, data, progress)}
+        await this.#ensureParents(full)
+        const status = await this.#put(this.#url(full), data, {}, progress)
+        if (status < 200 || status >= 300) {return panic(NextcloudHandler.#uploadError(status, full))}
         progress?.(1.0)
     }
 
@@ -117,21 +123,27 @@ export class NextcloudHandler implements CloudHandler {
     }
 
     async download(path: string): Promise<ArrayBuffer> {
-        const response = await this.#request(path, {method: "GET"})
-        if (response.status === 404) {return Promise.reject(new Errors.FileNotFound(path))}
-        if (!response.ok) {return panic(`Nextcloud download failed (${response.status}) for '${path}'`)}
+        const full = this.#resolve(path)
+        const response = await this.#request(full, {method: "GET"})
+        if (response.status === 404) {return Promise.reject(new Errors.FileNotFound(full))}
+        if (!response.ok) {return panic(`Nextcloud download failed (${response.status}) for '${full}'`)}
         return response.arrayBuffer()
     }
 
     async exists(path: string): Promise<boolean> {
-        const response = await this.#request(path, {method: "PROPFIND", headers: {Depth: "0"}})
+        const response = await this.#request(this.#resolve(path), {method: "PROPFIND", headers: {Depth: "0"}})
         if (response.status === 404) {return false}
         if (response.status === 207 || response.ok) {return true}
-        return panic(`Nextcloud exists check failed (${response.status}) for '${path}'`)
+        return panic(`Nextcloud exists check failed (${response.status}) for '${this.#resolve(path)}'`)
     }
 
-    async list(path?: string): Promise<Array<string>> {
-        const target = path ?? ""
+    list(path?: string): Promise<Array<string>> {
+        return this.#listFull(this.#resolve(path ?? ""))
+    }
+
+    // Lists a fully-resolved path (base already applied), used both by the public list() and by the
+    // internal parent-creation helpers, which always work with full paths.
+    async #listFull(target: string): Promise<Array<string>> {
         const response = await this.#request(target, {method: "PROPFIND", headers: {Depth: "1"}})
         if (response.status === 404) {return []}
         if (!(response.status === 207 || response.ok)) {
@@ -143,9 +155,9 @@ export class NextcloudHandler implements CloudHandler {
     }
 
     async delete(path: string): Promise<void> {
-        const response = await this.#request(path, {method: "DELETE"})
+        const response = await this.#request(this.#resolve(path), {method: "DELETE"})
         if (!response.ok && response.status !== 404) {
-            return panic(`Nextcloud delete failed (${response.status}) for '${path}'`)
+            return panic(`Nextcloud delete failed (${response.status}) for '${this.#resolve(path)}'`)
         }
     }
 
@@ -174,13 +186,20 @@ export class NextcloudHandler implements CloudHandler {
     }
 
     // Lists a folder's child names once and caches them, so creating many siblings (e.g. one folder
-    // per asset) does not re-issue a PROPFIND per sibling.
+    // per asset) does not re-issue a PROPFIND per sibling. `folder` is a fully-resolved path.
     async #childrenOf(folder: string): Promise<Set<string>> {
         const cached = this.#collectionChildren.get(folder)
         if (isDefined(cached)) {return cached}
-        const children = new Set(await this.list(folder))
+        const children = new Set(await this.#listFull(folder))
         this.#collectionChildren.set(folder, children)
         return children
+    }
+
+    // Prepends the configured base folder to a logical path. Empty base = identity (account root).
+    #resolve(path: string): string {
+        const clean = path.replace(/^\/+/, "")
+        if (this.#base.length === 0) {return clean}
+        return clean.length === 0 ? this.#base : `${this.#base}/${clean}`
     }
 
     #request(path: string, init: RequestInit): Promise<Response> {

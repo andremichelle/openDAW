@@ -207,19 +207,22 @@ export namespace NextcloudDialogs {
             <input className="default" type="text" autocomplete="username" placeholder="Username"/>
         const inputPassword: HTMLInputElement =
             <input className="default" type="password" autocomplete="current-password" placeholder="Password"/>
+        const inputFolder: HTMLInputElement =
+            <input className="default" type="text" placeholder="(optional) e.g. Classroom/anna"/>
         const approve = () => {
             const baseUrl = inputUrl.value.trim()
             const username = inputUser.value.trim()
             const appPassword = inputPassword.value
+            const baseFolder = inputFolder.value.trim()
             if (baseUrl.length === 0 || username.length === 0 || appPassword.length === 0) {
                 Dialogs.info({
                     headline: "Missing input",
-                    message: "Server URL, username and app password are required."
+                    message: "Server URL, username and password are required."
                 }).finally()
                 return false
             }
             localStorage.setItem(ServerUrlKey, baseUrl)
-            resolve({baseUrl, username, appPassword})
+            resolve({baseUrl, username, appPassword, baseFolder})
             return true
         }
         // The form wrapper exists, so the password field is contained in a form (browser/password-manager
@@ -247,6 +250,8 @@ export namespace NextcloudDialogs {
                     {inputUser}
                     <div>Password:</div>
                     {inputPassword}
+                    <div>Folder:</div>
+                    {inputFolder}
                 </form>
             </Dialog>
         )
