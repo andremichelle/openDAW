@@ -284,18 +284,17 @@ fix (`RemoveIndexSignature` in `types.ts`) so tags whose DOM interface carries i
 (`HTMLFormElement`, `HTMLSelectElement`, …) no longer collapse their JSX children to `string`.
 Login Flow v2 (§3) remains the deferred nicer-UX option.
 
-**Configurable base folder (Step A, done):** the connect dialog has an optional **Folder** field
-(tucked under an **Advanced** disclosure so normal users are not tempted to set it and silently
-scatter their projects) and `NextcloudCredentials` an optional `baseFolder`. `NextcloudHandler` scopes every read/write under
-it (a `#resolve` prefix; `alive()` still probes the account root so a connectivity/auth check never
-depends on the folder existing). **Empty = the account root, i.e. the original behaviour unchanged**,
-so this is purely additive. `SharedFolderSync` is untouched: it keeps using logical paths (e.g.
-`openDAW/index.json`) which the handler resolves under the base. This enables the classroom model
-where each student's space is a Group Folder subfolder (`Classroom/<student>`) and a teacher points
-at the same path (with write, via Group Folder ACLs) to review/edit a student's projects. The Folder
-value is **not** persisted (it differs per user/purpose; only the school-wide server URL is
-remembered). Read-only handling for teacher browsing (hide Upload/Delete on a read-only share) is a
-small follow-up, worth it only if teachers browse often.
+**Configurable base folder (Step A) — built then REVERTED.** A `baseFolder`/`#resolve` prefix was
+added to scope all I/O under a chosen subfolder, so each student's space could be a Team Folder
+subfolder (`Classroom/<student>`) browsable by a teacher. It worked technically, but the **teacher
+access via Team Folders + ACLs proved unworkable for schools**: the setup is admin-grade and very
+fiddly (deny-by-default vs grant-by-default, parent-traversal 403/409, "denied at the folder can't be
+re-allowed" blocking read on subfolders, and a real Nextcloud 34 sub-admin bug, server#61013, that
+breaks editing an existing user's groups). The base-folder code (handler `#resolve`/`baseFolder`,
+the dialog Folder field) and the manual's shared-folder option were reverted; openDAW is back to the
+simple **per-student-account** model (data at the account root). Conclusion: proper teacher access
+needs a **custom Nextcloud app** (expanded Step 7) or an admin-run **provisioning script** (OCS API),
+not client-side base folders + manual ACLs. See §6.
 
 ### Step 7 (later): own openDAW connector app
 Package the CORS allowlist as our own Nextcloud app (§1, Step 2) so schools get one-click
