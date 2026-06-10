@@ -48,6 +48,7 @@ export namespace SharedFolderSync {
         // smoothly via byte progress, so the bar always advances and never sits at a per-file 100%.
         const report = (value: unitValue, label: string) =>
             onProgress({value: (unit + value) / totalUnits, label})
+        onProgress({value: 0, label: "Preparing project"})
         await cloudHandler.upload(`${base}/${ProjectPaths.ProjectFile}`, project.toArrayBuffer() as ArrayBuffer,
             value => report(value, "Uploading project"))
         await cloudHandler.upload(`${base}/${ProjectPaths.ProjectMetaFile}`, encodeJSON(meta))
@@ -73,7 +74,7 @@ export namespace SharedFolderSync {
         }
         for (const box of soundfontFileBoxes) {
             const id = UUID.toString(box.address.uuid)
-            const label = `Uploading soundfont ${unit}/${assetCount}`
+            const label = `Uploading soundfont ${unit}/${assetCount}: ${box.fileName.getValue()}`
             if (!sharedSoundfonts.has(id)) {
                 const loader = project.soundfontManager.getOrCreate(box.address.uuid)
                 if (!await uploadSoundfont(cloudHandler, loader, value => report(value, label))) {
@@ -203,6 +204,7 @@ export namespace SharedFolderSync {
     }
 
     const downloadCatalog = async (cloudHandler: CloudHandler): Promise<Catalog> => {
+        if (!(await cloudHandler.list("")).includes(IndexPath)) {return {}}
         const result = await Promises.tryCatch(cloudHandler.download(IndexPath))
         if (result.status === "rejected") {
             return result.error instanceof Errors.FileNotFound ? {} : panic(String(result.error))
