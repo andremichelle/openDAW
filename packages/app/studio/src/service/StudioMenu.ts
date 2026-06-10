@@ -125,7 +125,9 @@ export const populateStudioMenu = (service: StudioService) => {
                             MenuItem.default({label: "Browse projects..."})
                                 .setTriggerProcedure(() => NextcloudDialogs.browse(service)),
                             MenuItem.default({label: "Upload project...", selectable: service.hasProfile})
-                                .setTriggerProcedure(() => NextcloudDialogs.save(service))
+                                .setTriggerProcedure(() => NextcloudDialogs.save(service)),
+                            MenuItem.default({label: "Help", icon: IconSymbol.Help, separatorBefore: true})
+                                .setTriggerProcedure(() => RouteLocation.get().navigateTo("/manuals/nextcloud"))
                         )
                     }),
                     MenuItem.default({

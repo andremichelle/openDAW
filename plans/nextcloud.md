@@ -77,8 +77,14 @@ many projects. openDAW already content-addresses samples and soundfonts by UUID
 content key. Proposed layout inside the shared root folder (e.g. a Group Folder named
 `openDAW`):
 
+**Implemented:** everything lives under a fixed `openDAW/` root in the connected user's WebDAV space
+(constant `Root` in `SharedFolderSync`, not user-configurable), so the rest of the account stays free
+for other apps. On first upload a `openDAW/README.txt` warning ("do not edit by hand") is written
+once (`ensureReadme`).
+
 ```
-openDAW/                         <- the shared folder (group-shared or share-linked)
+openDAW/                         <- fixed root in the user's files (keeps the rest of the account clean)
+  README.txt                     <- auto-written once: warns humans not to touch the files
   index.json                     <- catalog of projects (uuid -> name, artist, modified, asset refs)
   projects/
     <project-uuid>/
@@ -252,29 +258,80 @@ during delete, both of which succeed on retry. Delete's orphan-asset GC (`delete
 each shared asset folder once and only DELETEs assets that exist, so a stale catalog reference no
 longer logs a 404.
 
-**Connection persistence (session-only):** the first open/save prompts and validates credentials
-(`ensureConnection`), then caches them in an in-memory module variable for the rest of the page
-session, so subsequent open/save reuse them without prompting. Nothing is written to cookies or
-storage; a reload clears it. A **"Disconnect from Nextcloud"** entry (shown only while connected)
-clears the cache to switch account or recover from rotated credentials. Login Flow v2 (§3) remains
-the deferred nicer-UX option. The **server URL** (non-sensitive) is additionally remembered across
-reloads in `localStorage` (`nextcloud.server-url`) to pre-fill the dialog; the field defaults empty
-and the username/app password are never stored. The credential inputs sit in a `<form>` (so the
-browser/password-manager does not warn about a password field outside a form; submit is handled
-manually). Making `<form>` accept element children required a small `lib-jsx` types fix
-(`RemoveIndexSignature` in `types.ts`) so tags whose DOM interface carries index signatures
+**Connection (always prompt, per-user):** `ensureConnection` **always shows** the credentials
+dialog and validates with an `alive()` check before each browse/upload, so a different Nextcloud
+**user** can be chosen every time — essential for classrooms where each student logs in as their own
+account (isolation comes from separate Nextcloud accounts; app passwords are unscoped). There is no
+in-memory session cache and no "Disconnect" entry (both removed). Only the **server URL**
+(non-sensitive) is remembered across reloads in `localStorage` (`nextcloud.server-url`) to pre-fill
+the dialog; **username and app password are never stored or pre-filled**. The credential inputs sit
+in a `<form>` (so the browser/password-manager does not warn about a password field outside a form;
+submit is handled manually). Making `<form>` accept element children required a small `lib-jsx` types
+fix (`RemoveIndexSignature` in `types.ts`) so tags whose DOM interface carries index signatures
 (`HTMLFormElement`, `HTMLSelectElement`, …) no longer collapse their JSX children to `string`.
+Login Flow v2 (§3) remains the deferred nicer-UX option.
 
 ### Step 7 (later): own openDAW connector app
 Package the CORS allowlist as our own Nextcloud app (§1, Step 2) so schools get one-click
 install instead of the WebAppPassword config step.
 
 ### Step 8 (ongoing): school installation manual
-Write a standalone, school-facing manual for setting up their own Nextcloud to work with
-openDAW: prerequisites (admin access, app installs allowed), install WebAppPassword (store or
-manual SFTP fallback), allowlist `opendaw.studio`, create the shared folder, and connect from
-openDAW. Distil it from §2 and appendix G as the real flow stabilises. **Living document,
-update this step as each preceding step lands and as we learn more from pilot schools.**
+Standalone, school-facing manual for setting up a Nextcloud to work with openDAW. **Living
+document, refine wording/screenshots as pilot schools test it.** Draft below.
+
+#### Prerequisites
+1. A Nextcloud instance where you are the **administrator** (self-hosted, or a managed instance
+   such as Hetzner Storage Share where you hold admin). A free shared account on someone else's
+   instance will not work, because openDAW needs an admin-level app install and origin setting.
+2. A valid **HTTPS** certificate on the instance (browsers refuse cross-origin WebDAV to plain
+   HTTP). Managed hosts and Let's Encrypt provide this automatically.
+
+#### Part A: one-time instance setup (admin, done once for the whole school)
+1. Sign in as the admin. Click your avatar (top right), then **Apps**.
+2. Open the **Security** category, find **WebAppPassword**, click **Download and enable**. If it
+   is not listed (locked-down hosting blocks the app store), install it manually: download the
+   `webapppassword` release `.tar.gz`, upload the unpacked `webapppassword/` folder into the
+   Nextcloud `apps/` directory via SFTP, then enable it under **Apps**.
+3. Click your avatar, then **Administration settings**, then **WebAppPassword** in the left
+   sidebar.
+4. In the **WebDAV/CalDAV allowed origins** field, add `https://opendaw.studio`, then click
+   **Set origins**. (No-app-store fallback: instead set `'webapppassword.origins' =>
+   ['https://opendaw.studio']` in `config/config.php` via SFTP.)
+
+#### Part B: create a student account (repeat per student)
+Each student needs their **own** account, this is what keeps one student from changing or
+deleting another student's work (a Nextcloud app password grants the full access of its account,
+so a separate password on a shared account would not isolate anyone).
+1. Sign in as the admin.
+2. Click your avatar (top right), then **Users**.
+3. Click **+ New account** (top left).
+4. Fill in:
+   1. **Username** (login name), for example `student-anna`. Keep it short, lowercase, no spaces.
+   2. **Display name**, for example `Anna M.`.
+   3. **Password**, set an initial one (the student can change it later under their own settings).
+   4. **Email** (optional), lets the student reset their own password.
+   5. **Quota** (optional), for example `2 GB`, to cap how much each student can store.
+5. Click **Add new account**.
+6. Repeat for every student. Tip: for a whole class at once, use **Users**, then the `...` menu,
+   then **Import accounts** with a CSV file (`username,displayname,password,email,quota,...`).
+
+That is all that is required for isolation: each student, signed in as their own account, only
+ever sees and writes their own openDAW folder. No extra folder or permission setup is needed for
+the isolated model. (If instead you want students to *collaborate* in one shared space, create a
+**Group Folder** via the Group Folders app and the per-student configurable base folder, not yet
+built, see §6.)
+
+#### Part C: a student connects from openDAW (each student, once per session)
+1. The student signs in to Nextcloud as their own account.
+2. They click their avatar, then **Settings**, then **Security**, scroll to **Devices & sessions**,
+   type a name like `openDAW`, and click **Create new app password**. Nextcloud shows a one-time
+   app password, copy it.
+3. In openDAW, open the **Nextcloud** menu, then **Browse projects...** (or **Upload project...**).
+4. In the connect dialog enter: **Server URL** (e.g. `https://nextcloud.your-school.org`),
+   **Username** (their login name), **App password** (the value from step 2), then **Connect**.
+5. openDAW now lists/saves projects in that student's own space. The dialog appears every time, so a
+   shared classroom computer can be used by different students in turn (no credentials are stored;
+   only the server URL is remembered to save retyping).
 
 ### ✅ Step 9: Nextcloud chunked upload + upload progress + cancel
 Done in `NextcloudHandler`: files over 10 MB use **chunked upload v2** (create session

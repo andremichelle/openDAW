@@ -8,15 +8,16 @@ import {Workers} from "../Workers"
 import {SampleStorage} from "../samples"
 import {SoundfontStorage} from "../soundfont"
 
-// Reads/writes projects to a shared folder with deduplicated assets. Layout:
-//   index.json catalog of projects
-//   projects/<uuid>/{project.od,meta.json, image.bin}
-//   assets/samples/<uuid>/{audio.wav,peaks.bin, meta.json} shared, uploaded once
-//   assets/soundfonts/<uuid>/{soundfont.sf2,meta.json} shared, uploaded once
+// Reads/writes projects to a shared folder with deduplicated assets. Everything lives under a single
+// `openDAW/` root, so the rest of the user's Nextcloud account stays clean for other apps. Layout:
+//   openDAW/index.json catalog of projects
+//   openDAW/projects/<uuid>/{project.od,meta.json, image.bin}
+//   openDAW/assets/samples/<uuid>/{audio.wav,peaks.bin, meta.json} shared, uploaded once
+//   openDAW/assets/soundfonts/<uuid>/{soundfont.sf2,meta.json} shared, uploaded once
 export namespace SharedFolderSync {
     export type CatalogMeta = Pick<ProjectMeta, "name" | "modified" | "created" | "tags" | "description">
     // A project entry carries its metadata plus the UUIDs of every asset it references. The reference
-    // graph lives here (not by scanning project.od files) so counting and GC are a single index read.
+    // graph lives here (not by scanning project.od files), so counting and GC are a single index read.
     export type CatalogEntry = {
         meta: CatalogMeta
         samples: ReadonlyArray<UUID.String>
@@ -29,16 +30,28 @@ export namespace SharedFolderSync {
     export type SyncProgress = { value: unitValue, label: string }
 
     const CatalogVersion = 1
-    const IndexPath = "index.json"
+    // Single root folder for all openDAW data, so a student account can be used by other apps too.
+    const Root = "openDAW"
+    const IndexName = "index.json"
+    const IndexPath = `${Root}/${IndexName}`
+    const SamplesFolder = `${Root}/assets/samples`
+    const SoundfontsFolder = `${Root}/assets/soundfonts`
+    const ReadmeName = "README.txt"
+    const ReadmePath = `${Root}/${ReadmeName}`
+    const ReadmeText =
+        "This folder is managed by openDAW (https://opendaw.studio).\n\n" +
+        "Please do not rename, move, edit, or delete anything in here by hand.\n" +
+        "openDAW keeps a catalog (index.json) and shares samples and soundfonts between projects.\n" +
+        "Manual changes will corrupt that bookkeeping and break opening, saving, and asset cleanup."
     // Guards only the library fetch when a referenced sample is not in local storage, so a stalled
     // download cannot hang the sync. Does NOT apply to uploads, which may legitimately take minutes.
     const MaterializeTimeout = TimeSpan.minutes(2)
-    const projectFolder = (uuid: UUID.Bytes): string => `projects/${UUID.toString(uuid)}`
-    const sampleFolder = (uuid: UUID.Bytes): string => `assets/samples/${UUID.toString(uuid)}`
-    const soundfontFolder = (uuid: UUID.Bytes): string => `assets/soundfonts/${UUID.toString(uuid)}`
+    const projectFolder = (uuid: UUID.Bytes): string => `${Root}/projects/${UUID.toString(uuid)}`
+    const sampleFolder = (uuid: UUID.Bytes): string => `${SamplesFolder}/${UUID.toString(uuid)}`
+    const soundfontFolder = (uuid: UUID.Bytes): string => `${SoundfontsFolder}/${UUID.toString(uuid)}`
 
     export const readCatalog = async (cloudHandler: CloudHandler): Promise<Catalog> => {
-        if (!(await cloudHandler.list("")).includes(IndexPath)) {return emptyCatalog()}
+        if (!(await cloudHandler.list(Root)).includes(IndexName)) {return emptyCatalog()}
         const result = await Promises.tryCatch(cloudHandler.download(IndexPath))
         if (result.status === "rejected") {
             return result.error instanceof Errors.FileNotFound ? emptyCatalog() : panic(String(result.error))
@@ -68,8 +81,8 @@ export namespace SharedFolderSync {
         if (!isDefined(removed)) {progress?.(1.0); return}
         delete catalog.projects[key]
         const live = collectLiveAssets(catalog)
-        const orphanSamples = await existingOrphans(cloudHandler, "assets/samples", removed.samples, live.samples)
-        const orphanSoundfonts = await existingOrphans(cloudHandler, "assets/soundfonts", removed.soundfonts,
+        const orphanSamples = await existingOrphans(cloudHandler, SamplesFolder, removed.samples, live.samples)
+        const orphanSoundfonts = await existingOrphans(cloudHandler, SoundfontsFolder, removed.soundfonts,
             live.soundfonts)
         // project folder + catalog upload + one step per orphan asset folder.
         const total = 2 + orphanSamples.length + orphanSoundfonts.length
@@ -77,8 +90,8 @@ export namespace SharedFolderSync {
         const advance = () => progress?.(++done / total)
         await cloudHandler.delete(projectFolder(uuid))
         advance()
-        for (const id of orphanSamples) {await cloudHandler.delete(`assets/samples/${id}`); advance()}
-        for (const id of orphanSoundfonts) {await cloudHandler.delete(`assets/soundfonts/${id}`); advance()}
+        for (const id of orphanSamples) {await cloudHandler.delete(`${SamplesFolder}/${id}`); advance()}
+        for (const id of orphanSoundfonts) {await cloudHandler.delete(`${SoundfontsFolder}/${id}`); advance()}
         await cloudHandler.upload(IndexPath, encodeJSON(catalog))
         advance()
     }
@@ -101,6 +114,7 @@ export namespace SharedFolderSync {
         const report = (value: unitValue, label: string) =>
             onProgress({value: (unit + value) / totalUnits, label})
         onProgress({value: 0, label: "Preparing project"})
+        await ensureReadme(cloudHandler)
         await cloudHandler.upload(`${base}/${ProjectPaths.ProjectFile}`, project.toArrayBuffer() as ArrayBuffer,
             value => report(value, "Uploading project"))
         await cloudHandler.upload(`${base}/${ProjectPaths.ProjectMetaFile}`, encodeJSON(meta))
@@ -109,8 +123,8 @@ export namespace SharedFolderSync {
             some: buffer => cloudHandler.upload(`${base}/${ProjectPaths.ProjectCoverFile}`, buffer)
         })
         unit = 1
-        const sharedSamples = await listShared(cloudHandler, "assets/samples")
-        const sharedSoundfonts = await listShared(cloudHandler, "assets/soundfonts")
+        const sharedSamples = await listShared(cloudHandler, SamplesFolder)
+        const sharedSoundfonts = await listShared(cloudHandler, SoundfontsFolder)
         let failed = 0
         for (const box of audioFileBoxes) {
             checkAbort()
@@ -287,11 +301,11 @@ export namespace SharedFolderSync {
     // re-save GC, where no progress is reported).
     const deleteOrphans = async (cloudHandler: CloudHandler, entry: CatalogEntry,
                                  live: { samples: Set<UUID.String>, soundfonts: Set<UUID.String> }): Promise<void> => {
-        for (const id of await existingOrphans(cloudHandler, "assets/samples", entry.samples, live.samples)) {
-            await cloudHandler.delete(`assets/samples/${id}`)
+        for (const id of await existingOrphans(cloudHandler, SamplesFolder, entry.samples, live.samples)) {
+            await cloudHandler.delete(`${SamplesFolder}/${id}`)
         }
-        for (const id of await existingOrphans(cloudHandler, "assets/soundfonts", entry.soundfonts, live.soundfonts)) {
-            await cloudHandler.delete(`assets/soundfonts/${id}`)
+        for (const id of await existingOrphans(cloudHandler, SoundfontsFolder, entry.soundfonts, live.soundfonts)) {
+            await cloudHandler.delete(`${SoundfontsFolder}/${id}`)
         }
     }
 
@@ -348,9 +362,18 @@ export namespace SharedFolderSync {
 
     const writeOpfs = (path: string, data: ArrayBuffer): Promise<void> => Workers.Opfs.write(path, new Uint8Array(data))
 
-    const encodeJSON = (value: unknown): ArrayBuffer => {
-        const bytes = new TextEncoder().encode(JSON.stringify(value))
+    const encodeText = (text: string): ArrayBuffer => {
+        const bytes = new TextEncoder().encode(text)
         return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+    }
+
+    const encodeJSON = (value: unknown): ArrayBuffer => encodeText(JSON.stringify(value))
+
+    // Drops a human-readable warning into the openDAW root once, so anyone browsing the Nextcloud files
+    // knows not to touch them by hand. Written only if absent, so it never overwrites/repeats.
+    const ensureReadme = async (cloudHandler: CloudHandler): Promise<void> => {
+        if ((await cloudHandler.list(Root)).includes(ReadmeName)) {return}
+        await cloudHandler.upload(ReadmePath, encodeText(ReadmeText))
     }
 
     const progressStep = (total: number, progress: Progress.Handler): (() => void) => {
