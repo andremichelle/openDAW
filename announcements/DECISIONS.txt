@@ -1,0 +1,33 @@
+openDAW announcement decisions and style
+========================================
+Notes to remember how the user wants announcements written. Keep this updated.
+
+Writing style (all channels)
+• No dashes (em or en dashes). Use commas or periods instead.
+• No semicolons. Split into two sentences, or use a comma.
+• Plain language. No marketing speak (for example, avoid "The point:").
+
+Per channel
+• Discord: supports markdown. Big headline uses "# " and starts with "Update: ", sublines use "### ".
+  All headlines in Title Case (keep brand casing like openDAW and Nextcloud). Links use markdown
+  masked links [label](url). Casual and factual, no emoji, no salesy phrasing.
+• LinkedIn: professional. Hashtags at the end.
+• Newsletter: focus on the schools angle. No greeting line (no "Hi ..."). No beta or pilot note.
+
+Links
+• openDAW: https://opendaw.studio
+• Nextcloud manual: https://opendaw.studio/manuals/nextcloud
+
+Feature framing (Nextcloud)
+• Audience: schools and music classes first.
+• Each student has their own Nextcloud account and own space, isolated from other students.
+• Projects and assets stay on the school's own Nextcloud. openDAW talks to it directly. Nothing
+  passes through openDAW servers.
+• Samples and soundfonts are deduplicated, stored once and reused.
+• openDAW is free and open.
+• This is not a beta. Do not call it a beta.
+
+Still open (see the questions at the bottom of nextcloud.txt)
+• Release status and whether to call for pilot schools.
+• Discord channel name for the post.
+• Newsletter subject line (currently a general blast, no greeting).

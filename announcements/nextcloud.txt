@@ -1,0 +1,83 @@
+openDAW + Nextcloud announcement
+================================
+
+
+-----------------------------------------
+DISCORD
+-----------------------------------------
+# Update: openDAW Now Talks to Your Own Nextcloud!
+
+You can save and open your projects straight from a Nextcloud you control, right in the browser.
+Samples and soundfonts are stored once and reused across projects, so nothing gets uploaded twice.
+
+### Heads Up: It Is Self-Hosted
+Nextcloud is open-source software you host yourself, so you (or any school) need to run a Nextcloud
+server. There is not a quick sign-up service. Already have a server? Use the
+[Nextcloud web install guide](https://nextcloud.com/install/).
+
+### Your Files Stay Yours
+Your files stay on your own server. openDAW connects to it directly from the browser. Nothing passes
+through our servers.
+
+### Good for Classrooms
+A school can run its own Nextcloud and give each student an account, so every student signs in and
+works in their own space.
+
+### Get Started
+Open the menu, then Nextcloud, then Browse or Upload. Read the
+[admin setup guide](https://opendaw.studio/manuals/nextcloud).
+
+
+-----------------------------------------
+LINKEDIN
+-----------------------------------------
+openDAW now integrates with Nextcloud.
+
+openDAW is a free, browser-based digital audio workstation. With the new Nextcloud integration,
+schools and individuals can store and load their music projects on a Nextcloud server they run
+themselves, directly from the browser.
+
+Why it matters for education:
+• Data ownership: projects and audio stay on the school's own Nextcloud. openDAW talks to it
+  directly. Nothing is routed through or stored on our servers.
+• Per-student accounts: each student works in their own space, isolated from the others.
+• Efficient: samples and soundfonts are deduplicated, so shared content is stored once.
+
+No vendor lock-in: projects live on the school's own Nextcloud, never on openDAW's servers, so the
+school keeps full control of its data.
+
+Free and open: https://opendaw.studio
+Admin setup guide: https://opendaw.studio/manuals/nextcloud
+New to Nextcloud? Web install guide: https://nextcloud.com/install/
+
+#musiceducation #edtech #nextcloud #opensource #musicproduction #DAW
+
+
+-----------------------------------------
+NEWSLETTER
+-----------------------------------------
+Subject: openDAW for schools, now with your own Nextcloud
+
+openDAW now connects to a school's own Nextcloud, so a music class can keep all its work on the
+school's own server, with each student in their own space, straight from the browser.
+
+Why this matters for schools
+• Every student signs in with their own Nextcloud account and works in their own space, so one
+  student cannot see or change another's projects.
+• Every project, sample, and soundfont stays on the school's own Nextcloud. openDAW talks to it
+  directly. Nothing is routed through or stored on openDAW's servers.
+• The school stays in full control of its data, which makes it easy to satisfy data-protection
+  requirements.
+• Shared samples and soundfonts are stored once and reused across projects, saving space.
+
+How it works for the class
+The school runs its own Nextcloud (an open-source, self-hosted alternative to Dropbox or Google
+Drive). The administrator creates an account per student once. From then on, students just open the
+Nextcloud menu in openDAW and sign in to save and load their projects.
+
+Getting started
+You will need a Nextcloud where you are the administrator. Our step-by-step guide walks you through
+the one-time setup and connecting from openDAW:
+https://opendaw.studio/manuals/nextcloud
+
+openDAW is free and open. Happy teaching,
