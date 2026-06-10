@@ -1,5 +1,5 @@
 import {createElement} from "@opendaw/lib-jsx"
-import {Errors, panic, RuntimeNotifier} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, panic, RuntimeNotifier, unitValue} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {NextcloudCredentials, NextcloudHandler, SharedFolderSync} from "@opendaw/studio-core"
 import {IconSymbol} from "@opendaw/studio-enums"
@@ -49,15 +49,20 @@ export namespace NextcloudDebug {
         if (credentials.status === "rejected") {return}
         const handler = new NextcloudHandler(credentials.value)
         const profile = service.profile
-        const notifier = RuntimeNotifier.progress({headline: "Nextcloud Shared Folder", message: "Saving project..."})
+        const progressValue = new DefaultObservableValue<unitValue>(0.0)
+        const notifier = RuntimeNotifier.progress({
+            headline: "Nextcloud Shared Folder", message: "Saving project...", progress: progressValue
+        })
         const result = await Promises.tryCatch((async () => {
-            const failed = await SharedFolderSync.saveProject(handler, profile,
-                value => notifier.message = `Uploading project and assets ${Math.round(value * 100)}%`)
+            const failed = await SharedFolderSync.saveProject(handler, profile, ({value, label}) => {
+                progressValue.setValue(value)
+                notifier.message = label
+            })
             notifier.message = "Listing shared projects..."
             const listing = await SharedFolderSync.listProjects(handler)
             notifier.message = "Re-opening project..."
             const reopened = await SharedFolderSync.openProject(service, handler, profile.uuid,
-                value => notifier.message = `Downloading assets ${Math.round(value * 100)}%`)
+                value => progressValue.setValue(value))
             return {count: listing.length, name: reopened.meta.name, failed}
         })())
         notifier.terminate()

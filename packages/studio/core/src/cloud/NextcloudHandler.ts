@@ -1,4 +1,4 @@
-import {Errors, isDefined, panic} from "@opendaw/lib-std"
+import {Errors, isDefined, panic, Progress, unitValue} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {CloudHandler} from "./CloudHandler"
 
@@ -8,16 +8,25 @@ export type NextcloudCredentials = {
     appPassword: string
 }
 
+// Files larger than this are uploaded in chunks (Nextcloud chunked upload v2). Chunk size must be
+// between 5 MB and 5 GB; 10 MB keeps us safely above the minimum and well under typical proxy caps.
+const ChunkSize = 10 * 1024 * 1024
+
 export class NextcloudHandler implements CloudHandler {
     readonly #davBase: string
+    readonly #uploadsBase: string
     readonly #authHeader: string
     readonly #knownCollections: Set<string>
+    readonly #collectionChildren: Map<string, Set<string>>
 
     constructor({baseUrl, username, appPassword}: NextcloudCredentials) {
         const root = baseUrl.trim().replace(/\/+$/, "")
-        this.#davBase = `${root}/remote.php/dav/files/${encodeURIComponent(username)}`
+        const user = encodeURIComponent(username)
+        this.#davBase = `${root}/remote.php/dav/files/${user}`
+        this.#uploadsBase = `${root}/remote.php/dav/uploads/${user}`
         this.#authHeader = `Basic ${btoa(`${username}:${appPassword}`)}`
         this.#knownCollections = new Set<string>()
+        this.#collectionChildren = new Map<string, Set<string>>()
     }
 
     async alive(): Promise<void> {
@@ -26,10 +35,54 @@ export class NextcloudHandler implements CloudHandler {
         return panic(`Nextcloud not reachable (${response.status})`)
     }
 
-    async upload(path: string, data: ArrayBuffer): Promise<void> {
+    async upload(path: string, data: ArrayBuffer, progress?: Progress.Handler): Promise<void> {
+        if (data.byteLength > ChunkSize) {return this.#uploadChunked(path, data, progress)}
         await this.#ensureParents(path)
-        const response = await this.#request(path, {method: "PUT", body: data})
-        if (!response.ok) {return panic(`Nextcloud upload failed (${response.status}) for '${path}'`)}
+        const status = await this.#put(this.#url(path), data, {}, progress)
+        if (status < 200 || status >= 300) {return panic(`Nextcloud upload failed (${status}) for '${path}'`)}
+        progress?.(1.0)
+    }
+
+    // Nextcloud chunked upload v2: create a session folder (Destination = final file), PUT each chunk
+    // named 00001.., then MOVE the synthetic .file to assemble. Avoids single-PUT size limits and
+    // gives byte-level progress across the whole file.
+    async #uploadChunked(path: string, data: ArrayBuffer, progress?: Progress.Handler): Promise<void> {
+        await this.#ensureParents(path)
+        const destination = this.#url(path)
+        const total = data.byteLength
+        const session = `${this.#uploadsBase}/opendaw-${crypto.randomUUID()}`
+        const created = await this.#fetch(session, {method: "MKCOL", headers: {Destination: destination}})
+        if (!created.ok) {return panic(`Nextcloud could not create upload session (${created.status})`)}
+        const chunkCount = Math.ceil(total / ChunkSize)
+        for (let index = 0; index < chunkCount; index++) {
+            const start = index * ChunkSize
+            const end = Math.min(start + ChunkSize, total)
+            const name = String(index + 1).padStart(5, "0")
+            const status = await this.#put(`${session}/${name}`, data.slice(start, end), {Destination: destination},
+                (fraction: unitValue) => progress?.((start + fraction * (end - start)) / total))
+            if (status < 200 || status >= 300) {return panic(`Nextcloud chunk upload failed (${status}) for '${path}'`)}
+        }
+        const assembled = await this.#fetch(`${session}/.file`,
+            {method: "MOVE", headers: {Destination: destination, "OC-Total-Length": String(total)}})
+        if (!assembled.ok) {return panic(`Nextcloud could not assemble chunks (${assembled.status}) for '${path}'`)}
+        progress?.(1.0)
+    }
+
+    // Uploads via XHR rather than fetch because only XHR exposes upload progress events.
+    #put(url: string, data: ArrayBuffer, headers: Record<string, string>,
+         progress?: Progress.Handler): Promise<number> {
+        const {promise, resolve, reject} = Promise.withResolvers<number>()
+        const xhr = new XMLHttpRequest()
+        xhr.open("PUT", url)
+        xhr.setRequestHeader("Authorization", this.#authHeader)
+        for (const [key, value] of Object.entries(headers)) {xhr.setRequestHeader(key, value)}
+        if (isDefined(progress)) {
+            xhr.upload.onprogress = event => {if (event.lengthComputable) {progress(event.loaded / event.total)}}
+        }
+        xhr.onload = () => resolve(xhr.status)
+        xhr.onerror = () => reject(new Error(`Upload network error for '${url}'`))
+        xhr.send(data)
+        return promise
     }
 
     async download(path: string): Promise<ArrayBuffer> {
@@ -75,12 +128,13 @@ export class NextcloudHandler implements CloudHandler {
         for (const segment of segments) {
             const current = parent.length === 0 ? segment : `${parent}/${segment}`
             if (!this.#knownCollections.has(current)) {
-                const children = await this.list(parent)
-                if (!children.includes(segment)) {
+                const children = await this.#childrenOf(parent)
+                if (!children.has(segment)) {
                     const response = await this.#request(current, {method: "MKCOL"})
                     if (!response.ok && response.status !== 405) {
                         return panic(`Nextcloud MKCOL failed (${response.status}) for '${current}'`)
                     }
+                    children.add(segment)
                 }
                 this.#knownCollections.add(current)
             }
@@ -88,10 +142,24 @@ export class NextcloudHandler implements CloudHandler {
         }
     }
 
-    async #request(path: string, init: RequestInit): Promise<Response> {
+    // Lists a folder's child names once and caches them, so creating many siblings (e.g. one folder
+    // per asset) does not re-issue a PROPFIND per sibling.
+    async #childrenOf(folder: string): Promise<Set<string>> {
+        const cached = this.#collectionChildren.get(folder)
+        if (isDefined(cached)) {return cached}
+        const children = new Set(await this.list(folder))
+        this.#collectionChildren.set(folder, children)
+        return children
+    }
+
+    #request(path: string, init: RequestInit): Promise<Response> {
+        return this.#fetch(this.#url(path), init)
+    }
+
+    async #fetch(url: string, init: RequestInit): Promise<Response> {
         const headers = new Headers(init.headers)
         headers.set("Authorization", this.#authHeader)
-        const {status, value, error} = await Promises.tryCatch(fetch(this.#url(path), {...init, headers}))
+        const {status, value, error} = await Promises.tryCatch(fetch(url, {...init, headers}))
         if (status === "rejected") {return panic(String(error))}
         return value
     }

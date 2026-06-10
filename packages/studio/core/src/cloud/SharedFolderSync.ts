@@ -1,4 +1,4 @@
-import {Errors, Option, panic, Progress, UUID} from "@opendaw/lib-std"
+import {Errors, Option, panic, Procedure, Progress, TimeSpan, unitValue, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioFileBox, SoundfontFileBox} from "@opendaw/studio-boxes"
 import {SampleLoader, SoundfontLoader} from "@opendaw/studio-adapters"
@@ -17,9 +17,13 @@ export namespace SharedFolderSync {
     export type CatalogEntry = Pick<ProjectMeta, "name" | "modified" | "created" | "tags" | "description">
     export type Catalog = Record<UUID.String, CatalogEntry>
     export type Listing = { uuid: UUID.Bytes, meta: CatalogEntry }
+    // `value` is the byte-progress of the file currently uploading (0..1); `label` names it.
+    export type SyncProgress = { value: unitValue, label: string }
 
     const IndexPath = "index.json"
-    const AssetTimeoutMs = 60000
+    // Guards only the library fetch when a referenced sample is not in local storage, so a stalled
+    // download cannot hang the sync. Does NOT apply to uploads, which may legitimately take minutes.
+    const MaterializeTimeout = TimeSpan.minutes(2)
     const projectFolder = (uuid: UUID.Bytes): string => `projects/${UUID.toString(uuid)}`
     const sampleFolder = (uuid: UUID.Bytes): string => `assets/samples/${UUID.toString(uuid)}`
     const soundfontFolder = (uuid: UUID.Bytes): string => `assets/soundfonts/${UUID.toString(uuid)}`
@@ -31,44 +35,55 @@ export namespace SharedFolderSync {
 
     export const saveProject = async (cloudHandler: CloudHandler,
                                       {uuid, project, meta, cover}: ProjectProfile,
-                                      progress: Progress.Handler): Promise<number> => {
+                                      onProgress: Procedure<SyncProgress>): Promise<number> => {
         const base = projectFolder(uuid)
-        await cloudHandler.upload(`${base}/${ProjectPaths.ProjectFile}`, project.toArrayBuffer() as ArrayBuffer)
+        const audioFileBoxes = project.boxGraph.boxes()
+            .filter((box): box is AudioFileBox => box instanceof AudioFileBox)
+        const soundfontFileBoxes = project.boxGraph.boxes()
+            .filter((box): box is SoundfontFileBox => box instanceof SoundfontFileBox)
+        const assetCount = audioFileBoxes.length + soundfontFileBoxes.length
+        const totalUnits = 1 + assetCount
+        let unit = 0
+        // Overall progress: each unit (the project, then each asset) fills its 1/totalUnits slice
+        // smoothly via byte progress, so the bar always advances and never sits at a per-file 100%.
+        const report = (value: unitValue, label: string) =>
+            onProgress({value: (unit + value) / totalUnits, label})
+        await cloudHandler.upload(`${base}/${ProjectPaths.ProjectFile}`, project.toArrayBuffer() as ArrayBuffer,
+            value => report(value, "Uploading project"))
         await cloudHandler.upload(`${base}/${ProjectPaths.ProjectMetaFile}`, encodeJSON(meta))
         await cover.match({
             none: () => Promise.resolve(),
             some: buffer => cloudHandler.upload(`${base}/${ProjectPaths.ProjectCoverFile}`, buffer)
         })
-        const audioFileBoxes = project.boxGraph.boxes()
-            .filter((box): box is AudioFileBox => box instanceof AudioFileBox)
-        const soundfontFileBoxes = project.boxGraph.boxes()
-            .filter((box): box is SoundfontFileBox => box instanceof SoundfontFileBox)
-        const advance = progressStep(audioFileBoxes.length + soundfontFileBoxes.length, progress)
+        unit = 1
         const sharedSamples = await listShared(cloudHandler, "assets/samples")
         const sharedSoundfonts = await listShared(cloudHandler, "assets/soundfonts")
         let failed = 0
         for (const box of audioFileBoxes) {
             const id = UUID.toString(box.address.uuid)
+            const label = `Uploading sample ${unit}/${assetCount}: ${box.fileName.getValue()}`
             if (!sharedSamples.has(id)) {
                 const loader = project.sampleManager.getOrCreate(box.address.uuid)
-                if (!await uploadSample(cloudHandler, loader)) {
+                if (!await uploadSample(cloudHandler, loader, value => report(value, label))) {
                     failed++
                     console.warn(`[SharedFolderSync] could not upload sample '${box.fileName.getValue()}' (${id})`)
                 }
             }
-            advance()
+            unit++
         }
         for (const box of soundfontFileBoxes) {
             const id = UUID.toString(box.address.uuid)
+            const label = `Uploading soundfont ${unit}/${assetCount}`
             if (!sharedSoundfonts.has(id)) {
                 const loader = project.soundfontManager.getOrCreate(box.address.uuid)
-                if (!await uploadSoundfont(cloudHandler, loader)) {
+                if (!await uploadSoundfont(cloudHandler, loader, value => report(value, label))) {
                     failed++
                     console.warn(`[SharedFolderSync] could not upload soundfont (${id})`)
                 }
             }
-            advance()
+            unit++
         }
+        onProgress({value: 1.0, label: "Updating catalog"})
         const catalog = await downloadCatalog(cloudHandler)
         catalog[UUID.toString(uuid)] = {
             name: meta.name,
@@ -78,7 +93,6 @@ export namespace SharedFolderSync {
             description: meta.description
         }
         await cloudHandler.upload(IndexPath, encodeJSON(catalog))
-        progress(1.0)
         return failed
     }
 
@@ -91,7 +105,10 @@ export namespace SharedFolderSync {
         const project = await Project.loadAnyVersion(env, projectData)
         const meta = JSON.parse(new TextDecoder()
             .decode(await cloudHandler.download(`${base}/${ProjectPaths.ProjectMetaFile}`))) as ProjectMeta
-        const cover = await downloadOptional(cloudHandler, `${base}/${ProjectPaths.ProjectCoverFile}`)
+        const projectFiles = await cloudHandler.list(base)
+        const cover = projectFiles.includes(ProjectPaths.ProjectCoverFile)
+            ? Option.wrap(await cloudHandler.download(`${base}/${ProjectPaths.ProjectCoverFile}`))
+            : Option.None
         const audioFileBoxes = project.boxGraph.boxes().filter(box => box instanceof AudioFileBox)
         const soundfontFileBoxes = project.boxGraph.boxes().filter(box => box instanceof SoundfontFileBox)
         const advance = progressStep(audioFileBoxes.length + soundfontFileBoxes.length, progress)
@@ -110,12 +127,13 @@ export namespace SharedFolderSync {
     // Materializes the sample (downloading a library sample into local storage if needed) and uploads
     // it. The shared project must be self-contained, so library samples are bundled too. Returns false
     // if the sample cannot be materialized (e.g. the library is unavailable).
-    const uploadSample = async (cloudHandler: CloudHandler, loader: SampleLoader): Promise<boolean> => {
+    const uploadSample = async (cloudHandler: CloudHandler, loader: SampleLoader,
+                                onProgress: Progress.Handler): Promise<boolean> => {
         const local = `${SampleStorage.Folder}/${UUID.toString(loader.uuid)}`
         if (!await ensureLocal(local, "audio.wav", () => awaitSampleLoaded(loader))) {return false}
         const remote = sampleFolder(loader.uuid)
         const result = await Promises.tryCatch((async () => {
-            await cloudHandler.upload(`${remote}/audio.wav`, await readOpfs(`${local}/audio.wav`))
+            await cloudHandler.upload(`${remote}/audio.wav`, await readOpfs(`${local}/audio.wav`), onProgress)
             await cloudHandler.upload(`${remote}/peaks.bin`, await readOpfs(`${local}/peaks.bin`))
             await cloudHandler.upload(`${remote}/meta.json`, await readOpfs(`${local}/meta.json`))
         })())
@@ -125,12 +143,13 @@ export namespace SharedFolderSync {
         return result.status === "resolved"
     }
 
-    const uploadSoundfont = async (cloudHandler: CloudHandler, loader: SoundfontLoader): Promise<boolean> => {
+    const uploadSoundfont = async (cloudHandler: CloudHandler, loader: SoundfontLoader,
+                                   onProgress: Progress.Handler): Promise<boolean> => {
         const local = `${SoundfontStorage.Folder}/${UUID.toString(loader.uuid)}`
         if (!await ensureLocal(local, "soundfont.sf2", () => awaitSoundfontLoaded(loader))) {return false}
         const remote = soundfontFolder(loader.uuid)
         const result = await Promises.tryCatch((async () => {
-            await cloudHandler.upload(`${remote}/soundfont.sf2`, await readOpfs(`${local}/soundfont.sf2`))
+            await cloudHandler.upload(`${remote}/soundfont.sf2`, await readOpfs(`${local}/soundfont.sf2`), onProgress)
             await cloudHandler.upload(`${remote}/meta.json`, await readOpfs(`${local}/meta.json`))
         })())
         if (result.status === "rejected") {
@@ -144,7 +163,7 @@ export namespace SharedFolderSync {
     const ensureLocal = async (folder: string, primaryFile: string,
                                materialize: () => Promise<void>): Promise<boolean> => {
         if (await localFileExists(folder, primaryFile)) {return true}
-        const result = await Promises.tryCatch(withTimeout(materialize()))
+        const result = await Promises.tryCatch(Promises.timeout(materialize(), MaterializeTimeout, "library fetch timed out"))
         if (result.status === "rejected") {
             console.warn(`[SharedFolderSync] '${folder}' not in local storage and could not be fetched:`, result.error)
             return false
@@ -170,10 +189,17 @@ export namespace SharedFolderSync {
     }
 
     // Lists the UUID folder names already present under a shared asset folder so we can dedup in
-    // memory, instead of probing each asset (which logs a 404 per missing asset in the console).
+    // memory. Walks down from the root, listing only folders that exist (each returns 207), so a
+    // not-yet-created assets folder never triggers a 404 in the console.
     const listShared = async (cloudHandler: CloudHandler, folder: string): Promise<Set<string>> => {
-        const result = await Promises.tryCatch(cloudHandler.list(folder))
-        return result.status === "resolved" ? new Set(result.value) : new Set<string>()
+        let children = await cloudHandler.list("")
+        let current = ""
+        for (const segment of folder.split("/")) {
+            if (!children.includes(segment)) {return new Set<string>()}
+            current = current.length === 0 ? segment : `${current}/${segment}`
+            children = await cloudHandler.list(current)
+        }
+        return new Set(children)
     }
 
     const downloadCatalog = async (cloudHandler: CloudHandler): Promise<Catalog> => {
@@ -182,11 +208,6 @@ export namespace SharedFolderSync {
             return result.error instanceof Errors.FileNotFound ? {} : panic(String(result.error))
         }
         return JSON.parse(new TextDecoder().decode(result.value)) as Catalog
-    }
-
-    const downloadOptional = async (cloudHandler: CloudHandler, path: string): Promise<Option<ArrayBuffer>> => {
-        const result = await Promises.tryCatch(cloudHandler.download(path))
-        return result.status === "resolved" ? Option.wrap(result.value) : Option.None
     }
 
     // Checks presence by listing the parent folder, which does not open an exclusive file handle
@@ -222,14 +243,6 @@ export namespace SharedFolderSync {
             }
         })
         return promise
-    }
-
-    // Bounds the library fetch so a sample that never loads cannot freeze the sync. Only guards
-    // materialization, not uploads (a large file may legitimately take minutes to upload).
-    const withTimeout = (operation: Promise<void>): Promise<void> => {
-        const {promise, reject} = Promise.withResolvers<void>()
-        const timer = setTimeout(() => reject(new Error(`timed out after ${AssetTimeoutMs}ms`)), AssetTimeoutMs)
-        return Promise.race([operation, promise]).finally(() => clearTimeout(timer))
     }
 
     const readOpfs = async (path: string): Promise<ArrayBuffer> => {

@@ -219,15 +219,17 @@ manual SFTP fallback), allowlist `opendaw.studio`, create the shared folder, and
 openDAW. Distil it from §2 and appendix G as the real flow stabilises. **Living document,
 update this step as each preceding step lands and as we learn more from pilot schools.**
 
-### Step 9 (later): Nextcloud chunked upload for large assets
-Refines the asset uploads from Step 5. A single PUT works on our Strato instance (a 57 MB
-soundfont uploaded in ~1 min) but is slow and can exceed a stricter server's PHP limits
-(`upload_max_filesize`/`post_max_size`) or proxy body-size caps, failing large assets on some
-school servers. Implement Nextcloud's **chunked upload v2** in `NextcloudHandler` for files over
-a threshold (e.g. ~10 MB): create an upload session under `uploads/<user>/<id>/`, `PUT` each
-chunk, then `MOVE` the assembled file to its destination. Keep the plain single `PUT` for small
-files. This makes large samples/soundfonts robust regardless of server limits, and enables
-progress reporting per chunk.
+### Step 9: Nextcloud chunked upload + upload progress (implemented, verify in-app)
+Done in `NextcloudHandler`: files over 10 MB use **chunked upload v2**, create a session
+(`MKCOL uploads/<user>/<id>` with `Destination`), `PUT` each 10 MB chunk named `00001..`, then
+`MOVE .file` with `OC-Total-Length` to assemble. Smaller files use a single PUT. Uploads now go
+through **XHR** (not fetch) so `upload.onprogress` gives byte-level progress. `CloudHandler.upload`
+gained an optional `progress?: Progress.Handler`. `SharedFolderSync.saveProject` reports
+`{value, label}` per file; the debug entry shows a **progress bar** (files up to 100 MB).
+Open risk to verify: the cross-origin **MOVE** method and the `Destination`/`OC-Total-Length`
+headers must be permitted by WebAppPassword's CORS allowlist; confirm a >10 MB asset uploads in
+the browser. Also fixed: `openProject` lists the project folder and only downloads `image.bin`
+when present (no more cover 404).
 
 ---
 
