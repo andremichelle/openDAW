@@ -218,8 +218,9 @@ dialog (`NextcloudDialogs.showCredentialsDialog`, extracted from the debug entry
 it), an `alive()` check, then the project browser (`project/NextcloudBrowser.tsx`, modelled on
 `ProjectBrowser`). The browser reads `index.json` once and shows a count line
 (`N projects · M samples · K soundfonts`), lets you **delete** a project (with GC of orphaned
-assets, see §4; shown behind an indeterminate progress dialog) and **open** one (downloads only
-locally-missing assets, behind a cancellable progress bar). Asset counting is instant because refs
+assets, see §4; behind a progress bar that advances over the project-folder delete, each orphan
+asset delete, and the catalog upload — `deleteProject` takes a `Progress.Handler`) and **open** one
+(downloads only locally-missing assets, behind a cancellable progress bar). Asset counting is instant because refs
 live in `index.json`. A delete tears the browse dialog down (the delete-progress dialog clears
 `Surface.flyout`, which holds the browse dialog), so the browser signals `reopen` and
 `NextcloudDialogs.browse` loops to **recreate** a fresh browse dialog with the updated catalog.

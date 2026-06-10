@@ -58,16 +58,29 @@ export namespace SharedFolderSync {
     }
 
     // Removes a project and garbage-collects the assets it referenced that no longer belong to any
-    // remaining project. Shared assets (still referenced elsewhere) are kept.
-    export const deleteProject = async (cloudHandler: CloudHandler, uuid: UUID.Bytes): Promise<void> => {
+    // remaining project. Shared assets (still referenced elsewhere) are kept. `progress` advances over
+    // the deletes (project folder + each orphan asset) and the final catalog upload.
+    export const deleteProject = async (cloudHandler: CloudHandler, uuid: UUID.Bytes,
+                                        progress?: Progress.Handler): Promise<void> => {
         const catalog = await readCatalog(cloudHandler)
         const key = UUID.toString(uuid)
         const removed = catalog.projects[key]
-        if (!isDefined(removed)) {return}
+        if (!isDefined(removed)) {progress?.(1.0); return}
         delete catalog.projects[key]
+        const live = collectLiveAssets(catalog)
+        const orphanSamples = await existingOrphans(cloudHandler, "assets/samples", removed.samples, live.samples)
+        const orphanSoundfonts = await existingOrphans(cloudHandler, "assets/soundfonts", removed.soundfonts,
+            live.soundfonts)
+        // project folder + catalog upload + one step per orphan asset folder.
+        const total = 2 + orphanSamples.length + orphanSoundfonts.length
+        let done = 0
+        const advance = () => progress?.(++done / total)
         await cloudHandler.delete(projectFolder(uuid))
-        await deleteOrphans(cloudHandler, removed, collectLiveAssets(catalog))
+        advance()
+        for (const id of orphanSamples) {await cloudHandler.delete(`assets/samples/${id}`); advance()}
+        for (const id of orphanSoundfonts) {await cloudHandler.delete(`assets/soundfonts/${id}`); advance()}
         await cloudHandler.upload(IndexPath, encodeJSON(catalog))
+        advance()
     }
 
     export const saveProject = async (cloudHandler: CloudHandler,
@@ -270,22 +283,27 @@ export namespace SharedFolderSync {
         return {samples, soundfonts}
     }
 
-    // Deletes the asset folders referenced by `entry` that are absent from the live set. Only assets
-    // that actually exist on the server are deleted (looked up via one listing per kind), so a stale
-    // catalog reference never triggers a 404 DELETE in the console.
+    // Deletes the asset folders referenced by `entry` that are absent from the live set (used by the
+    // re-save GC, where no progress is reported).
     const deleteOrphans = async (cloudHandler: CloudHandler, entry: CatalogEntry,
                                  live: { samples: Set<UUID.String>, soundfonts: Set<UUID.String> }): Promise<void> => {
-        await deleteOrphanFolder(cloudHandler, "assets/samples", entry.samples, live.samples)
-        await deleteOrphanFolder(cloudHandler, "assets/soundfonts", entry.soundfonts, live.soundfonts)
+        for (const id of await existingOrphans(cloudHandler, "assets/samples", entry.samples, live.samples)) {
+            await cloudHandler.delete(`assets/samples/${id}`)
+        }
+        for (const id of await existingOrphans(cloudHandler, "assets/soundfonts", entry.soundfonts, live.soundfonts)) {
+            await cloudHandler.delete(`assets/soundfonts/${id}`)
+        }
     }
 
-    const deleteOrphanFolder = async (cloudHandler: CloudHandler, folder: string,
-                                      referenced: ReadonlyArray<UUID.String>,
-                                      live: Set<UUID.String>): Promise<void> => {
+    // The orphan ids under `folder` that actually exist on the server (looked up via one listing), so a
+    // stale catalog reference never triggers a 404 DELETE in the console.
+    const existingOrphans = async (cloudHandler: CloudHandler, folder: string,
+                                   referenced: ReadonlyArray<UUID.String>,
+                                   live: Set<UUID.String>): Promise<ReadonlyArray<UUID.String>> => {
         const orphans = referenced.filter(id => !live.has(id))
-        if (orphans.length === 0) {return}
+        if (orphans.length === 0) {return []}
         const existing = await listShared(cloudHandler, folder)
-        for (const id of orphans) {if (existing.has(id)) {await cloudHandler.delete(`${folder}/${id}`)}}
+        return orphans.filter(id => existing.has(id))
     }
 
     // Checks presence by listing the parent folder, which does not open an exclusive file handle

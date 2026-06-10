@@ -7,6 +7,7 @@ import {
     RuntimeNotifier,
     StringComparator,
     TimeSpan,
+    unitValue,
     UUID
 } from "@opendaw/lib-std"
 import {Icon} from "@/ui/components/Icon"
@@ -93,12 +94,15 @@ export const NextcloudBrowser = ({lifecycle, handler, select, reopen}: Construct
                                                            + " project uses. This cannot be undone."
                                                    }).then(async approved => {
                                                        if (!approved) {return}
+                                                       const progressValue = new DefaultObservableValue<unitValue>(0.0)
                                                        const notifier = RuntimeNotifier.progress({
                                                            headline: "Nextcloud",
-                                                           message: `Deleting "${entry.meta.name}"...`
+                                                           message: `Deleting "${entry.meta.name}"...`,
+                                                           progress: progressValue
                                                        })
                                                        const {status, error} = await Promises
-                                                           .tryCatch(SharedFolderSync.deleteProject(handler, uuid))
+                                                           .tryCatch(SharedFolderSync.deleteProject(handler, uuid,
+                                                               value => progressValue.setValue(value)))
                                                        notifier.terminate()
                                                        if (status === "rejected") {
                                                            await RuntimeNotifier.info({
