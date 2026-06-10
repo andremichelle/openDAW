@@ -208,7 +208,18 @@ export namespace NextcloudDialogs {
         const inputPassword: HTMLInputElement =
             <input className="default" type="password" autocomplete="current-password" placeholder="Password"/>
         const inputFolder: HTMLInputElement =
-            <input className="default" type="text" placeholder="(optional) e.g. Classroom/anna"/>
+            <input className="default" type="text" placeholder="(optional)" style={{flex: "1", minWidth: "0"}}/>
+        const folderHelp: HTMLElement = (
+            <span title={"Leave empty for a normal account."
+                + "\nOnly enter a folder when your school uses a shared group folder"
+                + " (e.g. Classroom/your-name)."}
+                  style={{
+                      cursor: "help", flex: "0 0 auto",
+                      width: "1.25em", height: "1.25em", borderRadius: "50%",
+                      border: "1px solid currentColor", opacity: "0.7",
+                      display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.75em"
+                  }}>?</span>
+        )
         const approve = () => {
             const baseUrl = inputUrl.value.trim()
             const username = inputUser.value.trim()
@@ -251,7 +262,10 @@ export namespace NextcloudDialogs {
                     <div>Password:</div>
                     {inputPassword}
                     <div>Folder:</div>
-                    {inputFolder}
+                    <div style={{display: "flex", alignItems: "center", columnGap: "0.5em"}}>
+                        {inputFolder}
+                        {folderHelp}
+                    </div>
                 </form>
             </Dialog>
         )
