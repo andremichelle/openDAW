@@ -47,22 +47,26 @@ export namespace NextcloudDebug {
         }
         const credentials = await Promises.tryCatch(showCredentialsDialog())
         if (credentials.status === "rejected") {return}
-        const handler = new NextcloudHandler(credentials.value)
+        const abort = new AbortController()
+        const handler = new NextcloudHandler(credentials.value, abort.signal)
         const profile = service.profile
         const progressValue = new DefaultObservableValue<unitValue>(0.0)
         const notifier = RuntimeNotifier.progress({
-            headline: "Nextcloud Shared Folder", message: "Saving project...", progress: progressValue
+            headline: "Nextcloud Shared Folder",
+            message: "Saving project...",
+            progress: progressValue,
+            cancel: () => abort.abort()
         })
         const result = await Promises.tryCatch((async () => {
             const failed = await SharedFolderSync.saveProject(handler, profile, ({value, label}) => {
                 progressValue.setValue(value)
                 notifier.message = label
-            })
+            }, abort.signal)
             notifier.message = "Listing shared projects..."
             const listing = await SharedFolderSync.listProjects(handler)
             notifier.message = "Re-opening project..."
             const reopened = await SharedFolderSync.openProject(service, handler, profile.uuid,
-                value => progressValue.setValue(value))
+                value => progressValue.setValue(value), abort.signal)
             return {count: listing.length, name: reopened.meta.name, failed}
         })())
         notifier.terminate()
@@ -74,6 +78,8 @@ export namespace NextcloudDebug {
                 headline: "Shared folder OK",
                 message: `Saved project + deduplicated assets.\nCatalog holds ${result.value.count} project(s); re-opened "${result.value.name}".${failedNote}`
             })
+        } else if (Errors.isAbort(result.error)) {
+            await RuntimeNotifier.info({headline: "Nextcloud", message: "Sync cancelled."})
         } else {
             await RuntimeNotifier.info({headline: "Shared folder failed", message: String(result.error)})
         }

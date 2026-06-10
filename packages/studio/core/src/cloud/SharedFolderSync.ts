@@ -1,4 +1,4 @@
-import {Errors, Option, panic, Procedure, Progress, TimeSpan, unitValue, UUID} from "@opendaw/lib-std"
+import {Errors, isDefined, Option, panic, Procedure, Progress, TimeSpan, unitValue, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioFileBox, SoundfontFileBox} from "@opendaw/studio-boxes"
 import {SampleLoader, SoundfontLoader} from "@opendaw/studio-adapters"
@@ -35,7 +35,9 @@ export namespace SharedFolderSync {
 
     export const saveProject = async (cloudHandler: CloudHandler,
                                       {uuid, project, meta, cover}: ProjectProfile,
-                                      onProgress: Procedure<SyncProgress>): Promise<number> => {
+                                      onProgress: Procedure<SyncProgress>,
+                                      signal?: AbortSignal): Promise<number> => {
+        const checkAbort = () => {if (isDefined(signal) && signal.aborted) {throw Errors.AbortError}}
         const base = projectFolder(uuid)
         const audioFileBoxes = project.boxGraph.boxes()
             .filter((box): box is AudioFileBox => box instanceof AudioFileBox)
@@ -61,6 +63,7 @@ export namespace SharedFolderSync {
         const sharedSoundfonts = await listShared(cloudHandler, "assets/soundfonts")
         let failed = 0
         for (const box of audioFileBoxes) {
+            checkAbort()
             const id = UUID.toString(box.address.uuid)
             const label = `Uploading sample ${unit}/${assetCount}: ${box.fileName.getValue()}`
             if (!sharedSamples.has(id)) {
@@ -73,6 +76,7 @@ export namespace SharedFolderSync {
             unit++
         }
         for (const box of soundfontFileBoxes) {
+            checkAbort()
             const id = UUID.toString(box.address.uuid)
             const label = `Uploading soundfont ${unit}/${assetCount}: ${box.fileName.getValue()}`
             if (!sharedSoundfonts.has(id)) {
@@ -100,7 +104,9 @@ export namespace SharedFolderSync {
     export const openProject = async (env: ProjectEnv,
                                       cloudHandler: CloudHandler,
                                       uuid: UUID.Bytes,
-                                      progress: Progress.Handler): Promise<ProjectProfile> => {
+                                      progress: Progress.Handler,
+                                      signal?: AbortSignal): Promise<ProjectProfile> => {
+        const checkAbort = () => {if (isDefined(signal) && signal.aborted) {throw Errors.AbortError}}
         const base = projectFolder(uuid)
         const projectData = await cloudHandler.download(`${base}/${ProjectPaths.ProjectFile}`)
         const project = await Project.loadAnyVersion(env, projectData)
@@ -114,10 +120,12 @@ export namespace SharedFolderSync {
         const soundfontFileBoxes = project.boxGraph.boxes().filter(box => box instanceof SoundfontFileBox)
         const advance = progressStep(audioFileBoxes.length + soundfontFileBoxes.length, progress)
         for (const {address: {uuid: assetUUID}} of audioFileBoxes) {
+            checkAbort()
             await downloadSampleIfAbsent(cloudHandler, assetUUID)
             advance()
         }
         for (const {address: {uuid: assetUUID}} of soundfontFileBoxes) {
+            checkAbort()
             await downloadSoundfontIfAbsent(cloudHandler, assetUUID)
             advance()
         }

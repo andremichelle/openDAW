@@ -219,17 +219,23 @@ manual SFTP fallback), allowlist `opendaw.studio`, create the shared folder, and
 openDAW. Distil it from §2 and appendix G as the real flow stabilises. **Living document,
 update this step as each preceding step lands and as we learn more from pilot schools.**
 
-### Step 9: Nextcloud chunked upload + upload progress (implemented, verify in-app)
-Done in `NextcloudHandler`: files over 10 MB use **chunked upload v2**, create a session
-(`MKCOL uploads/<user>/<id>` with `Destination`), `PUT` each 10 MB chunk named `00001..`, then
-`MOVE .file` with `OC-Total-Length` to assemble. Smaller files use a single PUT. Uploads now go
-through **XHR** (not fetch) so `upload.onprogress` gives byte-level progress. `CloudHandler.upload`
-gained an optional `progress?: Progress.Handler`. `SharedFolderSync.saveProject` reports
-`{value, label}` per file; the debug entry shows a **progress bar** (files up to 100 MB).
-Open risk to verify: the cross-origin **MOVE** method and the `Destination`/`OC-Total-Length`
-headers must be permitted by WebAppPassword's CORS allowlist; confirm a >10 MB asset uploads in
-the browser. Also fixed: `openProject` lists the project folder and only downloads `image.bin`
-when present (no more cover 404).
+### ✅ Step 9: Nextcloud chunked upload + upload progress + cancel
+Done in `NextcloudHandler`: files over 10 MB use **chunked upload v2** (create session
+`MKCOL uploads/<user>/<id>` with `Destination`, `PUT` each 10 MB chunk `00001..`, `MOVE .file`
+with `OC-Total-Length`); smaller files use a single PUT. Verified end to end (a 57 MB soundfont
+uploads via chunks; cross-origin MOVE + `Destination`/`OC-Total-Length` headers pass WebAppPassword
+CORS). Uploads use **XHR** so `upload.onprogress` gives byte-level progress; `CloudHandler.upload`
+gained an optional `progress?: Progress.Handler`. `SharedFolderSync.saveProject` reports an
+**overall** `{value, label}` (project, then each asset fills its slice), shown as a progress bar.
+**Cancel:** an `AbortSignal` is threaded into the handler (aborts in-flight fetch/XHR) and into
+`saveProject`/`openProject` (checked between assets); the progress dialog's cancel button triggers
+it and the run reports "Sync cancelled". Also fixed: `openProject` lists the project folder and
+only downloads `image.bin` when present; dedup and parent-folder creation list directories instead
+of probing/MKCOL-ing (no 404/405 console spam).
+
+Console timings showed no code stall; slowness is network + per-request latency × sequential
+uploads. **Deferred option:** parallelize asset uploads (concurrency ~5) for a large speedup on
+many-file projects, at the cost of coarser progress. Not done; revisit if needed.
 
 ---
 

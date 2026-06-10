@@ -1,4 +1,4 @@
-import {Errors, isDefined, panic, Progress, unitValue} from "@opendaw/lib-std"
+import {Errors, isDefined, Optional, panic, Progress, unitValue} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {CloudHandler} from "./CloudHandler"
 
@@ -18,8 +18,9 @@ export class NextcloudHandler implements CloudHandler {
     readonly #authHeader: string
     readonly #knownCollections: Set<string>
     readonly #collectionChildren: Map<string, Set<string>>
+    readonly #signal: Optional<AbortSignal>
 
-    constructor({baseUrl, username, appPassword}: NextcloudCredentials) {
+    constructor({baseUrl, username, appPassword}: NextcloudCredentials, signal?: AbortSignal) {
         const root = baseUrl.trim().replace(/\/+$/, "")
         const user = encodeURIComponent(username)
         this.#davBase = `${root}/remote.php/dav/files/${user}`
@@ -27,6 +28,7 @@ export class NextcloudHandler implements CloudHandler {
         this.#authHeader = `Basic ${btoa(`${username}:${appPassword}`)}`
         this.#knownCollections = new Set<string>()
         this.#collectionChildren = new Map<string, Set<string>>()
+        this.#signal = signal
     }
 
     async alive(): Promise<void> {
@@ -81,6 +83,12 @@ export class NextcloudHandler implements CloudHandler {
         }
         xhr.onload = () => resolve(xhr.status)
         xhr.onerror = () => reject(new Error(`Upload network error for '${url}'`))
+        xhr.onabort = () => reject(Errors.AbortError)
+        if (isDefined(this.#signal)) {
+            if (this.#signal.aborted) {xhr.abort()} else {
+                this.#signal.addEventListener("abort", () => xhr.abort(), {once: true})
+            }
+        }
         xhr.send(data)
         return promise
     }
@@ -159,7 +167,7 @@ export class NextcloudHandler implements CloudHandler {
     async #fetch(url: string, init: RequestInit): Promise<Response> {
         const headers = new Headers(init.headers)
         headers.set("Authorization", this.#authHeader)
-        const {status, value, error} = await Promises.tryCatch(fetch(url, {...init, headers}))
+        const {status, value, error} = await Promises.tryCatch(fetch(url, {...init, headers, signal: this.#signal}))
         if (status === "rejected") {return panic(String(error))}
         return value
     }
