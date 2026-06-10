@@ -177,7 +177,7 @@ Deferred to Step 6 (belongs with the persisted connection UI, not a one-off dial
 `"Nextcloud"` to `CloudService` and a `CloudAuthManager` branch. The debug entry constructs the
 handler directly, so the transport is fully exercised without that wiring.
 
-### Step 5: Shared-folder sync (implemented, verify in-app)
+### ✅ Step 5: Shared-folder sync
 Done: `packages/studio/core/src/cloud/SharedFolderSync.ts` (exported from `cloud/index.ts`).
 Implements §4 against a `CloudHandler`:
 - `saveProject(handler, profile, progress)` -> uploads `projects/<uuid>/{project.od,meta.json,
@@ -188,9 +188,19 @@ Implements §4 against a `CloudHandler`:
 - `listProjects(handler)` -> reads `index.json` into `{uuid, meta}` entries.
 - `openProject(env, handler, uuid, progress)` -> downloads `project.od`, decodes it, and
   downloads **only the assets missing from local OPFS**, returns a `ProjectProfile`.
-Verify with a new debug-menu entry **"Sync Project to Nextcloud..."**
+Verified in-app via the debug-menu entry **"Sync Project to Nextcloud..."**
 (`NextcloudDebug.validateSharedFolder`): saves the active project, lists the catalog, re-opens
-it, and reports. Type-checks clean; not yet run in-app.
+it, reports. Robustness learned during testing and folded in:
+- WebDAV PUT to a missing parent returns **404** (not 409); `NextcloudHandler.upload` retries
+  after creating parents on 404/409, and caches created collections to avoid MKCOL spam.
+- Local asset presence is checked by **listing the parent folder**, not by opening the file
+  (opening takes an exclusive OPFS handle that can hang when the engine holds the sample).
+- Each asset upload is **time-bounded** so one locked/unavailable asset cannot freeze the sync.
+- The shared project is **self-contained**: every referenced sample is materialized (library
+  samples are downloaded into local storage on demand via the loader) and uploaded,
+  deduplicated by UUID. A sample that cannot be materialized (e.g. the openDAW library is
+  unavailable) is **reported as a failure** (counted, name logged, warning in the result),
+  never silently skipped, because whoever opens the shared project may not have library access.
 
 ### Step 6: UI
 "Open from / Save to Nextcloud" in `StudioMenu.ts`, plus the connection dialog and an

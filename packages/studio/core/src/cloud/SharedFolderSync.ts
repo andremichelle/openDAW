@@ -19,6 +19,7 @@ export namespace SharedFolderSync {
     export type Listing = { uuid: UUID.Bytes, meta: CatalogEntry }
 
     const IndexPath = "index.json"
+    const AssetTimeoutMs = 60000
     const projectFolder = (uuid: UUID.Bytes): string => `projects/${UUID.toString(uuid)}`
     const sampleFolder = (uuid: UUID.Bytes): string => `assets/samples/${UUID.toString(uuid)}`
     const soundfontFolder = (uuid: UUID.Bytes): string => `assets/soundfonts/${UUID.toString(uuid)}`
@@ -30,7 +31,7 @@ export namespace SharedFolderSync {
 
     export const saveProject = async (cloudHandler: CloudHandler,
                                       {uuid, project, meta, cover}: ProjectProfile,
-                                      progress: Progress.Handler): Promise<void> => {
+                                      progress: Progress.Handler): Promise<number> => {
         const base = projectFolder(uuid)
         await cloudHandler.upload(`${base}/${ProjectPaths.ProjectFile}`, project.toArrayBuffer() as ArrayBuffer)
         await cloudHandler.upload(`${base}/${ProjectPaths.ProjectMetaFile}`, encodeJSON(meta))
@@ -38,15 +39,27 @@ export namespace SharedFolderSync {
             none: () => Promise.resolve(),
             some: buffer => cloudHandler.upload(`${base}/${ProjectPaths.ProjectCoverFile}`, buffer)
         })
-        const audioFileBoxes = project.boxGraph.boxes().filter(box => box instanceof AudioFileBox)
-        const soundfontFileBoxes = project.boxGraph.boxes().filter(box => box instanceof SoundfontFileBox)
+        const audioFileBoxes = project.boxGraph.boxes()
+            .filter((box): box is AudioFileBox => box instanceof AudioFileBox)
+        const soundfontFileBoxes = project.boxGraph.boxes()
+            .filter((box): box is SoundfontFileBox => box instanceof SoundfontFileBox)
         const advance = progressStep(audioFileBoxes.length + soundfontFileBoxes.length, progress)
-        for (const {address: {uuid: assetUUID}} of audioFileBoxes) {
-            await uploadSampleIfAbsent(cloudHandler, project.sampleManager.getOrCreate(assetUUID))
+        let failed = 0
+        for (const box of audioFileBoxes) {
+            const loader = project.sampleManager.getOrCreate(box.address.uuid)
+            if (!await uploadSampleIfAbsent(cloudHandler, loader)) {
+                failed++
+                console.warn(`[SharedFolderSync] could not upload sample '${box.fileName.getValue()}' `
+                    + `(${UUID.toString(box.address.uuid)})`)
+            }
             advance()
         }
-        for (const {address: {uuid: assetUUID}} of soundfontFileBoxes) {
-            await uploadSoundfontIfAbsent(cloudHandler, project.soundfontManager.getOrCreate(assetUUID))
+        for (const box of soundfontFileBoxes) {
+            const loader = project.soundfontManager.getOrCreate(box.address.uuid)
+            if (!await uploadSoundfontIfAbsent(cloudHandler, loader)) {
+                failed++
+                console.warn(`[SharedFolderSync] could not upload soundfont (${UUID.toString(box.address.uuid)})`)
+            }
             advance()
         }
         const catalog = await downloadCatalog(cloudHandler)
@@ -59,6 +72,7 @@ export namespace SharedFolderSync {
         }
         await cloudHandler.upload(IndexPath, encodeJSON(catalog))
         progress(1.0)
+        return failed
     }
 
     export const openProject = async (env: ProjectEnv,
@@ -86,28 +100,69 @@ export namespace SharedFolderSync {
         return new ProjectProfile(uuid, project, meta, cover)
     }
 
-    const uploadSampleIfAbsent = async (cloudHandler: CloudHandler, loader: SampleLoader): Promise<void> => {
+    // Materializes the sample (downloading a library sample into local storage if needed) and uploads
+    // it unless already shared. The shared project must be self-contained, so library samples are
+    // bundled too. Returns false if the sample cannot be materialized (e.g. library unavailable).
+    const uploadSampleIfAbsent = async (cloudHandler: CloudHandler, loader: SampleLoader): Promise<boolean> => {
         const remote = sampleFolder(loader.uuid)
-        if (await cloudHandler.exists(`${remote}/audio.wav`)) {return}
-        await awaitSampleLoaded(loader)
+        if (await cloudHandler.exists(`${remote}/audio.wav`)) {return true}
         const local = `${SampleStorage.Folder}/${UUID.toString(loader.uuid)}`
-        await cloudHandler.upload(`${remote}/audio.wav`, await readOpfs(`${local}/audio.wav`))
-        await cloudHandler.upload(`${remote}/peaks.bin`, await readOpfs(`${local}/peaks.bin`))
-        await cloudHandler.upload(`${remote}/meta.json`, await readOpfs(`${local}/meta.json`))
+        if (!await ensureLocal(local, "audio.wav", () => awaitSampleLoaded(loader))) {return false}
+        const result = await Promises.tryCatch((async () => {
+            await cloudHandler.upload(`${remote}/audio.wav`, await readOpfs(`${local}/audio.wav`))
+            await cloudHandler.upload(`${remote}/peaks.bin`, await readOpfs(`${local}/peaks.bin`))
+            await cloudHandler.upload(`${remote}/meta.json`, await readOpfs(`${local}/meta.json`))
+        })())
+        if (result.status === "rejected") {
+            console.warn(`[SharedFolderSync] sample ${UUID.toString(loader.uuid)} upload failed:`, result.error)
+        }
+        return result.status === "resolved"
     }
 
-    const uploadSoundfontIfAbsent = async (cloudHandler: CloudHandler, loader: SoundfontLoader): Promise<void> => {
+    const uploadSoundfontIfAbsent = async (cloudHandler: CloudHandler, loader: SoundfontLoader): Promise<boolean> => {
+        const id = UUID.toString(loader.uuid)
         const remote = soundfontFolder(loader.uuid)
-        if (await cloudHandler.exists(`${remote}/soundfont.sf2`)) {return}
-        await awaitSoundfontLoaded(loader)
-        const local = `${SoundfontStorage.Folder}/${UUID.toString(loader.uuid)}`
-        await cloudHandler.upload(`${remote}/soundfont.sf2`, await readOpfs(`${local}/soundfont.sf2`))
-        await cloudHandler.upload(`${remote}/meta.json`, await readOpfs(`${local}/meta.json`))
+        const alreadyShared = await cloudHandler.exists(`${remote}/soundfont.sf2`)
+        console.debug(`[SFS] sf ${id} alreadyShared=${alreadyShared}`)
+        if (alreadyShared) {return true}
+        const local = `${SoundfontStorage.Folder}/${id}`
+        const present = await localFileExists(local, "soundfont.sf2")
+        console.debug(`[SFS] sf ${id} local='${local}' present=${present}`)
+        if (!present) {
+            const materialized = await Promises.tryCatch(awaitSoundfontLoaded(loader))
+            console.debug(`[SFS] sf ${id} materialize=${materialized.status}`,
+                materialized.status === "rejected" ? String(materialized.error) : "")
+            if (materialized.status === "rejected") {return false}
+        }
+        const result = await Promises.tryCatch((async () => {
+            const sf2 = await readOpfs(`${local}/soundfont.sf2`)
+            console.debug(`[SFS] sf ${id} read ${sf2.byteLength} bytes`)
+            await cloudHandler.upload(`${remote}/soundfont.sf2`, sf2)
+            await cloudHandler.upload(`${remote}/meta.json`, await readOpfs(`${local}/meta.json`))
+            console.debug(`[SFS] sf ${id} uploaded`)
+        })())
+        if (result.status === "rejected") {
+            console.warn(`[SFS] sf ${id} FAILED:`, String(result.error))
+        }
+        return result.status === "resolved"
+    }
+
+    // Ensures the asset files are in local storage. If the primary file is already there we use it
+    // directly; otherwise we run the loader to fetch it from the library. False = could not obtain.
+    const ensureLocal = async (folder: string, primaryFile: string,
+                               materialize: () => Promise<void>): Promise<boolean> => {
+        if (await localFileExists(folder, primaryFile)) {return true}
+        const result = await Promises.tryCatch(withTimeout(materialize()))
+        if (result.status === "rejected") {
+            console.warn(`[SharedFolderSync] '${folder}' not in local storage and could not be fetched:`, result.error)
+            return false
+        }
+        return true
     }
 
     const downloadSampleIfAbsent = async (cloudHandler: CloudHandler, uuid: UUID.Bytes): Promise<void> => {
         const local = `${SampleStorage.Folder}/${UUID.toString(uuid)}`
-        if (await Workers.Opfs.exists(`${local}/audio.wav`)) {return}
+        if (await localFileExists(local, "audio.wav")) {return}
         const remote = sampleFolder(uuid)
         await writeOpfs(`${local}/audio.wav`, await cloudHandler.download(`${remote}/audio.wav`))
         await writeOpfs(`${local}/peaks.bin`, await cloudHandler.download(`${remote}/peaks.bin`))
@@ -116,7 +171,7 @@ export namespace SharedFolderSync {
 
     const downloadSoundfontIfAbsent = async (cloudHandler: CloudHandler, uuid: UUID.Bytes): Promise<void> => {
         const local = `${SoundfontStorage.Folder}/${UUID.toString(uuid)}`
-        if (await Workers.Opfs.exists(`${local}/soundfont.sf2`)) {return}
+        if (await localFileExists(local, "soundfont.sf2")) {return}
         const remote = soundfontFolder(uuid)
         await writeOpfs(`${local}/soundfont.sf2`, await cloudHandler.download(`${remote}/soundfont.sf2`))
         await writeOpfs(`${local}/meta.json`, await cloudHandler.download(`${remote}/meta.json`))
@@ -135,34 +190,47 @@ export namespace SharedFolderSync {
         return result.status === "resolved" ? Option.wrap(result.value) : Option.None
     }
 
+    // Checks presence by listing the parent folder, which does not open an exclusive file handle
+    // and therefore cannot hang when the audio engine is holding the sample open.
+    const localFileExists = async (folder: string, fileName: string): Promise<boolean> =>
+        (await Workers.Opfs.list(folder)).some(entry => entry.name === fileName)
+
+    // getOrCreate already triggers loading (from local storage, else fetched from the library and
+    // persisted locally). We wait for that to finish so the bytes exist before uploading.
     const awaitSampleLoaded = (loader: SampleLoader): Promise<void> => {
-        if (loader.state.type === "loaded") {return Promise.resolve()}
-        return new Promise<void>((resolve, reject) => {
-            const subscription = loader.subscribe(state => {
-                if (state.type === "loaded") {
-                    resolve()
-                    subscription.terminate()
-                } else if (state.type === "error") {
-                    reject(new Error(state.reason))
-                    subscription.terminate()
-                }
-            })
+        const state = loader.state
+        if (state.type === "loaded") {return Promise.resolve()}
+        if (state.type === "error") {return Promise.reject(new Error(state.reason))}
+        const {promise, resolve, reject} = Promise.withResolvers<void>()
+        const subscription = loader.subscribe(next => {
+            if (next.type === "loaded") {subscription.terminate(); resolve()} else if (next.type === "error") {
+                subscription.terminate()
+                reject(new Error(next.reason))
+            }
         })
+        return promise
     }
 
     const awaitSoundfontLoaded = (loader: SoundfontLoader): Promise<void> => {
-        if (loader.state.type === "loaded") {return Promise.resolve()}
-        return new Promise<void>((resolve, reject) => {
-            const subscription = loader.subscribe(state => {
-                if (state.type === "loaded") {
-                    resolve()
-                    subscription.terminate()
-                } else if (state.type === "error") {
-                    reject(new Error(state.reason))
-                    subscription.terminate()
-                }
-            })
+        const state = loader.state
+        if (state.type === "loaded") {return Promise.resolve()}
+        if (state.type === "error") {return Promise.reject(new Error(state.reason))}
+        const {promise, resolve, reject} = Promise.withResolvers<void>()
+        const subscription = loader.subscribe(next => {
+            if (next.type === "loaded") {subscription.terminate(); resolve()} else if (next.type === "error") {
+                subscription.terminate()
+                reject(new Error(next.reason))
+            }
         })
+        return promise
+    }
+
+    // Bounds the library fetch so a sample that never loads cannot freeze the sync. Only guards
+    // materialization, not uploads (a large file may legitimately take minutes to upload).
+    const withTimeout = (operation: Promise<void>): Promise<void> => {
+        const {promise, reject} = Promise.withResolvers<void>()
+        const timer = setTimeout(() => reject(new Error(`timed out after ${AssetTimeoutMs}ms`)), AssetTimeoutMs)
+        return Promise.race([operation, promise]).finally(() => clearTimeout(timer))
     }
 
     const readOpfs = async (path: string): Promise<ArrayBuffer> => {

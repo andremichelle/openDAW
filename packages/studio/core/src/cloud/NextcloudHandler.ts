@@ -11,11 +11,13 @@ export type NextcloudCredentials = {
 export class NextcloudHandler implements CloudHandler {
     readonly #davBase: string
     readonly #authHeader: string
+    readonly #knownCollections: Set<string>
 
     constructor({baseUrl, username, appPassword}: NextcloudCredentials) {
         const root = baseUrl.trim().replace(/\/+$/, "")
         this.#davBase = `${root}/remote.php/dav/files/${encodeURIComponent(username)}`
         this.#authHeader = `Basic ${btoa(`${username}:${appPassword}`)}`
+        this.#knownCollections = new Set<string>()
     }
 
     async alive(): Promise<void> {
@@ -68,10 +70,12 @@ export class NextcloudHandler implements CloudHandler {
         let current = ""
         for (const segment of segments) {
             current = current.length === 0 ? segment : `${current}/${segment}`
+            if (this.#knownCollections.has(current)) {continue}
             const response = await this.#request(current, {method: "MKCOL"})
             if (!response.ok && response.status !== 405) {
                 return panic(`Nextcloud MKCOL failed (${response.status}) for '${current}'`)
             }
+            this.#knownCollections.add(current)
         }
     }
 

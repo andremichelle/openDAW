@@ -51,18 +51,23 @@ export namespace NextcloudDebug {
         const profile = service.profile
         const notifier = RuntimeNotifier.progress({headline: "Nextcloud Shared Folder", message: "Saving project..."})
         const result = await Promises.tryCatch((async () => {
-            await SharedFolderSync.saveProject(handler, profile, () => {})
+            const failed = await SharedFolderSync.saveProject(handler, profile,
+                value => notifier.message = `Uploading project and assets ${Math.round(value * 100)}%`)
             notifier.message = "Listing shared projects..."
             const listing = await SharedFolderSync.listProjects(handler)
             notifier.message = "Re-opening project..."
-            const reopened = await SharedFolderSync.openProject(service, handler, profile.uuid, () => {})
-            return {count: listing.length, name: reopened.meta.name}
+            const reopened = await SharedFolderSync.openProject(service, handler, profile.uuid,
+                value => notifier.message = `Downloading assets ${Math.round(value * 100)}%`)
+            return {count: listing.length, name: reopened.meta.name, failed}
         })())
         notifier.terminate()
         if (result.status === "resolved") {
+            const failedNote = result.value.failed > 0
+                ? `\nWARNING: ${result.value.failed} asset(s) could not be uploaded; the shared project is incomplete. See console for details.`
+                : ""
             await RuntimeNotifier.info({
                 headline: "Shared folder OK",
-                message: `Saved project + deduplicated assets.\nCatalog holds ${result.value.count} project(s); re-opened "${result.value.name}".`
+                message: `Saved project + deduplicated assets.\nCatalog holds ${result.value.count} project(s); re-opened "${result.value.name}".${failedNote}`
             })
         } else {
             await RuntimeNotifier.info({headline: "Shared folder failed", message: String(result.error)})
