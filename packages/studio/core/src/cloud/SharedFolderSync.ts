@@ -44,21 +44,28 @@ export namespace SharedFolderSync {
         const soundfontFileBoxes = project.boxGraph.boxes()
             .filter((box): box is SoundfontFileBox => box instanceof SoundfontFileBox)
         const advance = progressStep(audioFileBoxes.length + soundfontFileBoxes.length, progress)
+        const sharedSamples = await listShared(cloudHandler, "assets/samples")
+        const sharedSoundfonts = await listShared(cloudHandler, "assets/soundfonts")
         let failed = 0
         for (const box of audioFileBoxes) {
-            const loader = project.sampleManager.getOrCreate(box.address.uuid)
-            if (!await uploadSampleIfAbsent(cloudHandler, loader)) {
-                failed++
-                console.warn(`[SharedFolderSync] could not upload sample '${box.fileName.getValue()}' `
-                    + `(${UUID.toString(box.address.uuid)})`)
+            const id = UUID.toString(box.address.uuid)
+            if (!sharedSamples.has(id)) {
+                const loader = project.sampleManager.getOrCreate(box.address.uuid)
+                if (!await uploadSample(cloudHandler, loader)) {
+                    failed++
+                    console.warn(`[SharedFolderSync] could not upload sample '${box.fileName.getValue()}' (${id})`)
+                }
             }
             advance()
         }
         for (const box of soundfontFileBoxes) {
-            const loader = project.soundfontManager.getOrCreate(box.address.uuid)
-            if (!await uploadSoundfontIfAbsent(cloudHandler, loader)) {
-                failed++
-                console.warn(`[SharedFolderSync] could not upload soundfont (${UUID.toString(box.address.uuid)})`)
+            const id = UUID.toString(box.address.uuid)
+            if (!sharedSoundfonts.has(id)) {
+                const loader = project.soundfontManager.getOrCreate(box.address.uuid)
+                if (!await uploadSoundfont(cloudHandler, loader)) {
+                    failed++
+                    console.warn(`[SharedFolderSync] could not upload soundfont (${id})`)
+                }
             }
             advance()
         }
@@ -101,13 +108,12 @@ export namespace SharedFolderSync {
     }
 
     // Materializes the sample (downloading a library sample into local storage if needed) and uploads
-    // it unless already shared. The shared project must be self-contained, so library samples are
-    // bundled too. Returns false if the sample cannot be materialized (e.g. library unavailable).
-    const uploadSampleIfAbsent = async (cloudHandler: CloudHandler, loader: SampleLoader): Promise<boolean> => {
-        const remote = sampleFolder(loader.uuid)
-        if (await cloudHandler.exists(`${remote}/audio.wav`)) {return true}
+    // it. The shared project must be self-contained, so library samples are bundled too. Returns false
+    // if the sample cannot be materialized (e.g. the library is unavailable).
+    const uploadSample = async (cloudHandler: CloudHandler, loader: SampleLoader): Promise<boolean> => {
         const local = `${SampleStorage.Folder}/${UUID.toString(loader.uuid)}`
         if (!await ensureLocal(local, "audio.wav", () => awaitSampleLoaded(loader))) {return false}
+        const remote = sampleFolder(loader.uuid)
         const result = await Promises.tryCatch((async () => {
             await cloudHandler.upload(`${remote}/audio.wav`, await readOpfs(`${local}/audio.wav`))
             await cloudHandler.upload(`${remote}/peaks.bin`, await readOpfs(`${local}/peaks.bin`))
@@ -119,30 +125,16 @@ export namespace SharedFolderSync {
         return result.status === "resolved"
     }
 
-    const uploadSoundfontIfAbsent = async (cloudHandler: CloudHandler, loader: SoundfontLoader): Promise<boolean> => {
-        const id = UUID.toString(loader.uuid)
+    const uploadSoundfont = async (cloudHandler: CloudHandler, loader: SoundfontLoader): Promise<boolean> => {
+        const local = `${SoundfontStorage.Folder}/${UUID.toString(loader.uuid)}`
+        if (!await ensureLocal(local, "soundfont.sf2", () => awaitSoundfontLoaded(loader))) {return false}
         const remote = soundfontFolder(loader.uuid)
-        const alreadyShared = await cloudHandler.exists(`${remote}/soundfont.sf2`)
-        console.debug(`[SFS] sf ${id} alreadyShared=${alreadyShared}`)
-        if (alreadyShared) {return true}
-        const local = `${SoundfontStorage.Folder}/${id}`
-        const present = await localFileExists(local, "soundfont.sf2")
-        console.debug(`[SFS] sf ${id} local='${local}' present=${present}`)
-        if (!present) {
-            const materialized = await Promises.tryCatch(awaitSoundfontLoaded(loader))
-            console.debug(`[SFS] sf ${id} materialize=${materialized.status}`,
-                materialized.status === "rejected" ? String(materialized.error) : "")
-            if (materialized.status === "rejected") {return false}
-        }
         const result = await Promises.tryCatch((async () => {
-            const sf2 = await readOpfs(`${local}/soundfont.sf2`)
-            console.debug(`[SFS] sf ${id} read ${sf2.byteLength} bytes`)
-            await cloudHandler.upload(`${remote}/soundfont.sf2`, sf2)
+            await cloudHandler.upload(`${remote}/soundfont.sf2`, await readOpfs(`${local}/soundfont.sf2`))
             await cloudHandler.upload(`${remote}/meta.json`, await readOpfs(`${local}/meta.json`))
-            console.debug(`[SFS] sf ${id} uploaded`)
         })())
         if (result.status === "rejected") {
-            console.warn(`[SFS] sf ${id} FAILED:`, String(result.error))
+            console.warn(`[SharedFolderSync] soundfont ${UUID.toString(loader.uuid)} upload failed:`, result.error)
         }
         return result.status === "resolved"
     }
@@ -175,6 +167,13 @@ export namespace SharedFolderSync {
         const remote = soundfontFolder(uuid)
         await writeOpfs(`${local}/soundfont.sf2`, await cloudHandler.download(`${remote}/soundfont.sf2`))
         await writeOpfs(`${local}/meta.json`, await cloudHandler.download(`${remote}/meta.json`))
+    }
+
+    // Lists the UUID folder names already present under a shared asset folder so we can dedup in
+    // memory, instead of probing each asset (which logs a 404 per missing asset in the console).
+    const listShared = async (cloudHandler: CloudHandler, folder: string): Promise<Set<string>> => {
+        const result = await Promises.tryCatch(cloudHandler.list(folder))
+        return result.status === "resolved" ? new Set(result.value) : new Set<string>()
     }
 
     const downloadCatalog = async (cloudHandler: CloudHandler): Promise<Catalog> => {

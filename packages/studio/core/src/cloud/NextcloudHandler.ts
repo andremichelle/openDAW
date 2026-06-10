@@ -49,6 +49,7 @@ export class NextcloudHandler implements CloudHandler {
     async list(path?: string): Promise<Array<string>> {
         const target = path ?? ""
         const response = await this.#request(target, {method: "PROPFIND", headers: {Depth: "1"}})
+        if (response.status === 404) {return []}
         if (!(response.status === 207 || response.ok)) {
             return panic(`Nextcloud list failed (${response.status}) for '${target}'`)
         }
@@ -64,18 +65,26 @@ export class NextcloudHandler implements CloudHandler {
         }
     }
 
+    // Creates missing parent collections without ever issuing a request that returns a non-2xx
+    // status (which the browser would log). For each level we list the parent (always exists by
+    // induction, so PROPFIND returns 207) and only MKCOL the child when it is absent (returns 201).
     async #ensureParents(path: string): Promise<void> {
         const segments = path.replace(/^\/+/, "").split("/")
         segments.pop()
-        let current = ""
+        let parent = ""
         for (const segment of segments) {
-            current = current.length === 0 ? segment : `${current}/${segment}`
-            if (this.#knownCollections.has(current)) {continue}
-            const response = await this.#request(current, {method: "MKCOL"})
-            if (!response.ok && response.status !== 405) {
-                return panic(`Nextcloud MKCOL failed (${response.status}) for '${current}'`)
+            const current = parent.length === 0 ? segment : `${parent}/${segment}`
+            if (!this.#knownCollections.has(current)) {
+                const children = await this.list(parent)
+                if (!children.includes(segment)) {
+                    const response = await this.#request(current, {method: "MKCOL"})
+                    if (!response.ok && response.status !== 405) {
+                        return panic(`Nextcloud MKCOL failed (${response.status}) for '${current}'`)
+                    }
+                }
+                this.#knownCollections.add(current)
             }
-            this.#knownCollections.add(current)
+            parent = current
         }
     }
 

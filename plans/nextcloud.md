@@ -182,9 +182,9 @@ Done: `packages/studio/core/src/cloud/SharedFolderSync.ts` (exported from `cloud
 Implements §4 against a `CloudHandler`:
 - `saveProject(handler, profile, progress)` -> uploads `projects/<uuid>/{project.od,meta.json,
   image.bin}`, enumerates the project's `AudioFileBox`/`SoundfontFileBox` references, and
-  **exists-then-upload** dedup uploads each asset once into `assets/samples/<uuid>/` and
-  `assets/soundfonts/<uuid>/` (waits on the sample/soundfont loader, then copies the OPFS files,
-  same convention as `ProjectBundle`). Updates `index.json` catalog.
+  uploads each asset once into `assets/samples/<uuid>/` and `assets/soundfonts/<uuid>/`
+  (reads the files straight from local storage; only a sample not present locally is fetched via
+  the loader). Dedup is by a one-time listing of the shared asset folders. Updates `index.json`.
 - `listProjects(handler)` -> reads `index.json` into `{uuid, meta}` entries.
 - `openProject(env, handler, uuid, progress)` -> downloads `project.od`, decodes it, and
   downloads **only the assets missing from local OPFS**, returns a `ProjectProfile`.
@@ -195,7 +195,9 @@ it, reports. Robustness learned during testing and folded in:
   after creating parents on 404/409, and caches created collections to avoid MKCOL spam.
 - Local asset presence is checked by **listing the parent folder**, not by opening the file
   (opening takes an exclusive OPFS handle that can hang when the engine holds the sample).
-- Each asset upload is **time-bounded** so one locked/unavailable asset cannot freeze the sync.
+- Only the library **fetch** is time-bounded (60s); uploads are not, a 57 MB soundfont
+  legitimately took ~1 min as a single PUT. Dedup **lists** the shared asset folders once rather
+  than probing each asset, to avoid a 404-per-asset in the browser console.
 - The shared project is **self-contained**: every referenced sample is materialized (library
   samples are downloaded into local storage on demand via the loader) and uploaded,
   deduplicated by UUID. A sample that cannot be materialized (e.g. the openDAW library is
@@ -216,6 +218,16 @@ openDAW: prerequisites (admin access, app installs allowed), install WebAppPassw
 manual SFTP fallback), allowlist `opendaw.studio`, create the shared folder, and connect from
 openDAW. Distil it from §2 and appendix G as the real flow stabilises. **Living document,
 update this step as each preceding step lands and as we learn more from pilot schools.**
+
+### Step 9 (later): Nextcloud chunked upload for large assets
+Refines the asset uploads from Step 5. A single PUT works on our Strato instance (a 57 MB
+soundfont uploaded in ~1 min) but is slow and can exceed a stricter server's PHP limits
+(`upload_max_filesize`/`post_max_size`) or proxy body-size caps, failing large assets on some
+school servers. Implement Nextcloud's **chunked upload v2** in `NextcloudHandler` for files over
+a threshold (e.g. ~10 MB): create an upload session under `uploads/<user>/<id>/`, `PUT` each
+chunk, then `MOVE` the assembled file to its destination. Keep the plain single `PUT` for small
+files. This makes large samples/soundfonts robust regardless of server limits, and enables
+progress reporting per chunk.
 
 ---
 
