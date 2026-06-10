@@ -10,6 +10,7 @@ import {VideoRenderer} from "@/video/VideoRenderer"
 import {createDebugMenu} from "@/service/DebugMenu"
 import {connectRoom} from "@/service/StudioLiveRoomConnect"
 import {AiDemux} from "@/service/AiDemux.tsx"
+import {NextcloudDialogs} from "@/project/NextcloudDialogs"
 
 export const populateStudioMenu = (service: StudioService) => {
     const Global = GlobalShortcuts
@@ -97,7 +98,7 @@ export const populateStudioMenu = (service: StudioService) => {
                         checked: service.isSoftwareKeyboardVisible()
                     }).setTriggerProcedure(() => service.toggleSoftwareKeyboard()),
                     MenuItem.default({
-                        label: "Cloud Backup",
+                        label: "Backup",
                         icon: IconSymbol.CloudFolder,
                         separatorBefore: true
                     }).setRuntimeChildrenProcedure(parent => {
@@ -114,6 +115,22 @@ export const populateStudioMenu = (service: StudioService) => {
                                 CloudBackup.backup(service.cloudAuthManager, "GoogleDrive").catch(EmptyExec)),
                             MenuItem.default({label: "Help", icon: IconSymbol.Help, separatorBefore: true})
                                 .setTriggerProcedure(() => RouteLocation.get().navigateTo("/manuals/cloud-backup"))
+                        )
+                    }),
+                    MenuItem.default({
+                        label: "Nextcloud",
+                        icon: IconSymbol.Nextcloud
+                    }).setRuntimeChildrenProcedure(parent => {
+                        parent.addMenuItem(
+                            MenuItem.default({label: "Browse projects..."})
+                                .setTriggerProcedure(() => NextcloudDialogs.browse(service)),
+                            MenuItem.default({label: "Upload project...", selectable: service.hasProfile})
+                                .setTriggerProcedure(() => NextcloudDialogs.save(service)),
+                            MenuItem.default({
+                                label: "Disconnect",
+                                separatorBefore: true,
+                                hidden: !NextcloudDialogs.isConnected()
+                            }).setTriggerProcedure(() => NextcloudDialogs.disconnect())
                         )
                     }),
                     MenuItem.default({

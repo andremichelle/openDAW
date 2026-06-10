@@ -14,12 +14,21 @@ import {SoundfontStorage} from "../soundfont"
 //   assets/samples/<uuid>/{audio.wav,peaks.bin, meta.json} shared, uploaded once
 //   assets/soundfonts/<uuid>/{soundfont.sf2,meta.json} shared, uploaded once
 export namespace SharedFolderSync {
-    export type CatalogEntry = Pick<ProjectMeta, "name" | "modified" | "created" | "tags" | "description">
-    export type Catalog = Record<UUID.String, CatalogEntry>
-    export type Listing = { uuid: UUID.Bytes, meta: CatalogEntry }
+    export type CatalogMeta = Pick<ProjectMeta, "name" | "modified" | "created" | "tags" | "description">
+    // A project entry carries its metadata plus the UUIDs of every asset it references. The reference
+    // graph lives here (not by scanning project.od files) so counting and GC are a single index read.
+    export type CatalogEntry = {
+        meta: CatalogMeta
+        samples: ReadonlyArray<UUID.String>
+        soundfonts: ReadonlyArray<UUID.String>
+    }
+    export type Catalog = { version: number, projects: Record<UUID.String, CatalogEntry> }
+    export type Listing = { uuid: UUID.Bytes, entry: CatalogEntry }
+    export type AssetCounts = { samples: number, soundfonts: number }
     // `value` is the byte-progress of the file currently uploading (0..1); `label` names it.
     export type SyncProgress = { value: unitValue, label: string }
 
+    const CatalogVersion = 1
     const IndexPath = "index.json"
     // Guards only the library fetch when a referenced sample is not in local storage, so a stalled
     // download cannot hang the sync. Does NOT apply to uploads, which may legitimately take minutes.
@@ -28,9 +37,37 @@ export namespace SharedFolderSync {
     const sampleFolder = (uuid: UUID.Bytes): string => `assets/samples/${UUID.toString(uuid)}`
     const soundfontFolder = (uuid: UUID.Bytes): string => `assets/soundfonts/${UUID.toString(uuid)}`
 
+    export const readCatalog = async (cloudHandler: CloudHandler): Promise<Catalog> => {
+        if (!(await cloudHandler.list("")).includes(IndexPath)) {return emptyCatalog()}
+        const result = await Promises.tryCatch(cloudHandler.download(IndexPath))
+        if (result.status === "rejected") {
+            return result.error instanceof Errors.FileNotFound ? emptyCatalog() : panic(String(result.error))
+        }
+        return JSON.parse(new TextDecoder().decode(result.value)) as Catalog
+    }
+
     export const listProjects = async (cloudHandler: CloudHandler): Promise<ReadonlyArray<Listing>> => {
-        const catalog = await downloadCatalog(cloudHandler)
-        return Object.entries(catalog).map(([uuid, meta]) => ({uuid: UUID.parse(uuid), meta}))
+        const catalog = await readCatalog(cloudHandler)
+        return Object.entries(catalog.projects).map(([uuid, entry]) => ({uuid: UUID.parse(uuid), entry}))
+    }
+
+    // Distinct asset counts, derived from the in-memory catalog without any extra request.
+    export const countAssets = (catalog: Catalog): AssetCounts => {
+        const {samples, soundfonts} = collectLiveAssets(catalog)
+        return {samples: samples.size, soundfonts: soundfonts.size}
+    }
+
+    // Removes a project and garbage-collects the assets it referenced that no longer belong to any
+    // remaining project. Shared assets (still referenced elsewhere) are kept.
+    export const deleteProject = async (cloudHandler: CloudHandler, uuid: UUID.Bytes): Promise<void> => {
+        const catalog = await readCatalog(cloudHandler)
+        const key = UUID.toString(uuid)
+        const removed = catalog.projects[key]
+        if (!isDefined(removed)) {return}
+        delete catalog.projects[key]
+        await cloudHandler.delete(projectFolder(uuid))
+        await deleteOrphans(cloudHandler, removed, collectLiveAssets(catalog))
+        await cloudHandler.upload(IndexPath, encodeJSON(catalog))
     }
 
     export const saveProject = async (cloudHandler: CloudHandler,
@@ -89,14 +126,22 @@ export namespace SharedFolderSync {
             unit++
         }
         onProgress({value: 1.0, label: "Updating catalog"})
-        const catalog = await downloadCatalog(cloudHandler)
-        catalog[UUID.toString(uuid)] = {
-            name: meta.name,
-            modified: meta.modified,
-            created: meta.created,
-            tags: meta.tags,
-            description: meta.description
+        const catalog = await readCatalog(cloudHandler)
+        const key = UUID.toString(uuid)
+        const previous = catalog.projects[key]
+        catalog.projects[key] = {
+            meta: {
+                name: meta.name,
+                modified: meta.modified,
+                created: meta.created,
+                tags: meta.tags,
+                description: meta.description
+            },
+            samples: audioFileBoxes.map(box => UUID.toString(box.address.uuid)),
+            soundfonts: soundfontFileBoxes.map(box => UUID.toString(box.address.uuid))
         }
+        // Re-saving may drop an asset the project used to reference; GC it if no project keeps it alive.
+        if (isDefined(previous)) {await deleteOrphans(cloudHandler, previous, collectLiveAssets(catalog))}
         await cloudHandler.upload(IndexPath, encodeJSON(catalog))
         return failed
     }
@@ -211,13 +256,36 @@ export namespace SharedFolderSync {
         return new Set(children)
     }
 
-    const downloadCatalog = async (cloudHandler: CloudHandler): Promise<Catalog> => {
-        if (!(await cloudHandler.list("")).includes(IndexPath)) {return {}}
-        const result = await Promises.tryCatch(cloudHandler.download(IndexPath))
-        if (result.status === "rejected") {
-            return result.error instanceof Errors.FileNotFound ? {} : panic(String(result.error))
+    const emptyCatalog = (): Catalog => ({version: CatalogVersion, projects: {}})
+
+    // The "live set": every asset UUID still referenced by any project. GC keeps these and deletes
+    // the rest. Recomputed from the project list each time so it self-heals under last-write-wins.
+    const collectLiveAssets = (catalog: Catalog): { samples: Set<UUID.String>, soundfonts: Set<UUID.String> } => {
+        const samples = new Set<UUID.String>()
+        const soundfonts = new Set<UUID.String>()
+        for (const entry of Object.values(catalog.projects)) {
+            entry.samples.forEach(id => samples.add(id))
+            entry.soundfonts.forEach(id => soundfonts.add(id))
         }
-        return JSON.parse(new TextDecoder().decode(result.value)) as Catalog
+        return {samples, soundfonts}
+    }
+
+    // Deletes the asset folders referenced by `entry` that are absent from the live set. Only assets
+    // that actually exist on the server are deleted (looked up via one listing per kind), so a stale
+    // catalog reference never triggers a 404 DELETE in the console.
+    const deleteOrphans = async (cloudHandler: CloudHandler, entry: CatalogEntry,
+                                 live: { samples: Set<UUID.String>, soundfonts: Set<UUID.String> }): Promise<void> => {
+        await deleteOrphanFolder(cloudHandler, "assets/samples", entry.samples, live.samples)
+        await deleteOrphanFolder(cloudHandler, "assets/soundfonts", entry.soundfonts, live.soundfonts)
+    }
+
+    const deleteOrphanFolder = async (cloudHandler: CloudHandler, folder: string,
+                                      referenced: ReadonlyArray<UUID.String>,
+                                      live: Set<UUID.String>): Promise<void> => {
+        const orphans = referenced.filter(id => !live.has(id))
+        if (orphans.length === 0) {return}
+        const existing = await listShared(cloudHandler, folder)
+        for (const id of orphans) {if (existing.has(id)) {await cloudHandler.delete(`${folder}/${id}`)}}
     }
 
     // Checks presence by listing the parent folder, which does not open an exclusive file handle

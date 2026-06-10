@@ -12,6 +12,9 @@ export type NextcloudCredentials = {
 // between 5 MB and 5 GB; 10 MB keeps us safely above the minimum and well under typical proxy caps.
 const ChunkSize = 10 * 1024 * 1024
 
+// Total attempts (1 initial + retries) for transient read/metadata requests before giving up.
+const MaxFetchAttempts = 4
+
 export class NextcloudHandler implements CloudHandler {
     readonly #davBase: string
     readonly #uploadsBase: string
@@ -70,9 +73,18 @@ export class NextcloudHandler implements CloudHandler {
         progress?.(1.0)
     }
 
-    // Uploads via XHR rather than fetch because only XHR exposes upload progress events.
+    // Retries the PUT on transient network failures (a chunk PUT is idempotent within its session, a
+    // small PUT overwrites), so a single dropped connection does not fail the whole upload. Aborts
+    // are not retried.
     #put(url: string, data: ArrayBuffer, headers: Record<string, string>,
          progress?: Progress.Handler): Promise<number> {
+        return Promises.guardedRetry(() => this.#putOnce(url, data, headers, progress),
+            (error, count) => count < MaxFetchAttempts && !this.#aborted() && !Errors.isAbort(error))
+    }
+
+    // Uploads via XHR rather than fetch because only XHR exposes upload progress events.
+    #putOnce(url: string, data: ArrayBuffer, headers: Record<string, string>,
+             progress?: Progress.Handler): Promise<number> {
         const {promise, resolve, reject} = Promise.withResolvers<number>()
         const xhr = new XMLHttpRequest()
         xhr.open("PUT", url)
@@ -81,7 +93,9 @@ export class NextcloudHandler implements CloudHandler {
         if (isDefined(progress)) {
             xhr.upload.onprogress = event => {if (event.lengthComputable) {progress(event.loaded / event.total)}}
         }
-        xhr.onload = () => resolve(xhr.status)
+        xhr.onload = () => NextcloudHandler.#isTransient(xhr.status)
+            ? reject(new Error(`Nextcloud transient status ${xhr.status} for '${url}'`))
+            : resolve(xhr.status)
         xhr.onerror = () => reject(new Error(`Upload network error for '${url}'`))
         xhr.onabort = () => reject(Errors.AbortError)
         if (isDefined(this.#signal)) {
@@ -164,12 +178,29 @@ export class NextcloudHandler implements CloudHandler {
         return this.#fetch(this.#url(path), init)
     }
 
+    // Retries on transient network failures (e.g. ERR_HTTP2_PROTOCOL_ERROR, dropped connections) and
+    // transient server statuses (502/503/504), which occur intermittently against Nextcloud. Aborts
+    // are never retried and surface as AbortError.
     async #fetch(url: string, init: RequestInit): Promise<Response> {
         const headers = new Headers(init.headers)
         headers.set("Authorization", this.#authHeader)
-        const {status, value, error} = await Promises.tryCatch(fetch(url, {...init, headers, signal: this.#signal}))
-        if (status === "rejected") {return panic(String(error))}
-        return value
+        const result = await Promises.tryCatch(Promises.guardedRetry(
+            () => fetch(url, {...init, headers, signal: this.#signal})
+                .then(response => NextcloudHandler.#isTransient(response.status)
+                    ? Promise.reject(new Error(`Nextcloud transient status ${response.status} for '${url}'`))
+                    : response),
+            (error, count) => count < MaxFetchAttempts && !this.#aborted() && !Errors.isAbort(error)))
+        if (result.status === "resolved") {return result.value}
+        if (this.#aborted()) {return Promise.reject(Errors.AbortError)}
+        return panic(String(result.error))
+    }
+
+    #aborted(): boolean {return isDefined(this.#signal) && this.#signal.aborted}
+
+    // 423 = WebDAV file lock (Nextcloud transactional locking), which clears on its own shortly; 5xx
+    // are transient server hiccups. All are safe to retry.
+    static #isTransient(status: number): boolean {
+        return status === 423 || status === 502 || status === 503 || status === 504
     }
 
     #url(path: string): string {

@@ -36,6 +36,9 @@ export namespace ProjectStorage {
                 })))
     }
 
+    export const exists = async (uuid: UUID.Bytes): Promise<boolean> =>
+        (await Promises.tryCatch(Workers.Opfs.read(ProjectPaths.projectMeta(uuid)))).status === "resolved"
+
     export const loadProject = async (uuid: UUID.Bytes): Promise<ArrayBuffer> => {
         return Workers.Opfs.read(ProjectPaths.projectFile(uuid)).then(array => array.buffer as ArrayBuffer)
     }

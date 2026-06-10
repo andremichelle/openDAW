@@ -98,10 +98,15 @@ content, the same sample shared between ten class projects is stored exactly onc
 same "exists-then-upload" pattern `CloudBackupSamples.ts` already uses, just pointed at a
 shared `assets/` folder rather than a per-user private one.
 
-**Garbage collection:** a shared `assets/` folder accumulates orphans when projects are
-deleted. Out of scope for v1; add a later "compact shared folder" admin action that scans all
-`project.od` files for live asset UUIDs and deletes the rest. Note this clearly so we do not
-silently leak storage.
+**Garbage collection (implemented, Step 6):** `index.json` carries each project's asset UUID
+lists (`samples`/`soundfonts`), so the reference graph is read in one request, no `project.od`
+scanning. On project delete and on re-save, `SharedFolderSync` recomputes the **live set**
+(union of refs across all remaining projects) and deletes any asset folder no longer in it.
+Recompute-from-projects (not stored refcounts) is self-healing under last-write-wins. The new
+`index.json` shape:
+```json
+{ "version": 1, "projects": { "<uuid>": { "meta": {...}, "samples": ["<uuid>"], "soundfonts": ["<uuid>"] } } }
+```
 
 ---
 
@@ -204,9 +209,60 @@ it, reports. Robustness learned during testing and folded in:
   unavailable) is **reported as a failure** (counted, name logged, warning in the result),
   never silently skipped, because whoever opens the shared project may not have library access.
 
-### Step 6: UI
-"Open from / Save to Nextcloud" in `StudioMenu.ts`, plus the connection dialog and an
-`index.json` project browser.
+### Step 6: UI (open + save done)
+Done: a **"Nextcloud"** submenu in `StudioMenu.ts` directly below "Cloud Backup", icon
+`IconSymbol.Nextcloud` (the brand logo, added to `IconSymbol` + `IconLibrary.tsx` as an SVG
+symbol). Its children are **Browse...**, **Save...** (profile-gated) and **Disconnect** (shown only
+while connected). It runs the connection
+dialog (`NextcloudDialogs.showCredentialsDialog`, extracted from the debug entry and reused by
+it), an `alive()` check, then the project browser (`project/NextcloudBrowser.tsx`, modelled on
+`ProjectBrowser`). The browser reads `index.json` once and shows a count line
+(`N projects · M samples · K soundfonts`), lets you **delete** a project (with GC of orphaned
+assets, see §4; shown behind an indeterminate progress dialog) and **open** one (downloads only
+locally-missing assets, behind a cancellable progress bar). Asset counting is instant because refs
+live in `index.json`. A delete tears the browse dialog down (the delete-progress dialog clears
+`Surface.flyout`, which holds the browse dialog), so the browser signals `reopen` and
+`NextcloudDialogs.browse` loops to **recreate** a fresh browse dialog with the updated catalog.
+
+**"Save to Nextcloud..."** (`NextcloudDialogs.save`, `selectable` only with a profile) runs the
+credentials dialog + `alive()` then `SharedFolderSync.saveProject` behind a cancellable progress
+bar, and reports any assets that failed to upload. The debug "Sync Project to Nextcloud..." entry
+remains as a save+list+reopen round-trip test.
+
+**Load strategy (after open):** a Nextcloud project, once downloaded and ready, is **persisted
+into local OPFS** so it becomes a normal saved project (`NextcloudDialogs.store`). If a project
+with the **same UUID already exists locally** (`ProjectStorage.exists`), it asks: **Override**
+(default; overwrite the local copy at the same UUID with the Nextcloud version) or **Copy** (prompt
+for a name, then write under a fresh UUID via `Project.copy()`, leaving the existing one intact);
+Escape/cancel aborts without installing. No conflict: it is written under its own UUID. Both the
+override and no-conflict paths reuse `ProjectProfile.saveAs` on the unsaved profile (writes at the
+current UUID and marks it saved). Note: the `ProjectProfile` constructor reads meta back from the
+copied graph's `ProjectMetaBox`, so the **Copy** path applies the chosen name via `saveAs(newMeta)`
+(not the constructor arg), otherwise the copy keeps the old name.
+
+**Transient-failure robustness:** `NextcloudHandler` retries on transient network failures
+(`ERR_HTTP2_PROTOCOL_ERROR`, dropped connections) and transient statuses — **423 (WebDAV file
+lock)** plus 502/503/504 — via `Promises.guardedRetry` (up to 4 attempts, 1s apart). Both the read
+path (`#fetch`: GET/PROPFIND/DELETE/MKCOL/MOVE) and the upload path (`#put`, idempotent within a
+chunk session; its XHR `onload` rejects on a transient status so the retry sees it) are covered;
+aborts are never retried and surface as `AbortError`. Prompted by an intermittent
+`ERR_HTTP2_PROTOCOL_ERROR` on a `project.od` download and a `423 Locked` on an `index.json` PUT
+during delete, both of which succeed on retry. Delete's orphan-asset GC (`deleteOrphans`) also lists
+each shared asset folder once and only DELETEs assets that exist, so a stale catalog reference no
+longer logs a 404.
+
+**Connection persistence (session-only):** the first open/save prompts and validates credentials
+(`ensureConnection`), then caches them in an in-memory module variable for the rest of the page
+session, so subsequent open/save reuse them without prompting. Nothing is written to cookies or
+storage; a reload clears it. A **"Disconnect from Nextcloud"** entry (shown only while connected)
+clears the cache to switch account or recover from rotated credentials. Login Flow v2 (§3) remains
+the deferred nicer-UX option. The **server URL** (non-sensitive) is additionally remembered across
+reloads in `localStorage` (`nextcloud.server-url`) to pre-fill the dialog; the field defaults empty
+and the username/app password are never stored. The credential inputs sit in a `<form>` (so the
+browser/password-manager does not warn about a password field outside a form; submit is handled
+manually). Making `<form>` accept element children required a small `lib-jsx` types fix
+(`RemoveIndexSignature` in `types.ts`) so tags whose DOM interface carries index signatures
+(`HTMLFormElement`, `HTMLSelectElement`, …) no longer collapse their JSX children to `string`.
 
 ### Step 7 (later): own openDAW connector app
 Package the CORS allowlist as our own Nextcloud app (§1, Step 2) so schools get one-click
@@ -243,8 +299,8 @@ many-file projects, at the cost of coarser progress. Not done; revisit if needed
 
 - **Concurrency:** is a "shared project file" truly multi-writer, or is it shared assets plus
   per-student project copies? v1 = last-write-wins with a warning.
-- **Asset GC:** the shared `assets/` folder accumulates orphans on delete. Accept in v1, add a
-  "compact shared folder" tool later.
+- **Asset GC:** resolved in Step 6. `index.json` holds the per-project reference graph; delete
+  and re-save recompute the live set and delete orphaned asset folders (see §4).
 
 ---
 

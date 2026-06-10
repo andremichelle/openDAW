@@ -12,8 +12,18 @@ type AttributeMap = {
     style?: Partial<CSSStyleDeclaration> | CSSVars
 }
 
+// Some elements (e.g. HTMLFormElement, HTMLSelectElement) carry index signatures
+// ([index: number]: Element, [name: string]: any). Left in, those leak into the JSX props type and
+// make TS collapse the element's children to `string`, so `<form>{someElement}</form>` fails to
+// type-check. Dropping the index signatures before mapping lets such tags accept element children
+// like any other; arbitrary attributes stay allowed via the `& Record<string, unknown>` below.
+type RemoveIndexSignature<T> = {
+    [K in keyof T as
+        string extends K ? never : number extends K ? never : symbol extends K ? never : K]: T[K]
+}
+
 type ExtractProperties<T extends Element> = Partial<{
-    [K in keyof T]:
+    [K in keyof RemoveIndexSignature<T>]:
     K extends keyof AttributeMap ? AttributeMap[K] :
         K extends keyof GlobalEventHandlers ? GlobalEventHandlers[K] :
             T[K] extends Function ? never :

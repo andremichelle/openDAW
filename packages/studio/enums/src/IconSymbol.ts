@@ -63,6 +63,7 @@ export enum IconSymbol {
     Gate,
     Generator,
     GoogleDrive,
+    Nextcloud,
     Groove,
     Guitar,
     GuitarTab,
