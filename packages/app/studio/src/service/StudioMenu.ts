@@ -125,12 +125,7 @@ export const populateStudioMenu = (service: StudioService) => {
                             MenuItem.default({label: "Browse projects..."})
                                 .setTriggerProcedure(() => NextcloudDialogs.browse(service)),
                             MenuItem.default({label: "Upload project...", selectable: service.hasProfile})
-                                .setTriggerProcedure(() => NextcloudDialogs.save(service)),
-                            MenuItem.default({
-                                label: "Disconnect",
-                                separatorBefore: true,
-                                hidden: !NextcloudDialogs.isConnected()
-                            }).setTriggerProcedure(() => NextcloudDialogs.disconnect())
+                                .setTriggerProcedure(() => NextcloudDialogs.save(service))
                         )
                     }),
                     MenuItem.default({

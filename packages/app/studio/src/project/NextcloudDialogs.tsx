@@ -21,15 +21,10 @@ type Conflict = "override" | "copy" | "cancel"
 type BrowseResult = { type: "select", listing: SharedFolderSync.Listing } | { type: "reopen" }
 
 export namespace NextcloudDialogs {
-    // The active connection, kept in memory for the page session only (cleared on reload, never
-    // persisted to cookies or storage). Reused across open/save so credentials are entered once.
-    let session: Option<NextcloudCredentials> = Option.None
-    // Only the (non-sensitive) server URL is remembered across reloads to pre-fill the dialog; the
-    // username and app password are never stored.
+    // Only the server URL is remembered across reloads to pre-fill the dialog; username and app
+    // password are never stored. The dialog is always shown so a different Nextcloud user can be
+    // chosen each time.
     const ServerUrlKey = "nextcloud.server-url"
-
-    export const isConnected = (): boolean => session.nonEmpty()
-    export const disconnect = (): void => {session = Option.None}
 
     export const browse = async (service: StudioService): Promise<void> => {
         const credentials = await ensureConnection()
@@ -81,15 +76,13 @@ export namespace NextcloudDialogs {
         }
     }
 
-    // Returns the session credentials, prompting and validating once if not yet connected. The
-    // validated credentials are cached for the rest of the session. None = user cancelled or failed.
+    // Always prompts for and validates credentials so a different Nextcloud user can be chosen each
+    // time. None = the user cancelled or the connection failed.
     const ensureConnection = async (): Promise<Option<NextcloudCredentials>> => {
-        if (session.nonEmpty()) {return session}
         const credentials = await Promises.tryCatch(showCredentialsDialog("Connect to Nextcloud"))
         if (credentials.status === "rejected") {return Option.None}
         if (!await connect(new NextcloudHandler(credentials.value))) {return Option.None}
-        session = Option.wrap(credentials.value)
-        return session
+        return Option.wrap(credentials.value)
     }
 
     const connect = async (handler: NextcloudHandler): Promise<boolean> => {
@@ -209,9 +202,9 @@ export namespace NextcloudDialogs {
             <input className="default" type="text" autocomplete="url" value={localStorage.getItem(ServerUrlKey) ?? ""}
                    placeholder="https://your-nextcloud"/>
         const inputUser: HTMLInputElement =
-            <input className="default" type="text" autocomplete="username" placeholder="username"/>
+            <input className="default" type="text" autocomplete="username" placeholder="Username"/>
         const inputPassword: HTMLInputElement =
-            <input className="default" type="password" autocomplete="current-password" placeholder="app password"/>
+            <input className="default" type="password" autocomplete="current-password" placeholder="Password"/>
         const approve = () => {
             const baseUrl = inputUrl.value.trim()
             const username = inputUser.value.trim()
@@ -258,7 +251,8 @@ export namespace NextcloudDialogs {
         dialog.onkeydown = event => {if (event.code === "Enter") {if (approve()) {dialog.close()}}}
         Surface.get().flyout.appendChild(dialog)
         dialog.showModal()
-        const focusTarget = inputUrl.value.length === 0 ? inputUrl : inputUser
+        const focusTarget = inputUrl.value.length === 0 ? inputUrl
+            : inputUser.value.length === 0 ? inputUser : inputPassword
         focusTarget.focus()
         return promise
     }

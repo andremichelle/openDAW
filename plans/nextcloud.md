@@ -112,9 +112,9 @@ Recompute-from-projects (not stored refcounts) is self-healing under last-write-
 
 ## 5. Implementation roadmap (do these in order)
 
-**Status:** Steps 1–3 done. The browser CORS gate (Step 3) passed: a cross-origin `PROPFIND`
-from `https://localhost:8080` to `nextcloud.opendaw.studio` returned a full listing via
-WebAppPassword. Approach validated end to end. Next: Step 4.
+**Status:** Steps 1–6 and 9 done; the full browser flow (connect, browse, open, upload, delete with
+GC) works end to end against `nextcloud.opendaw.studio`. Remaining: Step 7 (own connector app) and
+Step 8 (school manual), plus the §6 concurrency question and the deferred parallel-upload option.
 
 The seam for the code steps: `CloudHandler`
 (`packages/studio/core/src/cloud/CloudHandler.ts`), a 6-method interface (`upload`, `exists`,
@@ -209,7 +209,7 @@ it, reports. Robustness learned during testing and folded in:
   unavailable) is **reported as a failure** (counted, name logged, warning in the result),
   never silently skipped, because whoever opens the shared project may not have library access.
 
-### Step 6: UI (open + save done)
+### ✅ Step 6: UI
 Done: a **"Nextcloud"** submenu in `StudioMenu.ts` directly below "Cloud Backup", icon
 `IconSymbol.Nextcloud` (the brand logo, added to `IconSymbol` + `IconLibrary.tsx` as an SVG
 symbol). Its children are **Browse...**, **Save...** (profile-gated) and **Disconnect** (shown only
