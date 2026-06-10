@@ -243,11 +243,10 @@ export namespace NextcloudDialogs {
                     icon={IconSymbol.Nextcloud}
                     cancelable={true}
                     onCancel={() => reject(Errors.AbortError)}
-                    buttons={[{
-                        text: "Connect",
-                        primary: true,
-                        onClick: handler => {if (approve()) {handler.close()}}
-                    }]}>
+                    buttons={[
+                        {text: "Cancel", onClick: handler => handler.close()},
+                        {text: "Connect", primary: true, onClick: handler => {if (approve()) {handler.close()}}}
+                    ]}>
                 <form style={{
                     padding: "1em 0", display: "grid", gridTemplateColumns: "auto 1fr",
                     columnGap: "1em", rowGap: "0.5em"
