@@ -35,6 +35,7 @@ export const App = (service: StudioService) => {
     }
     return (
         <Frag>
+            <RoomStatus lifecycle={terminator} service={service}/>
             <Header lifecycle={new Terminator()} service={service}/>
             <Router
                 runtime={terminator}
@@ -75,7 +76,6 @@ export const App = (service: StudioService) => {
                 ]}
             />
             <ChatOverlay lifecycle={terminator} service={service}/>
-            <RoomStatus lifecycle={terminator} service={service}/>
             <Footer lifecycle={terminator} service={service}/>
         </Frag>
     )

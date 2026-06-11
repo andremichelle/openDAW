@@ -127,6 +127,7 @@ export enum IconSymbol {
     Saxophone,
     Scissors,
     Search,
+    Share,
     SelectDown,
     SelectUp,
     Shadertoy,

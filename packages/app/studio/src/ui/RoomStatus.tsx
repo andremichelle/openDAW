@@ -23,7 +23,7 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
             element.style.display = ""
             const roomLabel: HTMLElement = (
                 <div className="room-label">
-                    <Icon symbol={IconSymbol.Copy}/>
+                    <Icon symbol={IconSymbol.Share}/>
                     <span className="room-name"
                           title="Click to copy join link"
                           onclick={async () => {
