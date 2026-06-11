@@ -13,6 +13,7 @@ import {Icon} from "@/ui/components/Icon"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {Dialogs} from "@/ui/components/dialogs"
 import {EditorLoadFailure} from "@/ui/components/EditorLoadFailure"
+import {Surface} from "@/ui/surface/Surface"
 import {dynamicImportWithRetry} from "@/ui/components/dynamicImportWithRetry"
 import {CodeEditorHandler} from "./CodeEditorHandler"
 import {CodeEditorExample} from "./CodeEditorState"
@@ -33,10 +34,8 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
         <div className="status idle"
              onclick={() => {
                  if (statusType !== "error") {return}
-                 Clipboard.writeText(statusText).then(() => Dialogs.info({
-                     headline: "Copied to Clipboard",
-                     message: "The error message has been copied to your clipboard."
-                 }))
+                 Clipboard.writeText(statusText)
+                     .then(() => Surface.get(statusLabel).toast("Error message copied to clipboard", IconSymbol.Copy))
              }}>Idle</div>
     )
     const state = service.activeCodeEditor.unwrapOrNull()
@@ -139,10 +138,7 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
                                 {starterPrompt.length > 0 && (
                                     <Button lifecycle={lifecycle}
                                             onClick={() => Clipboard.writeText(starterPrompt)
-                                                .then(() => Dialogs.info({
-                                                    headline: "AI Prompt Copied",
-                                                    message: "The starter prompt has been copied to your clipboard.\n\nPaste it into an AI assistant (e.g. ChatGPT, Claude) to get help writing code for this device.\n\nThen copy the generated code and use 'From Clipboard' to load it."
-                                                }))
+                                                .then(() => Surface.get(statusLabel).toast("AI prompt copied to clipboard", IconSymbol.Copy))
                                                 .catch(reason => setStatus(String(reason), "error"))}
                                             appearance={{
                                                 tooltip: "Copy AI starter prompt to clipboard",

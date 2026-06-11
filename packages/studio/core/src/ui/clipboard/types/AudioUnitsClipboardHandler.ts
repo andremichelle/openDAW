@@ -85,14 +85,20 @@ export namespace AudioUnitsClipboard {
             const audioUnitAdapter = optAudioUnit.unwrap()
             const audioUnitBox = audioUnitAdapter.box
             const isOutput = audioUnitAdapter.type === AudioUnitType.Output
+            if (isOutput) {return Option.None}
             const dependencies = collectDependencies(audioUnitBox, isOutput)
             const metadata: AudioUnitMetadata = {type: audioUnitAdapter.type}
             const allBoxes = [audioUnitBox, ...dependencies]
             const data = ClipboardUtils.serializeBoxes(allBoxes, encodeMetadata(metadata))
-            return Option.wrap({type: "audio-units", data})
+            return Option.wrap({type: "audio-units", data, count: 1})
         }
         return {
-            canCopy: (): boolean => getEnabled() && getEditedAudioUnit().nonEmpty(),
+            canCopy: (): boolean => {
+                if (!getEnabled()) {return false}
+                const optAudioUnit = getEditedAudioUnit()
+                if (optAudioUnit.isEmpty()) {return false}
+                return !optAudioUnit.unwrap().isOutput
+            },
             canCut: (): boolean => {
                 if (!getEnabled()) {return false}
                 const optAudioUnit = getEditedAudioUnit()

@@ -7,6 +7,7 @@ import markdownit from "markdown-it"
 import {markdownItTable} from "markdown-it-table"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
+import {Surface} from "@/ui/surface/Surface"
 
 const className = Html.adoptStyleSheet(css, "Markdown")
 
@@ -54,9 +55,9 @@ export const renderMarkdown = (element: HTMLElement, text: string, actions?: Rec
         code.onclick = async () => {
             if (isDefined(code.textContent)) {
                 const {status} = await Promises.tryCatch(Clipboard.writeText(code.textContent))
-                alert(status === "resolved"
-                    ? "Copied to clipboard"
-                    : "Could not copy to clipboard.")
+                if (status === "resolved") {
+                    Surface.get(element).toast("Copied to clipboard", IconSymbol.Copy)
+                }
             }
         }
     })

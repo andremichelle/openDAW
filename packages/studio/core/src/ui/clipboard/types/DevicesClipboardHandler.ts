@@ -168,7 +168,7 @@ export namespace DevicesClipboard {
                 audioEffectMaxIndex
             }
             const data = ClipboardUtils.serializeBoxes(allBoxes, encodeMetadata(metadata))
-            return Option.wrap({type: "devices", data})
+            return Option.wrap({type: "devices", data, count: selected.length})
         }
         return {
             canCopy: (): boolean => getEnabled() && copyableSelected().length > 0,

@@ -11,7 +11,8 @@ export namespace PreferencesPageLabels {
                 "enable-history-buttons": "Show Undo/Redo buttons",
                 "auto-open-clips": "Always open clip view",
                 "scrollbar-padding": "Add scrollbar padding",
-                "base-frequency": "Show base frequency"
+                "base-frequency": "Show base frequency",
+                "toasts": "Show notifications"
             }
         },
         "time-display": {

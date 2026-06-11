@@ -1,5 +1,6 @@
-import {Client, Option, Subscription, Terminable} from "@opendaw/lib-std"
+import {Client, isDefined, Option, RuntimeNotifier, Subscription, Terminable} from "@opendaw/lib-std"
 import {Clipboard, Events, ReservedShortcuts} from "@opendaw/lib-dom"
+import {IconSymbol} from "@opendaw/studio-enums"
 import {ContextMenu} from "./ContextMenu"
 import {MenuItem} from "../menu/MenuItems"
 import {StudioPreferences} from "../../StudioPreferences"
@@ -10,6 +11,7 @@ const CLIPBOARD_VERSION = 2
 export type ClipboardEntry<T extends string = string> = {
     readonly type: T
     readonly data: ArrayBufferLike
+    readonly count?: number
 }
 
 export interface ClipboardHandler<E extends ClipboardEntry> {
@@ -31,6 +33,25 @@ export namespace ClipboardManager {
         let binary = ""
         for (let i = 0; i < bytes.length; i++) {binary += String.fromCharCode(bytes[i])}
         return `${CLIPBOARD_HEADER}:${CLIPBOARD_VERSION}:${entry.type}:${btoa(binary)}`
+    }
+
+    const labelForType = (type: string): { one: string, many: string } => {
+        switch (type) {
+            case "devices": return {one: "Device", many: "Devices"}
+            case "regions": return {one: "Region", many: "Regions"}
+            case "notes": return {one: "Note", many: "Notes"}
+            case "values": return {one: "Automation point", many: "Automation points"}
+            case "audio-units": return {one: "AudioUnit", many: "AudioUnits"}
+            default: return {one: "Selection", many: "Selection"}
+        }
+    }
+
+    const notify = (entry: AnyEntry, verb: string, icon: IconSymbol): void => {
+        const {one, many} = labelForType(entry.type)
+        const label = !isDefined(entry.count)
+            ? `${one}(s)`
+            : entry.count === 1 ? one : `${entry.count} ${many}`
+        RuntimeNotifier.notify({message: `${label} ${verb} to clipboard`, icon: IconSymbol.toName(icon)})
     }
 
     const decode = (text: string): Option<AnyEntry> => {
@@ -57,13 +78,13 @@ export namespace ClipboardManager {
         const performCopy = (): boolean => {
             if (!handler.canCopy(noClient)) {return false}
             const entry = handler.copy()
-            entry.ifSome(writeEntry)
+            entry.ifSome(entry => {writeEntry(entry); notify(entry, "copied", IconSymbol.Copy)})
             return entry.nonEmpty()
         }
         const performCut = (): boolean => {
             if (!handler.canCut(noClient)) {return false}
             const entry = handler.cut()
-            entry.ifSome(writeEntry)
+            entry.ifSome(entry => {writeEntry(entry); notify(entry, "cut", IconSymbol.Scissors)})
             return entry.nonEmpty()
         }
         const performPaste = async () => {
@@ -97,6 +118,7 @@ export namespace ClipboardManager {
                     const encoded = encode(entry)
                     fallbackEntry = Option.wrap(entry)
                     event.clipboardData?.setData("text/plain", encoded)
+                    notify(entry, "copied", IconSymbol.Copy)
                 })
             }),
             Events.subscribe(element, "cut", (event: ClipboardEvent) => {
@@ -108,6 +130,7 @@ export namespace ClipboardManager {
                     const encoded = encode(entry)
                     fallbackEntry = Option.wrap(entry)
                     event.clipboardData?.setData("text/plain", encoded)
+                    notify(entry, "cut", IconSymbol.Scissors)
                 })
             }),
             Events.subscribe(document, "paste", (event: ClipboardEvent) => {

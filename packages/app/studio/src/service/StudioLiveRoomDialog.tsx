@@ -1,5 +1,5 @@
 import css from "./StudioLiveRoomDialog.sass?inline"
-import {Errors, isDefined, Optional, RuntimeNotifier} from "@opendaw/lib-std"
+import {Errors, isDefined, Optional} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {Clipboard, Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
@@ -48,9 +48,7 @@ export const showConnectRoomDialog = (prefillRoomName?: Optional<string>): Promi
                       && nameInput.value.trim().length > 0) {
                       const {status} = await Promises.tryCatch(Clipboard.writeText(text))
                       if (status === "resolved") {
-                          await RuntimeNotifier.info({headline: "Clipboard", message: "Join link copied to clipboard."})
-                      } else {
-                          await RuntimeNotifier.info({headline: "Clipboard", message: "Could not copy to clipboard."})
+                          Surface.get(urlPreview).toast("Join link copied to clipboard", IconSymbol.Copy)
                       }
                   }
               }}/>

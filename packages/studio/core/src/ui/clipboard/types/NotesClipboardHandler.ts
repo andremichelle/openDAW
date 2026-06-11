@@ -57,7 +57,7 @@ export namespace NotesClipboard {
             const allBoxes = [...eventBoxes, ...dependencies]
             const data = ClipboardUtils.serializeBoxes(allBoxes, encodeMetadata(min, max))
             setPosition(max)
-            return Option.wrap({type: "notes", data})
+            return Option.wrap({type: "notes", data, count: selected.length})
         }
         return {
             canCopy: (): boolean => getEnabled() && selection.nonEmpty(),

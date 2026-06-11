@@ -15,7 +15,7 @@ export const Toast = ({text, icon}: {text: string, icon: IconSymbol}): HTMLEleme
             <span>{text}</span>
         </div>
     )
-    Wait.timeSpan(TimeSpan.seconds(3))
+    Wait.timeSpan(TimeSpan.seconds(1.5))
         .then(() => element.classList.add("leaving"))
         .then(() => Wait.event(element, "transitionend"))
         .then(() => element.remove())

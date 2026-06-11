@@ -10,13 +10,15 @@ export const StudioSettingsSchema = z.object({
         "enable-history-buttons": z.boolean(),
         "auto-open-clips": z.boolean(),
         "scrollbar-padding": z.boolean(),
-        "base-frequency": z.boolean()
+        "base-frequency": z.boolean(),
+        "toasts": z.boolean()
     }).default({
         "visible-help-hints": true,
         "enable-history-buttons": navigator.maxTouchPoints > 0,
         "auto-open-clips": true,
         "scrollbar-padding": Browser.isWindows(),
-        "base-frequency": false
+        "base-frequency": false,
+        "toasts": true
     }),
     "time-display": z.object({
         "musical": z.boolean(),

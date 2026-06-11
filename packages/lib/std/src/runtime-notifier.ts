@@ -33,6 +33,12 @@ export namespace RuntimeNotification {
         set message(value: string)
     }
 
+    export type NotifyRequest = {
+        message: string
+        icon?: string
+        origin?: Element
+    }
+
     export interface Installer {
         install(notifier: Notifier): void
     }
@@ -41,6 +47,7 @@ export namespace RuntimeNotification {
         info(request: InfoRequest): Promise<void>
         approve(request: ApproveRequest): Promise<boolean>
         progress(request: ProgressRequest): ProgressUpdater
+        notify(request: NotifyRequest): void
     }
 }
 
@@ -58,6 +65,10 @@ export const RuntimeNotifier: RuntimeNotification.Notifier & RuntimeNotification
         progress: (request: RuntimeNotification.ProgressRequest): RuntimeNotification.ProgressUpdater => notifierOption.match({
             none: () => ({message: "", terminate: EmptyExec}),
             some: notifier => notifier.progress(request)
+        }),
+        notify: (request: RuntimeNotification.NotifyRequest): void => notifierOption.match({
+            none: EmptyExec,
+            some: notifier => notifier.notify(request)
         }),
         install: (notifier: RuntimeNotification.Notifier) => {
             assert(notifierOption.isEmpty(), "RuntimeNotification already installed")

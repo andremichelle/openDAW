@@ -51,7 +51,7 @@ export namespace ValuesClipboard {
             const allBoxes = [...eventBoxes, ...dependencies]
             const data = ClipboardUtils.serializeBoxes(allBoxes, encodeMetadata(min, max))
             setPosition(max)
-            return Option.wrap({type: "values", data})
+            return Option.wrap({type: "values", data, count: selected.length})
         }
         return {
             canCopy: (): boolean => getEnabled() && selection.nonEmpty(),

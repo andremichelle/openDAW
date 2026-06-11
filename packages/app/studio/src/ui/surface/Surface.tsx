@@ -25,6 +25,7 @@ import {TextTooltip} from "./TextTooltip"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 import {AnimationFrame, CssUtils, Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {IconSymbol, initializeColors} from "@opendaw/studio-enums"
+import {StudioPreferences} from "@opendaw/studio-core"
 import {Toast} from "./Toast"
 
 const className = Html.adoptStyleSheet(css, "Surface")
@@ -227,6 +228,7 @@ export class Surface implements TerminableOwner {
     }
 
     toast(text: string, icon: IconSymbol = IconSymbol.Notification): void {
+        if (!StudioPreferences.settings.visibility["toasts"]) {return}
         this.#toasts.prepend(Toast({text, icon}))
     }
 

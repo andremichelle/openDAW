@@ -27,7 +27,7 @@ import {MissingFeature} from "@/ui/MissingFeature.tsx"
 import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
 import {showStoragePersistDialog} from "@/AppDialogs"
 import {Promises} from "@opendaw/lib-runtime"
-import {AnimationFrame, Browser, Events, Html, ShortcutManager} from "@opendaw/lib-dom"
+import {AnimationFrame, Browser, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {installLatencyReporter} from "@/LatencyReporter"
 import {reportVisitor} from "@/VisitorReporter"
@@ -35,6 +35,7 @@ import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
 import {AudioData} from "@opendaw/lib-dsp"
 import {ChainedSampleProvider, ChainedSoundfontProvider} from "@opendaw/studio-p2p"
+import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Menu} from "@/ui/components/Menu"
 
@@ -116,19 +117,6 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
         }))
     }, errorHandler)
     Surface.subscribeKeyboard("keydown", event => ShortcutManager.get().handleEvent(event), Number.MAX_SAFE_INTEGER)
-    const toastSamples = [
-        "Saved",
-        "Project exported successfully",
-        "Could not connect to the collaboration server, retrying in a few seconds",
-        "This is a deliberately very long toast message used to verify how the notification wraps or truncates when the text far exceeds the typical width of the surface"
-    ]
-    let toastSampleIndex = 0
-    Surface.subscribeKeyboard("keydown", event => {
-        if (event.code === "KeyT" && event.altKey && !Events.isTextInput(event.target)) {
-            event.preventDefault()
-            Surface.get().toast(toastSamples[toastSampleIndex++ % toastSamples.length])
-        }
-    })
     document.querySelector("#preloader")?.remove()
     replaceChildren(surface.ground, App(service))
     AnimationFrame.start(window)
@@ -136,7 +124,9 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
     RuntimeNotifier.install({
         info: (request) => Dialogs.info(request),
         approve: (request) => Dialogs.approve({...request, reverse: true}),
-        progress: (request): RuntimeNotification.ProgressUpdater => Dialogs.progress(request)
+        progress: (request): RuntimeNotification.ProgressUpdater => Dialogs.progress(request),
+        notify: ({message, icon, origin}) => Surface.get(origin)
+            .toast(message, isDefined(icon) ? IconSymbol.fromName(icon) : IconSymbol.Notification)
     })
     const opfsProbe = await Promises.tryCatch(navigator.storage.getDirectory())
     if (opfsProbe.status === "rejected") {

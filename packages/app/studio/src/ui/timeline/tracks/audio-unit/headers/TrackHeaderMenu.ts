@@ -71,7 +71,7 @@ export const installTrackHeaderMenu = (service: StudioService,
                 }
             })),
         MenuItem.default({
-            label: "Copy AudioUnit",
+            label: "Duplicate AudioUnit",
             shortcut: GlobalShortcuts["copy-device"].shortcut.format(),
             separatorBefore: true,
             hidden: audioUnitBoxAdapter.isOutput

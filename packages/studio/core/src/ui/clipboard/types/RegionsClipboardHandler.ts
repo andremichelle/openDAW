@@ -116,7 +116,7 @@ export namespace RegionsClipboard {
             const metadata: RegionsMetadata = {minPosition, maxPosition, tracks: trackInfos}
             const data = ClipboardUtils.serializeBoxes(allBoxes, encodeMetadata(metadata))
             setPosition(maxPosition)
-            return Option.wrap({type: "regions", data})
+            return Option.wrap({type: "regions", data, count: selected.length})
         }
         return {
             canCopy: (): boolean => getEnabled() && selection.nonEmpty(),

@@ -1,7 +1,8 @@
 import css from "./RoomStatus.sass?inline"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
-import {isDefined, Lifecycle, Nullable, Optional, RuntimeNotifier, Terminator} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, Nullable, Optional, Terminator} from "@opendaw/lib-std"
 import {Clipboard, Html} from "@opendaw/lib-dom"
+import {Surface} from "@/ui/surface/Surface"
 import {StudioService} from "@/service/StudioService"
 import {AwarenessUserState, RoomAwareness} from "@/service/RoomAwareness"
 import {Promises} from "@opendaw/lib-runtime"
@@ -30,10 +31,7 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
                               const joinUrl = `${location.origin}/join/${awareness.roomName}`
                               const {status} = await Promises.tryCatch(Clipboard.writeText(joinUrl))
                               if (status === "resolved") {
-                                  await RuntimeNotifier.info({
-                                      headline: "Clipboard",
-                                      message: `Join link copied to clipboard.`
-                                  })
+                                  Surface.get(element).toast("Join link copied to clipboard", IconSymbol.Copy)
                               }
                           }}>{`Room '${awareness.roomName}'`}</span>
                 </div>

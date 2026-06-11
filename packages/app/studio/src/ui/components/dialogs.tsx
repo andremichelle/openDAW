@@ -246,7 +246,7 @@ export namespace Dialogs {
                                 JSON.stringify(box.toJSON(), null, 2))
                             if (status === "success") {
                                 Clipboard.writeText(value)
-                                    .then(EmptyExec, EmptyExec)
+                                    .then(() => Surface.get(origin).toast("Box JSON copied to clipboard", IconSymbol.Copy), EmptyExec)
                                     .finally(() => handler.close())
                             } else {
                                 console.warn(error)
