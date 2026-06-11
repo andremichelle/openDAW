@@ -24,7 +24,8 @@ import {ValueTooltip} from "@/ui/surface/ValueTooltip.tsx"
 import {TextTooltip} from "./TextTooltip"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 import {AnimationFrame, CssUtils, Events, Html, Keyboard} from "@opendaw/lib-dom"
-import {initializeColors} from "@opendaw/studio-enums"
+import {IconSymbol, initializeColors} from "@opendaw/studio-enums"
+import {Toast} from "./Toast"
 
 const className = Html.adoptStyleSheet(css, "Surface")
 
@@ -119,6 +120,7 @@ export class Surface implements TerminableOwner {
     readonly #ground: DomElement
     readonly #flyout: DomElement
     readonly #floating: DomElement
+    readonly #toasts: DomElement
     readonly #textTooltip: TextTooltip
     readonly #valueTooltip: ValueTooltip
     readonly #pointer: Point
@@ -134,6 +136,7 @@ export class Surface implements TerminableOwner {
         this.#ground = <div className="ground"/>
         this.#flyout = <div className="flyout"/>
         this.#floating = <div className="flyout"/>
+        this.#toasts = <div className="toasts"/>
         this.#textTooltip = new TextTooltip(this)
         this.#valueTooltip = new ValueTooltip(this)
         this.#pointer = Point.zero()
@@ -144,6 +147,7 @@ export class Surface implements TerminableOwner {
                 {this.#ground}
                 {this.#flyout}
                 {this.#floating}
+                {this.#toasts}
             </div>
         )
 
@@ -220,6 +224,10 @@ export class Surface implements TerminableOwner {
             if (surface.#parent === null) {return surface}
             surface = surface.#parent
         } while (true)
+    }
+
+    toast(text: string, icon: IconSymbol = IconSymbol.Notification): void {
+        this.#toasts.prepend(Toast({text, icon}))
     }
 
     async requestFloatingTextInput(client: Client, value?: string): Promise<string> {

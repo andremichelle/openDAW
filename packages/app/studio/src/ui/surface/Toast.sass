@@ -1,0 +1,24 @@
+@use "@/mixins"
+
+component
+  @include mixins.floating
+  font-size: 1.125rem
+  align-items: center
+  column-gap: 0.5em
+  padding: 0.5em 0.75em
+  pointer-events: auto
+  transition: opacity 0.2s ease, transform 0.2s ease
+
+  > svg
+    flex: 0 0 auto
+    width: 1.5em !important
+    height: 1.5em !important
+
+  > span
+    font-size: 1em
+    max-width: 24em
+    text-align: center
+
+  &.leaving
+    opacity: 0
+    transform: translateY(-0.5em)

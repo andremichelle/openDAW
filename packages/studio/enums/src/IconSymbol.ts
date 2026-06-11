@@ -100,6 +100,7 @@ export enum IconSymbol {
     NoAudio,
     Note,
     NotePad,
+    Notification,
     OpenDAW,
     Panel,
     Paste,
