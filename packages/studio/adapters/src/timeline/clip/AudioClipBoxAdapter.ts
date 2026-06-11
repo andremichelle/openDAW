@@ -128,6 +128,7 @@ export class AudioClipBoxAdapter implements AudioContentBoxAdapter, ClipBoxAdapt
     get hue(): int {return this.#box.hue.getValue()}
     get gain(): MutableObservableValue<number> {return this.#box.gain}
     get file(): AudioFileBoxAdapter {return this.#fileAdapter.unwrap("Cannot access file.")}
+    get optFile(): Option<AudioFileBoxAdapter> {return this.#fileAdapter}
     get observableOptPlayMode(): ObservableOption<AudioPlayMode> {return this.#playMode}
     get hasCollection() {return !this.optCollection.isEmpty()}
     get optCollection(): Option<never> {return Option.None}

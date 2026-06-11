@@ -30,7 +30,8 @@ export const TransientMarkerEditor = ({lifecycle, range, reader, hoverTransient}
                 const {requestUpdate} = lifecycle.own(new CanvasPainter(canvas, painter => {
                     const {context, actualHeight, devicePixelRatio} = painter
                     const optWarpMarkers = audioContent.optWarpMarkers
-                    if (optWarpMarkers.isEmpty() || audioContent.asPlayModeTimeStretch.isEmpty()) {return}
+                    if (optWarpMarkers.isEmpty() || audioContent.asPlayModeTimeStretch.isEmpty()
+                        || audioContent.optFile.isEmpty()) {return}
                     const transientsCollection = audioContent.file.transients
                     if (transientsCollection.length() < 2) {return}
                     const warpMarkers = optWarpMarkers.unwrap()

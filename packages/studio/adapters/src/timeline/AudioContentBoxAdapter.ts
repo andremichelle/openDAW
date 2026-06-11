@@ -10,6 +10,7 @@ import {AudioClipBox, AudioRegionBox} from "@opendaw/studio-boxes"
 
 export interface AudioContentBoxAdapter extends BoxAdapter {
     get file(): AudioFileBoxAdapter
+    get optFile(): Option<AudioFileBoxAdapter>
     get timeBase(): TimeBase
     get duration(): ppqn
     get observableOptPlayMode(): ObservableOption<AudioPlayMode>
