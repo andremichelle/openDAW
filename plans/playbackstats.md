@@ -31,103 +31,109 @@ tab is visible, so this is fine.
 
 ## No casts
 
-`lib.dom` does not type `playoutStats`. Type it with a global declaration merge,
-not an `as` cast:
+`lib.dom` does not type `playbackStats`. Type it with an ambient global interface
+merge, not an `as` cast. Lives in both packages that touch the API (separate
+compilations):
+
+- `packages/studio/core/src/env.d.ts` (next to the existing `MediaTrackSettings`
+  augment), for the detector.
+- `packages/app/studio/src/global.d.ts`, for the footer and the debug probe.
 
 ```ts
-interface AudioContextPlayoutStats {
-    readonly fallbackFramesEvents: number
-    readonly fallbackFramesDuration: number
-    readonly totalFramesDuration: number
+interface AudioPlaybackStats {
+    readonly underrunDuration: number
+    readonly underrunEvents: number
+    readonly totalDuration: number
+    readonly averageLatency: number
+    readonly minimumLatency: number
+    readonly maximumLatency: number
+    resetLatency(): void
+    toJSON(): object
 }
-declare global {
-    interface AudioContext {
-        readonly playoutStats?: AudioContextPlayoutStats
-    }
+interface AudioContext {
+    readonly playbackStats?: AudioPlaybackStats
 }
 ```
 
-Then `audioContext.playoutStats` is typed `Optional<AudioContextPlayoutStats>`
-with zero casts. Source the context from `ProjectEnv.audioContext`, which is
-already typed `AudioContext`. Never go through `AudioWorklets.context`, that is a
-`BaseAudioContext` and would force the cast.
+`audioContext.playbackStats` is then `AudioPlaybackStats | undefined`, no casts.
+The worklet is ruled out: it runs on a `BaseAudioContext`, which has no
+`playbackStats`, so reading it there would force the `BaseAudioContext as
+AudioContext` cast we are avoiding.
 
-(Find the right place for the `declare global` block, an existing ambient types
-file if one exists, otherwise the detector module.)
+## Detector (implemented)
 
-## Detection (location to revisit)
+`packages/studio/core/src/BufferUnderrunDetector.ts`, a `Terminable` class in core.
 
-NOT in `EngineWorklet`. The worklet is driven by a `BaseAudioContext`, not an
-`AudioContext`, and `playoutStats` only exists on `AudioContext`. Putting it there
-would force the exact `BaseAudioContext as AudioContext` cast we are avoiding.
+- Constructor `(playbackStats: AudioPlaybackStats, engine: EngineFacade)`. No
+  `StudioService` and no `AudioContext` dependency, which is why it can live in core.
+- Feature detection lives at the call site in `boot.ts`:
+  `if (isDefined(context.playbackStats)) { new BufferUnderrunDetector(context.playbackStats, service.engine) }`.
+  Absent (non Chrome) means the detector is never constructed.
+- Polls `underrunEvents` every 1 s. Counts consecutive tick over tick increases,
+  an isolated bump resets the streak to 0.
+- On 3 consecutive increases (`CONSECUTIVE_THRESHOLD`) it treats the situation as a
+  permanent overload, resets the streak, and runs the response.
 
-So detection must run wherever a properly typed `AudioContext` is available. The
-candidate is the main thread, polling `service.audioContext` (or
-`ProjectEnv.audioContext`, both typed `AudioContext`) on a roughly 1 Hz tick. The
-stats only update once per second anyway. Pick a concrete owner later, options:
+Gated on the `engine["stop-playback-when-overloading"]` preference (default true),
+the same setting `handleCpuOverload` uses, checked at fire time so a runtime toggle
+is respected.
 
-- A small detector owned by `StudioService`, started once, watching
-  `engine.isPlaying`.
-- Hook into an existing main thread ticker (`AnimationFrame`) with a 1 s gate.
+Response (only while `engine.isPlaying`), mirrors `Project.handleCpuOverload`:
 
-Detection rules (wherever it lands):
+- `engine.sleep()` is the whole stop. `EngineWorklet.sleep()` halts the DSP (the
+  processor returns early before `render()`, `EngineProcessor.ts:352`), sets
+  `isPlaying` false, AND issues `commands.stop(true)`, so the engine is stopped, not
+  just paused. Recovery is the normal play button: `engine.play()` -> `wake()`
+  clears the flag.
+- `RuntimeNotifier.info(...)` tells the user to check the device and press play.
 
-- Read `audioContext.playbackStats`, feature detect with `isDefined`. On non Chrome
-  it is absent and detection is a no op.
-- Baseline `lastUnderrunEvents` from the current `underrunEvents`. The counter is
-  cumulative since context creation and the context outlives project reloads, so a
-  fresh baseline avoids false triggers.
-- Fire only when the event count increases AND the engine is playing. Advance the
-  baseline on every increase so dropouts that happened while stopped do not fire
-  later.
+NO `context.suspend()`. It was tried and broke playback: the `stop(true)` that
+`sleep()` dispatches is delivered asynchronously to the audio render thread, and
+suspending freezes that thread before the command lands, stranding the transport in
+a half-stopped state. The working CPU-overload path never suspends, so we don't
+either. Releasing the output device would need a different mechanism (suspend only
+after the engine has confirmed stop, plus resume-on-play) and is out of scope.
 
-Open: exact owner and ticker for the main thread poll. Revisit after the Chrome
-verification (debug menu entry "Show Playbackstats...") confirms the API works.
+## Footer indicator (implemented, independent)
 
-## Handling
-
-`Project.handleBufferUnderrun()`, sibling of `handleCpuOverload()`:
-
-```ts
-handleBufferUnderrun(): void {
-    this.engine.sleep()
-    this.#env.audioContext.suspend().finally()
-    RuntimeNotifier.info({
-        headline: "Audio Dropout Detected",
-        message: "Playback has been stopped because the audio device could not keep up. "
-            + "Check or reconnect your audio device, then press play to resume."
-    }).finally()
-}
-```
-
-- `engine.sleep()` halts the DSP. The processor returns early before `render()`
-  when the control flag is set (`EngineProcessor.ts:352`), so this is a real stop,
-  not just a transport stop.
-- `audioContext.suspend()` releases the output device so the user can swap or
-  reconnect it. No cast, `#env.audioContext` is `AudioContext`.
+`packages/app/studio/src/ui/Footer.tsx`, an "Underruns" `FooterItem`. It keeps its
+own 1 s poll and the same 3 consecutive increase rule, latches the number red, and
+a click resets the streak and clears the colour. Deliberately independent of the
+detector (separate poller, display only).
 
 ## Recovery
 
-Already wired. `EngineFacade.play()` resumes a suspended context and calls
-`wake()`, so pressing play after fixing the device restores both. No change.
+Pressing play calls `engine.play()` -> `worklet.play()` -> `wake()` (clears the
+sleep flag), and the processor resumes `render()`.
 
-## Open questions for André
+Two fixes were needed to make recovery actually work:
 
-1. Preference gate? `handleCpuOverload` gates on
-   `engine["stop-playback-when-overloading"]`. Underrun could be always on or get
-   its own setting.
-2. Detection site: a main thread poller (the worklet is ruled out, it runs on a
-   `BaseAudioContext`). Owner and ticker still to decide, see Detection section.
-3. Forward compat: also probe `playbackStats` (spec name) so non Chrome browsers
-   work once they ship the renamed API, or stay Chrome only for now.
+1. Detector re-trigger loop. `underrunEvents` is a monotonic browser counter, and
+   the audio system keeps registering fallback events while it catches up after a
+   glitch. Unlike CPU load (which reads 0 once asleep, removing its own trigger),
+   our counter kept climbing and re-fired the sleep. Fix: the detector polls only
+   while `engine.isPlaying`, stops the instant it sleeps, and re-arms re-baselined
+   when the engine plays again, so the catch-up burst is absorbed.
+
+2. Play button stuck on "playing". The engine only broadcasts transport state from
+   `render()` (`#stateSender.tryWrite()` at `EngineProcessor.ts:414`), which is
+   skipped while asleep, so the stopped state never reached the UI. The play button
+   stayed active, and its toggle (`if (isPlaying) stop() else play()`) called
+   `stop()` instead of `play()`, so the engine never woke. Fix: the processor's
+   sleep branch now calls `#stateSender.tryWrite()` before returning, reporting the
+   stopped transport without doing DSP. Benefits the CPU-overload stop identically.
 
 ## Status
 
-- Done: Chrome verification probe. Debug menu entry "Show Playbackstats..." in
-  `packages/app/studio/src/service/DebugMenu.ts` dumps every `playoutStats` field
-  via a dialog, with the `declare global` augmentation (no cast).
+- Done: Chrome verification probe (`DebugMenu.ts`, "Show Playbackstats..."), dumps
+  `playbackStats` via `toJSON()`. Verified the spec field names in Chrome.
+- Done: footer "Underruns" indicator with 3 in a row red latch and click reset.
+- Done: `BufferUnderrunDetector` in core, wired in `boot.ts`, sleep + suspend +
+  dialog on overload.
 
-## Files touched (implementation, not yet done)
+## Open questions for André
 
-- Detection: a main thread poller, owner to be decided (not `EngineWorklet`).
-- `packages/studio/core/src/project/Project.ts`: `handleBufferUnderrun()`.
+1. The detector and footer poll independently with no shared state. Fine for now,
+   could later share one source if it matters.
+2. Forward compat / cross browser: Chrome only for now (the augment is optional, so
+   other browsers are a clean no op).

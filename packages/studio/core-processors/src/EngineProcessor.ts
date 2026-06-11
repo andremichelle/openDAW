@@ -349,7 +349,10 @@ export class EngineProcessor extends AudioWorkletProcessor implements EngineCont
 
     process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
         if (!this.#valid) {return false} // will not revive
-        if (Atomics.load(this.#controlFlags, 0) === 1) {return true} // sleeps. can be awake
+        if (Atomics.load(this.#controlFlags, 0) === 1) {
+            this.#stateSender.tryWrite() // keep the UI in sync (stopped transport) while asleep, no DSP
+            return true
+        }
         try {
             return this.render(inputs, outputs)
         } catch (reason: any) {

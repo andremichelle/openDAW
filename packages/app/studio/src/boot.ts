@@ -2,7 +2,7 @@ if ("stackTraceLimit" in Error) {Error.stackTraceLimit = 50}
 
 import "./main.sass"
 import {App} from "@/ui/App.tsx"
-import {panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {isDefined, panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
 import {SampleMetaData, SoundfontMetaData} from "@opendaw/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
@@ -12,6 +12,7 @@ import {Surface} from "@/ui/surface/Surface.tsx"
 import {replaceChildren} from "@opendaw/lib-jsx"
 import {
     AudioWorklets,
+    BufferUnderrunDetector,
     CloudAuthManager,
     ContextMenu,
     GlobalSampleLoaderManager,
@@ -99,6 +100,9 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
         sampleManager, soundfontManager, chainedSampleProvider, chainedSoundfontProvider,
         cloudAuthManager, buildInfo)
     StudioShortcutManager.install(service)
+    if (isDefined(context.playbackStats)) {
+        new BufferUnderrunDetector(context.playbackStats, service.engine)
+    }
     const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand())
     const surface = Surface.main({
         config: (surface: Surface) => surface.own(ContextMenu.install(surface.owner, (menuItem, {clientX, clientY}) => {
