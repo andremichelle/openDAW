@@ -118,12 +118,12 @@ export const installTrackHeaderMenu = (service: StudioService,
                 }).setTriggerProcedure(() => editing.modify(() => audioUnitBoxAdapter.moveTrack(trackBoxAdapter, 1))),
                 MenuItem.default({
                     label: "AudioUnit 1 Up",
-                    selectable: audioUnitBoxAdapter.indexField.getValue() > 0 && false
+                    selectable: audioUnitBoxAdapter.indexField.getValue() > 0
                 }).setTriggerProcedure(() => editing.modify(() => audioUnitBoxAdapter.move(-1))),
                 MenuItem.default({
                     label: "AudioUnit 1 Down",
                     selectable: audioUnitBoxAdapter.indexField.getValue() < project.rootBoxAdapter.audioUnits.adapters()
-                        .filter(adapter => !adapter.isOutput).length - 1 && false
+                        .filter(adapter => !adapter.isOutput).length - 1
                 }).setTriggerProcedure(() => editing.modify(() => audioUnitBoxAdapter.move(1)))
             )),
         MenuItem.default({

@@ -108,23 +108,21 @@ export class IndexedBoxAdapterCollection<A extends IndexedBoxAdapter, P extends 
     }
 
     moveIndex(startIndex: int, delta: int): void {
+        if (delta === 0) {return}
         const adapters = this.adapters()
         const adapter = adapters[startIndex]
+        const newIndex = clamp(startIndex + delta, 0, adapters.length - 1)
+        if (newIndex === startIndex) {return}
         if (delta < 0) {
-            const newIndex = clamp(startIndex + delta, 0, adapters.length - 1)
             for (let index = newIndex; index < startIndex; index++) {
                 adapters[index].indexField.setValue(index + 1)
             }
-            adapter.indexField.setValue(newIndex)
-        } else if (delta > 1) {
-            const newIndex = clamp(startIndex + (delta - 1), 0, adapters.length - 1)
+        } else {
             for (let index = startIndex; index < newIndex; index++) {
                 adapters[index + 1].indexField.setValue(index)
             }
-            adapter.indexField.setValue(newIndex)
-        } else {
-            console.warn(`moveIndex had no effect: startIndex: ${startIndex}, delta: ${delta}`)
         }
+        adapter.indexField.setValue(newIndex)
     }
 
     size(): int {return this.#entries.size()}
