@@ -10,6 +10,19 @@ import {SyncLogService} from "@/service/SyncLogService"
 import {Dialogs} from "@/ui/components/dialogs"
 import {NextcloudDebug} from "@/service/NextcloudDebug"
 
+// Buffer-underrun statistics (not yet typed in lib.dom).
+// https://webaudio.github.io/web-audio-api/#AudioPlaybackStats
+interface AudioPlaybackStats {
+    resetLatency(): void
+    toJSON?(): object
+}
+
+declare global {
+    interface AudioContext {
+        readonly playbackStats?: AudioPlaybackStats
+    }
+}
+
 export const createDebugMenu = (service: StudioService) => MenuItem.default({
     label: "Debug",
     icon: IconSymbol.Bug,
@@ -65,6 +78,28 @@ export const createDebugMenu = (service: StudioService) => MenuItem.default({
     }).setTriggerProcedure(() => service.panicEngine()),
     MenuItem.default({label: "List Supported Codecs...", separatorBefore: true})
         .setTriggerProcedure(() => CodecsUtils.listSupportedCodecs()),
+    MenuItem.default({label: "Show Playbackstats..."})
+        .setTriggerProcedure(() => {
+            const context = service.audioContext
+            const stats = context.playbackStats
+            if (!isDefined(stats)) {
+                RuntimeNotifier.info({
+                    headline: "Playback Stats",
+                    message: "AudioContext.playbackStats is not available in this browser."
+                }).finally()
+                return
+            }
+            const dump = isDefined(stats.toJSON) ? stats.toJSON() : stats
+            const message = [
+                `context.state: ${context.state}`,
+                `sampleRate: ${context.sampleRate}`,
+                `baseLatency: ${context.baseLatency}`,
+                `outputLatency: ${context.outputLatency}`,
+                "",
+                JSON.stringify(dump, null, 2)
+            ].join("\n")
+            RuntimeNotifier.info({headline: "Playback Stats", message}).finally()
+        }),
     MenuItem.default({label: "Validate Nextcloud Access...", separatorBefore: true})
         .setTriggerProcedure(() => NextcloudDebug.validateAccess()),
     MenuItem.default({label: "Clear Local Storage", separatorBefore: true})
