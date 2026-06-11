@@ -16,7 +16,6 @@ type ChartProps = {
 
 const DEFAULT_PADDING = {top: 16, right: 16, bottom: 28, left: 40}
 const COMPACT_PADDING = {top: 8, right: 8, bottom: 8, left: 8}
-const GRID_LINES = 4
 const LABEL_MIN_DISTANCE = 24
 const X_LABEL_MIN_DISTANCE = 32
 
@@ -30,11 +29,30 @@ const latencyBarColor = (label: string): string => {
     return Colors.orange.toString()
 }
 
-const niceStep = (rawStep: number): number => {
+const UNIT_SCALES: ReadonlyArray<readonly [number, string]> = [
+    [1_000_000_000, "B"],
+    [1_000_000, "M"],
+    [1_000, "K"]
+]
+
+const axisUnit = (ticks: ReadonlyArray<number>): readonly [number, string] => {
+    for (const [divisor, suffix] of UNIT_SCALES) {
+        if (ticks.every(value => value % divisor === 0)) {return [divisor, suffix] as const}
+    }
+    return [1, ""] as const
+}
+
+const formatTick = (value: number, divisor: number, suffix: string): string =>
+    value === 0 ? "0" : `${value / divisor}${suffix}`
+
+const UNIT_MANTISSAS: ReadonlyArray<number> = [1, 2, 5, 10]
+const FINE_MANTISSAS: ReadonlyArray<number> = [1, 2.5, 5, 10]
+
+const niceStep = (rawStep: number, mantissas: ReadonlyArray<number> = UNIT_MANTISSAS): number => {
     const exponent = Math.floor(Math.log10(Math.max(1, rawStep)))
     for (let magnitudeExp = exponent; magnitudeExp <= exponent + 3; magnitudeExp++) {
         const magnitude = Math.pow(10, magnitudeExp)
-        for (const mantissa of [1, 2.5, 5, 10]) {
+        for (const mantissa of mantissas) {
             const candidate = mantissa * magnitude
             if (Number.isInteger(candidate) && candidate >= 1 && candidate >= rawStep) {return candidate}
         }
@@ -69,13 +87,17 @@ export const LineChart = ({lifecycle, series, color, showAxis = true, showTrend 
                 const chartHeight = Math.max(1, height - padding.top - padding.bottom)
                 const values = data.map(([, value]) => value)
                 const labels = data.map(([date]) => date)
-                const maxValue = Math.max(...values)
-                const minValue = Math.min(0, ...values)
-                const valueRange = Math.max(1, maxValue - minValue)
+                const rawMax = Math.max(...values, 1)
+                const rawMin = Math.min(0, ...values)
+                const rawRange = Math.max(1, rawMax - rawMin)
+                const valueStep = niceStep(LABEL_MIN_DISTANCE * rawRange / chartHeight)
+                const axisMin = rawMin < 0 ? Math.floor(rawMin / valueStep) * valueStep : 0
+                const axisMax = Math.max(axisMin + valueStep, Math.ceil(rawMax / valueStep) * valueStep)
+                const valueRange = axisMax - axisMin
                 const stepX = values.length > 1 ? chartWidth / (values.length - 1) : 0
                 const points: ReadonlyArray<readonly [number, number]> = values.map((value, index) => {
                     const x = padding.left + index * stepX
-                    const y = padding.top + chartHeight - ((value - minValue) / valueRange) * chartHeight
+                    const y = padding.top + chartHeight - ((value - axisMin) / valueRange) * chartHeight
                     return [x, y] as const
                 })
                 const baseY = padding.top + chartHeight
@@ -91,17 +113,18 @@ export const LineChart = ({lifecycle, series, color, showAxis = true, showTrend 
                             </linearGradient>
                         </defs>
                         {showAxis && (() => {
-                            const lines = Math.min(GRID_LINES, Math.max(1, Math.floor(maxValue)))
-                            return Array.from({length: lines + 1}, (_, index) => {
-                                const y = padding.top + (chartHeight / lines) * index
-                                const value = Math.round(maxValue - (valueRange / lines) * index)
+                            const tickValues: Array<number> = []
+                            for (let value = axisMin; value <= axisMax; value += valueStep) {tickValues.push(value)}
+                            const [divisor, suffix] = axisUnit(tickValues)
+                            return tickValues.map(value => {
+                                const y = padding.top + chartHeight - ((value - axisMin) / valueRange) * chartHeight
                                 return (
                                     <Frag>
                                         <line x1={padding.left} y1={y} x2={width - padding.right} y2={y}
                                               stroke="rgba(255, 255, 255, 0.2)" stroke-width="1" stroke-opacity="0.4"/>
                                         <text x={`${padding.left - 6}`} y={`${y + 4}`}
                                               fill={Colors.shadow.toString()} font-size="10"
-                                              font-family="sans-serif" text-anchor="end">{value}</text>
+                                              font-family="sans-serif" text-anchor="end">{formatTick(value, divisor, suffix)}</text>
                                     </Frag>
                                 )
                             })
@@ -129,8 +152,8 @@ export const LineChart = ({lifecycle, series, color, showAxis = true, showTrend 
                             const trendEnd = slope * (count - 1) + intercept
                             const [firstX] = points[0]
                             const [lastX] = points[points.length - 1]
-                            const yStart = padding.top + chartHeight - ((trendStart - minValue) / valueRange) * chartHeight
-                            const yEnd = padding.top + chartHeight - ((trendEnd - minValue) / valueRange) * chartHeight
+                            const yStart = padding.top + chartHeight - ((trendStart - axisMin) / valueRange) * chartHeight
+                            const yEnd = padding.top + chartHeight - ((trendEnd - axisMin) / valueRange) * chartHeight
                             return (
                                 <line x1={firstX} y1={yStart} x2={lastX} y2={yEnd}
                                       stroke={Colors.blue.toString()} stroke-width="1"
@@ -166,7 +189,8 @@ export const BarChart = ({lifecycle, series, color, showAxis = true, peakLabels 
                 const slotWidth = chartWidth / values.length
                 const barWidth = Math.max(1, slotWidth * 0.7)
                 const baseY = padding.top + chartHeight
-                const valueStep = niceStep(LABEL_MIN_DISTANCE / 2 * maxValue / chartHeight)
+                const valueStep = niceStep(LABEL_MIN_DISTANCE / 2 * maxValue / chartHeight,
+                    peakLabels ? FINE_MANTISSAS : UNIT_MANTISSAS)
                 const axisMax = Math.max(valueStep, Math.ceil(maxValue / valueStep) * valueStep)
                 const centerX = (index: number): number => padding.left + index * slotWidth + slotWidth / 2
                 const xLabelIndices = (() => {
@@ -195,6 +219,7 @@ export const BarChart = ({lifecycle, series, color, showAxis = true, peakLabels 
                         {showAxis && (() => {
                             const ticks: Array<number> = []
                             for (let value = 0; value <= axisMax; value += valueStep) {ticks.push(value)}
+                            const [divisor, suffix] = axisUnit(ticks)
                             return ticks.map(value => {
                                 const y = padding.top + (1 - value / axisMax) * chartHeight
                                 return (
@@ -203,7 +228,7 @@ export const BarChart = ({lifecycle, series, color, showAxis = true, peakLabels 
                                               stroke={"rgba(255, 255, 255, 0.2)"} stroke-width="1" stroke-opacity="0.4"/>
                                         <text x={`${padding.left - 6}`} y={`${y + 4}`}
                                               fill={Colors.shadow.toString()} font-size="10"
-                                              font-family="sans-serif" text-anchor="end">{value}{unit}</text>
+                                              font-family="sans-serif" text-anchor="end">{formatTick(value, divisor, suffix)}{unit}</text>
                                     </Frag>
                                 )
                             })

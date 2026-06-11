@@ -131,10 +131,14 @@ component
     grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr))
     padding: 0.75rem
 
+    &::before
+      @include colors.diagonal-stripes
+
     &::after
       @include colors.hud-frame
 
     .sponsor
+      position: relative
       display: flex
       flex-direction: column
       align-items: center
