@@ -73,7 +73,8 @@ export const installTrackHeaderMenu = (service: StudioService,
         MenuItem.default({
             label: "Copy AudioUnit",
             shortcut: GlobalShortcuts["copy-device"].shortcut.format(),
-            separatorBefore: true
+            separatorBefore: true,
+            hidden: audioUnitBoxAdapter.isOutput
         }).setTriggerProcedure(() => {
             const copies = editing.modify(() => TransferAudioUnits
                 .transfer([trackBoxAdapter.audioUnit], project.skeleton, {
@@ -90,7 +91,8 @@ export const installTrackHeaderMenu = (service: StudioService,
             hidden: !audioUnitBoxAdapter.isInstrument || !isFrozen
         }).setTriggerProcedure(() => project.audioUnitFreeze.unfreeze(audioUnitBoxAdapter)),
         MenuItem.default({
-            label: "Extract AudioUnit Into New Project"
+            label: "Extract AudioUnit Into New Project",
+            hidden: audioUnitBoxAdapter.isOutput
         }).setTriggerProcedure(async () => {
             if (service.hasProfile && !project.editing.hasNoChanges()) {
                 const approved = await RuntimeNotifier.approve({
