@@ -27,6 +27,7 @@ import {
 } from "@opendaw/studio-core"
 import {SearchInput} from "@/ui/components/SearchInput"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 const className = Html.adoptStyleSheet(css, "ProjectBrowser")
 
@@ -61,7 +62,8 @@ export const ProjectBrowser = ({service, lifecycle, select}: Construct) => {
                    success={projects => (
                        <Frag>
                            <div className="content">
-                               <div className="list">
+                               <div className="list"
+                                    onConnect={list => lifecycle.own(installScrollbars(list))}>
                                    {projects
                                        .toSorted((a, b) => -StringComparator(a.meta.modified, b.meta.modified))
                                        .map(({uuid, meta}) => {

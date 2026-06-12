@@ -17,6 +17,7 @@ import {Html} from "@opendaw/lib-dom"
 import {ProjectMeta, ProjectSignals, TemplateStorage} from "@opendaw/studio-core"
 import {SearchInput} from "@/ui/components/SearchInput"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 const className = Html.adoptStyleSheet(css, "TemplateBrowser")
 
@@ -51,7 +52,8 @@ export const TemplateBrowser = ({service, lifecycle, select}: Construct) => {
                    success={templates => (
                        <Frag>
                            <div className="content">
-                               <div className="list">
+                               <div className="list"
+                                    onConnect={list => lifecycle.own(installScrollbars(list))}>
                                    {templates
                                        .toSorted((a, b) => -StringComparator(a.meta.modified, b.meta.modified))
                                        .map(({uuid, meta}) => {

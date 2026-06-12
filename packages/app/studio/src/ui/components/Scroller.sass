@@ -1,9 +1,11 @@
 @use "@/colors"
 
+$thickness: 8px
+
 component
   display: flex
-  width: 0.5em
-  height: 0.5em
+  width: $thickness
+  height: $thickness
   position: relative
 
   &:active > div
@@ -23,7 +25,7 @@ component
       left: 0
       top: 1px
       bottom: 1px
-      height: calc(0.5em - 2px)
+      height: calc(#{$thickness} - 2px)
 
   &.vertical
     right: 0
@@ -33,9 +35,9 @@ component
       top: 0
       left: 1px
       right: 1px
-      width: calc(0.5em - 2px)
+      width: calc(#{$thickness} - 2px)
 
   > div
-    border-radius: calc(0.5em - 2px)
+    border-radius: calc(#{$thickness} - 2px)
     position: absolute
-    background-color: rgba(white, 0.125)
+    background-color: rgba(white, 0.3)

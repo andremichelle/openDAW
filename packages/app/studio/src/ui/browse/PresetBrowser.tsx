@@ -28,6 +28,7 @@ import {CompoundItem} from "@/ui/browse/CompoundItem"
 import {Checkbox} from "../components/Checkbox"
 import {Icon} from "../components/Icon"
 import {SearchInput} from "@/ui/components/SearchInput"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 
 const className = Html.adoptStyleSheet(css, "PresetBrowser")
@@ -55,7 +56,7 @@ export const PresetBrowser = ({lifecycle, service}: Construct) => {
     const search = new DefaultObservableValue("")
     const showStock = new DefaultObservableValue(true)
     const showUser = new DefaultObservableValue(true)
-    const tree: HTMLElement = <div className="tree"/>
+    const tree: HTMLElement = <div className="tree" onConnect={element => lifecycle.own(installScrollbars(element))}/>
     // Per-render lifecycle for item-level subscriptions (e.g. preset tooltips).
     // Terminated at the start of every render so disposed-of items don't leak
     // event listeners across re-renders.

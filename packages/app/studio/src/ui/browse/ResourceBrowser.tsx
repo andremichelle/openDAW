@@ -12,6 +12,7 @@ import {Icon} from "@/ui/components/Icon"
 import {AssetLocation} from "@/ui/browse/AssetLocation"
 import {HTMLSelection} from "@/ui/HTMLSelection"
 import {ResourceBrowserConfig} from "@/ui/browse/ResourceBrowserConfig"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 type Construct<T> = {
     lifecycle: Lifecycle
@@ -32,7 +33,9 @@ export const ResourceBrowser = <T, >({
                                          fontSize,
                                          location
                                      }: Construct<T>) => {
-    const entries: HTMLElement = <div className="scrollable"/>
+    const entries: HTMLElement = (
+        <div className="scrollable" onConnect={scrollable => lifecycle.own(installScrollbars(scrollable))}/>
+    )
     const selection = lifecycle.own(new HTMLSelection(entries))
     const resourceSelection = config.createSelection(service, selection)
     const entriesLifeSpan = lifecycle.own(new Terminator())
