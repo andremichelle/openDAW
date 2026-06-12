@@ -5,6 +5,7 @@ import {
     Observer,
     Option,
     RuntimeNotifier,
+    RuntimeSignal,
     Terminable,
     UUID
 } from "@opendaw/lib-std"
@@ -20,9 +21,11 @@ import {
     ProjectMeta,
     ProjectMigration,
     ProjectProfile,
+    ProjectSignals,
     ProjectStorage,
     SampleService,
-    SoundfontService
+    SoundfontService,
+    TemplateStorage
 } from "@opendaw/studio-core"
 import {ProjectSkeleton, SampleLoaderManager, SoundfontLoaderManager} from "@opendaw/studio-adapters"
 import {BoxGraph} from "@opendaw/lib-box"
@@ -76,6 +79,37 @@ export class ProjectProfileService {
             const optProfile = await profile.saveAs(meta)
             optProfile.ifSome(profile => this.#profile.wrap(profile))
         })
+    }
+
+    async saveAsTemplate(): Promise<void> {
+        return this.#profile.ifSome(async profile => {
+            const {status, value: name} = await Promises.tryCatch(
+                ProjectDialogs.showTemplateNameDialog(profile.meta.name))
+            if (status === "rejected") {return}
+            const {status: saveStatus, error} = await Promises.tryCatch(TemplateStorage.saveAsTemplate(profile, name))
+            if (saveStatus === "rejected") {
+                console.warn(error)
+                RuntimeNotifier.notify({message: "Could not save template.", icon: "Warning"})
+                return
+            }
+            RuntimeSignal.dispatch(ProjectSignals.StorageUpdated)
+        })
+    }
+
+    async openTemplate(uuid: UUID.Bytes, meta: ProjectMeta) {
+        const {status, value: project, error} = await Promises.tryCatch(
+            TemplateStorage.loadTemplate(uuid)
+                .then(buffer => Project.loadAnyVersion(this.#env, buffer))
+                .then(template => template.copyWithNewIdentities()))
+        if (status === "rejected") {
+            console.warn(error)
+            RuntimeNotifier.notify({message: "Could not open template.", icon: "Warning"})
+            return
+        }
+        await this.#sampleService.replaceMissingFiles(project.boxGraph, this.#sampleManager)
+        await this.#soundfontService.replaceMissingFiles(project.boxGraph, this.#soundfontManager)
+        const cover = await TemplateStorage.loadCover(uuid)
+        this.#setProfile(UUID.generate(), project, ProjectMeta.copy(meta), cover)
     }
 
     async load(uuid: UUID.Bytes, meta: ProjectMeta) {

@@ -1,6 +1,6 @@
 import {asDefined, isAbsent, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {InstrumentFactories, Soundfont} from "@opendaw/studio-adapters"
-import {OpenSoundfontAPI, PresetStorage, ProjectStorage, SoundfontStorage} from "@opendaw/studio-core"
+import {OpenSoundfontAPI, PresetStorage, ProjectStorage, SoundfontStorage, TemplateStorage} from "@opendaw/studio-core"
 import {HTMLSelection} from "@/ui/HTMLSelection"
 import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "../components/dialogs"
@@ -30,8 +30,9 @@ export class SoundfontSelection implements ResourceSelection {
 
     async deleteSoundfonts(...soundfonts: ReadonlyArray<Soundfont>) {
         const dialog = RuntimeNotifier.progress({headline: "Checking Soundfont Usages"})
-        const [usedByProjects, usedByPresets, onlineList] = await Promise.all([
+        const [usedByProjects, usedByTemplates, usedByPresets, onlineList] = await Promise.all([
             ProjectStorage.listUsedAssets(SoundfontFileBox),
+            TemplateStorage.listUsedAssets(SoundfontFileBox),
             PresetStorage.listUsedAssets(SoundfontFileBox),
             OpenSoundfontAPI.get().all()
         ])
@@ -51,11 +52,15 @@ export class SoundfontSelection implements ResourceSelection {
         for (const soundfont of soundfonts) {
             const isOnline = online.has(soundfont.uuid)
             const projectRefs = usedByProjects.get(soundfont.uuid) ?? []
+            const templateRefs = usedByTemplates.get(soundfont.uuid) ?? []
             const presetRefs = usedByPresets.get(soundfont.uuid) ?? []
-            if (!isOnline && (projectRefs.length > 0 || presetRefs.length > 0)) {
+            if (!isOnline && (projectRefs.length > 0 || templateRefs.length > 0 || presetRefs.length > 0)) {
                 const lines: Array<string> = []
                 if (projectRefs.length > 0) {
                     lines.push(`Used by project(s): ${truncateList(projectRefs)}`)
+                }
+                if (templateRefs.length > 0) {
+                    lines.push(`Used by template(s): ${truncateList(templateRefs)}`)
                 }
                 if (presetRefs.length > 0) {
                     lines.push(`Used by preset(s): ${truncateList(presetRefs)}`)

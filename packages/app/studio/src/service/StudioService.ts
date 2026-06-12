@@ -13,6 +13,7 @@ import {
     Option,
     Provider,
     RuntimeNotifier,
+    RuntimeSignal,
     safeRead,
     Subscription,
     Terminable,
@@ -56,12 +57,14 @@ import {
     ProjectEnv,
     ProjectMeta,
     ProjectProfile,
+    ProjectSignals,
     ProjectStorage,
     Recovery,
     RestartWorklet,
     SampleService,
     SoundfontService,
     StudioPreferences,
+    TemplateStorage,
     TimelineRange
 } from "@opendaw/studio-core"
 import {ProjectDialogs} from "@/project/ProjectDialogs"
@@ -217,6 +220,13 @@ export class StudioService implements ProjectEnv {
         const {status} = await Promises.tryCatch(ProjectStorage.deleteProject(uuid))
         if (status === "resolved") {
             this.#signals.notify({type: "delete-project", meta})
+        }
+    }
+
+    async deleteTemplate(uuid: UUID.Bytes): Promise<void> {
+        const {status} = await Promises.tryCatch(TemplateStorage.deleteTemplate(uuid))
+        if (status === "resolved") {
+            RuntimeSignal.dispatch(ProjectSignals.StorageUpdated)
         }
     }
 

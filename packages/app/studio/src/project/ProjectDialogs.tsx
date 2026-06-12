@@ -62,6 +62,48 @@ export namespace ProjectDialogs {
         return promise
     }
 
+    export const showTemplateNameDialog = async (suggested: string): Promise<string> => {
+        const {resolve, reject, promise} = Promise.withResolvers<string>()
+        const inputField: HTMLInputElement = <input className="default" type="text" placeholder="Enter a name"/>
+        inputField.value = suggested
+        inputField.select()
+        inputField.focus()
+        const approve = () => {
+            const name = inputField.value.trim()
+            if (name.length === 0) {return}
+            resolve(name)
+        }
+        const dialog: HTMLDialogElement = (
+            <Dialog headline="Save as Template"
+                    icon={IconSymbol.FileList}
+                    cancelable={true}
+                    buttons={[{
+                        text: "Save",
+                        primary: true,
+                        onClick: handler => {
+                            if (inputField.value.trim().length === 0) {return}
+                            handler.close()
+                            approve()
+                        }
+                    }]}>
+                <div style={{padding: "1em 0", display: "grid", gridTemplateColumns: "auto 1fr", columnGap: "1em"}}>
+                    <div>Name:</div>
+                    {inputField}
+                </div>
+            </Dialog>
+        )
+        dialog.oncancel = () => reject(Errors.AbortError)
+        dialog.onkeydown = event => {
+            if (event.code === "Enter" && inputField.value.trim().length > 0) {
+                dialog.close()
+                approve()
+            }
+        }
+        Surface.get().flyout.appendChild(dialog)
+        dialog.showModal()
+        return promise
+    }
+
     export const showBrowseDialog = async (service: StudioService): Promise<[UUID.Bytes, ProjectMeta]> => {
         const {resolve, reject, promise} = Promise.withResolvers<[UUID.Bytes, ProjectMeta]>()
         const lifecycle = new Terminator()

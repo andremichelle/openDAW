@@ -3,6 +3,7 @@ import {Html} from "@opendaw/lib-dom"
 import {DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {ProjectBrowser} from "@/project/ProjectBrowser"
+import {TemplateBrowser} from "@/project/TemplateBrowser"
 import {Dialogs} from "@/ui/components/dialogs"
 import {SampleBrowser} from "@/ui/browse/SampleBrowser"
 import {SoundfontBrowser} from "@/ui/browse/SoundfontBrowser"
@@ -27,8 +28,9 @@ export const Resources = ({lifecycle, service}: Construct) => {
                         model={scope}
                         elements={[
                             {value: 0, element: (<h3>Projects</h3>)},
-                            {value: 1, element: (<h3>Samples</h3>)},
-                            {value: 2, element: (<h3>Soundfonts</h3>)}
+                            {value: 1, element: (<h3>Templates</h3>)},
+                            {value: 2, element: (<h3>Samples</h3>)},
+                            {value: 3, element: (<h3>Soundfonts</h3>)}
                         ]}/>
             <div style={{display: "contents"}} onInit={element => {
                 const scopeLifeCycle = lifecycle.own(new Terminator())
@@ -49,10 +51,21 @@ export const Resources = ({lifecycle, service}: Construct) => {
                             break
                         case 1:
                             replaceChildren(element, (
-                                <SampleBrowser lifecycle={scopeLifeCycle} service={service}/>
+                                <TemplateBrowser service={service}
+                                                 lifecycle={scopeLifeCycle}
+                                                 select={async ([uuid, meta]) => {
+                                                     const handler = Dialogs.processMonolog("Loading...")
+                                                     await service.projectProfileService.openTemplate(uuid, meta)
+                                                     handler.close()
+                                                 }}/>
                             ))
                             break
                         case 2:
+                            replaceChildren(element, (
+                                <SampleBrowser lifecycle={scopeLifeCycle} service={service}/>
+                            ))
+                            break
+                        case 3:
                             replaceChildren(element, (
                                 <SoundfontBrowser lifecycle={scopeLifeCycle} service={service}/>
                             ))

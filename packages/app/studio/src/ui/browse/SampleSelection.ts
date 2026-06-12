@@ -1,7 +1,14 @@
 import {asDefined, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, Sample} from "@opendaw/studio-adapters"
-import {AudioContentFactory, OpenSampleAPI, PresetStorage, ProjectStorage, SampleStorage} from "@opendaw/studio-core"
+import {
+    AudioContentFactory,
+    OpenSampleAPI,
+    PresetStorage,
+    ProjectStorage,
+    SampleStorage,
+    TemplateStorage
+} from "@opendaw/studio-core"
 import {HTMLSelection} from "@/ui/HTMLSelection"
 import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "../components/dialogs"
@@ -59,8 +66,9 @@ export class SampleSelection implements ResourceSelection {
 
     async deleteSamples(...samples: ReadonlyArray<Sample>) {
         const dialog = RuntimeNotifier.progress({headline: "Checking Sample Usages"})
-        const [usedByProjects, usedByPresets, onlineList] = await Promise.all([
+        const [usedByProjects, usedByTemplates, usedByPresets, onlineList] = await Promise.all([
             ProjectStorage.listUsedAssets(AudioFileBox),
+            TemplateStorage.listUsedAssets(AudioFileBox),
             PresetStorage.listUsedAssets(AudioFileBox),
             OpenSampleAPI.get().all()
         ])
@@ -80,11 +88,15 @@ export class SampleSelection implements ResourceSelection {
         for (const sample of samples) {
             const isOnline = online.has(sample.uuid)
             const projectRefs = usedByProjects.get(sample.uuid) ?? []
+            const templateRefs = usedByTemplates.get(sample.uuid) ?? []
             const presetRefs = usedByPresets.get(sample.uuid) ?? []
-            if (!isOnline && (projectRefs.length > 0 || presetRefs.length > 0)) {
+            if (!isOnline && (projectRefs.length > 0 || templateRefs.length > 0 || presetRefs.length > 0)) {
                 const lines: Array<string> = []
                 if (projectRefs.length > 0) {
                     lines.push(`Used by project(s): ${truncateList(projectRefs)}`)
+                }
+                if (templateRefs.length > 0) {
+                    lines.push(`Used by template(s): ${truncateList(templateRefs)}`)
                 }
                 if (presetRefs.length > 0) {
                     lines.push(`Used by preset(s): ${truncateList(presetRefs)}`)

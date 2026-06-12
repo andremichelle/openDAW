@@ -71,6 +71,7 @@ import {
 } from "@opendaw/studio-adapters"
 import {LiveStreamBroadcaster, LiveStreamReceiver} from "@opendaw/lib-fusion"
 import {ProjectEnv} from "./ProjectEnv"
+import {BoxGraphCopy} from "../BoxGraphCopy"
 import {Mixer} from "../Mixer"
 import {ProjectApi} from "./ProjectApi"
 import {ProjectMigration} from "./ProjectMigration"
@@ -472,6 +473,17 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     copy(env?: Partial<ProjectEnv>): Project {
         return Project.load({...this.#env, ...env}, this.toArrayBuffer() as ArrayBuffer)
+    }
+
+    copyWithNewIdentities(env?: Partial<ProjectEnv>): Project {
+        const data = BoxGraphCopy.serializeBoxes(this.boxGraph.boxes())
+        const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
+        boxGraph.beginTransaction()
+        BoxGraphCopy.deserializeBoxes(data, boxGraph, {mapPointer: (_pointer, address) => address})
+        boxGraph.endTransaction()
+        boxGraph.verifyPointers()
+        return Project.fromSkeleton({...this.#env, ...env},
+            {boxGraph, mandatoryBoxes: ProjectSkeleton.findMandatoryBoxes(boxGraph)})
     }
 
     invalid(): boolean {

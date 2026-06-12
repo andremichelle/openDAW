@@ -40,6 +40,10 @@ export const populateStudioMenu = (service: StudioService) => {
                         shortcut: Global["project-save-as"].shortcut.format(),
                         selectable: service.hasProfile
                     }).setTriggerProcedure(() => service.projectProfileService.saveAs()),
+                    MenuItem.default({
+                        label: "Save as Template...",
+                        selectable: service.hasProfile
+                    }).setTriggerProcedure(() => service.projectProfileService.saveAsTemplate()),
                     MenuItem.default({label: "Import", separatorBefore: true})
                         .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
                             MenuItem.default({label: "Audio Files..."})
