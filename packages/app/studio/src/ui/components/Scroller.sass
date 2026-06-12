@@ -7,6 +7,7 @@ component
   width: $thickness
   height: $thickness
   position: relative
+  outline: none
 
   &:active > div
     background-color: rgba(white, 0.25)
@@ -16,6 +17,14 @@ component
 
   &.floating
     position: absolute
+
+  &.auto-hide
+    opacity: 0
+    transition: opacity 400ms ease
+
+    &.scrolling, &:hover
+      opacity: 1
+      transition: opacity 80ms ease
 
   &.horizontal
     width: 100%

@@ -48,7 +48,7 @@ export const installScrollbars = (element: HTMLElement): Terminable => {
     if (isScrollableOverflow(style.overflowX)) {orientations.push(Orientation.horizontal)}
     orientations.forEach(orientation => {
         const model = terminator.own(new ScrollModel())
-        const bar: HTMLElement = <Scroller lifecycle={terminator} model={model} orientation={orientation} floating/>
+        const bar: HTMLElement = <Scroller lifecycle={terminator} model={model} orientation={orientation} floating autoHide/>
         bar.style.pointerEvents = "auto"
         overlay.appendChild(bar)
         terminator.own(bindNativeScroll(element, model, orientation))
