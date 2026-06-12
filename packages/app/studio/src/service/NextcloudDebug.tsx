@@ -32,7 +32,8 @@ export namespace NextcloudDebug {
                 message: `Round-trip succeeded: connect, upload, download (verified), list, delete.\nRoot contains ${result.value.length} item(s).`
             })
         } else {
-            await RuntimeNotifier.info({headline: "Nextcloud access failed", message: String(result.error)})
+            console.warn(result.error)
+            RuntimeNotifier.notify({message: "Nextcloud access failed.", icon: "Warning"})
         }
     }
 }

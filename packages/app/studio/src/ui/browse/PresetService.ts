@@ -179,10 +179,8 @@ export class PresetService {
         if (loaded.status === "rejected") {
             // User cancelled the download — silent, no error popup.
             if (Errors.isAbort(loaded.error)) {return}
-            await RuntimeNotifier.info({
-                headline: "Could Not Load Preset",
-                message: String(loaded.error)
-            })
+            console.warn(loaded.error)
+            RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
             return
         }
         const bytes = loaded.value
@@ -196,10 +194,7 @@ export class PresetService {
                     keepTimeline: true
                 })
                 if (attempt.isFailure()) {
-                    RuntimeNotifier.info({
-                        headline: "Can't Apply Preset",
-                        message: attempt.failureReason()
-                    }).then()
+                    RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
                 }
             })
             this.project.loadScriptDevices()
@@ -207,10 +202,7 @@ export class PresetService {
             this.project.editing.modify(() => {
                 const attempt = PresetDecoder.replaceAudioUnit(bytes, audioUnitBox)
                 if (attempt.isFailure()) {
-                    RuntimeNotifier.info({
-                        headline: "Can't Apply Preset",
-                        message: attempt.failureReason()
-                    }).then()
+                    RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
                 }
             })
             this.project.loadScriptDevices()
@@ -225,10 +217,7 @@ export class PresetService {
                 Devices.deleteEffectDevices([effect])
                 const attempt = PresetDecoder.insertEffectChain(bytes, audioUnitBox, insertIndex, chainKind)
                 if (attempt.isFailure()) {
-                    RuntimeNotifier.info({
-                        headline: "Can't Apply Preset",
-                        message: attempt.failureReason()
-                    }).then()
+                    RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
                 }
             })
             this.project.loadScriptDevices()
@@ -265,19 +254,19 @@ export class PresetService {
         const factory = EffectFactories.MergedNamed[key as keyof typeof EffectFactories.MergedNamed]
         const audioUnitOption = this.project.userEditingManager.audioUnit.get()
         if (audioUnitOption.isEmpty()) {
-            RuntimeNotifier.info({
-                headline: "No Source Device Yet",
-                message: "Please create an instrument or select an audio-bus first."
-            }).finally()
+            RuntimeNotifier.notify({
+                message: "Create an instrument or select an audio-bus first.",
+                icon: "Info"
+            })
             return
         }
         audioUnitOption.ifSome(vertex => {
             const deviceHost = this.project.boxAdapters.adapterFor(vertex.box, Devices.isHost)
             if (kind === "midi-effect" && deviceHost.inputAdapter.mapOr(input => input.accepts !== "midi", true)) {
-                RuntimeNotifier.info({
-                    headline: "Add Midi Effect",
-                    message: "The selected audio unit does not have a midi input."
-                }).finally()
+                RuntimeNotifier.notify({
+                    message: "The selected audio unit does not have a midi input.",
+                    icon: "Info"
+                })
                 return
             }
             const field = kind === "audio-effect"
@@ -669,10 +658,8 @@ export class PresetService {
         if (entry.source !== "user") {return}
         const loaded = await Promises.tryCatch(PresetStorage.load(UUID.parse(entry.uuid)))
         if (loaded.status === "rejected") {
-            await RuntimeNotifier.info({
-                headline: "Could Not Load Preset",
-                message: String(loaded.error)
-            })
+            console.warn(loaded.error)
+            RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
             return
         }
         await OpenPresetAPI.get().upload(loaded.value, entry)
@@ -694,7 +681,8 @@ export class PresetService {
         if (entry.source !== "user") {return}
         const loaded = await Promises.tryCatch(PresetStorage.load(UUID.parse(entry.uuid)))
         if (loaded.status === "rejected") {
-            await RuntimeNotifier.info({headline: "Could Not Load Preset", message: String(loaded.error)})
+            console.warn(loaded.error)
+            RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
             return
         }
         const {source: _source, ...meta} = entry
@@ -710,7 +698,8 @@ export class PresetService {
         if (entry.source !== "user") {return}
         const loaded = await Promises.tryCatch(PresetStorage.load(UUID.parse(entry.uuid)))
         if (loaded.status === "rejected") {
-            await RuntimeNotifier.info({headline: "Could Not Load Preset", message: String(loaded.error)})
+            console.warn(loaded.error)
+            RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
             return
         }
         const {source: _source, ...meta} = entry
@@ -740,7 +729,8 @@ export class PresetService {
         if (isAbsent(file)) {return}
         const decoded = await Promises.tryCatch(PresetBundle.decode(await file.arrayBuffer()))
         if (decoded.status === "rejected") {
-            await RuntimeNotifier.info({headline: "Could Not Load Preset", message: String(decoded.error)})
+            console.warn(decoded.error)
+            RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
             return
         }
         const {meta, data} = decoded.value
@@ -773,9 +763,8 @@ export class PresetService {
             const result = await Promises.tryCatch(
                 PresetApplication.createNewAudioUnitFromRack(this.project, entry.uuid, entry.source))
             if (result.status === "rejected") {
-                await RuntimeNotifier.info({
-                    headline: "Could Not Load Preset", message: String(result.error)
-                })
+                console.warn(result.error)
+                RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
             }
             return
         }
@@ -784,9 +773,8 @@ export class PresetService {
                 PresetApplication.createNewAudioUnitFromInstrument(
                     this.project, entry.uuid, entry.device, entry.source))
             if (result.status === "rejected") {
-                await RuntimeNotifier.info({
-                    headline: "Could Not Load Preset", message: String(result.error)
-                })
+                console.warn(result.error)
+                RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
             }
             return
         }
@@ -794,27 +782,19 @@ export class PresetService {
             || entry.category === "audio-effect-chain" || entry.category === "midi-effect-chain") {
             const loaded = await Promises.tryCatch(PresetApplication.loadBytes(entry.uuid, entry.source))
             if (loaded.status === "rejected") {
-                await RuntimeNotifier.info({
-                    headline: "Could Not Load Preset",
-                    message: String(loaded.error)
-                })
+                console.warn(loaded.error)
+                RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
                 return
             }
             const editing = this.project.userEditingManager.audioUnit.get()
             if (editing.isEmpty()) {
-                await RuntimeNotifier.info({
-                    headline: "No Source Device",
-                    message: "Please select an audio unit first."
-                })
+                RuntimeNotifier.notify({message: "Please select an audio unit first.", icon: "Info"})
                 return
             }
             const host = this.project.boxAdapters.adapterFor(editing.unwrap().box, Devices.isHost)
             const isMidi = entry.category === "midi-effect" || entry.category === "midi-effect-chain"
             if (isMidi && host.inputAdapter.mapOr(input => input.accepts !== "midi", true)) {
-                await RuntimeNotifier.info({
-                    headline: "Incompatible Audio Unit",
-                    message: "The selected audio unit does not accept MIDI."
-                })
+                RuntimeNotifier.notify({message: "The selected audio unit does not accept MIDI.", icon: "Info"})
                 return
             }
             const field = isMidi ? host.midiEffects.field() : host.audioEffects.field()
@@ -824,10 +804,7 @@ export class PresetService {
                 const attempt = PresetDecoder.insertEffectChain(
                     loaded.value, host.audioUnitBoxAdapter().box, insertIndex, chainKind)
                 if (attempt.isFailure()) {
-                    RuntimeNotifier.info({
-                        headline: "Can't Apply Preset",
-                        message: attempt.failureReason()
-                    }).then()
+                    RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
                 }
             })
             this.project.loadScriptDevices()

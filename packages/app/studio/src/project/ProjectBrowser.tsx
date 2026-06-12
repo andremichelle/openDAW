@@ -92,10 +92,8 @@ export const ProjectBrowser = ({service, lifecycle, select}: Construct) => {
                                                                                     types: [FilePickerAcceptTypes.ProjectFileType]
                                                                                 })))
                                                                         if (status === "rejected" && !Errors.isAbort(error)) {
-                                                                            await RuntimeNotifier.info({
-                                                                                headline: "Download failed",
-                                                                                message: String(error)
-                                                                            })
+                                                                            console.warn(error)
+                                                                            RuntimeNotifier.notify({message: "Download failed.", icon: "Warning"})
                                                                         }
                                                                     }))))}>
                                                        <div className="name">{meta.name}</div>

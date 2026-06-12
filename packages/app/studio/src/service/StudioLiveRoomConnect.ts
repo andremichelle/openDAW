@@ -116,10 +116,8 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
         await Wait.timeSpan(TimeSpan.seconds(1))
     } else {
         reportRoomResult(sessionId, classifyConnectError(error))
-        await RuntimeNotifier.info({
-            headline: "Failed Connecting Room",
-            message: String(error)
-        })
+        console.warn(error)
+        RuntimeNotifier.notify({message: "Could not connect to room.", icon: "Warning"})
     }
     progressDialog.terminate()
 }

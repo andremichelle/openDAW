@@ -1,10 +1,9 @@
-import {Arrays, clamp, int, Option, Selection} from "@opendaw/lib-std"
+import {Arrays, clamp, int, Option, RuntimeNotifier, Selection} from "@opendaw/lib-std"
 import {AnyLoopableRegionBoxAdapter, AnyRegionBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {ppqn, RegionCollection} from "@opendaw/lib-dsp"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {Project, RegionModifyStrategy} from "@opendaw/studio-core"
-import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {Dragging} from "@opendaw/lib-dom"
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier"
 
@@ -154,7 +153,7 @@ export class RegionMoveModifier implements RegionModifier {
             return trackAdapter.accepts(adapter)
         })) {
             this.cancel()
-            Dialogs.info({message: "Cannot move region to different track type."}).finally()
+            RuntimeNotifier.notify({message: "Cannot move region to different track type.", icon: "Info"})
             return
         }
         const modifiedTracks: ReadonlyArray<TrackBoxAdapter> = Arrays.removeDuplicates(adapters

@@ -287,10 +287,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     handleCpuOverload(): void {
         if (!StudioPreferences.settings.engine["stop-playback-when-overloading"]) {return}
         this.engine.sleep()
-        RuntimeNotifier.info({
-            headline: "CPU Overload Detected",
-            message: "Playback has been stopped. Try removing heavy plugins or effects."
-        }).finally()
+        RuntimeNotifier.notify({message: "CPU overload. Playback stopped.", icon: "Info"})
     }
 
     startRecording(countIn: boolean = true) {

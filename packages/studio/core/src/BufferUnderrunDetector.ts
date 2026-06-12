@@ -45,11 +45,7 @@ export class BufferUnderrunDetector implements Terminable {
         if (!StudioPreferences.settings.engine["stop-playback-when-overloading"]) {return}
         this.#stopPolling()
         this.#engine.sleep()
-        RuntimeNotifier.info({
-            headline: "Audio Dropout Detected",
-            message: "Playback has been stopped because the audio device could not keep up. "
-                + "Remove busy devices, then press play to resume."
-        }).finally()
+        RuntimeNotifier.notify({message: "Audio dropout. Playback stopped.", icon: "Info"})
     }
 
     terminate(): void {this.#terminator.terminate()}

@@ -132,8 +132,8 @@ export const ShadertoyEditor = ({service, lifecycle}: Construct) => {
                                 const code = editor.getValue()
                                 const attempt = canCompile(code)
                                 if (attempt.isFailure()) {
-                                    RuntimeNotifier.info({headline: "Cannot Save", message: attempt.failureReason()})
-                                        .then(EmptyProcedure, EmptyProcedure)
+                                    console.warn(attempt.failureReason())
+                                    RuntimeNotifier.notify({message: "Cannot save.", icon: "Warning"})
                                 } else {
                                     saveShadertoyCode(code)
                                     service.projectProfileService.save().then(EmptyProcedure, EmptyProcedure)

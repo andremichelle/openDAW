@@ -107,14 +107,12 @@ export class OpenSampleAPI implements SampleAPI {
             if (xhr.readyState === 4) {
                 dialog.terminate()
                 if (xhr.status === 200) {
-                    RuntimeNotifier.info({message: xhr.responseText})
+                    RuntimeNotifier.notify({message: "Upload complete.", icon: "Checkbox"})
                 } else {
                     const {status, value} =
                         tryCatch(() => JSON.parse(xhr.responseText).message ?? "Unknown error message")
-                    RuntimeNotifier.info({
-                        headline: "Upload Failure",
-                        message: status === "success" ? value : "Unknown error"
-                    })
+                    console.warn(status === "success" ? value : xhr.responseText)
+                    RuntimeNotifier.notify({message: "Upload failed.", icon: "Warning"})
                 }
             }
         }

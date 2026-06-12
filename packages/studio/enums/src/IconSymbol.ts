@@ -163,6 +163,7 @@ export enum IconSymbol {
     Vocoder,
     Volume,
     VUMeter,
+    Warning,
     Waveform,
     Zeitgeist,
 }

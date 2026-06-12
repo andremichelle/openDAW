@@ -1,4 +1,4 @@
-import {EmptyExec, RuntimeNotifier} from "@opendaw/lib-std"
+import {RuntimeNotifier} from "@opendaw/lib-std"
 import {Result, Validator} from "./validator"
 
 export const NameValidator: Validator<string> = {
@@ -8,7 +8,7 @@ export const NameValidator: Validator<string> = {
             match.success(trimmed)
         } else {
             match.failure?.call(null)
-            RuntimeNotifier.info({message: "A name must have one to 64 chararacters.", origin: origin}).catch(EmptyExec)
+            RuntimeNotifier.notify({message: "A name must have one to 64 characters.", icon: "Info", origin})
         }
     }
 }

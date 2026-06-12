@@ -183,10 +183,8 @@ export namespace VideoRenderer {
             const message = isAllocationError(error)
                 ? "Video is too large for this browser. Please use Chrome."
                 : String(error)
-            await RuntimeNotifier.info({
-                headline: "Video Export Failed",
-                message
-            })
+            console.warn(message)
+            RuntimeNotifier.notify({message: "Video export failed.", icon: "Warning"})
             throw error
         }
 

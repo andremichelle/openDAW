@@ -142,7 +142,7 @@ export const ProjectProfileInfo = ({lifecycle, service}: Construct) => {
                                     }
                                     unpublishButton.classList.toggle("hidden", isUndefined(meta.radioToken))
                                     buttonPublishText.value = isDefined(meta.radioToken) ? "Republish" : "Publish"
-                                    return await RuntimeNotifier.info({headline: "Publish complete", message: ""})
+                                    RuntimeNotifier.notify({message: "Publish complete", icon: "Checkbox"})
                                 }}
                                 appearance={{framed: true, color: Colors.purple}}>
                             {buttonPublishText}

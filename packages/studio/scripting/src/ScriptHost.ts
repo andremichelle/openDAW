@@ -23,7 +23,7 @@ export class ScriptHost implements ScriptExecutionProtocol {
         progressUpdater.terminate()
         if (status === "rejected") {
             console.warn(error)
-            await RuntimeNotifier.info({headline: "The script caused an error", message: String(error)})
+            RuntimeNotifier.notify({message: "The script caused an error.", icon: "Warning"})
         }
     }
 }

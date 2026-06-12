@@ -3,8 +3,7 @@ import {Sample} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {createElement} from "@opendaw/lib-jsx"
-import {Dialogs} from "@/ui/components/dialogs"
-import {Errors} from "@opendaw/lib-std"
+import {Errors, RuntimeNotifier} from "@opendaw/lib-std"
 
 export namespace SampleDialogs {
     export const showEditSampleDialog = async (sample: Sample): Promise<Sample> => {
@@ -22,12 +21,12 @@ export namespace SampleDialogs {
         const approve = () => {
             const name = inputName.value
             if (name.trim().length < 3) {
-                Dialogs.info({headline: "Invalid Name", message: "Must be at least 3 letters long."}).finally()
+                RuntimeNotifier.notify({message: "Name must be at least 3 letters long.", icon: "Info"})
                 return false
             }
             const bpm = parseFloat(inputBpm.value)
             if (isNaN(bpm)) {
-                Dialogs.info({headline: "Invalid Bpm", message: "Must be a number."}).finally()
+                RuntimeNotifier.notify({message: "BPM must be a number.", icon: "Info"})
                 return false
             }
             sample.name = name

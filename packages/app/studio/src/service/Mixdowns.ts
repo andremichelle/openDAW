@@ -79,13 +79,15 @@ export namespace Mixdowns {
         dialog.terminate()
         if (status === "rejected") {
             if (Errors.isAbort(renderError)) {return}
-            await RuntimeNotifier.info({headline: "Export Failed", message: String(renderError)})
+            console.warn(renderError)
+            RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
             return
         }
         const {status: zipStatus, error: zipError} = await Promises.tryCatch(
             saveZipFile(value, meta, Object.values(config.stems ?? {}).map(({fileName}) => fileName)))
         if (zipStatus === "rejected") {
-            await RuntimeNotifier.info({headline: "Export Failed", message: String(zipError)})
+            console.warn(zipError)
+            RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
             return
         }
     }
@@ -142,10 +144,8 @@ export namespace Mixdowns {
     const saveZipFile = async (audioData: AudioData, meta: ProjectMeta, trackNames: ReadonlyArray<string>) => {
         const libResult = await ExternalLib.JSZip()
         if (libResult.status === "rejected") {
-            await RuntimeNotifier.info({
-                headline: "Error",
-                message: `Could not load JSZip: ${String(libResult.error)}`
-            })
+            console.warn(libResult.error)
+            RuntimeNotifier.notify({message: "Could not load JSZip.", icon: "Warning"})
             return Promise.reject(libResult.error)
         }
         const dialog = RuntimeNotifier.progress({headline: "Creating Zip File..."})
@@ -167,10 +167,8 @@ export namespace Mixdowns {
         }))
         dialog.terminate()
         if (status === "rejected") {
-            await RuntimeNotifier.info({
-                headline: "Error",
-                message: `Could not create zip file: ${String(error)}`
-            })
+            console.warn(error)
+            RuntimeNotifier.notify({message: "Could not create zip.", icon: "Warning"})
             return
         }
         return saveFileAfterAsync({
@@ -189,10 +187,8 @@ export namespace Mixdowns {
         const {status, value, error} = await Promises.tryCatch(FFmpegWorker.load(value => progress.setValue(value)))
         progressDialog.terminate()
         if (status === "rejected") {
-            await RuntimeNotifier.info({
-                headline: "Error",
-                message: `Could not load FFmpeg: ${String(error)}`
-            })
+            console.warn(error)
+            RuntimeNotifier.notify({message: "Could not load FFmpeg.", icon: "Warning"})
             throw error
         }
         return value

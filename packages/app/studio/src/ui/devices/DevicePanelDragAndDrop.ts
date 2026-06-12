@@ -173,10 +173,8 @@ export namespace DevicePanelDragAndDrop {
             .adapterFor(editing.unwrap().box, Devices.isHost).audioUnitBoxAdapter().box
         const load = await Promises.tryCatch(PresetApplication.loadBytes(dragData.uuid, dragData.source))
         if (load.status === "rejected") {
-            await RuntimeNotifier.info({
-                headline: "Could Not Load Preset",
-                message: String(load.error)
-            })
+            console.warn(load.error)
+            RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
             return
         }
         if (dragData.category === "audio-unit") {
@@ -185,10 +183,7 @@ export namespace DevicePanelDragAndDrop {
             project.editing.modify(() => {
                 const attempt = PresetDecoder.replaceAudioUnit(load.value, targetAudioUnit, {keepTimeline})
                 if (attempt.isFailure()) {
-                    RuntimeNotifier.info({
-                        headline: "Can't Apply Preset",
-                        message: attempt.failureReason()
-                    }).then()
+                    RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
                 }
             })
             project.loadScriptDevices()
@@ -201,10 +196,7 @@ export namespace DevicePanelDragAndDrop {
                 const attempt = PresetDecoder.replaceAudioUnit(load.value, targetAudioUnit,
                     {keepMIDIEffects: true, keepAudioEffects: true, keepTimeline})
                 if (attempt.isFailure()) {
-                    RuntimeNotifier.info({
-                        headline: "Can't Apply Preset",
-                        message: attempt.failureReason()
-                    }).then()
+                    RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
                 }
             })
             project.loadScriptDevices()
@@ -218,10 +210,7 @@ export namespace DevicePanelDragAndDrop {
             project.editing.modify(() => {
                 const attempt = PresetDecoder.insertEffectChain(load.value, targetAudioUnit, dropIndex, chainKind)
                 if (attempt.isFailure()) {
-                    RuntimeNotifier.info({
-                        headline: "Can't Apply Preset",
-                        message: attempt.failureReason()
-                    }).then()
+                    RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
                 }
             })
             project.loadScriptDevices()

@@ -74,7 +74,8 @@ export namespace AudioConsolidation {
         if (renderResult.status === "rejected") {
             dialog.terminate()
             if (!Errors.isAbort(renderResult.error)) {
-                await RuntimeNotifier.info({headline: "Flatten Failed", message: String(renderResult.error)})
+                console.warn(renderResult.error)
+                RuntimeNotifier.notify({message: "Flatten failed.", icon: "Warning"})
             }
             return
         }
@@ -84,7 +85,8 @@ export namespace AudioConsolidation {
             sampleService.importFile({name: "flatten", arrayBuffer: WavFile.encodeFloats(audioData)}))
         if (importResult.status === "rejected") {
             dialog.terminate()
-            await RuntimeNotifier.info({headline: "Flatten Failed", message: String(importResult.error)})
+            console.warn(importResult.error)
+            RuntimeNotifier.notify({message: "Flatten failed.", icon: "Warning"})
             return
         }
         const sample = importResult.value

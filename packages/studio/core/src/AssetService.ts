@@ -64,7 +64,7 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
             if (status === "rejected") {
                 if (Errors.isAbort(error) || Errors.isNotAllowed(error)) {return}
                 console.warn(`File browse failed: ${error}`)
-                await RuntimeNotifier.info({headline: "File Access Error", message: String(error)})
+                RuntimeNotifier.notify({message: "File access error.", icon: "Warning"})
                 return
             }
             if (files.length === 0) {return}
@@ -86,10 +86,7 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
                 })
                 continue
             }
-            await RuntimeNotifier.info({
-                headline: "Replaced Asset",
-                message: `${importResult.value.name} has been replaced`
-            })
+            RuntimeNotifier.notify({message: `${importResult.value.name} has been replaced`, icon: "Checkbox"})
             manager.invalidate(uuid)
         }
     }
@@ -100,7 +97,7 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
         if (status === "rejected") {
             if (Errors.isAbort(error) || Errors.isNotAllowed(error)) {return []}
             console.warn(`File browse failed: ${error}`)
-            await RuntimeNotifier.info({headline: "File Access Error", message: String(error)})
+            RuntimeNotifier.notify({message: "File access error.", icon: "Warning"})
             return []
         }
         const progress = new DefaultObservableValue(0.0)

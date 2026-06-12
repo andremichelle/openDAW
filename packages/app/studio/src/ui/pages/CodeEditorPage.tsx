@@ -92,10 +92,8 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                             const allDiagnostics = [...semanticDiagnostics, ...syntacticDiagnostics]
                             if (allDiagnostics.length > 0) {
                                 const errors = allDiagnostics.map(d => d.messageText).join("\n")
-                                await RuntimeNotifier.info({
-                                    headline: "Compilation Error",
-                                    message: errors
-                                })
+                                console.warn(errors)
+                                RuntimeNotifier.notify({message: "Compilation error.", icon: "Warning"})
                                 return
                             }
                             const emitOutput = await client.getEmitOutput(model.uri.toString())
@@ -109,16 +107,11 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                                         .unwrapOrElse(440.0)
                                 })
                             } else {
-                                await RuntimeNotifier.info({
-                                    headline: "Compiler Error",
-                                    message: "No output files generated"
-                                })
+                                RuntimeNotifier.notify({message: "No output files generated.", icon: "Warning"})
                             }
                         } catch (error) {
-                            await RuntimeNotifier.info({
-                                headline: "Compilation Error",
-                                message: String(error)
-                            })
+                            console.warn(error)
+                            RuntimeNotifier.notify({message: "Compilation error.", icon: "Warning"})
                         }
                     }
                     return (

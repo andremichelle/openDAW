@@ -24,7 +24,8 @@ export class DawProjectService {
         const {project: projectSchema, resources} = await DawProject.decode(arrayBuffer)
         const importResult = await Promises.tryCatch(DawProjectImport.read(projectSchema, resources))
         if (importResult.status === "rejected") {
-            await RuntimeNotifier.info({headline: "Import Error", message: String(importResult.error)})
+            console.warn(importResult.error)
+            RuntimeNotifier.notify({message: "Import failed.", icon: "Warning"})
             return Option.None
         }
         const {skeleton, audioIds} = importResult.value

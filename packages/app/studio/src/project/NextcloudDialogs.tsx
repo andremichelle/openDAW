@@ -73,7 +73,8 @@ export namespace NextcloudDialogs {
                     : `Uploaded "${profile.meta.name}" and its assets.`
             })
         } else if (!Errors.isAbort(result.error)) {
-            await RuntimeNotifier.info({headline: "Upload failed", message: String(result.error)})
+            console.warn(result.error)
+            RuntimeNotifier.notify({message: "Upload failed.", icon: "Warning"})
         }
     }
 
@@ -92,7 +93,8 @@ export namespace NextcloudDialogs {
         notifier.terminate()
         if (result.status === "rejected") {
             const reason = result.error instanceof Error ? result.error.message : String(result.error)
-            await RuntimeNotifier.info({headline: "Nextcloud", message: `Could not connect: ${reason}`})
+            console.warn(reason)
+            RuntimeNotifier.notify({message: "Could not connect.", icon: "Warning"})
             return false
         }
         return true
@@ -114,7 +116,8 @@ export namespace NextcloudDialogs {
         notifier.terminate()
         if (result.status === "rejected") {
             if (!Errors.isAbort(result.error)) {
-                await RuntimeNotifier.info({headline: "Open failed", message: String(result.error)})
+                console.warn(result.error)
+                RuntimeNotifier.notify({message: "Open failed.", icon: "Warning"})
             }
             return
         }

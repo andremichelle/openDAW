@@ -796,6 +796,9 @@ export const IconLibrary = () => (
                 <path d="M18 3a3 3 0 1 0 0 6a3 3 0 1 0 0-6"/>
                 <path d="M5 4c-1.1 0-2 .9-2 2v13c0 1.1.9 2 2 2h13c1.1 0 2-.9 2-2v-8.99c-.61.3-1.28.49-2 .49c-2.48 0-4.5-2.02-4.5-4.5c0-.72.19-1.39.49-2z"/>
             </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.Warning)} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM11 15H13V17H11V15ZM11 7H13V13H11V7Z"/>
+            </symbol>
             <symbol id={IconSymbol.toName(IconSymbol.Lock)} viewBox="0 0 16 16" fill="currentColor">
                 <path fill-rule="evenodd"
                       d="M3 5v1H1v10h14V6h-2V5A5 5 0 0 0 3 5m7 1V5a2 2 0 1 0-4 0v1zm-.748 5a1.252 1.252 0 1 1-2.504 0a1.252 1.252 0 0 1 2.504 0"

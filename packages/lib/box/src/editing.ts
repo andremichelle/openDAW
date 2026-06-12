@@ -126,7 +126,7 @@ export class BoxEditing implements Editing {
                 if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
                 applied.toReversed().forEach(completed => completed.forward(this.#graph))
                 this.#historyIndex++
-                RuntimeNotifier.info({headline: "Undo Failed", message: "This history step is no longer valid due to changes from other participants."})
+                RuntimeNotifier.notify({message: "History changed by another participant.", icon: "Info"})
                 return false
             }
             applied.push(step)
@@ -146,7 +146,7 @@ export class BoxEditing implements Editing {
                 if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
                 applied.toReversed().forEach(completed => completed.inverse(this.#graph))
                 this.#historyIndex--
-                RuntimeNotifier.info({headline: "Redo Failed", message: "This history step is no longer valid due to changes from other participants."})
+                RuntimeNotifier.notify({message: "History changed by another participant.", icon: "Info"})
                 return false
             }
             applied.push(step)

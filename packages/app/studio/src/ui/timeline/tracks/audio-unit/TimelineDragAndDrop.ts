@@ -107,7 +107,7 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
         if (audioDataResult.status === "rejected") {
             console.warn("Failed to load sample:", audioDataResult.error)
             subscription.terminate()
-            await RuntimeNotifier.info({headline: "Sample Error", message: `Failed to load sample '${name}'.`})
+            RuntimeNotifier.notify({message: `Failed to load sample '${name}'.`, icon: "Info"})
             return
         }
         const audioFileBoxResult = await Promises.tryCatch(AudioFileBoxFactory
@@ -116,7 +116,7 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
         if (audioFileBoxResult.status === "rejected") {
             console.warn("Failed to create audio file:", audioFileBoxResult.error)
             subscription.terminate()
-            await RuntimeNotifier.info({headline: "Sample Error", message: `Failed to process sample '${name}'.`})
+            RuntimeNotifier.notify({message: `Failed to process sample '${name}'.`, icon: "Info"})
             return
         }
         subscription.terminate()

@@ -226,7 +226,8 @@ export class StudioService implements ProjectEnv {
                 await this.audioContext.suspend()
                 const {status, error} = await Promises.tryCatch(Mixdowns.exportMixdown(profile))
                 if (status === "rejected" && !Errors.isAbort(error)) {
-                    await RuntimeNotifier.info({headline: "Export Failed", message: String(error)})
+                    console.warn(error)
+                RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
                 }
                 this.audioContext.resume().then()
             })
@@ -238,23 +239,23 @@ export class StudioService implements ProjectEnv {
                 const {project} = profile
                 if (project.rootBox.audioUnits.pointerHub.incoming()
                     .every(({box}) => asInstanceOf(box, AudioUnitBox).type.getValue() === AudioUnitType.Output)) {
-                    return RuntimeNotifier.info({
-                        headline: "Export Error",
-                        message: "No stems to export"
-                    })
+                    RuntimeNotifier.notify({message: "No stems to export.", icon: "Info"})
+                    return
                 }
                 const {status: dialogStatus, error: dialogError, value: config} =
                     await Promises.tryCatch(ProjectDialogs.showExportStemsDialog(project))
                 if (dialogStatus === "rejected") {
                     if (Errors.isAbort(dialogError)) {return}
-                    await RuntimeNotifier.info({headline: "Export Failed", message: String(dialogError)})
+                    console.warn(dialogError)
+                    RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
                     return
                 }
                 ExportConfiguration.sanitizeExportNamesInPlace(config)
                 await this.audioContext.suspend()
                 const {status, error} = await Promises.tryCatch(Mixdowns.exportStems(profile, config))
                 if (status === "rejected" && !Errors.isAbort(error)) {
-                    await RuntimeNotifier.info({headline: "Export Failed", message: String(error)})
+                    console.warn(error)
+                RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
                 }
                 this.audioContext.resume().then(EmptyExec, EmptyExec)
             })
@@ -281,7 +282,8 @@ export class StudioService implements ProjectEnv {
         if (status === "rejected") {return}
         const zipResult = await Promises.tryCatch(JSZip.loadAsync(await firstFile.arrayBuffer()))
         if (zipResult.status === "rejected") {
-            await RuntimeNotifier.info({headline: "Import Failed", message: String(zipResult.error)})
+            console.warn(zipResult.error)
+            RuntimeNotifier.notify({message: "Import failed.", icon: "Warning"})
             return
         }
         const audioEntries = Object.entries(zipResult.value.files)
@@ -412,7 +414,7 @@ export class StudioService implements ProjectEnv {
         if (!this.hasProfile) {return}
         const {boxGraph} = this.project
         const result = boxGraph.verifyPointers()
-        await RuntimeNotifier.info({message: `Project is okay. All ${result.count} pointers are fine.`})
+        RuntimeNotifier.notify({message: `Project is okay. All ${result.count} pointers are fine.`, icon: "Checkbox"})
     }
 
     toggleSoftwareKeyboard(): void {

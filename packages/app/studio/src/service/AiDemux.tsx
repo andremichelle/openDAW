@@ -187,7 +187,8 @@ export namespace AiDemux {
         // 4. Decode the audio file at 44.1 kHz.
         const decoded = await Promises.tryCatch(decodeAudioFile(file, 44100))
         if (decoded.status === "rejected") {
-            await RuntimeNotifier.info({headline: "AI Demux", message: `Could not decode audio: ${decoded.error}`})
+            console.warn(decoded.error)
+            RuntimeNotifier.notify({message: "Could not decode audio.", icon: "Warning"})
             return
         }
         const {audio, channels, frames} = decoded.value
@@ -220,10 +221,8 @@ export namespace AiDemux {
             dlDialog.terminate()
             if (preloadResult.status === "rejected") {
                 if (!Errors.isAbort(preloadResult.error)) {
-                    await RuntimeNotifier.info({
-                        headline: "Model download failed",
-                        message: String(preloadResult.error)
-                    })
+                    console.warn(preloadResult.error)
+                    RuntimeNotifier.notify({message: "Model download failed.", icon: "Warning"})
                 }
                 return
             }
@@ -255,10 +254,8 @@ export namespace AiDemux {
             loadDialog.terminate()
             if (sessionResult.status === "rejected") {
                 if (!Errors.isAbort(sessionResult.error)) {
-                    await RuntimeNotifier.info({
-                        headline: "AI Demux failed",
-                        message: `Could not load model session: ${sessionResult.error}`
-                    })
+                    console.warn(sessionResult.error)
+                    RuntimeNotifier.notify({message: "Could not load model.", icon: "Warning"})
                 }
                 return
             }
@@ -286,10 +283,8 @@ export namespace AiDemux {
 
         if (inferenceResult.status === "rejected") {
             if (!Errors.isAbort(inferenceResult.error)) {
-                await RuntimeNotifier.info({
-                    headline: "AI Demux failed",
-                    message: String(inferenceResult.error)
-                })
+                console.warn(inferenceResult.error)
+                RuntimeNotifier.notify({message: "AI demux failed.", icon: "Warning"})
             }
             return
         }

@@ -42,10 +42,7 @@ export namespace PresetApplication {
                 bytes, product.audioUnitBox,
                 {keepMIDIEffects: true, keepAudioEffects: true})
             if (attempt.isFailure()) {
-                RuntimeNotifier.info({
-                    headline: "Can't Apply Preset",
-                    message: attempt.failureReason()
-                }).then()
+                RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
             }
         })
         project.loadScriptDevices()

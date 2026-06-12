@@ -152,10 +152,7 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
                     const clipIndex = target.clipIndex
                     switch (trackBoxAdapter.type) {
                         case TrackType.Audio:
-                            RuntimeNotifier.info({
-                                headline: "Cannot Create Audio Clip",
-                                message: "Drag a sample from the sample-library or your hard-drive instead."
-                            }).finally()
+                            RuntimeNotifier.notify({message: "Drag a sample to create an audio clip.", icon: "Info"})
                             return
                         case TrackType.Notes:
                             return project.api.createNoteClip(trackBoxAdapter.box, clipIndex)

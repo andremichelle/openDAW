@@ -107,10 +107,8 @@ export const NextcloudBrowser = ({lifecycle, handler, username, select, reopen}:
                                                                value => progressValue.setValue(value)))
                                                        notifier.terminate()
                                                        if (status === "rejected") {
-                                                           await RuntimeNotifier.info({
-                                                               headline: "Delete failed",
-                                                               message: String(error)
-                                                           })
+                                                           console.warn(error)
+                                                           RuntimeNotifier.notify({message: "Delete failed.", icon: "Warning"})
                                                        }
                                                        reopen()
                                                    })

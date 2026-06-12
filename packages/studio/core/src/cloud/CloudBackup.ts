@@ -44,10 +44,7 @@ export namespace CloudBackup {
         } catch (reason: unknown) {
             if (Errors.isAbort(reason)) {return}
             console.warn(reason)
-            await RuntimeNotifier.info({
-                headline: `Could not sync`,
-                message: String(reason)
-            })
+            RuntimeNotifier.notify({message: "Could not sync.", icon: "Warning"})
         } finally {
             RuntimeSignal.dispatch(ProjectSignals.StorageUpdated)
         }

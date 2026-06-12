@@ -95,7 +95,8 @@ export class AudioUnitFreeze implements Terminable {
         if (renderResult.status === "rejected") {
             dialog.terminate()
             if (!Errors.isAbort(renderResult.error)) {
-                await RuntimeNotifier.info({headline: "Freeze Failed", message: String(renderResult.error)})
+                console.warn(renderResult.error)
+                RuntimeNotifier.notify({message: "Freeze failed.", icon: "Warning"})
             }
             return
         }

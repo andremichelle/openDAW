@@ -16,10 +16,8 @@ export namespace ProjectBundle {
                                  progress: Progress.Handler): Promise<ArrayBuffer> => {
         const {status, value: JSZip, error} = await ExternalLib.JSZip()
         if (status === "rejected") {
-            await RuntimeNotifier.info({
-                headline: "Error",
-                message: `Could not load JSZip: ${String(error)}`
-            })
+            console.warn(error)
+            RuntimeNotifier.notify({message: "Could not load JSZip.", icon: "Warning"})
             return Promise.reject(error)
         }
         const zip = new JSZip()
@@ -63,10 +61,8 @@ export namespace ProjectBundle {
                                  openProfileUUID?: UUID.Bytes): Promise<ProjectProfile> => {
         const {status, value: JSZip, error} = await ExternalLib.JSZip()
         if (status === "rejected") {
-            await RuntimeNotifier.info({
-                headline: "Error",
-                message: `Could not load JSZip: ${String(error)}`
-            })
+            console.warn(error)
+            RuntimeNotifier.notify({message: "Could not load JSZip.", icon: "Warning"})
             return Promise.reject(error)
         }
         const zip = await JSZip.loadAsync(arrayBuffer)

@@ -20,10 +20,8 @@ export namespace DawProject {
     }> => {
         const {status, value: JSZip, error} = await ExternalLib.JSZip()
         if (status === "rejected") {
-            await RuntimeNotifier.info({
-                headline: "Error",
-                message: `Could not load JSZip: ${String(error)}`
-            })
+            console.warn(error)
+            RuntimeNotifier.notify({message: "Could not load JSZip.", icon: "Warning"})
             return Promise.reject(error)
         }
         const zip = await JSZip.loadAsync(buffer)
@@ -56,10 +54,8 @@ export namespace DawProject {
                                  metaData: MetaDataSchema): Promise<ArrayBuffer> => {
         const {status, value: JSZip, error} = await ExternalLib.JSZip()
         if (status === "rejected") {
-            await RuntimeNotifier.info({
-                headline: "Error",
-                message: `Could not load JSZip: ${String(error)}`
-            })
+            console.warn(error)
+            RuntimeNotifier.notify({message: "Could not load JSZip.", icon: "Warning"})
             return Promise.reject(error)
         }
         const zip = new JSZip()

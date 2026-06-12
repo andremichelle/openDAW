@@ -99,15 +99,10 @@ export const createDebugMenu = (service: StudioService) => MenuItem.default({
                     await Promises.tryCatch(Workers.Opfs.delete(""))
                 if (status === "resolved") {
                     RuntimeSignal.dispatch(ProjectSignals.StorageUpdated)
-                    await RuntimeNotifier.info({
-                        headline: "Clear Local Storage",
-                        message: "Your Local Storage is cleared"
-                    })
+                    RuntimeNotifier.notify({message: "Local storage cleared", icon: "Checkbox"})
                 } else {
-                    await RuntimeNotifier.info({
-                        headline: "Clear Local Storage",
-                        message: String(error)
-                    })
+                    console.warn(error)
+                    RuntimeNotifier.notify({message: "Could not clear storage.", icon: "Warning"})
                 }
             }
         })

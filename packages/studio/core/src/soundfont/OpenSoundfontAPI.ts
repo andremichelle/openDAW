@@ -15,10 +15,11 @@ export class OpenSoundfontAPI {
     readonly #memoized: () => Promise<ReadonlyArray<Soundfont>> = Promises.memoizeAsync(() => network.defaultFetch(`${OpenSoundfontAPI.ApiRoot}/list.json`, OpenDAWHeaders)
         .then(x => x.json())
         .then(x => z.array(Soundfont).parse(x))
-        .catch(reason => RuntimeNotifier.info({
-            headline: "OpenSoundfont API",
-            message: `Could not connect to OpenSoundfont API\nReason: '${reason}'`
-        }).then(() => [])))
+        .catch(reason => {
+            console.warn(reason)
+            RuntimeNotifier.notify({message: "Could not connect to OpenSoundfont API.", icon: "Warning"})
+            return []
+        }))
 
     private constructor() {}
 

@@ -22,10 +22,8 @@ export namespace Files {
             }
             const {status: writeStatus, error: writeError} = await Promises.tryCatch(writeFile())
             if (writeStatus === "rejected") {
-                await RuntimeNotifier.info({
-                    headline: "Could not save file",
-                    message: String(writeError)
-                })
+                console.warn(writeError)
+                RuntimeNotifier.notify({message: "Could not save file.", icon: "Warning"})
                 return Promise.reject(writeError)
             }
             return handle.name ?? "unknown"

@@ -7,10 +7,8 @@ export namespace CodecsUtils {
         const {status, value: mediabunny, error} = await Promises.tryCatch(import("mediabunny"))
         dialog.terminate()
         if (status === "rejected") {
-            await RuntimeNotifier.info({
-                headline: "Error",
-                message: `Could not load mediabunny: ${String(error)}`
-            })
+            console.warn(error)
+            RuntimeNotifier.notify({message: "Could not load mediabunny.", icon: "Warning"})
             return
         }
         const {getEncodableAudioCodecs, getEncodableVideoCodecs} = mediabunny

@@ -159,7 +159,8 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
                 this.#monitorStreamDest.disconnect()
                 this.#monitorStreamDest = null
                 this.#monitorOutputDeviceId = Option.None
-                RuntimeNotifier.info({headline: "Output Device Error", message: `${reason}`})
+                console.warn(reason)
+                RuntimeNotifier.notify({message: "Output device error.", icon: "Warning"})
                 return
             }
         }

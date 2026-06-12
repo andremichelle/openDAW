@@ -34,28 +34,21 @@ export namespace PresetDecoder {
     export const decode = (bytes: ArrayBufferLike, target: ProjectSkeleton): ReadonlyArray<AudioUnitBox> => {
         const header = new ByteArrayInput(bytes.slice(0, 8))
         if (header.readInt() !== PresetHeader.MAGIC_HEADER_OPEN) {
-            RuntimeNotifier.info({
-                headline: "Could Not Import Preset",
-                message: "Invalid preset file"
-            }).then()
+            RuntimeNotifier.notify({message: "Invalid preset file.", icon: "Warning"})
             return []
         }
         const version = header.readInt()
         if (version !== PresetHeader.FORMAT_VERSION) {
-            RuntimeNotifier.info({
-                headline: "Could Not Import Preset",
-                message: `Unsupported preset version ${version} (this build supports ${PresetHeader.FORMAT_VERSION}).`
-            }).then()
+            console.warn(`Unsupported preset version ${version} (supports ${PresetHeader.FORMAT_VERSION})`)
+            RuntimeNotifier.notify({message: "Unsupported preset version.", icon: "Warning"})
             return []
         }
         const sourceBoxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
         try {
             sourceBoxGraph.fromArrayBuffer(bytes.slice(8), false)
         } catch (reason) {
-            RuntimeNotifier.info({
-                headline: "Could Not Import Preset",
-                message: String(reason)
-            }).then()
+            console.warn(reason)
+            RuntimeNotifier.notify({message: "Could not import preset.", icon: "Warning"})
             return []
         }
         const summary: Record<string, number> = {}

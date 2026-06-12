@@ -33,10 +33,8 @@ export namespace TempoDetection {
             dialog.terminate()
             if (preloadResult.status === "rejected") {
                 if (Errors.isAbort(preloadResult.error)) {return null}
-                await RuntimeNotifier.info({
-                    headline: "Tempo detection",
-                    message: `Could not load model: ${preloadResult.error}`
-                })
+                console.warn(preloadResult.error)
+                RuntimeNotifier.notify({message: "Could not load tempo model.", icon: "Warning"})
                 return null
             }
         }
@@ -56,10 +54,8 @@ export namespace TempoDetection {
         dialog.terminate()
         if (result.status === "rejected") {
             if (Errors.isAbort(result.error)) {return null}
-            await RuntimeNotifier.info({
-                headline: "Tempo detection",
-                message: String(result.error)
-            })
+            console.warn(result.error)
+            RuntimeNotifier.notify({message: "Tempo detection failed.", icon: "Warning"})
             return null
         }
         return result.value.bpm

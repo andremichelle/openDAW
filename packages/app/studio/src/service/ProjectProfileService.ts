@@ -82,7 +82,8 @@ export class ProjectProfileService {
         const {status, value: project, error} = await Promises.tryCatch(
             ProjectStorage.loadProject(uuid).then(buffer => Project.loadAnyVersion(this.#env, buffer)))
         if (status === "rejected") {
-            await RuntimeNotifier.info({headline: "Could not load project", message: String(error)})
+            console.warn(error)
+            RuntimeNotifier.notify({message: "Could not load project.", icon: "Warning"})
             return
         }
         await this.#sampleService.replaceMissingFiles(project.boxGraph, this.#sampleManager)
@@ -99,7 +100,8 @@ export class ProjectProfileService {
                 ProjectBundle.encode(profile, progress => progressValue.setValue(progress)))
             processDialog.terminate()
             if (status === "rejected") {
-                await RuntimeNotifier.info({headline: "Export Failed", message: String(error)})
+                console.warn(error)
+                RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
                 return
             }
             const {status: approveStatus} = await Promises.tryCatch(Dialogs.approve({
@@ -116,7 +118,8 @@ export class ProjectProfileService {
                 })
             } catch (error) {
                 if (!Errors.isAbort(error)) {
-                    Dialogs.info({headline: "Could not export project", message: String(error)}).finally()
+                    console.warn(error)
+                    RuntimeNotifier.notify({message: "Could not export project.", icon: "Warning"})
                 }
             }
         })
@@ -131,7 +134,8 @@ export class ProjectProfileService {
             this.#profile.wrap(profile)
         } catch (error) {
             if (!Errors.isAbort(error)) {
-                Dialogs.info({headline: "Could not load project", message: String(error)}).finally()
+                console.warn(error)
+                RuntimeNotifier.notify({message: "Could not load project.", icon: "Warning"})
             }
         }
     }
@@ -144,10 +148,11 @@ export class ProjectProfileService {
                     suggestedName: "project.od",
                     types: [FilePickerAcceptTypes.ProjectFileType]
                 })
-                Dialogs.info({message: `Project '${fileName}' saved successfully!`}).finally()
+                RuntimeNotifier.notify({message: `Project '${fileName}' saved successfully!`, icon: "Checkbox"})
             } catch (error) {
                 if (!Errors.isAbort(error)) {
-                    Dialogs.info({message: `Error saving project: ${error}`}).finally()
+                    console.warn(error)
+                RuntimeNotifier.notify({message: "Could not save project.", icon: "Warning"})
                 }
             }
         })
@@ -180,7 +185,8 @@ export class ProjectProfileService {
             }
         } catch (error) {
             if (!Errors.isAbort(error)) {
-                Dialogs.info({headline: "Could not load json", message: String(error)}).finally()
+                console.warn(error)
+                RuntimeNotifier.notify({message: "Could not load JSON.", icon: "Warning"})
             }
         }
     }

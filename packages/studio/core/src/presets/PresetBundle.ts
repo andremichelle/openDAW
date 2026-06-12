@@ -10,7 +10,8 @@ export namespace PresetBundle {
     export const encode = async (meta: PresetMeta, data: ArrayBufferLike): Promise<ArrayBuffer> => {
         const {status, value: JSZip, error} = await ExternalLib.JSZip()
         if (status === "rejected") {
-            await RuntimeNotifier.info({headline: "Error", message: `Could not load JSZip: ${String(error)}`})
+            console.warn(error)
+            RuntimeNotifier.notify({message: "Could not load JSZip.", icon: "Warning"})
             return Promise.reject(error)
         }
         const zip = new JSZip()
@@ -24,7 +25,8 @@ export namespace PresetBundle {
     export const decode = async (arrayBuffer: ArrayBuffer): Promise<{ meta: PresetMeta, data: ArrayBuffer }> => {
         const {status, value: JSZip, error} = await ExternalLib.JSZip()
         if (status === "rejected") {
-            await RuntimeNotifier.info({headline: "Error", message: `Could not load JSZip: ${String(error)}`})
+            console.warn(error)
+            RuntimeNotifier.notify({message: "Could not load JSZip.", icon: "Warning"})
             return Promise.reject(error)
         }
         const zip = await JSZip.loadAsync(arrayBuffer)
