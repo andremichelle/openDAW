@@ -50,8 +50,15 @@ One consequence of CSS: an `position: absolute` child of a scroll container **sc
 content** (the scroll offset is applied to abs descendants whose containing block is the scroller).
 So the bar must be **counter-translated** by the scroll offset on every `scroll`/`resize` to stay
 pinned to the viewport edge — `transform: translate(scrollLeft, scrollTop)`. `transform` is
-visual-only, so it does **not** add to `scrollWidth/Height` (using `top/left` would). The only
-requirement on the host is `position: relative` (safe — does not change its own box).
+visual-only, so it does **not** add to `scrollWidth/Height` (using `top/left` would).
+
+The host must be a containing block (non-`static` position) for the bar to anchor to it. The
+installer does **not** mutate the host — it would silently re-anchor the host's existing abs
+descendants. Instead it **throws** if the host computes `position: static` — which, read via `getComputedStyle`,
+also covers a host with no `position` set at all (unset resolves to `static`). That specific site
+is handled deliberately (add `position: relative` to that host's own `.sass` after checking it has
+no abs descendants that would re-anchor, or solve it another way for that one case). Fail-fast over
+a hidden global side effect.
 
 ### Opt-in API — imperative `installScrollbars(element)`
 
@@ -61,9 +68,13 @@ the element's computed `overflow-x` / `overflow-y` and adds a bar per axis whose
 `scroll`, or `overlay`. Callers keep authoring `overflow` in their `.sass` exactly as today. (~40
 one-line call sites — explicit, no DOM magic, no auto-scan `MutationObserver`.)
 
-## New: `bindNativeScroll` (the two-way binding)
+## New file: `Scrollbars.tsx`
 
-Location: `packages/app/studio/src/ui/components/bindNativeScroll.ts`
+Both `bindNativeScroll` and `installScrollbars` live in one file,
+`packages/app/studio/src/ui/components/Scrollbars.tsx` (`.tsx` because `installScrollbars` uses JSX).
+`isScrollableOverflow` is a small private helper in the same file.
+
+### `bindNativeScroll` (the two-way binding)
 
 Binds one axis of a native-scroll `viewport` element to a `ScrollModel` so the existing `Scroller`
 renders/drag-controls it. This is `AudioUnitsTimeline.tsx:107-116` generalized over orientation:
@@ -100,16 +111,19 @@ Notes:
 - `ScrollModel.position` setter already clamps via `normalized`; the getter's `Math.floor` does not
   cause a 1px drift loop in the timeline today. If it ever does, compare before writing `scrollTop`.
 
-## New: `installScrollbars` (inject + counter-translate)
+### `installScrollbars` (inject + counter-translate)
 
-Location: `packages/app/studio/src/ui/components/installScrollbars.ts`
+Same file. Follows the repo convention: returns a `Terminable`, the caller owns it
+(`lifecycle.own(installScrollbars(el))`) — no `lifecycle` parameter threaded in, exactly like
+`Events.subscribe` / `Html.watchResize` / `bindNativeScroll`.
 
 ```tsx
-export const installScrollbars = (lifecycle: Lifecycle, element: HTMLElement): Terminable => {
-    const terminator = lifecycle.own(new Terminator())
-    if (getComputedStyle(element).position === "static") {element.style.position = "relative"}
-    element.classList.add("custom-scrollbar-host") // hides the native bar via global CSS
-    const style = getComputedStyle(element)
+export const installScrollbars = (element: HTMLElement): Terminable => {
+    const style = getComputedStyle(element) // computed, not element.style — unset resolves to "static"
+    if (style.position === "static") {
+        return panic(`installScrollbars: host must be positioned (non-static), got '${style.position}'`)
+    }
+    const terminator = new Terminator()
     const orientations: Array<Orientation> = []
     if (isScrollableOverflow(style.overflowY)) {orientations.push(Orientation.vertical)}
     if (isScrollableOverflow(style.overflowX)) {orientations.push(Orientation.horizontal)}
@@ -140,9 +154,10 @@ export const installScrollbars = (lifecycle: Lifecycle, element: HTMLElement): T
 - `bindNativeScroll` already adds its own `scroll`/`resize` listeners for the model; `pin` adds a
   second pair. Fine for clarity; merge into one handler if it ever matters.
 - Give the bar a unique class so existing `.host > *` child selectors do not accidentally style it.
-- Owner usage: `lifecycle.own(installScrollbars(lifecycle, scrollEl))` where `scrollEl` is the same
-  element that today carries `overflow: auto/scroll`. Optional `<Scrollbars/>` child-component sugar
-  could wrap this later, but imperative is the baseline.
+- Native bars are hidden by **one global rule** (see below) — the installer never tags the host.
+- Owner usage: `lifecycle.own(installScrollbars(scrollEl))` where `scrollEl` is the same element that
+  today carries `overflow: auto/scroll`. Optional `<Scrollbars/>` child-component sugar could wrap
+  this later, but imperative is the baseline.
 
 ## Boot capability detection
 
@@ -199,23 +214,29 @@ for any global tweaks.
 
 ## Global CSS: hide native scrollbars
 
-The hide rule is keyed off the `.custom-scrollbar-host` class that `installScrollbars` adds (only
-added when supported + installed), so it never touches child windows / code editor / native areas.
-Replace the temporary `*` block in `main.sass` with:
+One global rule, applied to everything — no per-host class. It already works today as the temporary
+`*` block in `main.sass`; the only change is to gate it on the boot capability class so unsupported
+browsers keep native bars. `scrollbar-width` is **not** inherited, so it must target `*` (a single
+`:root` rule would only affect the root element):
 
 ```sass
-.custom-scrollbar-host
+body.custom-scrollbars *
   scrollbar-width: none        // Firefox
   -ms-overflow-style: none     // legacy Edge
   &::-webkit-scrollbar         // Chrome / Safari
     display: none
 ```
 
+If a few areas genuinely want the native bar (e.g. the code editor), exclude them with a
+`:not(.native-scrollbars)` opt-out rather than opting every host in.
+
 ## Migration
 
 For each scroll element, grab its ref and call `lifecycle.own(installScrollbars(lifecycle, el))`.
-No CSS change needed (the installer sets `position: relative` if static and reads the existing
-`overflow`). Sites with native `overflow: auto/scroll` (grep `overflow.*\(auto\|scroll\)` over
+The installer reads the existing `overflow` to pick axes and **throws if the host is `position:
+static`** — most hosts are already positioned; the rest get `position: relative` added to their own
+`.sass` (verify no abs descendants re-anchor) as a deliberate per-site fix. Sites with native
+`overflow: auto/scroll` (grep `overflow.*\(auto\|scroll\)` over
 `packages/app/studio/src/**/*.sass`, ~40):
 
 - `ui/PreferencePanel.sass`, `ui/pages/PreferencesPage.sass`
@@ -291,8 +312,9 @@ not relied on), so the JS counter-translate is the baseline everywhere.
   can lag a frame and the whole bar drifts off the edge, then snaps back. Worst on Safari (no
   compositor-synced fallback). Mitigate with synchronous transform writes + `will-change`; validate
   in phase 1 before committing to the sweep.
-- **`position: relative` on the host**: the installer sets it when the host is `static`. Establishes
-  a stacking context — usually harmless; spot-check sites with `z-index` children.
+- **Static host**: the installer throws on a `position: static` host rather than mutating it (would
+  re-anchor the host's existing abs descendants). Each thrown site is fixed deliberately — add
+  `position: relative` to that host's own `.sass` after checking for abs descendants.
 - **Injected child matched by `> *` selectors**: give the bar a unique class.
 - **Dynamic content size**: needs `MutationObserver`/`invalidate()` so the thumb resizes when list
   contents change without a host resize.
