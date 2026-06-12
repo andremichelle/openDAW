@@ -1,6 +1,6 @@
 import css from "./NoteEditor.sass?inline"
 import {Html, ShortcutManager} from "@opendaw/lib-dom"
-import {DefaultObservableValue, int, isInstanceOf, Lifecycle, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, int, isDefined, isInstanceOf, Lifecycle, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {PitchEditor} from "@/ui/timeline/editors/notes/pitch/PitchEditor.tsx"
@@ -160,7 +160,14 @@ export const NoteEditor =
                 }
             })()))
         const element: HTMLElement = (
-            <div className={className} tabIndex={-1} onConnect={(self: HTMLElement) => self.focus()}>
+            <div className={className} tabIndex={-1} onConnect={(self: HTMLElement) => {
+                // Only grab focus when nothing else holds it. A content swap triggered by
+                // selecting a region in the timeline re-mounts this editor; stealing focus there
+                // would pull it out of the RegionsArea and break region shortcuts/clipboard until
+                // the region is clicked again.
+                const active = document.activeElement
+                if (!isDefined(active) || active === document.body) {self.focus()}
+            }}>
                 {pitchHeader}
                 {pitchBody}
                 <PropertyHeader lifecycle={lifecycle}
