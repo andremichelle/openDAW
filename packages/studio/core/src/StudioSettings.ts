@@ -1,5 +1,4 @@
 import {z} from "zod"
-import {Browser} from "@opendaw/lib-dom"
 
 export const FpsOptions = [24, 25, 29.97, 30] as const
 export const OverlappingRegionsBehaviourOptions = ["clip", "push-existing", "keep-existing"] as const
@@ -9,14 +8,12 @@ export const StudioSettingsSchema = z.object({
         "visible-help-hints": z.boolean(),
         "enable-history-buttons": z.boolean(),
         "auto-open-clips": z.boolean(),
-        "scrollbar-padding": z.boolean(),
         "base-frequency": z.boolean(),
         "toasts": z.boolean()
     }).default({
         "visible-help-hints": true,
         "enable-history-buttons": navigator.maxTouchPoints > 0,
         "auto-open-clips": true,
-        "scrollbar-padding": Browser.isWindows(),
         "base-frequency": false,
         "toasts": true
     }),

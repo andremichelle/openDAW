@@ -574,7 +574,5 @@ export class StudioService implements ProjectEnv {
             document.body.classList.toggle("experimental-visible", value), "debug", "enable-beta-features")
         StudioPreferences.catchupAndSubscribe(value =>
             document.body.classList.toggle("help-hidden", !value), "visibility", "visible-help-hints")
-        StudioPreferences.catchupAndSubscribe(value =>
-            document.body.classList.toggle("scrollbar-padding", value), "visibility", "scrollbar-padding")
     }
 }

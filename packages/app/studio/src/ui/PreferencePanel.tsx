@@ -8,6 +8,7 @@ import {Icon} from "@/ui/components/Icon"
 import {NumberInput} from "@/ui/components/NumberInput"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {Preferences} from "@opendaw/lib-fusion"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 const className = Html.adoptStyleSheet(css, "PreferencePanel")
 
@@ -46,7 +47,8 @@ export const PreferencePanel = <ROOT_SETTINGS, SETTINGS = ROOT_SETTINGS>(
     ) as SETTINGS
 
     return (
-        <div className={className}>
+        <div className={className}
+             onConnect={element => {if (pathPrefix.length === 0) {lifecycle.own(installScrollbars(element))}}}>
             {Object.keys(labels).map(key => {
                 const pKey = key as keyof SETTINGS & string
                 const setting = settings[pKey]

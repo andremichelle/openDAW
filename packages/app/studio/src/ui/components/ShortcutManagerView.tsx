@@ -14,6 +14,7 @@ import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Surface} from "@/ui/surface/Surface"
 import {Colors} from "@opendaw/studio-enums"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 const className = Html.adoptStyleSheet(css, "ShortcutManagerView")
 
@@ -27,7 +28,9 @@ let lastOpenIndex = 0
 
 export const ShortcutManagerView = ({lifecycle, contexts, updateNotifier}: Construct) => {
     return (
-        <div className={className} onInit={element => {
+        <div className={className}
+             onConnect={element => lifecycle.own(installScrollbars(element))}
+             onInit={element => {
             const update = () => replaceChildren(element, Objects.entries(contexts).map(([key, shortcuts], index) => (
                 <details className="context"
                          open={lastOpenIndex === index}
