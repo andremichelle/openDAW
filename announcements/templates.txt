@@ -1,0 +1,76 @@
+openDAW Templates announcement
+==============================
+
+
+-----------------------------------------
+DISCORD
+-----------------------------------------
+# Update: openDAW Now Has Project Templates!
+
+Save any project as a reusable starting point, then start new tracks from it whenever you want.
+
+### Save as Template
+Open the menu, then Save as Template, and give it a name. Your current project is saved as a
+template, and you keep working in the project you already had open.
+
+### Find Them in the Dashboard
+Templates have their own list in the Dashboard, right between Projects and Samples. They look and
+work just like your projects.
+
+### Opens as a Fresh Copy
+Opening a template creates a new, unsaved project. The first Save asks for a name. The template
+itself is never changed, so you can reuse it as often as you like.
+
+### Backed Up With Your Projects
+Templates live in your browser and are included when you back up to Dropbox or Google Drive, the
+same as your projects. You can delete a template from the Dashboard at any time.
+
+
+-----------------------------------------
+LINKEDIN
+-----------------------------------------
+openDAW now has project templates.
+
+openDAW is a free, browser-based digital audio workstation. You can now save any project as a
+template and start new projects from it, so you do not rebuild the same setup every time.
+
+Why it matters for education:
+• Ready-made starting points. A teacher can prepare a template with the right tracks, instruments,
+  and tempo, then start each new lesson project from it.
+• Every opened template becomes a fresh, independent project. The original template is never
+  changed, so it stays clean for next time.
+• Templates back up alongside your projects to Dropbox or Google Drive.
+
+Learn more at https://opendaw.studio
+
+#MusicEducation #MusicTech #DAW #EdTech #openDAW
+
+
+-----------------------------------------
+NEWSLETTER
+-----------------------------------------
+openDAW now has project templates.
+
+Teachers can build a starting project once, with the tracks, instruments, and tempo a lesson needs,
+and save it as a template. From then on, every new project can start from that template instead of
+an empty page, so the class begins from the same setup.
+
+How it works:
+• Open the menu and choose Save as Template, then give it a name.
+• Templates have their own list in the Dashboard, next to your projects.
+• Opening a template creates a fresh, unsaved project. The first Save asks for a name, and the
+  template stays untouched, ready to use again.
+
+Templates are stored in the browser and are included in your Dropbox or Google Drive backup, so they
+travel with the rest of your work.
+
+Read more at https://opendaw.studio
+
+
+-----------------------------------------
+QUESTIONS
+-----------------------------------------
+• Which Discord channel for the post.
+• Newsletter subject line.
+• Release timing, and whether to ship this together with another update.
+• Should the newsletter mention that templates do not yet sync to Nextcloud, or leave that out.
