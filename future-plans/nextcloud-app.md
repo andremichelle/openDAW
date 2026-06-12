@@ -22,6 +22,46 @@ backend enforces the rules instead of the fragile Team Folder plus ACL setup we 
 shift: openDAW talks to the app's own REST API (CORS enabled), not raw WebDAV, so the app does all
 the file work with privileges and the teacher UI needs zero permission management.
 
+## Responsibilities and roles (studio vs app)
+
+This is a separate feature from the current generic Nextcloud connect. The current system stays as is
+(personal accounts, raw WebDAV, no app). The Classroom feature connects to our custom app.
+
+**Single connect.** The studio sends server URL plus credentials, and the login returns the user's
+role (student or teacher) and the roster. There is no "connect as teacher / connect as student"
+choice, and no classroom configuration in the studio.
+
+### openDAW studio
+- One connect flow. The role from the login decides the view.
+- Student view: browse, open, and upload your own projects.
+- Teacher view: read access to all student projects, shown as a tree of student folders with their
+  projects inside.
+- Distribution: pick a project, "Upload to...", then select students or the whole class.
+  Distribution lives in the studio because only the studio understands project files.
+- All project and asset handling stays in the studio.
+- No classroom management and no config in the studio.
+
+### Nextcloud app
+- CORS for `opendaw.studio`.
+- Accounts, groups, and all classroom management (add, remove, move students) in its own Nextcloud
+  UI.
+- Returns the role and roster to the studio on login.
+- Stores blobs only: per-student project storage, one shared deduplicated asset store, access
+  control, and teacher notifications.
+- Never parses or assembles projects. It is storage plus roster plus rules.
+
+### Templates (teacher uploads)
+- A project a teacher uploads into a student's folder is a template.
+- It is immutable for the student. The student cannot override it.
+- Opening a template creates a copy in the student's own space, so the original stays intact. The
+  studio performs the copy on open (it understands projects). The app keeps the template read-only
+  for the student.
+
+### Distribution flow
+- The studio (as teacher) reads the roster from the app, the teacher picks targets in "Upload to...",
+  and the studio writes the project into each selected student's folder as a template through the
+  app's authorized write API. The app only checks that this teacher may write to those students.
+
 ## Feasibility per requirement
 
 1. **Add CORS.** Yes. A Nextcloud app exposes API controllers with the `#[CORS]` attribute plus an
