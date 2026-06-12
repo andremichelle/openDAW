@@ -22,7 +22,7 @@ export const StereoToolDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudi
     15: {type: "boolean", name: "swap", pointerRules: ParameterPointerRules},
     20: {
         type: "int32", name: "panning-mixing",
-        value: Mixing.EqualPower,
+        value: Mixing.Linear,
         constraints: {
             values: [Mixing.Linear, Mixing.EqualPower]
         }, unit: ""
