@@ -9,6 +9,7 @@ import {Html} from "@opendaw/lib-dom"
 import {CloudBackup, MenuItem} from "@opendaw/studio-core"
 import {EmptyExec, panic} from "@opendaw/lib-std"
 import {network} from "@opendaw/lib-runtime"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 const className = Html.adoptStyleSheet(css, "ManualPage")
 
@@ -35,10 +36,10 @@ const addManuals = (manuals: ReadonlyArray<Manual>): ReadonlyArray<MenuItem> => 
     }
 })
 
-export const ManualPage: PageFactory<StudioService> = ({service, path}: PageContext<StudioService>) => {
+export const ManualPage: PageFactory<StudioService> = ({lifecycle, service, path}: PageContext<StudioService>) => {
     return (
         <div className={className}>
-            <aside>
+            <aside onConnect={host => lifecycle.own(installScrollbars(host))}>
                 <BackButton/>
                 <nav>
                     <LocalLink href="/manuals/">⇱</LocalLink>
@@ -46,7 +47,7 @@ export const ManualPage: PageFactory<StudioService> = ({service, path}: PageCont
                     {addManuals(Manuals)}
                 </nav>
             </aside>
-            <div className="manual">
+            <div className="manual" onConnect={host => lifecycle.own(installScrollbars(host))}>
                 {path === "/manuals/" ? (<p>Select a topic in the side bar...</p>) : (<Await
                     factory={() => network.defaultFetch(`${path ?? "index"}.md?uuid=${service.buildInfo.uuid}`)
                         .then(x => x.text())}

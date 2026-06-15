@@ -3,11 +3,12 @@ import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Html} from "@opendaw/lib-dom"
 import {Colors} from "@opendaw/studio-enums"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 const className = Html.adoptStyleSheet(css, "PrivacyPage")
 
-export const PrivacyPage: PageFactory<StudioService> = ({}: PageContext<StudioService>) => (
-    <div className={className}>
+export const PrivacyPage: PageFactory<StudioService> = ({lifecycle}: PageContext<StudioService>) => (
+    <div className={className} onConnect={host => lifecycle.own(installScrollbars(host))}>
         <h1>Privacy Policy</h1>
         <p style={{color: Colors.blue.toString()}}>openDAW respects your privacy. This application does not collect
             personal data, create user accounts, or track visitors.</p>

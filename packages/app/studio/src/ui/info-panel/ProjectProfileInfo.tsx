@@ -15,6 +15,7 @@ import {Button} from "@/ui/components/Button"
 import {Colors} from "@opendaw/studio-enums"
 import {PublishMusic} from "@/ui/info-panel/PublishMusic"
 import {Promises} from "@opendaw/lib-runtime"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 const className = Html.adoptStyleSheet(css, "ProjectInfo")
 
@@ -177,7 +178,7 @@ export const ProjectProfileInfo = ({lifecycle, service}: Construct) => {
         })
     )
     return (
-        <div className={className}>
+        <div className={className} onConnect={host => lifecycle.own(installScrollbars(host))}>
             {form}
         </div>
     )

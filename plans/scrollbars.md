@@ -273,8 +273,16 @@ Sites with native `overflow: auto/scroll` (grep `overflow.*\(auto\|scroll\)` ove
 
 Project list, Template list, Sample/Soundfont (`ResourceBrowser`), Preset tree, `PreferencePanel`,
 `ShortcutManagerView`, `NotePadPanel`, `DemoProjects`, `NextcloudBrowser`, `ControlValues`,
-`NamModelDialog`, `ExportStemsConfigurator`, `ChatOverlay` `.messages`. Remaining: the
-**Settings/content pages** group and the dev/test pages.
+`NamModelDialog`, `ExportStemsConfigurator`, `ChatOverlay` `.messages`, `stats/DashboardPage`
+(full page), `ProjectProfileInfo` (Project Info — had no `overflow`, added `hidden auto`).
+`PreferencesPage` already correct (page root `overflow: hidden`; only its inner `PreferencePanel` /
+`ShortcutManagerView` lists scroll, already wired).
+
+Also done: `ManualPage` (both `aside` + `div.manual`), `PrivacyPage`, `ImprintPage`.
+
+Skipped per decision (low value / not applicable): `PerformancePage`, `SampleReadPage` (dev
+benchmark), `AutomationPage`, the `errors/*` pages, `OpenBundlePage` (transient bundle loader), and
+the dev/test pages (`ComponentsPage`, `TestPage`, `IconsPage`, `SpikeTestPage`, `BoxesDebugView`).
 
 `ChatOverlay` needed a prerequisite fix: its pin-to-bottom `AnimationFrame(scrollToBottom)` was tied
 to `sendOnEnter` start + `transitionend` stop, so with no textarea transition it ran forever and

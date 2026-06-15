@@ -8,6 +8,7 @@ import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {BarChart, LineChart} from "./charts"
 import {Card} from "./components"
 import {Tile} from "./Tile"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 import {
     BuildInfo,
     DailySeries,
@@ -187,7 +188,7 @@ export const DashboardPage: PageFactory<StudioService> = ({lifecycle}: PageConte
         return {rooms, users, visitors}
     })()
     return (
-        <div className={className}>
+        <div className={className} onConnect={host => lifecycle.own(installScrollbars(host))}>
             <header className="dashboard-head">
                 <h1>openDAW Statistics</h1>
                 <span className="updated">Updated {updatedAt}</span>
