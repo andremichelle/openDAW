@@ -132,8 +132,9 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
     if (opfsProbe.status === "rejected") {
         Dialogs.info({
             headline: "Storage Unavailable",
-            message: "openDAW cannot persist samples, presets or projects because the browser is blocking access to private storage. This typically happens in Private Browsing mode. Please reopen openDAW in a regular browser window to enable saving."
+            message: "openDAW cannot start because the browser is blocking access to private storage, so samples, presets and projects cannot be persisted. This typically happens in Private Browsing mode. Please reopen openDAW in a regular browser window."
         }).finally()
+        return
     }
     if (buildInfo.env === "production" && !Browser.isLocalHost()) {
         if (import.meta.env.BUILD_UUID !== buildInfo.uuid) {
