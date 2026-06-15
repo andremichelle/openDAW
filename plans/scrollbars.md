@@ -159,76 +159,31 @@ export const installScrollbars = (element: HTMLElement): Terminable => {
   today carries `overflow: auto/scroll`. Optional `<Scrollbars/>` child-component sugar could wrap
   this later, but imperative is the baseline.
 
-## Boot capability detection
+## Boot capability detection — dropped (unnecessary)
 
-Hiding native scrollbars works on every browser in active use, but the *one* honest gap (Firefox
-< 64, and any future engine that ignores the rules) must degrade gracefully — not show a native bar
-*and* our overlay. So probe at boot and gate the whole feature on a body class.
-
-This is **not** part of `features.ts` / `testFeatures()` — that aborts boot with `MissingFeature` for
-*required* capabilities. Custom scrollbars are an enhancement, so a missing capability must silently
-fall back to native bars, never block boot.
-
-### Probe — `Browser.canHideScrollbars()`
-
-Add to `packages/lib/dom/src/browser.ts`. A measurement probe, uniform across classic and overlay
-scrollbars (no engine sniffing):
-
-```ts
-canHideScrollbars(): boolean {
-    const id = "scrollbar-probe"
-    const style = document.createElement("style")
-    style.textContent = `.${id}::-webkit-scrollbar{display:none}` // pseudo-element can't be inlined
-    const probe = document.createElement("div")
-    probe.className = id
-    probe.setAttribute("style",
-        "position:absolute;visibility:hidden;width:100px;height:100px;overflow:scroll;" +
-        "scrollbar-width:none;-ms-overflow-style:none")
-    document.head.appendChild(style)
-    document.body.appendChild(probe)
-    const hidden = probe.offsetWidth - probe.clientWidth === 0
-    probe.remove()
-    style.remove()
-    return hidden
-}
-```
-
-`overflow: scroll` forces a bar, then `offsetWidth - clientWidth === 0` (the gutter collapsed) is the
-signal:
-- classic bars + hide works (Windows/Linux) -> gutter ~15px collapses to 0 -> `true`
-- overlay bars (macOS) -> gutter already 0, pseudo kills the transient bar -> `true`
-- hide not honored (Firefox < 64) -> gutter stays > 0 -> `false`
-
-### Wire-up — `boot.ts`
-
-After `Surface.main(...)` (so `document.body` exists), one line:
-
-```ts
-document.body.classList.toggle("custom-scrollbars", Browser.canHideScrollbars())
-```
-
-Boot stashes the boolean on a shared config that `installScrollbars` reads: when unsupported, the
-installer **no-ops** (adds no `.custom-scrollbar-host` class, appends no bar), so the native bars
-stay and nothing overlays — zero-risk fallback. The `body.custom-scrollbars` class is still handy
-for any global tweaks.
+Considered a `Browser.canHideScrollbars()` probe at boot to gate the feature, but dropped it: the
+hide rules work on every browser in use. `::-webkit-scrollbar { display: none }` covers all
+WebKit/Blink (every version); `scrollbar-width: none` covers Firefox 64+ (Dec 2018). The only gap is
+Firefox < 64 — effectively extinct. So the probe + body-class + no-op fallback was dead complexity
+guarding a non-existent case. Ship the global hide unconditionally instead.
 
 ## Global CSS: hide native scrollbars
 
-One global rule, applied to everything — no per-host class. It already works today as the temporary
-`*` block in `main.sass`; the only change is to gate it on the boot capability class so unsupported
-browsers keep native bars. `scrollbar-width` is **not** inherited, so it must target `*` (a single
-`:root` rule would only affect the root element):
+One unconditional global rule in `main.sass`. `scrollbar-width` is **not** inherited, so it must
+target `*` (a `:root` rule would only affect the root element):
 
 ```sass
-body.custom-scrollbars *
-  scrollbar-width: none        // Firefox
+*
+  scrollbar-width: none        // Firefox 64+
   -ms-overflow-style: none     // legacy Edge
-  &::-webkit-scrollbar         // Chrome / Safari
+  &::-webkit-scrollbar         // Chrome / Safari / Blink
     display: none
 ```
 
-If a few areas genuinely want the native bar (e.g. the code editor), exclude them with a
-`:not(.native-scrollbars)` opt-out rather than opting every host in.
+Consequence: this hides native bars **everywhere**, including areas we deliberately left native
+(code-editor `.status`, chat textarea, skipped pages). Monaco draws its **own** (non-native) bars so
+it is unaffected; the rest are small/rare-scroll surfaces where no visible bar is acceptable. If a
+specific area ever needs its native bar back, give it an opt-out class and exclude it from this rule.
 
 ## Migration
 
@@ -332,8 +287,7 @@ not relied on), so the JS counter-translate is the baseline everywhere.
    counter-translate **scroll sync under load** (Safari especially) — this is the gating risk. Verify
    thumb tracks `scrollTop`, drag writes back, and the bar stays pinned to the edge during fast/
    momentum scroll.
-2. `Browser.canHideScrollbars()` probe + boot wire-up + `.custom-scrollbar-host` hide CSS (replace
-   the temporary `*` block in `main.sass`).
+2. Global native-bar hide: one unconditional `*` rule in `main.sass` (no boot probe — see above).
 3. Migrate `PreferencePanel` and `ResourceBrowser`; verify both axes in Chrome + Firefox + Safari.
 4. Sweep remaining ~40 sites.
 5. Remove `scrollbar-padding` preference and its rules.

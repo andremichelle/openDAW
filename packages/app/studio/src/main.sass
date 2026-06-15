@@ -39,8 +39,8 @@ h1, h2, h3, h4, h5
   user-select: none
   -webkit-user-select: none
 
-// TEMP (#260): globally hide native scrollbars to eyeball the effect. Remove once custom
-// scrollbars land scoped to .custom-scrollbars / .viewport.
+// Hide native scrollbars everywhere (#260). Custom bars are drawn by installScrollbars where wired;
+// Monaco draws its own. Supported by every engine in use (Firefox 64+, all WebKit/Blink).
 *
   scrollbar-width: none
   -ms-overflow-style: none
