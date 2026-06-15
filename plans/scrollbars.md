@@ -232,11 +232,20 @@ If a few areas genuinely want the native bar (e.g. the code editor), exclude the
 
 ## Migration
 
-For each scroll element, grab its ref and call `lifecycle.own(installScrollbars(lifecycle, el))`.
-The installer reads the existing `overflow` to pick axes and **throws if the host is `position:
-static`** — most hosts are already positioned; the rest get `position: relative` added to their own
-`.sass` (verify no abs descendants re-anchor) as a deliberate per-site fix. Sites with native
-`overflow: auto/scroll` (grep `overflow.*\(auto\|scroll\)` over
+For each scroll element, grab its ref and call `lifecycle.own(installScrollbars(el))` (via the
+element's `onConnect` so it runs once connected). The installer reads the host's computed `overflow`
+to pick axes and mounts the bar overlay into the host's `offsetParent`. The host does **not** need to
+be positioned (the overlay lives in the offsetParent, not the host). If the host is hidden
+(`display: none`) at connect time — overlays/dialogs — it has no `offsetParent` yet, so the installer
+**defers** and mounts when the host first becomes visible (`watchResize`).
+
+Gutter: flex/block hosts take a plain `padding-right`. **Subgrid** hosts can't (Firefox ignores
+container padding on inherited tracks) — reserve the gutter with a `margin-right` on the rightmost
+grid item (e.g. `.delete-icon`), or `minmax(Xpx, auto)` on the last column when the rightmost cell is
+sometimes empty. Also set `overflow: hidden scroll` on subgrid hosts so `overflow-x` doesn't compute
+to `auto` and spawn a phantom horizontal bar.
+
+Sites with native `overflow: auto/scroll` (grep `overflow.*\(auto\|scroll\)` over
 `packages/app/studio/src/**/*.sass`, ~40):
 
 - `ui/PreferencePanel.sass`, `ui/pages/PreferencesPage.sass`
@@ -252,8 +261,25 @@ static`** — most hosts are already positioned; the rest get `position: relativ
 - `service/ExportStemsConfigurator.sass`
 - error/stats pages: `ui/pages/errors/{Stack,Logs}.sass`, `ui/pages/stats/DashboardPage.sass`
 
-Start with 1–2 representative panels (e.g. `PreferencePanel`, `ResourceBrowser`) to validate
-positioning, the counter-translate pin, and scroll sync before sweeping the rest.
+### Excluded — keep native scrollbars
+
+- **All code editors** — `CodeEditorPanel` and scriptable-device editors. Monaco manages its own
+  scrolling (`overflow: hidden` host, internal bars); leave them native. (Decided 2026-06-15.)
+- **Chat input textarea** — a `<textarea>` can't host the overlay child and auto-grows. Skipped.
+- **Timeline editor headers** (`ValueEditorHeader`, `AudioEditorHeader`, `NoteEditor` pitch-header) —
+  rarely overflow, so a bar would almost never appear. Reverted.
+
+### Done
+
+Project list, Template list, Sample/Soundfont (`ResourceBrowser`), Preset tree, `PreferencePanel`,
+`ShortcutManagerView`, `NotePadPanel`, `DemoProjects`, `NextcloudBrowser`, `ControlValues`,
+`NamModelDialog`, `ExportStemsConfigurator`, `ChatOverlay` `.messages`. Remaining: the
+**Settings/content pages** group and the dev/test pages.
+
+`ChatOverlay` needed a prerequisite fix: its pin-to-bottom `AnimationFrame(scrollToBottom)` was tied
+to `sendOnEnter` start + `transitionend` stop, so with no textarea transition it ran forever and
+blocked scroll-up. Now tied to `transitionstart` → `transitionend` (only pins during an actual
+transition), so manual scroll-up works and the custom bar coexists.
 
 ## Remove the `scrollbar-padding` workaround
 

@@ -35,7 +35,8 @@ export const CodeEditorPanel = ({lifecycle, service}: Construct) => {
              onclick={() => {
                  if (statusType !== "error") {return}
                  Clipboard.writeText(statusText)
-                     .then(() => Surface.get(statusLabel).toast("Error message copied to clipboard", IconSymbol.Copy))
+                     .then(() => Surface.get(statusLabel)
+                         .toast("Error message copied to clipboard", IconSymbol.Copy))
              }}>Idle</div>
     )
     const state = service.activeCodeEditor.unwrapOrNull()

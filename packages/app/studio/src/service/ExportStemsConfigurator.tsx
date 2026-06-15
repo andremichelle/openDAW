@@ -7,6 +7,7 @@ import {ColorCodes, ExportConfiguration, ExportStemConfiguration} from "@opendaw
 import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
 import {TextInput} from "@/ui/components/TextInput"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 const className = Html.adoptStyleSheet(css, "ExportStemsConfigurator")
 
@@ -53,7 +54,7 @@ export const ExportStemsConfigurator = ({lifecycle, configuration}: Construct) =
                 </Checkbox>
                 <div>File Name</div>
             </header>
-            <div className="list">
+            <div className="list" onConnect={list => lifecycle.own(installScrollbars(list))}>
                 {Object.values(configuration).map((stem) => {
                     const include = new DefaultObservableValue(stem.include)
                     const includeAudioEffects = new DefaultObservableValue(stem.includeAudioEffects)

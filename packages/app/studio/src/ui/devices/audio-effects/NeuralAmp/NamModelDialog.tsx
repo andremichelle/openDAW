@@ -9,6 +9,7 @@ import {ArchitectureCanvas} from "./ArchitectureCanvas"
 import {computeStats, HistogramCanvas} from "./HistogramCanvas"
 import {MagnitudeCanvas} from "./MagnitudeCanvas"
 import {Surface} from "@/ui/surface/Surface"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 const className = Html.adoptStyleSheet(css, "NamModelDialog")
 
@@ -45,7 +46,7 @@ export const showNamModelDialog = (model: NamModel): void => {
                 icon={IconSymbol.NeuralAmp}
                 buttons={[{text: "Close", onClick: handler => handler.close(), primary: true}]}
                 growWidth>
-            <div className={className}>
+            <div className={className} onConnect={host => lifecycle.own(installScrollbars(host))}>
                 {isDefined(meta?.name) && <div className="name">{meta.name}</div>}
                 <div className="section">
                     <h2>Model</h2>

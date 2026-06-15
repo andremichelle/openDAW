@@ -6,6 +6,7 @@ import {AutomatableParameterFieldAdapter, MIDIOutputDeviceBoxAdapter} from "@ope
 import {MIDIOutputParameterBox} from "@opendaw/studio-boxes"
 import {Project} from "@opendaw/studio-core"
 import {ControlValue} from "@/ui/devices/instruments/MIDIOutputEditor/ControlValue"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 const className = Html.adoptStyleSheet(css, "ControlValues")
 
@@ -16,7 +17,7 @@ type Construct = {
 }
 
 export const ControlValues = ({lifecycle, project, adapter}: Construct) => (
-    <div className={className}>
+    <div className={className} onConnect={host => lifecycle.own(installScrollbars(host))}>
         <Group onInit={parent => {
             const set = UUID.newSet<{
                 uuid: UUID.Bytes,

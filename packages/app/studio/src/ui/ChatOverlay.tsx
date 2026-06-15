@@ -11,6 +11,7 @@ import {ChatOverlayBackground} from "@/ui/ChatOverlayBackground.tsx"
 import {StudioService} from "@/service/StudioService"
 import {ChatService} from "@/chat/ChatService"
 import {ChatMessage} from "@/chat/ChatMessage"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 const className = Html.adoptStyleSheet(css, "ChatOverlay")
 
@@ -36,7 +37,9 @@ export const ChatOverlay = ({lifecycle, service}: Construct) => {
     const sendOnEnter = lifecycle.own(new DefaultObservableValue<boolean>(true))
     const closeAfterSend = lifecycle.own(new DefaultObservableValue<boolean>(false))
     const tabIcon = lifecycle.own(new DefaultObservableValue<IconSymbol>(IconSymbol.ChatEmpty))
-    const messagesContainer: HTMLElement = (<div className="messages"/>)
+    const messagesContainer: HTMLElement = (
+        <div className="messages" onConnect={host => lifecycle.own(installScrollbars(host))}/>
+    )
     const textArea: HTMLTextAreaElement = (<textarea placeholder="Type a message..." maxLength={300} rows={1}/>)
     const isOpen = () => element.classList.contains("open")
     const updateTabIcon = () => {
@@ -105,12 +108,12 @@ export const ChatOverlay = ({lifecycle, service}: Construct) => {
     }))
     const scrollToBottom = () => messagesContainer.scrollTop = messagesContainer.scrollHeight
     let scrollSubscription: Terminable = Terminable.Empty
-    lifecycle.own(Events.subscribe(textArea, "transitionend", () => scrollSubscription.terminate()))
-    lifecycle.own(sendOnEnter.catchupAndSubscribe(owner => {
-        textArea.classList.toggle("single-line", owner.getValue())
+    lifecycle.own(Events.subscribe(textArea, "transitionstart", () => {
         scrollSubscription.terminate()
         scrollSubscription = AnimationFrame.add(scrollToBottom)
     }))
+    lifecycle.own(Events.subscribe(textArea, "transitionend", () => scrollSubscription.terminate()))
+    lifecycle.own(sendOnEnter.catchupAndSubscribe(owner => textArea.classList.toggle("single-line", owner.getValue())))
     const serviceLifecycle = lifecycle.own(new Terminator())
     lifecycle.own(service.chatService.catchupAndSubscribe((option: Option<ChatService>) => {
         serviceLifecycle.terminate()
