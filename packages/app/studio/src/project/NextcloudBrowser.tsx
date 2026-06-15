@@ -19,6 +19,7 @@ import {Promises} from "@opendaw/lib-runtime"
 import {CloudHandler, SharedFolderSync} from "@opendaw/studio-core"
 import {SearchInput} from "@/ui/components/SearchInput"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 const className = Html.adoptStyleSheet(css, "NextcloudBrowser")
 
@@ -65,7 +66,8 @@ export const NextcloudBrowser = ({lifecycle, handler, username, select, reopen}:
                                    <div/>
                                </header>
                                <div className="content">
-                                   <div className="list">
+                                   <div className="list"
+                                        onConnect={list => lifecycle.own(installScrollbars(list))}>
                                        {listings
                                            .toSorted((left, right) =>
                                                -StringComparator(left.entry.meta.modified, right.entry.meta.modified))

@@ -9,6 +9,7 @@ import {Checkbox} from "@/ui/components/Checkbox"
 import {renderMarkdown} from "@/ui/Markdown"
 import {Events, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 const className = Html.adoptStyleSheet(css, "NotePadPanel")
 
@@ -46,7 +47,7 @@ export const NotePadPanel = ({lifecycle, service}: Construct) => {
     }
     update()
     const element: Element = (
-        <div className={className}>
+        <div className={className} onConnect={host => lifecycle.own(installScrollbars(host))}>
             {notepad}
             <Checkbox lifecycle={lifecycle}
                       model={editMode}

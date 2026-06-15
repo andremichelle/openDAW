@@ -10,6 +10,7 @@ import {DemoProject} from "@/ui/dashboard/DemoProject"
 import {network, Promises} from "@opendaw/lib-runtime"
 import {ProjectBundle} from "@opendaw/studio-core"
 import {connectRoom} from "@/service/StudioLiveRoomConnect"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 const className = Html.adoptStyleSheet(css, "DemoProjects")
 
@@ -106,10 +107,10 @@ const loadDemoProject = async (service: StudioService, json: DemoProjectJson) =>
     service.projectProfileService.setValue(Option.wrap(profile))
 }
 
-export const DemoProjects = ({service}: Construct) => (
+export const DemoProjects = ({lifecycle, service}: Construct) => (
     <div className={className}>
         <h3 style={{color: Colors.orange.toString()}}>Start</h3>
-        <div className="projects">
+        <div className="projects" onConnect={element => lifecycle.own(installScrollbars(element))}>
             <DemoProject json={NewProjectJson} load={() => service.newProject()} extraClassName="tinted-blue"
                          cover="./favicon.svg"/>
             <DemoProject json={LiveRoomJson} load={() => connectRoom(service)} extraClassName="tinted-green"
