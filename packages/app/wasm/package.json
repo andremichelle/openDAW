@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "wasm": "source \"$HOME/.cargo/env\" && cargo build --release --target wasm32-unknown-unknown --manifest-path ../../../crates/Cargo.toml --workspace && cp ../../../crates/target/wasm32-unknown-unknown/release/*.wasm public/",
+    "wasm": ". \"$HOME/.cargo/env\" && cargo build --release --target wasm32-unknown-unknown --manifest-path ../../../crates/Cargo.toml --workspace && cp ../../../crates/target/wasm32-unknown-unknown/release/*.wasm public/",
     "predev": "npm run wasm",
     "dev": "vite --host",
     "prebuild": "npm run wasm",
