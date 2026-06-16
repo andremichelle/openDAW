@@ -29,8 +29,8 @@ jobs:
       - name: 📦 Install dependencies
         run: npm ci
 
-      - name: 🏗️ Build wasm app
-        run: npm run build -w @opendaw/app-wasm
+      - name: 🏗️ Build wasm app (turbo builds @opendaw/lib-* deps first)
+        run: npx turbo build --filter=@opendaw/app-wasm
 
       - name: 🚚 Deploy to wasm.opendaw.studio
         env:
