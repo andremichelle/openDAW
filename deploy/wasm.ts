@@ -10,7 +10,9 @@ const config = {
 } as const
 
 const distDir = "./packages/app/wasm/dist"
-const remoteDir = "/wasm.opendaw.studio"
+// The SFTP login is rooted at the opendaw.studio docroot, so an absolute "/wasm.opendaw.studio"
+// resolves under it. Step up one level to reach the sibling subdomain docroot at the server root.
+const remoteDir = "../wasm.opendaw.studio"
 
 // SPA fallback (client routes resolve on deep-link/refresh) + cross-origin isolation so
 // SharedArrayBuffer is available (shared memory / assets, coming soon).
