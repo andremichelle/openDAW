@@ -21,10 +21,13 @@ WASM core is free to restructure; it just has to produce the same audio.
   property/fuzz tests and CI. We rely on this rather than reading the WASM/native source.
 - **Real-time safety first.** No GC pauses, no allocation on the audio callback, deterministic.
 - **All homebrew.** No third-party DSP (JUCE etc.) — licensing. Every algorithm is ported ourselves.
+- **Minimal dependencies.** Keep external deps (crates, npm, tools, toolchain) minimal — prefer
+  homebrew, smallest install that works. Source-file count is not a concern; structure freely.
 
 ## Plan index
 
 - [**Feature inventory**](feature-inventory.md) — the master list of engine mechanics to port, one at a time
+- [**Open questions**](open-questions.md) — consolidated, prioritized (spike-blockers first)
 1. [Language choice](01-language.md) — **decided: Rust**
 2. [Source layout / repo](02-repo-layout.md) — **decided: monorepo, `crates/`**
 3. [Threading model](03-threading.md) — **decided: single-threaded**
@@ -35,6 +38,7 @@ WASM core is free to restructure; it just has to produce the same audio.
 5. [Memory & module composition](05-memory.md) — **drafted** (needs a spike)
 6. [Build toolchain & integration](06-build.md) — **drafted**
 7. [Testing & parity harness](07-testing.md) — **drafted**
+   - [Integration — separate WASM test app](integration.md) — `packages/app/wasm/`, studio untouched
 8. [Port order](08-port-order.md) — **drafted**
 9. [Rollout / fallback / retirement](09-rollout.md) — **drafted**
 
