@@ -1,0 +1,25 @@
+{
+  "name": "@opendaw/app-wasm",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "wasm": "source \"$HOME/.cargo/env\" && cargo build --release --target wasm32-unknown-unknown --manifest-path ../../../crates/Cargo.toml --workspace && cp ../../../crates/target/wasm32-unknown-unknown/release/*.wasm public/",
+    "predev": "npm run wasm",
+    "dev": "vite --host",
+    "prebuild": "npm run wasm",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "clean": "rm -rf dist public/*.wasm"
+  },
+  "dependencies": {
+    "@opendaw/lib-std": "^0.0.78",
+    "@opendaw/lib-dom": "^0.0.83",
+    "@opendaw/lib-jsx": "^0.0.83",
+    "@opendaw/studio-enums": "^0.0.77"
+  },
+  "devDependencies": {
+    "sass": "^1.77.0",
+    "vite": "^7.0.2"
+  }
+}

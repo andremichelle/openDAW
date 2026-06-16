@@ -6,8 +6,11 @@ dependency + difficulty; refine as we go.
 
 ## Phase 0 — Infrastructure spikes
 
-1. **Toolchain + sine wave.** Rust→wasm build, load into the AudioWorklet, emit a sine. Proves
-   build + worklet load + output path end-to-end. Monolithic — no plugin system yet.
+1. **Toolchain + sine wave.** ✅ Done. `crates/audio-engine` (no_std, no deps, homebrew sine) →
+   wasm; `packages/app/wasm` test app loads it into an AudioWorklet (`public/engine-worklet.js`) and
+   plays it. Engine verified numerically in Node (zero imports, ±0.2 sine, ~440 Hz). Studio untouched
+   (workspace glob picks the app up). Browser audible check: `npm i` then
+   `npm run dev -w @opendaw/app-wasm`, click Play.
 2. **Composition spike (`05`).** Engine wasm + one device wasm sharing `Memory` + `Table`, render a
    block **wasm-to-wasm**; validate memory model A, measure. **Gates the plugin architecture** — if
    this doesn't fly, the device design changes.

@@ -1,0 +1,11 @@
+# Cargo workspace. Shared code lives in `dsp` (lib); each feature/test is its own thin cdylib
+# crate compiling to a focused .wasm (one entry point per feature). Add a member per feature.
+[workspace]
+resolver = "2"
+members = ["dsp", "sine"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+panic = "abort"
+strip = true

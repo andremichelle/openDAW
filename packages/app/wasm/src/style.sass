@@ -1,0 +1,40 @@
+// Colors come from packages/studio/enums Colors.ts via initializeColors() → --color-* CSS vars.
+body
+  font: 14px system-ui, sans-serif
+  margin: 0
+  color: var(--color-dark)
+  background: var(--color-background)
+
+.nav
+  display: flex
+  gap: 1rem
+  align-items: center
+  padding: 0.75rem 1.5rem
+  background: var(--color-panel-background)
+  border-bottom: 1px solid var(--color-panel-background-bright)
+
+  strong
+    color: var(--color-bright)
+
+  a
+    color: var(--color-gray)
+    text-decoration: none
+
+    &.active
+      color: var(--color-blue)
+
+main
+  padding: 1.5rem
+
+.page
+  h2
+    color: var(--color-bright)
+
+  button
+    font: inherit
+    padding: 0.5em 1em
+    margin-right: 0.5em
+    cursor: pointer
+
+  pre
+    color: var(--color-blue)

@@ -30,6 +30,14 @@ untouched** — not even a Router change.
 2. **Back-channel** telemetry — peaks, spectrum, position → page (DSP→UI contract, `device-contract.md`).
 3. **Live box-change sync** — one-way (`04`). Last, because it's the hardest.
 
+## Implemented (step 1)
+
+- JSX **Router** app (`@opendaw/lib-jsx`): `src/App.tsx` (Router + `LocalLink` nav), pages under
+  `src/pages/` (`HomePage`, `SinePage`), mounted in `main.tsx`. New test = new `*.tsx` + a route.
+- Deploy: `deploy/wasm.ts` (SFTP `dist/` → `/wasm.opendaw.studio` + SPA-fallback `.htaccess`,
+  **no CORS/COOP yet**) and `.github/workflows/deploy-wasm.yml` (`workflow_dispatch`, installs Rust,
+  builds, deploys) — independent of the studio's `deploy.yml`.
+
 ## Notes
 
 - Test projects = the `07` fixtures (shared corpus).
