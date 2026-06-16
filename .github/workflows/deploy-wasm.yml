@@ -34,8 +34,8 @@ jobs:
 
       - name: 🚚 Deploy to wasm.opendaw.studio
         env:
-          SFTP_HOST: ${{ secrets.SFTP_HOST }}
-          SFTP_PORT: ${{ secrets.SFTP_PORT }}
-          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
-          SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+          SFTP_HOST: ${{ secrets.SFTP_WASM_HOST }}
+          SFTP_PORT: ${{ secrets.SFTP_WASM_PORT }}
+          SFTP_USERNAME: ${{ secrets.SFTP_WASM_USERNAME }}
+          SFTP_PASSWORD: ${{ secrets.SFTP_WASM_PASSWORD }}
         run: npx ts-node --transpile-only deploy/wasm.ts

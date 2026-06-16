@@ -10,9 +10,8 @@ const config = {
 } as const
 
 const distDir = "./packages/app/wasm/dist"
-// The SFTP account is hard-chrooted to the opendaw.studio docroot, so this resolves to
-// /opendaw.studio/wasm.opendaw.studio. Point the wasm.opendaw.studio subdomain docroot here.
-const remoteDir = "/wasm.opendaw.studio"
+// Dedicated FTP account rooted at the wasm.opendaw.studio docroot, so "/" is the docroot.
+const remoteDir = "/"
 
 // SPA fallback (client routes resolve on deep-link/refresh) + cross-origin isolation so
 // SharedArrayBuffer is available (shared memory / assets, coming soon).
@@ -34,7 +33,7 @@ RewriteRule . /index.html [L]
     await sftp.mkdir(remoteDir, true).catch(() => {})
     console.log(`uploading ${distDir} -> ${remoteDir}`)
     await sftp.uploadDir(distDir, remoteDir)
-    await sftp.put(Buffer.from(htaccess), `${remoteDir}/.htaccess`)
+    await sftp.put(Buffer.from(htaccess), `${remoteDir.replace(/\/$/, "")}/.htaccess`)
     await sftp.end()
     console.log("✅ deployed wasm test app to wasm.opendaw.studio")
 })().catch((reason) => {
