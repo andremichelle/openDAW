@@ -17,6 +17,13 @@ const IgnoredErrors = [
 ]
 const BrowserInternalPatterns = ["feature named", "window.__firefox__"]
 const MonacoPatterns = ["monaco-editor", "vs/base/common/errors", "editor.main", "editor.worker"]
+// A lazily-loaded chunk could not be fetched (transient network / CDN / deploy hiccup), not a logic bug.
+// Cross-browser variants: Chrome/Edge, Firefox, Safari.
+const ChunkLoadPatterns = [
+    "Failed to fetch dynamically imported module",
+    "error loading dynamically imported module",
+    "Importing a module script failed"
+]
 const ThirdPartyAppPatterns = ["_callback_receiveMIDIMessage", "_callback_addSource"]
 const UrlPattern = /https?:\/\/[^\s)]+/g
 // A stack frame that belongs to our code references a script module file: a built ".js"/".mjs"
@@ -31,6 +38,7 @@ export class ErrorHandler {
 
     #errorThrown: boolean = false
     #rejectionReported: boolean = false
+    #chunkLoadDialogOpen: boolean = false
 
     constructor(buildInfo: BuildInfo, recover: Provider<Option<Provider<Promise<void>>>>) {
         this.#buildInfo = buildInfo
@@ -78,6 +86,19 @@ export class ErrorHandler {
         return MonacoPatterns.some(pattern => sources.includes(pattern))
     }
 
+    // A lazy chunk (e.g. the code editor) failed to fetch. Only that component didn't open; the project
+    // and the rest of the app are intact. Do NOT reload (that would discard unsaved work). Inform the user;
+    // reopening the component retries the import. The guard only avoids STACKING duplicate dialogs from a
+    // burst — it resets on dismiss, so a later failure notifies again.
+    #notifyChunkLoadFailure(): void {
+        if (this.#chunkLoadDialogOpen) {return}
+        this.#chunkLoadDialogOpen = true
+        Dialogs.info({
+            headline: "Couldn't Load Component",
+            message: "A part of openDAW failed to load, usually a temporary network issue. Your project is unaffected — please try again."
+        }).finally(() => {this.#chunkLoadDialogOpen = false})
+    }
+
     #tryIgnore(event: Event): boolean {
         if (event instanceof ErrorEvent && IgnoredErrors.includes(event.message)) {
             console.warn(event.message)
@@ -113,6 +134,14 @@ export class ErrorHandler {
         if (isDefined(reasonMessage) && IgnoredErrors.some(ignored => reasonMessage.includes(ignored))) {
             console.warn(reasonMessage)
             event.preventDefault()
+            return true
+        }
+        // A lazily-loaded chunk failed to fetch (transient network / CDN / deploy). Not a crash: a page
+        // reload re-fetches it (and clears the browser's poisoned module map). Prompt instead of reporting.
+        if (isDefined(reasonMessage) && ChunkLoadPatterns.some(pattern => reasonMessage.includes(pattern))) {
+            console.warn(`Chunk load failed: ${reasonMessage}`)
+            event.preventDefault()
+            this.#notifyChunkLoadFailure()
             return true
         }
         if (Errors.isAbort(reason)) {
