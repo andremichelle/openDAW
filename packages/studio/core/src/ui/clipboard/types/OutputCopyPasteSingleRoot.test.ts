@@ -1,14 +1,14 @@
 import {describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioUnitBoxAdapter, ProjectSkeleton} from "@opendaw/studio-adapters"
-import {AudioUnitBox, RootBox} from "@opendaw/studio-boxes"
+import {RootBox} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
 import {AudioUnitsClipboard} from "./AudioUnitsClipboardHandler"
 import type {ProjectEnv} from "../../../project/ProjectEnv"
 
-// #1008-1010: the corruption is a SECOND RootBox, historically grafted by copy/pasting an Output audio
-// unit before the 2026-02 fixes (c83595ae9 added the RootBox exclusion, 08e5ea6b1 added the paste UUID
-// remap). This drives the REAL handler's output copy+paste on current code and asserts it stays at one root.
+// #1008-1010: a SECOND RootBox could be grafted by copying/duplicating the Output unit. The clipboard
+// handler now refuses to copy the Output unit outright (copyAudioUnit returns None), so it can never be
+// pasted into a second root. This asserts that refusal on the real handler.
 
 if (!isDefined(Reflect.get(globalThis, "AudioWorkletNode"))) {
     Reflect.set(globalThis, "AudioWorkletNode", class {})
@@ -27,7 +27,7 @@ const createEnv = (): ProjectEnv => ({
 }) as unknown as ProjectEnv
 
 describe("Output audio-unit copy/paste", () => {
-    it("does not graft a second RootBox (current code)", async () => {
+    it("refuses to copy the Output unit, so it can never be pasted into a second RootBox", async () => {
         const {Project} = await import("../../../project/Project")
         const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
         const outputBox = skeleton.mandatoryBoxes.primaryAudioUnitBox
@@ -45,23 +45,12 @@ describe("Output audio-unit copy/paste", () => {
             getEditedAudioUnit: () => Option.wrap(outputAdapter)
         })
 
-        // copy excludes RootBox from the payload ...
+        // The Output unit is a project singleton — copying it is refused outright (no clipboard entry),
+        // so it can never be pasted into a second RootBox.
+        expect(handler.copy().isEmpty(), "copying the Output unit must produce no clipboard entry").toBe(true)
+        // And collectDependencies never includes the RootBox in any unit's payload.
         expect(AudioUnitsClipboard.collectDependencies(outputBox, true)
             .some(box => box instanceof RootBox)).toBe(false)
-
-        const entry = handler.copy().unwrap("copy produced no clipboard entry")
-        handler.paste(entry)
-
-        const count = (ctor: Function) => boxGraph.boxes().filter(box => box instanceof ctor).length
-        const outputs = boxGraph.boxes().filter((box): box is AudioUnitBox =>
-            box instanceof AudioUnitBox && box.type.getValue() === AudioUnitType.Output)
-        const strays = boxGraph.boxes().filter((box): box is AudioUnitBox => box instanceof AudioUnitBox)
-            .filter(unit => unit.collection.targetVertex.mapOr(
-                vertex => !vertex.address.equals(skeleton.mandatoryBoxes.rootBox.audioUnits.address), true))
-
-        expect(count(RootBox), "RootBox count after output paste").toBe(1)
-        expect(outputs.length, "Output unit count").toBe(1)
-        expect(strays.length, "units enrolled in a foreign root").toBe(0)
         project.terminate()
     })
 })
