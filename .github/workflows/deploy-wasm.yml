@@ -30,7 +30,7 @@ jobs:
         run: npm ci
 
       - name: 🏗️ Build wasm app
-        run: npm run build -w @opendaw/app-wasm
+        run: npx turbo run build --filter=@opendaw/app-wasm
 
       - name: 🚚 Deploy to wasm.opendaw.studio
         env:
