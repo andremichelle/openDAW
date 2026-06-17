@@ -5,6 +5,7 @@ import {HomePage} from "./pages/home/HomePage"
 import {SinePage} from "./pages/sine/SinePage"
 import {RackPage} from "./pages/rack/RackPage"
 import {MetronomePage} from "./pages/metronome/MetronomePage"
+import {TempoAutomationPage} from "./pages/tempo-automation/TempoAutomationPage"
 
 export const App = () => {
     const runtime = new Terminator()
@@ -16,6 +17,7 @@ export const App = () => {
                 <LocalLink href="/sine">Sine</LocalLink>
                 <LocalLink href="/rack">Rack</LocalLink>
                 <LocalLink href="/metronome">Metronome</LocalLink>
+                <LocalLink href="/tempo-automation">Tempo Automation</LocalLink>
             </header>
             <main>
                 <Router
@@ -25,7 +27,8 @@ export const App = () => {
                         {path: "/", factory: HomePage},
                         {path: "/sine", factory: SinePage},
                         {path: "/rack", factory: RackPage},
-                        {path: "/metronome", factory: MetronomePage}
+                        {path: "/metronome", factory: MetronomePage},
+                        {path: "/tempo-automation", factory: TempoAutomationPage}
                     ]}
                     fallback={() => <div className="page"><h2>404</h2></div>}/>
             </main>

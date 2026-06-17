@@ -23,7 +23,6 @@ use boxgraph::graph::BoxGraph;
 use boxgraph::updates::decode_forward;
 use studio_boxes::registry;
 use transport::transport::{Transport, RENDER_QUANTUM};
-use value::value::value_at;
 
 mod metronome;
 use metronome::Metronome;
@@ -38,6 +37,24 @@ static mut TRANSPORT: Option<Transport> = None;
 static mut METRONOME: Option<Metronome> = None;
 static mut OUTPUT: [f32; RENDER_QUANTUM * 2] = [0.0; RENDER_QUANTUM * 2];
 static mut TEMPO: Option<ValueCollection> = None;
+static mut BASE_BPM: f32 = 120.0; // TimelineBox.bpm — the fixed bpm used when tempo automation is off
+static mut TEMPO_AUTOMATION_ENABLED: bool = true; // TimelineBox.tempoTrack.enabled
+
+// WASM CONTRACT: EngineStateSchema byte layout (studio-adapters/EngineStateSchema.ts), big-endian.
+// We expose the raw schema payload (no SyncStream Atomics header — the harness is single main-thread);
+// JS decodes it with `EngineStateSchema().read(...)`. Field order = byte order.
+const STATE_POSITION: usize = 0; // f32 (ppqn)
+const STATE_BPM: usize = 4; // f32
+const STATE_PLAYBACK_TIMESTAMP: usize = 8; // f32
+const STATE_COUNT_IN_REMAINING: usize = 12; // f32
+const STATE_IS_PLAYING: usize = 16; // u8 bool
+const STATE_IS_COUNTING_IN: usize = 17; // u8 bool
+const STATE_IS_RECORDING: usize = 18; // u8 bool
+const STATE_PERF_INDEX: usize = 19; // i32
+const STATE_PERF_BUFFER: usize = 23; // f32[PERF_BUFFER_SIZE]
+const PERF_BUFFER_SIZE: usize = 512;
+const ENGINE_STATE_LEN: usize = STATE_PERF_BUFFER + PERF_BUFFER_SIZE * 4;
+static mut ENGINE_STATE: [u8; ENGINE_STATE_LEN] = [0; ENGINE_STATE_LEN];
 
 #[no_mangle]
 pub extern "C" fn input_ptr() -> *mut u8 {
@@ -101,32 +118,57 @@ pub extern "C" fn init(sample_rate: f32) {
     }
 }
 
-/// Render one 128-frame quantum into the output buffer (planar: left channel then right). Advances
-/// the transport and mixes metronome clicks while playing; silence when stopped.
+/// Render one 128-frame quantum into the output buffer (planar: left channel then right). Drives the
+/// transport block loop (tempo automation + loop wrap), mixing metronome clicks per sub-block while
+/// playing; silence when stopped. Always refreshes the EngineState back-channel afterwards.
 #[no_mangle]
 pub extern "C" fn render() {
     unsafe {
         for sample in OUTPUT.iter_mut() {
             *sample = 0.0
         }
-        if !TRANSPORT.as_ref().is_some_and(|transport| transport.is_playing()) {
-            return;
-        }
         if let (Some(transport), Some(metronome)) = (TRANSPORT.as_mut(), METRONOME.as_mut()) {
-            // tempo automation: a non-empty tempo map overrides the fixed bpm at the quantum start
-            // (per-quantum is finer than the TS 80-pulse grid, so no sub-block split is needed here).
-            if let Some(tempo) = TEMPO.as_ref() {
-                let events = tempo.events();
-                if !events.is_empty() {
-                    let bpm = value_at(&events, transport.position(), transport.bpm());
-                    transport.set_bpm(bpm);
+            if transport.is_playing() {
+                // use the tempo map only when automation is enabled and non-empty, else the fixed bpm
+                let events = if TEMPO_AUTOMATION_ENABLED { TEMPO.as_ref().map(|tempo| tempo.events()) } else { None };
+                let active = events.as_deref().filter(|collection| !collection.is_empty());
+                if active.is_none() {
+                    transport.set_bpm(BASE_BPM);
                 }
+                transport.render_quantum(active, |block| {
+                    let (left, right) = OUTPUT.split_at_mut(RENDER_QUANTUM);
+                    metronome.process(block, &mut left[block.s0..block.s1], &mut right[block.s0..block.s1])
+                });
             }
-            let block = transport.process_quantum();
-            let (left, right) = OUTPUT.split_at_mut(RENDER_QUANTUM);
-            metronome.process(&block, left, right);
+        }
+        if let Some(transport) = TRANSPORT.as_ref() {
+            write_engine_state(transport);
         }
     }
+}
+
+/// Serialize the current transport state into the EngineState buffer (big-endian, per the contract).
+fn write_engine_state(transport: &Transport) {
+    unsafe {
+        ENGINE_STATE[STATE_POSITION..STATE_POSITION + 4].copy_from_slice(&(transport.position() as f32).to_be_bytes());
+        ENGINE_STATE[STATE_BPM..STATE_BPM + 4].copy_from_slice(&transport.bpm().to_be_bytes());
+        ENGINE_STATE[STATE_PLAYBACK_TIMESTAMP..STATE_PLAYBACK_TIMESTAMP + 4].copy_from_slice(&0f32.to_be_bytes());
+        ENGINE_STATE[STATE_COUNT_IN_REMAINING..STATE_COUNT_IN_REMAINING + 4].copy_from_slice(&0f32.to_be_bytes());
+        ENGINE_STATE[STATE_IS_PLAYING] = transport.is_playing() as u8;
+        ENGINE_STATE[STATE_IS_COUNTING_IN] = 0;
+        ENGINE_STATE[STATE_IS_RECORDING] = 0;
+        ENGINE_STATE[STATE_PERF_INDEX..STATE_PERF_INDEX + 4].copy_from_slice(&0i32.to_be_bytes());
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn engine_state_ptr() -> *const u8 {
+    unsafe { ENGINE_STATE.as_ptr() }
+}
+
+#[no_mangle]
+pub extern "C" fn engine_state_len() -> usize {
+    ENGINE_STATE_LEN
 }
 
 #[no_mangle]
@@ -182,9 +224,13 @@ pub extern "C" fn bind() -> i32 {
         };
         graph.catchup_and_subscribe(Address::of(uuid, vec![31]), |value| {
             if let Some(bpm) = value.as_float32() {
-                if let Some(transport) = TRANSPORT.as_mut() {
-                    transport.set_bpm(bpm)
-                }
+                BASE_BPM = bpm
+            }
+        });
+        // tempo automation on/off: TimelineBox.tempoTrack (22).enabled (20).
+        graph.catchup_and_subscribe(Address::of(uuid, vec![22, 20]), |value| {
+            if let Some(enabled) = value.as_bool() {
+                TEMPO_AUTOMATION_ENABLED = enabled
             }
         });
         graph.catchup_and_subscribe(Address::of(uuid, vec![10, 1]), |value| {
@@ -198,6 +244,28 @@ pub extern "C" fn bind() -> i32 {
             if let Some(denominator) = value.as_int32() {
                 if let Some(metronome) = METRONOME.as_mut() {
                     metronome.set_denominator(denominator as u32)
+                }
+            }
+        });
+        // loop area: TimelineBox.loopArea (11) = {enabled (1, bool), from (2, i32), to (3, i32) pulses}.
+        graph.catchup_and_subscribe(Address::of(uuid, vec![11, 1]), |value| {
+            if let Some(enabled) = value.as_bool() {
+                if let Some(transport) = TRANSPORT.as_mut() {
+                    transport.set_loop_enabled(enabled)
+                }
+            }
+        });
+        graph.catchup_and_subscribe(Address::of(uuid, vec![11, 2]), |value| {
+            if let Some(from) = value.as_int32() {
+                if let Some(transport) = TRANSPORT.as_mut() {
+                    transport.set_loop_from(from as f64)
+                }
+            }
+        });
+        graph.catchup_and_subscribe(Address::of(uuid, vec![11, 3]), |value| {
+            if let Some(to) = value.as_int32() {
+                if let Some(transport) = TRANSPORT.as_mut() {
+                    transport.set_loop_to(to as f64)
                 }
             }
         });

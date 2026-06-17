@@ -55,6 +55,10 @@ impl FieldValue {
     pub fn as_float32(&self) -> Option<f32> {
         if let FieldValue::Float32(value) = self {Some(*value)} else {None}
     }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        if let FieldValue::Boolean(value) = self {Some(*value)} else {None}
+    }
 }
 
 pub type Fields = BTreeMap<u16, FieldValue>;

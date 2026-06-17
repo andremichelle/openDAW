@@ -19,6 +19,8 @@ type EngineExports = {
     output_ptr: () => number
     heap_used: () => number
     heap_claimed: () => number
+    engine_state_ptr: () => number
+    engine_state_len: () => number
 }
 
 class MetronomeEngine extends AudioWorkletProcessor {
@@ -26,6 +28,7 @@ class MetronomeEngine extends AudioWorkletProcessor {
     readonly #sampleRate: number
     #bound: boolean = false
     #sinceStats: number = 0
+    #sinceState: number = 0
 
     constructor(options?: AudioWorkletNodeOptions) {
         super()
@@ -55,10 +58,18 @@ class MetronomeEngine extends AudioWorkletProcessor {
         const right = new Float32Array(buffer, pointer + frames * Float32Array.BYTES_PER_ELEMENT, frames)
         out[0].set(left)
         if (out.length > 1) {out[1].set(right)}
+        this.#sinceState += frames
+        if (this.#sinceState >= this.#sampleRate / 30) { // ~30 Hz transport-state back-channel
+            this.#sinceState = 0
+            const length = this.#exports.engine_state_len()
+            const bytes = new Uint8Array(buffer, this.#exports.engine_state_ptr(), length).slice().buffer
+            this.port.postMessage({type: "state", bytes}, [bytes])
+        }
         this.#sinceStats += frames
         if (this.#sinceStats >= this.#sampleRate) { // ~once per second of audio
             this.#sinceStats = 0
             this.port.postMessage({
+                type: "heap",
                 heapUsed: this.#exports.heap_used(),
                 heapClaimed: this.#exports.heap_claimed(),
                 memoryTotal: this.#exports.memory.buffer.byteLength

@@ -50,7 +50,9 @@ export const MetronomePage: PageFactory<Env> = ({lifecycle}) => {
         })
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)
-        workletNode.port.onmessage = (event: MessageEvent) => showMemory(event.data as HeapStats)
+        workletNode.port.onmessage = (event: MessageEvent) => {
+            if ((event.data as {type: string}).type === "heap") {showMemory(event.data as HeapStats)}
+        }
         // SyncSource (unchanged) -> local loopback -> serialize (this graph's schema) -> worklet bytes
         const sender = new BroadcastChannel("metronome-sync")
         const receiver = new BroadcastChannel("metronome-sync")
