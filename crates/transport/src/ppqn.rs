@@ -1,0 +1,32 @@
+//! Pulses-per-quarter-note conversions, mirroring lib-dsp `ppqn.ts`. PPQN = 960. All `f64`, matching
+//! the TS `number` math exactly (the conversions do no rounding).
+
+pub const QUARTER: f64 = 960.0;
+pub const BAR: f64 = 3840.0; // QUARTER * 4
+pub const SEMI_QUAVER: f64 = 240.0; // QUARTER / 4
+
+pub fn seconds_to_pulses(seconds: f64, bpm: f64) -> f64 {
+    seconds * bpm / 60.0 * QUARTER
+}
+
+pub fn pulses_to_seconds(pulses: f64, bpm: f64) -> f64 {
+    (pulses * 60.0 / QUARTER) / bpm
+}
+
+pub fn seconds_to_bpm(seconds: f64, pulses: f64) -> f64 {
+    (pulses * 60.0 / QUARTER) / seconds
+}
+
+pub fn samples_to_pulses(samples: f64, bpm: f64, sample_rate: f64) -> f64 {
+    seconds_to_pulses(samples / sample_rate, bpm)
+}
+
+pub fn pulses_to_samples(pulses: f64, bpm: f64, sample_rate: f64) -> f64 {
+    pulses_to_seconds(pulses, bpm) * sample_rate
+}
+
+/// Pulses per bar for a time signature (4/4 = 3840). Mirrors `fromSignature`; truncation equals
+/// `Math.floor` for these positive values.
+pub fn from_signature(nominator: i32, denominator: i32) -> f64 {
+    ((BAR / denominator as f64) as i64 as f64) * nominator as f64
+}
