@@ -13,6 +13,7 @@ use crate::boxes::{GraphBox, Registry};
 use crate::bytes::{ByteReader, ByteWriter};
 use crate::checksum::{checksum_fields, Checksum};
 use crate::field::{read_fields, FieldValue};
+use crate::subscription::{Propagation, SubscriptionId, Subscriptions, UpdateObserver};
 use crate::updates::Update;
 use crate::Error;
 
@@ -28,6 +29,7 @@ pub struct BoxGraph {
     forward: BTreeMap<Address, usize>,        // pointer source → edge
     incoming: BTreeMap<Address, Vec<usize>>,  // target vertex → edges aimed at it (resolved only)
     next_index: i32,                          // creation index for boxes created via updates
+    subscriptions: Subscriptions,             // change listeners notified during a transaction
 }
 
 impl BoxGraph {
@@ -38,7 +40,8 @@ impl BoxGraph {
         }
         let next_index = map.values().map(|graph_box| graph_box.creation_index).max().map_or(0, |max| max + 1);
         let mut graph = Self {
-            boxes: map, edges: Vec::new(), forward: BTreeMap::new(), incoming: BTreeMap::new(), next_index
+            boxes: map, edges: Vec::new(), forward: BTreeMap::new(), incoming: BTreeMap::new(), next_index,
+            subscriptions: Subscriptions::new()
         };
         graph.rebuild_edges();
         graph
@@ -139,13 +142,33 @@ impl BoxGraph {
 
     // ---- Mutation (the live-mirror update stream; see the `updates` module) ----
 
-    /// Apply a transaction: each update forward, then edges rebuilt once.
+    /// Apply a transaction: each update forward (then dispatched to subscribers), edges rebuilt once.
     pub fn transaction(&mut self, updates: &[Update], registry: &Registry) -> Result<(), Error> {
         for update in updates {
             self.apply(update, registry)?;
+            self.subscriptions.dispatch(update);
         }
         self.rebuild_edges();
         Ok(())
+    }
+
+    /// Subscribe to every applied update. Returns a handle for `unsubscribe`.
+    pub fn subscribe_all(&mut self, observer: UpdateObserver) -> SubscriptionId {
+        self.subscriptions.subscribe_all(observer)
+    }
+
+    /// Subscribe to updates at `address`, filtered by `propagation` (This / Parent / Children).
+    pub fn subscribe_vertex(&mut self, propagation: Propagation, address: Address, observer: UpdateObserver) -> SubscriptionId {
+        self.subscriptions.subscribe_vertex(propagation, address, observer)
+    }
+
+    /// Remove a subscription, dropping its observer. Returns whether one was removed.
+    pub fn unsubscribe(&mut self, id: SubscriptionId) -> bool {
+        self.subscriptions.unsubscribe(id)
+    }
+
+    pub fn subscription_count(&self) -> usize {
+        self.subscriptions.count()
     }
 
     /// Undo a transaction: each update's inverse in reverse order, then edges rebuilt.
