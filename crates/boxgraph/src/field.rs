@@ -23,6 +23,8 @@ pub enum FieldType {
     String,
     Bytes,
     Pointer,
+    /// A pointer-target hook (`Field.hook`) — a referenceable vertex with no serialized value.
+    Hook,
     Object(BTreeMap<u16, FieldType>),
     Array {element: Box<FieldType>, length: usize},
 }
@@ -38,6 +40,7 @@ pub enum FieldValue {
     String(String),
     Bytes(Vec<u8>),
     Pointer(Option<Address>),
+    Hook,
     Object(Fields),
     Array(Vec<FieldValue>),
 }
@@ -61,6 +64,7 @@ fn write_value(writer: &mut ByteWriter, value: &FieldValue) {
             }
             None => writer.write_bool(false)
         },
+        FieldValue::Hook => {} // a hook serializes nothing
         FieldValue::Object(fields) => write_fields(writer, fields),
         FieldValue::Array(elements) => elements.iter().for_each(|element| write_value(writer, element))
     }
@@ -80,6 +84,7 @@ fn read_value(reader: &mut ByteReader, field_type: &FieldType) -> Result<FieldVa
             let target = if reader.read_bool()? {Some(Address::read(reader)?)} else {None};
             Ok(FieldValue::Pointer(target))
         }
+        FieldType::Hook => Ok(FieldValue::Hook),
         FieldType::Object(schema) => Ok(FieldValue::Object(read_fields(reader, schema)?)),
         FieldType::Array {element, length} => {
             let mut values = Vec::with_capacity(*length);

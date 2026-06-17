@@ -11,6 +11,7 @@ BoxForge.gen<Pointers>({
         enum: "Pointers",
         print: pointer => `Pointers.${Pointers[pointer]}`
     },
+    rust: {path: "../../../crates/studio-boxes/src/registry.rs"},
     boxes: [
         ...Definitions,
         ...DeviceDefinitions,

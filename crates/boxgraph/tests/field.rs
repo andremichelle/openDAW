@@ -34,6 +34,15 @@ fn primitives_round_trip() {
 }
 
 #[test]
+fn hook_is_zero_width() {
+    // A `Field.hook` serializes nothing: in the FLDS container it is key + len(0) + empty payload.
+    let schema: Schema = BTreeMap::from([(0, FieldType::Int32), (5, FieldType::Hook)]);
+    let fields: Fields = BTreeMap::from([(0, FieldValue::Int32(7)), (5, FieldValue::Hook)]);
+    let decoded = round_trip(&schema, &fields);
+    assert_eq!(decoded, fields);
+}
+
+#[test]
 fn pointer_present_and_absent() {
     let schema: Schema = BTreeMap::from([(10, FieldType::Pointer)]);
     for target in [None, Some(Address::box_of(A)), Some(Address::box_of(A).append(1).append(3))] {

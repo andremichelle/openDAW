@@ -48,3 +48,10 @@ version = "0.0.0"
 dependencies = [
  "dsp",
 ]
+
+[[package]]
+name = "studio-boxes"
+version = "0.0.0"
+dependencies = [
+ "boxgraph",
+]

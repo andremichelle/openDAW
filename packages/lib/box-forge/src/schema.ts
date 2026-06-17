@@ -23,6 +23,9 @@ export type Schema<E extends PointerTypes> = {
         enum: string // the name of the exported pointer-type enum
         print: Func<E, string> // a function that turns the enum value into source code (Ptr.A > "Ptr.A")
     }
+    rust?: {
+        path: string // output file for the generated Rust box-schema registry (registry.rs)
+    }
     boxes: ReadonlyArray<BoxSchema<E>>
 }
 export type FieldRecord<E extends PointerTypes> = {
