@@ -8,6 +8,8 @@ export type seconds = number
 export type samples = number
 export type bpm = number
 
+// WASM CONTRACT: PPQN (Quarter = 960) and the conversion formulas below are mirrored in Rust
+// (crates/transport ppqn.rs). Changing the value or the math diverges TS and WASM timing.
 const Quarter = 960 as const
 const Bar: ppqn = Quarter << 2 // 3_840
 const SemiQuaver: ppqn = Quarter >>> 2 // 240

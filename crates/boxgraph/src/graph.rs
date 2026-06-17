@@ -11,6 +11,7 @@ use crate::address::{Address, Uuid};
 use alloc::string::ToString;
 use crate::boxes::{GraphBox, Registry};
 use crate::bytes::{ByteReader, ByteWriter};
+use crate::checksum::{checksum_fields, Checksum};
 use crate::field::{read_fields, FieldValue};
 use crate::updates::Update;
 use crate::Error;
@@ -89,6 +90,15 @@ impl BoxGraph {
 
     pub fn edges(&self) -> &[Edge] {
         &self.edges
+    }
+
+    /// 32-byte rolling XOR checksum over every box's fields (uuid order), matching `BoxGraph.checksum`.
+    pub fn checksum(&self) -> [u8; 32] {
+        let mut checksum = Checksum::new();
+        for graph_box in self.boxes.values() {
+            checksum_fields(&mut checksum, &graph_box.fields);
+        }
+        checksum.result()
     }
 
     /// The target a pointer field points at (if it has one).

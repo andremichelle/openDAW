@@ -2,6 +2,8 @@ import {FieldKey, Fields} from "./field"
 import {assert, ByteArrayInput, ByteArrayOutput, DataInput, DataOutput, isUndefined, tryCatch} from "@opendaw/lib-std"
 
 export namespace Serializer {
+    // WASM CONTRACT: this FLDS magic and the writeFields layout (magic + count, then per field
+    // key + byte-length + payload) are parsed and checksummed byte-for-byte by Rust (crates/boxgraph).
     const MAGIC_HEADER = 0x464c4453
     export const writeFields = <FIELDS extends Fields>(output: DataOutput, fields: FIELDS) => {
         const entries = Object.entries(fields).filter(([_, field]) => !field.deprecated)

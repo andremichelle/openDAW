@@ -4,6 +4,9 @@ import {PointerField} from "./pointer"
 import {Arrays, ByteArrayInput, DataInput, DataOutput, Option, UUID} from "@opendaw/lib-std"
 import {BoxGraph} from "./graph"
 
+// WASM CONTRACT: the per-update type tags ("new"/"delete"/"pointer"/"primitive") and each update's
+// write() layout are decoded by Rust (crates/boxgraph updates.rs, the .odsl stream). Do not rename
+// the tags or reorder the serialized fields.
 export type Update = NewUpdate | PrimitiveUpdate | PointerUpdate | DeleteUpdate
 
 export namespace Updates {

@@ -2,9 +2,13 @@ import {assert, ByteArrayInput, ByteArrayOutput, Hash} from "@opendaw/lib-std"
 import {Update} from "@opendaw/lib-box"
 import {Project} from "../project/Project"
 
+// WASM CONTRACT: these ordinals (Init=0, Open=1, Updates=2, NewVersion=3) and the Commit
+// serialize/deserialize layout below are parsed byte-for-byte by the Rust engine (sync-log replay).
+// Do not reorder the enum or change the wire layout without updating the Rust side.
 export const enum CommitType { Init, Open, Updates, NewVersion }
 
 export class Commit {
+    // WASM CONTRACT: the Rust commit reader asserts this version. Bump it in lockstep with Rust.
     static readonly VERSION = 1 // For devs: walk your way to dynamic versioning from here
 
     static readonly #NO_PAYLOAD = new Uint8Array(1).buffer

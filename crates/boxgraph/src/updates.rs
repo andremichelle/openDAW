@@ -133,3 +133,38 @@ fn read_settings(reader: &mut ByteReader) -> Result<Vec<u8>, Error> {
     let length = reader.read_int()? as usize;
     Ok(reader.read_raw(length)?)
 }
+
+/// Decode the live, FORWARD-ONLY sync stream (`SyncSource`'s `UpdateTask[]`, serialized by the
+/// worklet/test bridge): `count` then per task a type tag + payload. It carries only new values, so
+/// we fill inverse placeholders (old = new, empty delete settings) — the engine never reverts.
+/// Type tags differ from the `.odsl` stream: `new` / `update-primitive` / `update-pointer` /
+/// `delete` (uuid-only).
+pub fn decode_forward(reader: &mut ByteReader) -> Result<Vec<Update>, Error> {
+    let count = reader.read_int()? as usize;
+    let mut updates = Vec::with_capacity(count);
+    for _ in 0..count {
+        let task_type = reader.read_string()?;
+        let update = match task_type.as_str() {
+            "new" => Update::New {
+                uuid: read_uuid(reader)?,
+                name: reader.read_string()?,
+                settings: read_settings(reader)?
+            },
+            "update-primitive" => {
+                let address = Address::read(reader)?;
+                let field_type = primitive_field_type(&reader.read_string()?)?;
+                let value = read_value(reader, &field_type)?;
+                Update::Primitive {address, old: value.clone(), new: value}
+            },
+            "update-pointer" => Update::Pointer {
+                address: Address::read(reader)?,
+                old: None,
+                new: read_optional_address(reader)?
+            },
+            "delete" => Update::Delete {uuid: read_uuid(reader)?, name: String::new(), settings: Vec::new()},
+            _ => return Err(Error::UnknownUpdate)
+        };
+        updates.push(update);
+    }
+    Ok(updates)
+}

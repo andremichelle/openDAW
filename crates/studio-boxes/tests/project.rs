@@ -77,6 +77,14 @@ fn timeline_box_values() {
 }
 
 #[test]
+fn checksum_matches_ts_reference() {
+    let graph = BoxGraph::from_bytes(&load_chunk(), &registry()).unwrap();
+    let hex: String = graph.checksum().iter().map(|byte| format!("{byte:02x}")).collect();
+    // BoxGraph.checksum() computed by TS on the same file (scripts/checksum-openup.ts)
+    assert_eq!(hex, "409f1c9adf5e86553d1ed53323811a08d0221b6227deee59359aef03dd696c5f");
+}
+
+#[test]
 fn golden_round_trip_byte_identical() {
     let chunk = load_chunk();
     let graph = BoxGraph::from_bytes(&chunk, &registry()).unwrap();

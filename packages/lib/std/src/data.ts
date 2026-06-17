@@ -28,6 +28,8 @@ export interface DataInput {
     skip(count: int): void
 }
 
+// WASM CONTRACT: the byte layout written here (big-endian primitives, 1-byte booleans, int
+// code-unit count + UTF-16 BE strings, raw byte arrays) is mirrored by Rust (crates/boxgraph bytes.rs).
 export class ByteArrayOutput implements DataOutput {
     static create(initialCapacity: int = 1024): ByteArrayOutput {
         return this.use(new ArrayBuffer(initialCapacity))
@@ -138,6 +140,9 @@ export class ByteCounter implements DataOutput {
     get count(): int {return this.#count}
 }
 
+// WASM CONTRACT: this rolling 32-byte XOR checksum (multi-byte values folded little-endian) is
+// reimplemented in Rust (crates/boxgraph checksum.rs) and compared after every transaction. Do not
+// change the algorithm or width.
 export class Checksum implements DataOutput, Equality<Checksum> {
     readonly #result: Int8Array
 

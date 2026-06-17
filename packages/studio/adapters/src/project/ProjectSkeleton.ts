@@ -31,6 +31,8 @@ export type ProjectSkeleton = {
 }
 
 export namespace ProjectSkeleton {
+    // WASM CONTRACT: this OPEN magic + format version frame every project the Rust engine loads
+    // (crates/studio-boxes). Keep both in lockstep with the Rust reader.
     const MAGIC_HEADER_OPEN = 0x4F50454E
     const FORMAT_VERSION = 2
 

@@ -12,6 +12,7 @@ pub mod field;
 pub mod boxes;
 pub mod graph;
 pub mod updates;
+pub mod checksum;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
