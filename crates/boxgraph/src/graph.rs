@@ -5,6 +5,7 @@
 //! so nothing holds a borrow into another box. Loading is two-pass: insert all boxes, then resolve
 //! edges (a pointer may target a box loaded earlier or later).
 
+use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use crate::address::{Address, Uuid};
@@ -167,6 +168,22 @@ impl BoxGraph {
     /// Subscribe to updates at `address`, filtered by `propagation` (This / Parent / Children).
     pub fn subscribe_vertex(&mut self, propagation: Propagation, address: Address, observer: UpdateObserver) -> SubscriptionId {
         self.subscriptions.subscribe_vertex(propagation, address, observer)
+    }
+
+    /// Catch up to the current value at `address`, then subscribe to future primitive updates there;
+    /// both invoke `observer` with the field value. Mirrors TS `catchupAndSubscribe` (primitive fields).
+    pub fn catchup_and_subscribe<F>(&mut self, address: Address, mut observer: F) -> SubscriptionId
+    where
+        F: FnMut(&FieldValue) + 'static
+    {
+        if let Some(value) = self.field_value(&address) {
+            observer(value);
+        }
+        self.subscribe_vertex(Propagation::This, address, Box::new(move |update| {
+            if let Update::Primitive {new, ..} = update {
+                observer(new)
+            }
+        }))
     }
 
     /// Remove a subscription, dropping its observer. Returns whether one was removed.

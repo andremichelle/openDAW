@@ -1,5 +1,5 @@
 [package]
-name = "dsp"
+name = "math"
 version = "0.0.0"
 edition = "2021"
 publish = false
@@ -8,4 +8,4 @@ publish = false
 crate-type = ["lib"]
 
 [dependencies]
-math = {path = "../math"}
+libm = "0.2"

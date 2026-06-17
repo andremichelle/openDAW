@@ -6,3 +6,6 @@ publish = false
 
 [lib]
 crate-type = ["lib"]
+
+[dependencies]
+value = {path = "../value"}

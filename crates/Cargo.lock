@@ -47,6 +47,9 @@ dependencies = [
 [[package]]
 name = "dsp"
 version = "0.0.0"
+dependencies = [
+ "math",
+]
 
 [[package]]
 name = "engine"
@@ -60,12 +63,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "libm"
+version = "0.2.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
+
+[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "224399e74b87b5f3557511d98dff8b14089b3dadafcab6bb93eab67d3aace965"
 dependencies = [
  "scopeguard",
+]
+
+[[package]]
+name = "math"
+version = "0.0.0"
+dependencies = [
+ "libm",
 ]
 
 [[package]]
@@ -101,3 +117,13 @@ dependencies = [
 [[package]]
 name = "transport"
 version = "0.0.0"
+dependencies = [
+ "value",
+]
+
+[[package]]
+name = "value"
+version = "0.0.0"
+dependencies = [
+ "math",
+]

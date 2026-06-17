@@ -13,7 +13,6 @@
 
 extern crate alloc;
 
-use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
 use boxgraph::address::Address;
@@ -21,8 +20,7 @@ use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
 use boxgraph::field::FieldValue;
 use boxgraph::graph::BoxGraph;
-use boxgraph::subscription::Propagation;
-use boxgraph::updates::{decode_forward, Update};
+use boxgraph::updates::decode_forward;
 use studio_boxes::registry;
 use transport::transport::{Transport, RENDER_QUANTUM};
 
@@ -92,7 +90,7 @@ pub extern "C" fn apply_updates(len: usize) -> i32 {
 pub extern "C" fn init(sample_rate: f32) {
     reset();
     unsafe {
-        let mut transport = Transport::new(sample_rate as f64, 120.0);
+        let mut transport = Transport::new(sample_rate, 120.0);
         transport.play();
         TRANSPORT = Some(transport);
         METRONOME = Some(Metronome::new(sample_rate));
@@ -169,45 +167,27 @@ pub extern "C" fn bind() -> i32 {
             Some(timeline) => timeline.uuid,
             None => return 1
         };
-        let bpm_address = Address::of(uuid, vec![31]);
-        let nominator_address = Address::of(uuid, vec![10, 1]);
-        let denominator_address = Address::of(uuid, vec![10, 2]);
-        if let Some(FieldValue::Float32(bpm)) = graph.field_value(&bpm_address) {
-            if let Some(transport) = TRANSPORT.as_mut() {
-                transport.set_bpm(*bpm as f64)
-            }
-        }
-        if let Some(FieldValue::Int32(nominator)) = graph.field_value(&nominator_address) {
-            if let Some(metronome) = METRONOME.as_mut() {
-                metronome.set_nominator(*nominator as u32)
-            }
-        }
-        if let Some(FieldValue::Int32(denominator)) = graph.field_value(&denominator_address) {
-            if let Some(metronome) = METRONOME.as_mut() {
-                metronome.set_denominator(*denominator as u32)
-            }
-        }
-        graph.subscribe_vertex(Propagation::This, bpm_address, Box::new(|update| {
-            if let Update::Primitive {new: FieldValue::Float32(bpm), ..} = update {
+        graph.catchup_and_subscribe(Address::of(uuid, vec![31]), |value| {
+            if let FieldValue::Float32(bpm) = value {
                 if let Some(transport) = TRANSPORT.as_mut() {
-                    transport.set_bpm(*bpm as f64)
+                    transport.set_bpm(*bpm)
                 }
             }
-        }));
-        graph.subscribe_vertex(Propagation::This, nominator_address, Box::new(|update| {
-            if let Update::Primitive {new: FieldValue::Int32(nominator), ..} = update {
+        });
+        graph.catchup_and_subscribe(Address::of(uuid, vec![10, 1]), |value| {
+            if let FieldValue::Int32(nominator) = value {
                 if let Some(metronome) = METRONOME.as_mut() {
                     metronome.set_nominator(*nominator as u32)
                 }
             }
-        }));
-        graph.subscribe_vertex(Propagation::This, denominator_address, Box::new(|update| {
-            if let Update::Primitive {new: FieldValue::Int32(denominator), ..} = update {
+        });
+        graph.catchup_and_subscribe(Address::of(uuid, vec![10, 2]), |value| {
+            if let FieldValue::Int32(denominator) = value {
                 if let Some(metronome) = METRONOME.as_mut() {
                     metronome.set_denominator(*denominator as u32)
                 }
             }
-        }));
+        });
         0
     }
 }
