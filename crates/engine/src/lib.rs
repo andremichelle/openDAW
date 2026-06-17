@@ -13,12 +13,21 @@
 
 extern crate alloc;
 
+use alloc::boxed::Box;
+use alloc::vec;
 use alloc::vec::Vec;
+use boxgraph::address::Address;
 use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
+use boxgraph::field::FieldValue;
 use boxgraph::graph::BoxGraph;
-use boxgraph::updates::decode_forward;
+use boxgraph::subscription::Propagation;
+use boxgraph::updates::{decode_forward, Update};
 use studio_boxes::registry;
+use transport::transport::{Transport, RENDER_QUANTUM};
+
+mod metronome;
+use metronome::Metronome;
 
 const INPUT_CAPACITY: usize = 1 << 20; // 1 MiB scratch for one transaction's update bytes
 
@@ -26,6 +35,9 @@ static mut INPUT: [u8; INPUT_CAPACITY] = [0; INPUT_CAPACITY];
 static mut CHECKSUM: [u8; 32] = [0; 32];
 static mut GRAPH: Option<BoxGraph> = None;
 static mut REGISTRY: Option<Registry> = None;
+static mut TRANSPORT: Option<Transport> = None;
+static mut METRONOME: Option<Metronome> = None;
+static mut OUTPUT: [f32; RENDER_QUANTUM * 2] = [0.0; RENDER_QUANTUM * 2];
 
 #[no_mangle]
 pub extern "C" fn input_ptr() -> *mut u8 {
@@ -71,6 +83,131 @@ pub extern "C" fn apply_updates(len: usize) -> i32 {
             return 1;
         }
         CHECKSUM = graph.checksum();
+        0
+    }
+}
+
+/// Initialize the engine for `sample_rate`: empty graph, a playing transport, and a metronome.
+#[no_mangle]
+pub extern "C" fn init(sample_rate: f32) {
+    reset();
+    unsafe {
+        let mut transport = Transport::new(sample_rate as f64, 120.0);
+        transport.play();
+        TRANSPORT = Some(transport);
+        METRONOME = Some(Metronome::new(sample_rate));
+    }
+}
+
+/// Render one 128-frame quantum into the output buffer (planar: left channel then right). Advances
+/// the transport and mixes metronome clicks while playing; silence when stopped.
+#[no_mangle]
+pub extern "C" fn render() {
+    unsafe {
+        for sample in OUTPUT.iter_mut() {
+            *sample = 0.0
+        }
+        if !TRANSPORT.as_ref().is_some_and(|transport| transport.is_playing()) {
+            return;
+        }
+        if let (Some(transport), Some(metronome)) = (TRANSPORT.as_mut(), METRONOME.as_mut()) {
+            let block = transport.process_quantum();
+            let (left, right) = OUTPUT.split_at_mut(RENDER_QUANTUM);
+            metronome.process(&block, left, right);
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn output_ptr() -> *const f32 {
+    unsafe { OUTPUT.as_ptr() }
+}
+
+#[no_mangle]
+pub extern "C" fn output_len() -> usize {
+    RENDER_QUANTUM * 2
+}
+
+#[no_mangle]
+pub extern "C" fn play() {
+    unsafe {
+        if let Some(transport) = TRANSPORT.as_mut() {
+            transport.play()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn stop() {
+    unsafe {
+        if let Some(transport) = TRANSPORT.as_mut() {
+            transport.stop(false)
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn set_metronome_enabled(enabled: i32) {
+    unsafe {
+        if let Some(metronome) = METRONOME.as_mut() {
+            metronome.set_enabled(enabled != 0)
+        }
+    }
+}
+
+/// After the project has synced, bind the transport bpm and metronome signature to the live
+/// `TimelineBox`: catch up the current values, then subscribe so future edits apply immediately
+/// (each update carries the new value). Returns 0 on success, 1 if no TimelineBox is present.
+#[no_mangle]
+pub extern "C" fn bind() -> i32 {
+    unsafe {
+        let graph = match GRAPH.as_mut() {
+            Some(graph) => graph,
+            None => return 1
+        };
+        let uuid = match graph.find_by_name("TimelineBox") {
+            Some(timeline) => timeline.uuid,
+            None => return 1
+        };
+        let bpm_address = Address::of(uuid, vec![31]);
+        let nominator_address = Address::of(uuid, vec![10, 1]);
+        let denominator_address = Address::of(uuid, vec![10, 2]);
+        if let Some(FieldValue::Float32(bpm)) = graph.field_value(&bpm_address) {
+            if let Some(transport) = TRANSPORT.as_mut() {
+                transport.set_bpm(*bpm as f64)
+            }
+        }
+        if let Some(FieldValue::Int32(nominator)) = graph.field_value(&nominator_address) {
+            if let Some(metronome) = METRONOME.as_mut() {
+                metronome.set_nominator(*nominator as u32)
+            }
+        }
+        if let Some(FieldValue::Int32(denominator)) = graph.field_value(&denominator_address) {
+            if let Some(metronome) = METRONOME.as_mut() {
+                metronome.set_denominator(*denominator as u32)
+            }
+        }
+        graph.subscribe_vertex(Propagation::This, bpm_address, Box::new(|update| {
+            if let Update::Primitive {new: FieldValue::Float32(bpm), ..} = update {
+                if let Some(transport) = TRANSPORT.as_mut() {
+                    transport.set_bpm(*bpm as f64)
+                }
+            }
+        }));
+        graph.subscribe_vertex(Propagation::This, nominator_address, Box::new(|update| {
+            if let Update::Primitive {new: FieldValue::Int32(nominator), ..} = update {
+                if let Some(metronome) = METRONOME.as_mut() {
+                    metronome.set_nominator(*nominator as u32)
+                }
+            }
+        }));
+        graph.subscribe_vertex(Propagation::This, denominator_address, Box::new(|update| {
+            if let Update::Primitive {new: FieldValue::Int32(denominator), ..} = update {
+                if let Some(metronome) = METRONOME.as_mut() {
+                    metronome.set_denominator(*denominator as u32)
+                }
+            }
+        }));
         0
     }
 }

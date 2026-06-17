@@ -47,7 +47,9 @@ name = "engine"
 version = "0.0.0"
 dependencies = [
  "boxgraph",
+ "dsp",
  "studio-boxes",
+ "transport",
 ]
 
 [[package]]

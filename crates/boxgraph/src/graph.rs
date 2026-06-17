@@ -125,6 +125,13 @@ impl BoxGraph {
             .collect()
     }
 
+    /// The field value at an address (None for a box address or an unresolved path).
+    pub fn field_value(&self, address: &Address) -> Option<&FieldValue> {
+        let graph_box = self.boxes.get(&address.uuid)?;
+        let (first, rest) = address.field_keys.split_first()?;
+        graph_box.fields.get(first).and_then(|value| resolve_path(value, rest))
+    }
+
     /// Whether an address resolves to an existing vertex (a box, or a field path within one).
     pub fn vertex_exists(&self, address: &Address) -> bool {
         match self.boxes.get(&address.uuid) {

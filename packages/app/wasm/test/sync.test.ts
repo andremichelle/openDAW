@@ -10,11 +10,12 @@
 import {describe, expect, it} from "vitest"
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
-import {ByteArrayInput, ByteArrayOutput, isDefined, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
-import {Address, BoxGraph, PrimitiveField, PrimitiveValues, SyncSource, Synchronization, Updates, UpdateTask} from "@opendaw/lib-box"
+import {BoxGraph, SyncSource, Synchronization, Updates, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
+import {serializeUpdateTasks} from "../src/sync/serialize-update-tasks"
 
 const ODSL = path.resolve(__dirname, "../../../../test-files/actions.odsl")
 const WASM = path.resolve(__dirname, "../public/engine.wasm")
@@ -56,39 +57,6 @@ const loadEngine = async (): Promise<EngineExports> => {
     return engine
 }
 
-// Serialize SyncSource's forward-only UpdateTask[] into the stream decode_forward reads.
-const serializeTasks = (tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>, source: BoxGraph<BoxIO.TypeMap>): ArrayBuffer => {
-    const output = ByteArrayOutput.create()
-    output.writeInt(tasks.length)
-    tasks.forEach(task => {
-        output.writeString(task.type)
-        if (task.type === "new") {
-            UUID.toDataOutput(output, task.uuid)
-            output.writeString(task.name as string)
-            output.writeInt(task.buffer.byteLength)
-            output.writeBytes(new Int8Array(task.buffer))
-        } else if (task.type === "update-primitive") {
-            const address = Address.reconstruct(task.address)
-            address.write(output)
-            const field = source.findVertex(address).unwrap(() => `no field at ${address}`) as PrimitiveField
-            const serialization = field.serialization()
-            output.writeString(serialization.type)
-            serialization.encode(output, task.value as PrimitiveValues)
-        } else if (task.type === "update-pointer") {
-            Address.reconstruct(task.address).write(output)
-            if (isDefined(task.target)) {
-                output.writeBoolean(true)
-                Address.reconstruct(task.target).write(output)
-            } else {
-                output.writeBoolean(false)
-            }
-        } else if (task.type === "delete") {
-            UUID.toDataOutput(output, task.uuid)
-        }
-    })
-    return output.toArrayBuffer() as ArrayBuffer
-}
-
 const checksumsEqual = (left: Int8Array, right: Int8Array): boolean =>
     left.length === right.length && left.every((byte, index) => byte === right[index])
 
@@ -106,7 +74,7 @@ describe("sync: actions.odsl -> SyncSource -> wasm engine (checksum per transact
 
         const target: Synchronization<BoxIO.TypeMap> = {
             sendUpdates(tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void {
-                const bytes = new Uint8Array(serializeTasks(tasks, source))
+                const bytes = new Uint8Array(serializeUpdateTasks(tasks, source))
                 expect(bytes.length).toBeLessThanOrEqual(engine.input_capacity())
                 new Uint8Array(engine.memory.buffer, engine.input_ptr(), bytes.length).set(bytes)
                 expect(engine.apply_updates(bytes.length)).toBe(0)
