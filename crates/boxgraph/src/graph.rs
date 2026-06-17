@@ -8,9 +8,11 @@
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use crate::address::{Address, Uuid};
+use alloc::string::ToString;
 use crate::boxes::{GraphBox, Registry};
 use crate::bytes::{ByteReader, ByteWriter};
-use crate::field::FieldValue;
+use crate::field::{read_fields, FieldValue};
+use crate::updates::Update;
 use crate::Error;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -24,6 +26,7 @@ pub struct BoxGraph {
     edges: Vec<Edge>,
     forward: BTreeMap<Address, usize>,        // pointer source → edge
     incoming: BTreeMap<Address, Vec<usize>>,  // target vertex → edges aimed at it (resolved only)
+    next_index: i32,                          // creation index for boxes created via updates
 }
 
 impl BoxGraph {
@@ -32,7 +35,10 @@ impl BoxGraph {
         for graph_box in boxes {
             map.insert(graph_box.uuid, graph_box);
         }
-        let mut graph = Self {boxes: map, edges: Vec::new(), forward: BTreeMap::new(), incoming: BTreeMap::new()};
+        let next_index = map.values().map(|graph_box| graph_box.creation_index).max().map_or(0, |max| max + 1);
+        let mut graph = Self {
+            boxes: map, edges: Vec::new(), forward: BTreeMap::new(), incoming: BTreeMap::new(), next_index
+        };
         graph.rebuild_edges();
         graph
     }
@@ -121,6 +127,65 @@ impl BoxGraph {
         }
     }
 
+    // ---- Mutation (the live-mirror update stream; see the `updates` module) ----
+
+    /// Apply a transaction: each update forward, then edges rebuilt once.
+    pub fn transaction(&mut self, updates: &[Update], registry: &Registry) -> Result<(), Error> {
+        for update in updates {
+            self.apply(update, registry)?;
+        }
+        self.rebuild_edges();
+        Ok(())
+    }
+
+    /// Undo a transaction: each update's inverse in reverse order, then edges rebuilt.
+    pub fn abort(&mut self, updates: &[Update], registry: &Registry) -> Result<(), Error> {
+        for update in updates.iter().rev() {
+            self.revert(update, registry)?;
+        }
+        self.rebuild_edges();
+        Ok(())
+    }
+
+    fn apply(&mut self, update: &Update, registry: &Registry) -> Result<(), Error> {
+        match update {
+            Update::New {uuid, name, settings} => self.create_box(*uuid, name, settings, registry),
+            Update::Delete {uuid, ..} => {self.boxes.remove(uuid); Ok(())}
+            Update::Primitive {address, new, ..} => self.set_field(address, new.clone()),
+            Update::Pointer {address, new, ..} => self.set_field(address, FieldValue::Pointer(new.clone()))
+        }
+    }
+
+    fn revert(&mut self, update: &Update, registry: &Registry) -> Result<(), Error> {
+        match update {
+            Update::New {uuid, ..} => {self.boxes.remove(uuid); Ok(())}
+            Update::Delete {uuid, name, settings} => self.create_box(*uuid, name, settings, registry),
+            Update::Primitive {address, old, ..} => self.set_field(address, old.clone()),
+            Update::Pointer {address, old, ..} => self.set_field(address, FieldValue::Pointer(old.clone()))
+        }
+    }
+
+    fn create_box(&mut self, uuid: Uuid, name: &str, settings: &[u8], registry: &Registry) -> Result<(), Error> {
+        let schema = registry.get(name).ok_or(Error::UnknownBox)?;
+        let mut reader = ByteReader::new(settings);
+        let fields = read_fields(&mut reader, schema)?;
+        let creation_index = self.next_index;
+        self.next_index += 1;
+        self.boxes.insert(uuid, GraphBox {creation_index, name: name.to_string(), uuid, fields});
+        Ok(())
+    }
+
+    fn set_field(&mut self, address: &Address, value: FieldValue) -> Result<(), Error> {
+        let graph_box = self.boxes.get_mut(&address.uuid).ok_or(Error::AddressNotFound)?;
+        let (first, rest) = address.field_keys.split_first().ok_or(Error::AddressNotFound)?;
+        let target = graph_box.fields
+            .get_mut(first)
+            .and_then(|value| resolve_path_mut(value, rest))
+            .ok_or(Error::AddressNotFound)?;
+        *target = value;
+        Ok(())
+    }
+
     fn rebuild_edges(&mut self) {
         let mut edges = Vec::new();
         for graph_box in self.boxes.values() {
@@ -141,6 +206,17 @@ impl BoxGraph {
         self.edges = edges;
         self.forward = forward;
         self.incoming = incoming;
+    }
+}
+
+fn resolve_path_mut<'a>(value: &'a mut FieldValue, keys: &[u16]) -> Option<&'a mut FieldValue> {
+    if keys.is_empty() {
+        return Some(value);
+    }
+    match value {
+        FieldValue::Object(fields) => fields.get_mut(&keys[0]).and_then(|child| resolve_path_mut(child, &keys[1..])),
+        FieldValue::Array(elements) => elements.get_mut(keys[0] as usize).and_then(|child| resolve_path_mut(child, &keys[1..])),
+        _ => None
     }
 }
 

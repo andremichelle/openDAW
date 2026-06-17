@@ -11,12 +11,15 @@ pub mod address;
 pub mod field;
 pub mod boxes;
 pub mod graph;
+pub mod updates;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
     UnexpectedEnd,
     BadMagic,
     UnknownBox,
+    UnknownUpdate,
+    AddressNotFound,
 }
 
 impl From<bytes::ByteError> for Error {

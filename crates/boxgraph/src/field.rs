@@ -47,7 +47,7 @@ pub enum FieldValue {
 
 pub type Fields = BTreeMap<u16, FieldValue>;
 
-fn write_value(writer: &mut ByteWriter, value: &FieldValue) {
+pub(crate) fn write_value(writer: &mut ByteWriter, value: &FieldValue) {
     match value {
         FieldValue::Int32(value) => writer.write_int(*value),
         FieldValue::Float32(value) => writer.write_float(*value),
@@ -70,7 +70,7 @@ fn write_value(writer: &mut ByteWriter, value: &FieldValue) {
     }
 }
 
-fn read_value(reader: &mut ByteReader, field_type: &FieldType) -> Result<FieldValue, Error> {
+pub(crate) fn read_value(reader: &mut ByteReader, field_type: &FieldType) -> Result<FieldValue, Error> {
     match field_type {
         FieldType::Int32 => Ok(FieldValue::Int32(reader.read_int()?)),
         FieldType::Float32 => Ok(FieldValue::Float32(reader.read_float()?)),
