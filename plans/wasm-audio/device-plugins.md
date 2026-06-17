@@ -40,6 +40,27 @@ wasm→JS bridge.
 - **Hand-rolled C-ABI + shared memory** — full control, works now, more manual.
 - Proposal: **custom C-ABI now**, kept WIT-shaped so we can adopt the component model later.
 
+## CLAP alignment (option)
+
+Our device model already lands in the **same family as [CLAP](https://github.com/free-audio/clap)**:
+stable C-ABI, host-instantiated per-instance plugins, block `process` with multi-port audio,
+declared parameters, UI/DSP split. ~60–70% conceptual overlap by construction. We are **not** aiming
+for CLAP compatibility in the current plan, but it is worth keeping the door open.
+
+- **Cheap to keep open:** shape the descriptor / param / (future) event structs to mirror CLAP's
+  layouts (`clap_process`, params ext, event queue). Costs little now, buys familiarity and a
+  possible future shim to port CLAP plugins compiled to wasm32.
+- **What still diverges (by design):** shared single linear memory (CLAP assumes per-plugin address
+  space — this is our biggest mismatch and the source of the relocation / shadow-stack work in
+  `05-memory.md`); host-owned **box-graph state** vs CLAP's opaque state blob; single-threaded vs
+  CLAP's main/audio thread contracts; web TS UI vs embedded native GUI.
+- **Reaching actual CLAP** (host real CLAP plugins, or be a CLAP host) is a separate, larger effort:
+  CLAP's exact structs, the extension-query mechanism, and the full event/transport model — plus
+  solving the shared-memory mismatch. Out of scope for parity; revisit if third-party ecosystem
+  interop becomes a goal.
+
+Decision: **stay CLAP-shaped where free**, don't pay for compatibility we don't need yet.
+
 ## Packaging implication
 
 If devices are runtime plugins, their **UI (TS) must also be loadable**, not baked into the studio
@@ -58,5 +79,6 @@ commands — see `device-contract.md`).
 ## Open
 
 - ABI mechanism: custom C-ABI vs component model (proposal: custom now, WIT-shaped).
+- How CLAP-shaped to keep the structs (cheap familiarity vs over-fitting a standard we may not adopt).
 - Isolation model for untrusted devices (defer to Phase B).
 - Device-package format (wasm + UI + manifest) and how the studio discovers/loads it.
