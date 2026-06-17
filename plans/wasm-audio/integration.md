@@ -38,6 +38,20 @@ untouched** — not even a Router change.
   **no CORS/COOP yet**) and `.github/workflows/deploy-wasm.yml` (`workflow_dispatch`, installs Rust,
   builds, deploys) — independent of the studio's `deploy.yml`.
 
+## Live sync — current state + TODO
+
+- **Done (metronome page):** a real project + the unchanged `SyncSource` ships every transaction to
+  the wasm engine, which mirrors the box graph and renders a live metronome (bpm + signature edits
+  apply while playing, via the engine's `TimelineBox` `catchupAndSubscribe`).
+- **Shortcut in place:** `SyncSource` currently dispatches to a **main-thread loopback** executor
+  that serializes `UpdateTask[]` (using the source graph's schema) and `postMessage`s bytes to the
+  worklet. It works, but `SyncSource` is not yet the direct main->worklet transport.
+- **TODO (soon):** point `SyncSource` straight at the worklet port; the worklet's `Communicator`
+  receives `UpdateTask[]` and serializes schema-free (typeof-tagged values), and the **engine resolves
+  primitive int/float from its own mirror**. This needs `lib/runtime/src/communicator.ts` to grow
+  **multiple channels** (sync vs preferences vs transport) and **typed messages** rather than the one
+  ad-hoc byte stream used now.
+
 ## Notes
 
 - Test projects = the `07` fixtures (shared corpus).
