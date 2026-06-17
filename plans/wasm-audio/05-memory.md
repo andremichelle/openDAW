@@ -34,24 +34,22 @@ Two independently-compiled Rust modules sharing **one** linear memory each assum
 **Lean: A** (no multi-memory dependency, best perf), ABI passes buffer offsets; keep **C** as the
 guaranteed-works fallback.
 
-## Reclaiming allocator — current gap (TODO)
+## Reclaiming allocator (done: talc)
 
-The `engine` crate ships a **test-grade bump allocator**: a fixed arena + a cursor, `alloc` bumps
-forward, **`dealloc` is a no-op**. It never reclaims, so with churn it only grows and eventually
-exhausts. Fine for the bounded `.odsl` replay/sync test, not for a continuously running engine.
+The `engine` crate uses **talc** (`talc::wasm::WasmDynamicTalc` via `new_wasm_dynamic_allocator()`) as
+its global allocator: it reclaims freed blocks and grows linear memory via `memory.grow` on demand
+(no fixed arena). It replaced an earlier test-grade bump allocator that never freed. Cost: +4% wasm
+size (~3.7 KB), deps `talc` + `lock_api`; single-threaded build, so no spinlock. Under host
+`cargo test` it is cfg'd out and std's allocator is used, so workspace tests are unaffected.
 
-The cleanup *logic* is already correct: Rust ownership runs `Drop` and calls `dealloc` for removed
-boxes, rebuilt edges, and unsubscribed observers (the subscription test proves the observer's
-captured state frees on unsubscribe). Only the allocator decides whether freed memory is reclaimed,
-so swapping it needs **no changes to drop logic**.
+The cleanup logic was already correct (Rust `Drop` calls `dealloc` for removed boxes, rebuilt edges,
+and unsubscribed observers, proven by the subscription test), so the swap reclaims that memory with
+no drop-logic changes.
 
-**To do:** replace the bump with a **real reclaiming allocator**. Prefer a homebrew free-list (no
-dependency, matches the minimal-deps rule); fallback is a small crate (`talc` / `dlmalloc`).
-
-**This gates samples.** Sample PCM buffers are large and dynamic. When an `AudioFileBox` / sample is
-removed its buffer must actually free, otherwise the engine leaks audio memory fast. So the real
-allocator is a **prerequisite before the engine loads/manages samples** (see the AudioData section
-below), not just boxes and device instances.
+**Invariant:** never allocate or grow on the audio thread during `render`. talc grows via
+`memory.grow`, which can detach `memory.buffer`, so JS must re-read the buffer after any growth (the
+worklet already re-fetches it each `process()`). This unblocks **sample buffers** (large, dynamic),
+which could not free under the bump.
 
 ## Other memory concerns
 

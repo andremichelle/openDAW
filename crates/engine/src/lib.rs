@@ -3,8 +3,8 @@
 //! input buffer, calls `apply_updates(len)`, then reads the 32-byte checksum buffer to compare
 //! against the TS source after every transaction.
 //!
-//! ALLOCATOR NOTE: uses a bump allocator that never frees — fine for bounded replay/tests, but a
-//! continuously-running production engine needs a real reclaiming allocator. Flagged, not final.
+//! ALLOCATOR: talc (`WasmDynamicTalc`), a reclaiming allocator that grows linear memory via
+//! `memory.grow` on demand and frees blocks back for reuse. Single-threaded build, so no lock.
 
 #![cfg_attr(not(test), no_std)]
 // The engine is a single-threaded wasm module; its graph/registry/buffers are process globals
@@ -212,36 +212,49 @@ pub extern "C" fn bind() -> i32 {
     }
 }
 
-#[cfg(not(test))]
-mod runtime {
+// Dynamic heap: talc claims linear memory via `memory.grow` on demand (no fixed arena) and reclaims
+// freed blocks. Single-threaded wasm, so we wrap the non-Sync `TalcCell` and assert `Sync` (exactly
+// what talc's own `TalcSyncCell` does), but keep the inner cell reachable so we can read counters,
+// which `TalcSyncCell` does not expose.
+#[cfg(all(not(target_feature = "atomics"), target_family = "wasm"))]
+mod heap {
     use core::alloc::{GlobalAlloc, Layout};
-    use core::ptr::null_mut;
+    use talc::cell::TalcCell;
+    use talc::wasm::{WasmBinning, WasmGrowAndClaim};
 
-    const HEAP_SIZE: usize = 64 << 20;
-    static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
-    static mut OFFSET: usize = 0;
+    struct EngineAlloc(TalcCell<WasmGrowAndClaim, WasmBinning>);
 
-    struct Bump;
+    // SAFETY: the engine wasm is single-threaded (no atomics), so there is never concurrent access.
+    unsafe impl Sync for EngineAlloc {}
 
-    unsafe impl GlobalAlloc for Bump {
-        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-            let align = layout.align();
-            let start = (OFFSET + align - 1) & !(align - 1);
-            let end = start + layout.size();
-            if end > HEAP_SIZE {
-                return null_mut();
-            }
-            OFFSET = end;
-            HEAP.as_mut_ptr().add(start)
+    unsafe impl GlobalAlloc for EngineAlloc {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {self.0.alloc(layout)}
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {self.0.dealloc(ptr, layout)}
+        unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {self.0.alloc_zeroed(layout)}
+        unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+            self.0.realloc(ptr, layout, new_size)
         }
-        unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
     }
 
     #[global_allocator]
-    static ALLOCATOR: Bump = Bump;
+    static TALC: EngineAlloc = EngineAlloc(TalcCell::new(WasmGrowAndClaim));
 
-    #[panic_handler]
-    fn panic(_info: &core::panic::PanicInfo) -> ! {
-        loop {}
+    /// Bytes currently allocated (live).
+    #[no_mangle]
+    pub extern "C" fn heap_used() -> usize {
+        TALC.0.counters().allocated_bytes
     }
+
+    /// Total bytes the heap manages (live + free) — the claimed footprint.
+    #[no_mangle]
+    pub extern "C" fn heap_claimed() -> usize {
+        let counters = TALC.0.counters();
+        counters.allocated_bytes + counters.available_bytes
+    }
+}
+
+#[cfg(not(test))]
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    loop {}
 }

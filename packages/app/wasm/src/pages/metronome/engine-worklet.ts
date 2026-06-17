@@ -17,15 +17,20 @@ type EngineExports = {
     bind: () => number
     render: () => void
     output_ptr: () => number
+    heap_used: () => number
+    heap_claimed: () => number
 }
 
 class MetronomeEngine extends AudioWorkletProcessor {
     readonly #exports: EngineExports
+    readonly #sampleRate: number
     #bound: boolean = false
+    #sinceStats: number = 0
 
     constructor(options?: AudioWorkletNodeOptions) {
         super()
         const {module, sampleRate}: BootOptions = options?.processorOptions
+        this.#sampleRate = sampleRate
         this.#exports = new WebAssembly.Instance(module, {}).exports as unknown as EngineExports
         this.#exports.init(sampleRate)
         this.port.onmessage = (event: MessageEvent) => this.#applyUpdates(event.data as ArrayBuffer)
@@ -50,6 +55,15 @@ class MetronomeEngine extends AudioWorkletProcessor {
         const right = new Float32Array(buffer, pointer + frames * Float32Array.BYTES_PER_ELEMENT, frames)
         out[0].set(left)
         if (out.length > 1) {out[1].set(right)}
+        this.#sinceStats += frames
+        if (this.#sinceStats >= this.#sampleRate) { // ~once per second of audio
+            this.#sinceStats = 0
+            this.port.postMessage({
+                heapUsed: this.#exports.heap_used(),
+                heapClaimed: this.#exports.heap_claimed(),
+                memoryTotal: this.#exports.memory.buffer.byteLength
+            })
+        }
         return true
     }
 }

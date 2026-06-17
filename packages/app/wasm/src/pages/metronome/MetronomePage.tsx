@@ -23,6 +23,13 @@ export const MetronomePage: PageFactory<Env> = ({lifecycle}) => {
     const log: HTMLPreElement = <pre/>
     const append = (line: string): void => {log.textContent = `${log.textContent ?? ""}${line}\n`}
 
+    const memory: HTMLPreElement = <pre>memory: waiting…</pre>
+    const kb = (bytes: number): string => `${(bytes / 1024).toFixed(1)} KB`
+    type HeapStats = {heapUsed: number, heapClaimed: number, memoryTotal: number}
+    const showMemory = ({heapUsed, heapClaimed, memoryTotal}: HeapStats): void => {
+        memory.textContent = `heap: ${kb(heapUsed)} used / ${kb(heapClaimed)} claimed | linear memory: ${kb(memoryTotal)}`
+    }
+
     const {boxGraph, mandatoryBoxes} = ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
     const timelineBox = mandatoryBoxes.timelineBox
 
@@ -43,6 +50,7 @@ export const MetronomePage: PageFactory<Env> = ({lifecycle}) => {
         })
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)
+        workletNode.port.onmessage = (event: MessageEvent) => showMemory(event.data as HeapStats)
         // SyncSource (unchanged) -> local loopback -> serialize (this graph's schema) -> worklet bytes
         const sender = new BroadcastChannel("metronome-sync")
         const receiver = new BroadcastChannel("metronome-sync")
@@ -112,6 +120,7 @@ export const MetronomePage: PageFactory<Env> = ({lifecycle}) => {
                     {DENOMINATORS.map(value => <option value={String(value)} selected={value === 4}>{String(value)}</option>)}
                 </select>
             </div>
+            {memory}
             {log}
         </div>
     )

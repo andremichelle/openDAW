@@ -12,3 +12,4 @@ boxgraph = {path = "../boxgraph"}
 studio-boxes = {path = "../studio-boxes"}
 transport = {path = "../transport"}
 dsp = {path = "../dsp"}
+talc = {version = "5.0.3", features = ["counters"]}

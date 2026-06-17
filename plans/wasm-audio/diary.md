@@ -16,4 +16,4 @@
 - Subscriptions: the Rust graph notifies listeners on changes, with clean removal. Done.
 - Transport: PPQN time conversions and a block-by-block transport clock. Done.
 - Metronome: a live page where the engine renders the click and reacts to bpm and signature edits in real time. Done.
-- Allocator: a test-grade bump allocator is in place; a real reclaiming allocator is the prerequisite for samples. Pending.
+- Allocator: replaced the bump allocator with talc (`WasmDynamicTalc`), which reclaims freed memory and grows via `memory.grow` on demand; +4% wasm size. Done.
