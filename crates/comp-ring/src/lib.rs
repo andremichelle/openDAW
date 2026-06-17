@@ -1,11 +1,13 @@
 //! Ring modulator: `out = in0 * in1 * gain`. Two inputs, separate output — the multi-input ABI.
 //! Stateless DSP; safe Rust via the `abi` shim.
 
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
+#[cfg(not(test))]
 use core::panic::PanicInfo;
 use abi::Ports;
 
+#[cfg(not(test))]
 #[panic_handler]
 fn panic(_: &PanicInfo) -> ! {
     loop {}

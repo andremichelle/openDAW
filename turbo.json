@@ -91,6 +91,12 @@
       "dependsOn": [
         "^build"
       ]
+    },
+    "@opendaw/app-wasm#test": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false
     }
   }
 }

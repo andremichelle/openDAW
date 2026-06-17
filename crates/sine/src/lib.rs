@@ -1,10 +1,12 @@
 //! Feature entry point: sine generator (step 1). Thin cdylib over `dsp`.
 
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
+#[cfg(not(test))]
 use core::panic::PanicInfo;
 use dsp::{fast_sin, PI};
 
+#[cfg(not(test))]
 #[panic_handler]
 fn panic(_: &PanicInfo) -> ! {
     loop {}

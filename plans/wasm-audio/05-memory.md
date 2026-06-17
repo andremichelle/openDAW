@@ -44,6 +44,32 @@ guaranteed-works fallback.
 - Memory is `SharedArrayBuffer`-backed (needed anyway for asset `AudioData` delivery and
   main↔worklet comms).
 
+## AudioData (samples) delivery — SAB-backed engine memory
+
+**Constraint:** a wasm module can address **only its own linear memory**. Unlike the TS worklet
+(which can view any `SharedArrayBuffer` handed to it), the engine wasm cannot read an external SAB.
+So sample PCM must live **inside** the engine's memory.
+
+**Decision:** the engine's `WebAssembly.Memory` is created **`shared: true` + `maximum`** so its
+`.buffer` *is* a `SharedArrayBuffer`. Then it mirrors the TS sample path zero-copy: PCM lives in the
+shared memory; the main thread/loader writes it; the engine reads it as `&[f32]` in render — no copy,
+no JS in the hot path. (Needs COOP/COEP — already in place.)
+
+Flow (the off-thread asset path of the execution-only model):
+1. Main thread / loader fetches + decodes the sample to f32 PCM **off-thread**.
+2. It writes the PCM into a host/engine-designated region of the shared memory.
+3. The box-graph sample reference is "ready" only after the write completes (ready flag / pointer);
+   the engine reads it **only then**.
+4. Render reads the sample slice directly at its offset — zero-copy, identical principle to TS.
+
+**Growth:** samples are large/dynamic and can't be pre-sized for all cases → `memory.grow` the
+**shared** memory **off-thread** as samples import. Shared-memory grow does not detach the buffer
+(existing views stay valid, length extends). **Never grow during `process`.**
+
+**Current state:** the spikes used a **non-shared** `Memory`; supporting AudioData requires switching
+the engine memory to `shared: true` + `maximum`. AudioData delivery is the concrete driver to make
+the memory SAB-backed (was deferred above) and raises the stakes on the shadow-stack overlap below.
+
 ## Spike (do this first)
 
 Tiny PoC in an AudioWorklet: engine wasm + 1 device wasm sharing one `Memory` + `Table`, render a

@@ -9,7 +9,7 @@
 //!   [5] param_count  [6] params_ptr       (-> f32[param_count])
 //!   [7] state_ptr    (-> device instance state)
 
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
 use core::ptr::NonNull;
 use core::slice;

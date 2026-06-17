@@ -2,11 +2,13 @@
 //! same module backs many instances. DSP is safe Rust via the `abi` shim. `probe` returns a stack
 //! address so the harness can confirm this module's region is disjoint from the others.
 
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
+#[cfg(not(test))]
 use core::panic::PanicInfo;
 use abi::Ports;
 
+#[cfg(not(test))]
 #[panic_handler]
 fn panic(_: &PanicInfo) -> ! {
     loop {}

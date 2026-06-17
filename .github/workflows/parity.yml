@@ -31,11 +31,8 @@ jobs:
           rustup target add wasm32-unknown-unknown
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      - name: 🧪 Native unit tests (dsp)
-        run: cargo test --manifest-path crates/Cargo.toml -p dsp
-
       - name: 📦 Install dependencies
         run: npm ci
 
-      - name: 🔬 WASM parity (build wasm + null-test vs TS reference)
-        run: npm run test:parity -w @opendaw/app-wasm
+      - name: 🧪 All Rust tests (cargo workspace) + wasm parity null-test
+        run: npm run test -w @opendaw/app-wasm

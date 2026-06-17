@@ -8,11 +8,13 @@
 //! module, per-instance external state, the multi-input descriptor ABI, and a heap device — all at
 //! once. The engine assembles the canonical descriptors (see the `abi` crate for the layout).
 
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
+#[cfg(not(test))]
 use core::panic::PanicInfo;
 use dsp::{fast_sin, PI};
 
+#[cfg(not(test))]
 #[panic_handler]
 fn panic(_: &PanicInfo) -> ! {
     loop {}

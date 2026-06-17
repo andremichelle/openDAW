@@ -10,8 +10,10 @@
     "prebuild": "npm run wasm",
     "build": "vite build",
     "preview": "vite preview --host",
+    "test:rust": ". \"$HOME/.cargo/env\" && cargo test --manifest-path ../../../crates/Cargo.toml --workspace",
     "pretest:parity": "npm run wasm",
     "test:parity": "vitest run --config vitest.config.ts",
+    "test": "npm run test:rust && npm run test:parity",
     "clean": "rm -rf dist public/*.wasm"
   },
   "dependencies": {

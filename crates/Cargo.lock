@@ -7,6 +7,10 @@ name = "abi"
 version = "0.0.0"
 
 [[package]]
+name = "boxgraph"
+version = "0.0.0"
+
+[[package]]
 name = "comp-delay"
 version = "0.0.0"
 dependencies = [

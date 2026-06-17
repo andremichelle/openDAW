@@ -3,27 +3,36 @@
 //! coexists with the other modules, and that each instance allocates its own line. The per-sample
 //! DSP is safe Rust; the heap-line handle is reconstructed once per call from per-instance state.
 
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
 extern crate alloc;
 
+#[cfg(not(test))]
 use core::alloc::{GlobalAlloc, Layout};
+#[cfg(not(test))]
 use core::panic::PanicInfo;
 use core::slice;
 use abi::Ports;
 use alloc::vec;
 
+#[cfg(not(test))]
 #[panic_handler]
 fn panic(_: &PanicInfo) -> ! {
     loop {}
 }
 
+// The custom allocator only exists in the wasm build; native `cargo test` uses std's allocator.
+#[cfg(not(test))]
 const HEAP_SIZE: usize = 1 << 20; // 1 MiB arena, in this module's relocated region
+#[cfg(not(test))]
 static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
+#[cfg(not(test))]
 static mut HEAP_POS: usize = 0;
 
+#[cfg(not(test))]
 struct Bump;
 
+#[cfg(not(test))]
 unsafe impl GlobalAlloc for Bump {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let align = layout.align();
@@ -38,6 +47,7 @@ unsafe impl GlobalAlloc for Bump {
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
 }
 
+#[cfg(not(test))]
 #[global_allocator]
 static ALLOCATOR: Bump = Bump;
 
@@ -86,6 +96,7 @@ pub extern "C" fn probe() -> u32 {
 }
 
 /// Bytes allocated from this module's heap so far (for the harness to confirm the heap was used).
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn heap_used() -> u32 {
     unsafe { *(&raw const HEAP_POS) as u32 }
