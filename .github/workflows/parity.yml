@@ -1,0 +1,41 @@
+# WASM engine parity harness (plans/wasm-audio/07-testing.md): native DSP unit tests + the
+# wasm-vs-TS null test. Runs only when wasm-engine files change, and on demand. Kept separate from
+# the main `turbo test` run so that suite stays Rust-free.
+name: WASM parity
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "crates/**"
+      - "packages/app/wasm/**"
+      - ".github/workflows/parity.yml"
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v5
+
+      - name: 🦄 Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 🦀 Install Rust + wasm target
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+          . "$HOME/.cargo/env"
+          rustup target add wasm32-unknown-unknown
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: 🧪 Native unit tests (dsp)
+        run: cargo test --manifest-path crates/Cargo.toml -p dsp
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔬 WASM parity (build wasm + null-test vs TS reference)
+        run: npm run test:parity -w @opendaw/app-wasm

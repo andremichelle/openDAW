@@ -18,8 +18,11 @@ dependency + difficulty; refine as we go.
    each relocated via `--global-base` into a disjoint slab — bit-faithful vs an f32 reference, state
    isolated across 100k cross-calls, ~700 ns/block. Dynamic dispatch (`Table`/`call_indirect`) and
    SAB-backed memory deferred (see `open-questions`). **Plugin architecture de-risked.**
-3. **Parity harness skeleton (`07`).** Rust offline render + null-test vs the TS offline engine, in
-   CI, while there's something trivial to compare (silence/sine). Must exist before Phase 1.
+3. **Parity harness skeleton (`07`).** ✅ Done. Two levels wired + green: native `cargo test -p dsp`
+   (DSP primitives vs std), and a wasm **null test** — `renderSineOffline` + `nullTest` vs a TS f32
+   reference (`packages/app/wasm/src/parity/`), peak < 1e-5. Runs via `npm run test:parity` in a
+   dedicated `parity.yml` (installs Rust); kept out of the main `turbo test` so that stays Rust-free.
+   Reference is a TS sine placeholder for now, swapped for the real TS engine output as features land.
 
 ## Phase 1 — Foundation (the spine)
 

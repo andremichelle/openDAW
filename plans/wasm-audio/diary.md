@@ -1,5 +1,14 @@
 # Diary
 
+## 2026-06-17 — Step 3: parity-harness skeleton
+
+The tests-as-contract foundation (correctness by test, not by reading Rust).
+
+- Native unit level: `dsp` builds with std under `cargo test` (`#![cfg_attr(not(test), no_std)]`); tests check `fabs` and `fast_sin` vs the standard library.
+- WASM parity level: `packages/app/wasm/src/parity/` — `renderSineOffline` (deterministic offline render, no AudioContext), `nullTest` (peak/RMS residual), and a TS f32 reference. First test null-tests the sine wasm vs the reference, peak < 1e-5.
+- CI: `parity.yml` installs Rust, runs native tests + `npm run test:parity`. Kept out of the main `turbo test` (no plain `test` script) so that suite stays Rust-free.
+- The TS reference is a sine placeholder; it gets swapped for the real TS offline engine output as features land. Workflow rule: a feature is done only when it has a passing parity test.
+
 ## 2026-06-17 — Milestone: Step 2 (composition spike) complete
 
 Two independently compiled wasm modules share one linear memory and call each other wasm-to-wasm.
