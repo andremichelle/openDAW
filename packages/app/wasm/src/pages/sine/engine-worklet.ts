@@ -36,3 +36,5 @@ class SineEngine extends AudioWorkletProcessor {
 }
 
 registerProcessor("engine", SineEngine)
+
+export {} // isolate this file's scope (module) so its types don't collide with other worklets

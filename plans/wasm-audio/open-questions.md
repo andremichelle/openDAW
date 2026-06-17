@@ -2,17 +2,27 @@
 
 Consolidated from the plan docs, grouped by what resolves them. Source doc in brackets.
 
-## 🔴 Resolved by the composition spike — do first
+## 🟢 Settled by the composition spike (step 2 ✅)
 
-The spike (`05`/`08`: engine wasm + one device wasm sharing `Memory`+`Table`, render a block
-wasm-to-wasm, measured) settles the highest-risk unknowns:
+Spike: `compose-engine` + `compose-device` wasm share one imported `Memory`; the engine generates a
+sine into an engine-owned arena and calls the device's `process` **wasm-to-wasm** (host wires the
+device export as an engine import). Verified numerically (device scales the engine buffer through
+shared memory, no collision) and measured **~250 ns/block (Node) / ~500 ns/block (browser)**.
 
-- **Memory model:** A (one shared memory + engine-assigned arenas) vs B (per-device memory +
-  multi-memory shared I/O) vs C (per-device memory + host copies the block). Lean A, C as fallback. [05]
-- **Is the engine memory `SharedArrayBuffer`-backed?** (→ needs shared-memory build features). [05, 06]
-- **Multi-memory browser support** — decides whether B is viable. [05]
-- **Device allocator strategy** — `no_std` / custom global allocator / arena API. [05]
-- **Is per-device JS-copy (model C) fast enough at scale?** — measurement. [05]
+- **Memory model → A confirmed.** One shared memory + engine-assigned arena, device stateless, no JS
+  in the loop. B (multi-memory) and C (host copies) are unnecessary as the primary path. [05]
+
+Still open within memory/composition (deferred, not blocking):
+
+- **`SharedArrayBuffer`-backed memory** — spike used a non-shared `Memory`. Revisit when threads /
+  asset (`AudioData`) delivery need it (adds `shared`+`maximum` and atomics build flags). [05, 06]
+- **Dynamic dispatch** — spike used a fixed function import (one device). Runtime-loadable / multiple
+  devices need `Table` + `call_indirect` (or per-load re-instantiation). Validate when device count
+  is dynamic. [05, device-plugins]
+- **Device allocator strategy** — fine for stateless/arena devices (proven). Stateful devices
+  (own statics) also proven: relocate each module with `--global-base` into a disjoint slab
+  (engine 1 MiB, devices 4/8 MiB) — verified two stateful devices keep byte-identical state with no
+  collision. Devices needing a dynamic heap still need a custom allocator within their slab. [05]
 
 ## 🟡 Device ABI & plugins
 

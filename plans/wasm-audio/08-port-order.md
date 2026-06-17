@@ -11,9 +11,13 @@ dependency + difficulty; refine as we go.
    plays it. Engine verified numerically in Node (zero imports, ±0.2 sine, ~440 Hz). Studio untouched
    (workspace glob picks the app up). Browser audible check: `npm i` then
    `npm run dev -w @opendaw/app-wasm`, click Play.
-2. **Composition spike (`05`).** Engine wasm + one device wasm sharing `Memory` + `Table`, render a
-   block **wasm-to-wasm**; validate memory model A, measure. **Gates the plugin architecture** — if
-   this doesn't fly, the device design changes.
+2. **Composition spike (`05`).** ✅ Done. `compose-engine` + `compose-device` share one imported
+   `Memory`; engine generates a sine into its arena and calls the device's `process` wasm-to-wasm.
+   Memory model **A validated** (no collision, ~250 ns/block Node / ~500 ns browser). Test page
+   `/compose`. Hardened with two **stateful** devices chained (`/chain`: lowpass + feedback delay),
+   each relocated via `--global-base` into a disjoint slab — bit-faithful vs an f32 reference, state
+   isolated across 100k cross-calls, ~700 ns/block. Dynamic dispatch (`Table`/`call_indirect`) and
+   SAB-backed memory deferred (see `open-questions`). **Plugin architecture de-risked.**
 3. **Parity harness skeleton (`07`).** Rust offline render + null-test vs the TS offline engine, in
    CI, while there's something trivial to compare (silence/sine). Must exist before Phase 1.
 

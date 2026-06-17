@@ -50,6 +50,47 @@ Tiny PoC in an AudioWorklet: engine wasm + 1 device wasm sharing one `Memory` + 
 block **wasm-to-wasm**, measure. Validate model **A**; confirm **C** as fallback. This de-risks the
 plugin architecture before any real porting.
 
+## Device state must be per-instance (no module statics) — verified
+
+A device module is loaded **once** but instantiated **many times** (10 reverbs, 20 EQs). Holding DSP
+state in Rust `static mut` gives **one global per module** at a fixed linear-memory address, so every
+"instance" shares it and corrupts the others. Proven: two instances of one `osc` module with their
+own state → clean independent 110 + 440 Hz (parity 6e-8); the same two pointed at one shared state →
+both tones collapse to garbage.
+
+**Rule:** instance state lives in an **engine-assigned state block** in shared memory, handed to the
+device via the descriptor (`process(desc)` where the descriptor carries a `state_ptr`). Devices are
+**reentrant code over external state** — never module-global mutable state. (The `chain-lp` /
+`chain-delay` spike devices use `static mut` and are therefore single-instance demos only.)
+
+**Safe devices.** Crossing the raw-offset boundary needs `unsafe`, but it is confined to one audited
+shim crate (`abi`): `Ports::from_descriptor(desc_ptr)` parses the canonical descriptor into safe
+slices (`output: &mut [f32]`, `inputs.get(i): &[f32]`, `params: &[f32]`) and typed state
+(`state: &mut S`). Device DSP is then **100% safe Rust** — the only `unsafe` a device contains is the
+single boundary call. `osc` is the reference (verified bit-identical after the conversion).
+
+## Shadow-stack overlap — found, UNSOLVED
+
+The comprehensive rack (`comp-engine` + filter + ring + heap-delay, all in one shared memory)
+confirmed data isolation works but surfaced a separate problem: **rust-lld pins every module's
+shadow stack at `[0, stack-size)`**. `--global-base` relocates a module's *static data* (verified:
+engine 1 MiB, filter 4 MiB, ring 8 MiB, delay heap 13 MiB — disjoint) but **not** the stack;
+`--stack-first` had no effect via `rustc-cdylib-link-arg`. So all modules' shadow stacks overlap.
+
+Today it's harmless only because the spike's DSP functions keep locals in wasm registers and never
+spill to the linear-memory stack (full-rack parity is bit-exact). But a device that spills (large
+local arrays, deep calls) would clobber the caller's live frame. Options to resolve before complex
+devices land:
+
+- **Per-device memory (model B/C):** each module its own memory for stack/heap, share only an I/O
+  memory. Cleanest isolation; needs multi-memory or host-copied I/O.
+- **No-spill discipline:** keep device DSP register-only (no large stack locals); enforce by lint /
+  review. Fragile.
+- **Patch `__stack_pointer`:** post-link rewrite of each module's stack-pointer global into its slab.
+  Works but hacky.
+
+Decision pending. Does not block the single-device path; matters for the multi-device rack.
+
 ## Open
 
 - Multi-memory browser support (decides whether **B** is viable).
