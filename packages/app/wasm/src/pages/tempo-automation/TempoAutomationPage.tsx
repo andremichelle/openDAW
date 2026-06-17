@@ -8,15 +8,13 @@ import {Env} from "../../Env"
 import {serializeUpdateTasks} from "../../sync/serialize-update-tasks"
 import workletURL from "../metronome/engine-worklet.ts?worker&url"
 
-// Tempo automation + loop area, end to end. The project's TimelineBox gets a tempo track with two
-// linear value events (30 bpm @ bar 0, 1000 bpm @ bar 4) and a loop area over bars 0..4. The unchanged
-// SyncSource streams it to the wasm engine, which accelerates the metronome from 30 -> 1000 bpm then
-// loops back to the start. The engine writes its transport state (position / bpm / playing) into the
-// EngineState buffer each render; the worklet posts those bytes ~30 Hz and we decode them here with
-// the real EngineStateSchema to drive the readout.
-
 const BAR = 3840 // pulses (PPQN: 960 per quarter, 4/4)
 const LOOP_TO = 4 * BAR // 15360, the LoopArea default
+
+// Tagged messages the engine worklet posts back (see engine-worklet.ts).
+type EngineMessage =
+    | {readonly type: "state", readonly bytes: ArrayBuffer}
+    | {readonly type: "heap", readonly heapUsed: number, readonly heapClaimed: number, readonly memoryTotal: number}
 
 export const TempoAutomationPage: PageFactory<Env> = ({lifecycle}) => {
     const context = new MutableObservableOption<AudioContext>()
@@ -77,9 +75,8 @@ export const TempoAutomationPage: PageFactory<Env> = ({lifecycle}) => {
         const workletNode = new AudioWorkletNode(ctx, "engine", {processorOptions: {module, sampleRate: ctx.sampleRate}})
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)
-        workletNode.port.onmessage = (event: MessageEvent) => {
-            const data = event.data as {type: string}
-            if (data.type === "state") {showState((data as unknown as {bytes: ArrayBuffer}).bytes)}
+        workletNode.port.onmessage = (event: MessageEvent<EngineMessage>) => {
+            if (event.data.type === "state") {showState(event.data.bytes)}
         }
         const sender = new BroadcastChannel("tempo-sync")
         const receiver = new BroadcastChannel("tempo-sync")
@@ -121,9 +118,11 @@ export const TempoAutomationPage: PageFactory<Env> = ({lifecycle}) => {
     return (
         <div className="page">
             <h2>Tempo Automation</h2>
-            <p>Two linear tempo events (30 bpm @ bar 0, 1000 bpm @ bar 4) with a 4-bar loop. The
-                metronome accelerates, then jumps back to the start. Position / bpm / state come from the
-                engine's EngineState back-channel (~30 Hz), decoded with the real EngineStateSchema.</p>
+            <p>Tempo events on the TimelineBox tempo track: 30 bpm at bar 0 rising to 1000 bpm at bar 4,
+                with a curve on the first event so it accelerates gently at first. A 4-bar loop wraps it
+                back to the start. Turn tempo automation off to hear the fixed bpm from the slider
+                instead. Position, bpm, and transport state come from the engine's EngineState
+                back-channel (~30 Hz), decoded with the real EngineStateSchema.</p>
             <div>
                 <button onclick={() => void play()}>▶ Play</button>
                 <button onclick={() => void stop()}>■ Stop</button>
