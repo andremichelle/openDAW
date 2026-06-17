@@ -7,7 +7,7 @@ import {writeFileSync} from "node:fs"
 import {isDefined, Option, UUID} from "@opendaw/lib-std"
 import {BoxGraph, Field, PointerField, PointerTypes, Vertex} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
-import {ProjectSkeleton} from "./project/ProjectSkeleton"
+import {ProjectSkeleton} from "../src/project/ProjectSkeleton"
 
 const uuidFor = (index: number): UUID.Bytes => {
     const bytes = new Uint8Array(UUID.length)

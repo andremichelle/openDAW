@@ -76,6 +76,11 @@ impl BoxGraph {
         self.boxes.values().map(|graph_box| graph_box.name.as_str()).collect()
     }
 
+    /// First box with the given type name (useful for singleton boxes like RootBox).
+    pub fn find_by_name(&self, name: &str) -> Option<&GraphBox> {
+        self.boxes.values().find(|graph_box| graph_box.name == name)
+    }
+
     pub fn edges(&self) -> &[Edge] {
         &self.edges
     }

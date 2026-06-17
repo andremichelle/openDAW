@@ -21,7 +21,8 @@
     "build": "npm run generate-exports && tsc",
     "lint": "eslint \"**/*.ts\"",
     "test": "echo \"No tests to run\"",
-    "generate-all-boxes": "npx tsx src/generate-all-boxes.ts"
+    "generate-all-boxes": "npx tsx scripts/generate-all-boxes.ts",
+    "pregenerate-all-boxes": "npm run build -w @opendaw/studio-forge-boxes && npm run build -w @opendaw/studio-boxes"
   },
   "dependencies": {
     "@opendaw/lib-box": "^0.0.86",
