@@ -22,7 +22,14 @@ RewriteRule . /index.html [L]
   Header set Cross-Origin-Opener-Policy "same-origin"
   Header set Cross-Origin-Embedder-Policy "require-corp"
   Header set Cross-Origin-Resource-Policy "cross-origin"
+  Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+  Header set Pragma "no-cache"
+  Header set Expires "0"
+  Header unset ETag
+  Header unset Last-Modified
 </IfModule>
+
+FileETag None
 `
 
 ;(async () => {
