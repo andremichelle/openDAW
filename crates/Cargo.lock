@@ -43,6 +43,14 @@ name = "dsp"
 version = "0.0.0"
 
 [[package]]
+name = "engine"
+version = "0.0.0"
+dependencies = [
+ "boxgraph",
+ "studio-boxes",
+]
+
+[[package]]
 name = "sine"
 version = "0.0.0"
 dependencies = [

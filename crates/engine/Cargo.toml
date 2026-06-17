@@ -1,0 +1,12 @@
+[package]
+name = "engine"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+boxgraph = {path = "../boxgraph"}
+studio-boxes = {path = "../studio-boxes"}

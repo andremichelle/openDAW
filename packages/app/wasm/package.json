@@ -13,6 +13,8 @@
     "test:rust": ". \"$HOME/.cargo/env\" && cargo test --manifest-path ../../../crates/Cargo.toml --workspace",
     "pretest:parity": "npm run wasm",
     "test:parity": "vitest run --config vitest.config.ts",
+    "pretest:sync": "npm run wasm",
+    "test:sync": "vitest run --config vitest.config.ts test/sync.test.ts",
     "test": "npm run test:rust && npm run test:parity",
     "clean": "rm -rf dist public/*.wasm"
   },
@@ -23,6 +25,10 @@
     "@opendaw/studio-enums": "^0.0.77"
   },
   "devDependencies": {
+    "@opendaw/lib-box": "^0.0.86",
+    "@opendaw/lib-runtime": "^0.0.79",
+    "@opendaw/studio-boxes": "^0.0.94",
+    "@opendaw/studio-adapters": "^0.0.116",
     "sass": "^1.77.0",
     "vite": "^7.0.2",
     "vitest": "^3.1.3"
