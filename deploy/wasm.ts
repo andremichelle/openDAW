@@ -3,14 +3,13 @@ import SftpClient from "ssh2-sftp-client"
 // Deploys the WASM test app to the wasm.opendaw.studio docroot (already created on the server).
 // Separate from the studio deploy — touches nothing else.
 const config = {
-    host: process.env.SFTP_HOST,
-    port: Number(process.env.SFTP_PORT),
-    username: process.env.SFTP_USERNAME,
-    password: process.env.SFTP_PASSWORD
+    host: process.env.SFTP_WASM_HOST,
+    port: Number(process.env.SFTP_WASM_PORT),
+    username: process.env.SFTP_WASM_USERNAME,
+    password: process.env.SFTP_WASM_PASSWORD
 } as const
 
 const distDir = "./packages/app/wasm/dist"
-const remoteDir = "/wasm.opendaw.studio"
 
 // SPA fallback (client routes resolve on deep-link/refresh) + cross-origin isolation so
 // SharedArrayBuffer is available (shared memory / assets, coming soon).
@@ -29,9 +28,12 @@ RewriteRule . /index.html [L]
 ;(async () => {
     const sftp = new SftpClient()
     await sftp.connect(config)
-    await sftp.mkdir(remoteDir, true).catch(() => {})
-    console.log(`uploading ${distDir} -> ${remoteDir}`)
-    await sftp.uploadDir(distDir, remoteDir)
+    // The dedicated wasm SFTP account is rooted at the wasm.opendaw.studio docroot,
+    // so upload into its home directory rather than a hardcoded subpath.
+    const remoteHome = await sftp.cwd()
+    const remoteDir = remoteHome.endsWith("/") ? remoteHome.slice(0, -1) : remoteHome
+    console.log(`uploading ${distDir} -> ${remoteDir || "/"}`)
+    await sftp.uploadDir(distDir, remoteDir || "/")
     await sftp.put(Buffer.from(htaccess), `${remoteDir}/.htaccess`)
     await sftp.end()
     console.log("✅ deployed wasm test app to wasm.opendaw.studio")
