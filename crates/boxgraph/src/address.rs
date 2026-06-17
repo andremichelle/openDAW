@@ -3,7 +3,8 @@
 //! Address is `uuid(16) + keyCount(byte) + keys(short…)`; ordering is UUID byte-wise then the
 //! field-key path lexicographically (which `derive(Ord)` gives us, with `uuid` declared first).
 
-use alloc::string::{String, ToString};
+use core::fmt;
+use alloc::string::String;
 use alloc::vec::Vec;
 use crate::bytes::{ByteError, ByteReader, ByteWriter};
 
@@ -52,6 +53,16 @@ pub struct Address {
     pub field_keys: Vec<u16>,
 }
 
+impl fmt::Display for Address {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&uuid_to_string(&self.uuid))?;
+        for key in &self.field_keys {
+            write!(formatter, "/{key}")?;
+        }
+        Ok(())
+    }
+}
+
 impl Address {
     pub fn box_of(uuid: Uuid) -> Self {
         Self {uuid, field_keys: Vec::new()}
@@ -83,15 +94,6 @@ impl Address {
                 .iter()
                 .zip(self.field_keys.iter())
                 .all(|(left, right)| left == right)
-    }
-
-    pub fn to_string(&self) -> String {
-        let mut text = uuid_to_string(&self.uuid);
-        for key in &self.field_keys {
-            text.push('/');
-            text.push_str(&key.to_string());
-        }
-        text
     }
 
     pub fn decode(text: &str) -> Option<Address> {

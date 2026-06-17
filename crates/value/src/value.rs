@@ -115,7 +115,7 @@ pub fn next_event<'a>(events: &'a EventCollection<ValueEvent>, precursor: &Value
 
 /// Iterate events from `from`, including the first event whose position reaches or passes `to`.
 /// Mirrors `iterateWindow`.
-pub fn iterate_window<'a>(events: &'a EventCollection<ValueEvent>, from: f64, to: f64) -> impl Iterator<Item = &'a ValueEvent> {
+pub fn iterate_window(events: &EventCollection<ValueEvent>, from: f64, to: f64) -> impl Iterator<Item = &ValueEvent> {
     let mut stopped = false;
     events.iterate_from(from).take_while(move |event| {
         if stopped {

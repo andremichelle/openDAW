@@ -13,6 +13,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c880a97d28a3681c0267bd29cff89621202715b065127cd445fa0f0fe0aa2880"
 
 [[package]]
+name = "bindings"
+version = "0.0.0"
+dependencies = [
+ "boxgraph",
+ "value",
+]
+
+[[package]]
 name = "boxgraph"
 version = "0.0.0"
 
@@ -55,11 +63,13 @@ dependencies = [
 name = "engine"
 version = "0.0.0"
 dependencies = [
+ "bindings",
  "boxgraph",
  "dsp",
  "studio-boxes",
  "talc",
  "transport",
+ "value",
 ]
 
 [[package]]

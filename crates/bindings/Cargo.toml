@@ -1,0 +1,12 @@
+[package]
+name = "bindings"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+boxgraph = {path = "../boxgraph"}
+value = {path = "../value"}

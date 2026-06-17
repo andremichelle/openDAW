@@ -129,12 +129,12 @@ fn foo_box_schema() -> Schema {
     ])
 }
 
-fn foo_object(solo: &str, baz: i32) -> FieldValue {
+fn foo_object(solo: &str, number: i32) -> FieldValue {
     FieldValue::Object(BTreeMap::from([
         (0, FieldValue::Boolean(false)),
         (1, FieldValue::String(solo.to_string())),
         (2, FieldValue::Float32(core::f32::consts::PI)),
-        (3, FieldValue::Int32(baz)),
+        (3, FieldValue::Int32(number)),
         (4, FieldValue::Bytes(vec![1, 2, 3]))
     ]))
 }

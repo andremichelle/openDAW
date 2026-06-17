@@ -89,10 +89,10 @@ unsafe fn write_desc(desc: *mut u32, in_offs: u32, in_count: u32, out_offs: u32,
 pub extern "C" fn init(sample_rate: f32, saw_hz: f32, mod_hz: f32,
                        cutoff1: f32, cutoff2: f32, ring_gain: f32, feedback: f32) {
     unsafe {
-        *(&raw mut INC_S) = saw_hz / sample_rate;
-        *(&raw mut INC_M) = mod_hz / sample_rate;
-        *(&raw mut PHASE_S) = 0.0;
-        *(&raw mut PHASE_M) = 0.0;
+        INC_S = saw_hz / sample_rate;
+        INC_M = mod_hz / sample_rate;
+        PHASE_S = 0.0;
+        PHASE_M = 0.0;
         *(&raw mut O_S).cast::<u32>().add(0) = addr((&raw const S).cast::<f32>());
         *(&raw mut O_M).cast::<u32>().add(0) = addr((&raw const M).cast::<f32>());
         *(&raw mut O_R).cast::<u32>().add(0) = addr((&raw const R).cast::<f32>());
@@ -134,10 +134,10 @@ pub extern "C" fn render(frames: usize) {
         *(&raw mut D_DELAY).cast::<u32>().add(0) = n as u32;
         let s = (&raw mut S).cast::<f32>();
         let m = (&raw mut M).cast::<f32>();
-        let mut ps = *(&raw const PHASE_S);
-        let is = *(&raw const INC_S);
-        let mut pm = *(&raw const PHASE_M);
-        let im = *(&raw const INC_M);
+        let mut ps = PHASE_S;
+        let is = INC_S;
+        let mut pm = PHASE_M;
+        let im = INC_M;
         let mut i = 0;
         while i < n {
             *s.add(i) = 0.5 * (ps * 2.0 - 1.0);
@@ -152,8 +152,8 @@ pub extern "C" fn render(frames: usize) {
             }
             i += 1;
         }
-        *(&raw mut PHASE_S) = ps;
-        *(&raw mut PHASE_M) = pm;
+        PHASE_S = ps;
+        PHASE_M = pm;
         filter_process(addr((&raw const D_F1).cast::<u32>()));
         filter_process(addr((&raw const D_F2).cast::<u32>()));
         ring_process(addr((&raw const D_RING).cast::<u32>()));

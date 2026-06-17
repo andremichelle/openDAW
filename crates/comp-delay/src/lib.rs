@@ -36,12 +36,12 @@ struct Bump;
 unsafe impl GlobalAlloc for Bump {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let align = layout.align();
-        let start = (*(&raw const HEAP_POS) + align - 1) & !(align - 1);
+        let start = (HEAP_POS + align - 1) & !(align - 1);
         let end = start + layout.size();
         if end > HEAP_SIZE {
             return core::ptr::null_mut();
         }
-        *(&raw mut HEAP_POS) = end;
+        HEAP_POS = end;
         (&raw mut HEAP).cast::<u8>().add(start)
     }
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
@@ -99,5 +99,5 @@ pub extern "C" fn probe() -> u32 {
 #[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn heap_used() -> u32 {
-    unsafe { *(&raw const HEAP_POS) as u32 }
+    unsafe { HEAP_POS as u32 }
 }

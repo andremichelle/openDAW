@@ -6,8 +6,8 @@
 
 pub mod curve;
 
-/// Pi as f32 (DSP-grade; mirrors the value used by the feature crates).
-pub const PI: f32 = 3.141_592_7;
+/// Pi as f32, re-exported from core (what the feature crates use).
+pub use core::f32::consts::PI;
 
 #[inline]
 pub fn fabs(x: f32) -> f32 {

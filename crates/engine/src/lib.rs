@@ -15,14 +15,15 @@ extern crate alloc;
 
 use alloc::vec;
 use alloc::vec::Vec;
+use bindings::value_collection::ValueCollection;
 use boxgraph::address::Address;
 use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
-use boxgraph::field::FieldValue;
 use boxgraph::graph::BoxGraph;
 use boxgraph::updates::decode_forward;
 use studio_boxes::registry;
 use transport::transport::{Transport, RENDER_QUANTUM};
+use value::value::value_at;
 
 mod metronome;
 use metronome::Metronome;
@@ -36,6 +37,7 @@ static mut REGISTRY: Option<Registry> = None;
 static mut TRANSPORT: Option<Transport> = None;
 static mut METRONOME: Option<Metronome> = None;
 static mut OUTPUT: [f32; RENDER_QUANTUM * 2] = [0.0; RENDER_QUANTUM * 2];
+static mut TEMPO: Option<ValueCollection> = None;
 
 #[no_mangle]
 pub extern "C" fn input_ptr() -> *mut u8 {
@@ -81,6 +83,8 @@ pub extern "C" fn apply_updates(len: usize) -> i32 {
             return 1;
         }
         CHECKSUM = graph.checksum();
+        // the tempo cache updates itself inside `transaction` (its subscription observers run on the
+        // committed graph), so there is nothing to refresh here.
         0
     }
 }
@@ -109,6 +113,15 @@ pub extern "C" fn render() {
             return;
         }
         if let (Some(transport), Some(metronome)) = (TRANSPORT.as_mut(), METRONOME.as_mut()) {
+            // tempo automation: a non-empty tempo map overrides the fixed bpm at the quantum start
+            // (per-quantum is finer than the TS 80-pulse grid, so no sub-block split is needed here).
+            if let Some(tempo) = TEMPO.as_ref() {
+                let events = tempo.events();
+                if !events.is_empty() {
+                    let bpm = value_at(&events, transport.position(), transport.bpm());
+                    transport.set_bpm(bpm);
+                }
+            }
             let block = transport.process_quantum();
             let (left, right) = OUTPUT.split_at_mut(RENDER_QUANTUM);
             metronome.process(&block, left, right);
@@ -168,26 +181,32 @@ pub extern "C" fn bind() -> i32 {
             None => return 1
         };
         graph.catchup_and_subscribe(Address::of(uuid, vec![31]), |value| {
-            if let FieldValue::Float32(bpm) = value {
+            if let Some(bpm) = value.as_float32() {
                 if let Some(transport) = TRANSPORT.as_mut() {
-                    transport.set_bpm(*bpm)
+                    transport.set_bpm(bpm)
                 }
             }
         });
         graph.catchup_and_subscribe(Address::of(uuid, vec![10, 1]), |value| {
-            if let FieldValue::Int32(nominator) = value {
+            if let Some(nominator) = value.as_int32() {
                 if let Some(metronome) = METRONOME.as_mut() {
-                    metronome.set_nominator(*nominator as u32)
+                    metronome.set_nominator(nominator as u32)
                 }
             }
         });
         graph.catchup_and_subscribe(Address::of(uuid, vec![10, 2]), |value| {
-            if let FieldValue::Int32(denominator) = value {
+            if let Some(denominator) = value.as_int32() {
                 if let Some(metronome) = METRONOME.as_mut() {
-                    metronome.set_denominator(*denominator as u32)
+                    metronome.set_denominator(denominator as u32)
                 }
             }
         });
+        // observe the tempo-automation collection: TimelineBox.tempoTrack (22).events (1) points at
+        // the ValueEventCollectionBox.owners. ValueCollection caches + rebuilds only on relevant change.
+        let tempo_collection = graph.target_of(&Address::of(uuid, vec![22, 1])).map(|target| target.uuid);
+        if let Some(collection) = tempo_collection {
+            TEMPO = Some(ValueCollection::observe(graph, collection));
+        }
         0
     }
 }
@@ -236,5 +255,6 @@ mod heap {
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
-    loop {}
+    // Trap (observable RuntimeError) rather than `loop {}` (a silent hang), so a panic surfaces.
+    core::arch::wasm32::unreachable()
 }

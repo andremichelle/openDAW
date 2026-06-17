@@ -14,7 +14,7 @@ use crate::boxes::{GraphBox, Registry};
 use crate::bytes::{ByteReader, ByteWriter};
 use crate::checksum::{checksum_fields, Checksum};
 use crate::field::{read_fields, FieldValue};
-use crate::subscription::{Propagation, SubscriptionId, Subscriptions, UpdateObserver};
+use crate::subscription::{HubEvent, HubObserver, Propagation, SubscriptionId, Subscriptions, UpdateObserver};
 use crate::updates::Update;
 use crate::Error;
 
@@ -150,14 +150,49 @@ impl BoxGraph {
 
     // ---- Mutation (the live-mirror update stream; see the `updates` module) ----
 
-    /// Apply a transaction: each update forward (then dispatched to subscribers), edges rebuilt once.
+    /// Apply a transaction: every update forward, edges rebuilt once, then subscribers notified on the
+    /// final, consistent graph (per-update observers, then pointer-hub membership diffs).
     pub fn transaction(&mut self, updates: &[Update], registry: &Registry) -> Result<(), Error> {
         for update in updates {
             self.apply(update, registry)?;
-            self.subscriptions.dispatch(update);
         }
         self.rebuild_edges();
+        self.dispatch(updates);
         Ok(())
+    }
+
+    /// Notify subscribers after a transaction. The subscriptions are lifted out of `self` for the
+    /// duration so each observer can be handed `&self` (the fully-resolved graph) to read — the
+    /// standard "method needs &self plus one of its fields" move, not a second copy of state.
+    fn dispatch(&mut self, updates: &[Update]) {
+        if self.subscriptions.count() == 0 {
+            return;
+        }
+        let mut subscriptions = core::mem::take(&mut self.subscriptions);
+        for update in updates {
+            subscriptions.dispatch(self, update);
+        }
+        let targets = subscriptions.hub_targets();
+        if !targets.is_empty() {
+            let currents: Vec<Vec<Address>> = targets
+                .iter()
+                .map(|target| self.incoming(target).into_iter().cloned().collect())
+                .collect();
+            subscriptions.dispatch_hubs(self, &currents);
+        }
+        self.subscriptions = subscriptions;
+    }
+
+    /// Subscribe to the pointers aiming at `target` (a hub), the analog of TS `PointerHub.subscribe`.
+    /// Catches up by emitting `Added` for the current members, then emits Added/Removed as the
+    /// incoming set changes each transaction. Used to track membership of pointer-built collections
+    /// (value events, regions, device chains, notes, ...).
+    pub fn subscribe_pointer_hub(&mut self, target: Address, mut observer: HubObserver) -> SubscriptionId {
+        let current: Vec<Address> = self.incoming(&target).into_iter().cloned().collect();
+        for source in &current {
+            observer(self, &HubEvent::Added(source.clone()))
+        }
+        self.subscriptions.add_hub_monitor(target, current, observer)
     }
 
     /// Subscribe to every applied update. Returns a handle for `unsubscribe`.
@@ -179,7 +214,7 @@ impl BoxGraph {
         if let Some(value) = self.field_value(&address) {
             observer(value);
         }
-        self.subscribe_vertex(Propagation::This, address, Box::new(move |update| {
+        self.subscribe_vertex(Propagation::This, address, Box::new(move |_graph, update| {
             if let Update::Primitive {new, ..} = update {
                 observer(new)
             }

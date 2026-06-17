@@ -45,6 +45,18 @@ pub enum FieldValue {
     Array(Vec<FieldValue>),
 }
 
+impl FieldValue {
+    /// The inner value when this is the matching primitive variant, else `None` — lets a binder chain
+    /// `graph.field_value(addr).and_then(FieldValue::as_int32)` instead of matching the variant by hand.
+    pub fn as_int32(&self) -> Option<i32> {
+        if let FieldValue::Int32(value) = self {Some(*value)} else {None}
+    }
+
+    pub fn as_float32(&self) -> Option<f32> {
+        if let FieldValue::Float32(value) = self {Some(*value)} else {None}
+    }
+}
+
 pub type Fields = BTreeMap<u16, FieldValue>;
 
 pub(crate) fn write_value(writer: &mut ByteWriter, value: &FieldValue) {

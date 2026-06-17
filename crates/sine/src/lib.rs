@@ -21,8 +21,8 @@ static mut OUT: [f32; MAX_BLOCK] = [0.0; MAX_BLOCK];
 #[no_mangle]
 pub extern "C" fn init(sample_rate: f32, freq: f32) {
     unsafe {
-        *(&raw mut INC) = freq / sample_rate;
-        *(&raw mut PHASE) = 0.0;
+        INC = freq / sample_rate;
+        PHASE = 0.0;
     }
 }
 
@@ -36,8 +36,8 @@ pub extern "C" fn process(frames: usize) {
     let n = if frames > MAX_BLOCK { MAX_BLOCK } else { frames };
     let out = (&raw mut OUT).cast::<f32>();
     unsafe {
-        let inc = *(&raw const INC);
-        let mut p = *(&raw const PHASE);
+        let inc = INC;
+        let mut p = PHASE;
         let mut i = 0;
         while i < n {
             *out.add(i) = 0.2 * fast_sin((p * 2.0 - 1.0) * PI);
@@ -47,6 +47,6 @@ pub extern "C" fn process(frames: usize) {
             }
             i += 1;
         }
-        *(&raw mut PHASE) = p;
+        PHASE = p;
     }
 }
