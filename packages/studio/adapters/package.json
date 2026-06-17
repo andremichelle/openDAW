@@ -20,7 +20,8 @@
     "generate-exports": "node generate-exports.mjs",
     "build": "npm run generate-exports && tsc",
     "lint": "eslint \"**/*.ts\"",
-    "test": "echo \"No tests to run\""
+    "test": "echo \"No tests to run\"",
+    "generate-all-boxes": "npx tsx src/generate-all-boxes.ts"
   },
   "dependencies": {
     "@opendaw/lib-box": "^0.0.86",

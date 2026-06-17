@@ -72,6 +72,10 @@ impl BoxGraph {
         self.boxes.get(uuid)
     }
 
+    pub fn box_names(&self) -> Vec<&str> {
+        self.boxes.values().map(|graph_box| graph_box.name.as_str()).collect()
+    }
+
     pub fn edges(&self) -> &[Edge] {
         &self.edges
     }

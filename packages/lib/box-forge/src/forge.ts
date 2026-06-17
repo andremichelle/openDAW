@@ -109,6 +109,15 @@ export class BoxForge<E extends PointerTypes> {
             name: "TypeMap",
             properties: boxes.map(({class: {name}}) => ({name: `'${name}'`, type: name}))
         })
+        module.addVariableStatement({
+            isExported: true,
+            declarationKind: VariableDeclarationKind.Const,
+            declarations: [{
+                name: "names",
+                type: "ReadonlyArray<keyof TypeMap>",
+                initializer: `[${boxes.map(({class: {name}}) => `"${name}"`).join(", ")}]`
+            }]
+        })
 
         module.addVariableStatement({
             isExported: true,
