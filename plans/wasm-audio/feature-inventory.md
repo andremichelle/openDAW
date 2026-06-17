@@ -2,8 +2,9 @@
 
 The complete list of engine **mechanics** to re-implement, derived from the current TS engine
 (`core-processors`, `lib/dsp`, `boxes`, `adapters`, asset layer). This is the WHAT, not the how —
-no solutions here. Individual devices are **not** enumerated (only the chain/parameter plumbing).
-We will order this easiest-first and implement one item at a time.
+no solutions here. Individual device DSP is **not** specified here (only the chain/parameter plumbing);
+the concrete device types are listed in the appendix for scope. We will order this easiest-first and
+implement one item at a time.
 
 Out of scope (decided): multi-threading, offline render / export / bounce.
 
@@ -119,8 +120,8 @@ Out of scope (decided): multi-threading, offline render / export / bounce.
 ## 14. Recording & monitoring
 - Capture audio (deviceId, channels, gain, input latency, record mode).
 - Capture MIDI (deviceId, channel, record mode).
-- Recording processor → ring buffer to main thread.
-- Monitoring mix (input → monitor out); per-device monitoring map; count-in integration.
+- Recording processor → lock-free ring buffer to main thread (atomic read/write pointers, wraparound, Atomics.wait/notify).
+- Monitoring mix (input → monitor out, latency-free conditional wiring); per-device monitoring map; count-in integration.
 
 ## 15. Metronome / click
 - Click at beat / sub-beat (signature-aware), envelopes, monophonic fade between clicks, enable flag.
@@ -136,11 +137,36 @@ Out of scope (decided): multi-threading, offline render / export / bounce.
 - Groove (shuffle) timing grid applied to note timing/quantization.
 
 ## 19. Engine control & state sync
-- Command protocol: play/stop/seek/record, set parameters, wiring updates, freeze, monitoring.
-- State stream to client per render: position, bpm, playbackTimestamp, countInBeatsRemaining, transport/recording state, perf buffer.
+- Command protocol (15 commands, via the worklet port / Communicator): play, stop(reset), setPosition,
+  prepareRecordingState(countIn), stopRecording, queryLoadingComplete, panic, noteSignal,
+  ignoreNoteRegion, scheduleClipPlay, scheduleClipStop, setupMIDI, loadClickSound, setFrozenAudio,
+  updateMonitoringMap.
+- Two back-channels engine → UI, both over SharedArrayBuffer with lock-free Atomics (no postMessage in
+  the hot path); the dynamic one is subscription-aware (only computed when the UI is listening):
+  - Fixed state (SyncStream, one struct per render): position, bpm, playbackTimestamp,
+    countInBeatsRemaining, isPlaying, isRecording, isCountingIn, perfBuffer[512], perfIndex. In the new
+    engine these are fetched as scalars from the wasm each block and written into the struct.
+  - Dynamic streams (LiveStreamBroadcaster, address-keyed, variable size): PEAKS (peak + RMS per unit),
+    SPECTRUM (FFT bins, needs an FFT), WAVEFORM, per-parameter value addresses, per-unit note broadcaster.
 - Marker state; note on/off broadcast; parameter-write notifications.
 
-## 20. Numerical robustness (cross-cutting)
+## 20. Numerical robustness & real-time rules (cross-cutting)
 - Per-sample ramps for gain/pan/matrix (declick); one-pole parameter smoothing.
 - NaN/sanity detection; denormal mitigation.
 - Voice fade-outs to avoid clicks on stop/steal/discontinuity.
+- Cached topological sort: processor order computed once per wiring change, reused across renders.
+- Deterministic seeded randomness: the note sequencer's chance gate uses a seeded RNG, so playback is reproducible.
+- Zero allocation in the render loop: buffers and voices pre-allocated; allocation happens only at setup, wiring, or asset load.
+- Wiring changes deferred to process-phase "before" (never mid-render); discontinuity flag propagates to reset read heads and voices.
+
+## Appendix — device / processor types
+The chain plumbing in section 12 is device-agnostic; for scope, the engine currently instantiates ~34
+processor types (their DSP is the bulk of the per-device work, not detailed here):
+- Instruments: Tape (sampler), Vaporisateur (wavetable), Nano (3-osc), Playfield (granular), Soundfont
+  (SF2), Apparat (drum / step sequencer), plus MIDIOutput (routes MIDI to an external device).
+- MIDI effects: Arpeggio, Pitch, Velocity, Zeitgeist, Spielwerk, plus an unknown-device fallback.
+- Audio effects (~19): Delay, Reverb (FreeVerb), Dattorro reverb, StereoTool, Maximizer, Compressor,
+  Gate, Crusher, Fold, Waveshaper, Vocoder, NeuralAmp, Modular, Werkstatt, Revamp, Tidal, and the rest,
+  plus an unknown-audio-effect fallback.
+- Plus the AudioBus (summing) processor.
+- EventSpanRetainer backs the note sequencer's active-note lifecycle (note-on held until its note-off).
