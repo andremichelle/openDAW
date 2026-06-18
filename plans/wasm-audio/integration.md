@@ -51,6 +51,9 @@ untouched** — not even a Router change.
   primitive int/float from its own mirror**. This needs `lib/runtime/src/communicator.ts` to grow
   **multiple channels** (sync vs preferences vs transport) and **typed messages** rather than the one
   ad-hoc byte stream used now.
+- **Checksum is debug/test-only:** the Rust-vs-TS graph checksum is a development and parity guard, not
+  a production mechanism. Gate it behind debug/test builds and skip it entirely in production renders,
+  so it never costs anything on the live audio path.
 
 ## Notes
 

@@ -5,16 +5,25 @@ body
   color: var(--color-dark)
   background: var(--color-background)
 
+.layout
+  display: flex
+  align-items: stretch
+  min-height: 100vh
+
 .nav
   display: flex
-  gap: 1rem
-  align-items: center
-  padding: 0.75rem 1.5rem
+  flex-direction: column
+  gap: 0.5rem
+  align-items: flex-start
+  width: 12rem
+  flex-shrink: 0
+  padding: 1rem 1.25rem
   background: var(--color-panel-background)
-  border-bottom: 1px solid var(--color-panel-background-bright)
+  border-right: 1px solid var(--color-panel-background-bright)
 
   strong
     color: var(--color-bright)
+    margin-bottom: 0.5rem
 
   a
     color: var(--color-gray)
@@ -24,6 +33,7 @@ body
       color: var(--color-blue)
 
 main
+  flex: 1
   padding: 1.5rem
 
 .page

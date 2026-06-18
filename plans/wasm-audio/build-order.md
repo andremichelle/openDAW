@@ -15,7 +15,7 @@ Status: `[done]` `[partial]` `[todo]`. Read `← x, y` as "depends on x and y".
 ---
 
 ## Tier 0 — Foundations  (the base; nothing below them)
-- Box graph: load + serialize + live sync (SyncSource) + checksum + subscriptions. `[done]`
+- Box graph: load + serialize + live sync (SyncSource) + checksum (debug/test-only, not production) + subscriptions. `[done]`
 - PPQN math: pulses, conversions to seconds/samples. `[done]`
 - Allocator: talc, reclaiming + grow. `[done]`
 - Transport core: position, play/stop/seek, 128-sample block descriptor. `[partial: fixed bpm, no events]`
