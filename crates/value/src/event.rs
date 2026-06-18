@@ -8,6 +8,14 @@ pub trait Event {
     fn position(&self) -> f64;
 }
 
+/// An event with a duration (mirrors lib-dsp `EventSpan`). `complete` is its end position.
+pub trait EventSpan: Event {
+    fn duration(&self) -> f64;
+    fn complete(&self) -> f64 {
+        self.position() + self.duration()
+    }
+}
+
 pub struct EventCollection<E: Event + Ord> {
     events: Vec<E>
 }

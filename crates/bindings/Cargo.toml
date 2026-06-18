@@ -10,3 +10,4 @@ crate-type = ["lib"]
 [dependencies]
 boxgraph = {path = "../boxgraph"}
 value = {path = "../value"}
+math = {path = "../math"}

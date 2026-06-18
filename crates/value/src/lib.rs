@@ -10,4 +10,7 @@
 extern crate alloc;
 
 pub mod event;
+pub mod note;
+pub mod region;
+pub mod retainer;
 pub mod value;

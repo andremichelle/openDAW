@@ -18,6 +18,17 @@ pub fn fabs(x: f32) -> f32 {
     }
 }
 
+/// Floor of an f64 (libm-backed for no_std + host/wasm parity).
+#[inline]
+pub fn floor(x: f64) -> f64 {
+    libm::floor(x)
+}
+
+/// Floored (Euclidean) modulo: the result lies in `[0, m)` for `m > 0`. Mirrors lib-std `mod`.
+pub fn mod_euclid(n: f64, m: f64) -> f64 {
+    n - floor(n / m) * m
+}
+
 /// Clamp `value` into `[min, max]`. Generic over any ordered type (f32, f64, integers): the Rust way
 /// to "overload" is a single generic function, not multiple same-named ones.
 pub fn clamp<T: PartialOrd>(value: T, min: T, max: T) -> T {

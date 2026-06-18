@@ -1,0 +1,18 @@
+[package]
+name = "processors"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+math = {path = "../math"}
+dsp = {path = "../dsp"}
+value = {path = "../value"}
+transport = {path = "../transport"}
+
+[dev-dependencies]
+value = {path = "../value"}
+transport = {path = "../transport"}

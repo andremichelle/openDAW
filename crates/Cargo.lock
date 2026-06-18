@@ -17,6 +17,7 @@ name = "bindings"
 version = "0.0.0"
 dependencies = [
  "boxgraph",
+ "math",
  "value",
 ]
 
@@ -56,6 +57,7 @@ dependencies = [
 name = "dsp"
 version = "0.0.0"
 dependencies = [
+ "libm",
  "math",
 ]
 
@@ -92,6 +94,16 @@ name = "math"
 version = "0.0.0"
 dependencies = [
  "libm",
+]
+
+[[package]]
+name = "processors"
+version = "0.0.0"
+dependencies = [
+ "dsp",
+ "math",
+ "transport",
+ "value",
 ]
 
 [[package]]

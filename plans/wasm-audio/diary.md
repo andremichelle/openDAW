@@ -29,3 +29,15 @@
 - EngineState back-channel: the engine writes position, bpm, and transport state into a buffer matching the real EngineStateSchema byte layout, decoded on the main thread by the same schema. Done.
 - Tempo Automation page: a live page that accelerates 30 to 1000 bpm over a four-bar loop, with a tempo-automation toggle, a bpm slider, and a curved first segment. Done.
 - Code cleanliness: clippy-clean across the host and wasm targets, with unnecessary public surface and dead code trimmed, and field accessors replacing hand-written variant matches. Done.
+
+## Day 3: notes, loopable regions, and audible voices
+
+- NoteEvent + EventSpan: a note model (pitch, cent, velocity, duration) on a span trait, ordered like the TS comparator. Done.
+- Loopable-region math: `locate_loops` yields the loop cycles a block overlaps, mapped to global / region / window spans, the shared basis for note, audio, and automation regions. Ported from the TS LoopableRegion tests. Done.
+- EventSpanRetainer: holds notes that outlive the block that started them, releasing them when their span completes or on a stop / loop wrap. Done.
+- ADSR envelope + pitch: a per-sample ADSR state machine and the MIDI-pitch-to-frequency mapping, the basis of an audible voice. Done.
+- NoteSequencer: the Rust counterpart of the core-processors sequencer, focused on the timeline path. Per block it starts notes whose onset falls in the block (one per loop cycle) and stops retained notes when they complete or on a discontinuity, emitting sample-accurate note-on / note-off. Done.
+- Sine instrument + audio buffer: a minimal polyphonic instrument (one sine voice with an ADSR per note) that renders the sequencer's note lifecycle into a stereo render-quantum buffer, sample-accurately. Done.
+- NoteCollection binder: the box graph to notes bridge, an incrementally maintained note collection mirroring the value collection. Done.
+- Audible end to end: a pure-Rust test drives a looping note region through the sequencer and instrument over a real block loop and confirms recurring audio, proving the note-to-sound path before any browser. Done.
+- Still to wire: hosting the sequencer + instrument inside the WASM engine and a test page, so the notes are heard live (all the pieces are built and tested).

@@ -14,5 +14,7 @@
 
 extern crate alloc;
 
+pub mod note_events;
+pub mod note_collection;
 pub mod value_events;
 pub mod value_collection;

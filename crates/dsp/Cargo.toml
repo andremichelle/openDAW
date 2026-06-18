@@ -9,3 +9,4 @@ crate-type = ["lib"]
 
 [dependencies]
 math = {path = "../math"}
+libm = "0.2"
