@@ -6,6 +6,7 @@
 type BootOptions = {
     module: WebAssembly.Module
     sampleRate: number
+    metronome?: boolean // default true; the notes page sets false to hear only the instrument
 }
 
 type EngineExports = {
@@ -21,6 +22,7 @@ type EngineExports = {
     heap_claimed: () => number
     engine_state_ptr: () => number
     engine_state_len: () => number
+    set_metronome_enabled: (enabled: number) => void
 }
 
 class MetronomeEngine extends AudioWorkletProcessor {
@@ -32,10 +34,11 @@ class MetronomeEngine extends AudioWorkletProcessor {
 
     constructor(options?: AudioWorkletNodeOptions) {
         super()
-        const {module, sampleRate}: BootOptions = options?.processorOptions
+        const {module, sampleRate, metronome}: BootOptions = options?.processorOptions
         this.#sampleRate = sampleRate
         this.#exports = new WebAssembly.Instance(module, {}).exports as unknown as EngineExports
         this.#exports.init(sampleRate)
+        if (metronome === false) {this.#exports.set_metronome_enabled(0)}
         this.port.onmessage = (event: MessageEvent) => this.#applyUpdates(event.data as ArrayBuffer)
     }
 

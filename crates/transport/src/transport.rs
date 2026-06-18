@@ -41,8 +41,9 @@ enum Action {
 }
 
 pub struct Transport {
-    position: f64, // pulses (ppqn) — f64 for sample-accuracy over a long timeline
-    bpm: f32,
+    position: f64,     // pulses (ppqn) — f64 for sample-accuracy over a long timeline
+    bpm: f32,          // the live (effective) bpm: the nominal bpm, or the tempo map's value while automating
+    nominal_bpm: f32,  // the configured bpm (TimelineBox.bpm); the live bpm when no tempo automation drives it
     sample_rate: f32,
     playing: bool,
     loop_enabled: bool,
@@ -52,7 +53,7 @@ pub struct Transport {
 
 impl Transport {
     pub fn new(sample_rate: f32, bpm: f32) -> Self {
-        Self {position: 0.0, bpm, sample_rate, playing: false, loop_enabled: false, loop_from: 0.0, loop_to: 0.0}
+        Self {position: 0.0, bpm, nominal_bpm: bpm, sample_rate, playing: false, loop_enabled: false, loop_from: 0.0, loop_to: 0.0}
     }
 
     pub fn position(&self) -> f64 {self.position}
@@ -60,7 +61,9 @@ impl Transport {
     pub fn sample_rate(&self) -> f32 {self.sample_rate}
     pub fn is_playing(&self) -> bool {self.playing}
 
-    pub fn set_bpm(&mut self, bpm: f32) {self.bpm = bpm}
+    /// Set the configured tempo (TimelineBox.bpm). It becomes the live bpm immediately and the fallback
+    /// the tempo map is evaluated against; while automating, the map overrides the live bpm per block.
+    pub fn set_bpm(&mut self, bpm: f32) {self.bpm = bpm; self.nominal_bpm = bpm}
     pub fn set_loop_enabled(&mut self, enabled: bool) {self.loop_enabled = enabled}
     pub fn set_loop_from(&mut self, from: f64) {self.loop_from = from}
     pub fn set_loop_to(&mut self, to: f64) {self.loop_to = to}
@@ -158,11 +161,13 @@ impl Transport {
         s1
     }
 
+    /// Set the live bpm at `position`: the tempo map's value when automating (falling back to the
+    /// nominal bpm), otherwise the nominal bpm itself. So with no tempo map the live bpm is always the
+    /// configured `TimelineBox.bpm`, with no stale value left over from a previous automated pass.
     fn eval_tempo(&mut self, tempo: Option<&EventCollection<ValueEvent>>, position: f64) {
-        if let Some(events) = tempo {
-            if !events.is_empty() {
-                self.bpm = value_at(events, position, self.bpm);
-            }
-        }
+        self.bpm = match tempo {
+            Some(events) if !events.is_empty() => value_at(events, position, self.nominal_bpm),
+            _ => self.nominal_bpm
+        };
     }
 }

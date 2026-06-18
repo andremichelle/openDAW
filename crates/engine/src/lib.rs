@@ -15,12 +15,16 @@ extern crate alloc;
 
 use alloc::vec;
 use alloc::vec::Vec;
+use bindings::note_collection::NoteCollection;
 use bindings::value_collection::ValueCollection;
 use boxgraph::address::Address;
 use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
 use boxgraph::updates::decode_forward;
+use processors::buffer::AudioBuffer;
+use processors::instrument::SineInstrument;
+use processors::sequencer::{NoteRegion, NoteSequencer, TimedNote};
 use studio_boxes::registry;
 use transport::transport::{Transport, RENDER_QUANTUM};
 
@@ -37,8 +41,16 @@ static mut TRANSPORT: Option<Transport> = None;
 static mut METRONOME: Option<Metronome> = None;
 static mut OUTPUT: [f32; RENDER_QUANTUM * 2] = [0.0; RENDER_QUANTUM * 2];
 static mut TEMPO: Option<ValueCollection> = None;
-static mut BASE_BPM: f32 = 120.0; // TimelineBox.bpm — the fixed bpm used when tempo automation is off
 static mut TEMPO_AUTOMATION_ENABLED: bool = true; // TimelineBox.tempoTrack.enabled
+
+// Note playback: a sequencer + sine instrument fed by a note region + its NoteCollection (bound from
+// the first NoteRegionBox in the project). The instrument renders into NOTE_BUFFER, mixed into OUTPUT.
+static mut NOTE_SEQUENCER: Option<NoteSequencer> = None;
+static mut INSTRUMENT: Option<SineInstrument> = None;
+static mut NOTES: Option<NoteCollection> = None;
+static mut NOTE_REGION: Option<NoteRegion> = None;
+static mut NOTE_BUFFER: AudioBuffer = AudioBuffer {left: [0.0; RENDER_QUANTUM], right: [0.0; RENDER_QUANTUM]};
+static mut NOTE_EVENTS: Vec<TimedNote> = Vec::new();
 
 // WASM CONTRACT: EngineStateSchema byte layout (studio-adapters/EngineStateSchema.ts), big-endian.
 // We expose the raw schema payload (no SyncStream Atomics header — the harness is single main-thread);
@@ -115,6 +127,8 @@ pub extern "C" fn init(sample_rate: f32) {
         transport.play();
         TRANSPORT = Some(transport);
         METRONOME = Some(Metronome::new(sample_rate));
+        NOTE_SEQUENCER = Some(NoteSequencer::new(sample_rate));
+        INSTRUMENT = Some(SineInstrument::new(sample_rate));
     }
 }
 
@@ -129,20 +143,43 @@ pub extern "C" fn render() {
         }
         if let (Some(transport), Some(metronome)) = (TRANSPORT.as_mut(), METRONOME.as_mut()) {
             if transport.is_playing() {
+                NOTE_BUFFER.clear();
                 // use the tempo map only when automation is enabled and non-empty, else the fixed bpm
                 let events = if TEMPO_AUTOMATION_ENABLED { TEMPO.as_ref().map(|tempo| tempo.events()) } else { None };
                 let active = events.as_deref().filter(|collection| !collection.is_empty());
-                if active.is_none() {
-                    transport.set_bpm(BASE_BPM);
-                }
                 transport.render_quantum(active, |block| {
                     let (left, right) = OUTPUT.split_at_mut(RENDER_QUANTUM);
-                    metronome.process(block, &mut left[block.s0..block.s1], &mut right[block.s0..block.s1])
+                    metronome.process(block, &mut left[block.s0..block.s1], &mut right[block.s0..block.s1]);
+                    render_notes(block)
                 });
+                // mix the instrument's stereo buffer (filled per sub-block) into the planar output
+                for index in 0..RENDER_QUANTUM {
+                    OUTPUT[index] += NOTE_BUFFER.left[index];
+                    OUTPUT[RENDER_QUANTUM + index] += NOTE_BUFFER.right[index];
+                }
             }
         }
         if let Some(transport) = TRANSPORT.as_ref() {
             write_engine_state(transport);
+        }
+    }
+}
+
+/// Sequence the note region for `block` and render the resulting notes into NOTE_BUFFER. A no-op until
+/// a note region has been bound. (v1: the region's own loop drives repetition; transport-loop wrap
+/// discontinuity for notes spanning the wrap is a later refinement.)
+fn render_notes(block: &transport::transport::Block) {
+    unsafe {
+        if let (Some(sequencer), Some(notes), Some(instrument), Some(region)) =
+            (NOTE_SEQUENCER.as_mut(), NOTES.as_ref(), INSTRUMENT.as_mut(), NOTE_REGION.as_ref())
+        {
+            NOTE_EVENTS.clear();
+            {
+                let collection = notes.events();
+                sequencer.process(region, &collection, block, true, false, &mut NOTE_EVENTS);
+            }
+            NOTE_EVENTS.sort_by_key(|timed| timed.offset);
+            instrument.process(&NOTE_EVENTS, &mut NOTE_BUFFER, block.s0, block.s1);
         }
     }
 }
@@ -224,7 +261,9 @@ pub extern "C" fn bind() -> i32 {
         };
         graph.catchup_and_subscribe(Address::of(uuid, vec![31]), |value| {
             if let Some(bpm) = value.as_float32() {
-                BASE_BPM = bpm
+                if let Some(transport) = TRANSPORT.as_mut() {
+                    transport.set_bpm(bpm)
+                }
             }
         });
         // tempo automation on/off: TimelineBox.tempoTrack (22).enabled (20).
@@ -275,7 +314,24 @@ pub extern "C" fn bind() -> i32 {
         if let Some(collection) = tempo_collection {
             TEMPO = Some(ValueCollection::observe(graph, collection));
         }
+        bind_note_region(graph);
         0
+    }
+}
+
+/// If the project has a `NoteRegionBox`, read its loopable span (position 10, duration 11,
+/// loopOffset 12, loopDuration 13) and observe the `NoteEventCollectionBox` its `events` pointer
+/// (key 2) targets, so the sequencer can play the region's notes.
+unsafe fn bind_note_region(graph: &mut BoxGraph) {
+    let region_uuid = match graph.find_by_name("NoteRegionBox") {
+        Some(region) => region.uuid,
+        None => return
+    };
+    let read = |key: u16| graph.field_value(&Address::of(region_uuid, vec![key])).and_then(|value| value.as_int32()).unwrap_or(0) as f64;
+    let region = NoteRegion {position: read(10), duration: read(11), loop_offset: read(12), loop_duration: read(13)};
+    NOTE_REGION = Some(region);
+    if let Some(collection) = graph.target_of(&Address::of(region_uuid, vec![2])).map(|target| target.uuid) {
+        NOTES = Some(NoteCollection::observe(graph, collection));
     }
 }
 
