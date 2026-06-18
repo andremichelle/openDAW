@@ -535,15 +535,68 @@ allocation, no trapping the engine).
 
 Status: UNRESOLVED. We will find a way.
 
-## 9. Open decisions for review
+## 9. Memory layout and loading many device modules (RESOLVED: dynamic linking)
+
+Third-party devices are a requirement: modules we do NOT compile, loaded at runtime. So any scheme that
+assigns a device its memory at BUILD time is out. A fixed per-type `--global-base` cannot be handed to a
+module someone else built, is bounded, and needs central coordination. It is rejected. The base must be
+assigned at LOAD time, by the host, the same way for every device.
+
+This is the WASM dynamic-linking model. Each device is a position-independent SIDE MODULE; the engine is
+the main module and acts as the dynamic linker. A device's data lives wherever the host puts it, addressed
+through an imported base, so any module (first- or third-party) gets a non-overlapping region with no
+build-time knowledge. (The earlier silence fix and the move to shared memory are unrelated and still hold;
+this only replaces the hardcoded `--global-base`.)
+
+How a device is built: PIC (`-C relocation-model=pic`, linked `--experimental-pic -shared`). It imports
+`env.memory`, `env.__indirect_function_table`, `env.__stack_pointer`, and two immutable i32 globals
+`env.__memory_base` and `env.__table_base`, plus `GOT.mem.*` / `GOT.func.*` for any address held in data.
+Its data segments are emitted RELATIVE to `__memory_base`, and it exports `__wasm_apply_data_relocs` and
+`__wasm_call_ctors`. A `dylink.0` custom section declares what it needs: `memorysize` + `memoryalignment`
+(data and bss) and `tablesize` + `tablealignment` (its indirect functions).
+
+How the host loads one (a small worklet loader, per device, at load time):
+
+1. Compile the module, read `dylink.0` -> `memorysize`, `memoryalignment`, `tablesize`, `tablealignment`.
+2. Allocate `memorysize` bytes (aligned) from the engine's talc -> the data base. Zero it.
+3. Grow the shared `__indirect_function_table` by `tablesize` -> the table base.
+4. Set `__memory_base` = data base, `__table_base` = table base, and point `__stack_pointer` at a talc stack.
+5. Instantiate sharing `env.memory` + the table + the base globals + GOT.
+6. Call `__wasm_apply_data_relocs()` then `__wasm_call_ctors()`.
+7. Install the device's `process` / `process_events` into a table slot and register the device (its slot
+   index + manifest) with the engine.
+
+How the engine calls a device: NOT a direct import. The engine is instantiated before any device, so it
+cannot import a not-yet-loaded device's function. It calls `call_indirect` on the shared
+`__indirect_function_table` at the slot the loader installed. Still zero-copy wasm-to-wasm: only the
+descriptor pointer crosses, no audio is copied.
+
+Resulting layout of the one shared memory: the engine's own static data stays low (fixed, `__heap_base`
+~2.1 MiB); everything else, including EVERY device's data, stack, state block, and IO, is a talc
+allocation. There is no fixed device window and no per-type base. talc hands each device a distinct
+region, so N devices (any provenance, any count up to memory) never collide.
+
+Keeps every requirement: one shared linear memory, zero-copy wasm-to-wasm (descriptor ptr via
+`call_indirect`), devices as separate wasm modules, talc owns ALL device memory (data, stack, state),
+panic strings kept (they sit in the device's talc-allocated data), single-threaded engine, no bss reserve.
+
+Risk, and the spike to run before committing: Rust PIC for `wasm32-unknown-unknown` is experimental and has
+sharp edges (e.g. trait objects have emitted position-dependent code, rust-lang/rust#108985; `--shared`
+has panicked on older toolchains, rustwasm/wasm-bindgen#1420). Spike a `no_std` device built as a PIC side
+module on the current toolchain first: confirm it emits `dylink.0` + the `__memory_base` import, loads via
+the steps above, and runs correctly with its data at a talc-assigned base. The engine also moves from the
+direct `instrument.process` import to `call_indirect` through the shared table, and becomes the side
+modules' linking environment (it exports the table plus a talc `alloc` / `free` for the loader). If the
+PIC spike hits a blocking toolchain bug, the fallback is a host-assigned `--global-base` per FIRST-party
+device (build-time) while third-party support waits on the toolchain, but the dynamic-linking model is the
+target.
+
+Sources: WebAssembly tool-conventions `DynamicLinking.md`; LLVM lld WebAssembly docs.
+
+## 10. Open decisions for review
 
 High-level, decide before implementing:
 
-- Many distinct device modules in ONE shared memory. The current device build relocates read-only data to
-  a fixed `--global-base` (4 MiB). Two DIFFERENT device modules would collide there. How do we place N
-  distinct device plugins in the one linear memory: a per-module base the host assigns at load, a reserved
-  window per module, position-independent code, or another scheme? This blocks shipping more than one
-  device type.
 - Fan-out pulls in containers. When one note source feeds several consumers (Instrument Layer fans the
   same input to N inner chains), is the source pulled ONCE and the result shared, or pulled per consumer?
   A stateful upstream (a MIDI fx) cannot be pulled repeatedly for the same range without advancing its
@@ -570,7 +623,9 @@ Lower-level, to finalize when the relevant feature is scheduled:
 
 Decided already: the device is called once per quantum with the full `ProcessInfo` (audio devices) or
 pulled on demand (MIDI fx); the engine never splits or pushes events; the device times its own sub-blocks
-via an (opt-in) device-SDK template; a device outputs exactly one kind (audio or events).
+via an (opt-in) device-SDK template; a device outputs exactly one kind (audio or events); and multi-device
+memory placement is resolved in section 9 by WASM dynamic linking (devices are PIC side modules whose data
+base the host assigns at load from talc, third-party included; pending a Rust-PIC spike).
 
 ## References
 
