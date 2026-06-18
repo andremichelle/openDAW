@@ -35,6 +35,7 @@ type EngineExports = {
     device_register: (processIndex: number, stateSize: number) => number
     input_ptr: () => number
     input_capacity: () => number
+    input_reserve: (len: number) => number // ensure the input scratch holds `len`, grow if needed, return its (current) ptr
     apply_updates: (len: number) => number
     bind: () => number
     render: () => void
@@ -139,8 +140,11 @@ class EngineProcessor extends AudioWorkletProcessor {
 
     #applyUpdates(bytes: ArrayBuffer): void {
         const array = new Uint8Array(bytes)
-        if (array.length > this.#engine.input_capacity()) {return}
-        new Uint8Array(this.#memory.buffer, this.#engine.input_ptr(), array.length).set(array)
+        // ensure the engine's input scratch holds this transaction, growing it if needed (kept at the
+        // high-water mark). The returned pointer is current even if a grow moved the buffer. So a large
+        // transaction is never silently dropped (which would desync the engine's box graph).
+        const pointer = this.#engine.input_reserve(array.length)
+        new Uint8Array(this.#memory.buffer, pointer, array.length).set(array)
         this.#engine.apply_updates(array.length)
         if (!this.#bound && this.#engine.bind() === 0) {this.#bound = true}
     }

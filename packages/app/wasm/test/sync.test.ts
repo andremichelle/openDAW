@@ -42,19 +42,24 @@ const readCommits = (buffer: ArrayBuffer): ReadonlyArray<Commit> => {
 }
 
 type EngineExports = {
-    memory: WebAssembly.Memory
     input_ptr(): number
     input_capacity(): number
     checksum_ptr(): number
-    reset(): void
+    init(sampleRate: number): void
     apply_updates(len: number): number
 }
 
-const loadEngine = async (): Promise<EngineExports> => {
+// The engine imports its memory + function table (it is the dynamic-linker host). For this sync/checksum
+// test we provide them and create the engine with `init` (the sample rate is passed at creation; the
+// box-graph / checksum path is rate-independent). No devices are loaded; this only replays update bytes.
+const loadEngine = async (): Promise<{engine: EngineExports, memory: WebAssembly.Memory}> => {
     const module = await WebAssembly.compile(readFileSync(WASM))
-    const engine = new WebAssembly.Instance(module, {}).exports as unknown as EngineExports
-    engine.reset()
-    return engine
+    const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
+    const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
+    const engine = new WebAssembly.Instance(module, {env: {memory, __indirect_function_table: table}})
+        .exports as unknown as EngineExports
+    engine.init(48000)
+    return {engine, memory}
 }
 
 const checksumsEqual = (left: Int8Array, right: Int8Array): boolean =>
@@ -66,17 +71,17 @@ describe("sync: actions.odsl -> SyncSource -> wasm engine (checksum per transact
         expect(commits.length).toBeGreaterThan(1)
         expect(commits[0].type).toBe(COMMIT_INIT)
 
-        const engine = await loadEngine()
+        const {engine, memory} = await loadEngine()
         const {boxGraph: source} = ProjectSkeleton.decode(commits[0].payload)
 
         const readEngineChecksum = (): Int8Array =>
-            new Int8Array(engine.memory.buffer, engine.checksum_ptr(), 32).slice()
+            new Int8Array(memory.buffer, engine.checksum_ptr(), 32).slice()
 
         const target: Synchronization<BoxIO.TypeMap> = {
             sendUpdates(tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void {
                 const bytes = new Uint8Array(serializeUpdateTasks(tasks, source))
                 expect(bytes.length).toBeLessThanOrEqual(engine.input_capacity())
-                new Uint8Array(engine.memory.buffer, engine.input_ptr(), bytes.length).set(bytes)
+                new Uint8Array(memory.buffer, engine.input_ptr(), bytes.length).set(bytes)
                 expect(engine.apply_updates(bytes.length)).toBe(0)
             },
             checksum(value: Int8Array): Promise<void> {

@@ -80,8 +80,7 @@ const DEVICE_MAX_EVENTS: usize = 256; // per-quantum note events passed to the d
 mod metronome;
 use metronome::Metronome;
 
-const INPUT_CAPACITY: usize = 1 << 20; // 1 MiB scratch for one transaction's update bytes
-const DEFAULT_SAMPLE_RATE: f32 = 48_000.0; // used by `reset` (data-path only; init sets the real rate)
+const INPUT_CAPACITY: usize = 1 << 20; // initial input scratch (1 MiB); grows on demand, keeps the high-water mark
 
 /// A process-global cell for the single-threaded wasm module: an `UnsafeCell` asserted `Sync`, the
 /// same shape talc uses for its allocator. SAFETY rests on the engine being driven by one thread,
@@ -109,7 +108,11 @@ impl<T> Shared<T> {
 // out of `Engine` so their addresses are stable and the 1 MiB input never lands on the stack during
 // `Engine` construction.
 static ENGINE: Shared<Option<Engine>> = Shared::new(None);
-static INPUT: Shared<[u8; INPUT_CAPACITY]> = Shared::new([0; INPUT_CAPACITY]);
+// The incoming-transaction scratch the worklet writes update bytes into. A growable buffer (not a fixed
+// array): pre-allocated to INPUT_CAPACITY at `init`, grown by `input_reserve` for a transaction that
+// exceeds it (and kept at the high-water mark), so a huge transaction is never silently dropped and grows
+// happen rarely, not per transaction.
+static INPUT: Shared<Vec<u8>> = Shared::new(Vec::new());
 static CHECKSUM: Shared<[u8; 32]> = Shared::new([0; 32]);
 static OUTPUT: Shared<[f32; RENDER_QUANTUM * 2]> = Shared::new([0.0; RENDER_QUANTUM * 2]);
 static ENGINE_STATE: Shared<[u8; ENGINE_STATE_LEN]> = Shared::new([0; ENGINE_STATE_LEN]);
@@ -602,7 +605,21 @@ pub extern "C" fn input_ptr() -> *mut u8 {
 
 #[no_mangle]
 pub extern "C" fn input_capacity() -> usize {
-    INPUT_CAPACITY
+    unsafe { INPUT.get().capacity() }
+}
+
+/// Ensure the input scratch can hold `len` bytes, growing it (and keeping the larger buffer) if needed.
+/// Returns the buffer's address, which a grow may have moved, so the host must use this result. Cheap when
+/// `len` already fits (the common case), so the host can call it before every transaction.
+#[no_mangle]
+pub extern "C" fn input_reserve(len: usize) -> *mut u8 {
+    unsafe {
+        let input = INPUT.get();
+        if input.capacity() < len {
+            input.reserve(len); // len() is always 0 (we read via the ptr, never push), so this targets `len`
+        }
+        input.as_mut_ptr()
+    }
 }
 
 #[no_mangle]
@@ -630,22 +647,32 @@ pub extern "C" fn engine_state_len() -> usize {
     ENGINE_STATE_LEN
 }
 
-/// Reset to a fresh engine with an empty graph (call before replaying a fresh session).
+/// Reset to a fresh engine with an empty graph, KEEPING the sample rate the engine was created with
+/// (call before replaying a fresh session). No-op if `init` has not created the engine yet: the sample
+/// rate is only known from creation, so there is nothing to reset to before then.
 #[no_mangle]
 pub extern "C" fn reset() {
     unsafe {
-        *ENGINE.get() = Some(Engine::new(DEFAULT_SAMPLE_RATE));
+        if let Some(sample_rate) = ENGINE.get().as_ref().map(|engine| engine.sample_rate) {
+            *ENGINE.get() = Some(Engine::new(sample_rate));
+        }
         CHECKSUM.get().fill(0);
     }
 }
 
 /// Apply one forward-only transaction from the first `len` input bytes, refreshing the checksum
-/// buffer. Returns 0 on success, 1 on a decode/apply error.
+/// buffer. Returns 0 on success, 1 on a decode/apply error or if the engine was not created (`init`).
 #[no_mangle]
 pub extern "C" fn apply_updates(len: usize) -> i32 {
     unsafe {
-        let engine = ENGINE.get().get_or_insert_with(|| Engine::new(DEFAULT_SAMPLE_RATE));
-        match engine.apply_updates(&INPUT.get()[..len]) {
+        let engine = match ENGINE.get().as_mut() {
+            Some(engine) => engine,
+            None => return 1 // the engine must be created (with its sample rate) by `init` first
+        };
+        // Read the bytes the host wrote via the (possibly grown) buffer pointer. The Vec's len stays 0
+        // (we never push), so index by the raw ptr; `len` is bounded by the host to the buffer capacity.
+        let input = core::slice::from_raw_parts(INPUT.get().as_ptr(), len);
+        match engine.apply_updates(input) {
             Ok(checksum) => {
                 CHECKSUM.get().copy_from_slice(&checksum);
                 0
@@ -662,6 +689,7 @@ pub extern "C" fn init(sample_rate: f32) {
     engine.play();
     unsafe {
         *ENGINE.get() = Some(engine);
+        INPUT.get().reserve(INPUT_CAPACITY); // pre-allocate the input scratch (len stays 0; this is capacity)
     }
 }
 
