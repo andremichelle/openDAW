@@ -5,11 +5,8 @@ edition = "2021"
 publish = false
 
 [lib]
-crate-type = ["lib"]
+crate-type = ["cdylib", "lib"]
 
 [dependencies]
-engine-env = {path = "../engine-env"}
+abi = {path = "../abi"}
 dsp = {path = "../dsp"}
-
-[dev-dependencies]
-value = {path = "../value"}

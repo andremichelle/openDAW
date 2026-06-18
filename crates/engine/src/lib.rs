@@ -30,21 +30,57 @@ use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
 use boxgraph::updates::decode_forward;
-use device_sine::SineDevice;
+use abi::{EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON};
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::audio_generator::AudioGenerator;
 use engine_env::block::Block;
 use engine_env::block_flags::BlockFlags;
 use engine_env::engine_context::EngineContext;
+use engine_env::event::Event;
+use engine_env::event_buffer::EventBuffer;
+use engine_env::event_receiver::EventReceiver;
+use engine_env::note_event_instrument::{NoteEventInstrument, SharedNoteEventSource};
 use engine_env::note_region::NoteRegion;
 use engine_env::note_region_source::NoteRegionSource;
 use engine_env::note_sequencer::NoteSequencer;
+use engine_env::ppqn::pulses_to_samples;
 use engine_env::process_info::ProcessInfo;
+use engine_env::processor::Processor;
 use studio_boxes::registry;
 use transport::transport::{Transport, RENDER_QUANTUM};
 use value::event::EventCollection;
 use value::note::NoteEvent;
+
+// The sine device plugin (`device_sine.wasm`), loaded as a separate module sharing this engine's linear
+// memory. The host wires these imports to the device's exports and points the device's stack pointer at
+// an engine-allocated stack (see `build-wasm.sh` + the worklet). The engine builds the descriptor in
+// shared memory and calls `instrument_process` wasm-to-wasm — zero copy.
+#[cfg(target_family = "wasm")]
+#[link(wasm_import_module = "instrument")]
+extern "C" {
+    #[link_name = "process"]
+    fn instrument_process(desc_ptr: u32);
+    #[link_name = "state_size"]
+    fn instrument_state_size() -> u32;
+}
+
+// On native (cargo test compiles the lib), the device imports are unavailable; stub them so the crate
+// builds. The audio path only runs under wasm.
+#[cfg(not(target_family = "wasm"))]
+unsafe fn instrument_process(_desc_ptr: u32) {}
+#[cfg(not(target_family = "wasm"))]
+unsafe fn instrument_state_size() -> u32 {
+    0
+}
+
+// The device's relocated read-only data sits at `--global-base=4 MiB` (build-wasm.sh). Nothing here
+// needs to reserve it: talc's `WasmGrowAndClaim` only ever claims pages it grows ABOVE the initial
+// linear memory (16 MiB), so the heap never reaches down to 4 MiB. A bss "reserve" would be worse than
+// useless: with imported memory the linker zero-fills bss on instantiation, and a reserve spanning
+// 4 MiB would wipe the device's data segment (its exp2f table etc.) right after the device wrote it.
+const DEVICE_STACK_SIZE: usize = 256 * 1024; // talc-allocated stack handed to the device
+const DEVICE_MAX_EVENTS: usize = 256; // per-quantum note events passed to the device
 
 mod metronome;
 use metronome::Metronome;
@@ -141,6 +177,138 @@ impl NoteRegionSource for BoundNoteRegions {
     }
 }
 
+/// A graph node that voices its notes through the loaded `device_sine.wasm` plugin. It pulls notes from
+/// its `NoteEventInstrument`, resolves them to sample-offset `EventRecord`s for the quantum, fills the
+/// engine-allocated (shared-memory) descriptor + event buffer, and calls the device's `process`
+/// wasm-to-wasm (zero copy). The device renders into the engine-allocated mono output buffer, which this
+/// node fans out to its stereo output for the master bus. All device-facing memory (state, IO, descriptor)
+/// is talc-allocated here, so it is freed when the instrument is dropped.
+struct PluginInstrument {
+    sample_rate: f32,
+    note_input: NoteEventInstrument,
+    events: EventBuffer,
+    output: SharedAudioBuffer,
+    device_output: Box<[f32]>,
+    device_events: Box<[EventRecord]>,
+    // `device_state` / `out_offsets` are referenced only by raw address inside `descriptor`; they must
+    // stay alive (dropping them frees the memory the device reads), so keep the fields even though Rust
+    // sees no direct reads.
+    #[allow(dead_code)]
+    device_state: Box<[u32]>, // u32 so the block is 4-aligned for the device's SynthState
+    #[allow(dead_code)]
+    out_offsets: Box<[u32]>,
+    descriptor: Box<[u32]>
+}
+
+impl PluginInstrument {
+    fn new(sample_rate: f32) -> Self {
+        let device_output = vec![0.0f32; RENDER_QUANTUM].into_boxed_slice();
+        let blank = EventRecord {offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+        let device_events = vec![blank; DEVICE_MAX_EVENTS].into_boxed_slice();
+        let state_size = unsafe { instrument_state_size() } as usize;
+        let device_state = vec![0u32; state_size.div_ceil(4)].into_boxed_slice(); // 4-aligned, >= state_size bytes
+        let out_offsets = vec![device_output.as_ptr() as u32].into_boxed_slice();
+        // descriptor words (see the `abi` layout): frames, in_count/ptr, out_count/ptr, param_count/ptr,
+        // state_ptr, event_count/ptr.
+        let descriptor = vec![
+            RENDER_QUANTUM as u32,
+            0, 0,
+            1, out_offsets.as_ptr() as u32,
+            0, 0,
+            device_state.as_ptr() as u32,
+            0, device_events.as_ptr() as u32
+        ].into_boxed_slice();
+        Self {
+            sample_rate,
+            note_input: NoteEventInstrument::new(),
+            events: EventBuffer::new(),
+            output: shared_audio_buffer(),
+            device_output,
+            device_events,
+            device_state,
+            out_offsets,
+            descriptor
+        }
+    }
+
+    fn set_note_event_source(&mut self, source: SharedNoteEventSource) {
+        self.note_input.set_note_event_source(source);
+    }
+}
+
+/// The sample offset within the quantum for a note at pulse `position`, clamped to the block.
+fn sample_offset(position: f64, block: &Block, sample_rate: f32) -> usize {
+    let pulses = position - block.p0;
+    let raw = if pulses.abs() < 1.0e-7 {
+        block.s0
+    } else {
+        block.s0 + pulses_to_samples(pulses, block.bpm, sample_rate) as usize
+    };
+    raw.clamp(block.s0, block.s1)
+}
+
+impl EventReceiver for PluginInstrument {
+    fn event_input(&mut self) -> &mut EventBuffer {
+        &mut self.events
+    }
+}
+
+impl AudioGenerator for PluginInstrument {
+    fn audio_output(&self) -> SharedAudioBuffer {
+        self.output.clone()
+    }
+}
+
+impl Processor for PluginInstrument {
+    fn reset(&mut self) {
+        self.events.clear();
+    }
+
+    fn process(&mut self, info: &ProcessInfo) {
+        self.events.clear();
+        let mut count = 0;
+        for block in info.blocks {
+            self.note_input.fill(block, &mut self.events);
+            for event in self.events.get(block.index) {
+                if count >= DEVICE_MAX_EVENTS {
+                    break;
+                }
+                let record = match *event {
+                    Event::NoteStart {id, position, pitch, cent, velocity, ..} => EventRecord {
+                        offset: sample_offset(position, block, self.sample_rate) as u32,
+                        kind: EVENT_NOTE_ON,
+                        id: id as u32,
+                        pitch: pitch as u32,
+                        velocity,
+                        cent
+                    },
+                    Event::NoteComplete {id, position, pitch} => EventRecord {
+                        offset: sample_offset(position, block, self.sample_rate) as u32,
+                        kind: EVENT_NOTE_OFF,
+                        id: id as u32,
+                        pitch: pitch as u32,
+                        velocity: 0.0,
+                        cent: 0.0
+                    },
+                    Event::Update {..} => continue
+                };
+                self.device_events[count] = record;
+                count += 1;
+            }
+        }
+        self.device_events[..count].sort_by_key(|record| record.offset);
+        self.descriptor[0] = RENDER_QUANTUM as u32;
+        self.descriptor[8] = count as u32;
+        unsafe { instrument_process(self.descriptor.as_ptr() as u32) }
+        let mut output = self.output.borrow_mut();
+        for index in 0..RENDER_QUANTUM {
+            let sample = self.device_output[index];
+            output.left[index] = sample;
+            output.right[index] = sample;
+        }
+    }
+}
+
 struct Engine {
     graph: BoxGraph,
     registry: Registry,
@@ -151,6 +319,7 @@ struct Engine {
     output_bus: Option<SharedAudioBuffer>,
     sample_rate: f32,
     blocks: Vec<Block>,
+    device_stack: Option<Box<[u8]>>, // talc-allocated stack handed to the device plugin
     controls: Rc<Controls>
 }
 
@@ -166,8 +335,19 @@ impl Engine {
             output_bus: None,
             sample_rate,
             blocks: Vec::new(),
+            device_stack: None,
             controls: Rc::new(Controls::new())
         }
+    }
+
+    /// Allocate (from talc) the stack the device plugin runs on, and return its top address. The host
+    /// sets the device's `__stack_pointer` to this before any `process` call, so the device's stack
+    /// lives in engine-owned memory disjoint from the engine's own stack. Call once, before `bind`.
+    fn setup_device(&mut self) -> u32 {
+        let stack = vec![0u8; DEVICE_STACK_SIZE].into_boxed_slice();
+        let top = stack.as_ptr() as u32 + DEVICE_STACK_SIZE as u32; // wasm stack grows down from the top
+        self.device_stack = Some(stack);
+        top
     }
 
     /// Apply one forward-only transaction, returning the resulting checksum (or `Err` on a
@@ -315,12 +495,12 @@ impl Engine {
         self.output_bus = Some(output_buffer);
         let regions = self.bind_note_regions();
         if !regions.is_empty() {
-            let source = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {regions}))));
-            let device = Rc::new(RefCell::new(SineDevice::new(self.sample_rate)));
-            device.borrow_mut().set_note_event_source(source);
-            master.borrow_mut().add_audio_source(device.borrow().audio_output());
-            let device_id = self.context.register_processor(device);
-            self.context.register_edge(device_id, master_id); // instrument renders before the bus sums it
+            let source: SharedNoteEventSource = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {regions}))));
+            let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate)));
+            instrument.borrow_mut().set_note_event_source(source);
+            master.borrow_mut().add_audio_source(instrument.borrow().audio_output());
+            let instrument_id = self.context.register_processor(instrument);
+            self.context.register_edge(instrument_id, master_id); // instrument renders before the bus sums it
         }
     }
 
@@ -478,6 +658,18 @@ pub extern "C" fn bind() -> i32 {
         match ENGINE.get().as_mut() {
             Some(engine) => engine.bind(),
             None => 1
+        }
+    }
+}
+
+/// Allocate the device plugin's stack and return its top address. The host sets the device's
+/// `__stack_pointer` to this before any render (and before `bind`, which sizes the device state).
+#[no_mangle]
+pub extern "C" fn setup_device() -> u32 {
+    unsafe {
+        match ENGINE.get().as_mut() {
+            Some(engine) => engine.setup_device(),
+            None => 0
         }
     }
 }

@@ -6,6 +6,7 @@ import {BoxIO, ValueEventBox, ValueEventCollectionBox, ValueEventCurveBox} from 
 import {EngineStateSchema, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {Env} from "../../Env"
 import {serializeUpdateTasks} from "../../sync/serialize-update-tasks"
+import {loadEngineModules} from "../../engine-modules"
 import workletURL from "../metronome/engine-worklet.ts?worker&url"
 
 const BAR = 3840 // pulses (PPQN: 960 per quarter, 4/4)
@@ -70,9 +71,8 @@ export const TempoAutomationPage: PageFactory<Env> = ({lifecycle}) => {
         const ctx = new AudioContext()
         context.wrap(ctx)
         await ctx.audioWorklet.addModule(workletURL)
-        const wasm = await fetch("/engine.wasm").then(response => response.arrayBuffer())
-        const module = await WebAssembly.compile(wasm)
-        const workletNode = new AudioWorkletNode(ctx, "engine", {processorOptions: {module, sampleRate: ctx.sampleRate}})
+        const {engineModule, instrumentModule} = await loadEngineModules()
+        const workletNode = new AudioWorkletNode(ctx, "engine", {processorOptions: {engineModule, instrumentModule, sampleRate: ctx.sampleRate}})
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)
         workletNode.port.onmessage = (event: MessageEvent<EngineMessage>) => {

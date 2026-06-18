@@ -6,6 +6,7 @@ import {BoxIO} from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {Env} from "../../Env"
 import {serializeUpdateTasks} from "../../sync/serialize-update-tasks"
+import {loadEngineModules} from "../../engine-modules"
 import workletURL from "./engine-worklet.ts?worker&url"
 
 // Live metronome: a real project (TimelineBox) on the main thread; the unchanged SyncSource ships
@@ -43,10 +44,9 @@ export const MetronomePage: PageFactory<Env> = ({lifecycle}) => {
         const ctx = new AudioContext()
         context.wrap(ctx)
         await ctx.audioWorklet.addModule(workletURL)
-        const wasm = await fetch("/engine.wasm").then(response => response.arrayBuffer())
-        const module = await WebAssembly.compile(wasm)
+        const {engineModule, instrumentModule} = await loadEngineModules()
         const workletNode = new AudioWorkletNode(ctx, "engine", {
-            processorOptions: {module, sampleRate: ctx.sampleRate}
+            processorOptions: {engineModule, instrumentModule, sampleRate: ctx.sampleRate}
         })
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)

@@ -26,40 +26,11 @@ name = "boxgraph"
 version = "0.0.0"
 
 [[package]]
-name = "comp-delay"
-version = "0.0.0"
-dependencies = [
- "abi",
-]
-
-[[package]]
-name = "comp-engine"
-version = "0.0.0"
-dependencies = [
- "dsp",
-]
-
-[[package]]
-name = "comp-filter"
-version = "0.0.0"
-dependencies = [
- "abi",
-]
-
-[[package]]
-name = "comp-ring"
-version = "0.0.0"
-dependencies = [
- "abi",
-]
-
-[[package]]
 name = "device-sine"
 version = "0.0.0"
 dependencies = [
+ "abi",
  "dsp",
- "engine-env",
- "value",
 ]
 
 [[package]]
@@ -74,9 +45,9 @@ dependencies = [
 name = "engine"
 version = "0.0.0"
 dependencies = [
+ "abi",
  "bindings",
  "boxgraph",
- "device-sine",
  "dsp",
  "engine-env",
  "processors",

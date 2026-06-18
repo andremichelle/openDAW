@@ -7,6 +7,7 @@ import {EngineStateSchema, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {PPQN} from "@opendaw/lib-dsp"
 import {Env} from "../../Env"
 import {serializeUpdateTasks} from "../../sync/serialize-update-tasks"
+import {loadEngineModules} from "../../engine-modules"
 import workletURL from "../metronome/engine-worklet.ts?worker&url"
 
 // Loop-end truncation test. A bar-looping note region holds a short downbeat note (beat 1) and a note
@@ -91,9 +92,8 @@ export const LoopTruncationPage: PageFactory<Env> = ({lifecycle}) => {
         const ctx = new AudioContext()
         context.wrap(ctx)
         await ctx.audioWorklet.addModule(workletURL)
-        const wasm = await fetch("/engine.wasm").then(response => response.arrayBuffer())
-        const module = await WebAssembly.compile(wasm)
-        const workletNode = new AudioWorkletNode(ctx, "engine", {processorOptions: {module, sampleRate: ctx.sampleRate, metronome: false}})
+        const {engineModule, instrumentModule} = await loadEngineModules()
+        const workletNode = new AudioWorkletNode(ctx, "engine", {processorOptions: {engineModule, instrumentModule, sampleRate: ctx.sampleRate, metronome: false}})
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)
         workletNode.port.onmessage = (event: MessageEvent<{type: string, bytes?: ArrayBuffer}>) => {
