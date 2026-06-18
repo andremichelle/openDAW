@@ -39,9 +39,9 @@ fn a_looping_note_region_produces_recurring_audio() {
     let mut note_onsets = 0;
     let mut events = Vec::new();
     for _ in 0..quanta {
-        let block = Block {p0: position, p1: position + pulses_per_quantum, s0: 0, s1: RENDER_QUANTUM, bpm: BPM};
+        let block = Block {p0: position, p1: position + pulses_per_quantum, s0: 0, s1: RENDER_QUANTUM, bpm: BPM, discontinuous: false};
         events.clear();
-        sequencer.process(&region, &notes, &block, true, false, &mut events);
+        sequencer.process(&region, &notes, &block, true, &mut events);
         events.sort_by_key(|timed| timed.offset); // note-offs before note-ons at the same offset
         note_onsets += starts(&events);
         let mut out = AudioBuffer::new();

@@ -24,6 +24,8 @@ fn quantize_ceil(position: f64, grid: f64) -> f64 {
 }
 
 /// A processed slice of one quantum: pulse range `[p0, p1)` over sample range `[s0, s1)` at `bpm`.
+/// `discontinuous` is true for the first block after a position jump (a loop wrap), the Rust analog
+/// of the TS `BlockFlag.discontinuous`, so consumers can release state held across the jump.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Block {
     pub p0: f64,
@@ -31,6 +33,7 @@ pub struct Block {
     pub s0: usize,
     pub s1: usize,
     pub bpm: f32,
+    pub discontinuous: bool,
 }
 
 /// The nearest event that splits a sub-block: a bpm change at a tempo grid, or the loop-area end.
@@ -85,19 +88,21 @@ impl Transport {
         let p0 = self.position;
         let p1 = p0 + samples_to_pulses(RENDER_QUANTUM as f64, self.bpm, self.sample_rate);
         self.position = p1;
-        Block {p0, p1, s0: 0, s1: RENDER_QUANTUM, bpm: self.bpm}
+        Block {p0, p1, s0: 0, s1: RENDER_QUANTUM, bpm: self.bpm, discontinuous: false}
     }
 
     /// Render one quantum into `emit`, splitting at the nearest action: a tempo-grid bpm change from
     /// `tempo` (a bpm value map), or the loop-area end. With no events and no loop this emits a single
     /// fixed-bpm block. Advances the position and updates the live bpm. Callback-based so the crate
-    /// stays zero-alloc / no_std.
+    /// stays zero-alloc / no_std. The block after a loop wrap carries `discontinuous = true` so
+    /// sequencers can release notes held across the wrap.
     pub fn render_quantum<F: FnMut(&Block)>(&mut self, tempo: Option<&EventCollection<ValueEvent>>, mut emit: F) {
         if !self.playing {
             return;
         }
         let mut p0 = self.position;
         let mut s0: usize = 0;
+        let mut discontinuous = false;
         self.eval_tempo(tempo, p0);
         while s0 < RENDER_QUANTUM {
             let sn = RENDER_QUANTUM - s0;
@@ -132,19 +137,27 @@ impl Transport {
             match action {
                 Action::None => {
                     let s1 = s0 + sn;
-                    emit(&Block {p0, p1, s0, s1, bpm: self.bpm});
+                    emit(&Block {p0, p1, s0, s1, bpm: self.bpm, discontinuous});
+                    discontinuous = false;
                     p0 = p1;
                     s0 = s1;
                 }
                 Action::Tempo(new_bpm) => {
-                    s0 = self.emit_until(action_position, p0, s0, &mut emit);
+                    let s1 = self.emit_until(action_position, p0, s0, discontinuous, &mut emit);
+                    if s1 > s0 {
+                        discontinuous = false; // a real block carried the flag; later blocks are continuous
+                    }
+                    s0 = s1;
                     p0 = action_position;
                     self.bpm = new_bpm;
                 }
                 Action::Loop => {
-                    s0 = self.emit_until(action_position, p0, s0, &mut emit);
+                    // the partial block up to the loop end carries the current flag; the next block,
+                    // resuming at the loop start, is the discontinuity.
+                    s0 = self.emit_until(action_position, p0, s0, discontinuous, &mut emit);
                     p0 = self.loop_from;
                     self.eval_tempo(tempo, p0);
+                    discontinuous = true;
                 }
             }
         }
@@ -153,10 +166,10 @@ impl Transport {
 
     /// Emit the block from `p0` to `action_position` (if it spans any samples) and return the new
     /// sample cursor. Shared by the tempo-change and loop-wrap splits.
-    fn emit_until<F: FnMut(&Block)>(&self, action_position: f64, p0: f64, s0: usize, emit: &mut F) -> usize {
+    fn emit_until<F: FnMut(&Block)>(&self, action_position: f64, p0: f64, s0: usize, discontinuous: bool, emit: &mut F) -> usize {
         let s1 = s0 + pulses_to_samples(action_position - p0, self.bpm, self.sample_rate) as i64 as usize;
         if s1 > s0 {
-            emit(&Block {p0, p1: action_position, s0, s1, bpm: self.bpm});
+            emit(&Block {p0, p1: action_position, s0, s1, bpm: self.bpm, discontinuous});
         }
         s1
     }

@@ -113,18 +113,63 @@ impl Controls {
     }
 }
 
+/// The note-playback group: the sequencer + instrument plus the bound region / collection and the
+/// render scratch. Kept together so `render` threads one binding rather than eight arguments.
+struct NotePlayer {
+    sequencer: NoteSequencer,
+    instrument: SineInstrument,
+    collection: Option<NoteCollection>,
+    region: Option<NoteRegion>,
+    buffer: AudioBuffer,
+    events: Vec<TimedNote>
+}
+
+impl NotePlayer {
+    fn new(sample_rate: f32) -> Self {
+        Self {
+            sequencer: NoteSequencer::new(sample_rate),
+            instrument: SineInstrument::new(sample_rate),
+            collection: None,
+            region: None,
+            buffer: AudioBuffer::new(),
+            events: Vec::new()
+        }
+    }
+
+    fn clear(&mut self) {
+        self.buffer.clear()
+    }
+
+    /// Sequence the bound region for `block` and render its notes into the internal buffer (a no-op
+    /// until a region is bound). The sequencer releases notes held across a `block.discontinuous` wrap.
+    fn render(&mut self, block: &Block) {
+        if let (Some(collection), Some(region)) = (self.collection.as_ref(), self.region.as_ref()) {
+            self.events.clear();
+            {
+                let notes = collection.events();
+                self.sequencer.process(region, &notes, block, true, &mut self.events);
+            }
+            self.events.sort_by_key(|timed| timed.offset);
+            self.instrument.process(&self.events, &mut self.buffer, block.s0, block.s1);
+        }
+    }
+
+    /// Mix the rendered notes (filled across the quantum) into the planar `output`.
+    fn mix_into(&self, output: &mut [f32]) {
+        for index in 0..RENDER_QUANTUM {
+            output[index] += self.buffer.left[index];
+            output[RENDER_QUANTUM + index] += self.buffer.right[index];
+        }
+    }
+}
+
 struct Engine {
     graph: BoxGraph,
     registry: Registry,
     transport: Transport,
     metronome: Metronome,
     tempo: Option<ValueCollection>,
-    sequencer: NoteSequencer,
-    instrument: SineInstrument,
-    notes: Option<NoteCollection>,
-    note_region: Option<NoteRegion>,
-    note_buffer: AudioBuffer,
-    note_events: Vec<TimedNote>,
+    note_player: NotePlayer,
     controls: Rc<Controls>
 }
 
@@ -136,12 +181,7 @@ impl Engine {
             transport: Transport::new(sample_rate, 120.0),
             metronome: Metronome::new(sample_rate),
             tempo: None,
-            sequencer: NoteSequencer::new(sample_rate),
-            instrument: SineInstrument::new(sample_rate),
-            notes: None,
-            note_region: None,
-            note_buffer: AudioBuffer::new(),
-            note_events: Vec::new(),
+            note_player: NotePlayer::new(sample_rate),
             controls: Rc::new(Controls::new())
         }
     }
@@ -160,9 +200,9 @@ impl Engine {
         for sample in output.iter_mut() {
             *sample = 0.0
         }
-        // disjoint field borrows so the render closure can hold the metronome / note pieces while
+        // disjoint field borrows so the render closure can hold the metronome / note player while
         // `render_quantum` holds the transport.
-        let Engine {transport, metronome, sequencer, instrument, notes, note_region, note_buffer, note_events, tempo, controls, ..} = self;
+        let Engine {transport, metronome, note_player, tempo, controls, ..} = self;
         // apply the latest timeline values recorded by the subscriptions
         transport.set_bpm(controls.bpm.get());
         transport.set_loop_enabled(controls.loop_enabled.get());
@@ -171,7 +211,7 @@ impl Engine {
         metronome.set_nominator(controls.nominator.get() as u32);
         metronome.set_denominator(controls.denominator.get() as u32);
         if transport.is_playing() {
-            note_buffer.clear();
+            note_player.clear();
             // use the tempo map only when automation is enabled and non-empty, else the fixed bpm
             let events = if controls.tempo_automation_enabled.get() {
                 tempo.as_ref().map(|tempo| tempo.events())
@@ -182,13 +222,9 @@ impl Engine {
             transport.render_quantum(active, |block| {
                 let (left, right) = output.split_at_mut(RENDER_QUANTUM);
                 metronome.process(block, &mut left[block.s0..block.s1], &mut right[block.s0..block.s1]);
-                render_notes(block, sequencer, notes, note_region, instrument, note_buffer, note_events)
+                note_player.render(block)
             });
-            // mix the instrument's stereo buffer (filled per sub-block) into the planar output
-            for index in 0..RENDER_QUANTUM {
-                output[index] += note_buffer.left[index];
-                output[RENDER_QUANTUM + index] += note_buffer.right[index];
-            }
+            note_player.mix_into(output);
         }
         write_engine_state(transport, state);
     }
@@ -279,37 +315,14 @@ impl Engine {
         let duration = self.read_pulses(region_uuid, 11);
         let loop_offset = self.read_pulses(region_uuid, 12);
         let loop_duration = self.read_pulses(region_uuid, 13);
-        self.note_region = Some(NoteRegion {position, duration, loop_offset, loop_duration});
+        self.note_player.region = Some(NoteRegion {position, duration, loop_offset, loop_duration});
         if let Some(collection) = self.graph.target_of(&Address::of(region_uuid, vec![2])).map(|target| target.uuid) {
-            self.notes = Some(NoteCollection::observe(&mut self.graph, collection));
+            self.note_player.collection = Some(NoteCollection::observe(&mut self.graph, collection));
         }
     }
 
     fn read_pulses(&self, uuid: boxgraph::address::Uuid, key: u16) -> f64 {
         self.graph.field_value(&Address::of(uuid, vec![key])).and_then(|value| value.as_int32()).unwrap_or(0) as f64
-    }
-}
-
-/// Sequence the note region for `block` and render the resulting notes into `note_buffer`. A no-op
-/// until a note region has been bound. (v1: the region's own loop drives repetition; transport-loop
-/// wrap discontinuity for notes spanning the wrap is a later refinement.)
-fn render_notes(
-    block: &Block,
-    sequencer: &mut NoteSequencer,
-    notes: &Option<NoteCollection>,
-    note_region: &Option<NoteRegion>,
-    instrument: &mut SineInstrument,
-    note_buffer: &mut AudioBuffer,
-    note_events: &mut Vec<TimedNote>
-) {
-    if let (Some(notes), Some(region)) = (notes.as_ref(), note_region.as_ref()) {
-        note_events.clear();
-        {
-            let collection = notes.events();
-            sequencer.process(region, &collection, block, true, false, note_events);
-        }
-        note_events.sort_by_key(|timed| timed.offset);
-        instrument.process(note_events, note_buffer, block.s0, block.s1);
     }
 }
 

@@ -85,18 +85,17 @@ impl NoteSequencer {
         self.retainer.len()
     }
 
-    /// Emit the note lifecycle for `block` into `out`. `playing` gates note starts; `discontinuous`
-    /// (a loop wrap / seek) forces every retained note to stop at the block start.
+    /// Emit the note lifecycle for `block` into `out`. `playing` gates note starts; a `discontinuous`
+    /// block (a loop wrap / seek) forces every retained note to stop at the block start.
     pub fn process(
         &mut self,
         region: &NoteRegion,
         notes: &EventCollection<NoteEvent>,
         block: &Block,
         playing: bool,
-        discontinuous: bool,
         out: &mut Vec<TimedNote>
     ) {
-        if !playing || discontinuous {
+        if !playing || block.discontinuous {
             for retained in self.retainer.release_all() {
                 out.push(TimedNote {offset: block.s0, lifecycle: NoteLifecycle::Stop {id: retained.id}});
             }

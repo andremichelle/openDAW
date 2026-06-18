@@ -50,6 +50,19 @@ fn loop_wraps_within_a_quantum() {
 }
 
 #[test]
+fn the_block_resuming_after_a_loop_wrap_is_flagged_discontinuous() {
+    // same wrap-within-a-quantum setup; capture the discontinuity flag per emitted block.
+    let mut transport = Transport::new(48_000.0, 120.0);
+    transport.set_loop_enabled(true);
+    transport.set_loop_from(0.0);
+    transport.set_loop_to(3.0);
+    transport.play();
+    let mut flags = Vec::new();
+    transport.render_quantum(None, |block| flags.push(block.discontinuous));
+    assert_eq!(flags, vec![false, true], "pre-wrap block continuous, the block resuming at the loop start discontinuous");
+}
+
+#[test]
 fn loop_reevaluates_tempo_at_the_loop_start() {
     // linear bpm map: 30 @ pulse 0 .. 300 @ pulse 100. Start at pulse 2.0 (bpm ~35.4), loop end 2.5,
     // loop start 0 (bpm 30) -> after the wrap the live bpm must drop to ~30, not stay at ~35.
