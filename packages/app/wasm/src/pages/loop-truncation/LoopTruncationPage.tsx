@@ -9,11 +9,21 @@ import {Env} from "../../Env"
 import {serializeUpdateTasks} from "../../sync/serialize-update-tasks"
 import workletURL from "../metronome/engine-worklet.ts?worker&url"
 
-// Loop-end truncation test. A bar-looping note region holds a short downbeat note (beat 1) and a bass
-// note that enters on the last beat and is two quarters long, so it WANTS to ring into the next bar.
-// The transport loops the bar, so each wrap the loop-wrap discontinuity must cut the bass off at the
-// bar line. If you hear the bass stop exactly when the next downbeat fires, truncation works; if it
-// bleeds across the wrap, it does not.
+// Loop-end truncation test. A bar-looping note region holds a short downbeat note (beat 1) and a note
+// that enters on the last beat and is two quarters long, so it WANTS to ring into the next bar. The
+// transport loops the bar, so each wrap the loop-wrap discontinuity must cut it off at the bar line.
+// If the note stops exactly when the next downbeat fires, truncation works; if it bleeds across the
+// wrap, it does not.
+
+const TIMELINE = `region = 1 bar, looped by the transport; every cycle replays the same content.
+
+beat    1   2   3   4 | 1   2   3   4     | = bar end = loop wrap
+        |---|---|---|---|---|---|---|---|
+region  [=============]  [=============]   one bar, replayed by the loop
+blip    *               *                 C6 blip on beat 1, each cycle
+note                [==X            [==X   C4 on beat 4 (2 quarters): it would
+                                           ring past the bar, but is cut at
+                                           every wrap (X) instead of held over`
 
 export const LoopTruncationPage: PageFactory<Env> = ({lifecycle}) => {
     const context = new MutableObservableOption<AudioContext>()
@@ -126,6 +136,7 @@ export const LoopTruncationPage: PageFactory<Env> = ({lifecycle}) => {
                 entering on beat 4 that is two quarters long. It would ring into the next bar, but the
                 transport loops the bar, so the loop-wrap discontinuity must cut it off at the bar line.
                 The note should stop exactly when the next downbeat fires, not bleed across the wrap.</p>
+            <pre className="timeline">{TIMELINE}</pre>
             <div>
                 <button onclick={() => void play()}>▶ Play</button>
                 <button onclick={() => void stop()}>■ Stop</button>

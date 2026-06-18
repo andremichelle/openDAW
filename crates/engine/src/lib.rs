@@ -24,7 +24,7 @@ use alloc::vec::Vec;
 use core::cell::{Cell, UnsafeCell};
 use bindings::note_collection::NoteCollection;
 use bindings::value_collection::ValueCollection;
-use boxgraph::address::Address;
+use boxgraph::address::{Address, Uuid};
 use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
@@ -113,44 +113,54 @@ impl Controls {
     }
 }
 
-/// The note-playback group: the sequencer + instrument plus the bound region / collection and the
-/// render scratch. Kept together so `render` threads one binding rather than eight arguments.
-struct NotePlayer {
+/// One bound note region: its loopable span, a dedicated sequencer (so its note ids never collide
+/// with another region's), an instrument to voice it, and the collection it reads. Multiple regions
+/// may share the same `NoteEventCollectionBox` in the graph — each gets its own `NoteCollection` view.
+struct RegionPlayer {
+    region: NoteRegion,
     sequencer: NoteSequencer,
     instrument: SineInstrument,
-    collection: Option<NoteCollection>,
-    region: Option<NoteRegion>,
+    collection: NoteCollection
+}
+
+/// All bound note regions, plus the shared stereo buffer they mix into and the per-block event scratch.
+struct NotePlayer {
+    sample_rate: f32,
+    regions: Vec<RegionPlayer>,
     buffer: AudioBuffer,
     events: Vec<TimedNote>
 }
 
 impl NotePlayer {
     fn new(sample_rate: f32) -> Self {
-        Self {
-            sequencer: NoteSequencer::new(sample_rate),
-            instrument: SineInstrument::new(sample_rate),
-            collection: None,
-            region: None,
-            buffer: AudioBuffer::new(),
-            events: Vec::new()
-        }
+        Self {sample_rate, regions: Vec::new(), buffer: AudioBuffer::new(), events: Vec::new()}
+    }
+
+    fn add_region(&mut self, region: NoteRegion, collection: NoteCollection) {
+        self.regions.push(RegionPlayer {
+            region,
+            sequencer: NoteSequencer::new(self.sample_rate),
+            instrument: SineInstrument::new(self.sample_rate),
+            collection
+        });
     }
 
     fn clear(&mut self) {
         self.buffer.clear()
     }
 
-    /// Sequence the bound region for `block` and render its notes into the internal buffer (a no-op
-    /// until a region is bound). The sequencer releases notes held across a `block.discontinuous` wrap.
+    /// Sequence every bound region for `block` and mix their notes into the internal buffer. The
+    /// sequencer releases notes held across a `block.discontinuous` wrap.
     fn render(&mut self, block: &Block) {
-        if let (Some(collection), Some(region)) = (self.collection.as_ref(), self.region.as_ref()) {
-            self.events.clear();
+        let NotePlayer {regions, buffer, events, ..} = self;
+        for player in regions.iter_mut() {
+            events.clear();
             {
-                let notes = collection.events();
-                self.sequencer.process(region, &notes, block, true, &mut self.events);
+                let notes = player.collection.events();
+                player.sequencer.process(&player.region, &notes, block, true, events);
             }
-            self.events.sort_by_key(|timed| timed.offset);
-            self.instrument.process(&self.events, &mut self.buffer, block.s0, block.s1);
+            events.sort_by_key(|timed| timed.offset);
+            player.instrument.process(events, buffer, block.s0, block.s1);
         }
     }
 
@@ -299,29 +309,30 @@ impl Engine {
         if let Some(collection) = tempo_collection {
             self.tempo = Some(ValueCollection::observe(&mut self.graph, collection));
         }
-        self.bind_note_region();
+        self.bind_note_regions();
         0
     }
 
-    /// If the project has a `NoteRegionBox`, read its loopable span (position 10, duration 11,
+    /// Bind every `NoteRegionBox`: read each one's loopable span (position 10, duration 11,
     /// loopOffset 12, loopDuration 13) and observe the `NoteEventCollectionBox` its `events` pointer
-    /// (key 2) targets, so the sequencer can play the region's notes.
-    fn bind_note_region(&mut self) {
-        let region_uuid = match self.graph.find_by_name("NoteRegionBox") {
-            Some(region) => region.uuid,
-            None => return
-        };
-        let position = self.read_pulses(region_uuid, 10);
-        let duration = self.read_pulses(region_uuid, 11);
-        let loop_offset = self.read_pulses(region_uuid, 12);
-        let loop_duration = self.read_pulses(region_uuid, 13);
-        self.note_player.region = Some(NoteRegion {position, duration, loop_offset, loop_duration});
-        if let Some(collection) = self.graph.target_of(&Address::of(region_uuid, vec![2])).map(|target| target.uuid) {
-            self.note_player.collection = Some(NoteCollection::observe(&mut self.graph, collection));
+    /// (key 2) targets. Regions may share a collection (mirrored regions); each gets its own view.
+    fn bind_note_regions(&mut self) {
+        let region_uuids: Vec<Uuid> = self.graph.find_all_by_name("NoteRegionBox").iter().map(|region| region.uuid).collect();
+        for region_uuid in region_uuids {
+            let region = NoteRegion {
+                position: self.read_pulses(region_uuid, 10),
+                duration: self.read_pulses(region_uuid, 11),
+                loop_offset: self.read_pulses(region_uuid, 12),
+                loop_duration: self.read_pulses(region_uuid, 13)
+            };
+            if let Some(collection_uuid) = self.graph.target_of(&Address::of(region_uuid, vec![2])).map(|target| target.uuid) {
+                let collection = NoteCollection::observe(&mut self.graph, collection_uuid);
+                self.note_player.add_region(region, collection);
+            }
         }
     }
 
-    fn read_pulses(&self, uuid: boxgraph::address::Uuid, key: u16) -> f64 {
+    fn read_pulses(&self, uuid: Uuid, key: u16) -> f64 {
         self.graph.field_value(&Address::of(uuid, vec![key])).and_then(|value| value.as_int32()).unwrap_or(0) as f64
     }
 }

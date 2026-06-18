@@ -92,6 +92,11 @@ impl BoxGraph {
         self.boxes.values().find(|graph_box| graph_box.name == name)
     }
 
+    /// Every box with the given type name, in uuid order (e.g. all `NoteRegionBox`es).
+    pub fn find_all_by_name(&self, name: &str) -> Vec<&GraphBox> {
+        self.boxes.values().filter(|graph_box| graph_box.name == name).collect()
+    }
+
     pub fn edges(&self) -> &[Edge] {
         &self.edges
     }

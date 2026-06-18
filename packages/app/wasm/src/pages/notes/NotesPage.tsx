@@ -9,15 +9,20 @@ import {Env} from "../../Env"
 import {serializeUpdateTasks} from "../../sync/serialize-update-tasks"
 import workletURL from "../metronome/engine-worklet.ts?worker&url"
 
-// Notes, end to end. The project gets a one-quarter note region (a C-major arpeggio in semiquavers)
-// whose loopDuration is a quarter, so its content loops four times per bar. It is streamed via the
-// unchanged SyncSource to the wasm engine, where the NoteSequencer schedules note on/off and a sine
-// instrument renders them. The transport loops the bar. State comes from the EngineState channel.
+// Notes, end to end. Mirrored regions: ONE note collection (a 1-quarter arpeggio) shared by TWO
+// regions — a 4-bar loop split at bar 2 — streamed via the unchanged SyncSource to the wasm engine,
+// where the NoteSequencer plays each region and a sine instrument renders them.
 
 // One quarter: C4 E4 G4 C5 as semiquavers (position in pulses from the quarter's start, MIDI pitch).
 const ARPEGGIO: ReadonlyArray<readonly [number, number]> = [
     [0, 60], [PPQN.SemiQuaver, 64], [2 * PPQN.SemiQuaver, 67], [3 * PPQN.SemiQuaver, 72]
 ]
+
+const TIMELINE = `bar   0       1       2       3       4      transport loops 0..4
+      |-------|-------|-------|-------|
+A     [===============]                      region A ──┐
+B                     [===============]      region B ──┴── share one collection
+      C4 E4 G4 C5 semiquavers, loopDuration = 1 quarter`
 
 type EngineMessage =
     | { readonly type: "state", readonly bytes: ArrayBuffer }
@@ -54,17 +59,19 @@ export const NotesPage: PageFactory<Env> = ({lifecycle}) => {
         box.tracks.refer(mockAudioUnit.tracks)
         box.target.refer(mockAudioUnit)
     })
-    // The note content: a one-BAR region whose loopDuration is a QUARTER, so the quarter of semiquavers
-    // loops four times across the bar.
+    // Mirrored regions (see TIMELINE): ONE collection shared by TWO regions, each a 2-bar half of a
+    // 4-bar loop. Both point `events` at the same collection's `owners`, so the arpeggio plays in both.
     const collection = NoteEventCollectionBox.create(boxGraph, UUID.generate())
-    NoteRegionBox.create(boxGraph, UUID.generate(), box => {
+    const region = (position: number) => NoteRegionBox.create(boxGraph, UUID.generate(), box => {
         box.regions.refer(mockTrack.regions) // MOCK anchor (mandatory)
-        box.position.setValue(0)
-        box.duration.setValue(PPQN.Bar)
+        box.position.setValue(position)
+        box.duration.setValue(2 * PPQN.Bar)
         box.loopOffset.setValue(0)
-        box.loopDuration.setValue(PPQN.Quarter)
-        box.events.refer(collection.owners)
+        box.loopDuration.setValue(PPQN.Quarter) // the quarter arpeggio loops within each region
+        box.events.refer(collection.owners) // both regions share this one collection
     })
+    region(0)           // region A: bars 0..2
+    region(2 * PPQN.Bar) // region B: bars 2..4 (the split)
     ARPEGGIO.forEach(([position, pitch]) => NoteEventBox.create(boxGraph, UUID.generate(), box => {
         box.position.setValue(position)
         box.duration.setValue(PPQN.SemiQuaver / 2) // staccato, so each note is clearly separated
@@ -72,9 +79,9 @@ export const NotesPage: PageFactory<Env> = ({lifecycle}) => {
         box.velocity.setValue(0.8)
         box.events.refer(collection.events)
     }))
-    // loop the single bar so the arpeggio repeats.
+    // loop the whole four bars so both regions repeat.
     timelineBox.loopArea.from.setValue(0)
-    timelineBox.loopArea.to.setValue(PPQN.Bar)
+    timelineBox.loopArea.to.setValue(4 * PPQN.Bar)
     timelineBox.loopArea.enabled.setValue(true)
     boxGraph.endTransaction()
 
@@ -114,7 +121,7 @@ export const NotesPage: PageFactory<Env> = ({lifecycle}) => {
             }
         })
         await ctx.suspend()
-        append(`booted @ ${ctx.sampleRate} Hz — suspended; a semiquaver arpeggio looping every quarter`)
+        append(`booted @ ${ctx.sampleRate} Hz — suspended; two mirrored regions sharing one arpeggio`)
     }
 
     const play = async (): Promise<void> => {
@@ -140,10 +147,12 @@ export const NotesPage: PageFactory<Env> = ({lifecycle}) => {
     return (
         <div className="page">
             <h2>Notes</h2>
-            <p>A C-major arpeggio (C4 E4 G4 C5) in semiquavers, as a note region whose loop is one
-                quarter long, so the figure repeats four times per bar. The NoteSequencer in the wasm
-                engine schedules note on/off per block and a sine instrument renders them. The transport
-                loops the bar. The metronome is off here.</p>
+            <p>A C-major arpeggio (C4 E4 G4 C5) in semiquavers, looping every quarter. It lives in one
+                note collection shared by <strong>two mirrored regions</strong> — a 4-bar loop split at
+                bar 2 into two 2-bar halves — so the same arpeggio plays in both halves. The NoteSequencer
+                plays each region; if region sharing were broken, bars 2–4 would fall silent. Metronome
+                off.</p>
+            <pre className="timeline">{TIMELINE}</pre>
             <div>
                 <button onclick={() => void play()}>▶ Play</button>
                 <button onclick={() => void stop()}>■ Stop</button>
