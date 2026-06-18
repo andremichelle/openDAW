@@ -29,6 +29,7 @@ Out of scope (decided): multi-threading, offline render / export / bounce.
 - Per-unit chain order: MIDI effects → instrument/input → audio effects → channel strip → output.
 - Buses sum multiple inputs; aux sends (pre/post, send gain, send pan) to aux buses.
 - Mono↔stereo up/down-mix; channel-count handling.
+- **Variable channel count (deferred):** the Rust `AudioBuffer` is fixed stereo for now, matching the TS engine (mono/stereo only) and the stereo worklet output. Generalize to N channels (quad, 5.1, 3D / ambisonics) only when a device or output target actually needs it. It is a self-contained buffer refactor that stays off the hot path until then, so there is no benefit to building it speculatively.
 - Wiring invalidation + re-wire at process-phase "before"; cleanup at "after".
 
 ## 3. Channel strip & mixing
@@ -40,6 +41,7 @@ Out of scope (decided): multi-threading, offline render / export / bounce.
 ## 4. Block / quantum processing
 - 128-sample render quantum.
 - Block descriptor: index, p0/p1 (ppqn), s0/s1 (sample offsets), bpm, flags (transporting/playing/discontinuous/bpmChanged).
+  - Planned: replace the `BlockFlags` integer bitset with actual booleans (one field per flag) instead of bit-packing.
 - Sub-block splitting at events (tempo change, loop, marker, callbacks, MIDI/automation events).
 - Process phases (before / after).
 - NaN sanity checks; denormal handling.

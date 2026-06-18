@@ -5,7 +5,7 @@
 //! there (the discontinuity), and keeps filling the quantum, so a loop wrap is sample-accurate with
 //! no gap. Markers are a separate build-order item. Mirrors core-processors `BlockRenderer`.
 
-use crate::ppqn::{pulses_to_samples, samples_to_pulses};
+use engine_env::ppqn::{pulses_to_samples, samples_to_pulses};
 use value::event::EventCollection;
 use value::value::{value_at, ValueEvent};
 

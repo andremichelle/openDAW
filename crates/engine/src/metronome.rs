@@ -8,7 +8,7 @@
 
 use alloc::vec::Vec;
 use dsp::{fast_sin, PI};
-use transport::ppqn::{from_signature, pulses_to_samples};
+use engine_env::ppqn::{from_signature, pulses_to_samples};
 use transport::transport::Block;
 
 const TAU: f32 = 2.0 * PI;

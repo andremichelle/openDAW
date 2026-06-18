@@ -18,10 +18,11 @@
 
 extern crate alloc;
 
+use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::cell::{Cell, UnsafeCell};
+use core::cell::{Cell, RefCell, UnsafeCell};
 use bindings::note_collection::NoteCollection;
 use bindings::value_collection::ValueCollection;
 use boxgraph::address::{Address, Uuid};
@@ -29,11 +30,21 @@ use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
 use boxgraph::updates::decode_forward;
-use processors::buffer::AudioBuffer;
-use processors::instrument::SineInstrument;
-use processors::sequencer::{NoteRegion, NoteSequencer, TimedNote};
+use device_sine::SineDevice;
+use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
+use engine_env::audio_bus_processor::AudioBusProcessor;
+use engine_env::audio_generator::AudioGenerator;
+use engine_env::block::Block;
+use engine_env::block_flags::BlockFlags;
+use engine_env::engine_context::EngineContext;
+use engine_env::note_region::NoteRegion;
+use engine_env::note_region_source::NoteRegionSource;
+use engine_env::note_sequencer::NoteSequencer;
+use engine_env::process_info::ProcessInfo;
 use studio_boxes::registry;
-use transport::transport::{Block, Transport, RENDER_QUANTUM};
+use transport::transport::{Transport, RENDER_QUANTUM};
+use value::event::EventCollection;
+use value::note::NoteEvent;
 
 mod metronome;
 use metronome::Metronome;
@@ -113,62 +124,19 @@ impl Controls {
     }
 }
 
-/// One bound note region: its loopable span, a dedicated sequencer (so its note ids never collide
-/// with another region's), an instrument to voice it, and the collection it reads. Multiple regions
-/// may share the same `NoteEventCollectionBox` in the graph — each gets its own `NoteCollection` view.
-struct RegionPlayer {
-    region: NoteRegion,
-    sequencer: NoteSequencer,
-    instrument: SineInstrument,
-    collection: NoteCollection
+/// The note content the sequencer reads (the `NoteRegionSource` the engine binds from the box graph):
+/// every bound note region's loopable span paired with its observed `NoteEventCollection`. Regions may
+/// share a `NoteEventCollectionBox` (mirrored regions); each gets its own `NoteCollection` view.
+/// FIRST-CUT binding: all `NoteRegionBox`es feed one instrument; per-audio-unit / per-track grouping is
+/// the next refinement.
+struct BoundNoteRegions {
+    regions: Vec<(NoteRegion, NoteCollection)>
 }
 
-/// All bound note regions, plus the shared stereo buffer they mix into and the per-block event scratch.
-struct NotePlayer {
-    sample_rate: f32,
-    regions: Vec<RegionPlayer>,
-    buffer: AudioBuffer,
-    events: Vec<TimedNote>
-}
-
-impl NotePlayer {
-    fn new(sample_rate: f32) -> Self {
-        Self {sample_rate, regions: Vec::new(), buffer: AudioBuffer::new(), events: Vec::new()}
-    }
-
-    fn add_region(&mut self, region: NoteRegion, collection: NoteCollection) {
-        self.regions.push(RegionPlayer {
-            region,
-            sequencer: NoteSequencer::new(self.sample_rate),
-            instrument: SineInstrument::new(self.sample_rate),
-            collection
-        });
-    }
-
-    fn clear(&mut self) {
-        self.buffer.clear()
-    }
-
-    /// Sequence every bound region for `block` and mix their notes into the internal buffer. The
-    /// sequencer releases notes held across a `block.discontinuous` wrap.
-    fn render(&mut self, block: &Block) {
-        let NotePlayer {regions, buffer, events, ..} = self;
-        for player in regions.iter_mut() {
-            events.clear();
-            {
-                let notes = player.collection.events();
-                player.sequencer.process(&player.region, &notes, block, true, events);
-            }
-            events.sort_by_key(|timed| timed.offset);
-            player.instrument.process(events, buffer, block.s0, block.s1);
-        }
-    }
-
-    /// Mix the rendered notes (filled across the quantum) into the planar `output`.
-    fn mix_into(&self, output: &mut [f32]) {
-        for index in 0..RENDER_QUANTUM {
-            output[index] += self.buffer.left[index];
-            output[RENDER_QUANTUM + index] += self.buffer.right[index];
+impl NoteRegionSource for BoundNoteRegions {
+    fn for_each_region(&self, _from: f64, _to: f64, visit: &mut dyn FnMut(&NoteRegion, &EventCollection<NoteEvent>)) {
+        for (region, collection) in &self.regions {
+            visit(region, &collection.events());
         }
     }
 }
@@ -179,7 +147,10 @@ struct Engine {
     transport: Transport,
     metronome: Metronome,
     tempo: Option<ValueCollection>,
-    note_player: NotePlayer,
+    context: EngineContext,
+    output_bus: Option<SharedAudioBuffer>,
+    sample_rate: f32,
+    blocks: Vec<Block>,
     controls: Rc<Controls>
 }
 
@@ -191,7 +162,10 @@ impl Engine {
             transport: Transport::new(sample_rate, 120.0),
             metronome: Metronome::new(sample_rate),
             tempo: None,
-            note_player: NotePlayer::new(sample_rate),
+            context: EngineContext::new(),
+            output_bus: None,
+            sample_rate,
+            blocks: Vec::new(),
             controls: Rc::new(Controls::new())
         }
     }
@@ -210,9 +184,9 @@ impl Engine {
         for sample in output.iter_mut() {
             *sample = 0.0
         }
-        // disjoint field borrows so the render closure can hold the metronome / note player while
+        // disjoint field borrows so the render closure can hold the metronome / block scratch while
         // `render_quantum` holds the transport.
-        let Engine {transport, metronome, note_player, tempo, controls, ..} = self;
+        let Engine {transport, metronome, context, output_bus, blocks, tempo, controls, ..} = self;
         // apply the latest timeline values recorded by the subscriptions
         transport.set_bpm(controls.bpm.get());
         transport.set_loop_enabled(controls.loop_enabled.get());
@@ -221,7 +195,7 @@ impl Engine {
         metronome.set_nominator(controls.nominator.get() as u32);
         metronome.set_denominator(controls.denominator.get() as u32);
         if transport.is_playing() {
-            note_player.clear();
+            blocks.clear();
             // use the tempo map only when automation is enabled and non-empty, else the fixed bpm
             let events = if controls.tempo_automation_enabled.get() {
                 tempo.as_ref().map(|tempo| tempo.events())
@@ -229,12 +203,29 @@ impl Engine {
                 None
             };
             let active = events.as_deref().filter(|collection| !collection.is_empty());
+            // collect this quantum's blocks (converting transport flags) and run the metronome per block
             transport.render_quantum(active, |block| {
                 let (left, right) = output.split_at_mut(RENDER_QUANTUM);
                 metronome.process(block, &mut left[block.s0..block.s1], &mut right[block.s0..block.s1]);
-                note_player.render(block)
+                blocks.push(Block {
+                    index: blocks.len() as u32,
+                    p0: block.p0,
+                    p1: block.p1,
+                    s0: block.s0,
+                    s1: block.s1,
+                    bpm: block.bpm,
+                    flags: BlockFlags::create(true, block.discontinuous, true, false)
+                });
             });
-            note_player.mix_into(output);
+            // drive the processor graph over those blocks, then mix the output unit's buffer in
+            context.process(&ProcessInfo {blocks: blocks.as_slice()});
+            if let Some(buffer) = output_bus.as_ref() {
+                let buffer = buffer.borrow();
+                for index in 0..RENDER_QUANTUM {
+                    output[index] += buffer.left[index];
+                    output[RENDER_QUANTUM + index] += buffer.right[index];
+                }
+            }
         }
         write_engine_state(transport, state);
     }
@@ -309,15 +300,36 @@ impl Engine {
         if let Some(collection) = tempo_collection {
             self.tempo = Some(ValueCollection::observe(&mut self.graph, collection));
         }
-        self.bind_note_regions();
+        self.build_audio_graph();
         0
     }
 
-    /// Bind every `NoteRegionBox`: read each one's loopable span (position 10, duration 11,
-    /// loopOffset 12, loopDuration 13) and observe the `NoteEventCollectionBox` its `events` pointer
-    /// (key 2) targets. Regions may share a collection (mirrored regions); each gets its own view.
-    fn bind_note_regions(&mut self) {
+    /// Build the processor graph from the box graph (FIRST CUT): a master output bus whose buffer feeds
+    /// the worklet, plus one `SineDevice` instrument fed by a `NoteSequencer` over all bound note
+    /// regions, routed into the master bus. Per-audio-unit / per-track routing and the instrument-device
+    /// lookup (the box's `input` device) are the next refinements; this gets the new graph audible.
+    fn build_audio_graph(&mut self) {
+        let output_buffer = shared_audio_buffer();
+        let master = Rc::new(RefCell::new(AudioBusProcessor::new(output_buffer.clone())));
+        let master_id = self.context.register_processor(master.clone());
+        self.output_bus = Some(output_buffer);
+        let regions = self.bind_note_regions();
+        if !regions.is_empty() {
+            let source = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {regions}))));
+            let device = Rc::new(RefCell::new(SineDevice::new(self.sample_rate)));
+            device.borrow_mut().set_note_event_source(source);
+            master.borrow_mut().add_audio_source(device.borrow().audio_output());
+            let device_id = self.context.register_processor(device);
+            self.context.register_edge(device_id, master_id); // instrument renders before the bus sums it
+        }
+    }
+
+    /// Bind every `NoteRegionBox`: read each one's loopable span (position 10, duration 11, loopOffset
+    /// 12, loopDuration 13) and observe the `NoteEventCollectionBox` its `events` pointer (key 2)
+    /// targets. Regions may share a collection (mirrored regions); each gets its own view.
+    fn bind_note_regions(&mut self) -> Vec<(NoteRegion, NoteCollection)> {
         let region_uuids: Vec<Uuid> = self.graph.find_all_by_name("NoteRegionBox").iter().map(|region| region.uuid).collect();
+        let mut bound = Vec::new();
         for region_uuid in region_uuids {
             let region = NoteRegion {
                 position: self.read_pulses(region_uuid, 10),
@@ -327,9 +339,10 @@ impl Engine {
             };
             if let Some(collection_uuid) = self.graph.target_of(&Address::of(region_uuid, vec![2])).map(|target| target.uuid) {
                 let collection = NoteCollection::observe(&mut self.graph, collection_uuid);
-                self.note_player.add_region(region, collection);
+                bound.push((region, collection));
             }
         }
+        bound
     }
 
     fn read_pulses(&self, uuid: Uuid, key: u16) -> f64 {

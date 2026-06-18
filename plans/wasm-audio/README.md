@@ -34,6 +34,8 @@ WASM core is free to restructure; it just has to produce the same audio.
 4. [Architecture & TS↔WASM boundary](04-architecture.md) — **drafted** (2 open questions)
    - [Device contract (UI ↔ engine)](device-contract.md)
    - [Device plugins (runtime-loadable WASM)](device-plugins.md) — **decided: from the start**
+   - [Device processing pattern (AudioProcessor / NoteProcessor)](device-processing.md) — **draft, discussing**
+   - [Processor infrastructure port map (TS → Rust)](processor-port-map.md) — **draft, discussing**
    - [Scriptable devices (JS DSP backend)](scriptable-devices.md)
 5. [Memory & module composition](05-memory.md) — **drafted** (needs a spike)
 6. [Build toolchain & integration](06-build.md) — **drafted**

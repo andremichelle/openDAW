@@ -10,7 +10,7 @@
 
 use alloc::vec::Vec;
 use math::clamp;
-use transport::ppqn::pulses_to_samples;
+use engine_env::ppqn::pulses_to_samples;
 use transport::transport::Block;
 use value::event::{Event, EventCollection, EventSpan};
 use value::note::NoteEvent;

@@ -5,7 +5,7 @@
 use processors::buffer::AudioBuffer;
 use processors::instrument::SineInstrument;
 use processors::sequencer::{NoteLifecycle, NoteRegion, NoteSequencer, TimedNote};
-use transport::ppqn::samples_to_pulses;
+use engine_env::ppqn::samples_to_pulses;
 use transport::transport::{Block, RENDER_QUANTUM};
 use value::event::EventCollection;
 use value::note::NoteEvent;

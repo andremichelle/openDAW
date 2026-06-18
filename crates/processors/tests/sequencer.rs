@@ -3,7 +3,7 @@
 //! note per cycle. Blocks are built consistent with the bpm / sample-rate so sample offsets are real.
 
 use processors::sequencer::{NoteLifecycle, NoteRegion, NoteSequencer, TimedNote};
-use transport::ppqn::pulses_to_samples;
+use engine_env::ppqn::pulses_to_samples;
 use transport::transport::Block;
 use value::event::EventCollection;
 use value::note::NoteEvent;

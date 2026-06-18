@@ -10,6 +10,8 @@ crate-type = ["cdylib"]
 [dependencies]
 boxgraph = {path = "../boxgraph"}
 studio-boxes = {path = "../studio-boxes"}
+engine-env = {path = "../engine-env"}
+device-sine = {path = "../device-sine"}
 transport = {path = "../transport"}
 dsp = {path = "../dsp"}
 value = {path = "../value"}

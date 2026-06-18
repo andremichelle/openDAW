@@ -54,6 +54,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-sine"
+version = "0.0.0"
+dependencies = [
+ "dsp",
+ "engine-env",
+ "value",
+]
+
+[[package]]
 name = "dsp"
 version = "0.0.0"
 dependencies = [
@@ -67,11 +76,22 @@ version = "0.0.0"
 dependencies = [
  "bindings",
  "boxgraph",
+ "device-sine",
  "dsp",
+ "engine-env",
  "processors",
  "studio-boxes",
  "talc",
  "transport",
+ "value",
+]
+
+[[package]]
+name = "engine-env"
+version = "0.0.0"
+dependencies = [
+ "boxgraph",
+ "math",
  "value",
 ]
 
@@ -102,6 +122,7 @@ name = "processors"
 version = "0.0.0"
 dependencies = [
  "dsp",
+ "engine-env",
  "math",
  "transport",
  "value",
@@ -141,6 +162,7 @@ dependencies = [
 name = "transport"
 version = "0.0.0"
 dependencies = [
+ "engine-env",
  "value",
 ]
 

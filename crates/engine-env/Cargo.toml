@@ -1,5 +1,5 @@
 [package]
-name = "transport"
+name = "engine-env"
 version = "0.0.0"
 edition = "2021"
 publish = false
@@ -8,5 +8,6 @@ publish = false
 crate-type = ["lib"]
 
 [dependencies]
+boxgraph = {path = "../boxgraph"}
 value = {path = "../value"}
-engine-env = {path = "../engine-env"}
+math = {path = "../math"}

@@ -1,4 +1,8 @@
-use transport::ppqn::*;
+//! PPQN conversions (ported from lib-dsp `ppqn.ts`): the constants match (PPQN = 960), `from_signature`
+//! gives pulses per bar, seconds<->pulses and samples<->pulses round-trip, and one quarter at 140 bpm is
+//! 60/140 seconds.
+
+use engine_env::ppqn::*;
 
 #[test]
 fn constants_match_ts() {

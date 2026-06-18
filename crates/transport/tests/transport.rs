@@ -1,4 +1,4 @@
-use transport::ppqn::samples_to_pulses;
+use engine_env::ppqn::samples_to_pulses;
 use transport::transport::{Transport, RENDER_QUANTUM};
 
 #[test]
