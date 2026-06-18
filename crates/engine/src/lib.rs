@@ -160,11 +160,10 @@ impl Controls {
     }
 }
 
-/// The note content the sequencer reads (the `NoteRegionSource` the engine binds from the box graph):
-/// every bound note region's loopable span paired with its observed `NoteEventCollection`. Regions may
-/// share a `NoteEventCollectionBox` (mirrored regions); each gets its own `NoteCollection` view.
-/// FIRST-CUT binding: all `NoteRegionBox`es feed one instrument; per-audio-unit / per-track grouping is
-/// the next refinement.
+/// The note content one instrument's sequencer reads (the `NoteRegionSource` the engine binds from the
+/// box graph): one audio unit's note regions, each region's loopable span paired with its observed
+/// `NoteEventCollection`. Regions may share a `NoteEventCollectionBox` (mirrored regions); each gets its
+/// own `NoteCollection` view.
 struct BoundNoteRegions {
     regions: Vec<(NoteRegion, NoteCollection)>
 }
@@ -484,17 +483,18 @@ impl Engine {
         0
     }
 
-    /// Build the processor graph from the box graph (FIRST CUT): a master output bus whose buffer feeds
-    /// the worklet, plus one `SineDevice` instrument fed by a `NoteSequencer` over all bound note
-    /// regions, routed into the master bus. Per-audio-unit / per-track routing and the instrument-device
-    /// lookup (the box's `input` device) are the next refinements; this gets the new graph audible.
+    /// Build the processor graph from the box graph: a master output bus whose buffer feeds the worklet,
+    /// plus one `PluginInstrument` (the sine device) PER AUDIO UNIT, each fed by a `NoteSequencer` over
+    /// that unit's note regions and routed into the master bus. The device wasm is loaded once; every
+    /// instrument calls it with its own state block, so the units play independently.
+    /// DEVIATION from the TS engine: every unit uses the sine device — the unit's actual `input`
+    /// instrument device and its audio-effect chain are not read yet.
     fn build_audio_graph(&mut self) {
         let output_buffer = shared_audio_buffer();
         let master = Rc::new(RefCell::new(AudioBusProcessor::new(output_buffer.clone())));
         let master_id = self.context.register_processor(master.clone());
         self.output_bus = Some(output_buffer);
-        let regions = self.bind_note_regions();
-        if !regions.is_empty() {
+        for regions in self.bind_note_regions_by_unit() {
             let source: SharedNoteEventSource = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {regions}))));
             let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate)));
             instrument.borrow_mut().set_note_event_source(source);
@@ -504,30 +504,63 @@ impl Engine {
         }
     }
 
-    /// Bind every `NoteRegionBox`: read each one's loopable span (position 10, duration 11, loopOffset
-    /// 12, loopDuration 13) and observe the `NoteEventCollectionBox` its `events` pointer (key 2)
-    /// targets. Regions may share a collection (mirrored regions); each gets its own view.
-    fn bind_note_regions(&mut self) -> Vec<(NoteRegion, NoteCollection)> {
-        let region_uuids: Vec<Uuid> = self.graph.find_all_by_name("NoteRegionBox").iter().map(|region| region.uuid).collect();
-        let mut bound = Vec::new();
-        for region_uuid in region_uuids {
-            let region = NoteRegion {
-                position: self.read_pulses(region_uuid, 10),
-                duration: self.read_pulses(region_uuid, 11),
-                loop_offset: self.read_pulses(region_uuid, 12),
-                loop_duration: self.read_pulses(region_uuid, 13)
-            };
-            if let Some(collection_uuid) = self.graph.target_of(&Address::of(region_uuid, vec![2])).map(|target| target.uuid) {
-                let collection = NoteCollection::observe(&mut self.graph, collection_uuid);
-                bound.push((region, collection));
+    /// Group every `NoteRegionBox` by its owning audio unit, returning one bound-region list per unit (in
+    /// discovery order). The chain is pointer-only: region.regions (key 1) -> the track's regions hub,
+    /// track.tracks (key 1) -> the unit's tracks hub. Regions that resolve to no unit are grouped together
+    /// (one fallback instrument) so they still sound.
+    fn bind_note_regions_by_unit(&mut self) -> Vec<Vec<(NoteRegion, NoteCollection)>> {
+        let mut bound_per_unit = Vec::new();
+        for members in group_regions_by_unit(&self.graph) {
+            let bound: Vec<(NoteRegion, NoteCollection)> =
+                members.into_iter().filter_map(|region_uuid| self.bind_region(region_uuid)).collect();
+            if !bound.is_empty() {
+                bound_per_unit.push(bound);
             }
         }
-        bound
+        bound_per_unit
+    }
+
+    /// Read one region's loopable span (position 10, duration 11, loopOffset 12, loopDuration 13) and
+    /// observe the `NoteEventCollectionBox` its `events` pointer (key 2) targets. `None` if it has none.
+    fn bind_region(&mut self, region_uuid: Uuid) -> Option<(NoteRegion, NoteCollection)> {
+        let region = NoteRegion {
+            position: self.read_pulses(region_uuid, 10),
+            duration: self.read_pulses(region_uuid, 11),
+            loop_offset: self.read_pulses(region_uuid, 12),
+            loop_duration: self.read_pulses(region_uuid, 13)
+        };
+        let collection_uuid = self.graph.target_of(&Address::of(region_uuid, vec![2]))?.uuid;
+        let collection = NoteCollection::observe(&mut self.graph, collection_uuid);
+        Some((region, collection))
     }
 
     fn read_pulses(&self, uuid: Uuid, key: u16) -> f64 {
         self.graph.field_value(&Address::of(uuid, vec![key])).and_then(|value| value.as_int32()).unwrap_or(0) as f64
     }
+}
+
+/// Group note-region uuids by their owning audio unit, in discovery order: region.regions (key 1) ->
+/// the track, then track.tracks (key 1) -> the unit. Regions resolving to no unit (orphans) collect into
+/// the `None`-keyed group, kept so they still sound. Pure over the box graph (unit-tested).
+fn group_regions_by_unit(graph: &BoxGraph) -> Vec<Vec<Uuid>> {
+    let region_uuids: Vec<Uuid> = graph.find_all_by_name("NoteRegionBox").iter().map(|region| region.uuid).collect();
+    let mut groups: Vec<(Option<Uuid>, Vec<Uuid>)> = Vec::new();
+    for region_uuid in region_uuids {
+        let unit = unit_of_region(graph, region_uuid);
+        match groups.iter_mut().find(|(group_unit, _)| *group_unit == unit) {
+            Some((_, members)) => members.push(region_uuid),
+            None => groups.push((unit, vec![region_uuid]))
+        }
+    }
+    groups.into_iter().map(|(_, members)| members).collect()
+}
+
+/// The audio unit a note region belongs to: region.regions (key 1) -> track, then track.tracks (key 1)
+/// -> unit. `None` if either pointer is unset (an orphan region).
+fn unit_of_region(graph: &BoxGraph, region_uuid: Uuid) -> Option<Uuid> {
+    let track = graph.target_of(&Address::of(region_uuid, vec![1]))?.uuid;
+    let unit = graph.target_of(&Address::of(track, vec![1]))?.uuid;
+    Some(unit)
 }
 
 /// Serialize the transport state into `state` (big-endian, per the EngineState contract).
@@ -720,4 +753,73 @@ mod heap {
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     // Trap (observable RuntimeError) rather than `loop {}` (a silent hang), so a panic surfaces.
     core::arch::wasm32::unreachable()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{group_regions_by_unit, unit_of_region};
+    use boxgraph::address::{Address, Uuid};
+    use boxgraph::boxes::GraphBox;
+    use boxgraph::field::FieldValue;
+    use boxgraph::graph::BoxGraph;
+    use std::collections::BTreeMap;
+
+    fn uuid(tag: u8) -> Uuid {
+        [tag, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    }
+
+    // A box whose only field is the key-1 pointer (region.regions -> track, track.tracks -> unit) the
+    // grouping follows — the only field `group_regions_by_unit` reads.
+    fn linked(creation_index: i32, name: &str, id: Uuid, key1: Option<Address>) -> GraphBox {
+        GraphBox {
+            creation_index,
+            name: name.to_string(),
+            uuid: id,
+            fields: BTreeMap::from([(1u16, FieldValue::Pointer(key1))])
+        }
+    }
+
+    // U1, U2 = audio units. T1->U1, T2->U2, T3 = a track with no unit. Regions: R1,R2 in T1 (mirrored),
+    // R3 in T2, R4 has no track, R5 in the unit-less T3. uuids ascend with logical order (find_all_by_name
+    // returns uuid order), so the grouping order is deterministic.
+    fn fixture() -> (BoxGraph, [Uuid; 5]) {
+        let (u1, u2) = (uuid(0x10), uuid(0x20));
+        let (t1, t2, t3) = (uuid(0x11), uuid(0x21), uuid(0x31));
+        let (r1, r2, r3, r4, r5) = (uuid(0x1a), uuid(0x1b), uuid(0x2a), uuid(0x4a), uuid(0x5a));
+        let graph = BoxGraph::from_boxes(vec![
+            linked(0, "AudioUnitBox", u1, None),
+            linked(1, "AudioUnitBox", u2, None),
+            linked(2, "TrackBox", t1, Some(Address::of(u1, vec![20]))),
+            linked(3, "TrackBox", t2, Some(Address::of(u2, vec![20]))),
+            linked(4, "TrackBox", t3, None),
+            linked(5, "NoteRegionBox", r1, Some(Address::of(t1, vec![3]))),
+            linked(6, "NoteRegionBox", r2, Some(Address::of(t1, vec![3]))),
+            linked(7, "NoteRegionBox", r3, Some(Address::of(t2, vec![3]))),
+            linked(8, "NoteRegionBox", r4, None),
+            linked(9, "NoteRegionBox", r5, Some(Address::of(t3, vec![3])))
+        ]);
+        (graph, [r1, r2, r3, r4, r5])
+    }
+
+    #[test]
+    fn unit_of_region_follows_region_track_unit() {
+        let (graph, [r1, _r2, r3, r4, r5]) = fixture();
+        assert_eq!(unit_of_region(&graph, r1), Some(uuid(0x10))); // R1 -> T1 -> U1
+        assert_eq!(unit_of_region(&graph, r3), Some(uuid(0x20))); // R3 -> T2 -> U2
+        assert_eq!(unit_of_region(&graph, r4), None); // R4 has no track
+        assert_eq!(unit_of_region(&graph, r5), None); // R5's track has no unit
+    }
+
+    #[test]
+    fn groups_regions_by_owning_unit_mirrored_together_orphans_pooled() {
+        let (graph, [r1, r2, r3, r4, r5]) = fixture();
+        let groups = group_regions_by_unit(&graph);
+        // three groups, in discovery order: {R1,R2} (unit U1), {R3} (unit U2), {R4,R5} (no unit, pooled)
+        assert_eq!(groups, vec![vec![r1, r2], vec![r3], vec![r4, r5]]);
+    }
+
+    #[test]
+    fn empty_graph_yields_no_groups() {
+        assert!(group_regions_by_unit(&BoxGraph::from_boxes(Vec::new())).is_empty());
+    }
 }
