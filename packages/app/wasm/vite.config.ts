@@ -8,6 +8,6 @@ const headers = {
 }
 
 export default defineConfig({
-    server: {headers},
-    preview: {headers}
+    server: {headers, port: 8080},
+    preview: {headers, port: 8080}
 })

@@ -7,7 +7,7 @@ import {EngineStateSchema, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {PPQN} from "@opendaw/lib-dsp"
 import {Env} from "../../Env"
 import {serializeUpdateTasks} from "../../sync/serialize-update-tasks"
-import {loadEngineModules} from "../../engine-modules"
+import {createEngineMemory, loadEngineModules} from "../../engine-modules"
 import workletURL from "../metronome/engine-worklet.ts?worker&url"
 
 // Notes, end to end. Mirrored regions: ONE note collection (a 1-quarter arpeggio) shared by TWO
@@ -91,10 +91,12 @@ export const NotesPage: PageFactory<Env> = ({lifecycle}) => {
         context.wrap(ctx)
         await ctx.audioWorklet.addModule(workletURL)
         const {engineModule, instrumentModule} = await loadEngineModules()
+        const memory = createEngineMemory()
         const workletNode = new AudioWorkletNode(ctx, "engine", {
             processorOptions: {
                 engineModule,
                 instrumentModule,
+                memory,
                 sampleRate: ctx.sampleRate,
                 metronome: false
             }

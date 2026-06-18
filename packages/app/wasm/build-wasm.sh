@@ -15,12 +15,21 @@ cd "$ROOT/crates"
 TARGET=wasm32-unknown-unknown
 OUT="target/$TARGET/release"
 DEVICE_BASE=4194304 # 4 MiB: above the engine's static data, inside its reserved window, below the talc heap
+MAX_MEMORY=4294967296 # 4 GiB = 65536 wasm pages, the wasm32 ceiling (address-space reservation, lazily committed)
 
-cargo rustc -p engine --release --target "$TARGET" -- -C link-arg=--import-memory
+# SHARED linear memory so the main thread can see the WASM heap. Importing a shared memory means the
+# module must DECLARE a shared memory import (--shared-memory + --max-memory). We do NOT enable atomic
+# instructions: the engine is single-threaded (only the audio thread runs wasm; the main thread only writes
+# sample data into the heap), so we only need the shared FLAG, not atomic ops. --no-check-features skips
+# wasm-ld's atomics/bulk-memory feature lint on precompiled core and the deps. Stays on stable, no build-std.
+SHARED="-C link-arg=--shared-memory -C link-arg=--max-memory=$MAX_MEMORY -C link-arg=--no-check-features"
+
+cargo rustc -p engine --release --target "$TARGET" -- -C link-arg=--import-memory $SHARED
 cargo rustc -p device-sine --release --target "$TARGET" -- \
   -C link-arg=--import-memory \
   -C link-arg=--global-base=$DEVICE_BASE \
-  -C link-arg=--export=__stack_pointer
+  -C link-arg=--export=__stack_pointer \
+  $SHARED
 cargo build -p sine --release --target "$TARGET"
 
 cp "$OUT/engine.wasm" "$OUT/device_sine.wasm" "$OUT/sine.wasm" "$ROOT/packages/app/wasm/public/"

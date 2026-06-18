@@ -7,7 +7,7 @@ import {EngineStateSchema, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {PPQN} from "@opendaw/lib-dsp"
 import {Env} from "../../Env"
 import {serializeUpdateTasks} from "../../sync/serialize-update-tasks"
-import {loadEngineModules} from "../../engine-modules"
+import {createEngineMemory, loadEngineModules} from "../../engine-modules"
 import workletURL from "../metronome/engine-worklet.ts?worker&url"
 
 // Two audio units, two parts, ONE device. The engine builds one PluginInstrument (sine plugin) per audio
@@ -94,8 +94,9 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
         context.wrap(ctx)
         await ctx.audioWorklet.addModule(workletURL)
         const {engineModule, instrumentModule} = await loadEngineModules()
+        const memory = createEngineMemory()
         const workletNode = new AudioWorkletNode(ctx, "engine", {
-            processorOptions: {engineModule, instrumentModule, sampleRate: ctx.sampleRate, metronome: false}
+            processorOptions: {engineModule, instrumentModule, memory, sampleRate: ctx.sampleRate, metronome: false}
         })
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)

@@ -9,6 +9,7 @@
 type BootOptions = {
     engineModule: WebAssembly.Module
     instrumentModule: WebAssembly.Module
+    memory: WebAssembly.Memory // SHARED, created on the main thread so it can see the WASM heap
     sampleRate: number
     metronome?: boolean // default true; the note's page sets false to hear only the instrument
 }
@@ -46,10 +47,11 @@ class EngineProcessor extends AudioWorkletProcessor {
 
     constructor(options?: AudioWorkletNodeOptions) {
         super()
-        const {engineModule, instrumentModule, sampleRate, metronome}: BootOptions = options?.processorOptions
+        const {engineModule, instrumentModule, memory, sampleRate, metronome}: BootOptions = options?.processorOptions
         this.#sampleRate = sampleRate
-        // one shared linear memory: 256 pages (16 MiB) initial, growable (talc grows it on demand).
-        this.#memory = new WebAssembly.Memory({initial: 256})
+        // the one SHARED linear memory, created on the main thread and handed in (so the main thread can
+        // see the WASM heap). talc grows it on demand; shared memory grows in place without detaching.
+        this.#memory = memory
         const env = {memory: this.#memory}
         // the device plugin first (the engine imports its `process` / `state_size`); the engine instance
         // retains the device through that import binding, so no separate reference is kept here.

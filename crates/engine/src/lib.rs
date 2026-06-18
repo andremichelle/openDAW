@@ -93,7 +93,8 @@ const DEFAULT_SAMPLE_RATE: f32 = 48_000.0; // used by `reset` (data-path only; i
 /// with no overlapping `&mut` to the same cell.
 struct Shared<T>(UnsafeCell<T>);
 
-// SAFETY: the engine wasm is single-threaded (no atomics), so there is never concurrent access.
+// SAFETY: only the audio thread runs engine code, so there is never concurrent access (the shared
+// memory lets the main thread write sample data, but it never executes the engine).
 unsafe impl<T> Sync for Shared<T> {}
 
 impl<T> Shared<T> {
@@ -708,10 +709,12 @@ pub extern "C" fn setup_device() -> u32 {
 }
 
 // Dynamic heap: talc claims linear memory via `memory.grow` on demand (no fixed arena) and reclaims
-// freed blocks. Single-threaded wasm, so we wrap the non-Sync `TalcCell` and assert `Sync` (exactly
-// what talc's own `TalcSyncCell` does), but keep the inner cell reachable so we can read counters,
-// which `TalcSyncCell` does not expose.
-#[cfg(all(not(target_feature = "atomics"), target_family = "wasm"))]
+// freed blocks. The engine runs on ONE thread (the audio thread); the linear memory is shared only so the
+// main thread can WRITE sample data into it, never to run engine code, so there is still no concurrent
+// access. We wrap the non-Sync `TalcCell` and assert `Sync` (exactly what talc's own `TalcSyncCell` does),
+// but keep the inner cell reachable so we can read counters, which `TalcSyncCell` does not expose. Always
+// present on wasm regardless of the `atomics` feature (the shared-memory build enables it).
+#[cfg(target_family = "wasm")]
 mod heap {
     use core::alloc::{GlobalAlloc, Layout};
     use talc::cell::TalcCell;
@@ -719,7 +722,8 @@ mod heap {
 
     struct EngineAlloc(TalcCell<WasmGrowAndClaim, WasmBinning>);
 
-    // SAFETY: the engine wasm is single-threaded (no atomics), so there is never concurrent access.
+    // SAFETY: only the audio thread runs engine code, so there is never concurrent access (the shared
+    // memory lets the main thread write sample data, but it never executes the engine).
     unsafe impl Sync for EngineAlloc {}
 
     unsafe impl GlobalAlloc for EngineAlloc {
