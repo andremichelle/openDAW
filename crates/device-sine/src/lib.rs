@@ -119,22 +119,16 @@ fn apply(state: &mut SynthState, event: &EventRecord, sample_rate: f32) {
 
 // ---- The device ABI: shared with the engine, called wasm-to-wasm. ----
 
-static mut SAMPLE_RATE: f32 = 48_000.0;
-
+/// Bytes the engine must allocate (zeroed) for one instance's state block. The sine's state is a fixed
+/// voice array, so the size does not depend on `sample_rate`; the parameter keeps the ABI uniform with
+/// devices whose state IS rate-sized (e.g. device-saw's delay buffer).
 #[no_mangle]
-pub extern "C" fn init(sample_rate: f32) {
-    unsafe { SAMPLE_RATE = sample_rate }
-}
-
-/// Bytes the engine must allocate (zeroed) for one instance's state block.
-#[no_mangle]
-pub extern "C" fn state_size() -> u32 {
+pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
     core::mem::size_of::<SynthState>() as u32
 }
 
 #[no_mangle]
 pub extern "C" fn process(desc_ptr: u32) {
     let ports = unsafe { Ports::<SynthState>::from_descriptor(desc_ptr) };
-    let sample_rate = unsafe { SAMPLE_RATE };
-    render(ports.state, ports.events, ports.output, sample_rate);
+    render(ports.state, ports.events, ports.output, ports.sample_rate);
 }

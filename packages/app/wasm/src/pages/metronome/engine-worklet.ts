@@ -20,11 +20,11 @@ type BootOptions = {
     metronome?: boolean // default true; the note's page sets false to hear only the instrument
 }
 
-// The device exports the loader touches. A device may omit the relocation helpers if it needs none.
+// The device exports the loader touches. `state_size` takes the sample rate (devices size their state
+// from it, e.g. a delay buffer), so the device holds no global rate. Relocation helpers are optional.
 type DeviceExports = {
     process: (descPtr: number) => void
-    init: (sampleRate: number) => void
-    state_size: () => number
+    state_size: (sampleRate: number) => number
     __wasm_apply_data_relocs?: () => void
     __wasm_call_ctors?: () => void
 }
@@ -130,10 +130,11 @@ class EngineProcessor extends AudioWorkletProcessor {
         }).exports as unknown as DeviceExports
         device.__wasm_apply_data_relocs?.()
         device.__wasm_call_ctors?.()
-        device.init(sampleRate)
+        // The sample rate is known at load (the earliest point), so the device sizes its state from it
+        // here (e.g. a delay buffer) and reads it per render from the descriptor — no device-global rate.
         const processIndex = table.grow(1) // a fresh slot for the engine -> device call_indirect
         table.set(processIndex, device.process as unknown as () => void)
-        engine.device_register(processIndex, device.state_size())
+        engine.device_register(processIndex, device.state_size(sampleRate))
     }
 
     #applyUpdates(bytes: ArrayBuffer): void {

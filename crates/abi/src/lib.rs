@@ -9,6 +9,7 @@
 //!   [5] param_count  [6] params_ptr       (-> f32[param_count])
 //!   [7] state_ptr    (-> device instance state)
 //!   [8] event_count  [9] events_ptr       (-> EventRecord[event_count])  (note events; 0 for effects)
+//!   [10] sample_rate (f32 bits)           (the engine's render sample rate; passed in, never a global)
 
 #![cfg_attr(not(test), no_std)]
 
@@ -64,6 +65,9 @@ pub struct Ports<'a, S> {
     pub state: &'a mut S,
     /// The block's note events (empty for audio effects / `from_descriptor`).
     pub events: &'a [EventRecord],
+    /// The engine's render sample rate. Passed in via the descriptor, so devices never hold it as a
+    /// global; the host sets it from the audio context.
+    pub sample_rate: f32,
 }
 
 impl<'a, S> Ports<'a, S> {
@@ -88,6 +92,7 @@ impl<'a, S> Ports<'a, S> {
         let state_ptr = *desc.add(7) as *mut S;
         let event_count = *desc.add(8) as usize;
         let events_ptr = *desc.add(9) as *const EventRecord;
+        let sample_rate = f32::from_bits(*desc.add(10));
         let in_offsets = if in_count == 0 {
             slice::from_raw_parts(NonNull::<u32>::dangling().as_ptr(), 0)
         } else {
@@ -115,6 +120,7 @@ impl<'a, S> Ports<'a, S> {
             params,
             state: &mut *state_ptr,
             events,
+            sample_rate,
         }
     }
 }

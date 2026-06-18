@@ -205,14 +205,15 @@ impl PluginInstrument {
         let device_state = vec![0u32; state_size.div_ceil(4)].into_boxed_slice(); // 4-aligned, >= state_size bytes
         let out_offsets = vec![device_output.as_ptr() as u32].into_boxed_slice();
         // descriptor words (see the `abi` layout): frames, in_count/ptr, out_count/ptr, param_count/ptr,
-        // state_ptr, event_count/ptr.
+        // state_ptr, event_count/ptr, sample_rate (f32 bits).
         let descriptor = vec![
             RENDER_QUANTUM as u32,
             0, 0,
             1, out_offsets.as_ptr() as u32,
             0, 0,
             device_state.as_ptr() as u32,
-            0, device_events.as_ptr() as u32
+            0, device_events.as_ptr() as u32,
+            sample_rate.to_bits()
         ].into_boxed_slice();
         Self {
             process_index: device.process_index,
