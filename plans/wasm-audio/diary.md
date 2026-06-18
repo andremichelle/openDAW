@@ -1,12 +1,12 @@
 # Diary
 
-## Day 1: foundations
+## Day 1 (2026-06-16): foundations
 
 - Sine: Rust DSP to wasm, played in an AudioWorklet, with a test app and a live deploy. Done.
 - Composition spike: independent wasm modules share memory and call each other; plugin and memory model validated. Done.
 - Parity harness: native unit tests plus offline wasm-vs-TS null tests in CI. Done.
 
-## Day 2: data layer, live sync, and the metronome
+## Day 2 (2026-06-17): data layer, live sync, and the metronome
 
 - BoxGraph in Rust: ported and proven by loading a real project byte-for-byte. Done.
 - Schema registry: the TS box-forge now also generates the Rust registry from the same schema. Done.
@@ -30,7 +30,7 @@
 - Tempo Automation page: a live page that accelerates 30 to 1000 bpm over a four-bar loop, with a tempo-automation toggle, a bpm slider, and a curved first segment. Done.
 - Code cleanliness: clippy-clean across the host and wasm targets, with unnecessary public surface and dead code trimmed, and field accessors replacing hand-written variant matches. Done.
 
-## Day 3: notes, loopable regions, and audible voices
+## Day 3 (2026-06-18): notes, loopable regions, audible voices, the device as a real plugin, and per-unit instruments
 
 - NoteEvent + EventSpan: a note model (pitch, cent, velocity, duration) on a span trait, ordered like the TS comparator. Done.
 - Loopable-region math: `locate_loops` yields the loop cycles a block overlaps, mapped to global / region / window spans, the shared basis for note, audio, and automation regions. Ported from the TS LoopableRegion tests. Done.
@@ -40,10 +40,6 @@
 - Sine instrument + audio buffer: a minimal polyphonic instrument (one sine voice with an ADSR per note) that renders the sequencer's note lifecycle into a stereo render-quantum buffer, sample-accurately. Done.
 - NoteCollection binder: the box graph to notes bridge, an incrementally maintained note collection mirroring the value collection. Done.
 - Audible end to end: a pure-Rust test drives a looping note region through the sequencer and instrument over a real block loop and confirms recurring audio, proving the note-to-sound path before any browser. Done.
-- Still to wire: hosting the sequencer + instrument inside the WASM engine and a test page, so the notes are heard live (all the pieces are built and tested).
-
-## Day 4: note handling, the device as a real plugin, and per-unit instruments
-
 - Engine hosting: the sequencer and sine instrument run inside the WASM engine on an EngineContext graph, driven block by block and mixed into the output buffer. The Notes and Loop Truncation pages now play note regions live, with mirrored regions sharing one arpeggio across a loop split at bar two. Done.
 - Runtime plugin loading: the sine instrument is its own `device_sine.wasm`, loaded as a separate module that shares the engine's single linear memory and is called wasm-to-wasm through the abi descriptor with zero copy. The device is heap-free, its per-voice state living in an engine-allocated block. Done.
 - Per-audio-unit instruments: the graph builder creates one instrument per audio unit, grouping note regions by their owning unit through pointers, region to track to unit. Each instrument calls the one loaded device with its own state block, so units play independently on a single device.wasm. The Multiple Plugins page proves it: a slow low bass under a fast high arpeggio, two units at once. Done.
