@@ -49,7 +49,7 @@ export const LoopTruncationPage: PageFactory<Env> = ({lifecycle}) => {
     // engine ignores this hierarchy and reads the NoteRegionBox directly.
     const mockAudioUnit = AudioUnitBox.create(boxGraph, UUID.generate(), box => {
         box.collection.refer(mandatoryBoxes.rootBox.audioUnits)
-        box.index.setValue(1)
+        box.index.setValue(0) // device slot 0 (sine)
     })
     const mockTrack = TrackBox.create(boxGraph, UUID.generate(), box => {
         box.tracks.refer(mockAudioUnit.tracks)
@@ -92,9 +92,9 @@ export const LoopTruncationPage: PageFactory<Env> = ({lifecycle}) => {
         const ctx = new AudioContext()
         context.wrap(ctx)
         await ctx.audioWorklet.addModule(workletURL)
-        const {engineModule, instrumentModule} = await loadEngineModules()
+        const {engineModule, deviceModules} = await loadEngineModules()
         const memory = createEngineMemory()
-        const workletNode = new AudioWorkletNode(ctx, "engine", {processorOptions: {engineModule, instrumentModule, memory, sampleRate: ctx.sampleRate, metronome: false}})
+        const workletNode = new AudioWorkletNode(ctx, "engine", {processorOptions: {engineModule, deviceModules, memory, sampleRate: ctx.sampleRate, metronome: false}})
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)
         workletNode.port.onmessage = (event: MessageEvent<{type: string, bytes?: ArrayBuffer}>) => {

@@ -52,34 +52,29 @@ use transport::transport::{Transport, RENDER_QUANTUM};
 use value::event::EventCollection;
 use value::note::NoteEvent;
 
-// The sine device plugin (`device_sine.wasm`), loaded as a separate module sharing this engine's linear
-// memory. The host wires these imports to the device's exports and points the device's stack pointer at
-// an engine-allocated stack (see `build-wasm.sh` + the worklet). The engine builds the descriptor in
-// shared memory and calls `instrument_process` wasm-to-wasm — zero copy.
+// Devices are PIC side modules the host loads at runtime, each at a talc-assigned base, and installs
+// into the ONE shared `__indirect_function_table` (the engine is built `--import-table`). The engine
+// keeps a small registry of loaded devices and calls each device's `process(desc_ptr)` by its table slot
+// via `call_indirect` — wasm-to-wasm, zero copy. The host loader fills the registry through the
+// `device_register` export and allocates device data + stacks through `device_alloc`.
+#[derive(Clone, Copy)]
+struct DeviceReg {
+    process_index: u32, // slot in the shared function table holding the device's `process`
+    state_size: u32     // bytes the engine must allocate (zeroed) per instrument instance
+}
+
+// Call a device's `process` through the shared function table: a wasm function pointer IS a table index,
+// so transmuting the index to a fn and calling it emits `call_indirect` on the imported table.
 #[cfg(target_family = "wasm")]
-#[link(wasm_import_module = "instrument")]
-extern "C" {
-    #[link_name = "process"]
-    fn instrument_process(desc_ptr: u32);
-    #[link_name = "state_size"]
-    fn instrument_state_size() -> u32;
+#[inline]
+fn call_device_process(process_index: u32, desc_ptr: u32) {
+    let process: extern "C" fn(u32) = unsafe { core::mem::transmute(process_index as usize) };
+    process(desc_ptr);
 }
-
-// On native (cargo test compiles the lib), the device imports are unavailable; stub them so the crate
-// builds. The audio path only runs under wasm.
+// Native (cargo test) never runs the audio path; stub so the crate builds.
 #[cfg(not(target_family = "wasm"))]
-unsafe fn instrument_process(_desc_ptr: u32) {}
-#[cfg(not(target_family = "wasm"))]
-unsafe fn instrument_state_size() -> u32 {
-    0
-}
+fn call_device_process(_process_index: u32, _desc_ptr: u32) {}
 
-// The device's relocated read-only data sits at `--global-base=4 MiB` (build-wasm.sh). Nothing here
-// needs to reserve it: talc's `WasmGrowAndClaim` only ever claims pages it grows ABOVE the initial
-// linear memory (16 MiB), so the heap never reaches down to 4 MiB. A bss "reserve" would be worse than
-// useless: with imported memory the linker zero-fills bss on instantiation, and a reserve spanning
-// 4 MiB would wipe the device's data segment (its exp2f table etc.) right after the device wrote it.
-const DEVICE_STACK_SIZE: usize = 256 * 1024; // talc-allocated stack handed to the device
 const DEVICE_MAX_EVENTS: usize = 256; // per-quantum note events passed to the device
 
 mod metronome;
@@ -184,6 +179,7 @@ impl NoteRegionSource for BoundNoteRegions {
 /// node fans out to its stereo output for the master bus. All device-facing memory (state, IO, descriptor)
 /// is talc-allocated here, so it is freed when the instrument is dropped.
 struct PluginInstrument {
+    process_index: u32, // the device's `process` slot in the shared function table
     sample_rate: f32,
     note_input: NoteEventInstrument,
     events: EventBuffer,
@@ -201,11 +197,11 @@ struct PluginInstrument {
 }
 
 impl PluginInstrument {
-    fn new(sample_rate: f32) -> Self {
+    fn new(sample_rate: f32, device: DeviceReg) -> Self {
         let device_output = vec![0.0f32; RENDER_QUANTUM].into_boxed_slice();
         let blank = EventRecord {offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
         let device_events = vec![blank; DEVICE_MAX_EVENTS].into_boxed_slice();
-        let state_size = unsafe { instrument_state_size() } as usize;
+        let state_size = device.state_size as usize;
         let device_state = vec![0u32; state_size.div_ceil(4)].into_boxed_slice(); // 4-aligned, >= state_size bytes
         let out_offsets = vec![device_output.as_ptr() as u32].into_boxed_slice();
         // descriptor words (see the `abi` layout): frames, in_count/ptr, out_count/ptr, param_count/ptr,
@@ -219,6 +215,7 @@ impl PluginInstrument {
             0, device_events.as_ptr() as u32
         ].into_boxed_slice();
         Self {
+            process_index: device.process_index,
             sample_rate,
             note_input: NoteEventInstrument::new(),
             events: EventBuffer::new(),
@@ -299,7 +296,7 @@ impl Processor for PluginInstrument {
         self.device_events[..count].sort_by_key(|record| record.offset);
         self.descriptor[0] = RENDER_QUANTUM as u32;
         self.descriptor[8] = count as u32;
-        unsafe { instrument_process(self.descriptor.as_ptr() as u32) }
+        call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
         let mut output = self.output.borrow_mut();
         for index in 0..RENDER_QUANTUM {
             let sample = self.device_output[index];
@@ -319,7 +316,8 @@ struct Engine {
     output_bus: Option<SharedAudioBuffer>,
     sample_rate: f32,
     blocks: Vec<Block>,
-    device_stack: Option<Box<[u8]>>, // talc-allocated stack handed to the device plugin
+    devices: Vec<DeviceReg>,           // loaded device plugins, in load order (the host registers them)
+    device_allocs: Vec<Box<[u8]>>,     // talc-owned regions handed to devices (data + stacks); kept alive
     controls: Rc<Controls>
 }
 
@@ -335,19 +333,28 @@ impl Engine {
             output_bus: None,
             sample_rate,
             blocks: Vec::new(),
-            device_stack: None,
+            devices: Vec::new(),
+            device_allocs: Vec::new(),
             controls: Rc::new(Controls::new())
         }
     }
 
-    /// Allocate (from talc) the stack the device plugin runs on, and return its top address. The host
-    /// sets the device's `__stack_pointer` to this before any `process` call, so the device's stack
-    /// lives in engine-owned memory disjoint from the engine's own stack. Call once, before `bind`.
-    fn setup_device(&mut self) -> u32 {
-        let stack = vec![0u8; DEVICE_STACK_SIZE].into_boxed_slice();
-        let top = stack.as_ptr() as u32 + DEVICE_STACK_SIZE as u32; // wasm stack grows down from the top
-        self.device_stack = Some(stack);
-        top
+    /// Allocate `size` bytes from talc for a loading device (its relocated data region, or its stack) and
+    /// return the address. The block is kept alive for the session (devices live until shutdown), so the
+    /// memory the device's `__memory_base` / `__stack_pointer` point at never moves or frees.
+    fn device_alloc(&mut self, size: usize) -> u32 {
+        let block = vec![0u8; size].into_boxed_slice();
+        let ptr = block.as_ptr() as u32;
+        self.device_allocs.push(block);
+        ptr
+    }
+
+    /// Register a loaded device: the table slot holding its `process` and the bytes its state block needs.
+    /// Returns the device id (its index). The host calls this once per device, before `bind`.
+    fn device_register(&mut self, process_index: u32, state_size: u32) -> u32 {
+        let id = self.devices.len() as u32;
+        self.devices.push(DeviceReg {process_index, state_size});
+        id
     }
 
     /// Apply one forward-only transaction, returning the resulting checksum (or `Err` on a
@@ -495,9 +502,17 @@ impl Engine {
         let master = Rc::new(RefCell::new(AudioBusProcessor::new(output_buffer.clone())));
         let master_id = self.context.register_processor(master.clone());
         self.output_bus = Some(output_buffer);
-        for regions in self.bind_note_regions_by_unit() {
+        if self.devices.is_empty() {
+            return; // no device plugin loaded -> nothing to voice the notes with
+        }
+        // One instrument per audio unit. Until the unit's real input instrument device is read from the
+        // box, pick the device by the audio unit's `index` field (key 11) modulo the loaded devices, so
+        // the page deterministically controls which unit gets which device (e.g. bass -> sawtooth).
+        for (unit, regions) in self.bind_note_regions_by_unit() {
+            let slot = unit.map(|uuid| self.read_pulses(uuid, 11) as usize).unwrap_or(0) % self.devices.len();
+            let device = self.devices[slot];
             let source: SharedNoteEventSource = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {regions}))));
-            let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate)));
+            let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, device)));
             instrument.borrow_mut().set_note_event_source(source);
             master.borrow_mut().add_audio_source(instrument.borrow().audio_output());
             let instrument_id = self.context.register_processor(instrument);
@@ -509,13 +524,13 @@ impl Engine {
     /// discovery order). The chain is pointer-only: region.regions (key 1) -> the track's regions hub,
     /// track.tracks (key 1) -> the unit's tracks hub. Regions that resolve to no unit are grouped together
     /// (one fallback instrument) so they still sound.
-    fn bind_note_regions_by_unit(&mut self) -> Vec<Vec<(NoteRegion, NoteCollection)>> {
+    fn bind_note_regions_by_unit(&mut self) -> Vec<(Option<Uuid>, Vec<(NoteRegion, NoteCollection)>)> {
         let mut bound_per_unit = Vec::new();
-        for members in group_regions_by_unit(&self.graph) {
+        for (unit, members) in group_regions_by_unit(&self.graph) {
             let bound: Vec<(NoteRegion, NoteCollection)> =
                 members.into_iter().filter_map(|region_uuid| self.bind_region(region_uuid)).collect();
             if !bound.is_empty() {
-                bound_per_unit.push(bound);
+                bound_per_unit.push((unit, bound));
             }
         }
         bound_per_unit
@@ -540,10 +555,11 @@ impl Engine {
     }
 }
 
-/// Group note-region uuids by their owning audio unit, in discovery order: region.regions (key 1) ->
-/// the track, then track.tracks (key 1) -> the unit. Regions resolving to no unit (orphans) collect into
-/// the `None`-keyed group, kept so they still sound. Pure over the box graph (unit-tested).
-fn group_regions_by_unit(graph: &BoxGraph) -> Vec<Vec<Uuid>> {
+/// Group note-region uuids by their owning audio unit, in discovery order, returning `(unit, regions)`
+/// per group. The chain is pointer-only: region.regions (key 1) -> the track, then track.tracks (key 1)
+/// -> the unit. Regions resolving to no unit (orphans) collect into the `None`-keyed group, kept so they
+/// still sound. The caller reads the unit (e.g. its `index`) to choose the device. Pure (unit-tested).
+fn group_regions_by_unit(graph: &BoxGraph) -> Vec<(Option<Uuid>, Vec<Uuid>)> {
     let region_uuids: Vec<Uuid> = graph.find_all_by_name("NoteRegionBox").iter().map(|region| region.uuid).collect();
     let mut groups: Vec<(Option<Uuid>, Vec<Uuid>)> = Vec::new();
     for region_uuid in region_uuids {
@@ -553,7 +569,7 @@ fn group_regions_by_unit(graph: &BoxGraph) -> Vec<Vec<Uuid>> {
             None => groups.push((unit, vec![region_uuid]))
         }
     }
-    groups.into_iter().map(|(_, members)| members).collect()
+    groups
 }
 
 /// The audio unit a note region belongs to: region.regions (key 1) -> track, then track.tracks (key 1)
@@ -696,13 +712,26 @@ pub extern "C" fn bind() -> i32 {
     }
 }
 
-/// Allocate the device plugin's stack and return its top address. The host sets the device's
-/// `__stack_pointer` to this before any render (and before `bind`, which sizes the device state).
+/// Allocate `size` bytes of engine (talc) memory for a loading device and return the address. The host
+/// loader uses this for a device's relocated data region (its `__memory_base`) and its stack.
 #[no_mangle]
-pub extern "C" fn setup_device() -> u32 {
+pub extern "C" fn device_alloc(size: u32) -> u32 {
     unsafe {
         match ENGINE.get().as_mut() {
-            Some(engine) => engine.setup_device(),
+            Some(engine) => engine.device_alloc(size as usize),
+            None => 0
+        }
+    }
+}
+
+/// Register a loaded device: `process_index` is its `process` slot in the shared function table,
+/// `state_size` the bytes per instrument state block. Returns the device id. Call once per device, before
+/// `bind` (which builds the graph and assigns devices to units).
+#[no_mangle]
+pub extern "C" fn device_register(process_index: u32, state_size: u32) -> u32 {
+    unsafe {
+        match ENGINE.get().as_mut() {
+            Some(engine) => engine.device_register(process_index, state_size),
             None => 0
         }
     }
@@ -819,7 +848,11 @@ mod tests {
         let (graph, [r1, r2, r3, r4, r5]) = fixture();
         let groups = group_regions_by_unit(&graph);
         // three groups, in discovery order: {R1,R2} (unit U1), {R3} (unit U2), {R4,R5} (no unit, pooled)
-        assert_eq!(groups, vec![vec![r1, r2], vec![r3], vec![r4, r5]]);
+        assert_eq!(groups, vec![
+            (Some(uuid(0x10)), vec![r1, r2]),
+            (Some(uuid(0x20)), vec![r3]),
+            (None, vec![r4, r5])
+        ]);
     }
 
     #[test]

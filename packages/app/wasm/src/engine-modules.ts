@@ -1,10 +1,10 @@
-// Fetch + compile the two wasm modules the engine worklet needs: the engine itself and the sine
-// instrument plugin (loaded as a separate module sharing the engine's memory). Both are handed to the
-// "engine" AudioWorkletProcessor via processorOptions.
+// Fetch + compile the wasm modules the engine worklet needs: the engine (the dynamic-linker host) and
+// the device PLUGINS (PIC side modules the engine loads at host-assigned bases). All are handed to the
+// "engine" AudioWorkletProcessor via processorOptions; the worklet links the devices into the engine.
 
 export type EngineModules = {
     engineModule: WebAssembly.Module
-    instrumentModule: WebAssembly.Module
+    deviceModules: ReadonlyArray<WebAssembly.Module> // PIC side modules, in load order (device 0, 1, ...)
 }
 
 // The engine's single linear memory: SHARED, so the main thread can see the WASM heap (e.g. to write
@@ -14,14 +14,13 @@ export type EngineModules = {
 export const createEngineMemory = (): WebAssembly.Memory =>
     new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
 
+// The device PIC side modules to load, in order. Round-robin-assigned to audio units by the engine until
+// the per-unit instrument device is read from the box graph, so the order picks which unit gets which.
+const DEVICE_URLS = ["/device_sine.wasm", "/device_saw.wasm"] as const
+
 export const loadEngineModules = async (): Promise<EngineModules> => {
-    const [engineBytes, instrumentBytes] = await Promise.all([
-        fetch("/engine.wasm").then(response => response.arrayBuffer()),
-        fetch("/device_sine.wasm").then(response => response.arrayBuffer())
-    ])
-    const [engineModule, instrumentModule] = await Promise.all([
-        WebAssembly.compile(engineBytes),
-        WebAssembly.compile(instrumentBytes)
-    ])
-    return {engineModule, instrumentModule}
+    const urls = ["/engine.wasm", ...DEVICE_URLS]
+    const buffers = await Promise.all(urls.map(url => fetch(url).then(response => response.arrayBuffer())))
+    const [engineModule, ...deviceModules] = await Promise.all(buffers.map(bytes => WebAssembly.compile(bytes)))
+    return {engineModule, deviceModules}
 }

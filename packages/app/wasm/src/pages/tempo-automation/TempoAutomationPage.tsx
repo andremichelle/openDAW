@@ -71,9 +71,9 @@ export const TempoAutomationPage: PageFactory<Env> = ({lifecycle}) => {
         const ctx = new AudioContext()
         context.wrap(ctx)
         await ctx.audioWorklet.addModule(workletURL)
-        const {engineModule, instrumentModule} = await loadEngineModules()
+        const {engineModule, deviceModules} = await loadEngineModules()
         const memory = createEngineMemory()
-        const workletNode = new AudioWorkletNode(ctx, "engine", {processorOptions: {engineModule, instrumentModule, memory, sampleRate: ctx.sampleRate}})
+        const workletNode = new AudioWorkletNode(ctx, "engine", {processorOptions: {engineModule, deviceModules, memory, sampleRate: ctx.sampleRate}})
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)
         workletNode.port.onmessage = (event: MessageEvent<EngineMessage>) => {

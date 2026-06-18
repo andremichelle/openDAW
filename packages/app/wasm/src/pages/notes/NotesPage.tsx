@@ -54,7 +54,7 @@ export const NotesPage: PageFactory<Env> = ({lifecycle}) => {
     // throwaway structure to make the project valid, not a real audio-unit/track implementation.
     const mockAudioUnit = AudioUnitBox.create(boxGraph, UUID.generate(), box => {
         box.collection.refer(mandatoryBoxes.rootBox.audioUnits)
-        box.index.setValue(1)
+        box.index.setValue(0) // device slot 0 (sine)
     })
     const mockTrack = TrackBox.create(boxGraph, UUID.generate(), box => {
         box.tracks.refer(mockAudioUnit.tracks)
@@ -90,12 +90,12 @@ export const NotesPage: PageFactory<Env> = ({lifecycle}) => {
         const ctx = new AudioContext()
         context.wrap(ctx)
         await ctx.audioWorklet.addModule(workletURL)
-        const {engineModule, instrumentModule} = await loadEngineModules()
+        const {engineModule, deviceModules} = await loadEngineModules()
         const memory = createEngineMemory()
         const workletNode = new AudioWorkletNode(ctx, "engine", {
             processorOptions: {
                 engineModule,
-                instrumentModule,
+                deviceModules,
                 memory,
                 sampleRate: ctx.sampleRate,
                 metronome: false

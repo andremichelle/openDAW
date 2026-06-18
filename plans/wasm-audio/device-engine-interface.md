@@ -501,6 +501,30 @@ sidechain, aux), the audio outputs, whether it emits events, whether it reads th
 track kinds), and for containers the routing mode (layer, selector, drum) plus where the inner chains
 live in the box, channel counts, state size.
 
+Device build requirements (every device, to be a loadable PIC side module, section 9) — IMPLEMENTED and
+verified (device-sine + device-saw, build-wasm.sh). The exact recipe:
+
+- Build PIC on NIGHTLY with build-std (the precompiled `core` is non-PIC; a real device pulls enough of it
+  that `core` must be rebuilt PIC, which needs nightly):
+  `RUSTFLAGS="-C relocation-model=pic --experimental-pic -shared --shared-memory --max-memory=4GiB
+  --no-check-features -Zunstable-options -Cpanic=immediate-abort -Zdefault-visibility=hidden"
+  cargo +nightly build -Zbuild-std=core`. The engine + standalone sine stay on stable; only the devices
+  need nightly.
+- `-Cpanic=immediate-abort` AND `-Zdefault-visibility=hidden` are ESSENTIAL, not optional. Without them
+  `-shared` exports ALL of core, `--gc-sections` cannot prune it, and you get a ~1158-function module that
+  imports 58 GOT entries (which would require a full Emscripten-grade dynamic linker to resolve). WITH
+  them, only `process` / `init` / `state_size` are roots, core is pruned, and the module is ~2 KB with
+  ZERO GOT and no relocations, so the worklet loader needs no GOT resolution.
+- The dummy `__heap_base` / `__data_end` workaround is NOT needed on this toolchain: nightly already has
+  rust-lang/rust#156174 (which removed rustc's forced `--export=__heap_base` / `--export=__data_end` under
+  `-shared`, for dynamic wasm linking, issue #155173). Only older toolchains need the dummies.
+- A device `static` of `&dyn Trait` needs a `Sync` wrapper (a plain Rust rule). Function-pointer tables
+  are `Sync` and need no wrapper.
+- The device must NOT define its own memory or stack base; it imports `env.memory`, `env.__memory_base`,
+  `env.__table_base`, `env.__stack_pointer`, and `env.__indirect_function_table` from the host loader, and
+  exports `process` / `init` / `state_size` (+ `__wasm_apply_data_relocs` / `__wasm_call_ctors` when it has
+  relocations, which the tiny pruned device does not).
+
 ## 7. Phasing
 
 1. Move events to PULL and give devices their own timing. Add the descriptor's blocks-array, the
@@ -580,18 +604,33 @@ Keeps every requirement: one shared linear memory, zero-copy wasm-to-wasm (descr
 `call_indirect`), devices as separate wasm modules, talc owns ALL device memory (data, stack, state),
 panic strings kept (they sit in the device's talc-allocated data), single-threaded engine, no bss reserve.
 
-Risk, and the spike to run before committing: Rust PIC for `wasm32-unknown-unknown` is experimental and has
-sharp edges (e.g. trait objects have emitted position-dependent code, rust-lang/rust#108985; `--shared`
-has panicked on older toolchains, rustwasm/wasm-bindgen#1420). Spike a `no_std` device built as a PIC side
-module on the current toolchain first: confirm it emits `dylink.0` + the `__memory_base` import, loads via
-the steps above, and runs correctly with its data at a talc-assigned base. The engine also moves from the
-direct `instrument.process` import to `call_indirect` through the shared table, and becomes the side
-modules' linking environment (it exports the table plus a talc `alloc` / `free` for the loader). If the
-PIC spike hits a blocking toolchain bug, the fallback is a host-assigned `--global-base` per FIRST-party
-device (build-time) while third-party support waits on the toolchain, but the dynamic-linking model is the
-target.
+IMPLEMENTED and verified end to end (this session). The engine is built `--import-memory --import-table`
+and exports `device_alloc` / `device_register`; `PluginInstrument` calls its device by table slot via
+`call_indirect` (a transmuted index, since a wasm fn pointer IS a table index). The worklet
+(`engine-worklet.ts`) is the loader: it creates the shared table, instantiates the engine, then per device
+reads `dylink.0`, `device_alloc`s the data region + stack, sets `__memory_base` / `__table_base` /
+`__stack_pointer`, instantiates, runs `__wasm_apply_data_relocs` / `__wasm_call_ctors` (absent on the
+pruned device), installs `process` into a fresh table slot, and `device_register`s it. `device-sine` and
+`device-saw` (saw = sine with a sawtooth oscillator) are the two PIC devices; the engine assigns them to
+audio units round-robin.
 
-Sources: WebAssembly tool-conventions `DynamicLinking.md`; LLVM lld WebAssembly docs.
+A Node harness replicating the loader against the real engine + both devices proved it: sine and saw load
+at DISTINCT host-assigned bases in the one shared memory (e.g. 16832336 vs 16832592, both talc-allocated
+above 16 MiB), both render audio, and the waveforms differ. So two distinct device modules coexist and run
+correctly with no fixed addresses — the multi-device memory problem is solved.
+
+What the implementation actually required (correcting the earlier optimistic spike, which only held because
+it was trivial): NIGHTLY + `-Zbuild-std=core` (the precompiled `core` is non-PIC and a real device pulls
+it), plus `-Cpanic=immediate-abort` and `-Zdefault-visibility=hidden` so `--gc-sections` prunes core
+(otherwise a ~1158-function module with 58 GOT entries). With those, the device is ~2 KB with zero GOT, so
+the loader needs no GOT resolution. The dummy `__heap_base` / `__data_end` workaround turned out
+unnecessary on this nightly (it has rust-lang/rust#156174). The one piece a browser confirms (not Node) is
+the engine's per-quantum `call_indirect` into the device during a bound project; the dispatch mechanism
+itself is proven (the Node test calls the same exported `process`, and the engine builds with the table
+import + call_indirect).
+
+Sources: WebAssembly tool-conventions `DynamicLinking.md`; LLVM lld WebAssembly docs; spike + implementation
+in this session.
 
 ## 10. Open decisions for review
 
@@ -625,7 +664,7 @@ Decided already: the device is called once per quantum with the full `ProcessInf
 pulled on demand (MIDI fx); the engine never splits or pushes events; the device times its own sub-blocks
 via an (opt-in) device-SDK template; a device outputs exactly one kind (audio or events); and multi-device
 memory placement is resolved in section 9 by WASM dynamic linking (devices are PIC side modules whose data
-base the host assigns at load from talc, third-party included; pending a Rust-PIC spike).
+base the host assigns at load from talc, third-party included; spiked and verified on the stable toolchain).
 
 ## References
 

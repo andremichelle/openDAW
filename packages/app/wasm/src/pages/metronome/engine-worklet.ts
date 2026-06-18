@@ -1,29 +1,38 @@
-// Runs the engine wasm on the audio thread, with the sine instrument loaded as a SEPARATE wasm plugin
-// (device_sine.wasm) sharing one linear memory. The engine calls the device's `process` wasm-to-wasm
-// (zero copy). The host wires the device's exports into the engine's imports and relocates the device's
-// stack to an engine-(talc-)allocated block (so the two modules' stacks don't collide).
+// Runs the engine wasm on the audio thread. The engine is the dynamic-linker host: it owns the ONE shared
+// linear memory + function table, and loads each device as a PIC SIDE MODULE at a host-assigned base. The
+// loader here (per device) reads its `dylink.0`, allocates its data region + stack from the engine's talc
+// (device_alloc), sets the device's imported __memory_base / __table_base / __stack_pointer, applies its
+// data relocations, installs its `process` into the shared table, and registers it (device_register). The
+// engine then calls each device via call_indirect on that table slot — wasm-to-wasm, zero copy. So any
+// number of distinct device modules coexist in the one memory with no fixed addresses.
 //
 // The engine holds the wasm BoxGraph mirror; the main thread serializes SyncSource's UpdateTask[] into
 // bytes and posts them here. Each batch -> apply_updates, then bind() once the TimelineBox exists.
 
+const ENGINE_TABLE_RESERVE = 512 // shared table slots reserved for the engine's own functions (it needs ~42)
+const DEVICE_STACK_SIZE = 256 * 1024 // talc-allocated stack handed to each loaded device
+
 type BootOptions = {
     engineModule: WebAssembly.Module
-    instrumentModule: WebAssembly.Module
+    deviceModules: ReadonlyArray<WebAssembly.Module> // PIC side modules, in load order (device 0, 1, ...)
     memory: WebAssembly.Memory // SHARED, created on the main thread so it can see the WASM heap
     sampleRate: number
     metronome?: boolean // default true; the note's page sets false to hear only the instrument
 }
 
-type InstrumentExports = {
+// The device exports the loader touches. A device may omit the relocation helpers if it needs none.
+type DeviceExports = {
     process: (descPtr: number) => void
     init: (sampleRate: number) => void
     state_size: () => number
-    __stack_pointer: WebAssembly.Global
+    __wasm_apply_data_relocs?: () => void
+    __wasm_call_ctors?: () => void
 }
 
 type EngineExports = {
     init: (sampleRate: number) => void
-    setup_device: () => number
+    device_alloc: (size: number) => number
+    device_register: (processIndex: number, stateSize: number) => number
     input_ptr: () => number
     input_capacity: () => number
     apply_updates: (len: number) => number
@@ -37,9 +46,44 @@ type EngineExports = {
     set_metronome_enabled: (enabled: number) => void
 }
 
+// Read a varuint32 (LEB128) at `pos`; returns [value, nextPos].
+const readVarU32 = (bytes: Uint8Array, pos: number): [number, number] => {
+    let result = 0
+    let shift = 0
+    let cursor = pos
+    for (; ;) {
+        const byte = bytes[cursor++]
+        result |= (byte & 0x7f) << shift
+        if ((byte & 0x80) === 0) {break}
+        shift += 7
+    }
+    return [result >>> 0, cursor]
+}
+
+// Parse a device's `dylink.0` section for the WASM_DYLINK_MEM_INFO sizes the loader needs.
+const parseDylink = (module: WebAssembly.Module): { memorySize: number, tableSize: number } => {
+    const sections = WebAssembly.Module.customSections(module, "dylink.0")
+    if (sections.length === 0) {return {memorySize: 0, tableSize: 0}}
+    const bytes = new Uint8Array(sections[0])
+    let pos = 0
+    while (pos < bytes.length) {
+        const type = bytes[pos++]
+        const [size, afterSize] = readVarU32(bytes, pos)
+        if (type === 1) { // WASM_DYLINK_MEM_INFO: memorysize, memoryalignment, tablesize, tablealignment
+            const [memorySize, afterMem] = readVarU32(bytes, afterSize)
+            const [, afterAlign] = readVarU32(bytes, afterMem)
+            const [tableSize] = readVarU32(bytes, afterAlign)
+            return {memorySize, tableSize}
+        }
+        pos = afterSize + size
+    }
+    return {memorySize: 0, tableSize: 0}
+}
+
 class EngineProcessor extends AudioWorkletProcessor {
     readonly #memory: WebAssembly.Memory
     readonly #engine: EngineExports
+    readonly #table: WebAssembly.Table
     readonly #sampleRate: number
     #bound: boolean = false
     #sinceStats: number = 0
@@ -47,25 +91,49 @@ class EngineProcessor extends AudioWorkletProcessor {
 
     constructor(options?: AudioWorkletNodeOptions) {
         super()
-        const {engineModule, instrumentModule, memory, sampleRate, metronome}: BootOptions = options?.processorOptions
+        const {engineModule, deviceModules, memory, sampleRate, metronome}: BootOptions = options?.processorOptions
         this.#sampleRate = sampleRate
         // the one SHARED linear memory, created on the main thread and handed in (so the main thread can
         // see the WASM heap). talc grows it on demand; shared memory grows in place without detaching.
         this.#memory = memory
-        const env = {memory: this.#memory}
-        // the device plugin first (the engine imports its `process` / `state_size`); the engine instance
-        // retains the device through that import binding, so no separate reference is kept here.
-        const instrument = new WebAssembly.Instance(instrumentModule, {env}).exports as unknown as InstrumentExports
-        this.#engine = new WebAssembly.Instance(engineModule, {
-            env,
-            instrument: {process: instrument.process, state_size: instrument.state_size}
-        }).exports as unknown as EngineExports
-        this.#engine.init(sampleRate)
-        // relocate the device's stack into an engine-allocated block, then init the device.
-        instrument.__stack_pointer.value = this.#engine.setup_device()
-        instrument.init(sampleRate)
-        if (metronome === false) {this.#engine.set_metronome_enabled(0)}
+        // the one shared function table: the engine (main module) imports it and uses the low slots; each
+        // device's functions + its `process` entry are appended above via table.grow.
+        this.#table = new WebAssembly.Table({initial: ENGINE_TABLE_RESERVE, element: "anyfunc"})
+        const env = {memory, __indirect_function_table: this.#table}
+        // the engine is the dynamic-linker host; instantiate it first, before any device.
+        const engine = new WebAssembly.Instance(engineModule, {env}).exports as unknown as EngineExports
+        this.#engine = engine
+        engine.init(sampleRate)
+        // load each device PIC side module at a host-assigned base and register it with the engine.
+        for (const deviceModule of deviceModules) {this.#loadDevice(deviceModule, sampleRate)}
+        if (metronome === false) {engine.set_metronome_enabled(0)}
         this.port.onmessage = (event: MessageEvent) => this.#applyUpdates(event.data as ArrayBuffer)
+    }
+
+    // Link one PIC device side module into the engine: assign it memory + table + stack bases from talc,
+    // instantiate, apply its data relocations, install its `process` into the shared table, and register.
+    #loadDevice(module: WebAssembly.Module, sampleRate: number): void {
+        const engine = this.#engine
+        const table = this.#table
+        const {memorySize, tableSize} = parseDylink(module)
+        const memoryBase = engine.device_alloc(memorySize)
+        const tableBase = tableSize > 0 ? table.grow(tableSize) : table.length
+        const stackBase = engine.device_alloc(DEVICE_STACK_SIZE)
+        const device = new WebAssembly.Instance(module, {
+            env: {
+                memory: this.#memory,
+                __indirect_function_table: table,
+                __memory_base: new WebAssembly.Global({value: "i32", mutable: false}, memoryBase),
+                __table_base: new WebAssembly.Global({value: "i32", mutable: false}, tableBase),
+                __stack_pointer: new WebAssembly.Global({value: "i32", mutable: true}, stackBase + DEVICE_STACK_SIZE)
+            }
+        }).exports as unknown as DeviceExports
+        device.__wasm_apply_data_relocs?.()
+        device.__wasm_call_ctors?.()
+        device.init(sampleRate)
+        const processIndex = table.grow(1) // a fresh slot for the engine -> device call_indirect
+        table.set(processIndex, device.process as unknown as () => void)
+        engine.device_register(processIndex, device.state_size())
     }
 
     #applyUpdates(bytes: ArrayBuffer): void {

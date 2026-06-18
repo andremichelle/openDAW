@@ -26,6 +26,14 @@ name = "boxgraph"
 version = "0.0.0"
 
 [[package]]
+name = "device-saw"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+]
+
+[[package]]
 name = "device-sine"
 version = "0.0.0"
 dependencies = [
