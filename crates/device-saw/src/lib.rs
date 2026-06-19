@@ -160,5 +160,15 @@ pub extern "C" fn state_size(sample_rate: f32) -> u32 {
 #[no_mangle]
 pub extern "C" fn process(desc_ptr: u32) {
     let ports = unsafe { Ports::<SynthState>::from_descriptor(desc_ptr) };
-    render(ports.state, ports.events, ports.output, ports.sample_rate);
+    // PULL this instrument's notes per block into the device-owned scratch (Route A). Block offsets do
+    // not overlap and the host lifecycle-sorts each block, so the accumulated run is already
+    // offset-ordered for the whole quantum; render it in one pass (the delay then runs over the quantum).
+    let mut count = 0;
+    for block in ports.blocks {
+        if count >= ports.event_scratch.len() {
+            break;
+        }
+        count += abi::pull_events(block.p0, block.p1, block.flags, &mut ports.event_scratch[count..]);
+    }
+    render(ports.state, &ports.event_scratch[..count], ports.output, ports.sample_rate);
 }

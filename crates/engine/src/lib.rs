@@ -30,7 +30,7 @@ use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
 use boxgraph::updates::decode_forward;
-use abi::{EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON};
+use abi::{BlockRecord, EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON};
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::audio_generator::AudioGenerator;
@@ -75,7 +75,8 @@ fn call_device_process(process_index: u32, desc_ptr: u32) {
 #[cfg(not(target_family = "wasm"))]
 fn call_device_process(_process_index: u32, _desc_ptr: u32) {}
 
-const DEVICE_MAX_EVENTS: usize = 256; // per-quantum note events passed to the device
+const DEVICE_MAX_EVENTS: usize = 256; // per-quantum event scratch the device pulls into
+const DEVICE_MAX_BLOCKS: usize = RENDER_QUANTUM; // upper bound on blocks per quantum (one per sample worst case)
 
 mod metronome;
 use metronome::Metronome;
@@ -116,6 +117,98 @@ static INPUT: Shared<Vec<u8>> = Shared::new(Vec::new());
 static CHECKSUM: Shared<[u8; 32]> = Shared::new([0; 32]);
 static OUTPUT: Shared<[f32; RENDER_QUANTUM * 2]> = Shared::new([0.0; RENDER_QUANTUM * 2]);
 static ENGINE_STATE: Shared<[u8; ENGINE_STATE_LEN]> = Shared::new([0; ENGINE_STATE_LEN]);
+// The pull context the `host_pull_events` export reads. It is set up by the audio node (PluginInstrument)
+// right before it calls its device's `process`, and cleared after. Held in its OWN cell (NOT `ENGINE`), so
+// the device's re-entrant `host_pull_events` call never aliases the `&mut Engine` the render path holds.
+// The node scopes its `PULL.get()` borrows so none is live across the device call (single-threaded).
+static PULL: Shared<PullContext> = Shared::new(PullContext::new());
+
+/// What `host_pull_events` needs to resolve a device's input events for a pulse range: the device's note
+/// source, the quantum's blocks (to map a pulse position to a sample offset), the sample rate, and a
+/// reusable scratch. The blocks pointer borrows the live `ProcessInfo` for the duration of the device call.
+struct PullContext {
+    source: Option<SharedNoteEventSource>,
+    blocks: *const Block,
+    block_count: usize,
+    sample_rate: f32,
+    scratch: Vec<Event>
+}
+
+impl PullContext {
+    const fn new() -> Self {
+        Self {source: None, blocks: core::ptr::null(), block_count: 0, sample_rate: 0.0, scratch: Vec::new()}
+    }
+}
+
+// TS `NoteLifecycleEvent.Comparator`: by position; at equal position a note-complete (off) sorts before a
+// note-start (on). Mirrors `note_event_instrument::compare_lifecycle` (private there).
+fn compare_lifecycle(a: &Event, b: &Event) -> core::cmp::Ordering {
+    match a.position().partial_cmp(&b.position()) {
+        Some(core::cmp::Ordering::Equal) | None => lifecycle_rank(a).cmp(&lifecycle_rank(b)),
+        Some(order) => order
+    }
+}
+
+fn lifecycle_rank(event: &Event) -> u8 {
+    match event {
+        Event::NoteComplete {..} => 0,
+        _ => 1
+    }
+}
+
+/// Host import the device calls (wasm-to-wasm via the loader binding) to PULL its own input events for the
+/// pulse range `[from, to)`. Resolves the current device's note source, converts each event to a
+/// sample-offset `EventRecord` (absolute within the quantum), writes up to `max` into `out_ptr`, and
+/// returns the count. Reads only `PULL`, never `ENGINE`, so it is safe to call from inside `render`.
+#[no_mangle]
+pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
+    let pull = unsafe { PULL.get() };
+    let source = match &pull.source {
+        Some(source) => source.clone(),
+        None => return 0
+    };
+    if pull.blocks.is_null() {
+        return 0;
+    }
+    let blocks = unsafe { core::slice::from_raw_parts(pull.blocks, pull.block_count) };
+    let block = match blocks.iter().find(|block| block.p0 == from) {
+        Some(block) => *block,
+        None => return 0
+    };
+    let sample_rate = pull.sample_rate;
+    pull.scratch.clear();
+    source.borrow_mut().process_notes(from, to, BlockFlags(flags), &mut |event| pull.scratch.push(event));
+    pull.scratch.sort_by(compare_lifecycle);
+    let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
+    let mut count = 0;
+    for event in &pull.scratch {
+        if count >= out.len() {
+            break;
+        }
+        let record = match *event {
+            Event::NoteStart {id, position, pitch, cent, velocity, ..} => EventRecord {
+                offset: sample_offset(position, &block, sample_rate) as u32,
+                kind: EVENT_NOTE_ON,
+                id: id as u32,
+                pitch: pitch as u32,
+                velocity,
+                cent
+            },
+            Event::NoteComplete {id, position, pitch} => EventRecord {
+                offset: sample_offset(position, &block, sample_rate) as u32,
+                kind: EVENT_NOTE_OFF,
+                id: id as u32,
+                pitch: pitch as u32,
+                velocity: 0.0,
+                cent: 0.0
+            },
+            Event::Update {..} => continue
+        };
+        out[count] = record;
+        count += 1;
+    }
+    count as u32
+}
 
 // WASM CONTRACT: EngineStateSchema byte layout (studio-adapters/EngineStateSchema.ts), big-endian.
 // We expose the raw schema payload (no SyncStream Atomics header — the harness is single main-thread);
@@ -188,10 +281,13 @@ struct PluginInstrument {
     events: EventBuffer,
     output: SharedAudioBuffer,
     device_output: Box<[f32]>,
+    // `device_events` (the event scratch the device pulls into), `device_blocks`, `device_state`, and
+    // `out_offsets` are referenced only by raw address inside `descriptor`; they must stay alive (dropping
+    // them frees the memory the device reads/writes), so keep the fields even though Rust sees no direct
+    // reads. `device_blocks` is refilled from the ProcessInfo each quantum.
+    #[allow(dead_code)]
     device_events: Box<[EventRecord]>,
-    // `device_state` / `out_offsets` are referenced only by raw address inside `descriptor`; they must
-    // stay alive (dropping them frees the memory the device reads), so keep the fields even though Rust
-    // sees no direct reads.
+    device_blocks: Box<[BlockRecord]>,
     #[allow(dead_code)]
     device_state: Box<[u32]>, // u32 so the block is 4-aligned for the device's SynthState
     #[allow(dead_code)]
@@ -204,18 +300,23 @@ impl PluginInstrument {
         let device_output = vec![0.0f32; RENDER_QUANTUM].into_boxed_slice();
         let blank = EventRecord {offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
         let device_events = vec![blank; DEVICE_MAX_EVENTS].into_boxed_slice();
+        let blank_block = BlockRecord {index: 0, flags: 0, p0: 0.0, p1: 0.0, s0: 0, s1: 0, bpm: 0.0, reserved: 0};
+        let device_blocks = vec![blank_block; DEVICE_MAX_BLOCKS].into_boxed_slice();
         let state_size = device.state_size as usize;
         let device_state = vec![0u32; state_size.div_ceil(4)].into_boxed_slice(); // 4-aligned, >= state_size bytes
         let out_offsets = vec![device_output.as_ptr() as u32].into_boxed_slice();
         // descriptor words (see the `abi` layout): frames, in_count/ptr, out_count/ptr, param_count/ptr,
-        // state_ptr, event_count/ptr, sample_rate (f32 bits).
+        // state_ptr, in_event_cap/ptr (pull scratch), out_event_cap/ptr (0, instrument has no event out),
+        // block_count/ptr, sample_rate (f32 bits).
         let descriptor = vec![
             RENDER_QUANTUM as u32,
             0, 0,
             1, out_offsets.as_ptr() as u32,
             0, 0,
             device_state.as_ptr() as u32,
-            0, device_events.as_ptr() as u32,
+            DEVICE_MAX_EVENTS as u32, device_events.as_ptr() as u32,
+            0, 0,
+            0, device_blocks.as_ptr() as u32,
             sample_rate.to_bits()
         ].into_boxed_slice();
         Self {
@@ -226,6 +327,7 @@ impl PluginInstrument {
             output: shared_audio_buffer(),
             device_output,
             device_events,
+            device_blocks,
             device_state,
             out_offsets,
             descriptor
@@ -266,41 +368,42 @@ impl Processor for PluginInstrument {
     }
 
     fn process(&mut self, info: &ProcessInfo) {
-        self.events.clear();
-        let mut count = 0;
+        let mut block_count = 0;
         for block in info.blocks {
-            self.note_input.fill(block, &mut self.events);
-            for event in self.events.get(block.index) {
-                if count >= DEVICE_MAX_EVENTS {
-                    break;
-                }
-                let record = match *event {
-                    Event::NoteStart {id, position, pitch, cent, velocity, ..} => EventRecord {
-                        offset: sample_offset(position, block, self.sample_rate) as u32,
-                        kind: EVENT_NOTE_ON,
-                        id: id as u32,
-                        pitch: pitch as u32,
-                        velocity,
-                        cent
-                    },
-                    Event::NoteComplete {id, position, pitch} => EventRecord {
-                        offset: sample_offset(position, block, self.sample_rate) as u32,
-                        kind: EVENT_NOTE_OFF,
-                        id: id as u32,
-                        pitch: pitch as u32,
-                        velocity: 0.0,
-                        cent: 0.0
-                    },
-                    Event::Update {..} => continue
-                };
-                self.device_events[count] = record;
-                count += 1;
+            if block_count >= self.device_blocks.len() {
+                break;
             }
+            self.device_blocks[block_count] = BlockRecord {
+                index: block.index,
+                flags: block.flags.0,
+                p0: block.p0,
+                p1: block.p1,
+                s0: block.s0 as u32,
+                s1: block.s1 as u32,
+                bpm: block.bpm,
+                reserved: 0
+            };
+            block_count += 1;
         }
-        self.device_events[..count].sort_by_key(|record| record.offset);
         self.descriptor[0] = RENDER_QUANTUM as u32;
-        self.descriptor[8] = count as u32;
+        self.descriptor[12] = block_count as u32;
+        // Hand the device its pull context, then call it. The device PULLS its events via host_pull_events.
+        // Scope the `PULL.get()` borrow so none is live across `call_device_process` (the device's
+        // host_pull_events takes its own `PULL.get()`); single-threaded, so the two never overlap.
+        {
+            let pull = unsafe { PULL.get() };
+            pull.source = self.note_input.source();
+            pull.blocks = info.blocks.as_ptr();
+            pull.block_count = info.blocks.len();
+            pull.sample_rate = self.sample_rate;
+        }
         call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
+        {
+            let pull = unsafe { PULL.get() };
+            pull.source = None;
+            pull.blocks = core::ptr::null();
+            pull.block_count = 0;
+        }
         let mut output = self.output.borrow_mut();
         for index in 0..RENDER_QUANTUM {
             let sample = self.device_output[index];

@@ -3,13 +3,21 @@
 //! so device DSP code is written entirely in safe Rust.
 //!
 //! Canonical descriptor (u32 words); every offset is a byte address into the shared linear memory:
-//!   [0] frames
-//!   [1] in_count     [2] in_offsets_ptr   (-> u32[in_count],  each -> f32[frames])
-//!   [3] out_count    [4] out_offsets_ptr  (-> u32[out_count], each -> f32[frames])
-//!   [5] param_count  [6] params_ptr       (-> f32[param_count])
-//!   [7] state_ptr    (-> device instance state)
-//!   [8] event_count  [9] events_ptr       (-> EventRecord[event_count])  (note events; 0 for effects)
-//!   [10] sample_rate (f32 bits)           (the engine's render sample rate; passed in, never a global)
+//!   [0]  frames
+//!   [1]  in_count       [2]  in_offsets_ptr   (-> u32[in_count],  each -> f32[frames])
+//!   [3]  out_count      [4]  out_offsets_ptr  (-> u32[out_count], each -> f32[frames])
+//!   [5]  param_count    [6]  params_ptr       (-> f32[param_count])
+//!   [7]  state_ptr      (-> device instance state)
+//!   [8]  in_event_cap   [9]  in_events_ptr    (-> EventRecord[in_event_cap]; a device-owned SCRATCH the
+//!                                              device's `host_pull_events` pull WRITES into, NOT pre-filled)
+//!   [10] out_event_cap  [11] out_events_ptr   (-> EventRecord[out_event_cap]; a MIDI-fx pull RESPONSE
+//!                                              buffer, event-output devices only; 0 for instruments/effects)
+//!   [12] block_count    [13] blocks_ptr       (-> BlockRecord[block_count]; the quantum's ProcessInfo)
+//!   [14] sample_rate (f32 bits)               (the engine's render sample rate; passed in, never a global)
+//!
+//! The engine no longer PUSHES a resolved event array. A device PULLS its own input event stream for a
+//! pulse range through the `host_pull_events` host import (bound to the engine's export by the loader),
+//! into its `[8]/[9]` scratch, and times its own sub-blocks over the `[12]/[13]` blocks.
 
 #![cfg_attr(not(test), no_std)]
 
@@ -32,6 +40,46 @@ pub struct EventRecord {
 
 pub const EVENT_NOTE_ON: u32 = 0;
 pub const EVENT_NOTE_OFF: u32 = 1;
+
+/// One render block of the quantum's `ProcessInfo` (mirrors `engine-env::Block`): a pulse range
+/// `[p0, p1)` mapped to the sample range `[s0, s1)` at `bpm`, with transport `flags`. A flat,
+/// `#[repr(C)]` record both the host (engine) and the device read from shared memory. Field ORDER is
+/// chosen so the two `u32`s precede the `f64`s: `p0`/`p1` stay 8-aligned with no implicit padding, so
+/// the layout is identical and explicit on both sides. The device pulls each block's events with
+/// `pull_events(p0, p1, flags, ...)` and may honour `[s0, s1)` for sub-block timing or ignore it.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct BlockRecord {
+    pub index: u32,
+    pub flags: u32,
+    pub p0: f64,
+    pub p1: f64,
+    pub s0: u32,
+    pub s1: u32,
+    pub bpm: f32,
+    pub reserved: u32
+}
+
+// The host resolves this device's input note/param events for a pulse range on demand (Route A pull).
+// The device imports it from `env`; the worklet loader binds it to the engine's `host_pull_events`
+// export, so the call is wasm-to-wasm. It writes resolved `EventRecord`s into the device's scratch and
+// returns the count written (capped at `max`).
+#[cfg(target_family = "wasm")]
+#[link(wasm_import_module = "env")]
+extern "C" {
+    fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32;
+}
+
+/// Pull this device's resolved input events for the pulse range `[from, to)` into `out`, returning the
+/// number written (offsets are absolute within the quantum, lifecycle-sorted). On native builds there is
+/// no host, so the stub returns 0 (native device tests drive `render` directly, never `process`).
+#[inline]
+pub fn pull_events(from: f64, to: f64, flags: u32, out: &mut [EventRecord]) -> usize {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_pull_events(from, to, flags, out.as_mut_ptr() as u32, out.len() as u32) as usize } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (from, to, flags, out.len()); 0 }
+}
 
 /// Read-only view over a device's input ports.
 #[derive(Clone, Copy)]
@@ -63,22 +111,27 @@ pub struct Ports<'a, S> {
     pub output: &'a mut [f32],
     pub params: &'a [f32],
     pub state: &'a mut S,
-    /// The block's note events (empty for audio effects / `from_descriptor`).
-    pub events: &'a [EventRecord],
+    /// The quantum's render blocks (the `ProcessInfo`). The device pulls each block's events and may
+    /// fragment `[s0, s1)` at the offsets, or process the whole quantum and ignore the blocks.
+    pub blocks: &'a [BlockRecord],
+    /// A device-owned scratch the device PULLS its input events into (via [`pull_events`]); not
+    /// pre-filled by the host. `len()` is the capacity. Empty when the descriptor declares no scratch.
+    pub event_scratch: &'a mut [EventRecord],
     /// The engine's render sample rate. Passed in via the descriptor, so devices never hold it as a
     /// global; the host sets it from the audio context.
     pub sample_rate: f32,
 }
 
 impl<'a, S> Ports<'a, S> {
-    /// Parse a canonical descriptor into safe views (including the note-event port; `events` is empty
-    /// when `event_count` is 0, as for audio effects).
+    /// Parse a canonical descriptor into safe views. `event_scratch` is the device-owned pull buffer
+    /// (empty when the descriptor declares `in_event_cap == 0`); `blocks` is the quantum's block array.
     ///
     /// # Safety
     /// `desc_ptr` must reference a valid descriptor whose offsets describe live, mutually
-    /// non-aliasing f32 buffers of `frames` samples, a state block of at least `size_of::<S>()`, and
-    /// `event_count` valid `EventRecord`s — all in this module's shared linear memory. The engine
-    /// guarantees this when it assembles the descriptor; nothing else may call it.
+    /// non-aliasing f32 buffers of `frames` samples, a state block of at least `size_of::<S>()`,
+    /// `in_event_cap` writable `EventRecord` slots, and `block_count` valid `BlockRecord`s — all in this
+    /// module's shared linear memory. The engine guarantees this when it assembles the descriptor;
+    /// nothing else may call it.
     #[inline]
     pub unsafe fn from_descriptor(desc_ptr: u32) -> Self {
         let desc = desc_ptr as *const u32;
@@ -90,9 +143,12 @@ impl<'a, S> Ports<'a, S> {
         let param_count = *desc.add(5) as usize;
         let params_ptr = *desc.add(6) as *const f32;
         let state_ptr = *desc.add(7) as *mut S;
-        let event_count = *desc.add(8) as usize;
-        let events_ptr = *desc.add(9) as *const EventRecord;
-        let sample_rate = f32::from_bits(*desc.add(10));
+        let in_event_cap = *desc.add(8) as usize;
+        let in_events_ptr = *desc.add(9) as *mut EventRecord;
+        // [10] out_event_cap / [11] out_events_ptr: event-output devices (MIDI fx, phase 4); unused here.
+        let block_count = *desc.add(12) as usize;
+        let blocks_ptr = *desc.add(13) as *const BlockRecord;
+        let sample_rate = f32::from_bits(*desc.add(14));
         let in_offsets = if in_count == 0 {
             slice::from_raw_parts(NonNull::<u32>::dangling().as_ptr(), 0)
         } else {
@@ -108,10 +164,15 @@ impl<'a, S> Ports<'a, S> {
         } else {
             slice::from_raw_parts(params_ptr, param_count)
         };
-        let events = if event_count == 0 {
-            slice::from_raw_parts(NonNull::<EventRecord>::dangling().as_ptr(), 0)
+        let event_scratch = if in_event_cap == 0 {
+            slice::from_raw_parts_mut(NonNull::<EventRecord>::dangling().as_ptr(), 0)
         } else {
-            slice::from_raw_parts(events_ptr, event_count)
+            slice::from_raw_parts_mut(in_events_ptr, in_event_cap)
+        };
+        let blocks = if block_count == 0 {
+            slice::from_raw_parts(NonNull::<BlockRecord>::dangling().as_ptr(), 0)
+        } else {
+            slice::from_raw_parts(blocks_ptr, block_count)
         };
         Self {
             frames,
@@ -119,7 +180,8 @@ impl<'a, S> Ports<'a, S> {
             output,
             params,
             state: &mut *state_ptr,
-            events,
+            blocks,
+            event_scratch,
             sample_rate,
         }
     }

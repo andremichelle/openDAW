@@ -45,6 +45,9 @@ type EngineExports = {
     engine_state_ptr: () => number
     engine_state_len: () => number
     set_metronome_enabled: (enabled: number) => void
+    // A device imports this from `env`; the loader binds it so the device PULLS its own input events for a
+    // pulse range (Route A), writing EventRecords into the descriptor scratch and returning the count.
+    host_pull_events: (from: number, to: number, flags: number, outPtr: number, max: number) => number
 }
 
 // Read a varuint32 (LEB128) at `pos`; returns [value, nextPos].
@@ -126,7 +129,9 @@ class EngineProcessor extends AudioWorkletProcessor {
                 __indirect_function_table: table,
                 __memory_base: new WebAssembly.Global({value: "i32", mutable: false}, memoryBase),
                 __table_base: new WebAssembly.Global({value: "i32", mutable: false}, tableBase),
-                __stack_pointer: new WebAssembly.Global({value: "i32", mutable: true}, stackBase + DEVICE_STACK_SIZE)
+                __stack_pointer: new WebAssembly.Global({value: "i32", mutable: true}, stackBase + DEVICE_STACK_SIZE),
+                // wasm-to-wasm: the device calls the engine's event-pull export directly (Route A).
+                host_pull_events: engine.host_pull_events
             }
         }).exports as unknown as DeviceExports
         device.__wasm_apply_data_relocs?.()

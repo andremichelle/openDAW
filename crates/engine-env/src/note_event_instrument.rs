@@ -29,6 +29,12 @@ impl NoteEventInstrument {
         self.source = Some(source);
     }
 
+    /// The bound note source (a cheap `Rc` clone), or `None` if unset. The host hands this to the
+    /// event-pull facade so a device can pull its own notes for a range.
+    pub fn source(&self) -> Option<SharedNoteEventSource> {
+        self.source.clone()
+    }
+
     /// Pull the source's events for `block`, sort them, and add them to `event_input` under the block
     /// index. No-op when no source is set.
     pub fn fill(&mut self, block: &Block, event_input: &mut EventBuffer) {
