@@ -155,21 +155,15 @@ evolves.
 
 #### 2026/Q2
 
-- [ ] Fine-tune timeline clips (recording, switch times)
-- [ ] Fine-tune MIDI effects
-- [X] Implement missing region actions like flatten
+- [ ] WASM Audio-Engine
 - [ ] Polish UI
 
 #### 2026/Q3
 
 - [ ] Testing & QA
-- [ ] Launch 1.0
+- [ ] [Launch 1.0](https://opendaw.org/release26/)
 
-#### Future
-
-- [ ] Start Modular System
-- [ ] Add more synthesizers
-- [ ] Add more effect devices
+For more issues and feature requests, visit [github.com/andremichelle/opendaw/issues/](https://github.com/andremichelle/opendaw/issues/)
 
 ### Prepare, Clone, Installation, and Run
 
