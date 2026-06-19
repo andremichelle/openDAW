@@ -85,64 +85,58 @@ pub struct SynthState {
     delay_pos: u32
 }
 
-pub fn render(state: &mut SynthState, events: &[EventRecord], output: &mut [f32], sample_rate: f32) {
-    let frames = output.len();
-    for sample in output.iter_mut() {
-        *sample = 0.0;
-    }
-    let mut cursor = 0;
-    for event in events {
-        let offset = (event.offset as usize).min(frames);
-        if offset > cursor {
-            render_segment(state, &mut output[cursor..offset], sample_rate);
-            cursor = offset;
-        }
-        apply(state, event, sample_rate);
-    }
-    if cursor < frames {
-        render_segment(state, &mut output[cursor..frames], sample_rate);
-    }
-    for voice in state.voices.iter_mut() {
-        if voice.active != 0 && voice.env.is_idle() {
-            voice.active = 0;
-        }
-    }
-    // 3/16-note feedback delay over the mono output. The buffer is exactly `length` samples (state_size
-    // reserved it from the sample rate) and trails the voice header in the same state block, so the ring's
-    // length IS the delay. SAFETY: the buffer follows `SynthState` in the block and does not overlap it.
-    let length = delay_samples(sample_rate);
-    unsafe {
-        let header = state as *mut SynthState;
-        let delay = core::slice::from_raw_parts_mut(header.add(1) as *mut f32, length);
-        let mut pos = (*header).delay_pos as usize % length;
-        for sample in output.iter_mut() {
-            let echo = *sample + delay[pos];
-            delay[pos] = echo * DELAY_FEEDBACK;
-            pos = if pos + 1 >= length { 0 } else { pos + 1 };
-            *sample = echo;
-        }
-        (*header).delay_pos = pos as u32;
-    }
-}
+/// The device's DSP, plugged into the SDK's `Instrument` template ([`abi::render_instrument`]), which
+/// owns the event pull, block timing, and dispatch. Same as `device-sine` but a sawtooth oscillator and a
+/// 3/16 feedback delay run once per quantum in `finish`.
+pub struct Synth;
 
-fn render_segment(state: &mut SynthState, output: &mut [f32], _sample_rate: f32) {
-    for voice in state.voices.iter_mut() {
-        if voice.active != 0 {
-            voice.render(output);
-        }
-    }
-}
+impl abi::Instrument for Synth {
+    type State = SynthState;
 
-fn apply(state: &mut SynthState, event: &EventRecord, sample_rate: f32) {
-    if event.kind == EVENT_NOTE_ON {
-        if let Some(slot) = state.voices.iter_mut().find(|voice| voice.active == 0) {
-            slot.start(event, sample_rate);
-        }
-    } else {
+    fn process_audio(state: &mut SynthState, output: &mut [f32], _sample_rate: f32) {
         for voice in state.voices.iter_mut() {
-            if voice.active != 0 && voice.id == event.id {
-                voice.env.gate_off();
+            if voice.active != 0 {
+                voice.render(output);
             }
+        }
+    }
+
+    fn handle_event(state: &mut SynthState, event: &EventRecord, sample_rate: f32) {
+        if event.kind == EVENT_NOTE_ON {
+            if let Some(slot) = state.voices.iter_mut().find(|voice| voice.active == 0) {
+                slot.start(event, sample_rate);
+            }
+        } else {
+            for voice in state.voices.iter_mut() {
+                if voice.active != 0 && voice.id == event.id {
+                    voice.env.gate_off();
+                }
+            }
+        }
+    }
+
+    fn finish(state: &mut SynthState, output: &mut [f32], sample_rate: f32) {
+        for voice in state.voices.iter_mut() {
+            if voice.active != 0 && voice.env.is_idle() {
+                voice.active = 0;
+            }
+        }
+        // 3/16-note feedback delay over the mono output. The buffer is exactly `length` samples
+        // (state_size reserved it from the sample rate) and trails the voice header in the same state
+        // block, so the ring's length IS the delay. SAFETY: the buffer follows `SynthState` in the block
+        // and does not overlap it.
+        let length = delay_samples(sample_rate);
+        unsafe {
+            let header = state as *mut SynthState;
+            let delay = core::slice::from_raw_parts_mut(header.add(1) as *mut f32, length);
+            let mut pos = (*header).delay_pos as usize % length;
+            for sample in output.iter_mut() {
+                let echo = *sample + delay[pos];
+                delay[pos] = echo * DELAY_FEEDBACK;
+                pos = if pos + 1 >= length { 0 } else { pos + 1 };
+                *sample = echo;
+            }
+            (*header).delay_pos = pos as u32;
         }
     }
 }
@@ -160,15 +154,5 @@ pub extern "C" fn state_size(sample_rate: f32) -> u32 {
 #[no_mangle]
 pub extern "C" fn process(desc_ptr: u32) {
     let ports = unsafe { Ports::<SynthState>::from_descriptor(desc_ptr) };
-    // PULL this instrument's notes per block into the device-owned scratch (Route A). Block offsets do
-    // not overlap and the host lifecycle-sorts each block, so the accumulated run is already
-    // offset-ordered for the whole quantum; render it in one pass (the delay then runs over the quantum).
-    let mut count = 0;
-    for block in ports.blocks {
-        if count >= ports.event_scratch.len() {
-            break;
-        }
-        count += abi::pull_events(block.p0, block.p1, block.flags, &mut ports.event_scratch[count..]);
-    }
-    render(ports.state, &ports.event_scratch[..count], ports.output, ports.sample_rate);
+    abi::render_instrument::<Synth>(ports);
 }

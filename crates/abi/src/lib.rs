@@ -186,3 +186,61 @@ impl<'a, S> Ports<'a, S> {
         }
     }
 }
+
+/// The device-SDK template for an AUDIO instrument (the TS `AudioProcessor` / `NoteEventInstrument`
+/// analog). A device implements this and calls [`render_instrument`] from its `process` export; the SDK
+/// owns the event pull, the fragment-at-offsets timing, and the dispatch, so a device author writes only
+/// the DSP: render active state into a sub-chunk (`process_audio`), apply one note event at its offset
+/// (`handle_event`), and an optional once-per-quantum post-pass (`finish`, e.g. reclaim idle voices or
+/// run a delay). `State` is the device's instance state, interpreted from the engine-allocated block.
+pub trait Instrument {
+    type State;
+    /// Render the active state additively into `output` for one inter-event sub-chunk.
+    fn process_audio(state: &mut Self::State, output: &mut [f32], sample_rate: f32);
+    /// Apply one note event (on / off) at its sample offset.
+    fn handle_event(state: &mut Self::State, event: &EventRecord, sample_rate: f32);
+    /// Once per quantum, after all blocks. Default: nothing.
+    fn finish(state: &mut Self::State, output: &mut [f32], sample_rate: f32) {
+        let _ = (state, output, sample_rate);
+    }
+}
+
+/// Fragment `output` at the (offset-sorted, output-relative) `events` and dispatch: `process_audio` for
+/// each chunk between events, `handle_event` at each offset. Host-independent (events are supplied), so a
+/// device's DSP is unit-testable without the engine. Does not clear `output` or run `finish`.
+#[inline]
+pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: &mut [f32], events: &[EventRecord], sample_rate: f32) {
+    let frames = output.len();
+    let mut cursor = 0;
+    for event in events {
+        let offset = (event.offset as usize).min(frames);
+        if offset > cursor {
+            I::process_audio(state, &mut output[cursor..offset], sample_rate);
+            cursor = offset;
+        }
+        I::handle_event(state, event, sample_rate);
+    }
+    if cursor < frames {
+        I::process_audio(state, &mut output[cursor..frames], sample_rate);
+    }
+}
+
+/// The full per-quantum instrument path a device calls from `process`: clear the output, PULL each
+/// block's events into the scratch (Route A), dispatch the whole quantum (block offsets do not overlap
+/// and the host lifecycle-sorts each block, so the accumulated run is already offset-ordered), then run
+/// the once-per-quantum `finish`.
+pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
+    let sample_rate = ports.sample_rate;
+    for sample in ports.output.iter_mut() {
+        *sample = 0.0;
+    }
+    let mut count = 0;
+    for block in ports.blocks {
+        if count >= ports.event_scratch.len() {
+            break;
+        }
+        count += pull_events(block.p0, block.p1, block.flags, &mut ports.event_scratch[count..]);
+    }
+    dispatch_range::<I>(ports.state, ports.output, &ports.event_scratch[..count], sample_rate);
+    I::finish(ports.state, ports.output, sample_rate);
+}

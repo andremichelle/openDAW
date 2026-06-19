@@ -69,52 +69,56 @@ pub struct SynthState {
     voices: [Voice; MAX_VOICES]
 }
 
-/// Render the block: clear the (mono) output, fragment it at each event's sample offset rendering the
-/// active voices between events, voice note-on / note-off at the boundaries, and reclaim idle voices.
-pub fn render(state: &mut SynthState, events: &[EventRecord], output: &mut [f32], sample_rate: f32) {
-    let frames = output.len();
-    for sample in output.iter_mut() {
-        *sample = 0.0;
-    }
-    let mut cursor = 0;
-    for event in events {
-        let offset = (event.offset as usize).min(frames);
-        if offset > cursor {
-            render_segment(state, &mut output[cursor..offset], sample_rate);
-            cursor = offset;
-        }
-        apply(state, event, sample_rate);
-    }
-    if cursor < frames {
-        render_segment(state, &mut output[cursor..frames], sample_rate);
-    }
-    for voice in state.voices.iter_mut() {
-        if voice.active != 0 && voice.env.is_idle() {
-            voice.active = 0;
-        }
-    }
-}
+/// The device's DSP, plugged into the SDK's `Instrument` template ([`abi::render_instrument`]), which
+/// owns the event pull, block timing, and dispatch. This device writes only: voice the active state into
+/// a sub-chunk (`process_audio`), apply a note on/off (`handle_event`), and reclaim idle voices once per
+/// quantum (`finish`).
+pub struct Synth;
 
-fn render_segment(state: &mut SynthState, output: &mut [f32], _sample_rate: f32) {
-    for voice in state.voices.iter_mut() {
-        if voice.active != 0 {
-            voice.render(output);
-        }
-    }
-}
+impl abi::Instrument for Synth {
+    type State = SynthState;
 
-fn apply(state: &mut SynthState, event: &EventRecord, sample_rate: f32) {
-    if event.kind == EVENT_NOTE_ON {
-        if let Some(slot) = state.voices.iter_mut().find(|voice| voice.active == 0) {
-            slot.start(event, sample_rate);
-        }
-    } else {
+    fn process_audio(state: &mut SynthState, output: &mut [f32], _sample_rate: f32) {
         for voice in state.voices.iter_mut() {
-            if voice.active != 0 && voice.id == event.id {
-                voice.env.gate_off();
+            if voice.active != 0 {
+                voice.render(output);
             }
         }
     }
+
+    fn handle_event(state: &mut SynthState, event: &EventRecord, sample_rate: f32) {
+        if event.kind == EVENT_NOTE_ON {
+            if let Some(slot) = state.voices.iter_mut().find(|voice| voice.active == 0) {
+                slot.start(event, sample_rate);
+            }
+        } else {
+            for voice in state.voices.iter_mut() {
+                if voice.active != 0 && voice.id == event.id {
+                    voice.env.gate_off();
+                }
+            }
+        }
+    }
+
+    fn finish(state: &mut SynthState, _output: &mut [f32], _sample_rate: f32) {
+        for voice in state.voices.iter_mut() {
+            if voice.active != 0 && voice.env.is_idle() {
+                voice.active = 0;
+            }
+        }
+    }
+}
+
+/// Host-independent entry for tests: clear the (mono) output, dispatch the supplied events through the
+/// SDK template, and run the post-pass. The wasm `process` path uses [`abi::render_instrument`] instead,
+/// which adds the event pull.
+pub fn render(state: &mut SynthState, events: &[EventRecord], output: &mut [f32], sample_rate: f32) {
+    use abi::Instrument;
+    for sample in output.iter_mut() {
+        *sample = 0.0;
+    }
+    abi::dispatch_range::<Synth>(state, output, events, sample_rate);
+    Synth::finish(state, output, sample_rate);
 }
 
 // ---- The device ABI: shared with the engine, called wasm-to-wasm. ----
@@ -130,15 +134,5 @@ pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
 #[no_mangle]
 pub extern "C" fn process(desc_ptr: u32) {
     let ports = unsafe { Ports::<SynthState>::from_descriptor(desc_ptr) };
-    // PULL this instrument's notes per block into the device-owned scratch (Route A). Block offsets do
-    // not overlap and the host lifecycle-sorts each block, so the accumulated run is already
-    // offset-ordered for the whole quantum; render it in one pass.
-    let mut count = 0;
-    for block in ports.blocks {
-        if count >= ports.event_scratch.len() {
-            break;
-        }
-        count += abi::pull_events(block.p0, block.p1, block.flags, &mut ports.event_scratch[count..]);
-    }
-    render(ports.state, &ports.event_scratch[..count], ports.output, ports.sample_rate);
+    abi::render_instrument::<Synth>(ports);
 }
