@@ -131,6 +131,12 @@ pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
     core::mem::size_of::<SynthState>() as u32
 }
 
+/// What the host wires this device as (read at load): an instrument that voices notes into audio.
+#[no_mangle]
+pub extern "C" fn kind() -> u32 {
+    abi::DEVICE_KIND_INSTRUMENT
+}
+
 #[no_mangle]
 pub extern "C" fn process(desc_ptr: u32) {
     let ports = unsafe { Ports::<SynthState>::from_descriptor(desc_ptr) };

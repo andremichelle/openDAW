@@ -30,10 +30,11 @@ use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
 use boxgraph::updates::decode_forward;
-use abi::{BlockRecord, EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON};
+use abi::{BlockRecord, EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON, DEVICE_KIND_EFFECT, DEVICE_KIND_INSTRUMENT};
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::audio_generator::AudioGenerator;
+use engine_env::audio_input::AudioInput;
 use engine_env::block::Block;
 use engine_env::block_flags::BlockFlags;
 use engine_env::engine_context::EngineContext;
@@ -60,7 +61,8 @@ use value::note::NoteEvent;
 #[derive(Clone, Copy)]
 struct DeviceReg {
     process_index: u32, // slot in the shared function table holding the device's `process`
-    state_size: u32     // bytes the engine must allocate (zeroed) per instrument instance
+    state_size: u32,    // bytes the engine must allocate (zeroed) per instance
+    kind: u32           // DEVICE_KIND_INSTRUMENT / DEVICE_KIND_EFFECT (read from the device's `kind` export)
 }
 
 // Call a device's `process` through the shared function table: a wasm function pointer IS a table index,
@@ -413,6 +415,96 @@ impl Processor for PluginInstrument {
     }
 }
 
+/// A graph node that runs an audio-EFFECT device after an upstream node (Route B). It reads its single
+/// input buffer (the upstream's mono output, taken from its `left` channel) through the device, into the
+/// engine-allocated mono output, then fans that to its stereo output for the next node / the bus. The host
+/// owns ordering: a `register_edge(upstream, this)` guarantees the input buffer is fresh when this runs.
+/// Pulls no events (a no-param effect), so it never touches `PULL`. All device memory is talc-allocated.
+struct PluginAudioEffect {
+    process_index: u32,
+    events: EventBuffer, // unused (a no-param effect receives no events) but required by `Processor: EventReceiver`
+    output: SharedAudioBuffer,
+    // The upstream output buffer, kept alive; its `left` address is captured into `in_offsets[0]`. The
+    // `Rc<RefCell<AudioBuffer>>` never moves, so the captured pointer stays valid.
+    #[allow(dead_code)]
+    input: Option<SharedAudioBuffer>,
+    device_output: Box<[f32]>,
+    in_offsets: Box<[u32]>,
+    #[allow(dead_code)]
+    out_offsets: Box<[u32]>,
+    #[allow(dead_code)]
+    device_state: Box<[u32]>,
+    descriptor: Box<[u32]>
+}
+
+impl PluginAudioEffect {
+    fn new(sample_rate: f32, device: DeviceReg) -> Self {
+        let device_output = vec![0.0f32; RENDER_QUANTUM].into_boxed_slice();
+        let state_size = device.state_size as usize;
+        let device_state = vec![0u32; state_size.div_ceil(4)].into_boxed_slice();
+        let in_offsets = vec![0u32].into_boxed_slice(); // input buffer ptr, set by set_audio_source
+        let out_offsets = vec![device_output.as_ptr() as u32].into_boxed_slice();
+        // descriptor (see `abi`): frames, in_count/ptr (1), out_count/ptr (1), no params, state, no event
+        // scratch, no out events, no blocks (the effect ignores sub-block timing for now), sample_rate.
+        let descriptor = vec![
+            RENDER_QUANTUM as u32,
+            1, in_offsets.as_ptr() as u32,
+            1, out_offsets.as_ptr() as u32,
+            0, 0,
+            device_state.as_ptr() as u32,
+            0, 0,
+            0, 0,
+            0, 0,
+            sample_rate.to_bits()
+        ].into_boxed_slice();
+        Self {
+            process_index: device.process_index,
+            events: EventBuffer::new(),
+            output: shared_audio_buffer(),
+            input: None,
+            device_output,
+            in_offsets,
+            out_offsets,
+            device_state,
+            descriptor
+        }
+    }
+}
+
+impl EventReceiver for PluginAudioEffect {
+    fn event_input(&mut self) -> &mut EventBuffer {
+        &mut self.events
+    }
+}
+
+impl AudioInput for PluginAudioEffect {
+    fn set_audio_source(&mut self, source: SharedAudioBuffer) {
+        self.in_offsets[0] = source.borrow().left.as_ptr() as u32;
+        self.input = Some(source);
+    }
+}
+
+impl AudioGenerator for PluginAudioEffect {
+    fn audio_output(&self) -> SharedAudioBuffer {
+        self.output.clone()
+    }
+}
+
+impl Processor for PluginAudioEffect {
+    fn reset(&mut self) {}
+
+    fn process(&mut self, _info: &ProcessInfo) {
+        self.descriptor[0] = RENDER_QUANTUM as u32;
+        call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
+        let mut output = self.output.borrow_mut();
+        for index in 0..RENDER_QUANTUM {
+            let sample = self.device_output[index];
+            output.left[index] = sample;
+            output.right[index] = sample;
+        }
+    }
+}
+
 struct Engine {
     graph: BoxGraph,
     registry: Registry,
@@ -458,9 +550,9 @@ impl Engine {
 
     /// Register a loaded device: the table slot holding its `process` and the bytes its state block needs.
     /// Returns the device id (its index). The host calls this once per device, before `bind`.
-    fn device_register(&mut self, process_index: u32, state_size: u32) -> u32 {
+    fn device_register(&mut self, process_index: u32, state_size: u32, kind: u32) -> u32 {
         let id = self.devices.len() as u32;
-        self.devices.push(DeviceReg {process_index, state_size});
+        self.devices.push(DeviceReg {process_index, state_size, kind});
         id
     }
 
@@ -609,21 +701,42 @@ impl Engine {
         let master = Rc::new(RefCell::new(AudioBusProcessor::new(output_buffer.clone())));
         let master_id = self.context.register_processor(master.clone());
         self.output_bus = Some(output_buffer);
-        if self.devices.is_empty() {
-            return; // no device plugin loaded -> nothing to voice the notes with
+        // Split the loaded devices by kind. Instruments voice notes; effects transform audio. Order is
+        // preserved within each kind, so the page's load order still picks which unit gets which instrument.
+        let instruments: Vec<DeviceReg> =
+            self.devices.iter().filter(|device| device.kind == DEVICE_KIND_INSTRUMENT).copied().collect();
+        let effect = self.devices.iter().find(|device| device.kind == DEVICE_KIND_EFFECT).copied();
+        if instruments.is_empty() {
+            return; // no instrument plugin loaded -> nothing to voice the notes with
         }
         // One instrument per audio unit. Until the unit's real input instrument device is read from the
-        // box, pick the device by the audio unit's `index` field (key 11) modulo the loaded devices, so
-        // the page deterministically controls which unit gets which device (e.g. bass -> sawtooth).
+        // box, pick the device by the audio unit's `index` field (key 11) modulo the loaded instruments, so
+        // the page deterministically controls which unit gets which device (e.g. bass -> sawtooth). When an
+        // effect device is loaded, insert it after the BASS only (slot 1 = the saw): instrument -> effect
+        // -> master, so the demo contrasts a filtered bass against the dry lead.
         for (unit, regions) in self.bind_note_regions_by_unit() {
-            let slot = unit.map(|uuid| self.read_pulses(uuid, 11) as usize).unwrap_or(0) % self.devices.len();
-            let device = self.devices[slot];
+            let slot = unit.map(|uuid| self.read_pulses(uuid, 11) as usize).unwrap_or(0) % instruments.len();
+            let device = instruments[slot];
             let source: SharedNoteEventSource = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {regions}))));
             let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, device)));
             instrument.borrow_mut().set_note_event_source(source);
-            master.borrow_mut().add_audio_source(instrument.borrow().audio_output());
+            let instrument_output = instrument.borrow().audio_output();
             let instrument_id = self.context.register_processor(instrument);
-            self.context.register_edge(instrument_id, master_id); // instrument renders before the bus sums it
+            let unit_effect = effect.filter(|_| slot == 1); // DEMO: effect only on the bass (the saw, slot 1)
+            match unit_effect {
+                Some(effect_device) => {
+                    let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, effect_device)));
+                    node.borrow_mut().set_audio_source(instrument_output);
+                    master.borrow_mut().add_audio_source(node.borrow().audio_output());
+                    let effect_id = self.context.register_processor(node);
+                    self.context.register_edge(instrument_id, effect_id); // instrument renders before the effect reads it
+                    self.context.register_edge(effect_id, master_id); // effect renders before the bus sums it
+                }
+                None => {
+                    master.borrow_mut().add_audio_source(instrument_output);
+                    self.context.register_edge(instrument_id, master_id); // instrument renders before the bus sums it
+                }
+            }
         }
     }
 
@@ -857,13 +970,13 @@ pub extern "C" fn device_alloc(size: u32) -> u32 {
 }
 
 /// Register a loaded device: `process_index` is its `process` slot in the shared function table,
-/// `state_size` the bytes per instrument state block. Returns the device id. Call once per device, before
-/// `bind` (which builds the graph and assigns devices to units).
+/// `state_size` the bytes per instance state block, `kind` its `kind` export (instrument / effect).
+/// Returns the device id. Call once per device, before `bind` (which builds the graph and wires devices).
 #[no_mangle]
-pub extern "C" fn device_register(process_index: u32, state_size: u32) -> u32 {
+pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32) -> u32 {
     unsafe {
         match ENGINE.get().as_mut() {
-            Some(engine) => engine.device_register(process_index, state_size),
+            Some(engine) => engine.device_register(process_index, state_size, kind),
             None => 0
         }
     }

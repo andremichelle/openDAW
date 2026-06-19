@@ -26,6 +26,13 @@ name = "boxgraph"
 version = "0.0.0"
 
 [[package]]
+name = "device-lowpass"
+version = "0.0.0"
+dependencies = [
+ "abi",
+]
+
+[[package]]
 name = "device-saw"
 version = "0.0.0"
 dependencies = [

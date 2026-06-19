@@ -41,6 +41,11 @@ pub struct EventRecord {
 pub const EVENT_NOTE_ON: u32 = 0;
 pub const EVENT_NOTE_OFF: u32 = 1;
 
+/// What a device IS, so the host knows how to wire it into the graph (it reads this from the device's
+/// `kind` export at load). An instrument voices notes into audio; an effect transforms an input buffer.
+pub const DEVICE_KIND_INSTRUMENT: u32 = 0;
+pub const DEVICE_KIND_EFFECT: u32 = 1;
+
 /// One render block of the quantum's `ProcessInfo` (mirrors `engine-env::Block`): a pulse range
 /// `[p0, p1)` mapped to the sample range `[s0, s1)` at `bpm`, with transport `flags`. A flat,
 /// `#[repr(C)]` record both the host (engine) and the device read from shared memory. Field ORDER is
@@ -243,4 +248,28 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
     }
     dispatch_range::<I>(ports.state, ports.output, &ports.event_scratch[..count], sample_rate);
     I::finish(ports.state, ports.output, sample_rate);
+}
+
+/// The device-SDK template for an AUDIO EFFECT (the TS `AudioEffectDeviceProcessor` analog). It reads one
+/// input buffer and writes one output buffer over the whole quantum. Parameter automation and sub-block
+/// timing are a later route (the device sees only `process_audio` for now), so a no-param effect needs no
+/// blocks or event pull. `State` is the effect's instance state (e.g. a filter's history).
+pub trait AudioEffect {
+    type State;
+    /// Transform `input` into `output` (same length) for the whole quantum.
+    fn process_audio(state: &mut Self::State, input: &[f32], output: &mut [f32], sample_rate: f32);
+}
+
+/// The per-quantum effect path a device calls from `process`: pass input 0 (or silence if unconnected)
+/// through the effect's `process_audio` into the output buffer.
+pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
+    let frames = ports.output.len();
+    if ports.inputs.is_empty() {
+        for sample in ports.output.iter_mut() {
+            *sample = 0.0;
+        }
+        return;
+    }
+    let input = ports.inputs.get(0);
+    E::process_audio(ports.state, &input[..frames], ports.output, ports.sample_rate);
 }

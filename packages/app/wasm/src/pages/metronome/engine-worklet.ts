@@ -25,6 +25,7 @@ type BootOptions = {
 type DeviceExports = {
     process: (descPtr: number) => void
     state_size: (sampleRate: number) => number
+    kind: () => number // DEVICE_KIND_INSTRUMENT (0) / DEVICE_KIND_EFFECT (1); tells the host how to wire it
     __wasm_apply_data_relocs?: () => void
     __wasm_call_ctors?: () => void
 }
@@ -32,7 +33,7 @@ type DeviceExports = {
 type EngineExports = {
     init: (sampleRate: number) => void
     device_alloc: (size: number) => number
-    device_register: (processIndex: number, stateSize: number) => number
+    device_register: (processIndex: number, stateSize: number, kind: number) => number
     input_ptr: () => number
     input_capacity: () => number
     input_reserve: (len: number) => number // ensure the input scratch holds `len`, grow if needed, return its (current) ptr
@@ -140,7 +141,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         // here (e.g. a delay buffer) and reads it per render from the descriptor — no device-global rate.
         const processIndex = table.grow(1) // a fresh slot for the engine -> device call_indirect
         table.set(processIndex, device.process as unknown as () => void)
-        engine.device_register(processIndex, device.state_size(sampleRate))
+        engine.device_register(processIndex, device.state_size(sampleRate), device.kind())
     }
 
     #applyUpdates(bytes: ArrayBuffer): void {

@@ -10,12 +10,14 @@ import {serializeUpdateTasks} from "../../sync/serialize-update-tasks"
 import {createEngineMemory, loadEngineModules} from "../../engine-modules"
 import workletURL from "../metronome/engine-worklet.ts?worker&url"
 
-// Two audio units, two parts, TWO different device plugins in one shared memory. device_sine.wasm and
-// device_saw.wasm are loaded as PIC side modules at host-assigned bases (dynamic linking), and the engine
-// builds one PluginInstrument per audio unit calling its device via the shared function table. The unit's
-// `index` selects the device (slot index % device count): the bass (index 1) plays the SAWTOOTH, the
-// arpeggio (index 2 -> slot 0) plays the SINE. So you hear a sawtooth bass under a sine arpeggio, proving
-// two distinct device modules coexist and run independently from the one memory.
+// Two audio units, two parts, THREE device plugins in one shared memory: two instruments plus an audio
+// effect. device_sine.wasm and device_saw.wasm are loaded as PIC side modules at host-assigned bases
+// (dynamic linking); the engine builds one PluginInstrument per audio unit, picking the device by the
+// unit's `index` (slot index % instrument count): the bass (index 1) plays the SAWTOOTH, the arpeggio
+// (index 2 -> slot 0) plays the SINE. device_lowpass.wasm (an audio-effect device) is then inserted after
+// the BASS only — instrument -> effect -> master — so the bass is low-pass filtered (muffled) while the
+// sine arpeggio stays dry. So you hear a filtered sawtooth bass under a bright sine arpeggio, proving the
+// instrument devices AND the audio-effect path coexist and run from the one memory.
 
 type Note = readonly [number, number] // [position in pulses, MIDI pitch]
 
@@ -28,9 +30,9 @@ const LEAD: ReadonlyArray<Note> = [
     [0, 72], [PPQN.SemiQuaver, 76], [2 * PPQN.SemiQuaver, 79], [3 * PPQN.SemiQuaver, 84]
 ]
 
-const TIMELINE = `unit A (bass)  C2 E2 G2 E2  quarter notes, loop = 1 bar   -> SAWTOOTH device
-unit B (lead)  C5 E5 G5 C6  semiquavers,  loop = 1 quarter -> SINE device
-both loop over bars 0..2 — two distinct device plugins, one shared memory`
+const TIMELINE = `unit A (bass)  C2 E2 G2 E2  quarter notes, loop = 1 bar   -> SAWTOOTH -> LOW-PASS effect
+unit B (lead)  C5 E5 G5 C6  semiquavers,  loop = 1 quarter -> SINE (dry)
+both loop over bars 0..2 — two instrument devices + one effect device, one shared memory`
 
 type EngineMessage =
     | { readonly type: "state", readonly bytes: ArrayBuffer }
@@ -123,7 +125,7 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
             }
         })
         await ctx.suspend()
-        append(`booted @ ${ctx.sampleRate} Hz — suspended; sawtooth bass + sine arpeggio (two device plugins)`)
+        append(`booted @ ${ctx.sampleRate} Hz — suspended; low-pass sawtooth bass + dry sine arpeggio (three device plugins)`)
     }
 
     const play = async (): Promise<void> => {
@@ -149,12 +151,16 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
     return (
         <div className="page">
             <h2>Multiple Plugins</h2>
-            <p>Two audio units playing different parts through <strong>two different device plugins</strong>:
-                a <strong>sawtooth</strong> bass and a <strong>sine</strong> arpeggio. <code>device_sine.wasm</code>
-                and <code>device_saw.wasm</code> are loaded as position-independent side modules at
-                host-assigned bases in <strong>one shared memory</strong> (dynamic linking), and the engine calls
-                each unit's device through the shared function table. So a slow low sawtooth bass and a fast high
-                sine arpeggio play at once and independently, from two distinct modules. Metronome off.</p>
+            <p>Two audio units playing different parts through <strong>three device plugins</strong>: two
+                instruments and an audio effect. A <strong>sawtooth</strong> bass and a <strong>sine</strong>
+                arpeggio (<code>device_sine.wasm</code>, <code>device_saw.wasm</code>) are loaded as
+                position-independent side modules at host-assigned bases in <strong>one shared memory</strong>
+                (dynamic linking), and the engine calls each unit's device through the shared function table.
+                A <strong>low-pass effect</strong> (<code>device_lowpass.wasm</code>) is then inserted after the
+                bass only — instrument&nbsp;→&nbsp;effect&nbsp;→&nbsp;bus — so the sawtooth bass is
+                audibly <strong>muffled</strong> while the sine arpeggio stays <strong>bright</strong>. This
+                proves the instrument devices and the audio-effect path coexist and run from the one memory.
+                Metronome off.</p>
             <pre className="timeline">{TIMELINE}</pre>
             <div>
                 <button onclick={() => void play()}>▶ Play</button>
