@@ -30,7 +30,7 @@ use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
 use boxgraph::updates::decode_forward;
-use abi::{BlockRecord, EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON, DEVICE_KIND_EFFECT, DEVICE_KIND_INSTRUMENT};
+use abi::{BlockRecord, EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON, DEVICE_KIND_EFFECT, DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT};
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::audio_generator::AudioGenerator;
@@ -41,7 +41,7 @@ use engine_env::engine_context::EngineContext;
 use engine_env::event::Event;
 use engine_env::event_buffer::EventBuffer;
 use engine_env::event_receiver::EventReceiver;
-use engine_env::note_event_instrument::{NoteEventInstrument, SharedNoteEventSource};
+use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_region::NoteRegion;
 use engine_env::note_region_source::NoteRegionSource;
 use engine_env::note_sequencer::NoteSequencer;
@@ -76,6 +76,18 @@ fn call_device_process(process_index: u32, desc_ptr: u32) {
 // Native (cargo test) never runs the audio path; stub so the crate builds.
 #[cfg(not(target_family = "wasm"))]
 fn call_device_process(_process_index: u32, _desc_ptr: u32) {}
+
+// Call a MIDI-fx device's `process_events` pull responder through the shared function table (same
+// table-index-is-fn-pointer trick as `call_device_process`). Returns the count of events it wrote.
+#[cfg(target_family = "wasm")]
+#[inline]
+fn call_device_process_events(process_index: u32, from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
+    let process_events: extern "C" fn(f64, f64, u32, u32, u32) -> u32 =
+        unsafe { core::mem::transmute(process_index as usize) };
+    process_events(from, to, flags, out_ptr, max)
+}
+#[cfg(not(target_family = "wasm"))]
+fn call_device_process_events(_process_index: u32, _from: f64, _to: f64, _flags: u32, _out_ptr: u32, _max: u32) -> u32 { 0 }
 
 const DEVICE_MAX_EVENTS: usize = 256; // per-quantum event scratch the device pulls into
 const DEVICE_MAX_BLOCKS: usize = RENDER_QUANTUM; // upper bound on blocks per quantum (one per sample worst case)
@@ -125,11 +137,22 @@ static ENGINE_STATE: Shared<[u8; ENGINE_STATE_LEN]> = Shared::new([0; ENGINE_STA
 // The node scopes its `PULL.get()` borrows so none is live across the device call (single-threaded).
 static PULL: Shared<PullContext> = Shared::new(PullContext::new());
 
-/// What `host_pull_events` needs to resolve a device's input events for a pulse range: the device's note
-/// source, the quantum's blocks (to map a pulse position to a sample offset), the sample rate, and a
-/// reusable scratch. The blocks pointer borrows the live `ProcessInfo` for the duration of the device call.
+/// One link in a unit's event PULL CHAIN (the `NoteEventSource` chain, sequencer -> fx -> ... -> the
+/// instrument that consumes it). A leaf `Source` is the note sequencer; a `MidiFx` is a MIDI-effect device
+/// that, when pulled, transforms the events of its `upstream` link. Cheap to clone (`Rc` handles). This is
+/// the `PluginMidiEffect` role from the plan: a MIDI fx is NOT an audio-graph node, it is a pull link.
+#[derive(Clone)]
+enum PullLink {
+    Source(SharedNoteEventSource),
+    MidiFx { process_index: u32, upstream: Rc<PullLink> }
+}
+
+/// What `host_pull_events` needs to resolve a device's input events for a pulse range: the CURRENT pull
+/// link (shifted as the chain is descended), the quantum's blocks (to map a pulse position to a sample
+/// offset), the sample rate, and a reusable scratch. The blocks pointer borrows the live `ProcessInfo`
+/// for the duration of the device call.
 struct PullContext {
-    source: Option<SharedNoteEventSource>,
+    current: Option<PullLink>,
     blocks: *const Block,
     block_count: usize,
     sample_rate: f32,
@@ -138,7 +161,7 @@ struct PullContext {
 
 impl PullContext {
     const fn new() -> Self {
-        Self {source: None, blocks: core::ptr::null(), block_count: 0, sample_rate: 0.0, scratch: Vec::new()}
+        Self {current: None, blocks: core::ptr::null(), block_count: 0, sample_rate: 0.0, scratch: Vec::new()}
     }
 }
 
@@ -159,16 +182,39 @@ fn lifecycle_rank(event: &Event) -> u8 {
 }
 
 /// Host import the device calls (wasm-to-wasm via the loader binding) to PULL its own input events for the
-/// pulse range `[from, to)`. Resolves the current device's note source, converts each event to a
-/// sample-offset `EventRecord` (absolute within the quantum), writes up to `max` into `out_ptr`, and
-/// returns the count. Reads only `PULL`, never `ENGINE`, so it is safe to call from inside `render`.
+/// pulse range `[from, to)`. It resolves the CURRENT pull link: a leaf sequencer resolves + converts to
+/// sample-offset `EventRecord`s directly; a MIDI-fx link descends (routing the fx device's own upstream
+/// pull to the next link) and invokes that device's `process_events`. Reads only `PULL`, never `ENGINE`,
+/// so it is safe to call re-entrantly from inside `render`.
 #[no_mangle]
 pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
-    let pull = unsafe { PULL.get() };
-    let source = match &pull.source {
-        Some(source) => source.clone(),
-        None => return 0
+    let link = {
+        let pull = unsafe { PULL.get() };
+        match &pull.current {
+            Some(link) => link.clone(),
+            None => return 0
+        }
     };
+    match link {
+        PullLink::Source(ref source) => pull_from_source(source, from, to, flags, out_ptr, max),
+        PullLink::MidiFx {process_index, upstream} => {
+            // Descend: point the CURRENT link at the fx's upstream so the fx device's own
+            // `host_pull_events` resolves it, run the fx, then restore this link so the next (per-block)
+            // pull from downstream still goes through the fx. Scope each `PULL.get()` so none is held
+            // across the device call (it re-enters `PULL.get()`); single-threaded, so they never overlap.
+            { unsafe { PULL.get() }.current = Some((*upstream).clone()); }
+            let count = call_device_process_events(process_index, from, to, flags, out_ptr, max);
+            { unsafe { PULL.get() }.current = Some(PullLink::MidiFx {process_index, upstream}); }
+            count
+        }
+    }
+}
+
+/// Resolve a leaf note source for `[from, to)`: pull its events, lifecycle-sort them, and convert each to
+/// a sample-offset `EventRecord` (absolute within the quantum, found via the block whose `p0 == from`).
+/// The sequencer never re-enters `host_pull_events`, so holding the `PULL` borrow here is safe.
+fn pull_from_source(source: &SharedNoteEventSource, from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
+    let pull = unsafe { PULL.get() };
     if pull.blocks.is_null() {
         return 0;
     }
@@ -279,7 +325,7 @@ impl NoteRegionSource for BoundNoteRegions {
 struct PluginInstrument {
     process_index: u32, // the device's `process` slot in the shared function table
     sample_rate: f32,
-    note_input: NoteEventInstrument,
+    pull_chain: Option<PullLink>, // the top of this unit's event pull chain (sequencer, or a midi-fx over it)
     events: EventBuffer,
     output: SharedAudioBuffer,
     device_output: Box<[f32]>,
@@ -324,7 +370,7 @@ impl PluginInstrument {
         Self {
             process_index: device.process_index,
             sample_rate,
-            note_input: NoteEventInstrument::new(),
+            pull_chain: None,
             events: EventBuffer::new(),
             output: shared_audio_buffer(),
             device_output,
@@ -336,8 +382,8 @@ impl PluginInstrument {
         }
     }
 
-    fn set_note_event_source(&mut self, source: SharedNoteEventSource) {
-        self.note_input.set_note_event_source(source);
+    fn set_pull_chain(&mut self, chain: PullLink) {
+        self.pull_chain = Some(chain);
     }
 }
 
@@ -394,7 +440,7 @@ impl Processor for PluginInstrument {
         // host_pull_events takes its own `PULL.get()`); single-threaded, so the two never overlap.
         {
             let pull = unsafe { PULL.get() };
-            pull.source = self.note_input.source();
+            pull.current = self.pull_chain.clone();
             pull.blocks = info.blocks.as_ptr();
             pull.block_count = info.blocks.len();
             pull.sample_rate = self.sample_rate;
@@ -402,7 +448,7 @@ impl Processor for PluginInstrument {
         call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
         {
             let pull = unsafe { PULL.get() };
-            pull.source = None;
+            pull.current = None;
             pull.blocks = core::ptr::null();
             pull.block_count = 0;
         }
@@ -706,6 +752,7 @@ impl Engine {
         let instruments: Vec<DeviceReg> =
             self.devices.iter().filter(|device| device.kind == DEVICE_KIND_INSTRUMENT).copied().collect();
         let effect = self.devices.iter().find(|device| device.kind == DEVICE_KIND_EFFECT).copied();
+        let midi_fx = self.devices.iter().find(|device| device.kind == DEVICE_KIND_MIDI_EFFECT).copied();
         if instruments.is_empty() {
             return; // no instrument plugin loaded -> nothing to voice the notes with
         }
@@ -717,9 +764,19 @@ impl Engine {
         for (unit, regions) in self.bind_note_regions_by_unit() {
             let slot = unit.map(|uuid| self.read_pulses(uuid, 11) as usize).unwrap_or(0) % instruments.len();
             let device = instruments[slot];
-            let source: SharedNoteEventSource = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {regions}))));
+            let sequencer: SharedNoteEventSource = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {regions}))));
+            // Build the unit's pull chain. DEMO: insert the midi-fx (transpose) before the LEAD only
+            // (slot 0 = the sine) so the chain (instrument <- transpose <- sequencer) is audible there
+            // while the bass stays untransposed.
+            let chain = match midi_fx.filter(|_| slot == 0) {
+                Some(fx) => PullLink::MidiFx {
+                    process_index: fx.process_index,
+                    upstream: Rc::new(PullLink::Source(sequencer))
+                },
+                None => PullLink::Source(sequencer)
+            };
             let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, device)));
-            instrument.borrow_mut().set_note_event_source(source);
+            instrument.borrow_mut().set_pull_chain(chain);
             let instrument_output = instrument.borrow().audio_output();
             let instrument_id = self.context.register_processor(instrument);
             let unit_effect = effect.filter(|_| slot == 1); // DEMO: effect only on the bass (the saw, slot 1)

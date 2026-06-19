@@ -37,10 +37,11 @@ DEVICE_TOOLCHAIN="${DEVICE_TOOLCHAIN:-nightly}"
 
 cargo rustc -p engine --release --target "$TARGET" -- \
   -C link-arg=--import-memory -C link-arg=--import-table $SHARED
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-sine    --release --target "$TARGET" -Zbuild-std=core
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-saw     --release --target "$TARGET" -Zbuild-std=core
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-lowpass --release --target "$TARGET" -Zbuild-std=core
+RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-sine      --release --target "$TARGET" -Zbuild-std=core
+RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-saw       --release --target "$TARGET" -Zbuild-std=core
+RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-lowpass   --release --target "$TARGET" -Zbuild-std=core
+RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-transpose --release --target "$TARGET" -Zbuild-std=core
 cargo build -p sine --release --target "$TARGET"
 
-cp "$OUT/engine.wasm" "$OUT/device_sine.wasm" "$OUT/device_saw.wasm" "$OUT/device_lowpass.wasm" "$OUT/sine.wasm" "$ROOT/packages/app/wasm/public/"
-echo "built: engine.wasm device_sine.wasm device_saw.wasm device_lowpass.wasm sine.wasm"
+cp "$OUT/engine.wasm" "$OUT/device_sine.wasm" "$OUT/device_saw.wasm" "$OUT/device_lowpass.wasm" "$OUT/device_transpose.wasm" "$OUT/sine.wasm" "$ROOT/packages/app/wasm/public/"
+echo "built: engine.wasm device_sine.wasm device_saw.wasm device_lowpass.wasm device_transpose.wasm sine.wasm"

@@ -20,7 +20,7 @@ fn panic(_: &PanicInfo) -> ! {
 
 // One-pole low-pass smoothing coefficient `y += a * (x - y)`. Fixed (no parameters yet): a = 0.05 puts
 // the cutoff near sample_rate * a / (2*PI) ~ 380 Hz at 48 kHz, dark enough to be unmistakable.
-const SMOOTHING: f32 = 0.05;
+const SMOOTHING: f32 = 0.02;
 
 /// The effect's per-instance state, interpreted from the engine-allocated (zeroed) block: the filter's
 /// last output sample, carried across quanta. Valid when zeroed.

@@ -10,14 +10,16 @@ import {serializeUpdateTasks} from "../../sync/serialize-update-tasks"
 import {createEngineMemory, loadEngineModules} from "../../engine-modules"
 import workletURL from "../metronome/engine-worklet.ts?worker&url"
 
-// Two audio units, two parts, THREE device plugins in one shared memory: two instruments plus an audio
-// effect. device_sine.wasm and device_saw.wasm are loaded as PIC side modules at host-assigned bases
-// (dynamic linking); the engine builds one PluginInstrument per audio unit, picking the device by the
-// unit's `index` (slot index % instrument count): the bass (index 1) plays the SAWTOOTH, the arpeggio
-// (index 2 -> slot 0) plays the SINE. device_lowpass.wasm (an audio-effect device) is then inserted after
-// the BASS only — instrument -> effect -> master — so the bass is low-pass filtered (muffled) while the
-// sine arpeggio stays dry. So you hear a filtered sawtooth bass under a bright sine arpeggio, proving the
-// instrument devices AND the audio-effect path coexist and run from the one memory.
+// Two audio units, two parts, FOUR device plugins in one shared memory: two instruments, an audio effect,
+// and a MIDI effect. device_sine.wasm and device_saw.wasm are loaded as PIC side modules at host-assigned
+// bases (dynamic linking); the engine builds one PluginInstrument per audio unit, picking the device by
+// the unit's `index` (slot index % instrument count): the bass (index 1) plays the SAWTOOTH, the arpeggio
+// (index 2 -> slot 0) plays the SINE. Then two plugin paths are added: device_lowpass.wasm (audio effect)
+// after the BASS only — instrument -> effect -> master — so the bass is low-pass filtered (muffled); and
+// device_transpose.wasm (MIDI effect) before the LEAD only, as a PULL-CHAIN link (instrument <- transpose
+// <- sequencer), shifting the arpeggio up one octave. So you hear a filtered sawtooth bass under a
+// transposed sine arpeggio, proving the instrument, audio-effect, AND MIDI-effect (event pull) paths all
+// coexist and run from the one memory.
 
 type Note = readonly [number, number] // [position in pulses, MIDI pitch]
 
@@ -31,8 +33,8 @@ const LEAD: ReadonlyArray<Note> = [
 ]
 
 const TIMELINE = `unit A (bass)  C2 E2 G2 E2  quarter notes, loop = 1 bar   -> SAWTOOTH -> LOW-PASS effect
-unit B (lead)  C5 E5 G5 C6  semiquavers,  loop = 1 quarter -> SINE (dry)
-both loop over bars 0..2 — two instrument devices + one effect device, one shared memory`
+unit B (lead)  C5 E5 G5 C6  semiquavers,  loop = 1 quarter -> TRANSPOSE +12 -> SINE
+both loop over bars 0..2 — two instruments + an audio effect + a MIDI effect, one shared memory`
 
 type EngineMessage =
     | { readonly type: "state", readonly bytes: ArrayBuffer }
@@ -125,7 +127,7 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
             }
         })
         await ctx.suspend()
-        append(`booted @ ${ctx.sampleRate} Hz — suspended; low-pass sawtooth bass + dry sine arpeggio (three device plugins)`)
+        append(`booted @ ${ctx.sampleRate} Hz — suspended; low-pass sawtooth bass + transposed sine arpeggio (four device plugins)`)
     }
 
     const play = async (): Promise<void> => {
@@ -151,16 +153,19 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
     return (
         <div className="page">
             <h2>Multiple Plugins</h2>
-            <p>Two audio units playing different parts through <strong>three device plugins</strong>: two
-                instruments and an audio effect. A <strong>sawtooth</strong> bass and a <strong>sine</strong>
-                arpeggio (<code>device_sine.wasm</code>, <code>device_saw.wasm</code>) are loaded as
-                position-independent side modules at host-assigned bases in <strong>one shared memory</strong>
-                (dynamic linking), and the engine calls each unit's device through the shared function table.
-                A <strong>low-pass effect</strong> (<code>device_lowpass.wasm</code>) is then inserted after the
-                bass only — instrument&nbsp;→&nbsp;effect&nbsp;→&nbsp;bus — so the sawtooth bass is
-                audibly <strong>muffled</strong> while the sine arpeggio stays <strong>bright</strong>. This
-                proves the instrument devices and the audio-effect path coexist and run from the one memory.
-                Metronome off.</p>
+            <p>Two audio units playing different parts through <strong>four device plugins</strong>: two
+                instruments, an audio effect, and a MIDI effect. A <strong>sawtooth</strong> bass and a
+                <strong>sine</strong> arpeggio (<code>device_sine.wasm</code>, <code>device_saw.wasm</code>)
+                are loaded as position-independent side modules at host-assigned bases in <strong>one shared
+                memory</strong> (dynamic linking), and the engine calls each unit's device through the shared
+                function table. A <strong>low-pass effect</strong> (<code>device_lowpass.wasm</code>) is
+                inserted after the bass only — instrument&nbsp;→&nbsp;effect&nbsp;→&nbsp;bus — so the sawtooth
+                bass is audibly <strong>muffled</strong>; and a <strong>transpose MIDI effect</strong>
+                (<code>device_transpose.wasm</code>) sits before the lead only as a pull-chain link
+                (instrument&nbsp;←&nbsp;transpose&nbsp;←&nbsp;sequencer), shifting the arpeggio <strong>up one
+                octave</strong>. The MIDI fx is no audio node: it produces events on demand when the
+                instrument pulls. This proves the instrument, audio-effect, and MIDI-effect (event pull)
+                paths all coexist and run from the one memory. Metronome off.</p>
             <pre className="timeline">{TIMELINE}</pre>
             <div>
                 <button onclick={() => void play()}>▶ Play</button>

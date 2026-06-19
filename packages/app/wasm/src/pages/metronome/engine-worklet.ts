@@ -23,9 +23,11 @@ type BootOptions = {
 // The device exports the loader touches. `state_size` takes the sample rate (devices size their state
 // from it, e.g. a delay buffer), so the device holds no global rate. Relocation helpers are optional.
 type DeviceExports = {
-    process: (descPtr: number) => void
+    process?: (descPtr: number) => void // audio devices (instrument / effect): called once per quantum
+    // MIDI-fx devices: a pull responder invoked when something downstream pulls them for [from, to)
+    process_events?: (from: number, to: number, flags: number, outPtr: number, max: number) => number
     state_size: (sampleRate: number) => number
-    kind: () => number // DEVICE_KIND_INSTRUMENT (0) / DEVICE_KIND_EFFECT (1); tells the host how to wire it
+    kind: () => number // DEVICE_KIND_INSTRUMENT (0) / EFFECT (1) / MIDI_EFFECT (2); tells the host how to wire it
     __wasm_apply_data_relocs?: () => void
     __wasm_call_ctors?: () => void
 }
@@ -140,7 +142,9 @@ class EngineProcessor extends AudioWorkletProcessor {
         // The sample rate is known at load (the earliest point), so the device sizes its state from it
         // here (e.g. a delay buffer) and reads it per render from the descriptor — no device-global rate.
         const processIndex = table.grow(1) // a fresh slot for the engine -> device call_indirect
-        table.set(processIndex, device.process as unknown as () => void)
+        // An audio device installs `process`; a MIDI-fx device installs `process_events` (its pull responder).
+        const entry = device.process_events ?? device.process
+        table.set(processIndex, entry as unknown as () => void)
         engine.device_register(processIndex, device.state_size(sampleRate), device.kind())
     }
 

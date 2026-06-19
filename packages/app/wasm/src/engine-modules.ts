@@ -16,7 +16,7 @@ export const createEngineMemory = (): WebAssembly.Memory =>
 
 // The device PIC side modules to load, in order. Round-robin-assigned to audio units by the engine until
 // the per-unit instrument device is read from the box graph, so the order picks which unit gets which.
-const DEVICE_URLS = ["/device_sine.wasm", "/device_saw.wasm", "/device_lowpass.wasm"] as const
+const DEVICE_URLS = ["/device_sine.wasm", "/device_saw.wasm", "/device_lowpass.wasm", "/device_transpose.wasm"] as const
 
 export const loadEngineModules = async (): Promise<EngineModules> => {
     const urls = ["/engine.wasm", ...DEVICE_URLS]

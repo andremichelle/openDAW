@@ -42,9 +42,12 @@ pub const EVENT_NOTE_ON: u32 = 0;
 pub const EVENT_NOTE_OFF: u32 = 1;
 
 /// What a device IS, so the host knows how to wire it into the graph (it reads this from the device's
-/// `kind` export at load). An instrument voices notes into audio; an effect transforms an input buffer.
+/// `kind` export at load). An instrument voices notes into audio; an effect transforms an input buffer; a
+/// MIDI effect is a pull source that transforms an upstream event stream (no audio, exports
+/// `process_events` instead of `process`).
 pub const DEVICE_KIND_INSTRUMENT: u32 = 0;
 pub const DEVICE_KIND_EFFECT: u32 = 1;
+pub const DEVICE_KIND_MIDI_EFFECT: u32 = 2;
 
 /// One render block of the quantum's `ProcessInfo` (mirrors `engine-env::Block`): a pulse range
 /// `[p0, p1)` mapped to the sample range `[s0, s1)` at `bpm`, with transport `flags`. A flat,
@@ -272,4 +275,31 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
     }
     let input = ports.inputs.get(0);
     E::process_audio(ports.state, &input[..frames], ports.output, ports.sample_rate);
+}
+
+/// The device-SDK template for a MIDI EFFECT (the TS `MidiEffectProcessor` / `NoteEventSource` analog). A
+/// MIDI fx is a PULL SOURCE: the host invokes its `process_events` for a range only when something
+/// downstream pulls it, and the device pulls its OWN upstream (over a range it chooses) and returns the
+/// transformed events for the range. It produces no audio. A device implements `transform` and calls
+/// [`render_midi_effect`] from its `process_events` export.
+pub trait MidiEffect {
+    /// Transform the pulled upstream `input` events into `output`, returning the count written (capped at
+    /// `output.len()`). Offsets are absolute within the quantum; preserve them unless the fx warps time.
+    fn transform(input: &[EventRecord], output: &mut [EventRecord]) -> usize;
+}
+
+// The on-stack scratch a MIDI fx pulls its upstream into before transforming. Stack-resident (the device
+// gets a 256 KiB stack), so no device-global buffer; sized for a generous per-range event count.
+const MIDI_PULL_SCRATCH: usize = 256;
+
+/// The pull-response path a MIDI-fx device calls from `process_events(from, to, flags, out_ptr, max)`:
+/// PULL the upstream stream for `[from, to)` into an on-stack scratch, then `transform` it into the
+/// host-provided output buffer. The upstream range need not equal `[from, to)` (a time warp chooses its
+/// own), but this template pulls the same range, which suits pitch/velocity transforms.
+pub fn render_midi_effect<M: MidiEffect>(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
+    let blank = EventRecord {offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+    let mut scratch = [blank; MIDI_PULL_SCRATCH];
+    let pulled = pull_events(from, to, flags, &mut scratch);
+    let out = unsafe { slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
+    M::transform(&scratch[..pulled], out) as u32
 }

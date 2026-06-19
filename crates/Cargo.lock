@@ -49,6 +49,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-transpose"
+version = "0.0.0"
+dependencies = [
+ "abi",
+]
+
+[[package]]
 name = "dsp"
 version = "0.0.0"
 dependencies = [
