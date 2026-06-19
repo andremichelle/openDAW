@@ -8,5 +8,5 @@ publish = false
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
-abi = {path = "../abi"}
-dsp = {path = "../dsp"}
+abi = {path = "../../abi"}
+dsp = {path = "../../dsp"}

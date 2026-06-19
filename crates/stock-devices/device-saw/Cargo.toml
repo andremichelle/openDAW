@@ -1,5 +1,5 @@
 [package]
-name = "device-sine"
+name = "device-saw"
 version = "0.0.0"
 edition = "2021"
 publish = false
@@ -8,5 +8,5 @@ publish = false
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
-abi = {path = "../abi"}
-dsp = {path = "../dsp"}
+abi = {path = "../../abi"}
+dsp = {path = "../../dsp"}

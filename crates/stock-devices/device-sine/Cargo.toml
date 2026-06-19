@@ -1,5 +1,5 @@
 [package]
-name = "device-transpose"
+name = "device-sine"
 version = "0.0.0"
 edition = "2021"
 publish = false
@@ -8,4 +8,5 @@ publish = false
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
-abi = {path = "../abi"}
+abi = {path = "../../abi"}
+dsp = {path = "../../dsp"}
