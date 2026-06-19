@@ -24,12 +24,16 @@
 use core::ptr::NonNull;
 use core::slice;
 
-/// One timed note event the host hands an instrument for the current block, already resolved to a
-/// sample `offset` within `[0, frames)`. CLAP-shaped: a flat, `#[repr(C)]` record read straight from
-/// shared memory (no heap). `kind` is `EVENT_NOTE_ON` / `EVENT_NOTE_OFF`.
+/// One timed note event. CLAP-shaped: a flat, `#[repr(C)]` record read straight from shared memory (no
+/// heap). `kind` is `EVENT_NOTE_ON` / `EVENT_NOTE_OFF`. It carries TWO time fields: `position` is the
+/// pulse position, the currency the MIDI-fx pull chain works in (a groove device warps it, the host
+/// resolves the chain in pulses); `offset` is the sample offset within `[0, frames)`, which the CONSUMER
+/// (an instrument's `render_instrument`) fills from `position` for its DSP. MIDI fx read/write `position`
+/// and leave `offset` to the consumer. `position` first so the `f64` is 8-aligned with no padding.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct EventRecord {
+    pub position: f64,
     pub offset: u32,
     pub kind: u32,
     pub id: u32,
@@ -55,6 +59,10 @@ pub const DEVICE_KIND_MIDI_EFFECT: u32 = 2;
 pub const BLOCK_FLAG_TRANSPORTING: u32 = 1 << 0;
 pub const BLOCK_FLAG_DISCONTINUOUS: u32 = 1 << 1;
 pub const BLOCK_FLAG_PLAYING: u32 = 1 << 2;
+
+// WASM CONTRACT: pulses-per-quarter-note, mirror of engine-env / lib-dsp (PPQN = 960). Devices doing
+// musical timing (tempo-synced LFOs, arpeggiator rates) convert pulses with it.
+pub const PPQN_QUARTER: f64 = 960.0;
 
 /// One render block of the quantum's `ProcessInfo` (mirrors `engine-env::Block`): a pulse range
 /// `[p0, p1)` mapped to the sample range `[s0, s1)` at `bpm`, with transport `flags`. A flat,
@@ -266,7 +274,14 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
         if count >= ports.event_scratch.len() {
             break;
         }
-        count += pull_events(block.p0, block.p1, block.flags, &mut ports.event_scratch[count..]);
+        let pulled = pull_events(block.p0, block.p1, block.flags, &mut ports.event_scratch[count..]);
+        // The pull chain works in pulse positions; this consumer resolves each to its sample offset for the
+        // DSP (the block containing the position maps it). Positions are block-monotonic, so the result
+        // stays offset-sorted for `dispatch_range`.
+        for record in &mut ports.event_scratch[count..count + pulled] {
+            record.offset = pulse_to_offset(record.position);
+        }
+        count += pulled;
     }
     dispatch_range::<I>(ports.state, ports.output, &ports.event_scratch[..count], sample_rate);
     I::finish(ports.state, ports.output, sample_rate);
@@ -278,12 +293,16 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
 /// blocks or event pull. `State` is the effect's instance state (e.g. a filter's history).
 pub trait AudioEffect {
     type State;
-    /// Transform `input` into `output` (same length) for the whole quantum.
-    fn process_audio(state: &mut Self::State, input: &[f32], output: &mut [f32], sample_rate: f32);
+    /// Transform `input` into `output` (same length) for ONE block. `bpm` and `position` (the pulse
+    /// position at the block's start) let an effect lock to tempo and the song timeline (e.g. a
+    /// tempo-synced LFO); effects that need no timing ignore them.
+    fn process_audio(state: &mut Self::State, input: &[f32], output: &mut [f32], sample_rate: f32, bpm: f32, position: f64);
 }
 
-/// The per-quantum effect path a device calls from `process`: pass input 0 (or silence if unconnected)
-/// through the effect's `process_audio` into the output buffer.
+/// The per-quantum effect path a device calls from `process`: run input 0 through the effect's
+/// `process_audio` PER BLOCK, slicing each block's sample range and handing it the block's `bpm` and start
+/// `position` so the effect can sync to tempo. With no input it outputs silence; with no transport blocks
+/// (not playing) it passes the input through unchanged.
 pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
     let frames = ports.output.len();
     if ports.inputs.is_empty() {
@@ -293,7 +312,17 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
         return;
     }
     let input = ports.inputs.get(0);
-    E::process_audio(ports.state, &input[..frames], ports.output, ports.sample_rate);
+    if ports.blocks.is_empty() {
+        ports.output.copy_from_slice(&input[..frames]);
+        return;
+    }
+    for block in ports.blocks {
+        let s0 = (block.s0 as usize).min(frames);
+        let s1 = (block.s1 as usize).min(frames);
+        if s1 > s0 {
+            E::process_audio(ports.state, &input[s0..s1], &mut ports.output[s0..s1], ports.sample_rate, block.bpm, block.p0);
+        }
+    }
 }
 
 /// The device-SDK template for a MIDI EFFECT (the TS `MidiEffectProcessor` / `NoteEventSource` analog). A
@@ -324,7 +353,7 @@ const MIDI_PULL_SCRATCH: usize = 256;
 /// transforms that do not move events in time.
 pub fn render_midi_effect<M: MidiEffect>(from: f64, to: f64, flags: u32, state_ptr: u32, out_ptr: u32, max: u32) -> u32 {
     let state = unsafe { &mut *(state_ptr as *mut M::State) };
-    let blank = EventRecord {offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+    let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
     let mut scratch = [blank; MIDI_PULL_SCRATCH];
     let pulled = pull_events(from, to, flags, &mut scratch);
     let out = unsafe { slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };

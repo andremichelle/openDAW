@@ -42,7 +42,8 @@ RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-saw       
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-lowpass   --release --target "$TARGET" -Zbuild-std=core
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-transpose --release --target "$TARGET" -Zbuild-std=core
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-arp       --release --target "$TARGET" -Zbuild-std=core
+RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-zeitgeist --release --target "$TARGET" -Zbuild-std=core
 cargo build -p sine --release --target "$TARGET"
 
-cp "$OUT/engine.wasm" "$OUT/device_sine.wasm" "$OUT/device_saw.wasm" "$OUT/device_lowpass.wasm" "$OUT/device_transpose.wasm" "$OUT/device_arp.wasm" "$OUT/sine.wasm" "$ROOT/packages/app/wasm/public/"
-echo "built: engine.wasm device_sine.wasm device_saw.wasm device_lowpass.wasm device_transpose.wasm device_arp.wasm sine.wasm"
+cp "$OUT/engine.wasm" "$OUT/device_sine.wasm" "$OUT/device_saw.wasm" "$OUT/device_lowpass.wasm" "$OUT/device_transpose.wasm" "$OUT/device_arp.wasm" "$OUT/device_zeitgeist.wasm" "$OUT/sine.wasm" "$ROOT/packages/app/wasm/public/"
+echo "built: engine.wasm + device_sine/saw/lowpass/transpose/arp/zeitgeist + sine"

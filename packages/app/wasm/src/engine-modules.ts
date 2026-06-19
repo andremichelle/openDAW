@@ -16,9 +16,10 @@ export const createEngineMemory = (): WebAssembly.Memory =>
 
 // The device PIC side modules to load, in order. Round-robin-assigned to audio units by the engine until
 // the per-unit instrument device is read from the box graph, so the order picks which unit gets which.
-// MIDI fx load order matters: they are folded onto the lead's pull chain in this order, so the LAST one
-// (transpose) is closest to the instrument -> sequencer <- arp <- transpose <- instrument.
-const DEVICE_URLS = ["/device_sine.wasm", "/device_saw.wasm", "/device_lowpass.wasm", "/device_arp.wasm", "/device_transpose.wasm"] as const
+// MIDI fx load order matters: they are folded onto the lead's pull chain in this order, so the LAST one is
+// closest to the instrument -> sequencer <- arp <- zeitgeist <- transpose <- instrument (arpeggiate, then
+// shuffle the arp, then shift up an octave).
+const DEVICE_URLS = ["/device_sine.wasm", "/device_saw.wasm", "/device_lowpass.wasm", "/device_arp.wasm", "/device_zeitgeist.wasm", "/device_transpose.wasm"] as const
 
 export const loadEngineModules = async (): Promise<EngineModules> => {
     const urls = ["/engine.wasm", ...DEVICE_URLS]

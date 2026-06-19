@@ -248,20 +248,12 @@ pub extern "C" fn host_pulse_to_offset(pulse: f64) -> u32 {
     sample_offset(pulse, &block, pull.sample_rate) as u32
 }
 
-/// Resolve a leaf note source for `[from, to)`: pull its events, lifecycle-sort them, and convert each to
-/// a sample-offset `EventRecord` (absolute within the quantum, found via the block whose `p0 == from`).
+/// Resolve a leaf note source for `[from, to)`: pull its events, lifecycle-sort them, and write each as an
+/// `EventRecord` carrying its PULSE `position` (the consumer resolves the sample offset later, via
+/// `host_pulse_to_offset`). No block lookup, so an arbitrary (e.g. groove-unwarped) range resolves fine.
 /// The sequencer never re-enters `host_pull_events`, so holding the `PULL` borrow here is safe.
 fn pull_from_source(source: &SharedNoteEventSource, from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
     let pull = unsafe { PULL.get() };
-    if pull.blocks.is_null() {
-        return 0;
-    }
-    let blocks = unsafe { core::slice::from_raw_parts(pull.blocks, pull.block_count) };
-    let block = match blocks.iter().find(|block| block.p0 == from) {
-        Some(block) => *block,
-        None => return 0
-    };
-    let sample_rate = pull.sample_rate;
     pull.scratch.clear();
     source.borrow_mut().process_notes(from, to, BlockFlags(flags), &mut |event| pull.scratch.push(event));
     pull.scratch.sort_by(compare_lifecycle);
@@ -273,7 +265,8 @@ fn pull_from_source(source: &SharedNoteEventSource, from: f64, to: f64, flags: u
         }
         let record = match *event {
             Event::NoteStart {id, position, pitch, cent, velocity, ..} => EventRecord {
-                offset: sample_offset(position, &block, sample_rate) as u32,
+                position,
+                offset: 0,
                 kind: EVENT_NOTE_ON,
                 id: id as u32,
                 pitch: pitch as u32,
@@ -281,7 +274,8 @@ fn pull_from_source(source: &SharedNoteEventSource, from: f64, to: f64, flags: u
                 cent
             },
             Event::NoteComplete {id, position, pitch} => EventRecord {
-                offset: sample_offset(position, &block, sample_rate) as u32,
+                position,
+                offset: 0,
                 kind: EVENT_NOTE_OFF,
                 id: id as u32,
                 pitch: pitch as u32,
@@ -384,7 +378,7 @@ struct PluginInstrument {
 impl PluginInstrument {
     fn new(sample_rate: f32, device: DeviceReg) -> Self {
         let device_output = vec![0.0f32; RENDER_QUANTUM].into_boxed_slice();
-        let blank = EventRecord {offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+        let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
         let device_events = vec![blank; DEVICE_MAX_EVENTS].into_boxed_slice();
         let blank_block = BlockRecord {index: 0, flags: 0, p0: 0.0, p1: 0.0, s0: 0, s1: 0, bpm: 0.0, reserved: 0};
         let device_blocks = vec![blank_block; DEVICE_MAX_BLOCKS].into_boxed_slice();
@@ -518,6 +512,7 @@ struct PluginAudioEffect {
     out_offsets: Box<[u32]>,
     #[allow(dead_code)]
     device_state: Box<[u32]>,
+    device_blocks: Box<[BlockRecord]>, // refilled from the ProcessInfo each quantum (so the effect can sync to tempo)
     descriptor: Box<[u32]>
 }
 
@@ -528,8 +523,10 @@ impl PluginAudioEffect {
         let device_state = vec![0u32; state_size.div_ceil(4)].into_boxed_slice();
         let in_offsets = vec![0u32].into_boxed_slice(); // input buffer ptr, set by set_audio_source
         let out_offsets = vec![device_output.as_ptr() as u32].into_boxed_slice();
+        let blank_block = BlockRecord {index: 0, flags: 0, p0: 0.0, p1: 0.0, s0: 0, s1: 0, bpm: 0.0, reserved: 0};
+        let device_blocks = vec![blank_block; DEVICE_MAX_BLOCKS].into_boxed_slice();
         // descriptor (see `abi`): frames, in_count/ptr (1), out_count/ptr (1), no params, state, no event
-        // scratch, no out events, no blocks (the effect ignores sub-block timing for now), sample_rate.
+        // scratch, no out events, block_count/ptr (so the effect gets transport for tempo sync), sample_rate.
         let descriptor = vec![
             RENDER_QUANTUM as u32,
             1, in_offsets.as_ptr() as u32,
@@ -538,7 +535,7 @@ impl PluginAudioEffect {
             device_state.as_ptr() as u32,
             0, 0,
             0, 0,
-            0, 0,
+            0, device_blocks.as_ptr() as u32,
             sample_rate.to_bits()
         ].into_boxed_slice();
         Self {
@@ -550,6 +547,7 @@ impl PluginAudioEffect {
             in_offsets,
             out_offsets,
             device_state,
+            device_blocks,
             descriptor
         }
     }
@@ -577,8 +575,26 @@ impl AudioGenerator for PluginAudioEffect {
 impl Processor for PluginAudioEffect {
     fn reset(&mut self) {}
 
-    fn process(&mut self, _info: &ProcessInfo) {
+    fn process(&mut self, info: &ProcessInfo) {
+        let mut block_count = 0;
+        for block in info.blocks {
+            if block_count >= self.device_blocks.len() {
+                break;
+            }
+            self.device_blocks[block_count] = BlockRecord {
+                index: block.index,
+                flags: block.flags.0,
+                p0: block.p0,
+                p1: block.p1,
+                s0: block.s0 as u32,
+                s1: block.s1 as u32,
+                bpm: block.bpm,
+                reserved: 0
+            };
+            block_count += 1;
+        }
         self.descriptor[0] = RENDER_QUANTUM as u32;
+        self.descriptor[12] = block_count as u32;
         call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
         let mut output = self.output.borrow_mut();
         for index in 0..RENDER_QUANTUM {
