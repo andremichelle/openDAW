@@ -49,6 +49,13 @@ pub const DEVICE_KIND_INSTRUMENT: u32 = 0;
 pub const DEVICE_KIND_EFFECT: u32 = 1;
 pub const DEVICE_KIND_MIDI_EFFECT: u32 = 2;
 
+// WASM CONTRACT: block flag bits, mirror of `engine-env::BlockFlags`. A device reads these from the
+// `flags` it is handed; keep in lockstep with the host. DISCONTINUOUS marks a transport jump (loop wrap /
+// seek), the cue for a stateful device to release everything it is holding.
+pub const BLOCK_FLAG_TRANSPORTING: u32 = 1 << 0;
+pub const BLOCK_FLAG_DISCONTINUOUS: u32 = 1 << 1;
+pub const BLOCK_FLAG_PLAYING: u32 = 1 << 2;
+
 /// One render block of the quantum's `ProcessInfo` (mirrors `engine-env::Block`): a pulse range
 /// `[p0, p1)` mapped to the sample range `[s0, s1)` at `bpm`, with transport `flags`. A flat,
 /// `#[repr(C)]` record both the host (engine) and the device read from shared memory. Field ORDER is
@@ -76,6 +83,7 @@ pub struct BlockRecord {
 #[link(wasm_import_module = "env")]
 extern "C" {
     fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32;
+    fn host_pulse_to_offset(pulse: f64) -> u32;
 }
 
 /// Pull this device's resolved input events for the pulse range `[from, to)` into `out`, returning the
@@ -87,6 +95,17 @@ pub fn pull_events(from: f64, to: f64, flags: u32, out: &mut [EventRecord]) -> u
     { unsafe { host_pull_events(from, to, flags, out.as_mut_ptr() as u32, out.len() as u32) as usize } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (from, to, flags, out.len()); 0 }
+}
+
+/// Map a pulse position to its sample offset within the current quantum (the host resolves it against the
+/// block containing `pulse`). A generative device (e.g. an arpeggiator placing notes on a rate grid) uses
+/// this to time the events it emits. Native stub returns 0.
+#[inline]
+pub fn pulse_to_offset(pulse: f64) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_pulse_to_offset(pulse) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = pulse; 0 }
 }
 
 /// Read-only view over a device's input ports.
@@ -283,23 +302,31 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
 /// transformed events for the range. It produces no audio. A device implements `transform` and calls
 /// [`render_midi_effect`] from its `process_events` export.
 pub trait MidiEffect {
-    /// Transform the pulled upstream `input` events into `output`, returning the count written (capped at
-    /// `output.len()`). Offsets are absolute within the quantum; preserve them unless the fx warps time.
-    fn transform(input: &[EventRecord], output: &mut [EventRecord]) -> usize;
+    /// Per-instance state, interpreted from the engine-allocated (zeroed) block, persisting across pulls
+    /// (e.g. an arpeggiator's stack of held notes). `()` for a stateless fx.
+    type State;
+    /// Transform the pulled upstream `input` events into `output`, returning the count written (bounded by
+    /// `output.len()`). The relationship is NOT one-to-one: an fx may DROP events (a transpose silently
+    /// ignores notes that fall out of MIDI range, never clamps them) or PRODUCE more than it consumed (an
+    /// arpeggiator emits a stream from a held chord). Offsets are absolute within the quantum; preserve
+    /// them unless the fx warps time.
+    fn transform(state: &mut Self::State, input: &[EventRecord], output: &mut [EventRecord]) -> usize;
 }
 
 // The on-stack scratch a MIDI fx pulls its upstream into before transforming. Stack-resident (the device
 // gets a 256 KiB stack), so no device-global buffer; sized for a generous per-range event count.
 const MIDI_PULL_SCRATCH: usize = 256;
 
-/// The pull-response path a MIDI-fx device calls from `process_events(from, to, flags, out_ptr, max)`:
-/// PULL the upstream stream for `[from, to)` into an on-stack scratch, then `transform` it into the
-/// host-provided output buffer. The upstream range need not equal `[from, to)` (a time warp chooses its
-/// own), but this template pulls the same range, which suits pitch/velocity transforms.
-pub fn render_midi_effect<M: MidiEffect>(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
+/// The pull-response path a MIDI-fx device calls from `process_events(from, to, flags, state_ptr, out_ptr,
+/// max)`: PULL the upstream stream for `[from, to)` into an on-stack scratch, then `transform` it (with the
+/// instance state) into the host-provided output buffer. The upstream range need not equal `[from, to)` (a
+/// time warp chooses its own), but this template pulls the same range, which suits pitch/velocity/arp
+/// transforms that do not move events in time.
+pub fn render_midi_effect<M: MidiEffect>(from: f64, to: f64, flags: u32, state_ptr: u32, out_ptr: u32, max: u32) -> u32 {
+    let state = unsafe { &mut *(state_ptr as *mut M::State) };
     let blank = EventRecord {offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
     let mut scratch = [blank; MIDI_PULL_SCRATCH];
     let pulled = pull_events(from, to, flags, &mut scratch);
     let out = unsafe { slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
-    M::transform(&scratch[..pulled], out) as u32
+    M::transform(state, &scratch[..pulled], out) as u32
 }

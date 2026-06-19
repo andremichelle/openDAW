@@ -10,16 +10,18 @@ import {serializeUpdateTasks} from "../../sync/serialize-update-tasks"
 import {createEngineMemory, loadEngineModules} from "../../engine-modules"
 import workletURL from "../metronome/engine-worklet.ts?worker&url"
 
-// Two audio units, two parts, FOUR device plugins in one shared memory: two instruments, an audio effect,
-// and a MIDI effect. device_sine.wasm and device_saw.wasm are loaded as PIC side modules at host-assigned
-// bases (dynamic linking); the engine builds one PluginInstrument per audio unit, picking the device by
-// the unit's `index` (slot index % instrument count): the bass (index 1) plays the SAWTOOTH, the arpeggio
-// (index 2 -> slot 0) plays the SINE. Then two plugin paths are added: device_lowpass.wasm (audio effect)
-// after the BASS only — instrument -> effect -> master — so the bass is low-pass filtered (muffled); and
-// device_transpose.wasm (MIDI effect) before the LEAD only, as a PULL-CHAIN link (instrument <- transpose
-// <- sequencer), shifting the arpeggio up one octave. So you hear a filtered sawtooth bass under a
-// transposed sine arpeggio, proving the instrument, audio-effect, AND MIDI-effect (event pull) paths all
-// coexist and run from the one memory.
+// Two audio units, two parts, FIVE device plugins in one shared memory: two instruments, an audio effect,
+// and a TWO-stage MIDI-fx chain. device_sine.wasm and device_saw.wasm are loaded as PIC side modules at
+// host-assigned bases (dynamic linking); the engine builds one PluginInstrument per audio unit, picking the
+// device by the unit's `index` (slot index % instrument count): the bass (index 1) plays the SAWTOOTH, the
+// lead (index 2 -> slot 0) plays the SINE. Then the plugin paths are added: device_lowpass.wasm (audio
+// effect) after the BASS only — instrument -> effect -> master — so the bass is low-pass filtered
+// (muffled); and a MIDI-fx PULL CHAIN before the LEAD only — sequencer <- device_arp.wasm <-
+// device_transpose.wasm <- instrument. The lead part is a single HELD CHORD; the arpeggiator holds it in
+// its state block and emits a 1/16 stepped sequence (a few held notes become a stream — not one-to-one),
+// then the transpose fx shifts every step up an octave (dropping any out-of-range note). So you hear a
+// filtered sawtooth bass under an octave-up arpeggiated sine chord, proving instruments, the audio-effect
+// path, AND a multi-link MIDI-effect (event pull) chain all coexist and run from the one memory.
 
 type Note = readonly [number, number] // [position in pulses, MIDI pitch]
 
@@ -27,14 +29,15 @@ type Note = readonly [number, number] // [position in pulses, MIDI pitch]
 const BASS: ReadonlyArray<Note> = [
     [0, 36], [PPQN.Quarter, 40], [2 * PPQN.Quarter, 43], [3 * PPQN.Quarter, 40]
 ]
-// Unit B — lead: C5 E5 G5 C6 as semiquavers, looping every quarter.
+// Unit B — lead: a held C5-E5-G5 chord (all at position 0), looping every bar. The arpeggiator device
+// turns it into a 1/16 stepped sequence; the chord is held the whole bar so the arp has notes to step.
 const LEAD: ReadonlyArray<Note> = [
-    [0, 72], [PPQN.SemiQuaver, 76], [2 * PPQN.SemiQuaver, 79], [3 * PPQN.SemiQuaver, 84]
+    [0, 72], [0, 76], [0, 79]
 ]
 
-const TIMELINE = `unit A (bass)  C2 E2 G2 E2  quarter notes, loop = 1 bar   -> SAWTOOTH -> LOW-PASS effect
-unit B (lead)  C5 E5 G5 C6  semiquavers,  loop = 1 quarter -> TRANSPOSE +12 -> SINE
-both loop over bars 0..2 — two instruments + an audio effect + a MIDI effect, one shared memory`
+const TIMELINE = `unit A (bass)  C2 E2 G2 E2     quarter notes,  loop = 1 bar -> SAWTOOTH -> LOW-PASS effect
+unit B (lead)  C5+E5+G5 held chord, loop = 1 bar -> ARPEGGIATOR (1/16) -> TRANSPOSE +12 -> SINE
+both loop over bars 0..2 — two instruments + an audio effect + a 2-stage MIDI-fx chain, one shared memory`
 
 type EngineMessage =
     | { readonly type: "state", readonly bytes: ArrayBuffer }
@@ -88,8 +91,8 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
     }
 
     boxGraph.beginTransaction()
-    addPart(1, BASS, PPQN.Bar, PPQN.Quarter / 2)         // index 1 -> sawtooth device; staccato quarters
-    addPart(2, LEAD, PPQN.Quarter, PPQN.SemiQuaver / 2)  // index 2 -> sine device; staccato semiquavers
+    addPart(1, BASS, PPQN.Bar, PPQN.Quarter / 2)  // index 1 -> sawtooth device; staccato quarters
+    addPart(2, LEAD, PPQN.Bar, PPQN.Bar)          // index 2 -> sine device; chord held a full bar, arpeggiated
     timelineBox.loopArea.from.setValue(0)
     timelineBox.loopArea.to.setValue(2 * PPQN.Bar)
     timelineBox.loopArea.enabled.setValue(true)
@@ -127,7 +130,7 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
             }
         })
         await ctx.suspend()
-        append(`booted @ ${ctx.sampleRate} Hz — suspended; low-pass sawtooth bass + transposed sine arpeggio (four device plugins)`)
+        append(`booted @ ${ctx.sampleRate} Hz — suspended; low-pass sawtooth bass + octave-up arpeggiated sine chord (five device plugins)`)
     }
 
     const play = async (): Promise<void> => {
@@ -153,19 +156,24 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
     return (
         <div className="page">
             <h2>Multiple Plugins</h2>
-            <p>Two audio units playing different parts through <strong>four device plugins</strong>: two
-                instruments, an audio effect, and a MIDI effect. A <strong>sawtooth</strong> bass and a
-                <strong>sine</strong> arpeggio (<code>device_sine.wasm</code>, <code>device_saw.wasm</code>)
+            <p>Two audio units playing different parts through <strong>five device plugins</strong>: two
+                instruments, an audio effect, and a two-stage MIDI-fx chain. A <strong>sawtooth</strong> bass
+                and a <strong>sine</strong> lead (<code>device_sine.wasm</code>, <code>device_saw.wasm</code>)
                 are loaded as position-independent side modules at host-assigned bases in <strong>one shared
                 memory</strong> (dynamic linking), and the engine calls each unit's device through the shared
                 function table. A <strong>low-pass effect</strong> (<code>device_lowpass.wasm</code>) is
                 inserted after the bass only — instrument&nbsp;→&nbsp;effect&nbsp;→&nbsp;bus — so the sawtooth
-                bass is audibly <strong>muffled</strong>; and a <strong>transpose MIDI effect</strong>
-                (<code>device_transpose.wasm</code>) sits before the lead only as a pull-chain link
-                (instrument&nbsp;←&nbsp;transpose&nbsp;←&nbsp;sequencer), shifting the arpeggio <strong>up one
-                octave</strong>. The MIDI fx is no audio node: it produces events on demand when the
-                instrument pulls. This proves the instrument, audio-effect, and MIDI-effect (event pull)
-                paths all coexist and run from the one memory. Metronome off.</p>
+                bass is audibly <strong>muffled</strong>; and a <strong>two-stage MIDI-fx pull chain</strong>
+                sits before the lead only:
+                sequencer&nbsp;←&nbsp;<code>device_arp.wasm</code>&nbsp;←&nbsp;<code>device_transpose.wasm</code>&nbsp;←&nbsp;instrument.
+                The lead part is a single held C-E-G chord; the <strong>arpeggiator</strong> holds it in its
+                state block and emits a 1/16 stepped sequence (a few held notes become a stream — NOT
+                one-to-one — and it keeps stepping across blocks with no new input), then the
+                <strong>transpose</strong> stage shifts every step <strong>up an octave</strong>. Each pull
+                cascades up the chain (instrument pulls transpose, which pulls the arp, which pulls the
+                sequencer); the MIDI fx are no audio nodes, they produce events on demand. This proves
+                instruments, the audio-effect path, and a multi-link MIDI-effect (event pull) chain all
+                coexist and run from the one memory. Metronome off.</p>
             <pre className="timeline">{TIMELINE}</pre>
             <div>
                 <button onclick={() => void play()}>▶ Play</button>

@@ -23,16 +23,28 @@ fn panic(_: &PanicInfo) -> ! {
 const TRANSPOSE: i32 = 12;
 
 /// The transform, plugged into the SDK's `MidiEffect` template ([`abi::render_midi_effect`]), which owns
-/// the upstream pull. This device writes only the transform: copy each event, shifting its pitch.
+/// the upstream pull. This device writes only the transform: copy each event, shifting its pitch, and
+/// DROP any note shifted out of MIDI range (never clamp — clamping would fold distinct pitches together).
+/// So the output count is not one-to-one with the input. Stateless, so its `State` is `()`.
 pub struct Transpose;
 
 impl abi::MidiEffect for Transpose {
-    fn transform(input: &[EventRecord], output: &mut [EventRecord]) -> usize {
-        let count = input.len().min(output.len());
-        for index in 0..count {
-            let mut record = input[index];
-            record.pitch = (record.pitch as i32 + TRANSPOSE).clamp(0, 127) as u32;
-            output[index] = record;
+    type State = ();
+
+    fn transform(_state: &mut (), input: &[EventRecord], output: &mut [EventRecord]) -> usize {
+        let mut count = 0;
+        for record in input {
+            if count >= output.len() {
+                break;
+            }
+            let pitch = record.pitch as i32 + TRANSPOSE;
+            if !(0..=127).contains(&pitch) {
+                continue; // out of MIDI range: drop the note, do not clamp
+            }
+            let mut shifted = *record;
+            shifted.pitch = pitch as u32;
+            output[count] = shifted;
+            count += 1;
         }
         count
     }
@@ -44,13 +56,14 @@ pub extern "C" fn kind() -> u32 {
     abi::DEVICE_KIND_MIDI_EFFECT
 }
 
-/// A MIDI effect holds no per-instance audio state block; it pulls its upstream into an on-stack scratch.
+/// Bytes the engine must allocate (zeroed) for one instance's state block. Transpose is stateless (`()`),
+/// so this is 0; the parameter keeps the ABI uniform with stateful MIDI fx (e.g. an arpeggiator's stack).
 #[no_mangle]
 pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
-    0
+    core::mem::size_of::<<Transpose as abi::MidiEffect>::State>() as u32
 }
 
 #[no_mangle]
-pub extern "C" fn process_events(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
-    abi::render_midi_effect::<Transpose>(from, to, flags, out_ptr, max)
+pub extern "C" fn process_events(from: f64, to: f64, flags: u32, state_ptr: u32, out_ptr: u32, max: u32) -> u32 {
+    abi::render_midi_effect::<Transpose>(from, to, flags, state_ptr, out_ptr, max)
 }

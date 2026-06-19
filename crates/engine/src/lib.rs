@@ -78,16 +78,17 @@ fn call_device_process(process_index: u32, desc_ptr: u32) {
 fn call_device_process(_process_index: u32, _desc_ptr: u32) {}
 
 // Call a MIDI-fx device's `process_events` pull responder through the shared function table (same
-// table-index-is-fn-pointer trick as `call_device_process`). Returns the count of events it wrote.
+// table-index-is-fn-pointer trick as `call_device_process`). `state_ptr` is its per-instance state block.
+// Returns the count of events it wrote.
 #[cfg(target_family = "wasm")]
 #[inline]
-fn call_device_process_events(process_index: u32, from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
-    let process_events: extern "C" fn(f64, f64, u32, u32, u32) -> u32 =
+fn call_device_process_events(process_index: u32, from: f64, to: f64, flags: u32, state_ptr: u32, out_ptr: u32, max: u32) -> u32 {
+    let process_events: extern "C" fn(f64, f64, u32, u32, u32, u32) -> u32 =
         unsafe { core::mem::transmute(process_index as usize) };
-    process_events(from, to, flags, out_ptr, max)
+    process_events(from, to, flags, state_ptr, out_ptr, max)
 }
 #[cfg(not(target_family = "wasm"))]
-fn call_device_process_events(_process_index: u32, _from: f64, _to: f64, _flags: u32, _out_ptr: u32, _max: u32) -> u32 { 0 }
+fn call_device_process_events(_process_index: u32, _from: f64, _to: f64, _flags: u32, _state_ptr: u32, _out_ptr: u32, _max: u32) -> u32 { 0 }
 
 const DEVICE_MAX_EVENTS: usize = 256; // per-quantum event scratch the device pulls into
 const DEVICE_MAX_BLOCKS: usize = RENDER_QUANTUM; // upper bound on blocks per quantum (one per sample worst case)
@@ -137,14 +138,32 @@ static ENGINE_STATE: Shared<[u8; ENGINE_STATE_LEN]> = Shared::new([0; ENGINE_STA
 // The node scopes its `PULL.get()` borrows so none is live across the device call (single-threaded).
 static PULL: Shared<PullContext> = Shared::new(PullContext::new());
 
+/// A device's per-instance state block (talc-allocated, zeroed once, reused across calls), owned host-side
+/// and addressed by the device through a raw pointer. `u32`-backed so it is 4-aligned for the device's
+/// state struct. Shared via `Rc` so every clone of a `PullLink::MidiFx` addresses the SAME instance state.
+struct DeviceState(Box<[u64]>);
+
+impl DeviceState {
+    // u64-backed so the block is 8-aligned for any device state struct (e.g. an arpeggiator state holding
+    // f64 pulse positions); a 4-aligned block would be misaligned for those.
+    fn new(bytes: usize) -> Self {
+        Self(vec![0u64; bytes.div_ceil(8)].into_boxed_slice())
+    }
+
+    fn ptr(&self) -> u32 {
+        self.0.as_ptr() as u32
+    }
+}
+
 /// One link in a unit's event PULL CHAIN (the `NoteEventSource` chain, sequencer -> fx -> ... -> the
 /// instrument that consumes it). A leaf `Source` is the note sequencer; a `MidiFx` is a MIDI-effect device
-/// that, when pulled, transforms the events of its `upstream` link. Cheap to clone (`Rc` handles). This is
-/// the `PluginMidiEffect` role from the plan: a MIDI fx is NOT an audio-graph node, it is a pull link.
+/// that, when pulled, transforms the events of its `upstream` link, holding its own per-instance `state`
+/// (e.g. an arpeggiator's held-note stack). Cheap to clone (`Rc` handles), and clones share the one state.
+/// This is the `PluginMidiEffect` role from the plan: a MIDI fx is NOT an audio-graph node, it is a pull link.
 #[derive(Clone)]
 enum PullLink {
     Source(SharedNoteEventSource),
-    MidiFx { process_index: u32, upstream: Rc<PullLink> }
+    MidiFx { process_index: u32, state: Rc<DeviceState>, upstream: Rc<PullLink> }
 }
 
 /// What `host_pull_events` needs to resolve a device's input events for a pulse range: the CURRENT pull
@@ -197,17 +216,36 @@ pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32,
     };
     match link {
         PullLink::Source(ref source) => pull_from_source(source, from, to, flags, out_ptr, max),
-        PullLink::MidiFx {process_index, upstream} => {
+        PullLink::MidiFx {process_index, state, upstream} => {
             // Descend: point the CURRENT link at the fx's upstream so the fx device's own
-            // `host_pull_events` resolves it, run the fx, then restore this link so the next (per-block)
-            // pull from downstream still goes through the fx. Scope each `PULL.get()` so none is held
-            // across the device call (it re-enters `PULL.get()`); single-threaded, so they never overlap.
+            // `host_pull_events` resolves it, run the fx (with its per-instance state), then restore this
+            // link so the next (per-block) pull from downstream still goes through the fx. Scope each
+            // `PULL.get()` so none is held across the device call (it re-enters `PULL.get()`);
+            // single-threaded, so they never overlap.
+            let state_ptr = state.ptr();
             { unsafe { PULL.get() }.current = Some((*upstream).clone()); }
-            let count = call_device_process_events(process_index, from, to, flags, out_ptr, max);
-            { unsafe { PULL.get() }.current = Some(PullLink::MidiFx {process_index, upstream}); }
+            let count = call_device_process_events(process_index, from, to, flags, state_ptr, out_ptr, max);
+            { unsafe { PULL.get() }.current = Some(PullLink::MidiFx {process_index, state, upstream}); }
             count
         }
     }
+}
+
+/// Host import a (generative) device calls to map a pulse position to its sample offset within the current
+/// quantum, resolved against the block containing `pulse`. An arpeggiator uses it to time the events it
+/// emits on a rate grid. Reads only `PULL`, like `host_pull_events`.
+#[no_mangle]
+pub extern "C" fn host_pulse_to_offset(pulse: f64) -> u32 {
+    let pull = unsafe { PULL.get() };
+    if pull.blocks.is_null() {
+        return 0;
+    }
+    let blocks = unsafe { core::slice::from_raw_parts(pull.blocks, pull.block_count) };
+    let block = match blocks.iter().find(|block| pulse >= block.p0 && pulse < block.p1).or_else(|| blocks.last()) {
+        Some(block) => *block,
+        None => return 0
+    };
+    sample_offset(pulse, &block, pull.sample_rate) as u32
 }
 
 /// Resolve a leaf note source for `[from, to)`: pull its events, lifecycle-sort them, and convert each to
@@ -752,7 +790,8 @@ impl Engine {
         let instruments: Vec<DeviceReg> =
             self.devices.iter().filter(|device| device.kind == DEVICE_KIND_INSTRUMENT).copied().collect();
         let effect = self.devices.iter().find(|device| device.kind == DEVICE_KIND_EFFECT).copied();
-        let midi_fx = self.devices.iter().find(|device| device.kind == DEVICE_KIND_MIDI_EFFECT).copied();
+        let midi_fx: Vec<DeviceReg> =
+            self.devices.iter().filter(|device| device.kind == DEVICE_KIND_MIDI_EFFECT).copied().collect();
         if instruments.is_empty() {
             return; // no instrument plugin loaded -> nothing to voice the notes with
         }
@@ -765,16 +804,20 @@ impl Engine {
             let slot = unit.map(|uuid| self.read_pulses(uuid, 11) as usize).unwrap_or(0) % instruments.len();
             let device = instruments[slot];
             let sequencer: SharedNoteEventSource = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {regions}))));
-            // Build the unit's pull chain. DEMO: insert the midi-fx (transpose) before the LEAD only
-            // (slot 0 = the sine) so the chain (instrument <- transpose <- sequencer) is audible there
-            // while the bass stays untransposed.
-            let chain = match midi_fx.filter(|_| slot == 0) {
-                Some(fx) => PullLink::MidiFx {
-                    process_index: fx.process_index,
-                    upstream: Rc::new(PullLink::Source(sequencer))
-                },
-                None => PullLink::Source(sequencer)
-            };
+            // Build the unit's pull chain: the sequencer at the leaf, then each midi-fx (in load order)
+            // folded on top, so the LAST-loaded fx is the instrument's direct upstream. DEMO: only the LEAD
+            // (slot 0) gets the midi-fx chain (arp then transpose) -> sequencer <- arp <- transpose <-
+            // instrument, so the held chord is arpeggiated and then shifted up an octave; the bass gets none.
+            let mut chain = PullLink::Source(sequencer);
+            if slot == 0 {
+                for fx in &midi_fx {
+                    chain = PullLink::MidiFx {
+                        process_index: fx.process_index,
+                        state: Rc::new(DeviceState::new(fx.state_size as usize)),
+                        upstream: Rc::new(chain)
+                    };
+                }
+            }
             let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, device)));
             instrument.borrow_mut().set_pull_chain(chain);
             let instrument_output = instrument.borrow().audio_output();

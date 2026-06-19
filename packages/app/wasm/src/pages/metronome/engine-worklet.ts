@@ -25,7 +25,7 @@ type BootOptions = {
 type DeviceExports = {
     process?: (descPtr: number) => void // audio devices (instrument / effect): called once per quantum
     // MIDI-fx devices: a pull responder invoked when something downstream pulls them for [from, to)
-    process_events?: (from: number, to: number, flags: number, outPtr: number, max: number) => number
+    process_events?: (from: number, to: number, flags: number, statePtr: number, outPtr: number, max: number) => number
     state_size: (sampleRate: number) => number
     kind: () => number // DEVICE_KIND_INSTRUMENT (0) / EFFECT (1) / MIDI_EFFECT (2); tells the host how to wire it
     __wasm_apply_data_relocs?: () => void
@@ -51,6 +51,9 @@ type EngineExports = {
     // A device imports this from `env`; the loader binds it so the device PULLS its own input events for a
     // pulse range (Route A), writing EventRecords into the descriptor scratch and returning the count.
     host_pull_events: (from: number, to: number, flags: number, outPtr: number, max: number) => number
+    // Maps a pulse position to its sample offset in the current quantum; a generative device (arp) times
+    // its emitted events with it.
+    host_pulse_to_offset: (pulse: number) => number
 }
 
 // Read a varuint32 (LEB128) at `pos`; returns [value, nextPos].
@@ -133,8 +136,9 @@ class EngineProcessor extends AudioWorkletProcessor {
                 __memory_base: new WebAssembly.Global({value: "i32", mutable: false}, memoryBase),
                 __table_base: new WebAssembly.Global({value: "i32", mutable: false}, tableBase),
                 __stack_pointer: new WebAssembly.Global({value: "i32", mutable: true}, stackBase + DEVICE_STACK_SIZE),
-                // wasm-to-wasm: the device calls the engine's event-pull export directly (Route A).
-                host_pull_events: engine.host_pull_events
+                // wasm-to-wasm: the device calls the engine's event-pull / timing exports directly (Route A).
+                host_pull_events: engine.host_pull_events,
+                host_pulse_to_offset: engine.host_pulse_to_offset
             }
         }).exports as unknown as DeviceExports
         device.__wasm_apply_data_relocs?.()
