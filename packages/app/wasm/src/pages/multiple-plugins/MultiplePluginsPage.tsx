@@ -24,10 +24,12 @@ import workletURL from "../metronome/engine-worklet.ts?worker&url"
 // PitchDeviceBox (2) — i.e. sequencer <- arp <- zeitgeist <- transpose <- instrument. The lead part is a
 // single HELD CHORD; the arp holds it in its state block and emits a 1/16 stepped sequence (a few held
 // notes become a stream — not one-to-one), Zeitgeist SHUFFLES it (a swing groove, pulling its upstream over
-// an un-warped range and warping positions back), and transpose shifts every step up an octave. So you hear
-// an auto-wah sawtooth bass under a shuffled, octave-up arpeggiated sine chord, proving the whole device
-// model — instruments, audio-fx, and a multi-stage MIDI-fx pull chain — driven entirely from device boxes
-// via the table. The MIDI chain works in pulse positions; the instrument resolves sample offsets.
+// an un-warped range and warping positions back), and transpose shifts every step up an octave. Each unit
+// runs through its CHANNEL STRIP (volume / panning / mute, reactive to the box): the bass is panned hard
+// LEFT, the lead hard RIGHT. So you hear an auto-wah sawtooth bass on the left and a shuffled, octave-up
+// arpeggiated sine chord on the right, proving the whole device model — instruments, audio-fx, a
+// multi-stage MIDI-fx pull chain, and the per-unit strip — driven entirely from the box graph. The MIDI
+// chain works in pulse positions; the instrument resolves sample offsets.
 
 type Note = readonly [number, number] // [position in pulses, MIDI pitch]
 
@@ -70,11 +72,12 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
     // `midi-effects` and `audio-effects` chains (ordered by each device's `index`) from the box graph and
     // dispatches each device box to its plugin via the device table. `buildDevices` attaches the unit's
     // devices; the host hooks them up (no slot / load-order stopgap).
-    const addPart = (index: number, notes: ReadonlyArray<Note>, loopDuration: number, noteDuration: number,
-                     buildDevices: (unit: AudioUnitBox) => void): void => {
+    const addPart = (index: number, panning: number, notes: ReadonlyArray<Note>, loopDuration: number,
+                     noteDuration: number, buildDevices: (unit: AudioUnitBox) => void): void => {
         const unit = AudioUnitBox.create(boxGraph, UUID.generate(), box => {
             box.collection.refer(mandatoryBoxes.rootBox.audioUnits)
             box.index.setValue(index)
+            box.panning.setValue(panning) // the channel strip pans the unit: -1 hard left, +1 hard right
         })
         buildDevices(unit)
         const track = TrackBox.create(boxGraph, UUID.generate(), box => {
@@ -100,8 +103,8 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
     }
 
     boxGraph.beginTransaction()
-    // Bass: a sawtooth instrument (Nano) into a low-pass audio effect (Revamp). instrument -> audio-fx -> bus.
-    addPart(1, BASS, PPQN.Bar, PPQN.Quarter / 2, unit => {
+    // Bass: a sawtooth instrument (Nano) into a low-pass audio effect (Revamp), panned hard LEFT.
+    addPart(1, -1.0, BASS, PPQN.Bar, PPQN.Quarter / 2, unit => {
         NanoDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(unit.input))
         RevampDeviceBox.create(boxGraph, UUID.generate(), box => {
             box.host.refer(unit.audioEffects)
@@ -109,8 +112,8 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
         })
     })
     // Lead: a sine instrument (Vaporisateur) behind a 3-stage MIDI-fx chain ordered by index:
-    // arp (0) -> zeitgeist (1) -> transpose (2). The chord is held a full bar so the arp has notes to step.
-    addPart(2, LEAD, PPQN.Bar, PPQN.Bar, unit => {
+    // arp (0) -> zeitgeist (1) -> transpose (2), panned hard RIGHT. The chord is held a full bar.
+    addPart(2, 1.0, LEAD, PPQN.Bar, PPQN.Bar, unit => {
         VaporisateurDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(unit.input))
         ArpeggioDeviceBox.create(boxGraph, UUID.generate(), box => {
             box.host.refer(unit.midiEffects)
@@ -141,6 +144,7 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
         const {engineModule, deviceModules, deviceBoxTypes} = await loadEngineModules()
         const memory = createEngineMemory()
         const workletNode = new AudioWorkletNode(ctx, "engine", {
+            outputChannelCount: [2], // STEREO out; without this the node defaults to mono and drops the right channel
             processorOptions: {engineModule, deviceModules, deviceBoxTypes, memory, sampleRate: ctx.sampleRate, metronome: false}
         })
         node.wrap(workletNode)
@@ -166,7 +170,7 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
             }
         })
         await ctx.suspend()
-        append(`booted @ ${ctx.sampleRate} Hz — suspended; auto-wah sawtooth bass + shuffled octave-up arpeggiated sine chord (six device plugins)`)
+        append(`booted @ ${ctx.sampleRate} Hz — suspended; auto-wah sawtooth bass (left) + shuffled octave-up arpeggiated sine chord (right), six device plugins`)
     }
 
     const play = async (): Promise<void> => {

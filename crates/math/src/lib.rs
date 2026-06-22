@@ -47,6 +47,12 @@ pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
 
+/// Decibels to a linear gain (`10^(db/20)`), mirroring lib-dsp `dbToGain`. libm-backed for no_std +
+/// host/wasm parity.
+pub fn db_to_gain(db: f32) -> f32 {
+    libm::powf(10.0, db / 20.0)
+}
+
 /// Parabolic sine approximation for `x` in `[-PI, PI]` (good enough for a test tone / click).
 #[inline]
 pub fn fast_sin(x: f32) -> f32 {

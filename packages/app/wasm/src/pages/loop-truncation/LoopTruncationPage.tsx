@@ -97,7 +97,7 @@ export const LoopTruncationPage: PageFactory<Env> = ({lifecycle}) => {
         await ctx.audioWorklet.addModule(workletURL)
         const {engineModule, deviceModules, deviceBoxTypes} = await loadEngineModules()
         const memory = createEngineMemory()
-        const workletNode = new AudioWorkletNode(ctx, "engine", {processorOptions: {engineModule, deviceModules, deviceBoxTypes, memory, sampleRate: ctx.sampleRate, metronome: false}})
+        const workletNode = new AudioWorkletNode(ctx, "engine", {outputChannelCount: [2], processorOptions: {engineModule, deviceModules, deviceBoxTypes, memory, sampleRate: ctx.sampleRate, metronome: false}})
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)
         workletNode.port.onmessage = (event: MessageEvent<{type: string, bytes?: ArrayBuffer}>) => {

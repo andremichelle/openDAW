@@ -53,7 +53,7 @@ impl State {
 
     /// The member note an update affects, if any (its own box; notes have no satellite boxes).
     fn affected(&self, update: &Update) -> Option<Uuid> {
-        let uuid = update_uuid(update);
+        let uuid = affected_uuid(update);
         if self.index.contains_key(&uuid) {Some(uuid)} else {None}
     }
 }
@@ -107,7 +107,7 @@ impl NoteCollection {
 }
 
 /// The subject uuid of an update (the box it concerns).
-fn update_uuid(update: &Update) -> Uuid {
+fn affected_uuid(update: &Update) -> Uuid {
     match update {
         Update::Primitive {address, ..} | Update::Pointer {address, ..} => address.uuid,
         Update::New {uuid, ..} | Update::Delete {uuid, ..} => *uuid

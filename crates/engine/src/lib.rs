@@ -31,7 +31,7 @@ use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
 use boxgraph::updates::decode_forward;
 use abi::{EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON};
-use engine_env::audio_buffer::SharedAudioBuffer;
+use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::block::Block;
 use engine_env::block_flags::BlockFlags;
@@ -526,7 +526,15 @@ impl Engine {
         if let Some(collection) = tempo_collection {
             self.tempo = Some(ValueCollection::observe(&mut self.graph, collection));
         }
-        self.init_audio_graph();
+        // Master summing bus: every instrument audio unit's channel strip sums into it. It is the static
+        // input bus of THE output audio unit, whose channel strip (built by `output_strip`) is the engine's
+        // final master and what `render` reads. Both the bus and the output unit are fixed singletons.
+        let output_buffer = shared_audio_buffer();
+        let master = Rc::new(RefCell::new(AudioBusProcessor::new(output_buffer.clone())));
+        self.master_id = self.context.register_processor(master.clone());
+        self.master = Some(master);
+        self.output_bus = Some(self.output_strip(output_buffer)); // master strip output (or the bus, if no output unit)
+        self.observe_audio_units();
         0
     }
 }

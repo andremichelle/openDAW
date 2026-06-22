@@ -47,6 +47,7 @@ export const MetronomePage: PageFactory<Env> = ({lifecycle}) => {
         const {engineModule, deviceModules, deviceBoxTypes} = await loadEngineModules()
         const memory = createEngineMemory()
         const workletNode = new AudioWorkletNode(ctx, "engine", {
+            outputChannelCount: [2], // stereo out; without this the node defaults to mono and drops the right channel
             processorOptions: {engineModule, deviceModules, deviceBoxTypes, memory, sampleRate: ctx.sampleRate}
         })
         node.wrap(workletNode)

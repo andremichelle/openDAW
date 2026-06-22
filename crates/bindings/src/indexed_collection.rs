@@ -104,7 +104,7 @@ impl IndexedCollection {
         })));
         let edit_state = state.clone();
         subscriptions.push(graph.subscribe_all(Box::new(move |graph, update| {
-            let uuid = update_uuid(update);
+            let uuid = affected_uuid(update);
             if edit_state.borrow().is_member(uuid) {
                 edit_state.borrow_mut().refresh(graph, uuid);
             }
@@ -147,7 +147,7 @@ impl IndexedCollection {
     }
 }
 
-fn update_uuid(update: &Update) -> Uuid {
+fn affected_uuid(update: &Update) -> Uuid {
     match update {
         Update::Primitive {address, ..} | Update::Pointer {address, ..} => address.uuid,
         Update::New {uuid, ..} | Update::Delete {uuid, ..} => *uuid

@@ -59,6 +59,10 @@ impl FieldValue {
     pub fn as_bool(&self) -> Option<bool> {
         if let FieldValue::Boolean(value) = self {Some(*value)} else {None}
     }
+
+    pub fn as_str(&self) -> Option<&str> {
+        if let FieldValue::String(value) = self {Some(value)} else {None}
+    }
 }
 
 pub type Fields = BTreeMap<u16, FieldValue>;

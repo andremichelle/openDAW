@@ -25,10 +25,10 @@ use boxgraph::address::{Address, Uuid};
 use boxgraph::graph::BoxGraph;
 use boxgraph::subscription::{HubEvent, SubscriptionId};
 use boxgraph::updates::Update;
-use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
-use engine_env::audio_bus_processor::AudioBusProcessor;
+use engine_env::audio_buffer::SharedAudioBuffer;
 use engine_env::audio_generator::AudioGenerator;
 use engine_env::audio_input::AudioInput;
+use engine_env::channel_strip::{ChannelStripProcessor, StripParams};
 use engine_env::engine_context::NodeId;
 use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_region::NoteRegion;
@@ -180,6 +180,8 @@ pub(crate) struct AudioUnitBinding {
     tracks: Vec<TrackBinding>,
     track_changes: Rc<RefCell<Members>>,
     track_sub: SubscriptionId,
+    strip_params: Rc<StripParams>,        // the unit's volume / panning / mute, kept in sync with its box
+    strip_subs: Vec<SubscriptionId>,      // the volume / panning / mute field subscriptions
     input: IndexedCollection,
     midi: IndexedCollection,
     audio: IndexedCollection,
@@ -187,16 +189,12 @@ pub(crate) struct AudioUnitBinding {
 }
 
 impl Engine {
-    /// Set up the master output bus and start observing the RootBox `audio-units` membership. Each connected
-    /// `AudioUnitBox` becomes a unit binding, created / destroyed LIVE as the box graph changes (the reactive
-    /// replacement for a one-shot build). The membership observer only records into `unit_changes`; the
-    /// actual graph mutation happens in `reconcile_units` (catch-up here, and after every transaction).
-    pub(crate) fn init_audio_graph(&mut self) {
-        let output_buffer = shared_audio_buffer();
-        let master = Rc::new(RefCell::new(AudioBusProcessor::new(output_buffer.clone())));
-        self.master_id = self.context.register_processor(master.clone());
-        self.output_bus = Some(output_buffer);
-        self.master = Some(master);
+    /// Start observing the RootBox `audio-units` membership: each connected `AudioUnitBox` becomes a unit
+    /// binding, created / destroyed LIVE as the box graph changes (the reactive replacement for a one-shot
+    /// build). The membership observer only records into `unit_changes`; the actual graph mutation happens
+    /// in `reconcile_units` (catch-up here, and after every transaction). The master bus must already exist
+    /// (created by the engine before this is called), since `reconcile_units` wires units into it.
+    pub(crate) fn observe_audio_units(&mut self) {
         // RootBox.audio-units is field key 20; an AudioUnitBox connects via its `collection` pointer, so the
         // hub source's uuid IS the audio unit. We do not order the units (order is not audible).
         if let Some(root) = self.graph.find_by_name("RootBox") {
@@ -209,6 +207,49 @@ impl Engine {
             }));
         }
         self.reconcile_units();
+    }
+
+    /// THE output audio unit's uuid: the `AudioUnitBox` whose `type` (field 1) is `"output"`. It is a fixed
+    /// singleton (there is exactly one, and it never changes), so it is found once and wired statically.
+    fn output_unit_uuid(&self) -> Option<Uuid> {
+        self.graph.find_all_by_name("AudioUnitBox").iter()
+            .find(|unit| self.graph.field_value(&Address::of(unit.uuid, vec![1])).and_then(|value| value.as_str()) == Some("output"))
+            .map(|unit| unit.uuid)
+    }
+
+    fn is_output_unit(&self, uuid: Uuid) -> bool {
+        self.graph.field_value(&Address::of(uuid, vec![1])).and_then(|value| value.as_str()) == Some("output")
+    }
+
+    /// Wire THE output unit's channel strip as the engine's final master, fed by the static summing bus
+    /// (`master_output`, the engine's `master` bus that every instrument unit sums into). The strip applies
+    /// the output unit's volume / panning / mute (bound to its box) and its output is what `render` reads.
+    /// Built ONCE at bind — the output unit and its bus are fixed singletons, never reactive. Returns the
+    /// buffer `render` should read: the strip's output, or `master_output` directly if there is no output unit.
+    pub(crate) fn output_strip(&mut self, master_output: SharedAudioBuffer) -> SharedAudioBuffer {
+        let uuid = match self.output_unit_uuid() {
+            Some(uuid) => uuid,
+            None => return master_output
+        };
+        let params = Rc::new(StripParams::new());
+        let volume = params.clone();
+        self.graph.catchup_and_subscribe(Address::of(uuid, vec![12]), move |value| {
+            if let Some(value) = value.as_float32() { volume.volume_db.set(value) }
+        });
+        let panning = params.clone();
+        self.graph.catchup_and_subscribe(Address::of(uuid, vec![13]), move |value| {
+            if let Some(value) = value.as_float32() { panning.panning.set(value) }
+        });
+        let mute = params.clone();
+        self.graph.catchup_and_subscribe(Address::of(uuid, vec![14]), move |value| {
+            if let Some(value) = value.as_bool() { mute.mute.set(value) }
+        });
+        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(params, self.sample_rate)));
+        strip.borrow_mut().set_audio_source(master_output);
+        let strip_output = strip.borrow().audio_output();
+        let strip_id = self.context.register_processor(strip);
+        self.context.register_edge(self.master_id, strip_id); // the bus sums first, then the master strip
+        strip_output
     }
 
     /// Apply recorded membership changes top-down: tear down / build audio units, CASCADE into each unit's
@@ -229,6 +270,9 @@ impl Engine {
         for uuid in changes.added {
             if self.audio_units.iter().any(|binding| binding.unit == uuid) {
                 continue;
+            }
+            if self.is_output_unit(uuid) {
+                continue; // THE output unit is a fixed singleton, wired statically at bind (see `output_strip`)
             }
             let binding = self.build_unit(uuid);
             self.audio_units.push(binding);
@@ -254,6 +298,9 @@ impl Engine {
             self.teardown_wired(wired);
         }
         self.graph.unsubscribe(binding.track_sub);
+        for sub in &binding.strip_subs {
+            self.graph.unsubscribe(*sub);
+        }
         for track in binding.tracks {
             teardown_track(&mut self.graph, &binding.track_sets, &mut binding.collections, track);
         }
@@ -295,9 +342,25 @@ impl Engine {
         let input = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![22]), DEVICE_INDEX_KEY);
         let midi = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![21]), DEVICE_INDEX_KEY);
         let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![23]), DEVICE_INDEX_KEY);
+        // The channel strip's parameters, kept in sync with the unit's box: volume (12, dB), panning (13),
+        // mute (14). Reactive but no rewire needed — the strip reads these Cells each block.
+        let strip_params = Rc::new(StripParams::new());
+        let volume = strip_params.clone();
+        let volume_sub = self.graph.catchup_and_subscribe(Address::of(uuid, vec![12]), move |value| {
+            if let Some(value) = value.as_float32() { volume.volume_db.set(value) }
+        });
+        let panning = strip_params.clone();
+        let panning_sub = self.graph.catchup_and_subscribe(Address::of(uuid, vec![13]), move |value| {
+            if let Some(value) = value.as_float32() { panning.panning.set(value) }
+        });
+        let mute = strip_params.clone();
+        let mute_sub = self.graph.catchup_and_subscribe(Address::of(uuid, vec![14]), move |value| {
+            if let Some(value) = value.as_bool() { mute.mute.set(value) }
+        });
         AudioUnitBinding {
             unit: uuid, track_sets, collections: CollectionCache::default(), tracks: Vec::new(),
-            track_changes, track_sub, input, midi, audio, wired: None
+            track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub],
+            input, midi, audio, wired: None
         }
     }
 
@@ -354,11 +417,20 @@ impl Engine {
             nodes.push(node_id);
             output_node = node_id;
         }
+        // The channel strip terminates the unit's chain: instrument/fx -> STRIP -> master. It applies the
+        // unit's volume / panning / mute (read from the shared StripParams), then feeds the master bus.
+        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), self.sample_rate)));
+        strip.borrow_mut().set_audio_source(output);
+        let strip_output = strip.borrow().audio_output();
+        let strip_id = self.context.register_processor(strip);
+        self.context.register_edge(output_node, strip_id);
+        edges.push((output_node, strip_id));
+        nodes.push(strip_id);
         let master = self.master.as_ref().unwrap();
-        master.borrow_mut().add_audio_source(output.clone());
-        self.context.register_edge(output_node, self.master_id);
-        edges.push((output_node, self.master_id));
-        unit.wired = Some(WiredCluster {nodes, edges, output_buffer: output});
+        master.borrow_mut().add_audio_source(strip_output.clone());
+        self.context.register_edge(strip_id, self.master_id);
+        edges.push((strip_id, self.master_id));
+        unit.wired = Some(WiredCluster {nodes, edges, output_buffer: strip_output});
     }
 }
 
@@ -407,7 +479,7 @@ fn build_track(graph: &mut BoxGraph, track_uuid: Uuid) -> TrackBinding {
     // Re-sort on a member region's edit: re-read its span and re-sort the collection (TS onIndexingChanged).
     let edit_regions = regions_set.clone();
     let edit_sub = graph.subscribe_all(Box::new(move |graph, update| {
-        let uuid = update_uuid(update);
+        let uuid = affected_uuid(update);
         let mut set = edit_regions.borrow_mut();
         let mut moved = false;
         for bound in set.iter_mut() {
@@ -477,7 +549,7 @@ fn read_note_region(graph: &BoxGraph, region_uuid: Uuid) -> NoteRegion {
 }
 
 /// The box uuid an update targets (its own box for new/delete, the address' box for field edits).
-fn update_uuid(update: &Update) -> Uuid {
+fn affected_uuid(update: &Update) -> Uuid {
     match update {
         Update::Primitive {address, ..} | Update::Pointer {address, ..} => address.uuid,
         Update::New {uuid, ..} | Update::Delete {uuid, ..} => *uuid

@@ -63,7 +63,7 @@ impl State {
     /// The member event an update affects, if any: the member event itself, the member event a curve's
     /// pointer now / previously targets (attach / detach), or the event a curve box shapes (slope edit).
     fn affected(&self, graph: &BoxGraph, update: &Update) -> Option<Uuid> {
-        let uuid = update_uuid(update);
+        let uuid = affected_uuid(update);
         if self.index.contains_key(&uuid) {
             return Some(uuid);
         }
@@ -130,7 +130,7 @@ impl ValueCollection {
 }
 
 /// The subject uuid of an update (the box it concerns).
-fn update_uuid(update: &Update) -> Uuid {
+fn affected_uuid(update: &Update) -> Uuid {
     match update {
         Update::Primitive {address, ..} | Update::Pointer {address, ..} => address.uuid,
         Update::New {uuid, ..} | Update::Delete {uuid, ..} => *uuid

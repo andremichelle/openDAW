@@ -12,6 +12,8 @@ pub const RENDER_QUANTUM: usize = 128;
 
 pub mod audio_buffer;
 pub mod audio_bus_processor;
+pub mod channel_strip;
+pub mod ramp;
 pub mod audio_generator;
 pub mod audio_input;
 pub mod audio_output_buffer_registry;
