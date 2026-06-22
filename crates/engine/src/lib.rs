@@ -24,34 +24,24 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell, UnsafeCell};
-use bindings::indexed_collection::IndexedCollection;
-use bindings::note_collection::NoteCollection;
 use bindings::value_collection::ValueCollection;
-use boxgraph::address::{Address, Uuid};
+use boxgraph::address::Address;
 use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
-use boxgraph::subscription::{HubEvent, SubscriptionId};
 use boxgraph::updates::decode_forward;
-use abi::{EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON, DEVICE_KIND_EFFECT, DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT};
-use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
+use abi::{EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON};
+use engine_env::audio_buffer::SharedAudioBuffer;
 use engine_env::audio_bus_processor::AudioBusProcessor;
-use engine_env::audio_generator::AudioGenerator;
-use engine_env::audio_input::AudioInput;
 use engine_env::block::Block;
 use engine_env::block_flags::BlockFlags;
 use engine_env::engine_context::{EngineContext, NodeId};
 use engine_env::event::Event;
 use engine_env::note_event_instrument::SharedNoteEventSource;
-use engine_env::note_region::NoteRegion;
-use engine_env::note_region_source::NoteRegionSource;
-use engine_env::note_sequencer::NoteSequencer;
 use engine_env::ppqn::pulses_to_samples;
 use engine_env::process_info::ProcessInfo;
 use studio_boxes::registry;
 use transport::transport::{Transport, RENDER_QUANTUM};
-use value::event::EventCollection;
-use value::note::NoteEvent;
 
 // Devices are PIC side modules the host loads at runtime, each at a talc-assigned base, and installs
 // into the ONE shared `__indirect_function_table` (the engine is built `--import-table`). The engine
@@ -96,11 +86,11 @@ const DEVICE_INDEX_KEY: u16 = 2; // device box `index` field (DeviceFactory): th
 mod metronome;
 use metronome::Metronome;
 mod plugin_instrument;
-use plugin_instrument::PluginInstrument;
 mod plugin_audio_effect;
-use plugin_audio_effect::PluginAudioEffect;
 mod plugin_midi_effect;
-use plugin_midi_effect::PluginMidiEffect;
+use plugin_midi_effect::PluginMidiEffect; // named in the PullLink::MidiFx variant defined here
+mod audio_unit;
+use audio_unit::{AudioUnitBinding, Members};
 
 const INPUT_CAPACITY: usize = 1 << 20; // initial input scratch (1 MiB); grows on demand, keeps the high-water mark
 
@@ -319,33 +309,6 @@ impl Controls {
     }
 }
 
-/// One bound note region: its loopable span and its observed `NoteEventCollection`, keyed by uuid so the
-/// region cascade can remove it. Regions may share a collection box (mirrored regions); each gets its own
-/// `NoteCollection` view.
-struct BoundRegion {
-    region_uuid: Uuid,
-    region: NoteRegion,
-    collection: NoteCollection
-}
-
-/// An audio unit's LIVE set of bound note regions, shared between the unit's sequencer (which reads it each
-/// block) and the track / region cascade bindings (which insert and remove entries), so adding or removing
-/// a track or region is heard immediately.
-type SharedRegionSet = Rc<RefCell<Vec<BoundRegion>>>;
-
-/// The `NoteRegionSource` the unit's sequencer reads: a shared handle to the unit's live region set.
-struct BoundNoteRegions {
-    regions: SharedRegionSet
-}
-
-impl NoteRegionSource for BoundNoteRegions {
-    fn for_each_region(&self, _from: f64, _to: f64, visit: &mut dyn FnMut(&NoteRegion, &EventCollection<NoteEvent>)) {
-        for bound in self.regions.borrow().iter() {
-            visit(&bound.region, &bound.collection.events());
-        }
-    }
-}
-
 /// The sample offset within the quantum for a note at pulse `position`, clamped to the block.
 fn sample_offset(position: f64, block: &Block, sample_rate: f32) -> usize {
     let pulses = position - block.p0;
@@ -356,59 +319,6 @@ fn sample_offset(position: f64, block: &Block, sample_rate: f32) -> usize {
         s0 + pulses_to_samples(pulses, block.bpm, sample_rate) as usize
     };
     raw.clamp(s0, s1)
-}
-
-/// Pending membership changes a pointer-hub observer records (observers get `&BoxGraph` only, so they
-/// cannot mutate the processor graph); the engine drains them while reconciling, where it has `&mut`. Used
-/// at every cascade level: the RootBox's audio-units, an audio unit's tracks, a track's regions.
-#[derive(Default)]
-struct Members {
-    added: Vec<Uuid>,
-    removed: Vec<Uuid>
-}
-
-/// One bound note region in the cascade: holds the observed collection so it can be unsubscribed; its entry
-/// in the unit's shared region set is keyed by `region_uuid`.
-struct RegionBinding {
-    region_uuid: Uuid,
-    collection: NoteCollection
-}
-
-/// A track BINDING: observes the track's `regions` membership and maintains a `RegionBinding` per region,
-/// each inserting / removing its entry in the owning unit's shared region set.
-struct TrackBinding {
-    track_uuid: Uuid,
-    regions: Vec<RegionBinding>,
-    region_changes: Rc<RefCell<Members>>,
-    region_sub: SubscriptionId
-}
-
-/// The processor nodes + edges the engine wired for one unit (its teardown set, the analog of TS
-/// `AudioDeviceChain`'s `#disconnector`): everything to drop before a rebuild. `output_node`/`output_buffer`
-/// is the last node feeding the master bus.
-struct WiredCluster {
-    nodes: Vec<NodeId>,
-    edges: Vec<(NodeId, NodeId)>,
-    output_buffer: SharedAudioBuffer
-}
-
-/// A live audio-unit BINDING. The RootBox `audio-units` membership drives create / destroy. Beneath it:
-/// the track -> region cascade feeds the shared `region_set` the sequencer reads; and three
-/// `IndexedCollection`s observe the unit's device hosts — `input` (the instrument, host 22), `midi` (host
-/// 21), `audio` (host 23) — each ordered by the device `index`. The wired processor cluster is rebuilt
-/// (from the device table + the sorted chains) ONLY when one of those three reports `dirty`, so a unit's
-/// wiring stays stable until the user edits its scope. Teardown drops the cluster, the cascade, and the
-/// chain subscriptions.
-struct AudioUnitBinding {
-    unit: Uuid,
-    region_set: SharedRegionSet,
-    tracks: Vec<TrackBinding>,
-    track_changes: Rc<RefCell<Members>>,
-    track_sub: SubscriptionId,
-    input: IndexedCollection,
-    midi: IndexedCollection,
-    audio: IndexedCollection,
-    wired: Option<WiredCluster>
 }
 
 struct Engine {
@@ -619,265 +529,6 @@ impl Engine {
         self.init_audio_graph();
         0
     }
-
-    /// Set up the master output bus and start observing the RootBox `audio-units` membership. Each connected
-    /// `AudioUnitBox` becomes a unit binding, created / destroyed LIVE as the box graph changes (the reactive
-    /// replacement for a one-shot build). The membership observer only records into `unit_changes`; the
-    /// actual graph mutation happens in `reconcile_units` (catch-up here, and after every transaction).
-    fn init_audio_graph(&mut self) {
-        let output_buffer = shared_audio_buffer();
-        let master = Rc::new(RefCell::new(AudioBusProcessor::new(output_buffer.clone())));
-        self.master_id = self.context.register_processor(master.clone());
-        self.output_bus = Some(output_buffer);
-        self.master = Some(master);
-        // RootBox.audio-units is field key 20; an AudioUnitBox connects via its `collection` pointer, so the
-        // hub source's uuid IS the audio unit. We do not order the units (order is not audible).
-        if let Some(root) = self.graph.find_by_name("RootBox") {
-            let changes = self.unit_changes.clone();
-            self.graph.subscribe_pointer_hub(Address::of(root.uuid, vec![20]), Box::new(move |_graph, event| {
-                match event {
-                    HubEvent::Added(source) => changes.borrow_mut().added.push(source.uuid),
-                    HubEvent::Removed(source) => changes.borrow_mut().removed.push(source.uuid)
-                }
-            }));
-        }
-        self.reconcile_units();
-    }
-
-    /// Apply recorded membership changes top-down: tear down / build audio units, CASCADE into each unit's
-    /// tracks and regions, then RE-WIRE only the units whose device chains changed. Called on bind (catch-up)
-    /// and after every transaction; with nothing changed it is a cheap no-op (the per-unit dirty flags gate
-    /// the rewire), so a unit's wiring stays stable until the user edits its scope.
-    fn reconcile_units(&mut self) {
-        if self.master.is_none() {
-            return;
-        }
-        let changes = core::mem::take(&mut *self.unit_changes.borrow_mut());
-        for uuid in changes.removed {
-            if let Some(index) = self.audio_units.iter().position(|binding| binding.unit == uuid) {
-                let binding = self.audio_units.remove(index);
-                self.teardown_unit(binding);
-            }
-        }
-        for uuid in changes.added {
-            if self.audio_units.iter().any(|binding| binding.unit == uuid) {
-                continue;
-            }
-            let binding = self.build_unit(uuid);
-            self.audio_units.push(binding);
-        }
-        // Take the bindings out so the per-unit work can borrow `&mut self` (graph, context, master) without
-        // aliasing `self.audio_units`. Cascade the tracks -> regions, then re-wire any unit whose device
-        // chains (input / midi / audio) reported dirty — using `|` so all three dirty flags are consumed.
-        let mut units = core::mem::take(&mut self.audio_units);
-        for unit in &mut units {
-            reconcile_tracks(&mut self.graph, unit);
-            let dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty();
-            if dirty {
-                self.rewire_unit(unit);
-            }
-        }
-        self.audio_units = units;
-    }
-
-    /// Remove a unit entirely: drop its wired cluster (edges, nodes, bus source), unsubscribe its tracks
-    /// membership + track cascade, and terminate its three device-chain collections.
-    fn teardown_unit(&mut self, binding: AudioUnitBinding) {
-        if let Some(wired) = &binding.wired {
-            self.teardown_wired(wired);
-        }
-        self.graph.unsubscribe(binding.track_sub);
-        for track in binding.tracks {
-            teardown_track(&mut self.graph, &binding.region_set, track);
-        }
-        binding.input.terminate(&mut self.graph);
-        binding.midi.terminate(&mut self.graph);
-        binding.audio.terminate(&mut self.graph);
-    }
-
-    /// Drop a wired cluster's processor graph: unwire its output from the master bus, remove its edges, and
-    /// remove its nodes. The teardown set, the analog of TS `AudioDeviceChain`'s `#disconnector.terminate`.
-    fn teardown_wired(&mut self, wired: &WiredCluster) {
-        if let Some(master) = &self.master {
-            master.borrow_mut().remove_audio_source(&wired.output_buffer);
-        }
-        for (source, target) in &wired.edges {
-            self.context.remove_edge(*source, *target);
-        }
-        for node in &wired.nodes {
-            self.context.remove_processor(*node);
-        }
-    }
-
-    /// Build a unit binding: its shared region set, the track-membership subscription (key 20) the cascade
-    /// fills, and the three device-chain collections — `input` (host 22), `midi` (host 21), `audio` (host
-    /// 23), each ordered by the device `index` (field 2). No processor nodes yet; the first `reconcile`
-    /// rewires it (the collections are dirty from catch-up). No per-device-type logic: the device table
-    /// (`device_for_box`) maps each device box to its plugin.
-    fn build_unit(&mut self, uuid: Uuid) -> AudioUnitBinding {
-        let region_set: SharedRegionSet = Rc::new(RefCell::new(Vec::new()));
-        let track_changes = Rc::new(RefCell::new(Members::default()));
-        let recorder = track_changes.clone();
-        let track_sub = self.graph.subscribe_pointer_hub(Address::of(uuid, vec![20]), Box::new(move |_graph, event| {
-            match event {
-                HubEvent::Added(source) => recorder.borrow_mut().added.push(source.uuid),
-                HubEvent::Removed(source) => recorder.borrow_mut().removed.push(source.uuid)
-            }
-        }));
-        let input = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![22]), DEVICE_INDEX_KEY);
-        let midi = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![21]), DEVICE_INDEX_KEY);
-        let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![23]), DEVICE_INDEX_KEY);
-        AudioUnitBinding {
-            unit: uuid, region_set, tracks: Vec::new(), track_changes, track_sub, input, midi, audio, wired: None
-        }
-    }
-
-    /// (Re)build a unit's processor cluster from the current device table + the sorted chains: instrument
-    /// (the `input` device), the midi-fx pull chain folded in index order under it, and the audio-fx chain
-    /// wired instrument -> fx0 -> ... -> bus in index order. Tears down the old cluster first. A unit with no
-    /// resolvable instrument is left silent (wired = None). The whole device set is realized this way; the
-    /// only per-device knowledge is the box-type -> plugin table.
-    fn rewire_unit(&mut self, unit: &mut AudioUnitBinding) {
-        if let Some(wired) = unit.wired.take() {
-            self.teardown_wired(&wired);
-        }
-        let instrument_device = match unit.input.sorted().first()
-            .and_then(|uuid| self.graph.find_box(uuid))
-            .and_then(|device_box| self.device_for_type(&device_box.name)) {
-            Some(device) if device.kind == DEVICE_KIND_INSTRUMENT => device,
-            _ => return // no instrument yet: the unit stays silent until its `input` device box appears
-        };
-        // The pull chain: sequencer (over the unit's shared region set) at the leaf, each midi-fx folded on
-        // top in index order, so the instrument pulls the highest-index fx, which pulls the next, down to
-        // the sequencer.
-        let sequencer: SharedNoteEventSource =
-            Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {regions: unit.region_set.clone()}))));
-        let mut chain = PullLink::Source(sequencer);
-        for device_uuid in unit.midi.sorted() {
-            let device = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
-            match device {
-                Some(device) if device.kind == DEVICE_KIND_MIDI_EFFECT => {
-                    chain = PullLink::MidiFx {effect: Rc::new(PluginMidiEffect::new(device)), upstream: Rc::new(chain)};
-                }
-                _ => {}
-            }
-        }
-        let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, instrument_device)));
-        instrument.borrow_mut().set_pull_chain(chain);
-        let mut output = instrument.borrow().audio_output();
-        let instrument_id = self.context.register_processor(instrument);
-        let mut nodes = vec![instrument_id];
-        let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
-        let mut output_node = instrument_id;
-        // The audio-fx chain in index order: instrument -> fx0 -> fx1 -> ... Each reads the previous output.
-        for device_uuid in unit.audio.sorted() {
-            let resolved = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
-            let device = match resolved {
-                Some(device) if device.kind == DEVICE_KIND_EFFECT => device,
-                _ => continue
-            };
-            let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
-            node.borrow_mut().set_audio_source(output);
-            output = node.borrow().audio_output();
-            let node_id = self.context.register_processor(node);
-            self.context.register_edge(output_node, node_id);
-            edges.push((output_node, node_id));
-            nodes.push(node_id);
-            output_node = node_id;
-        }
-        let master = self.master.as_ref().unwrap();
-        master.borrow_mut().add_audio_source(output.clone());
-        self.context.register_edge(output_node, self.master_id);
-        edges.push((output_node, self.master_id));
-        unit.wired = Some(WiredCluster {nodes, edges, output_buffer: output});
-    }
-}
-
-// ---- The track / region cascade beneath an audio unit. Free functions taking `&mut BoxGraph`: they only
-// observe the box graph and edit the unit's shared region set, never the processor graph, so they avoid
-// borrowing the engine. Each level records membership into its own `Members` and is drained here. ----
-
-/// Reconcile one unit's tracks against its `tracks` membership, then each track's regions.
-fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding) {
-    let changes = core::mem::take(&mut *unit.track_changes.borrow_mut());
-    for track_uuid in changes.removed {
-        if let Some(index) = unit.tracks.iter().position(|track| track.track_uuid == track_uuid) {
-            let track = unit.tracks.remove(index);
-            teardown_track(graph, &unit.region_set, track);
-        }
-    }
-    for track_uuid in changes.added {
-        if unit.tracks.iter().any(|track| track.track_uuid == track_uuid) {
-            continue;
-        }
-        unit.tracks.push(build_track(graph, track_uuid));
-    }
-    for track in &mut unit.tracks {
-        reconcile_regions(graph, &unit.region_set, track);
-    }
-}
-
-/// Start observing a track's `regions` membership (key 3); the cascade builds a RegionBinding per region.
-fn build_track(graph: &mut BoxGraph, track_uuid: Uuid) -> TrackBinding {
-    let region_changes = Rc::new(RefCell::new(Members::default()));
-    let recorder = region_changes.clone();
-    let region_sub = graph.subscribe_pointer_hub(Address::of(track_uuid, vec![3]), Box::new(move |_graph, event| {
-        match event {
-            HubEvent::Added(source) => recorder.borrow_mut().added.push(source.uuid),
-            HubEvent::Removed(source) => recorder.borrow_mut().removed.push(source.uuid)
-        }
-    }));
-    TrackBinding {track_uuid, regions: Vec::new(), region_changes, region_sub}
-}
-
-/// Tear down a track: unsubscribe its regions membership, and remove each region from the unit's set and
-/// unsubscribe its collection.
-fn teardown_track(graph: &mut BoxGraph, region_set: &SharedRegionSet, track: TrackBinding) {
-    graph.unsubscribe(track.region_sub);
-    for region in track.regions {
-        region_set.borrow_mut().retain(|bound| bound.region_uuid != region.region_uuid);
-        region.collection.terminate(graph);
-    }
-}
-
-/// Reconcile a track's regions against its `regions` membership, maintaining the unit's shared region set.
-fn reconcile_regions(graph: &mut BoxGraph, region_set: &SharedRegionSet, track: &mut TrackBinding) {
-    let changes = core::mem::take(&mut *track.region_changes.borrow_mut());
-    for region_uuid in changes.removed {
-        if let Some(index) = track.regions.iter().position(|region| region.region_uuid == region_uuid) {
-            let region = track.regions.remove(index);
-            region_set.borrow_mut().retain(|bound| bound.region_uuid != region_uuid);
-            region.collection.terminate(graph);
-        }
-    }
-    for region_uuid in changes.added {
-        if track.regions.iter().any(|region| region.region_uuid == region_uuid) {
-            continue;
-        }
-        if let Some(binding) = build_region(graph, region_set, region_uuid) {
-            track.regions.push(binding);
-        }
-    }
-}
-
-/// Read a region's loopable span (position 10, duration 11, loopOffset 12, loopDuration 13), observe its
-/// note-event collection (`events` pointer key 2), and insert it into the unit's shared region set. `None`
-/// if the region has no collection.
-fn build_region(graph: &mut BoxGraph, region_set: &SharedRegionSet, region_uuid: Uuid) -> Option<RegionBinding> {
-    let region = NoteRegion {
-        position: region_pulses(graph, region_uuid, 10),
-        duration: region_pulses(graph, region_uuid, 11),
-        loop_offset: region_pulses(graph, region_uuid, 12),
-        loop_duration: region_pulses(graph, region_uuid, 13)
-    };
-    let collection_uuid = graph.target_of(&Address::of(region_uuid, vec![2]))?.uuid;
-    let collection = NoteCollection::observe(graph, collection_uuid);
-    region_set.borrow_mut().push(BoundRegion {region_uuid, region, collection: collection.clone()});
-    Some(RegionBinding {region_uuid, collection})
-}
-
-fn region_pulses(graph: &BoxGraph, uuid: Uuid, key: u16) -> f64 {
-    graph.field_value(&Address::of(uuid, vec![key])).and_then(|value| value.as_int32()).unwrap_or(0) as f64
 }
 
 /// Serialize the transport state into `state` (big-endian, per the EngineState contract).

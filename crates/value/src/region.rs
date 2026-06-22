@@ -6,6 +6,7 @@
 //!
 //! Returned as a lazy iterator (no per-block allocation): the sequencer queries it every render block.
 
+use alloc::vec::Vec;
 use math::{floor, mod_euclid};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -78,5 +79,82 @@ impl Iterator for LoopCycles {
         self.raw_start = raw_end;
         self.index += 1;
         Some(cycle)
+    }
+}
+
+/// A timeline SPAN: an item at `position` lasting `duration` pulses (TS `EventSpan`). The orderable key
+/// for a `RegionCollection`.
+pub trait Span {
+    fn position(&self) -> f64;
+    fn duration(&self) -> f64;
+}
+
+/// A collection of spans kept sorted by `position`, range-queried span-aware (the Rust mirror of lib-dsp
+/// `RegionCollection`). Backed by a `Vec`; `add` binary-inserts, `iterate_range` binary-searches the
+/// window. Regions on a track do not overlap, so `iterate_range` (like TS) considers only the single
+/// region at/before `from` as possibly still active, then yields forward while `position < to`.
+pub struct RegionCollection<R: Span> {
+    regions: Vec<R>
+}
+
+impl<R: Span> RegionCollection<R> {
+    pub fn new() -> Self {
+        Self {regions: Vec::new()}
+    }
+
+    pub fn len(&self) -> usize {
+        self.regions.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.regions.is_empty()
+    }
+
+    /// Insert keeping the `Vec` sorted by `position` (after any equal-position entries, a stable order).
+    pub fn add(&mut self, region: R) {
+        let index = self.regions.partition_point(|existing| existing.position() <= region.position());
+        self.regions.insert(index, region);
+    }
+
+    /// Drop the regions for which `keep` is false, preserving sorted order (TS removal by predicate).
+    pub fn retain(&mut self, keep: impl FnMut(&R) -> bool) {
+        self.regions.retain(keep);
+    }
+
+    /// Mutable access to the regions, for updating a region in place (e.g. after its position changed).
+    /// The caller MUST `resort` afterwards if it changed any `position` (TS `onIndexingChanged`).
+    pub fn iter_mut(&mut self) -> core::slice::IterMut<'_, R> {
+        self.regions.iter_mut()
+    }
+
+    /// Re-sort by `position` after positions changed (stable, so equal positions keep order). The lazy
+    /// re-index a `RegionCollection` does on `onIndexingChanged`; we re-sort eagerly when a region moves.
+    pub fn resort(&mut self) {
+        self.regions.sort_by(|a, b| a.position().partial_cmp(&b.position()).unwrap_or(core::cmp::Ordering::Equal));
+    }
+
+    /// Rightmost index whose `position <= position`, or -1 if none (mirrors `floorLastIndex`).
+    pub fn floor_last_index(&self, position: f64) -> isize {
+        self.regions.partition_point(|region| region.position() <= position) as isize - 1
+    }
+
+    /// Iterate the regions overlapping `[from, to)`: start at the region at/before `from` (binary search),
+    /// skip it if it already ended (`position + duration <= from`), then yield forward while
+    /// `position < to`. Mirrors lib-dsp `RegionCollection.iterateRange`.
+    pub fn iterate_range(&self, from: f64, to: f64) -> impl Iterator<Item = &R> {
+        let floor = self.floor_last_index(from);
+        let mut start = if floor < 0 {0} else {floor as usize};
+        if let Some(region) = self.regions.get(start) {
+            if region.position() + region.duration() <= from {
+                start += 1;
+            }
+        }
+        self.regions.get(start..).unwrap_or(&[]).iter().take_while(move |region| region.position() < to)
+    }
+}
+
+impl<R: Span> Default for RegionCollection<R> {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -78,3 +78,85 @@ fn global_to_local_wraps_within_the_loop_duration() {
     // a loop offset shifts the local origin.
     assert_eq!(global_to_local(0.0, 0.0, 0.25 * BAR, BAR), 0.25 * BAR);
 }
+
+// ---- RegionCollection: sorted-by-position, span-aware binary-search range query (mirrors lib-dsp). ----
+
+use value::region::{RegionCollection, Span};
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct TestRegion {
+    id: u32,
+    position: f64,
+    duration: f64
+}
+
+impl Span for TestRegion {
+    fn position(&self) -> f64 { self.position }
+    fn duration(&self) -> f64 { self.duration }
+}
+
+fn region(id: u32, position: f64, duration: f64) -> TestRegion {
+    TestRegion {id, position, duration}
+}
+
+fn ids(collection: &RegionCollection<TestRegion>, from: f64, to: f64) -> Vec<u32> {
+    collection.iterate_range(from, to).map(|region| region.id).collect()
+}
+
+#[test]
+fn add_keeps_regions_sorted_by_position() {
+    let mut collection = RegionCollection::new();
+    collection.add(region(2, 200.0, 100.0));
+    collection.add(region(0, 0.0, 100.0));
+    collection.add(region(1, 100.0, 100.0));
+    // the whole timeline, in position order regardless of insert order
+    assert_eq!(ids(&collection, 0.0, 1000.0), vec![0, 1, 2]);
+}
+
+#[test]
+fn iterate_range_yields_only_overlapping_regions() {
+    let mut collection = RegionCollection::new();
+    collection.add(region(0, 0.0, 100.0));   // [0, 100)
+    collection.add(region(1, 100.0, 100.0)); // [100, 200)
+    collection.add(region(2, 200.0, 100.0)); // [200, 300)
+    // a window inside region 1 only
+    assert_eq!(ids(&collection, 120.0, 180.0), vec![1]);
+    // a window spanning the 1/2 boundary
+    assert_eq!(ids(&collection, 180.0, 220.0), vec![1, 2]);
+    // a window before everything
+    assert!(ids(&collection, -50.0, -10.0).is_empty());
+}
+
+#[test]
+fn iterate_range_skips_a_region_that_already_ended() {
+    let mut collection = RegionCollection::new();
+    collection.add(region(0, 0.0, 100.0));   // ends at 100
+    collection.add(region(1, 300.0, 100.0)); // [300, 400)
+    // [150, 350): region 0 (the one at/before `from`) ended at 100 -> skipped; region 1 overlaps.
+    assert_eq!(ids(&collection, 150.0, 350.0), vec![1]);
+}
+
+#[test]
+fn iterate_range_includes_a_long_region_still_active_at_from() {
+    let mut collection = RegionCollection::new();
+    collection.add(region(0, 0.0, 1000.0)); // [0, 1000): starts before `from`, still active
+    // the region at/before `from` is still playing, so it must be included
+    assert_eq!(ids(&collection, 400.0, 500.0), vec![0]);
+}
+
+#[test]
+fn moving_a_region_then_resorting_reorders_it() {
+    let mut collection = RegionCollection::new();
+    collection.add(region(0, 0.0, 100.0));
+    collection.add(region(1, 100.0, 100.0));
+    collection.add(region(2, 200.0, 100.0));
+    // Move region 0 to the end (position 500) and re-sort, as the engine does on a position edit.
+    for r in collection.iter_mut() {
+        if r.id == 0 { r.position = 500.0; }
+    }
+    collection.resort();
+    assert_eq!(ids(&collection, 0.0, 1000.0), vec![1, 2, 0], "the moved region is now last");
+    // and a window now finds it at its new place, not its old one
+    assert_eq!(ids(&collection, 510.0, 560.0), vec![0]);
+    assert!(ids(&collection, 10.0, 60.0).is_empty(), "nothing remains at the old position");
+}
