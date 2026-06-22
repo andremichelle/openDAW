@@ -16,8 +16,14 @@ pub mod audio_generator;
 pub mod audio_input;
 pub mod audio_output_buffer_registry;
 pub mod audio_processor;
-pub mod block;
-pub mod block_flags;
+// The block type and its flags are part of the device ABI (host and devices share them), so they live in
+// `abi`; re-export under the original paths so host code keeps using `block::Block` / `block_flags::BlockFlags`.
+pub mod block {
+    pub use abi::Block;
+}
+pub mod block_flags {
+    pub use abi::BlockFlags;
+}
 pub mod engine_context;
 pub mod event;
 pub mod event_buffer;

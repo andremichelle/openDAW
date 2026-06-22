@@ -1,6 +1,6 @@
 # Device and Engine Interface (WASM)
 
-Status: APPROVED, NEXT TO IMPLEMENT. The phasing in section 7 is the agreed build order (start at step 1).
+Status: APPROVED. Phase 1 (section 7, step 1) is IMPLEMENTED; phases 2-6 remain. The phasing in section 7 is the agreed build order.
 This is the foundation for every device the engine hosts, present and future. It defines what a device
 needs from the engine, how it gets timeline data, and a single small interface (an ABI plus a host
 capability table) that serves MIDI effects, instruments, audio effects, sidechain, the composite Playfield,
@@ -45,6 +45,38 @@ This splits cleanly into two layers:
   via `process_events` for MIDI fx).
 
 Everything below is about what flows across that boundary.
+
+## 0.1 The fidelity invariant: the engine sounds what the UI shows
+
+The main thread owns the authoritative `BoxGraph` (read for the UI, written by editing). The engine holds a
+READ-ONLY copy of that same graph, laid out for the audio thread and Rust ownership; it never edits, it only
+applies the main thread's forward transactions through `SyncSource`. The non-negotiable invariant: EVERY
+main-thread change is reflected in the engine's data so the audio is exactly what the UI visualizes. No
+drift, ever. This is the whole point of the box-graph mirror, and it governs every binding below.
+
+Fidelity has TWO layers, and they must be kept distinct:
+
+- The MIRROR (the engine's `BoxGraph` copy). Proven faithful: after every transaction the engine recomputes
+  a graph checksum that must equal the source graph's, and the sync/parity test replays a recorded session
+  (hundreds of real transactions) asserting equality at each step. So the DATA cannot drift from the main
+  thread, byte for byte.
+- The BINDINGS (the playback layer derived from the mirror: the `EventCollection`s the sequencer reads, the
+  processor graph, the per-unit cascade). These are NOT the mirror; they are a reactive projection of it.
+  Their faithfulness is what the catchup-and-subscribe cascade exists to guarantee, and it is only as
+  complete as the box kinds it covers. A change to a box kind the bindings do NOT yet handle would update
+  the mirror (checksum still passes) yet never reach the sound — a silent drift between data and audio.
+
+Consequences this imposes on every feature here:
+
+- The cascade must mirror the FULL TS structure (audio-unit > track > regions AND clips > collection >
+  events, plus audio regions), dispatched by BOX TYPE, not by hardcoded assumptions about a level's kind.
+  Anything uncovered is a latent fidelity hole, not merely a missing feature.
+- The binding layer needs its OWN verification, analogous to the mirror's checksum: a test that asserts the
+  bound, playback-facing data matches the mirror for arbitrary edits. Until that exists, binding fidelity is
+  asserted only by ear and by the structural reviews in this document.
+- Every reactive binding catches up on existing members first (so a late subscription still sees the
+  current state) and then reacts to changes, so the order in which the main thread sends transactions never
+  matters to the final state.
 
 ## 1. Device taxonomy and what each needs
 
@@ -109,9 +141,9 @@ so it is fine. A device that genuinely needs non-monotonic or random-access read
 STATELESS source (the timeline query, Route C, which resolves any range), not from a stateful neighbour.
 The host may assert monotonic progression per pull chain to catch violations.
 
-Rust today (to migrate): `PluginInstrument` currently pre-pulls and pushes `EventRecord[]` in the
-descriptor and the device fragments on it. That works but is the push model; it moves to the pull model
-above so the engine stops delivering events.
+Rust status: DONE (phase 1). `PluginInstrument` no longer pushes an `EventRecord[]`; the device PULLS its
+own events via `host_pull_events` and the device-SDK template fragments the block. The engine resolves but
+never pushes or splits.
 
 ### Route B: audio (shared buffers, host owns order)
 
@@ -258,14 +290,23 @@ Descriptor (extends the current `abi` layout):
 [5]  param_count [6] params_ptr      // current-value snapshot at quantum start (Route D); refined by pulled param-updates
 [7]  state_ptr                       // stable per device instance, talc-allocated by the host
 [8]  in_event_cap  [9] in_events_ptr     // device-owned scratch the pull writes into (NOT pre-filled)
-[10] out_event_cap [11] out_events_ptr   // a MIDI fx / generative device's pull-response buffer (event-output devices only)
+[10] out_event_cap [11] out_events_ptr   // RESERVED, unused (see note below)
 [12] block_count   [13] blocks_ptr       // the ProcessInfo -> Block[]
+[14] sample_rate (f32 bits)              // the render sample rate, passed in at creation, never a global
 ```
 
-`Block` (the `ProcessInfo` element, mirroring `engine-env::Block`):
+IMPLEMENTED NOTE on `[10]/[11]`: these were planned as a MIDI-fx pull-response buffer, but in the built
+design a MIDI fx does NOT receive a descriptor at all. It is invoked directly as
+`process_events(from, to, flags, state_ptr, out_ptr, max) -> count`, with the output buffer passed as the
+`out_ptr` argument. So the response goes through the call's argument, not the descriptor, and `[10]/[11]`
+stay reserved. The descriptor is for audio devices (`process(desc_ptr)`).
+
+`Block` (the `ProcessInfo` element). One type shared by host and devices (the host's `engine-env::Block` is
+this exact `abi::Block`, re-exported), `#[repr(C)]`. Field order puts the two `u32`s first so `p0`/`p1` stay
+8-aligned with no implicit padding; there is no separate `BlockRecord`:
 
 ```
-index:u32  p0:f64  p1:f64  s0:u32  s1:u32  bpm:f32  flags:u32
+index:u32  flags:BlockFlags(repr-transparent u32)  p0:f64  p1:f64  s0:u32  s1:u32  bpm:f32
 ```
 
 The device receives all blocks for the quantum and may process the whole `[0, frames)` ignoring them, or,
@@ -292,18 +333,33 @@ Host import table (the device's view of the engine; a small set of functions the
 instantiation, callable during `process`). All pointers are byte offsets into shared memory.
 
 ```
-// Events (Routes A + D): the device's OWN input event stream resolved on demand, merged + offset-sorted
-// for [from,to): note lifecycle from its source (sequencer + upstream MIDI fx) plus its param-updates.
-// The device times its own sub-blocks on these. Returns the count written to out_ptr (EventRecord[]).
-host_pull_events(from_lo:u32, from_hi:u32, to_lo:u32, to_hi:u32, out_ptr:u32, max:u32) -> u32
+// Events (Routes A + D): the device's OWN input event stream resolved on demand, lifecycle-sorted for
+// [from,to): note lifecycle from its source (sequencer + upstream MIDI fx) plus its param-updates. The
+// device times its own sub-blocks on these. Returns the count written to out_ptr (EventRecord[]).
+host_pull_events(from:f64, to:f64, flags:u32, out_ptr:u32, max:u32) -> u32          // IMPLEMENTED
+// Map a pulse position to its sample offset within the current quantum. A generative device (arpeggiator
+// placing notes on a rate grid) uses it to time the events it emits.
+host_pulse_to_offset(pulse:f64) -> u32                                              // IMPLEMENTED
 // Timeline query (Route C), scoped to the calling device's audio unit (for Tape-like / generative devices
 // that read whole tracks, distinct from host_pull_events which gives this device's own input stream).
-host_query_note_events(from_lo:u32, from_hi:u32, to_lo:u32, to_hi:u32, out_ptr:u32, max:u32) -> u32
-host_query_audio_regions(from_lo:u32, from_hi:u32, to_lo:u32, to_hi:u32, out_ptr:u32, max:u32) -> u32
+host_query_note_events(from:f64, to:f64, out_ptr:u32, max:u32) -> u32               // phase 4
+host_query_audio_regions(from:f64, to:f64, out_ptr:u32, max:u32) -> u32             // phase 4
 // Sample resource (Route F): resolve a sample handle to resident frames; 1 if resident, 0 if not.
-host_resolve_sample(handle:u32, out_ptr:u32) -> u32   // out_ptr -> SampleRef
-// (f64 ppqn passed as two u32 words; or via a small in-memory query struct, to finalize.)
+host_resolve_sample(handle:u32, out_ptr:u32) -> u32   // out_ptr -> SampleRef        // not scheduled
 ```
+
+IMPLEMENTED NOTE on the event model (a refinement of the original Route A sketch). `EventRecord` carries
+BOTH a pulse `position` and a sample `offset`. The MIDI-fx pull chain works entirely in PULSE positions
+(the currency a groove device warps), exactly like the TS engine's ppqn chain: the leaf sequencer and each
+MIDI fx read/write `position` and leave `offset` 0. Only the CONSUMER (an instrument's `render_instrument`)
+resolves each pulled event's `offset` from its `position` via `host_pulse_to_offset`, just before its DSP.
+This is what makes a Zeitgeist time-warp expressible (it pulls upstream over `[unwarp(from), unwarp(to)]`
+and warps positions back) and is closer to the TS model than the original "events come back already
+sample-offset" wording. Ranges are passed as native `f64` (not split into two `u32` words), plus a `flags`
+word carrying the block's transport flags (so a stateful device sees `DISCONTINUOUS` on a transport jump).
+A MIDI fx is invoked as `process_events(from, to, flags, state_ptr, out_ptr, max) -> count` (it gets its
+instance state and writes its produced events to `out_ptr`); an instrument's input pull is the same
+`host_pull_events` import resolved against its pull chain.
 
 `SampleRef` (Route F): `frames_ptr:u32  frame_count:u32  channel_count:u32  sample_rate:f32`.
 
@@ -371,7 +427,33 @@ No `yield`: Rust has no stable generators (coroutines and `gen` blocks are night
 note pull works), and across the wasm ABI it is batch-into-buffer: `process_events` fills the out-events
 buffer for the range and returns the count.
 
-## 5. Composite and container devices (Playfield, and Bitwig-style containers)
+### 4.1 Device chains are indexed collections (ordered by `index`)
+
+A unit's device chains are NOT a load-order list; their order is data in the box graph and edits to it must
+be respected live. An `AudioUnitBox` has three device hosts: `midi-effects` (field 21), `input` (the single
+instrument), and `audio-effects` (field 45). A device box connects by pointing its `host` (field 1) at one
+of these; an effect / midi-fx box also carries an `index` (`int32`, field 2) that defines its position in
+the chain (the instrument has no index, it is the one `input`). This mirrors TS `IndexedBoxAdapterCollection`.
+
+The binding, per chain, mirrors the TS collection exactly:
+
+1. catchup + subscribe the host field's pointer hub: on add, build the device binding (dispatched by box
+   TYPE -> the matching `PluginInstrument` / `PluginAudioEffect` / `PluginMidiEffect`); on remove, tear down.
+2. per device, catchup + subscribe its `index` field; any change marks the chain dirty (TS `onReorder`).
+3. the chain's order is the members sorted by `index`, recomputed whenever membership OR any index changes.
+
+ENGINE-SPECIFIC, beyond the TS collection (which only yields an ordered adapter list): order IS the
+processor-graph wiring. So a reorder must RE-WIRE, not just re-sort a list — drop the chain's old edges and
+re-add them in the new order, re-pointing each `PluginAudioEffect`'s input buffer and each
+`PluginMidiEffect`'s `upstream`. The sorted collection gives the order; a chain-builder applies it to
+edges / pull-links. Done on every membership or index change, like the region cascade.
+
+PREREQUISITE this exposes: dispatching a device box to its plugin needs a box-TYPE -> loaded-plugin map.
+Today devices are identified only by load order + `kind` (a stopgap: `build_unit` folds the midi chain by
+load order and places one effect by slot). Respecting `index` from the box requires (a) the project to
+contain the device boxes (instrument `input`, `midi-effects`, `audio-effects` members with indices) and
+(b) the host to map each device box type to the plugin that realizes it. Both are part of this slice; until
+they land, chain order is the load-order stopgap, NOT the box `index`.
 
 TS Playfield: `incoming` is a `PlayfieldSequencer`, `outgoing` is a `MixProcessor`, and between them sit N
 `SampleProcessor`s, each with its OWN `InsertReturnAudioChain`, all registered into the same engine graph
@@ -527,11 +609,15 @@ verified (device-sine + device-saw, build-wasm.sh). The exact recipe:
 
 ## 7. Phasing
 
-1. Move events to PULL and give devices their own timing. Add the descriptor's blocks-array, the
-   event-pull import (`host_pull_events`), the in/out event scratch words, and the device-SDK
-   block-splitting template/macro. Migrate `PluginInstrument` from pushing `EventRecord[]` to answering
-   pulls. Generalize the bridge into `PluginAudioEffect` and `PluginMidiEffect`. Audio-effect and
-   MIDI-effect plugins become possible.
+1. DONE. Move events to PULL and give devices their own timing. Added the descriptor's blocks-array, the
+   event-pull import (`host_pull_events`) plus `host_pulse_to_offset`, the event scratch words, and the
+   device-SDK templates (`Instrument` / `AudioEffect` / `MidiEffect`, doing the pull + block-split +
+   dispatch). Migrated `PluginInstrument` from pushing `EventRecord[]` to answering pulls; added
+   `PluginAudioEffect` (its own graph node) and the MIDI-fx pull chain (`PullLink::MidiFx`, a pull-chain
+   link, not an audio node). Proven by `device-lowpass` (a tempo-synced audio effect) and a three-stage
+   MIDI-fx chain (`device-arp` -> `device-zeitgeist` -> `device-transpose`) on the Multiple Plugins page.
+   Refinement vs. the original sketch: events flow through the chain as pulse `position`s and the consuming
+   instrument resolves sample offsets via `host_pulse_to_offset` (see the §3 event-model note).
 2. Deliver automation (Route D): the host evaluates the value-event curves it already owns, fills the
    param snapshot at quantum start, and merges resolved param-updates into the pulled event stream. The
    split template from step 1 applies them. No pushing, no host splitting.
@@ -653,10 +739,15 @@ High-level, decide before implementing:
 
 Lower-level, to finalize when the relevant feature is scheduled:
 
-- Active-notes query for arpeggiators: a dedicated query versus passing the active set in the descriptor.
+- Active-notes query for arpeggiators: still open in general, but the phase-1 `device-arp` did NOT need a
+  query: it maintains its own held-note stack in its instance state by ingesting the note-on/off it pulls,
+  which suffices for a chord-driven arp. A dedicated active-notes query may still be wanted for devices that
+  must read held notes without consuming a stream.
 - Param-update event carrier: a distinct `EventRecord` kind in the shared event stream versus a separate
   automation port.
-- ppqn across the ABI: f64 passed as two u32 words versus a small in-memory query struct.
+- ppqn across the ABI: RESOLVED. Ranges and positions are passed as native `f64` arguments (wasm supports
+  f64 params directly); not split into two `u32` words. `EventRecord` carries both an `f64` `position`
+  (chain currency) and a `u32` `offset` (resolved by the consumer via `host_pulse_to_offset`).
 - `AudioRegionRecord` exact layout and the time-stretch / transient fields, against the box schema when
   Tape is scheduled.
 

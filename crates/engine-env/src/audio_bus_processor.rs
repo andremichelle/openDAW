@@ -3,6 +3,7 @@
 //! sources into it. Used for an audio bus and for the output audio unit (no channel-strip gain yet).
 //! Topological ordering guarantees the sources are rendered before this node runs.
 
+use alloc::rc::Rc;
 use alloc::vec::Vec;
 use crate::audio_buffer::SharedAudioBuffer;
 use crate::audio_generator::AudioGenerator;
@@ -26,6 +27,11 @@ impl AudioBusProcessor {
     /// Add a source whose output is summed into this bus (TS `addAudioSource`).
     pub fn add_audio_source(&mut self, source: SharedAudioBuffer) {
         self.sources.push(source);
+    }
+
+    /// Remove a previously added source (by buffer identity), e.g. when its audio unit is removed.
+    pub fn remove_audio_source(&mut self, source: &SharedAudioBuffer) {
+        self.sources.retain(|existing| !Rc::ptr_eq(existing, source));
     }
 
     /// Drop all sources (e.g. before a re-wire).

@@ -20,34 +20,34 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 use alloc::rc::Rc;
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell, UnsafeCell};
+use bindings::indexed_collection::IndexedCollection;
 use bindings::note_collection::NoteCollection;
 use bindings::value_collection::ValueCollection;
 use boxgraph::address::{Address, Uuid};
 use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
+use boxgraph::subscription::{HubEvent, SubscriptionId};
 use boxgraph::updates::decode_forward;
-use abi::{BlockRecord, EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON, DEVICE_KIND_EFFECT, DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT};
+use abi::{EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON, DEVICE_KIND_EFFECT, DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT};
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::audio_generator::AudioGenerator;
 use engine_env::audio_input::AudioInput;
 use engine_env::block::Block;
 use engine_env::block_flags::BlockFlags;
-use engine_env::engine_context::EngineContext;
+use engine_env::engine_context::{EngineContext, NodeId};
 use engine_env::event::Event;
-use engine_env::event_buffer::EventBuffer;
-use engine_env::event_receiver::EventReceiver;
 use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_region::NoteRegion;
 use engine_env::note_region_source::NoteRegionSource;
 use engine_env::note_sequencer::NoteSequencer;
 use engine_env::ppqn::pulses_to_samples;
 use engine_env::process_info::ProcessInfo;
-use engine_env::processor::Processor;
 use studio_boxes::registry;
 use transport::transport::{Transport, RENDER_QUANTUM};
 use value::event::EventCollection;
@@ -91,10 +91,16 @@ fn call_device_process_events(process_index: u32, from: f64, to: f64, flags: u32
 fn call_device_process_events(_process_index: u32, _from: f64, _to: f64, _flags: u32, _state_ptr: u32, _out_ptr: u32, _max: u32) -> u32 { 0 }
 
 const DEVICE_MAX_EVENTS: usize = 256; // per-quantum event scratch the device pulls into
-const DEVICE_MAX_BLOCKS: usize = RENDER_QUANTUM; // upper bound on blocks per quantum (one per sample worst case)
+const DEVICE_INDEX_KEY: u16 = 2; // device box `index` field (DeviceFactory): the chain order within a host
 
 mod metronome;
 use metronome::Metronome;
+mod plugin_instrument;
+use plugin_instrument::PluginInstrument;
+mod plugin_audio_effect;
+use plugin_audio_effect::PluginAudioEffect;
+mod plugin_midi_effect;
+use plugin_midi_effect::PluginMidiEffect;
 
 const INPUT_CAPACITY: usize = 1 << 20; // initial input scratch (1 MiB); grows on demand, keeps the high-water mark
 
@@ -138,32 +144,15 @@ static ENGINE_STATE: Shared<[u8; ENGINE_STATE_LEN]> = Shared::new([0; ENGINE_STA
 // The node scopes its `PULL.get()` borrows so none is live across the device call (single-threaded).
 static PULL: Shared<PullContext> = Shared::new(PullContext::new());
 
-/// A device's per-instance state block (talc-allocated, zeroed once, reused across calls), owned host-side
-/// and addressed by the device through a raw pointer. `u32`-backed so it is 4-aligned for the device's
-/// state struct. Shared via `Rc` so every clone of a `PullLink::MidiFx` addresses the SAME instance state.
-struct DeviceState(Box<[u64]>);
-
-impl DeviceState {
-    // u64-backed so the block is 8-aligned for any device state struct (e.g. an arpeggiator state holding
-    // f64 pulse positions); a 4-aligned block would be misaligned for those.
-    fn new(bytes: usize) -> Self {
-        Self(vec![0u64; bytes.div_ceil(8)].into_boxed_slice())
-    }
-
-    fn ptr(&self) -> u32 {
-        self.0.as_ptr() as u32
-    }
-}
-
 /// One link in a unit's event PULL CHAIN (the `NoteEventSource` chain, sequencer -> fx -> ... -> the
-/// instrument that consumes it). A leaf `Source` is the note sequencer; a `MidiFx` is a MIDI-effect device
-/// that, when pulled, transforms the events of its `upstream` link, holding its own per-instance `state`
-/// (e.g. an arpeggiator's held-note stack). Cheap to clone (`Rc` handles), and clones share the one state.
-/// This is the `PluginMidiEffect` role from the plan: a MIDI fx is NOT an audio-graph node, it is a pull link.
+/// instrument that consumes it). A leaf `Source` is the note sequencer; a `MidiFx` wraps a
+/// `PluginMidiEffect` (a MIDI-effect device bridge) over its `upstream` link. Cheap to clone (`Rc`
+/// handles); clones of a `MidiFx` share the one `PluginMidiEffect`, hence the one instance state. A MIDI fx
+/// is NOT an audio-graph node, it is a pull link (plan §4).
 #[derive(Clone)]
 enum PullLink {
     Source(SharedNoteEventSource),
-    MidiFx { process_index: u32, state: Rc<DeviceState>, upstream: Rc<PullLink> }
+    MidiFx { effect: Rc<PluginMidiEffect>, upstream: Rc<PullLink> }
 }
 
 /// What `host_pull_events` needs to resolve a device's input events for a pulse range: the CURRENT pull
@@ -216,16 +205,14 @@ pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32,
     };
     match link {
         PullLink::Source(ref source) => pull_from_source(source, from, to, flags, out_ptr, max),
-        PullLink::MidiFx {process_index, state, upstream} => {
-            // Descend: point the CURRENT link at the fx's upstream so the fx device's own
-            // `host_pull_events` resolves it, run the fx (with its per-instance state), then restore this
-            // link so the next (per-block) pull from downstream still goes through the fx. Scope each
-            // `PULL.get()` so none is held across the device call (it re-enters `PULL.get()`);
-            // single-threaded, so they never overlap.
-            let state_ptr = state.ptr();
+        PullLink::MidiFx {effect, upstream} => {
+            // Descend: point the CURRENT link at the fx's upstream so the fx device's own `host_pull_events`
+            // resolves it, run the fx, then restore this link so the next (per-block) pull from downstream
+            // still goes through the fx. Scope each `PULL.get()` so none is held across the device call (it
+            // re-enters `PULL.get()`); single-threaded, so they never overlap.
             { unsafe { PULL.get() }.current = Some((*upstream).clone()); }
-            let count = call_device_process_events(process_index, from, to, flags, state_ptr, out_ptr, max);
-            { unsafe { PULL.get() }.current = Some(PullLink::MidiFx {process_index, state, upstream}); }
+            let count = effect.process_events(from, to, flags, out_ptr, max);
+            { unsafe { PULL.get() }.current = Some(PullLink::MidiFx {effect, upstream}); }
             count
         }
     }
@@ -332,277 +319,96 @@ impl Controls {
     }
 }
 
-/// The note content one instrument's sequencer reads (the `NoteRegionSource` the engine binds from the
-/// box graph): one audio unit's note regions, each region's loopable span paired with its observed
-/// `NoteEventCollection`. Regions may share a `NoteEventCollectionBox` (mirrored regions); each gets its
-/// own `NoteCollection` view.
+/// One bound note region: its loopable span and its observed `NoteEventCollection`, keyed by uuid so the
+/// region cascade can remove it. Regions may share a collection box (mirrored regions); each gets its own
+/// `NoteCollection` view.
+struct BoundRegion {
+    region_uuid: Uuid,
+    region: NoteRegion,
+    collection: NoteCollection
+}
+
+/// An audio unit's LIVE set of bound note regions, shared between the unit's sequencer (which reads it each
+/// block) and the track / region cascade bindings (which insert and remove entries), so adding or removing
+/// a track or region is heard immediately.
+type SharedRegionSet = Rc<RefCell<Vec<BoundRegion>>>;
+
+/// The `NoteRegionSource` the unit's sequencer reads: a shared handle to the unit's live region set.
 struct BoundNoteRegions {
-    regions: Vec<(NoteRegion, NoteCollection)>
+    regions: SharedRegionSet
 }
 
 impl NoteRegionSource for BoundNoteRegions {
     fn for_each_region(&self, _from: f64, _to: f64, visit: &mut dyn FnMut(&NoteRegion, &EventCollection<NoteEvent>)) {
-        for (region, collection) in &self.regions {
-            visit(region, &collection.events());
+        for bound in self.regions.borrow().iter() {
+            visit(&bound.region, &bound.collection.events());
         }
-    }
-}
-
-/// A graph node that voices its notes through the loaded `device_sine.wasm` plugin. It pulls notes from
-/// its `NoteEventInstrument`, resolves them to sample-offset `EventRecord`s for the quantum, fills the
-/// engine-allocated (shared-memory) descriptor + event buffer, and calls the device's `process`
-/// wasm-to-wasm (zero copy). The device renders into the engine-allocated mono output buffer, which this
-/// node fans out to its stereo output for the master bus. All device-facing memory (state, IO, descriptor)
-/// is talc-allocated here, so it is freed when the instrument is dropped.
-struct PluginInstrument {
-    process_index: u32, // the device's `process` slot in the shared function table
-    sample_rate: f32,
-    pull_chain: Option<PullLink>, // the top of this unit's event pull chain (sequencer, or a midi-fx over it)
-    events: EventBuffer,
-    output: SharedAudioBuffer,
-    device_output: Box<[f32]>,
-    // `device_events` (the event scratch the device pulls into), `device_blocks`, `device_state`, and
-    // `out_offsets` are referenced only by raw address inside `descriptor`; they must stay alive (dropping
-    // them frees the memory the device reads/writes), so keep the fields even though Rust sees no direct
-    // reads. `device_blocks` is refilled from the ProcessInfo each quantum.
-    #[allow(dead_code)]
-    device_events: Box<[EventRecord]>,
-    device_blocks: Box<[BlockRecord]>,
-    #[allow(dead_code)]
-    device_state: Box<[u32]>, // u32 so the block is 4-aligned for the device's SynthState
-    #[allow(dead_code)]
-    out_offsets: Box<[u32]>,
-    descriptor: Box<[u32]>
-}
-
-impl PluginInstrument {
-    fn new(sample_rate: f32, device: DeviceReg) -> Self {
-        let device_output = vec![0.0f32; RENDER_QUANTUM].into_boxed_slice();
-        let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
-        let device_events = vec![blank; DEVICE_MAX_EVENTS].into_boxed_slice();
-        let blank_block = BlockRecord {index: 0, flags: 0, p0: 0.0, p1: 0.0, s0: 0, s1: 0, bpm: 0.0, reserved: 0};
-        let device_blocks = vec![blank_block; DEVICE_MAX_BLOCKS].into_boxed_slice();
-        let state_size = device.state_size as usize;
-        let device_state = vec![0u32; state_size.div_ceil(4)].into_boxed_slice(); // 4-aligned, >= state_size bytes
-        let out_offsets = vec![device_output.as_ptr() as u32].into_boxed_slice();
-        // descriptor words (see the `abi` layout): frames, in_count/ptr, out_count/ptr, param_count/ptr,
-        // state_ptr, in_event_cap/ptr (pull scratch), out_event_cap/ptr (0, instrument has no event out),
-        // block_count/ptr, sample_rate (f32 bits).
-        let descriptor = vec![
-            RENDER_QUANTUM as u32,
-            0, 0,
-            1, out_offsets.as_ptr() as u32,
-            0, 0,
-            device_state.as_ptr() as u32,
-            DEVICE_MAX_EVENTS as u32, device_events.as_ptr() as u32,
-            0, 0,
-            0, device_blocks.as_ptr() as u32,
-            sample_rate.to_bits()
-        ].into_boxed_slice();
-        Self {
-            process_index: device.process_index,
-            sample_rate,
-            pull_chain: None,
-            events: EventBuffer::new(),
-            output: shared_audio_buffer(),
-            device_output,
-            device_events,
-            device_blocks,
-            device_state,
-            out_offsets,
-            descriptor
-        }
-    }
-
-    fn set_pull_chain(&mut self, chain: PullLink) {
-        self.pull_chain = Some(chain);
     }
 }
 
 /// The sample offset within the quantum for a note at pulse `position`, clamped to the block.
 fn sample_offset(position: f64, block: &Block, sample_rate: f32) -> usize {
     let pulses = position - block.p0;
+    let (s0, s1) = (block.s0 as usize, block.s1 as usize);
     let raw = if pulses.abs() < 1.0e-7 {
-        block.s0
+        s0
     } else {
-        block.s0 + pulses_to_samples(pulses, block.bpm, sample_rate) as usize
+        s0 + pulses_to_samples(pulses, block.bpm, sample_rate) as usize
     };
-    raw.clamp(block.s0, block.s1)
+    raw.clamp(s0, s1)
 }
 
-impl EventReceiver for PluginInstrument {
-    fn event_input(&mut self) -> &mut EventBuffer {
-        &mut self.events
-    }
+/// Pending membership changes a pointer-hub observer records (observers get `&BoxGraph` only, so they
+/// cannot mutate the processor graph); the engine drains them while reconciling, where it has `&mut`. Used
+/// at every cascade level: the RootBox's audio-units, an audio unit's tracks, a track's regions.
+#[derive(Default)]
+struct Members {
+    added: Vec<Uuid>,
+    removed: Vec<Uuid>
 }
 
-impl AudioGenerator for PluginInstrument {
-    fn audio_output(&self) -> SharedAudioBuffer {
-        self.output.clone()
-    }
+/// One bound note region in the cascade: holds the observed collection so it can be unsubscribed; its entry
+/// in the unit's shared region set is keyed by `region_uuid`.
+struct RegionBinding {
+    region_uuid: Uuid,
+    collection: NoteCollection
 }
 
-impl Processor for PluginInstrument {
-    fn reset(&mut self) {
-        self.events.clear();
-    }
-
-    fn process(&mut self, info: &ProcessInfo) {
-        let mut block_count = 0;
-        for block in info.blocks {
-            if block_count >= self.device_blocks.len() {
-                break;
-            }
-            self.device_blocks[block_count] = BlockRecord {
-                index: block.index,
-                flags: block.flags.0,
-                p0: block.p0,
-                p1: block.p1,
-                s0: block.s0 as u32,
-                s1: block.s1 as u32,
-                bpm: block.bpm,
-                reserved: 0
-            };
-            block_count += 1;
-        }
-        self.descriptor[0] = RENDER_QUANTUM as u32;
-        self.descriptor[12] = block_count as u32;
-        // Hand the device its pull context, then call it. The device PULLS its events via host_pull_events.
-        // Scope the `PULL.get()` borrow so none is live across `call_device_process` (the device's
-        // host_pull_events takes its own `PULL.get()`); single-threaded, so the two never overlap.
-        {
-            let pull = unsafe { PULL.get() };
-            pull.current = self.pull_chain.clone();
-            pull.blocks = info.blocks.as_ptr();
-            pull.block_count = info.blocks.len();
-            pull.sample_rate = self.sample_rate;
-        }
-        call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
-        {
-            let pull = unsafe { PULL.get() };
-            pull.current = None;
-            pull.blocks = core::ptr::null();
-            pull.block_count = 0;
-        }
-        let mut output = self.output.borrow_mut();
-        for index in 0..RENDER_QUANTUM {
-            let sample = self.device_output[index];
-            output.left[index] = sample;
-            output.right[index] = sample;
-        }
-    }
+/// A track BINDING: observes the track's `regions` membership and maintains a `RegionBinding` per region,
+/// each inserting / removing its entry in the owning unit's shared region set.
+struct TrackBinding {
+    track_uuid: Uuid,
+    regions: Vec<RegionBinding>,
+    region_changes: Rc<RefCell<Members>>,
+    region_sub: SubscriptionId
 }
 
-/// A graph node that runs an audio-EFFECT device after an upstream node (Route B). It reads its single
-/// input buffer (the upstream's mono output, taken from its `left` channel) through the device, into the
-/// engine-allocated mono output, then fans that to its stereo output for the next node / the bus. The host
-/// owns ordering: a `register_edge(upstream, this)` guarantees the input buffer is fresh when this runs.
-/// Pulls no events (a no-param effect), so it never touches `PULL`. All device memory is talc-allocated.
-struct PluginAudioEffect {
-    process_index: u32,
-    events: EventBuffer, // unused (a no-param effect receives no events) but required by `Processor: EventReceiver`
-    output: SharedAudioBuffer,
-    // The upstream output buffer, kept alive; its `left` address is captured into `in_offsets[0]`. The
-    // `Rc<RefCell<AudioBuffer>>` never moves, so the captured pointer stays valid.
-    #[allow(dead_code)]
-    input: Option<SharedAudioBuffer>,
-    device_output: Box<[f32]>,
-    in_offsets: Box<[u32]>,
-    #[allow(dead_code)]
-    out_offsets: Box<[u32]>,
-    #[allow(dead_code)]
-    device_state: Box<[u32]>,
-    device_blocks: Box<[BlockRecord]>, // refilled from the ProcessInfo each quantum (so the effect can sync to tempo)
-    descriptor: Box<[u32]>
+/// The processor nodes + edges the engine wired for one unit (its teardown set, the analog of TS
+/// `AudioDeviceChain`'s `#disconnector`): everything to drop before a rebuild. `output_node`/`output_buffer`
+/// is the last node feeding the master bus.
+struct WiredCluster {
+    nodes: Vec<NodeId>,
+    edges: Vec<(NodeId, NodeId)>,
+    output_buffer: SharedAudioBuffer
 }
 
-impl PluginAudioEffect {
-    fn new(sample_rate: f32, device: DeviceReg) -> Self {
-        let device_output = vec![0.0f32; RENDER_QUANTUM].into_boxed_slice();
-        let state_size = device.state_size as usize;
-        let device_state = vec![0u32; state_size.div_ceil(4)].into_boxed_slice();
-        let in_offsets = vec![0u32].into_boxed_slice(); // input buffer ptr, set by set_audio_source
-        let out_offsets = vec![device_output.as_ptr() as u32].into_boxed_slice();
-        let blank_block = BlockRecord {index: 0, flags: 0, p0: 0.0, p1: 0.0, s0: 0, s1: 0, bpm: 0.0, reserved: 0};
-        let device_blocks = vec![blank_block; DEVICE_MAX_BLOCKS].into_boxed_slice();
-        // descriptor (see `abi`): frames, in_count/ptr (1), out_count/ptr (1), no params, state, no event
-        // scratch, no out events, block_count/ptr (so the effect gets transport for tempo sync), sample_rate.
-        let descriptor = vec![
-            RENDER_QUANTUM as u32,
-            1, in_offsets.as_ptr() as u32,
-            1, out_offsets.as_ptr() as u32,
-            0, 0,
-            device_state.as_ptr() as u32,
-            0, 0,
-            0, 0,
-            0, device_blocks.as_ptr() as u32,
-            sample_rate.to_bits()
-        ].into_boxed_slice();
-        Self {
-            process_index: device.process_index,
-            events: EventBuffer::new(),
-            output: shared_audio_buffer(),
-            input: None,
-            device_output,
-            in_offsets,
-            out_offsets,
-            device_state,
-            device_blocks,
-            descriptor
-        }
-    }
-}
-
-impl EventReceiver for PluginAudioEffect {
-    fn event_input(&mut self) -> &mut EventBuffer {
-        &mut self.events
-    }
-}
-
-impl AudioInput for PluginAudioEffect {
-    fn set_audio_source(&mut self, source: SharedAudioBuffer) {
-        self.in_offsets[0] = source.borrow().left.as_ptr() as u32;
-        self.input = Some(source);
-    }
-}
-
-impl AudioGenerator for PluginAudioEffect {
-    fn audio_output(&self) -> SharedAudioBuffer {
-        self.output.clone()
-    }
-}
-
-impl Processor for PluginAudioEffect {
-    fn reset(&mut self) {}
-
-    fn process(&mut self, info: &ProcessInfo) {
-        let mut block_count = 0;
-        for block in info.blocks {
-            if block_count >= self.device_blocks.len() {
-                break;
-            }
-            self.device_blocks[block_count] = BlockRecord {
-                index: block.index,
-                flags: block.flags.0,
-                p0: block.p0,
-                p1: block.p1,
-                s0: block.s0 as u32,
-                s1: block.s1 as u32,
-                bpm: block.bpm,
-                reserved: 0
-            };
-            block_count += 1;
-        }
-        self.descriptor[0] = RENDER_QUANTUM as u32;
-        self.descriptor[12] = block_count as u32;
-        call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
-        let mut output = self.output.borrow_mut();
-        for index in 0..RENDER_QUANTUM {
-            let sample = self.device_output[index];
-            output.left[index] = sample;
-            output.right[index] = sample;
-        }
-    }
+/// A live audio-unit BINDING. The RootBox `audio-units` membership drives create / destroy. Beneath it:
+/// the track -> region cascade feeds the shared `region_set` the sequencer reads; and three
+/// `IndexedCollection`s observe the unit's device hosts — `input` (the instrument, host 22), `midi` (host
+/// 21), `audio` (host 23) — each ordered by the device `index`. The wired processor cluster is rebuilt
+/// (from the device table + the sorted chains) ONLY when one of those three reports `dirty`, so a unit's
+/// wiring stays stable until the user edits its scope. Teardown drops the cluster, the cascade, and the
+/// chain subscriptions.
+struct AudioUnitBinding {
+    unit: Uuid,
+    region_set: SharedRegionSet,
+    tracks: Vec<TrackBinding>,
+    track_changes: Rc<RefCell<Members>>,
+    track_sub: SubscriptionId,
+    input: IndexedCollection,
+    midi: IndexedCollection,
+    audio: IndexedCollection,
+    wired: Option<WiredCluster>
 }
 
 struct Engine {
@@ -613,9 +419,14 @@ struct Engine {
     tempo: Option<ValueCollection>,
     context: EngineContext,
     output_bus: Option<SharedAudioBuffer>,
+    master: Option<Rc<RefCell<AudioBusProcessor>>>, // the output bus, retained so units wire into it live
+    master_id: NodeId,
+    audio_units: Vec<AudioUnitBinding>, // one per connected AudioUnitBox, maintained reactively
+    unit_changes: Rc<RefCell<Members>>, // recorded by the audio-units membership observer, drained by reconcile
     sample_rate: f32,
     blocks: Vec<Block>,
     devices: Vec<DeviceReg>,           // loaded device plugins, in load order (the host registers them)
+    device_box_types: Vec<(String, usize)>, // box-type name -> index into `devices`: the ONLY device glue.
     device_allocs: Vec<Box<[u8]>>,     // talc-owned regions handed to devices (data + stacks); kept alive
     controls: Rc<Controls>
 }
@@ -630,9 +441,14 @@ impl Engine {
             tempo: None,
             context: EngineContext::new(),
             output_bus: None,
+            master: None,
+            master_id: 0,
+            audio_units: Vec::new(),
+            unit_changes: Rc::new(RefCell::new(Members::default())),
             sample_rate,
             blocks: Vec::new(),
             devices: Vec::new(),
+            device_box_types: Vec::new(),
             device_allocs: Vec::new(),
             controls: Rc::new(Controls::new())
         }
@@ -654,6 +470,20 @@ impl Engine {
         let id = self.devices.len() as u32;
         self.devices.push(DeviceReg {process_index, state_size, kind});
         id
+    }
+
+    /// Map a device-box type name to a loaded device (its index). This is the whole device table: given a
+    /// device box in the graph, the engine looks up its box name here to find the plugin that realizes it.
+    fn set_device_box_type(&mut self, name: String, device_id: usize) {
+        self.device_box_types.push((name, device_id));
+    }
+
+    /// The plugin that realizes a device-box TYPE. The mapping is by type, not by instance: every box of the
+    /// same type uses the same plugin entry (each box still gets its own bridge + state block, i.e. a
+    /// separate instance). `None` for a type with no table entry (an unknown / unsupported device).
+    fn device_for_type(&self, box_type: &str) -> Option<DeviceReg> {
+        let id = self.device_box_types.iter().find(|(name, _)| name == box_type).map(|(_, id)| *id)?;
+        self.devices.get(id).copied()
     }
 
     /// Apply one forward-only transaction, returning the resulting checksum (or `Err` on a
@@ -695,12 +525,12 @@ impl Engine {
                 metronome.process(block, &mut left[block.s0..block.s1], &mut right[block.s0..block.s1]);
                 blocks.push(Block {
                     index: blocks.len() as u32,
+                    flags: BlockFlags::create(true, block.discontinuous, true, false),
                     p0: block.p0,
                     p1: block.p1,
-                    s0: block.s0,
-                    s1: block.s1,
-                    bpm: block.bpm,
-                    flags: BlockFlags::create(true, block.discontinuous, true, false)
+                    s0: block.s0 as u32,
+                    s1: block.s1 as u32,
+                    bpm: block.bpm
                 });
             });
             // drive the processor graph over those blocks, then mix the output unit's buffer in
@@ -786,134 +616,268 @@ impl Engine {
         if let Some(collection) = tempo_collection {
             self.tempo = Some(ValueCollection::observe(&mut self.graph, collection));
         }
-        self.build_audio_graph();
+        self.init_audio_graph();
         0
     }
 
-    /// Build the processor graph from the box graph: a master output bus whose buffer feeds the worklet,
-    /// plus one `PluginInstrument` (the sine device) PER AUDIO UNIT, each fed by a `NoteSequencer` over
-    /// that unit's note regions and routed into the master bus. The device wasm is loaded once; every
-    /// instrument calls it with its own state block, so the units play independently.
-    /// DEVIATION from the TS engine: every unit uses the sine device — the unit's actual `input`
-    /// instrument device and its audio-effect chain are not read yet.
-    fn build_audio_graph(&mut self) {
+    /// Set up the master output bus and start observing the RootBox `audio-units` membership. Each connected
+    /// `AudioUnitBox` becomes a unit binding, created / destroyed LIVE as the box graph changes (the reactive
+    /// replacement for a one-shot build). The membership observer only records into `unit_changes`; the
+    /// actual graph mutation happens in `reconcile_units` (catch-up here, and after every transaction).
+    fn init_audio_graph(&mut self) {
         let output_buffer = shared_audio_buffer();
         let master = Rc::new(RefCell::new(AudioBusProcessor::new(output_buffer.clone())));
-        let master_id = self.context.register_processor(master.clone());
+        self.master_id = self.context.register_processor(master.clone());
         self.output_bus = Some(output_buffer);
-        // Split the loaded devices by kind. Instruments voice notes; effects transform audio. Order is
-        // preserved within each kind, so the page's load order still picks which unit gets which instrument.
-        let instruments: Vec<DeviceReg> =
-            self.devices.iter().filter(|device| device.kind == DEVICE_KIND_INSTRUMENT).copied().collect();
-        let effect = self.devices.iter().find(|device| device.kind == DEVICE_KIND_EFFECT).copied();
-        let midi_fx: Vec<DeviceReg> =
-            self.devices.iter().filter(|device| device.kind == DEVICE_KIND_MIDI_EFFECT).copied().collect();
-        if instruments.is_empty() {
-            return; // no instrument plugin loaded -> nothing to voice the notes with
+        self.master = Some(master);
+        // RootBox.audio-units is field key 20; an AudioUnitBox connects via its `collection` pointer, so the
+        // hub source's uuid IS the audio unit. We do not order the units (order is not audible).
+        if let Some(root) = self.graph.find_by_name("RootBox") {
+            let changes = self.unit_changes.clone();
+            self.graph.subscribe_pointer_hub(Address::of(root.uuid, vec![20]), Box::new(move |_graph, event| {
+                match event {
+                    HubEvent::Added(source) => changes.borrow_mut().added.push(source.uuid),
+                    HubEvent::Removed(source) => changes.borrow_mut().removed.push(source.uuid)
+                }
+            }));
         }
-        // One instrument per audio unit. Until the unit's real input instrument device is read from the
-        // box, pick the device by the audio unit's `index` field (key 11) modulo the loaded instruments, so
-        // the page deterministically controls which unit gets which device (e.g. bass -> sawtooth). When an
-        // effect device is loaded, insert it after the BASS only (slot 1 = the saw): instrument -> effect
-        // -> master, so the demo contrasts a filtered bass against the dry lead.
-        for (unit, regions) in self.bind_note_regions_by_unit() {
-            let slot = unit.map(|uuid| self.read_pulses(uuid, 11) as usize).unwrap_or(0) % instruments.len();
-            let device = instruments[slot];
-            let sequencer: SharedNoteEventSource = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {regions}))));
-            // Build the unit's pull chain: the sequencer at the leaf, then each midi-fx (in load order)
-            // folded on top, so the LAST-loaded fx is the instrument's direct upstream. DEMO: only the LEAD
-            // (slot 0) gets the midi-fx chain (arp then transpose) -> sequencer <- arp <- transpose <-
-            // instrument, so the held chord is arpeggiated and then shifted up an octave; the bass gets none.
-            let mut chain = PullLink::Source(sequencer);
-            if slot == 0 {
-                for fx in &midi_fx {
-                    chain = PullLink::MidiFx {
-                        process_index: fx.process_index,
-                        state: Rc::new(DeviceState::new(fx.state_size as usize)),
-                        upstream: Rc::new(chain)
-                    };
-                }
+        self.reconcile_units();
+    }
+
+    /// Apply recorded membership changes top-down: tear down / build audio units, CASCADE into each unit's
+    /// tracks and regions, then RE-WIRE only the units whose device chains changed. Called on bind (catch-up)
+    /// and after every transaction; with nothing changed it is a cheap no-op (the per-unit dirty flags gate
+    /// the rewire), so a unit's wiring stays stable until the user edits its scope.
+    fn reconcile_units(&mut self) {
+        if self.master.is_none() {
+            return;
+        }
+        let changes = core::mem::take(&mut *self.unit_changes.borrow_mut());
+        for uuid in changes.removed {
+            if let Some(index) = self.audio_units.iter().position(|binding| binding.unit == uuid) {
+                let binding = self.audio_units.remove(index);
+                self.teardown_unit(binding);
             }
-            let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, device)));
-            instrument.borrow_mut().set_pull_chain(chain);
-            let instrument_output = instrument.borrow().audio_output();
-            let instrument_id = self.context.register_processor(instrument);
-            let unit_effect = effect.filter(|_| slot == 1); // DEMO: effect only on the bass (the saw, slot 1)
-            match unit_effect {
-                Some(effect_device) => {
-                    let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, effect_device)));
-                    node.borrow_mut().set_audio_source(instrument_output);
-                    master.borrow_mut().add_audio_source(node.borrow().audio_output());
-                    let effect_id = self.context.register_processor(node);
-                    self.context.register_edge(instrument_id, effect_id); // instrument renders before the effect reads it
-                    self.context.register_edge(effect_id, master_id); // effect renders before the bus sums it
-                }
-                None => {
-                    master.borrow_mut().add_audio_source(instrument_output);
-                    self.context.register_edge(instrument_id, master_id); // instrument renders before the bus sums it
-                }
+        }
+        for uuid in changes.added {
+            if self.audio_units.iter().any(|binding| binding.unit == uuid) {
+                continue;
             }
+            let binding = self.build_unit(uuid);
+            self.audio_units.push(binding);
+        }
+        // Take the bindings out so the per-unit work can borrow `&mut self` (graph, context, master) without
+        // aliasing `self.audio_units`. Cascade the tracks -> regions, then re-wire any unit whose device
+        // chains (input / midi / audio) reported dirty — using `|` so all three dirty flags are consumed.
+        let mut units = core::mem::take(&mut self.audio_units);
+        for unit in &mut units {
+            reconcile_tracks(&mut self.graph, unit);
+            let dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty();
+            if dirty {
+                self.rewire_unit(unit);
+            }
+        }
+        self.audio_units = units;
+    }
+
+    /// Remove a unit entirely: drop its wired cluster (edges, nodes, bus source), unsubscribe its tracks
+    /// membership + track cascade, and terminate its three device-chain collections.
+    fn teardown_unit(&mut self, binding: AudioUnitBinding) {
+        if let Some(wired) = &binding.wired {
+            self.teardown_wired(wired);
+        }
+        self.graph.unsubscribe(binding.track_sub);
+        for track in binding.tracks {
+            teardown_track(&mut self.graph, &binding.region_set, track);
+        }
+        binding.input.terminate(&mut self.graph);
+        binding.midi.terminate(&mut self.graph);
+        binding.audio.terminate(&mut self.graph);
+    }
+
+    /// Drop a wired cluster's processor graph: unwire its output from the master bus, remove its edges, and
+    /// remove its nodes. The teardown set, the analog of TS `AudioDeviceChain`'s `#disconnector.terminate`.
+    fn teardown_wired(&mut self, wired: &WiredCluster) {
+        if let Some(master) = &self.master {
+            master.borrow_mut().remove_audio_source(&wired.output_buffer);
+        }
+        for (source, target) in &wired.edges {
+            self.context.remove_edge(*source, *target);
+        }
+        for node in &wired.nodes {
+            self.context.remove_processor(*node);
         }
     }
 
-    /// Group every `NoteRegionBox` by its owning audio unit, returning one bound-region list per unit (in
-    /// discovery order). The chain is pointer-only: region.regions (key 1) -> the track's regions hub,
-    /// track.tracks (key 1) -> the unit's tracks hub. Regions that resolve to no unit are grouped together
-    /// (one fallback instrument) so they still sound.
-    fn bind_note_regions_by_unit(&mut self) -> Vec<(Option<Uuid>, Vec<(NoteRegion, NoteCollection)>)> {
-        let mut bound_per_unit = Vec::new();
-        for (unit, members) in group_regions_by_unit(&self.graph) {
-            let bound: Vec<(NoteRegion, NoteCollection)> =
-                members.into_iter().filter_map(|region_uuid| self.bind_region(region_uuid)).collect();
-            if !bound.is_empty() {
-                bound_per_unit.push((unit, bound));
+    /// Build a unit binding: its shared region set, the track-membership subscription (key 20) the cascade
+    /// fills, and the three device-chain collections — `input` (host 22), `midi` (host 21), `audio` (host
+    /// 23), each ordered by the device `index` (field 2). No processor nodes yet; the first `reconcile`
+    /// rewires it (the collections are dirty from catch-up). No per-device-type logic: the device table
+    /// (`device_for_box`) maps each device box to its plugin.
+    fn build_unit(&mut self, uuid: Uuid) -> AudioUnitBinding {
+        let region_set: SharedRegionSet = Rc::new(RefCell::new(Vec::new()));
+        let track_changes = Rc::new(RefCell::new(Members::default()));
+        let recorder = track_changes.clone();
+        let track_sub = self.graph.subscribe_pointer_hub(Address::of(uuid, vec![20]), Box::new(move |_graph, event| {
+            match event {
+                HubEvent::Added(source) => recorder.borrow_mut().added.push(source.uuid),
+                HubEvent::Removed(source) => recorder.borrow_mut().removed.push(source.uuid)
             }
+        }));
+        let input = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![22]), DEVICE_INDEX_KEY);
+        let midi = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![21]), DEVICE_INDEX_KEY);
+        let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![23]), DEVICE_INDEX_KEY);
+        AudioUnitBinding {
+            unit: uuid, region_set, tracks: Vec::new(), track_changes, track_sub, input, midi, audio, wired: None
         }
-        bound_per_unit
     }
 
-    /// Read one region's loopable span (position 10, duration 11, loopOffset 12, loopDuration 13) and
-    /// observe the `NoteEventCollectionBox` its `events` pointer (key 2) targets. `None` if it has none.
-    fn bind_region(&mut self, region_uuid: Uuid) -> Option<(NoteRegion, NoteCollection)> {
-        let region = NoteRegion {
-            position: self.read_pulses(region_uuid, 10),
-            duration: self.read_pulses(region_uuid, 11),
-            loop_offset: self.read_pulses(region_uuid, 12),
-            loop_duration: self.read_pulses(region_uuid, 13)
+    /// (Re)build a unit's processor cluster from the current device table + the sorted chains: instrument
+    /// (the `input` device), the midi-fx pull chain folded in index order under it, and the audio-fx chain
+    /// wired instrument -> fx0 -> ... -> bus in index order. Tears down the old cluster first. A unit with no
+    /// resolvable instrument is left silent (wired = None). The whole device set is realized this way; the
+    /// only per-device knowledge is the box-type -> plugin table.
+    fn rewire_unit(&mut self, unit: &mut AudioUnitBinding) {
+        if let Some(wired) = unit.wired.take() {
+            self.teardown_wired(&wired);
+        }
+        let instrument_device = match unit.input.sorted().first()
+            .and_then(|uuid| self.graph.find_box(uuid))
+            .and_then(|device_box| self.device_for_type(&device_box.name)) {
+            Some(device) if device.kind == DEVICE_KIND_INSTRUMENT => device,
+            _ => return // no instrument yet: the unit stays silent until its `input` device box appears
         };
-        let collection_uuid = self.graph.target_of(&Address::of(region_uuid, vec![2]))?.uuid;
-        let collection = NoteCollection::observe(&mut self.graph, collection_uuid);
-        Some((region, collection))
-    }
-
-    fn read_pulses(&self, uuid: Uuid, key: u16) -> f64 {
-        self.graph.field_value(&Address::of(uuid, vec![key])).and_then(|value| value.as_int32()).unwrap_or(0) as f64
+        // The pull chain: sequencer (over the unit's shared region set) at the leaf, each midi-fx folded on
+        // top in index order, so the instrument pulls the highest-index fx, which pulls the next, down to
+        // the sequencer.
+        let sequencer: SharedNoteEventSource =
+            Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {regions: unit.region_set.clone()}))));
+        let mut chain = PullLink::Source(sequencer);
+        for device_uuid in unit.midi.sorted() {
+            let device = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
+            match device {
+                Some(device) if device.kind == DEVICE_KIND_MIDI_EFFECT => {
+                    chain = PullLink::MidiFx {effect: Rc::new(PluginMidiEffect::new(device)), upstream: Rc::new(chain)};
+                }
+                _ => {}
+            }
+        }
+        let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, instrument_device)));
+        instrument.borrow_mut().set_pull_chain(chain);
+        let mut output = instrument.borrow().audio_output();
+        let instrument_id = self.context.register_processor(instrument);
+        let mut nodes = vec![instrument_id];
+        let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
+        let mut output_node = instrument_id;
+        // The audio-fx chain in index order: instrument -> fx0 -> fx1 -> ... Each reads the previous output.
+        for device_uuid in unit.audio.sorted() {
+            let resolved = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
+            let device = match resolved {
+                Some(device) if device.kind == DEVICE_KIND_EFFECT => device,
+                _ => continue
+            };
+            let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
+            node.borrow_mut().set_audio_source(output);
+            output = node.borrow().audio_output();
+            let node_id = self.context.register_processor(node);
+            self.context.register_edge(output_node, node_id);
+            edges.push((output_node, node_id));
+            nodes.push(node_id);
+            output_node = node_id;
+        }
+        let master = self.master.as_ref().unwrap();
+        master.borrow_mut().add_audio_source(output.clone());
+        self.context.register_edge(output_node, self.master_id);
+        edges.push((output_node, self.master_id));
+        unit.wired = Some(WiredCluster {nodes, edges, output_buffer: output});
     }
 }
 
-/// Group note-region uuids by their owning audio unit, in discovery order, returning `(unit, regions)`
-/// per group. The chain is pointer-only: region.regions (key 1) -> the track, then track.tracks (key 1)
-/// -> the unit. Regions resolving to no unit (orphans) collect into the `None`-keyed group, kept so they
-/// still sound. The caller reads the unit (e.g. its `index`) to choose the device. Pure (unit-tested).
-fn group_regions_by_unit(graph: &BoxGraph) -> Vec<(Option<Uuid>, Vec<Uuid>)> {
-    let region_uuids: Vec<Uuid> = graph.find_all_by_name("NoteRegionBox").iter().map(|region| region.uuid).collect();
-    let mut groups: Vec<(Option<Uuid>, Vec<Uuid>)> = Vec::new();
-    for region_uuid in region_uuids {
-        let unit = unit_of_region(graph, region_uuid);
-        match groups.iter_mut().find(|(group_unit, _)| *group_unit == unit) {
-            Some((_, members)) => members.push(region_uuid),
-            None => groups.push((unit, vec![region_uuid]))
+// ---- The track / region cascade beneath an audio unit. Free functions taking `&mut BoxGraph`: they only
+// observe the box graph and edit the unit's shared region set, never the processor graph, so they avoid
+// borrowing the engine. Each level records membership into its own `Members` and is drained here. ----
+
+/// Reconcile one unit's tracks against its `tracks` membership, then each track's regions.
+fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding) {
+    let changes = core::mem::take(&mut *unit.track_changes.borrow_mut());
+    for track_uuid in changes.removed {
+        if let Some(index) = unit.tracks.iter().position(|track| track.track_uuid == track_uuid) {
+            let track = unit.tracks.remove(index);
+            teardown_track(graph, &unit.region_set, track);
         }
     }
-    groups
+    for track_uuid in changes.added {
+        if unit.tracks.iter().any(|track| track.track_uuid == track_uuid) {
+            continue;
+        }
+        unit.tracks.push(build_track(graph, track_uuid));
+    }
+    for track in &mut unit.tracks {
+        reconcile_regions(graph, &unit.region_set, track);
+    }
 }
 
-/// The audio unit a note region belongs to: region.regions (key 1) -> track, then track.tracks (key 1)
-/// -> unit. `None` if either pointer is unset (an orphan region).
-fn unit_of_region(graph: &BoxGraph, region_uuid: Uuid) -> Option<Uuid> {
-    let track = graph.target_of(&Address::of(region_uuid, vec![1]))?.uuid;
-    let unit = graph.target_of(&Address::of(track, vec![1]))?.uuid;
-    Some(unit)
+/// Start observing a track's `regions` membership (key 3); the cascade builds a RegionBinding per region.
+fn build_track(graph: &mut BoxGraph, track_uuid: Uuid) -> TrackBinding {
+    let region_changes = Rc::new(RefCell::new(Members::default()));
+    let recorder = region_changes.clone();
+    let region_sub = graph.subscribe_pointer_hub(Address::of(track_uuid, vec![3]), Box::new(move |_graph, event| {
+        match event {
+            HubEvent::Added(source) => recorder.borrow_mut().added.push(source.uuid),
+            HubEvent::Removed(source) => recorder.borrow_mut().removed.push(source.uuid)
+        }
+    }));
+    TrackBinding {track_uuid, regions: Vec::new(), region_changes, region_sub}
+}
+
+/// Tear down a track: unsubscribe its regions membership, and remove each region from the unit's set and
+/// unsubscribe its collection.
+fn teardown_track(graph: &mut BoxGraph, region_set: &SharedRegionSet, track: TrackBinding) {
+    graph.unsubscribe(track.region_sub);
+    for region in track.regions {
+        region_set.borrow_mut().retain(|bound| bound.region_uuid != region.region_uuid);
+        region.collection.terminate(graph);
+    }
+}
+
+/// Reconcile a track's regions against its `regions` membership, maintaining the unit's shared region set.
+fn reconcile_regions(graph: &mut BoxGraph, region_set: &SharedRegionSet, track: &mut TrackBinding) {
+    let changes = core::mem::take(&mut *track.region_changes.borrow_mut());
+    for region_uuid in changes.removed {
+        if let Some(index) = track.regions.iter().position(|region| region.region_uuid == region_uuid) {
+            let region = track.regions.remove(index);
+            region_set.borrow_mut().retain(|bound| bound.region_uuid != region_uuid);
+            region.collection.terminate(graph);
+        }
+    }
+    for region_uuid in changes.added {
+        if track.regions.iter().any(|region| region.region_uuid == region_uuid) {
+            continue;
+        }
+        if let Some(binding) = build_region(graph, region_set, region_uuid) {
+            track.regions.push(binding);
+        }
+    }
+}
+
+/// Read a region's loopable span (position 10, duration 11, loopOffset 12, loopDuration 13), observe its
+/// note-event collection (`events` pointer key 2), and insert it into the unit's shared region set. `None`
+/// if the region has no collection.
+fn build_region(graph: &mut BoxGraph, region_set: &SharedRegionSet, region_uuid: Uuid) -> Option<RegionBinding> {
+    let region = NoteRegion {
+        position: region_pulses(graph, region_uuid, 10),
+        duration: region_pulses(graph, region_uuid, 11),
+        loop_offset: region_pulses(graph, region_uuid, 12),
+        loop_duration: region_pulses(graph, region_uuid, 13)
+    };
+    let collection_uuid = graph.target_of(&Address::of(region_uuid, vec![2]))?.uuid;
+    let collection = NoteCollection::observe(graph, collection_uuid);
+    region_set.borrow_mut().push(BoundRegion {region_uuid, region, collection: collection.clone()});
+    Some(RegionBinding {region_uuid, collection})
+}
+
+fn region_pulses(graph: &BoxGraph, uuid: Uuid, key: u16) -> f64 {
+    graph.field_value(&Address::of(uuid, vec![key])).and_then(|value| value.as_int32()).unwrap_or(0) as f64
 }
 
 /// Serialize the transport state into `state` (big-endian, per the EngineState contract).
@@ -1007,6 +971,7 @@ pub extern "C" fn apply_updates(len: usize) -> i32 {
         match engine.apply_updates(input) {
             Ok(checksum) => {
                 CHECKSUM.get().copy_from_slice(&checksum);
+                engine.reconcile_units(); // apply any audio-unit membership change this transaction recorded
                 0
             }
             Err(()) => 1
@@ -1098,6 +1063,24 @@ pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32
     }
 }
 
+/// Add a device-table entry mapping a box-type name -> a loaded device id. The host writes the UTF-8 box
+/// name into the input buffer (first `name_len` bytes) and calls this once per device after registering it.
+/// This table is the entire device-to-plugin glue; the engine instantiates a device box by looking its
+/// type up here.
+#[no_mangle]
+pub extern "C" fn device_set_box_type(device_id: u32, name_len: usize) {
+    unsafe {
+        let engine = match ENGINE.get().as_mut() {
+            Some(engine) => engine,
+            None => return
+        };
+        let bytes = core::slice::from_raw_parts(INPUT.get().as_ptr(), name_len);
+        if let Ok(name) = core::str::from_utf8(bytes) {
+            engine.set_device_box_type(String::from(name), device_id as usize);
+        }
+    }
+}
+
 // Dynamic heap: talc claims linear memory via `memory.grow` on demand (no fixed arena) and reclaims
 // freed blocks. The engine runs on ONE thread (the audio thread); the linear memory is shared only so the
 // main thread can WRITE sample data into it, never to run engine code, so there is still no concurrent
@@ -1149,75 +1132,3 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
     core::arch::wasm32::unreachable()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{group_regions_by_unit, unit_of_region};
-    use boxgraph::address::{Address, Uuid};
-    use boxgraph::boxes::GraphBox;
-    use boxgraph::field::FieldValue;
-    use boxgraph::graph::BoxGraph;
-    use std::collections::BTreeMap;
-
-    fn uuid(tag: u8) -> Uuid {
-        [tag, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    }
-
-    // A box whose only field is the key-1 pointer (region.regions -> track, track.tracks -> unit) the
-    // grouping follows — the only field `group_regions_by_unit` reads.
-    fn linked(creation_index: i32, name: &str, id: Uuid, key1: Option<Address>) -> GraphBox {
-        GraphBox {
-            creation_index,
-            name: name.to_string(),
-            uuid: id,
-            fields: BTreeMap::from([(1u16, FieldValue::Pointer(key1))])
-        }
-    }
-
-    // U1, U2 = audio units. T1->U1, T2->U2, T3 = a track with no unit. Regions: R1,R2 in T1 (mirrored),
-    // R3 in T2, R4 has no track, R5 in the unit-less T3. uuids ascend with logical order (find_all_by_name
-    // returns uuid order), so the grouping order is deterministic.
-    fn fixture() -> (BoxGraph, [Uuid; 5]) {
-        let (u1, u2) = (uuid(0x10), uuid(0x20));
-        let (t1, t2, t3) = (uuid(0x11), uuid(0x21), uuid(0x31));
-        let (r1, r2, r3, r4, r5) = (uuid(0x1a), uuid(0x1b), uuid(0x2a), uuid(0x4a), uuid(0x5a));
-        let graph = BoxGraph::from_boxes(vec![
-            linked(0, "AudioUnitBox", u1, None),
-            linked(1, "AudioUnitBox", u2, None),
-            linked(2, "TrackBox", t1, Some(Address::of(u1, vec![20]))),
-            linked(3, "TrackBox", t2, Some(Address::of(u2, vec![20]))),
-            linked(4, "TrackBox", t3, None),
-            linked(5, "NoteRegionBox", r1, Some(Address::of(t1, vec![3]))),
-            linked(6, "NoteRegionBox", r2, Some(Address::of(t1, vec![3]))),
-            linked(7, "NoteRegionBox", r3, Some(Address::of(t2, vec![3]))),
-            linked(8, "NoteRegionBox", r4, None),
-            linked(9, "NoteRegionBox", r5, Some(Address::of(t3, vec![3])))
-        ]);
-        (graph, [r1, r2, r3, r4, r5])
-    }
-
-    #[test]
-    fn unit_of_region_follows_region_track_unit() {
-        let (graph, [r1, _r2, r3, r4, r5]) = fixture();
-        assert_eq!(unit_of_region(&graph, r1), Some(uuid(0x10))); // R1 -> T1 -> U1
-        assert_eq!(unit_of_region(&graph, r3), Some(uuid(0x20))); // R3 -> T2 -> U2
-        assert_eq!(unit_of_region(&graph, r4), None); // R4 has no track
-        assert_eq!(unit_of_region(&graph, r5), None); // R5's track has no unit
-    }
-
-    #[test]
-    fn groups_regions_by_owning_unit_mirrored_together_orphans_pooled() {
-        let (graph, [r1, r2, r3, r4, r5]) = fixture();
-        let groups = group_regions_by_unit(&graph);
-        // three groups, in discovery order: {R1,R2} (unit U1), {R3} (unit U2), {R4,R5} (no unit, pooled)
-        assert_eq!(groups, vec![
-            (Some(uuid(0x10)), vec![r1, r2]),
-            (Some(uuid(0x20)), vec![r3]),
-            (None, vec![r4, r5])
-        ]);
-    }
-
-    #[test]
-    fn empty_graph_yields_no_groups() {
-        assert!(group_regions_by_unit(&BoxGraph::from_boxes(Vec::new())).is_empty());
-    }
-}

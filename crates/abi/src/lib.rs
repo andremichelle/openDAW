@@ -12,7 +12,7 @@
 //!                                              device's `host_pull_events` pull WRITES into, NOT pre-filled)
 //!   [10] out_event_cap  [11] out_events_ptr   (-> EventRecord[out_event_cap]; a MIDI-fx pull RESPONSE
 //!                                              buffer, event-output devices only; 0 for instruments/effects)
-//!   [12] block_count    [13] blocks_ptr       (-> BlockRecord[block_count]; the quantum's ProcessInfo)
+//!   [12] block_count    [13] blocks_ptr       (-> Block[block_count]; the quantum's ProcessInfo)
 //!   [14] sample_rate (f32 bits)               (the engine's render sample rate; passed in, never a global)
 //!
 //! The engine no longer PUSHES a resolved event array. A device PULLS its own input event stream for a
@@ -53,34 +53,80 @@ pub const DEVICE_KIND_INSTRUMENT: u32 = 0;
 pub const DEVICE_KIND_EFFECT: u32 = 1;
 pub const DEVICE_KIND_MIDI_EFFECT: u32 = 2;
 
-// WASM CONTRACT: block flag bits, mirror of `engine-env::BlockFlags`. A device reads these from the
-// `flags` it is handed; keep in lockstep with the host. DISCONTINUOUS marks a transport jump (loop wrap /
-// seek), the cue for a stateful device to release everything it is holding.
-pub const BLOCK_FLAG_TRANSPORTING: u32 = 1 << 0;
-pub const BLOCK_FLAG_DISCONTINUOUS: u32 = 1 << 1;
-pub const BLOCK_FLAG_PLAYING: u32 = 1 << 2;
-
-// WASM CONTRACT: pulses-per-quarter-note, mirror of engine-env / lib-dsp (PPQN = 960). Devices doing
-// musical timing (tempo-synced LFOs, arpeggiator rates) convert pulses with it.
+// WASM CONTRACT: pulses-per-quarter-note, mirror of lib-dsp (PPQN = 960). Devices doing musical timing
+// (tempo-synced LFOs, arpeggiator rates) convert pulses with it.
 pub const PPQN_QUARTER: f64 = 960.0;
 
-/// One render block of the quantum's `ProcessInfo` (mirrors `engine-env::Block`): a pulse range
-/// `[p0, p1)` mapped to the sample range `[s0, s1)` at `bpm`, with transport `flags`. A flat,
-/// `#[repr(C)]` record both the host (engine) and the device read from shared memory. Field ORDER is
-/// chosen so the two `u32`s precede the `f64`s: `p0`/`p1` stay 8-aligned with no implicit padding, so
-/// the layout is identical and explicit on both sides. The device pulls each block's events with
+/// Per-block transport flags (`BlockFlag` in TS, core-processors `processing.ts`), shared by the host and
+/// devices. State flags (`TRANSPORTING`, `PLAYING`) persist across a block's sub-chunks; event flags
+/// (`DISCONTINUOUS`, `BPM_CHANGED`) are one-shot, cleared after the first chunk via `EVENT_MASK`.
+/// `#[repr(transparent)]` so it is layout-identical to a `u32`: it is the `Block.flags` wire field AND
+/// carries the host's flag helpers. `DISCONTINUOUS` marks a transport jump (loop wrap / seek), the cue for
+/// a stateful device to release what it holds.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BlockFlags(pub u32);
+
+impl BlockFlags {
+    pub const TRANSPORTING: u32 = 1 << 0;
+    pub const DISCONTINUOUS: u32 = 1 << 1;
+    pub const PLAYING: u32 = 1 << 2;
+    pub const BPM_CHANGED: u32 = 1 << 3;
+    pub const EVENT_MASK: u32 = Self::DISCONTINUOUS | Self::BPM_CHANGED;
+
+    /// Mirror of TS `BlockFlags.create`.
+    pub fn create(transporting: bool, discontinuous: bool, playing: bool, bpm_changed: bool) -> Self {
+        let mut bits = 0;
+        if transporting { bits |= Self::TRANSPORTING; }
+        if discontinuous { bits |= Self::DISCONTINUOUS; }
+        if playing { bits |= Self::PLAYING; }
+        if bpm_changed { bits |= Self::BPM_CHANGED; }
+        Self(bits)
+    }
+
+    /// True when every bit of `mask` is set (TS `Bits.every`).
+    pub fn has(self, mask: u32) -> bool {
+        self.0 & mask == mask
+    }
+
+    pub fn transporting(self) -> bool {
+        self.has(Self::TRANSPORTING)
+    }
+
+    pub fn playing(self) -> bool {
+        self.has(Self::PLAYING)
+    }
+
+    pub fn discontinuous(self) -> bool {
+        self.has(Self::DISCONTINUOUS)
+    }
+
+    pub fn bpm_changed(self) -> bool {
+        self.has(Self::BPM_CHANGED)
+    }
+
+    /// Clear the one-shot event flags after the first chunk (TS `flags &= ~eventMask`).
+    pub fn clear_event_flags(&mut self) {
+        self.0 &= !Self::EVENT_MASK;
+    }
+}
+
+/// One render block of the quantum's `ProcessInfo`: a pulse range `[p0, p1)` mapped to the sample range
+/// `[s0, s1)` at `bpm`, with transport `flags`. The ONE block type shared by the host (engine processors)
+/// and devices, read straight from shared memory. `#[repr(C)]` with the two leading `u32`s before the
+/// `f64`s so `p0`/`p1` stay 8-aligned (no implicit padding mid-struct); `s0`/`s1` are sample indices as
+/// `u32` (the host casts to `usize` to slice). A device pulls each block's events with
 /// `pull_events(p0, p1, flags, ...)` and may honour `[s0, s1)` for sub-block timing or ignore it.
 #[repr(C)]
-#[derive(Clone, Copy)]
-pub struct BlockRecord {
+#[derive(Clone, Copy, Debug)]
+pub struct Block {
     pub index: u32,
-    pub flags: u32,
+    pub flags: BlockFlags,
     pub p0: f64,
     pub p1: f64,
     pub s0: u32,
     pub s1: u32,
-    pub bpm: f32,
-    pub reserved: u32
+    pub bpm: f32
 }
 
 // The host resolves this device's input note/param events for a pulse range on demand (Route A pull).
@@ -148,7 +194,7 @@ pub struct Ports<'a, S> {
     pub state: &'a mut S,
     /// The quantum's render blocks (the `ProcessInfo`). The device pulls each block's events and may
     /// fragment `[s0, s1)` at the offsets, or process the whole quantum and ignore the blocks.
-    pub blocks: &'a [BlockRecord],
+    pub blocks: &'a [Block],
     /// A device-owned scratch the device PULLS its input events into (via [`pull_events`]); not
     /// pre-filled by the host. `len()` is the capacity. Empty when the descriptor declares no scratch.
     pub event_scratch: &'a mut [EventRecord],
@@ -164,7 +210,7 @@ impl<'a, S> Ports<'a, S> {
     /// # Safety
     /// `desc_ptr` must reference a valid descriptor whose offsets describe live, mutually
     /// non-aliasing f32 buffers of `frames` samples, a state block of at least `size_of::<S>()`,
-    /// `in_event_cap` writable `EventRecord` slots, and `block_count` valid `BlockRecord`s — all in this
+    /// `in_event_cap` writable `EventRecord` slots, and `block_count` valid `Block`s — all in this
     /// module's shared linear memory. The engine guarantees this when it assembles the descriptor;
     /// nothing else may call it.
     #[inline]
@@ -182,7 +228,7 @@ impl<'a, S> Ports<'a, S> {
         let in_events_ptr = *desc.add(9) as *mut EventRecord;
         // [10] out_event_cap / [11] out_events_ptr: event-output devices (MIDI fx, phase 4); unused here.
         let block_count = *desc.add(12) as usize;
-        let blocks_ptr = *desc.add(13) as *const BlockRecord;
+        let blocks_ptr = *desc.add(13) as *const Block;
         let sample_rate = f32::from_bits(*desc.add(14));
         let in_offsets = if in_count == 0 {
             slice::from_raw_parts(NonNull::<u32>::dangling().as_ptr(), 0)
@@ -205,7 +251,7 @@ impl<'a, S> Ports<'a, S> {
             slice::from_raw_parts_mut(in_events_ptr, in_event_cap)
         };
         let blocks = if block_count == 0 {
-            slice::from_raw_parts(NonNull::<BlockRecord>::dangling().as_ptr(), 0)
+            slice::from_raw_parts(NonNull::<Block>::dangling().as_ptr(), 0)
         } else {
             slice::from_raw_parts(blocks_ptr, block_count)
         };
@@ -274,7 +320,7 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
         if count >= ports.event_scratch.len() {
             break;
         }
-        let pulled = pull_events(block.p0, block.p1, block.flags, &mut ports.event_scratch[count..]);
+        let pulled = pull_events(block.p0, block.p1, block.flags.0, &mut ports.event_scratch[count..]);
         // The pull chain works in pulse positions; this consumer resolves each to its sample offset for the
         // DSP (the block containing the position maps it). Positions are block-monotonic, so the result
         // stays offset-sorted for `dispatch_range`.

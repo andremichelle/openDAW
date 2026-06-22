@@ -5,6 +5,7 @@
 export type EngineModules = {
     engineModule: WebAssembly.Module
     deviceModules: ReadonlyArray<WebAssembly.Module> // PIC side modules, in load order (device 0, 1, ...)
+    deviceBoxTypes: ReadonlyArray<string> // parallel to deviceModules: the device-box type each plugin realizes
 }
 
 // The engine's single linear memory: SHARED, so the main thread can see the WASM heap (e.g. to write
@@ -14,16 +15,22 @@ export type EngineModules = {
 export const createEngineMemory = (): WebAssembly.Memory =>
     new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
 
-// The device PIC side modules to load, in order. Round-robin-assigned to audio units by the engine until
-// the per-unit instrument device is read from the box graph, so the order picks which unit gets which.
-// MIDI fx load order matters: they are folded onto the lead's pull chain in this order, so the LAST one is
-// closest to the instrument -> sequencer <- arp <- zeitgeist <- transpose <- instrument (arpeggiate, then
-// shuffle the arp, then shift up an octave).
-const DEVICE_URLS = ["/device_sine.wasm", "/device_saw.wasm", "/device_lowpass.wasm", "/device_arp.wasm", "/device_zeitgeist.wasm", "/device_transpose.wasm"] as const
+// The device PIC side modules to load: each wasm plus the device-BOX TYPE it realizes. This is the device
+// table the engine uses to instantiate a device box: when the box graph presents e.g. an ArpeggioDeviceBox,
+// the engine looks up its type here to find device_arp.wasm. Load order is irrelevant now (the engine reads
+// each unit's chains from the box, ordered by the device `index`); only the type mapping matters.
+const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
+    {url: "/device_sine.wasm", boxType: "VaporisateurDeviceBox"}, // instrument
+    {url: "/device_saw.wasm", boxType: "NanoDeviceBox"},          // instrument
+    {url: "/device_lowpass.wasm", boxType: "RevampDeviceBox"},    // audio effect
+    {url: "/device_arp.wasm", boxType: "ArpeggioDeviceBox"},      // midi effect
+    {url: "/device_zeitgeist.wasm", boxType: "ZeitgeistDeviceBox"}, // midi effect
+    {url: "/device_transpose.wasm", boxType: "PitchDeviceBox"}    // midi effect
+]
 
 export const loadEngineModules = async (): Promise<EngineModules> => {
-    const urls = ["/engine.wasm", ...DEVICE_URLS]
+    const urls = ["/engine.wasm", ...DEVICES.map(device => device.url)]
     const buffers = await Promise.all(urls.map(url => fetch(url).then(response => response.arrayBuffer())))
     const [engineModule, ...deviceModules] = await Promise.all(buffers.map(bytes => WebAssembly.compile(bytes)))
-    return {engineModule, deviceModules}
+    return {engineModule, deviceModules, deviceBoxTypes: DEVICES.map(device => device.boxType)}
 }

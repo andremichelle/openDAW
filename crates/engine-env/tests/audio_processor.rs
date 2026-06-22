@@ -53,7 +53,7 @@ impl AudioProcessor for Recorder {
         SR
     }
     fn process_audio(&mut self, chunk: &Block) {
-        self.log.push(Step::Audio {s0: chunk.s0, s1: chunk.s1, discontinuous: chunk.flags.discontinuous()});
+        self.log.push(Step::Audio {s0: chunk.s0 as usize, s1: chunk.s1 as usize, discontinuous: chunk.flags.discontinuous()});
     }
     fn handle_event(&mut self, event: &Event) {
         match event {

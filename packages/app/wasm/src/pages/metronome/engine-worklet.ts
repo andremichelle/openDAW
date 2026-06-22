@@ -15,6 +15,7 @@ const DEVICE_STACK_SIZE = 256 * 1024 // talc-allocated stack handed to each load
 type BootOptions = {
     engineModule: WebAssembly.Module
     deviceModules: ReadonlyArray<WebAssembly.Module> // PIC side modules, in load order (device 0, 1, ...)
+    deviceBoxTypes: ReadonlyArray<string> // parallel to deviceModules: the device-box type each plugin realizes
     memory: WebAssembly.Memory // SHARED, created on the main thread so it can see the WASM heap
     sampleRate: number
     metronome?: boolean // default true; the note's page sets false to hear only the instrument
@@ -36,6 +37,9 @@ type EngineExports = {
     init: (sampleRate: number) => void
     device_alloc: (size: number) => number
     device_register: (processIndex: number, stateSize: number, kind: number) => number
+    // Map a device-box type to the just-registered device: the box-type UTF-8 name is written into the
+    // input buffer (nameLen bytes) first. This is the device table the engine instantiates boxes through.
+    device_set_box_type: (deviceId: number, nameLen: number) => void
     input_ptr: () => number
     input_capacity: () => number
     input_reserve: (len: number) => number // ensure the input scratch holds `len`, grow if needed, return its (current) ptr
@@ -101,7 +105,7 @@ class EngineProcessor extends AudioWorkletProcessor {
 
     constructor(options?: AudioWorkletNodeOptions) {
         super()
-        const {engineModule, deviceModules, memory, sampleRate, metronome}: BootOptions = options?.processorOptions
+        const {engineModule, deviceModules, deviceBoxTypes, memory, sampleRate, metronome}: BootOptions = options?.processorOptions
         this.#sampleRate = sampleRate
         // the one SHARED linear memory, created on the main thread and handed in (so the main thread can
         // see the WASM heap). talc grows it on demand; shared memory grows in place without detaching.
@@ -114,15 +118,16 @@ class EngineProcessor extends AudioWorkletProcessor {
         const engine = new WebAssembly.Instance(engineModule, {env}).exports as unknown as EngineExports
         this.#engine = engine
         engine.init(sampleRate)
-        // load each device PIC side module at a host-assigned base and register it with the engine.
-        for (const deviceModule of deviceModules) {this.#loadDevice(deviceModule, sampleRate)}
+        // load each device PIC side module at a host-assigned base, register it, and map its box type.
+        deviceModules.forEach((deviceModule, index) => this.#loadDevice(deviceModule, deviceBoxTypes[index], sampleRate))
         if (metronome === false) {engine.set_metronome_enabled(0)}
         this.port.onmessage = (event: MessageEvent) => this.#applyUpdates(event.data as ArrayBuffer)
     }
 
     // Link one PIC device side module into the engine: assign it memory + table + stack bases from talc,
-    // instantiate, apply its data relocations, install its `process` into the shared table, and register.
-    #loadDevice(module: WebAssembly.Module, sampleRate: number): void {
+    // instantiate, apply its data relocations, install its `process` into the shared table, register it, and
+    // map its device-box type to the registered device id (the engine's device table).
+    #loadDevice(module: WebAssembly.Module, boxType: string, sampleRate: number): void {
         const engine = this.#engine
         const table = this.#table
         const {memorySize, tableSize} = parseDylink(module)
@@ -149,7 +154,14 @@ class EngineProcessor extends AudioWorkletProcessor {
         // An audio device installs `process`; a MIDI-fx device installs `process_events` (its pull responder).
         const entry = device.process_events ?? device.process
         table.set(processIndex, entry as unknown as () => void)
-        engine.device_register(processIndex, device.state_size(sampleRate), device.kind())
+        const deviceId = engine.device_register(processIndex, device.state_size(sampleRate), device.kind())
+        // Register the device table entry: write the box-type name into the input buffer, then map it.
+        // Box-type names are ASCII identifiers, so encode byte-per-char (no TextEncoder in the worklet scope).
+        const length = boxType.length
+        const pointer = engine.input_reserve(length)
+        const bytes = new Uint8Array(this.#memory.buffer, pointer, length)
+        for (let index = 0; index < length; index++) {bytes[index] = boxType.charCodeAt(index) & 0xff}
+        engine.device_set_box_type(deviceId, length)
     }
 
     #applyUpdates(bytes: ArrayBuffer): void {

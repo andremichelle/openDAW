@@ -72,6 +72,21 @@ impl EngineContext {
         self.needs_sort = true;
     }
 
+    /// Remove a node and its processor (the explicit engine-side re-wire step the module doc notes). The
+    /// caller removes any edges INTO other nodes (e.g. into a bus) via `remove_edge` first; this drops the
+    /// node's own vertex and predecessor list.
+    pub fn remove_processor(&mut self, id: NodeId) {
+        self.graph.remove_vertex(id);
+        self.processors.remove(&id);
+        self.needs_sort = true;
+    }
+
+    /// Remove an ordering edge (the inverse of `register_edge`).
+    pub fn remove_edge(&mut self, source: NodeId, target: NodeId) {
+        self.graph.remove_edge(source, target);
+        self.needs_sort = true;
+    }
+
     /// Run an observer in each `ProcessPhase` (TS `subscribeProcessPhase`). Unsubscription is deferred.
     pub fn subscribe_process_phase(&mut self, observer: Box<dyn FnMut(ProcessPhase)>) {
         self.phase_observers.push(observer);

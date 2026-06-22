@@ -106,7 +106,7 @@ pub fn step(state: &mut ArpState, from: f64, to: f64, flags: u32, out: &mut [Eve
     let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
     let mut emitted = [blank; EMIT_MAX];
     let mut count = 0;
-    let discontinuous = flags & abi::BLOCK_FLAG_DISCONTINUOUS != 0;
+    let discontinuous = flags & abi::BlockFlags::DISCONTINUOUS != 0;
     let mut index = 0;
     while index < state.active_count as usize {
         let active = state.active[index];

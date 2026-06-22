@@ -44,10 +44,10 @@ export const MetronomePage: PageFactory<Env> = ({lifecycle}) => {
         const ctx = new AudioContext()
         context.wrap(ctx)
         await ctx.audioWorklet.addModule(workletURL)
-        const {engineModule, deviceModules} = await loadEngineModules()
+        const {engineModule, deviceModules, deviceBoxTypes} = await loadEngineModules()
         const memory = createEngineMemory()
         const workletNode = new AudioWorkletNode(ctx, "engine", {
-            processorOptions: {engineModule, deviceModules, memory, sampleRate: ctx.sampleRate}
+            processorOptions: {engineModule, deviceModules, deviceBoxTypes, memory, sampleRate: ctx.sampleRate}
         })
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)

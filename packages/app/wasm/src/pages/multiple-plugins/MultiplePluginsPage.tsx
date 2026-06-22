@@ -2,7 +2,10 @@ import {createElement, PageFactory} from "@opendaw/lib-jsx"
 import {ByteArrayInput, MutableObservableOption, UUID} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {Synchronization, SyncSource, UpdateTask} from "@opendaw/lib-box"
-import {AudioUnitBox, BoxIO, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
+import {
+    ArpeggioDeviceBox, AudioUnitBox, BoxIO, GrooveShuffleBox, NanoDeviceBox, NoteEventBox, NoteEventCollectionBox,
+    NoteRegionBox, PitchDeviceBox, RevampDeviceBox, TrackBox, VaporisateurDeviceBox, ZeitgeistDeviceBox
+} from "@opendaw/studio-boxes"
 import {EngineStateSchema, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {PPQN} from "@opendaw/lib-dsp"
 import {Env} from "../../Env"
@@ -10,21 +13,21 @@ import {serializeUpdateTasks} from "../../sync/serialize-update-tasks"
 import {createEngineMemory, loadEngineModules} from "../../engine-modules"
 import workletURL from "../metronome/engine-worklet.ts?worker&url"
 
-// Two audio units, two parts, SIX device plugins in one shared memory: two instruments, an audio effect,
-// and a THREE-stage MIDI-fx chain. device_sine.wasm and device_saw.wasm are loaded as PIC side modules at
-// host-assigned bases (dynamic linking); the engine builds one PluginInstrument per audio unit, picking the
-// device by the unit's `index` (slot index % instrument count): the bass (index 1) plays the SAWTOOTH, the
-// lead (index 2 -> slot 0) plays the SINE. Then the plugin paths are added: device_lowpass.wasm (audio
-// effect) after the BASS only — instrument -> effect -> master — an LFO-swept low-pass whose LFO is SYNCED
-// TO THE TEMPO (one cutoff sweep per half-note, derived from the song position; coefficient from the sample
-// rate), a tempo-locked auto-wah; and a MIDI-fx PULL CHAIN before the LEAD only — sequencer <-
-// device_arp.wasm <- device_zeitgeist.wasm <- device_transpose.wasm <- instrument. The lead part is a
-// single HELD CHORD; the arpeggiator holds it in its state block and emits a 1/16 stepped sequence (a few
-// held notes become a stream — not one-to-one), then Zeitgeist SHUFFLES it (a swing groove, pulling its
-// upstream over an un-warped range and warping positions back), then the transpose stage shifts every step
-// up an octave. So you hear an auto-wah sawtooth bass under a shuffled, octave-up arpeggiated sine chord,
-// proving instruments, the audio-effect path, AND a multi-link MIDI-effect (event pull) chain coexist and
-// run from the one memory. The whole MIDI chain works in pulse positions; the instrument resolves offsets.
+// Two audio units, each with its real DEVICE BOXES in the box graph; the engine reads each unit's `input`
+// instrument, `midi-effects` and `audio-effects` chains (ordered by each device's `index`) and instantiates
+// the matching plugin through the device table (box type -> wasm). No load-order or slot stopgaps — the
+// graph is the source of truth, and editing a chain (add / remove / reorder a device) re-wires that unit
+// live. The bass unit: a NanoDeviceBox (sawtooth) into a RevampDeviceBox (an LFO-swept low-pass SYNCED TO
+// THE TEMPO — one cutoff sweep per half-note from the song position, coefficient from the sample rate, a
+// tempo-locked auto-wah). instrument -> audio-fx -> bus. The lead unit: a VaporisateurDeviceBox (sine)
+// behind a 3-stage MIDI-fx pull chain ordered by index — ArpeggioDeviceBox (0) -> ZeitgeistDeviceBox (1) ->
+// PitchDeviceBox (2) — i.e. sequencer <- arp <- zeitgeist <- transpose <- instrument. The lead part is a
+// single HELD CHORD; the arp holds it in its state block and emits a 1/16 stepped sequence (a few held
+// notes become a stream — not one-to-one), Zeitgeist SHUFFLES it (a swing groove, pulling its upstream over
+// an un-warped range and warping positions back), and transpose shifts every step up an octave. So you hear
+// an auto-wah sawtooth bass under a shuffled, octave-up arpeggiated sine chord, proving the whole device
+// model — instruments, audio-fx, and a multi-stage MIDI-fx pull chain — driven entirely from device boxes
+// via the table. The MIDI chain works in pulse positions; the instrument resolves sample offsets.
 
 type Note = readonly [number, number] // [position in pulses, MIDI pitch]
 
@@ -63,14 +66,17 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
     const {boxGraph, mandatoryBoxes} = ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
     const timelineBox = mandatoryBoxes.timelineBox
 
-    // One audio unit (own track + region + note collection) per part. The engine groups note regions by
-    // their owning audio unit (region.regions -> track, track.tracks -> unit) into one instrument each, and
-    // picks that unit's device by `index` (slot = index % device count): index 1 -> saw, index 2 -> sine.
-    const addPart = (index: number, notes: ReadonlyArray<Note>, loopDuration: number, noteDuration: number): void => {
+    // One audio unit per part, with its real device boxes. The engine reads each unit's `input` instrument,
+    // `midi-effects` and `audio-effects` chains (ordered by each device's `index`) from the box graph and
+    // dispatches each device box to its plugin via the device table. `buildDevices` attaches the unit's
+    // devices; the host hooks them up (no slot / load-order stopgap).
+    const addPart = (index: number, notes: ReadonlyArray<Note>, loopDuration: number, noteDuration: number,
+                     buildDevices: (unit: AudioUnitBox) => void): void => {
         const unit = AudioUnitBox.create(boxGraph, UUID.generate(), box => {
             box.collection.refer(mandatoryBoxes.rootBox.audioUnits)
             box.index.setValue(index)
         })
+        buildDevices(unit)
         const track = TrackBox.create(boxGraph, UUID.generate(), box => {
             box.tracks.refer(unit.tracks)
             box.target.refer(unit)
@@ -94,8 +100,35 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
     }
 
     boxGraph.beginTransaction()
-    addPart(1, BASS, PPQN.Bar, PPQN.Quarter / 2)  // index 1 -> sawtooth device; staccato quarters
-    addPart(2, LEAD, PPQN.Bar, PPQN.Bar)          // index 2 -> sine device; chord held a full bar, arpeggiated
+    // Bass: a sawtooth instrument (Nano) into a low-pass audio effect (Revamp). instrument -> audio-fx -> bus.
+    addPart(1, BASS, PPQN.Bar, PPQN.Quarter / 2, unit => {
+        NanoDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(unit.input))
+        RevampDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.host.refer(unit.audioEffects)
+            box.index.setValue(0)
+        })
+    })
+    // Lead: a sine instrument (Vaporisateur) behind a 3-stage MIDI-fx chain ordered by index:
+    // arp (0) -> zeitgeist (1) -> transpose (2). The chord is held a full bar so the arp has notes to step.
+    addPart(2, LEAD, PPQN.Bar, PPQN.Bar, unit => {
+        VaporisateurDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(unit.input))
+        ArpeggioDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.host.refer(unit.midiEffects)
+            box.index.setValue(0)
+        })
+        // Zeitgeist's `groove` is a mandatory pointer to a Groove; give it a GrooveShuffleBox. (Our device
+        // uses a fixed groove for now; the box satisfies the model and is where its params will bind later.)
+        const groove = GrooveShuffleBox.create(boxGraph, UUID.generate(), box => box.label.setValue("Shuffle"))
+        ZeitgeistDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.host.refer(unit.midiEffects)
+            box.index.setValue(1)
+            box.groove.refer(groove)
+        })
+        PitchDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.host.refer(unit.midiEffects)
+            box.index.setValue(2)
+        })
+    })
     timelineBox.loopArea.from.setValue(0)
     timelineBox.loopArea.to.setValue(2 * PPQN.Bar)
     timelineBox.loopArea.enabled.setValue(true)
@@ -105,10 +138,10 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
         const ctx = new AudioContext()
         context.wrap(ctx)
         await ctx.audioWorklet.addModule(workletURL)
-        const {engineModule, deviceModules} = await loadEngineModules()
+        const {engineModule, deviceModules, deviceBoxTypes} = await loadEngineModules()
         const memory = createEngineMemory()
         const workletNode = new AudioWorkletNode(ctx, "engine", {
-            processorOptions: {engineModule, deviceModules, memory, sampleRate: ctx.sampleRate, metronome: false}
+            processorOptions: {engineModule, deviceModules, deviceBoxTypes, memory, sampleRate: ctx.sampleRate, metronome: false}
         })
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)

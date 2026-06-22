@@ -3,10 +3,10 @@
 //! is not one-to-one (a few held notes become a stream of stepped on/off events), releasing the chord
 //! stops new notes, and a transport jump releases everything held.
 
-use abi::{EventRecord, BLOCK_FLAG_DISCONTINUOUS, BLOCK_FLAG_TRANSPORTING, EVENT_NOTE_OFF, EVENT_NOTE_ON};
+use abi::{BlockFlags, EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON};
 use device_arp::{ingest, step, ArpState};
 
-const PLAYING: u32 = BLOCK_FLAG_TRANSPORTING;
+const PLAYING: u32 = BlockFlags::TRANSPORTING;
 
 fn zeroed() -> ArpState {
     // The engine hands the device a zeroed state block; mirror that (empty stacks).
@@ -58,6 +58,6 @@ fn a_transport_jump_releases_everything_held() {
     ingest(&mut state, &[note(EVENT_NOTE_ON, 1, 60), note(EVENT_NOTE_ON, 2, 64)]);
     let mut out = [blank(); 64];
     step(&mut state, 0.0, 480.0, PLAYING, &mut out); // two steps -> two notes ringing
-    let count = step(&mut state, 0.0, 10.0, PLAYING | BLOCK_FLAG_DISCONTINUOUS, &mut out);
+    let count = step(&mut state, 0.0, 10.0, PLAYING | BlockFlags::DISCONTINUOUS, &mut out);
     assert_eq!(pitches(&out[..count], EVENT_NOTE_OFF).len(), 2, "a transport jump releases all ringing notes");
 }

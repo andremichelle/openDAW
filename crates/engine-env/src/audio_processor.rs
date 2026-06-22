@@ -51,13 +51,14 @@ pub trait AudioProcessor: EventReceiver {
             for index in 0..count {
                 let event = self.event_input().get(block.index)[index]; // Copy; borrow ends immediately
                 let pulses = event.position() - block.p0;
+                let (s0, s1) = (block.s0 as usize, block.s1 as usize);
                 let raw = if pulses.abs() < 1.0e-7 {
-                    block.s0
+                    s0
                 } else {
-                    block.s0 + pulses_to_samples(pulses, block.bpm, sample_rate) as usize
+                    s0 + pulses_to_samples(pulses, block.bpm, sample_rate) as usize
                 };
-                debug_assert!(raw >= block.s0 && raw <= block.s1, "event out of block bounds");
-                let to_index = raw.clamp(block.s0, block.s1);
+                debug_assert!(raw >= s0 && raw <= s1, "event out of block bounds");
+                let to_index = raw.clamp(s0, s1) as u32;
                 if chunk.s0 < to_index {
                     chunk.s1 = to_index;
                     chunk.p1 = event.position();

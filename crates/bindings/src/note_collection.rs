@@ -17,6 +17,9 @@ use value::event::EventCollection;
 use value::note::NoteEvent;
 use crate::note_events::{read_note_event, COLLECTION_EVENTS};
 
+// Clonable: `state` is shared by `Rc`, so a clone reads the same live collection. A binding keeps one
+// clone for teardown (`terminate` unsubscribes by id) while the sequencer reads from another.
+#[derive(Clone)]
 pub struct NoteCollection {
     state: Rc<RefCell<State>>,
     subscriptions: Vec<SubscriptionId>

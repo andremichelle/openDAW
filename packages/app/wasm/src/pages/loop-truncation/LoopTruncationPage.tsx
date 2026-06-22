@@ -2,7 +2,7 @@ import {createElement, PageFactory} from "@opendaw/lib-jsx"
 import {ByteArrayInput, MutableObservableOption, UUID} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {SyncSource, Synchronization, UpdateTask} from "@opendaw/lib-box"
-import {AudioUnitBox, BoxIO, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, BoxIO, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox, VaporisateurDeviceBox} from "@opendaw/studio-boxes"
 import {EngineStateSchema, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {PPQN} from "@opendaw/lib-dsp"
 import {Env} from "../../Env"
@@ -49,8 +49,11 @@ export const LoopTruncationPage: PageFactory<Env> = ({lifecycle}) => {
     // engine ignores this hierarchy and reads the NoteRegionBox directly.
     const mockAudioUnit = AudioUnitBox.create(boxGraph, UUID.generate(), box => {
         box.collection.refer(mandatoryBoxes.rootBox.audioUnits)
-        box.index.setValue(0) // device slot 0 (sine)
+        box.index.setValue(0)
     })
+    // The unit's instrument: a sine (Vaporisateur) device box on the `input` host; the engine reads it from
+    // the box and instantiates device_sine.wasm via the device table.
+    VaporisateurDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(mockAudioUnit.input))
     const mockTrack = TrackBox.create(boxGraph, UUID.generate(), box => {
         box.tracks.refer(mockAudioUnit.tracks)
         box.target.refer(mockAudioUnit)
@@ -92,9 +95,9 @@ export const LoopTruncationPage: PageFactory<Env> = ({lifecycle}) => {
         const ctx = new AudioContext()
         context.wrap(ctx)
         await ctx.audioWorklet.addModule(workletURL)
-        const {engineModule, deviceModules} = await loadEngineModules()
+        const {engineModule, deviceModules, deviceBoxTypes} = await loadEngineModules()
         const memory = createEngineMemory()
-        const workletNode = new AudioWorkletNode(ctx, "engine", {processorOptions: {engineModule, deviceModules, memory, sampleRate: ctx.sampleRate, metronome: false}})
+        const workletNode = new AudioWorkletNode(ctx, "engine", {processorOptions: {engineModule, deviceModules, deviceBoxTypes, memory, sampleRate: ctx.sampleRate, metronome: false}})
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)
         workletNode.port.onmessage = (event: MessageEvent<{type: string, bytes?: ArrayBuffer}>) => {
