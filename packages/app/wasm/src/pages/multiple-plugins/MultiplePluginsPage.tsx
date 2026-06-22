@@ -197,25 +197,33 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
         <div className="page">
             <h2>Multiple Plugins</h2>
             <p>Two audio units playing different parts through <strong>six device plugins</strong>: two
-                instruments, an audio effect, and a three-stage MIDI-fx chain. A <strong>sawtooth</strong>
-                bass and a <strong>sine</strong> lead (<code>device_sine.wasm</code>,
-                <code>device_saw.wasm</code>) are loaded as position-independent side modules at host-assigned
-                bases in <strong>one shared memory</strong> (dynamic linking), and the engine calls each
-                unit's device through the shared function table. An <strong>LFO-swept low-pass</strong>
-                (<code>device_lowpass.wasm</code>, a <strong>tempo-synced</strong> auto-wah — the LFO locks
-                to the song position, one sweep per half-note, coefficient from the sample rate) is inserted
-                after the bass only — instrument&nbsp;→&nbsp;effect&nbsp;→&nbsp;bus; and a
-                <strong>three-stage MIDI-fx pull chain</strong> sits before the lead only:
-                sequencer&nbsp;←&nbsp;<code>arp</code>&nbsp;←&nbsp;<code>zeitgeist</code>&nbsp;←&nbsp;<code>transpose</code>&nbsp;←&nbsp;instrument.
-                The lead part is a single held C-E-G chord; the <strong>arpeggiator</strong> holds it in its
-                state block and emits a 1/16 stepped sequence (a few held notes become a stream — NOT
-                one-to-one — and it keeps stepping across blocks with no new input), <strong>Zeitgeist</strong>
-                then <strong>shuffles</strong> it (a swing groove — it pulls its upstream over an un-warped
-                range and warps positions back), and <strong>transpose</strong> shifts every step <strong>up
-                an octave</strong>. Each pull cascades up the chain; the MIDI fx are no audio nodes, they
-                produce events on demand, working in pulse positions while the instrument resolves sample
-                offsets. This proves instruments, the audio-effect path, and a multi-link MIDI-effect (event
-                pull) chain all coexist and run from the one memory. Metronome off.</p>
+                instruments, an audio effect, and a three-stage MIDI-fx chain. All run from
+                <strong>one shared memory</strong>. Metronome off.</p>
+            <ul>
+                <li><strong>Dynamic linking.</strong> A <strong>sawtooth</strong> bass and a
+                    <strong>sine</strong> lead (<code>device_sine.wasm</code>, <code>device_saw.wasm</code>)
+                    load as position-independent side modules at host-assigned bases in the shared memory;
+                    the engine calls each unit's device through the shared function table.</li>
+                <li><strong>Audio effect (bass only).</strong> An <strong>LFO-swept low-pass</strong>
+                    (<code>device_lowpass.wasm</code>) is inserted after the bass:
+                    instrument&nbsp;→&nbsp;effect&nbsp;→&nbsp;bus. It is a <strong>tempo-synced</strong>
+                    auto-wah whose LFO locks to the song position (one sweep per half-note), with the
+                    coefficient derived from the sample rate.</li>
+                <li><strong>MIDI-fx pull chain (lead only).</strong> A three-stage chain sits before the lead:
+                    sequencer&nbsp;←&nbsp;<code>arp</code>&nbsp;←&nbsp;<code>zeitgeist</code>&nbsp;←&nbsp;<code>transpose</code>&nbsp;←&nbsp;instrument.
+                    The lead part is a single held C-E-G chord.</li>
+                <li><strong>Arpeggiator.</strong> Holds the chord in its state block and emits a 1/16 stepped
+                    sequence (a few held notes become a stream, NOT one-to-one), and keeps stepping across
+                    blocks with no new input.</li>
+                <li><strong>Zeitgeist.</strong> Shuffles the stream with a swing groove: it pulls its upstream
+                    over an un-warped range and warps the positions back.</li>
+                <li><strong>Transpose.</strong> Shifts every step up an octave.</li>
+                <li><strong>Pull model.</strong> Each pull cascades up the chain; the MIDI fx are not audio
+                    nodes, they produce events on demand, working in pulse positions while the instrument
+                    resolves sample offsets.</li>
+            </ul>
+            <p>This proves instruments, the audio-effect path, and a multi-link MIDI-effect (event pull)
+                chain all coexist and run from the one memory.</p>
             <pre className="timeline">{TIMELINE}</pre>
             <div>
                 <button onclick={() => void play()}>▶ Play</button>

@@ -44,6 +44,10 @@ pub struct EventRecord {
 
 pub const EVENT_NOTE_ON: u32 = 0;
 pub const EVENT_NOTE_OFF: u32 = 1;
+/// A parameter-automation update (Route D): clock-driven, merged into the pulled stream. `pitch` carries
+/// the parameter index, `velocity` the new value. At an equal position the device-SDK applies it between
+/// note-off and note-on (see the engine's event ordering), so a note starting there sees the new value.
+pub const EVENT_PARAM: u32 = 2;
 
 /// What a device IS, so the host knows how to wire it into the graph (it reads this from the device's
 /// `kind` export at load). An instrument voices notes into audio; an effect transforms an input buffer; a

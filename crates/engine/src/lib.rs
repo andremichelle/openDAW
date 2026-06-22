@@ -163,8 +163,11 @@ impl PullContext {
     }
 }
 
-// TS `NoteLifecycleEvent.Comparator`: by position; at equal position a note-complete (off) sorts before a
-// note-start (on). Mirrors `note_event_instrument::compare_lifecycle` (private there).
+// Order the device's input event stream: by position, and at an EQUAL position by kind priority
+// note-off -> param-update -> note-on. So a note ending at a position releases first, the automated
+// parameter is then updated, and a note starting there sees the new value (the confirmed tie-break).
+// Extends TS `NoteLifecycleEvent.Comparator` (which only ranks note-off before note-on) with the clock
+// update events the pulled stream also carries.
 fn compare_lifecycle(a: &Event, b: &Event) -> core::cmp::Ordering {
     match a.position().partial_cmp(&b.position()) {
         Some(core::cmp::Ordering::Equal) | None => lifecycle_rank(a).cmp(&lifecycle_rank(b)),
@@ -174,8 +177,9 @@ fn compare_lifecycle(a: &Event, b: &Event) -> core::cmp::Ordering {
 
 fn lifecycle_rank(event: &Event) -> u8 {
     match event {
-        Event::NoteComplete {..} => 0,
-        _ => 1
+        Event::NoteComplete {..} => 0, // note-off first
+        Event::Update {..} => 1,       // then the param-update (clock tick)
+        Event::NoteStart {..} => 2     // then note-on, so it sees the updated parameter
     }
 }
 
@@ -791,3 +795,42 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
     core::arch::wasm32::unreachable()
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::{compare_lifecycle};
+    use engine_env::event::Event;
+
+    fn note_on(position: f64) -> Event {
+        Event::NoteStart {id: 0, position, duration: 240.0, pitch: 60, cent: 0.0, velocity: 0.8}
+    }
+    fn note_off(position: f64) -> Event {
+        Event::NoteComplete {id: 0, position, pitch: 60}
+    }
+    fn update(position: f64) -> Event {
+        Event::Update {position}
+    }
+    fn kinds(events: &[Event]) -> Vec<&'static str> {
+        events.iter().map(|event| match event {
+            Event::NoteComplete {..} => "off",
+            Event::Update {..} => "param",
+            Event::NoteStart {..} => "on"
+        }).collect()
+    }
+
+    #[test]
+    fn input_events_sort_by_position_then_off_param_on() {
+        // Added out of order at the SAME position 0, plus a later note-on at 10.
+        let mut events = vec![note_on(0.0), update(0.0), note_off(0.0), note_on(10.0)];
+        events.sort_by(compare_lifecycle);
+        // at position 0: note-off -> param-update -> note-on; then the position-10 note-on.
+        assert_eq!(kinds(&events), vec!["off", "param", "on", "on"]);
+    }
+
+    #[test]
+    fn earlier_position_always_precedes_regardless_of_kind() {
+        let mut events = vec![note_on(5.0), note_off(20.0), update(1.0)];
+        events.sort_by(compare_lifecycle);
+        assert_eq!(events.iter().map(Event::position).collect::<Vec<_>>(), vec![1.0, 5.0, 20.0]);
+    }
+}
