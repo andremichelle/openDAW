@@ -13,7 +13,8 @@
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
-use abi::{EventRecord, MidiEffect};
+use abi::{EventRecord, MidiEffect, ParamValue};
+use math::value_mapping::{LinearInteger, ValueMapping};
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
@@ -21,9 +22,11 @@ fn panic(_: &PanicInfo) -> ! {
     loop {}
 }
 
-// The transpose parameter's field-key PATH on the box: PitchDeviceBox.semiTones (field 10). Its value IS the
-// semitone count (an integer field), so the device uses it directly — no 0..1 mapping.
+// The transpose parameter's field-key PATH on the box: PitchDeviceBox.semiTones (field 10), and its value
+// mapping (the device owns it; the host is mapping-agnostic). LinearInteger so a uniform automation value
+// maps to a whole semitone; 0..12 = up to an octave.
 const SEMITONE_FIELD: [u16; 1] = [10];
+const SEMITONE_MAPPING: LinearInteger = LinearInteger {min: 0, max: 12};
 
 /// The transpose's per-instance state, from the engine-allocated (zeroed) block: the current semitone shift
 /// (refreshed by `parameter_changed`) and the parameter id `bind_parameter` returned. Valid when zeroed
@@ -46,11 +49,16 @@ impl MidiEffect for Transpose {
         state.semitone_id = abi::bind_parameter(&SEMITONE_FIELD);
     }
 
-    fn parameter_changed(state: &mut TransposeState, id: u32, value: f32) {
+    fn parameter_changed(state: &mut TransposeState, id: u32, value: ParamValue) {
         if id == state.semitone_id {
-            // The field / curve value is already in semitones; round to the nearest (values are non-negative
-            // here, so `+ 0.5` truncation rounds without needing `f32::round`, which is not in `core`).
-            state.semitones = (value + 0.5) as i32;
+            // `Unit` => map the uniform 0..1 through the LinearInteger mapping, which yields a real `i32`
+            // semitone; `Int` => the box field's real semitone value, used directly. Semitones are an integer
+            // parameter, so any other variant is a contract error.
+            state.semitones = match value {
+                ParamValue::Unit(unit) => SEMITONE_MAPPING.y(unit),
+                ParamValue::Int(semitones) => semitones,
+                _ => panic!("transpose semitone expects a unit or int value")
+            };
         }
     }
 
@@ -96,10 +104,11 @@ pub extern "C" fn init(state_ptr: u32) {
     unsafe { abi::with_state(state_ptr, <Transpose as MidiEffect>::init) }
 }
 
-/// Apply a semitone value the host resolved (initial / edit / automation), by the id `init` got back.
+/// Apply a semitone value the host resolved (initial / edit / automation), by the id `init` got back. The
+/// `kind` tag tells the SDK how to type the f32 `value` into a `ParamValue` (uniform to map, or a real i32).
 #[no_mangle]
-pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, value: f32) {
-    unsafe { abi::with_state(state_ptr, |state| <Transpose as MidiEffect>::parameter_changed(state, id, value)) }
+pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
+    unsafe { abi::with_state(state_ptr, |state| <Transpose as MidiEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
 }
 
 #[cfg(test)]
@@ -107,7 +116,7 @@ mod tests {
     //! The transpose transform (driven via the ABI's `MidiEffect`): pitch shifts by the SEMITONE parameter,
     //! count + other fields pass through, off-range notes drop. In-crate so it can set the private state.
     use super::{Transpose, TransposeState};
-    use abi::{EventRecord, MidiEffect, EVENT_NOTE_ON};
+    use abi::{EventRecord, MidiEffect, ParamValue, EVENT_NOTE_ON};
 
     fn state_at(semitones: i32) -> TransposeState {
         TransposeState {semitones, semitone_id: 0}
@@ -153,10 +162,22 @@ mod tests {
     }
 
     #[test]
-    fn parameter_changed_sets_the_semitones_by_id() {
+    fn parameter_changed_maps_a_unit_value_but_takes_a_real_value_directly() {
         let mut state = state_at(0);
         let id = state.semitone_id;
-        Transpose::parameter_changed(&mut state, id, 12.0);
-        assert_eq!(state.semitones, 12, "the value is the semitone count, applied directly");
+        // Unit: the uniform 1.0 maps through LinearInteger(0, 12) -> 12 semitones.
+        Transpose::parameter_changed(&mut state, id, ParamValue::Unit(1.0));
+        assert_eq!(state.semitones, 12, "a unit value is mapped to a whole semitone");
+        // Int: a real field value (a UI edit) is used directly.
+        Transpose::parameter_changed(&mut state, id, ParamValue::Int(7));
+        assert_eq!(state.semitones, 7, "a real semitone value is used as-is");
+    }
+
+    #[test]
+    #[should_panic]
+    fn parameter_changed_rejects_a_mismatched_type() {
+        let mut state = state_at(0);
+        let id = state.semitone_id;
+        Transpose::parameter_changed(&mut state, id, ParamValue::Float(1.5));
     }
 }

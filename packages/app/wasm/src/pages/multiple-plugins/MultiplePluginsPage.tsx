@@ -94,8 +94,8 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
 
     // One value-automation track bound 1:1 to a device parameter `target` (TS `TrackType.Value`, any field
     // that accepts an Automation pointer): a region over the 2-bar loop whose ValueEventCollection holds
-    // `points` ([position, value]). The engine reads it on the global update clock and pushes the value to
-    // the device, which interprets it (the lowpass maps 0..1, the transpose reads semitones). `interpolation`
+    // `points` ([position, UNIFORM 0..1 value]). The engine reads it on the global update clock and hands the
+    // uniform value to the device, which maps it (cutoff -> Hz, semitones -> int, etc.). `interpolation`
     // (0 = none / step, 1 = linear) defaults to the box default (linear) when omitted.
     const addParamAutomation = (unit: AudioUnitBox, target: Parameters<TrackBox["target"]["refer"]>[0],
                                 points: Iterable<readonly [number, number]>, interpolation?: number): void => {
@@ -132,10 +132,11 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
         const revamp = RevampDeviceBox.create(boxGraph, UUID.generate(), box => {
             box.host.refer(unit.audioEffects)
             box.index.setValue(0)
-            // Box-field defaults (unit 0..1; the device maps): the value used when a parameter is NOT
-            // automated. Cutoff mid, resonance at the bottom (Butterworth).
-            box.lowPass.frequency.setValue(0.5)
-            box.lowPass.q.setValue(0.0)
+            // Box-field defaults are the parameter's REAL value (what a UI edit would write) — used when a
+            // parameter is NOT automated. The device reads them directly; only the 0..1 automation curve is
+            // mapped. Cutoff 600 Hz, resonance Butterworth (0.707).
+            box.lowPass.frequency.setValue(600.0)
+            box.lowPass.q.setValue(Math.SQRT1_2)
         })
         // Cutoff: an exponential sine auto-wah, points every 1/32 triplet (see CUTOFF_* above).
         addParamAutomation(unit, revamp.lowPass.frequency,
@@ -165,10 +166,10 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
             box.host.refer(unit.midiEffects)
             box.index.setValue(2)
         })
-        // Transpose (a MIDI-fx parameter, automated): 0 semitones through the first bar, then a STEP up to
-        // +12 (an octave) for the second bar, repeating each loop. The value IS the semitone count, and with
-        // NO interpolation on both events it jumps at the bar rather than gliding.
-        addParamAutomation(unit, pitch.semiTones, [[0, 0], [PPQN.Bar, 12]] as const, 0)
+        // Transpose (a MIDI-fx parameter, automated): a UNIFORM 0..1 curve the device maps through its
+        // LinearInteger(0, 12) mapping — 0.0 (= 0 semitones) through the first bar, then a STEP up to 1.0
+        // (= +12, an octave) for the second bar, repeating each loop. NO interpolation, so it jumps at the bar.
+        addParamAutomation(unit, pitch.semiTones, [[0, 0.0], [PPQN.Bar, 1.0]] as const, 0)
     })
     timelineBox.loopArea.from.setValue(0)
     timelineBox.loopArea.to.setValue(2 * PPQN.Bar)

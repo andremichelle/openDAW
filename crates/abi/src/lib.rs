@@ -54,7 +54,7 @@ pub const EVENT_PARAM: u32 = 2;
 /// MIDI effect is a pull source that transforms an upstream event stream (no audio, exports
 /// `process_events` instead of `process`).
 pub const DEVICE_KIND_INSTRUMENT: u32 = 0;
-pub const DEVICE_KIND_EFFECT: u32 = 1;
+pub const DEVICE_KIND_AUDIO_EFFECT: u32 = 1;
 pub const DEVICE_KIND_MIDI_EFFECT: u32 = 2;
 
 // WASM CONTRACT: pulses-per-quarter-note, mirror of lib-dsp (PPQN = 960). Devices doing musical timing
@@ -144,6 +144,7 @@ extern "C" {
     fn host_pulse_to_offset(pulse: f64) -> u32;
     fn host_bind_parameter(path_ptr: u32, path_len: u32) -> u32;
     fn host_update_parameters(position: f64, out_ptr: u32, max: u32) -> u32;
+    fn host_first_update_position(at: f64) -> f64;
     fn host_next_update_position(after: f64) -> f64;
 }
 
@@ -169,21 +170,61 @@ pub fn pulse_to_offset(pulse: f64) -> u32 {
     { let _ = pulse; 0 }
 }
 
+/// The kind tag carried beside a [`ParamChange`]'s `value`, telling the SDK how to read that one f32: `UNIT`
+/// is the uniform `0..1` automation value to MAP; `INT`/`FLOAT`/`BOOL` are a box field's already-real value of
+/// that primitive type (a UI edit / un-automated default), the f32 carrying it losslessly for any realistic
+/// parameter. The SDK turns `(kind, value)` into a typed [`ParamValue`], so devices never inspect the tag.
+pub const PARAM_KIND_UNIT: u32 = 0;
+pub const PARAM_KIND_INT: u32 = 1;
+pub const PARAM_KIND_FLOAT: u32 = 2;
+pub const PARAM_KIND_BOOL: u32 = 3;
+
 /// One resolved parameter change the host hands back from [`update_parameters`]: the parameter's `id` (the
-/// value [`bind_parameter`] returned for it) and its new UNIT value (`0..1`, the plugin maps it). `#[repr(C)]`
-/// so the host can write it straight into the device's scratch.
+/// value [`bind_parameter`] returned), a `kind` tag (`PARAM_KIND_*`), and the new `value` as a single f32. The
+/// SDK decodes `(kind, value)` into a typed [`ParamValue`]. `#[repr(C)]` so the host writes it straight into
+/// the scratch; the two `u32`s precede the f32 and everything is 4-aligned with no padding.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ParamChange {
     pub id: u32,
+    pub kind: u32,
     pub value: f32
+}
+
+/// A parameter value handed to a device's `parameter_changed`, ALREADY TYPED so device code never casts or
+/// reads a raw tag. The analog of lib-std's typed `ValueMapping<Y>` outputs: `Unit` is the uniform `0..1`
+/// automation value the device maps with its OWN mapping; `Int` / `Float` / `Bool` are a box field's
+/// already-real value (a UI edit / un-automated default) to use directly. The SDK builds this from a
+/// [`ParamChange`]'s wire `(kind, value)` via [`ParamValue::from_wire`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ParamValue {
+    Unit(f32),
+    Int(i32),
+    Float(f32),
+    Bool(bool)
+}
+
+impl ParamValue {
+    /// Decode the wire `(kind, value)` into a typed value. The ONE numeric conversion of an f32-carried real
+    /// value to its primitive type lives here, once, so device code stays cast-free. Panics on an unknown
+    /// kind: the engine and SDK are the only writers, so that can only be a contract drift, never live input.
+    #[inline]
+    pub fn from_wire(kind: u32, value: f32) -> Self {
+        match kind {
+            PARAM_KIND_UNIT => ParamValue::Unit(value),
+            PARAM_KIND_INT => ParamValue::Int(value as i32),
+            PARAM_KIND_FLOAT => ParamValue::Float(value),
+            PARAM_KIND_BOOL => ParamValue::Bool(value != 0.0),
+            _ => panic!("unknown parameter kind")
+        }
+    }
 }
 
 /// Register one of THIS device's parameters with the host by its stable FIELD-KEY PATH on the device box
 /// (`path`) — e.g. `[16, 10]` for `lowPass.frequency`, the same keys the box schema uses (no encoding).
 /// Returns an opaque `id` the device keeps and matches in `parameter_changed`. A device calls this from its
-/// `init` hook, once per parameter; the host then observes that field's value and any automation track.
-/// Native stub returns 0.
+/// `init` hook, once per parameter; the host then observes that field's value and any automation track. The
+/// host stays mapping-agnostic — the device maps the uniform automation value itself. Native stub returns 0.
 #[inline]
 pub fn bind_parameter(path: &[u16]) -> u32 {
     #[cfg(target_family = "wasm")]
@@ -204,10 +245,23 @@ pub fn update_parameters(position: f64, out: &mut [ParamChange]) -> usize {
     { let _ = (position, out.len()); 0 }
 }
 
-/// The engine's next parameter-update position strictly after `after`, per its update-clock policy (a fixed
-/// grid today, tempo-aware later) — the single place that owns the rate. Returns `f64::INFINITY` when THIS
-/// device has no automated parameter, so the SDK's fragmentation loop simply doesn't split. A device's
-/// render template walks these to fragment its work and refresh parameters; it never computes a grid itself.
+/// The FIRST update position at or AFTER `at` (INCLUSIVE) — the seed for a fragment loop, mirroring TS
+/// `Fragmentor`'s `ceil(p0 / rate)` so a grid point exactly on a block's start fires (otherwise the first
+/// update is dropped). The loop then ADVANCES with the strict [`next_update_position`]. Returns `INFINITY`
+/// when THIS device has no automated parameter (the loop never splits). Native stub returns `INFINITY`.
+#[inline]
+pub fn first_update_position(at: f64) -> f64 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_first_update_position(at) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = at; f64::INFINITY }
+}
+
+/// The next parameter-update position STRICTLY after `after`, per the engine's update-clock policy (a fixed
+/// grid today, tempo-aware later) — the single place that owns the rate. Strict so a fragment loop advancing
+/// `position = next_update_position(position)` always moves forward (the seed comes from the inclusive
+/// [`first_update_position`]). Returns `INFINITY` when THIS device has no automated parameter, so the loop
+/// stops. A device's render template walks these to fragment its work; it never computes a grid itself.
 /// Native stub returns `INFINITY` (no fragmentation off-engine).
 #[inline]
 pub fn next_update_position(after: f64) -> f64 {
@@ -220,14 +274,15 @@ pub fn next_update_position(after: f64) -> f64 {
 /// The most parameter changes [`update_parameters`] returns per call (a device's whole param set, comfortably).
 const MAX_PARAM_CHANGES: usize = 32;
 
-/// Pull the parameters changed at `position` and apply each through `apply` (the device's `parameter_changed`).
+/// Pull the parameters changed at `position` and apply each through `apply` (the device's `parameter_changed`),
+/// passing whether the value is the uniform automation value (to map) or an already-real value (to use).
 /// The scratch is on the stack, so no device-global buffer.
 #[inline]
-fn apply_param_changes<S>(state: &mut S, position: f64, apply: fn(&mut S, u32, f32)) {
-    let mut changes = [ParamChange {id: 0, value: 0.0}; MAX_PARAM_CHANGES];
+fn apply_param_changes<S>(state: &mut S, position: f64, apply: fn(&mut S, u32, ParamValue)) {
+    let mut changes = [ParamChange {id: 0, kind: 0, value: 0.0}; MAX_PARAM_CHANGES];
     let count = update_parameters(position, &mut changes);
     for change in &changes[..count] {
-        apply(state, change.id, change.value);
+        apply(state, change.id, ParamValue::from_wire(change.kind, change.value));
     }
 }
 
@@ -356,24 +411,26 @@ impl<'a, S> Ports<'a, S> {
 /// run a delay). `State` is the device's instance state, interpreted from the engine-allocated block.
 pub trait Instrument {
     type State;
-    /// Render the active state additively into `output` for one inter-event sub-chunk.
-    fn process_audio(state: &mut Self::State, output: &mut [f32], sample_rate: f32);
+    /// Render the active state additively into `output` for one inter-event sub-chunk. The sample rate is the
+    /// device's own (it stashed `Ports::sample_rate` in `state`), never a per-call argument.
+    fn process_audio(state: &mut Self::State, output: &mut [f32]);
     /// Apply one note event (on / off) at its sample offset.
-    fn handle_event(state: &mut Self::State, event: &EventRecord, sample_rate: f32);
+    fn handle_event(state: &mut Self::State, event: &EventRecord);
     /// Register this device's automatable parameters with the host via [`bind_parameter`], stashing the
     /// returned ids in `state`. Called once when the device is wired. Default: nothing (no params).
     fn init(state: &mut Self::State) {
         let _ = state;
     }
-    /// Apply a parameter's new UNIT value (`0..1`): map it to the device's range and store it in `state`.
-    /// `id` is the value `bind_parameter` returned. Called for the initial value, on edits, and on
-    /// automation (clock). Default: nothing (no params).
-    fn parameter_changed(state: &mut Self::State, id: u32, value: f32) {
+    /// Apply a parameter's new typed `value` for `id` (the value `bind_parameter` returned), storing it in
+    /// `state`. `value` is a [`ParamValue`]: `Unit` is the uniform `0..1` automation value to MAP to the
+    /// parameter's range; `Int` / `Float` / `Bool` are a box field's already-real value to use directly. Called
+    /// for the initial value, on edits, and on automation. Default: nothing (no params).
+    fn parameter_changed(state: &mut Self::State, id: u32, value: ParamValue) {
         let _ = (state, id, value);
     }
     /// Once per quantum, after all blocks. Default: nothing.
-    fn finish(state: &mut Self::State, output: &mut [f32], sample_rate: f32) {
-        let _ = (state, output, sample_rate);
+    fn finish(state: &mut Self::State, output: &mut [f32]) {
+        let _ = (state, output);
     }
 }
 
@@ -381,24 +438,24 @@ pub trait Instrument {
 /// each chunk between events, `handle_event` at each offset. Host-independent (events are supplied), so a
 /// device's DSP is unit-testable without the engine. Does not clear `output` or run `finish`.
 #[inline]
-pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: &mut [f32], events: &[EventRecord], sample_rate: f32) {
+pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: &mut [f32], events: &[EventRecord]) {
     let frames = output.len();
     let mut cursor = 0;
     for event in events {
         let offset = (event.offset as usize).min(frames);
         if offset > cursor {
-            I::process_audio(state, &mut output[cursor..offset], sample_rate);
+            I::process_audio(state, &mut output[cursor..offset]);
             cursor = offset;
         }
         // A clock event (Route D) pulls the parameters changed at this position; a note event voices.
         if event.kind == EVENT_PARAM {
             apply_param_changes::<I::State>(state, event.position, I::parameter_changed);
         } else {
-            I::handle_event(state, event, sample_rate);
+            I::handle_event(state, event);
         }
     }
     if cursor < frames {
-        I::process_audio(state, &mut output[cursor..frames], sample_rate);
+        I::process_audio(state, &mut output[cursor..frames]);
     }
 }
 
@@ -418,7 +475,6 @@ fn record_rank(kind: u32) -> u8 {
 /// every record's sample offset, sort, dispatch the quantum (`dispatch_range` voices notes and refreshes
 /// parameters at the markers), then run the once-per-quantum `finish`.
 pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
-    let sample_rate = ports.sample_rate;
     for sample in ports.output.iter_mut() {
         *sample = 0.0;
     }
@@ -430,9 +486,10 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
         let pulled = pull_events(block.p0, block.p1, block.flags.0, &mut ports.event_scratch[count..]);
         count += pulled;
         // Param-update markers at the engine's update positions in this block (none when the device has no
-        // automation — `next_update_position` returns INFINITY). They carry the pulse position; the offset is
+        // automation — `first_update_position` returns INFINITY). The seed is INCLUSIVE (a grid point on the
+        // block start fires); the loop then advances STRICTLY. They carry the pulse position; the offset is
         // resolved with the notes below.
-        let mut position = next_update_position(block.p0);
+        let mut position = first_update_position(block.p0);
         while position < block.p1 && count < ports.event_scratch.len() {
             ports.event_scratch[count] = EventRecord {position, offset: 0, kind: EVENT_PARAM, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
             count += 1;
@@ -445,8 +502,8 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
         record.offset = pulse_to_offset(record.position);
     }
     ports.event_scratch[..count].sort_unstable_by(|a, b| a.offset.cmp(&b.offset).then(record_rank(a.kind).cmp(&record_rank(b.kind))));
-    dispatch_range::<I>(ports.state, ports.output, &ports.event_scratch[..count], sample_rate);
-    I::finish(ports.state, ports.output, sample_rate);
+    dispatch_range::<I>(ports.state, ports.output, &ports.event_scratch[..count]);
+    I::finish(ports.state, ports.output);
 }
 
 /// The device-SDK template for an AUDIO EFFECT (the TS `AudioEffectDeviceProcessor` analog). It reads one
@@ -455,19 +512,22 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
 /// (the TS `AudioProcessor` split loop). `State` is the effect's instance state (e.g. a filter's history).
 pub trait AudioEffect {
     type State;
-    /// Transform `input` into `output` (same length) for one inter-event sub-chunk. `bpm` and `position`
-    /// (the pulse position at the chunk's start) let an effect lock to tempo; effects driven purely by
-    /// automated parameters ignore them and read the parameters `parameter_changed` set.
-    fn process_audio(state: &mut Self::State, input: &[f32], output: &mut [f32], sample_rate: f32, bpm: f32, position: f64);
+    /// Transform `input` into `output` (same length) for one inter-event sub-chunk. `block` is THIS chunk's
+    /// block: its `p0`/`p1` are the chunk's pulse range, `bpm`/`flags` carry over (one-shot flags cleared
+    /// after the first chunk), and `s0`/`s1` are rebased to `0`/`output.len()` to match the sliced buffers.
+    /// An effect locks to tempo via `block`; one driven purely by automated parameters ignores it and reads
+    /// what `parameter_changed` set. The sample rate is the device's own (it stashed `Ports::sample_rate`).
+    fn process_audio(state: &mut Self::State, input: &[f32], output: &mut [f32], block: &Block);
     /// Register this device's automatable parameters with the host via [`bind_parameter`], stashing the
     /// returned ids in `state`. Called once when the device is wired. Default: nothing (no params).
     fn init(state: &mut Self::State) {
         let _ = state;
     }
-    /// Apply a parameter's new UNIT value (`0..1`): map it to the device's range and store it in `state`.
-    /// `id` is the value `bind_parameter` returned. Called for the initial value, on edits, and on
-    /// automation (clock). Default: nothing (no params).
-    fn parameter_changed(state: &mut Self::State, id: u32, value: f32) {
+    /// Apply a parameter's new typed `value` for `id` (the value `bind_parameter` returned), storing it in
+    /// `state`. `value` is a [`ParamValue`]: `Unit` is the uniform `0..1` automation value to MAP to the
+    /// parameter's range; `Int` / `Float` / `Bool` are a box field's already-real value to use directly. Called
+    /// for the initial value, on edits, and on automation. Default: nothing (no params).
+    fn parameter_changed(state: &mut Self::State, id: u32, value: ParamValue) {
         let _ = (state, id, value);
     }
 }
@@ -498,18 +558,24 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
             continue;
         }
         let mut cursor = s0;
-        let mut position = next_update_position(block.p0);
+        let mut chunk_p0 = block.p0; // the pulse position at `cursor`
+        let mut flags = block.flags; // one-shot flags belong to the first chunk only
+        let mut position = first_update_position(block.p0);
         while position < block.p1 {
             let offset = (pulse_to_offset(position) as usize).clamp(s0, s1);
             if offset > cursor {
-                E::process_audio(ports.state, &input[cursor..offset], &mut ports.output[cursor..offset], ports.sample_rate, block.bpm, block.p0);
+                let sub = Block {index: block.index, flags, p0: chunk_p0, p1: position, s0: 0, s1: (offset - cursor) as u32, bpm: block.bpm};
+                E::process_audio(ports.state, &input[cursor..offset], &mut ports.output[cursor..offset], &sub);
                 cursor = offset;
+                chunk_p0 = position;
+                flags.clear_event_flags();
             }
             apply_param_changes::<E::State>(ports.state, position, E::parameter_changed);
             position = next_update_position(position);
         }
         if cursor < s1 {
-            E::process_audio(ports.state, &input[cursor..s1], &mut ports.output[cursor..s1], ports.sample_rate, block.bpm, block.p0);
+            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: 0, s1: (s1 - cursor) as u32, bpm: block.bpm};
+            E::process_audio(ports.state, &input[cursor..s1], &mut ports.output[cursor..s1], &sub);
         }
     }
 }
@@ -534,9 +600,10 @@ pub trait MidiEffect {
     fn init(state: &mut Self::State) {
         let _ = state;
     }
-    /// Apply a parameter's new UNIT value (`0..1`). `id` is the value `bind_parameter` returned. A midi-fx
-    /// with automated params is pulled per update sub-range, so this is called at each. Default: nothing.
-    fn parameter_changed(state: &mut Self::State, id: u32, value: f32) {
+    /// Apply a parameter's new typed `value` for `id`. `value` is a [`ParamValue`]: `Unit` is the uniform
+    /// `0..1` automation value (the device maps it), `Int` / `Float` / `Bool` a box field's already-real value.
+    /// A midi-fx with automated params is pulled per update sub-range, so this is called at each. Default: nothing.
+    fn parameter_changed(state: &mut Self::State, id: u32, value: ParamValue) {
         let _ = (state, id, value);
     }
 }
@@ -557,9 +624,11 @@ pub fn render_midi_effect<M: MidiEffect>(from: f64, to: f64, flags: u32, state_p
     let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
     let mut count = 0;
     let mut sub_from = from;
+    // The seed is INCLUSIVE (a boundary exactly on `from` fires); the loop then advances STRICTLY. When the fx
+    // has no automation, `boundary` is INFINITY, so this is ONE pull over `[from, to)` — the previous behaviour.
+    let mut boundary = first_update_position(from);
     loop {
-        let next = next_update_position(sub_from);
-        let sub_to = if next < to {next} else {to};
+        let sub_to = if boundary < to {boundary} else {to};
         let mut scratch = [blank; MIDI_PULL_SCRATCH];
         let pulled = pull_events(sub_from, sub_to, flags, &mut scratch);
         count += M::transform(state, &scratch[..pulled], &mut out[count..]);
@@ -567,8 +636,9 @@ pub fn render_midi_effect<M: MidiEffect>(from: f64, to: f64, flags: u32, state_p
             break;
         }
         // refresh this fx's parameters at the update boundary, before the next sub-range transforms.
-        apply_param_changes::<M::State>(state, next, M::parameter_changed);
+        apply_param_changes::<M::State>(state, boundary, M::parameter_changed);
         sub_from = sub_to;
+        boundary = next_update_position(boundary);
     }
     count as u32
 }

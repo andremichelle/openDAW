@@ -62,6 +62,7 @@ name = "device-transpose"
 version = "0.0.0"
 dependencies = [
  "abi",
+ "math",
 ]
 
 [[package]]

@@ -5,6 +5,7 @@
 #![cfg_attr(not(test), no_std)]
 
 pub mod curve;
+pub mod value_mapping;
 
 /// Pi as f32, re-exported from core (what the feature crates use).
 pub use core::f32::consts::PI;

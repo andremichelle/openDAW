@@ -66,7 +66,8 @@ impl Voice {
 /// The device's per-instance state, interpreted from the engine-allocated (zeroed) block. A fixed
 /// voice array; `state_size()` tells the engine how many bytes to reserve.
 pub struct SynthState {
-    voices: [Voice; MAX_VOICES]
+    voices: [Voice; MAX_VOICES],
+    sample_rate: f32 // the device's own rate, stashed from `Ports::sample_rate` each `process`
 }
 
 /// The device's DSP, plugged into the SDK's `Instrument` template ([`abi::render_instrument`]), which
@@ -78,7 +79,7 @@ pub struct Synth;
 impl abi::Instrument for Synth {
     type State = SynthState;
 
-    fn process_audio(state: &mut SynthState, output: &mut [f32], _sample_rate: f32) {
+    fn process_audio(state: &mut SynthState, output: &mut [f32]) {
         for voice in state.voices.iter_mut() {
             if voice.active != 0 {
                 voice.render(output);
@@ -86,8 +87,9 @@ impl abi::Instrument for Synth {
         }
     }
 
-    fn handle_event(state: &mut SynthState, event: &EventRecord, sample_rate: f32) {
+    fn handle_event(state: &mut SynthState, event: &EventRecord) {
         if event.kind == EVENT_NOTE_ON {
+            let sample_rate = state.sample_rate;
             if let Some(slot) = state.voices.iter_mut().find(|voice| voice.active == 0) {
                 slot.start(event, sample_rate);
             }
@@ -100,7 +102,7 @@ impl abi::Instrument for Synth {
         }
     }
 
-    fn finish(state: &mut SynthState, _output: &mut [f32], _sample_rate: f32) {
+    fn finish(state: &mut SynthState, _output: &mut [f32]) {
         for voice in state.voices.iter_mut() {
             if voice.active != 0 && voice.env.is_idle() {
                 voice.active = 0;
@@ -114,11 +116,12 @@ impl abi::Instrument for Synth {
 /// which adds the event pull.
 pub fn render(state: &mut SynthState, events: &[EventRecord], output: &mut [f32], sample_rate: f32) {
     use abi::Instrument;
+    state.sample_rate = sample_rate;
     for sample in output.iter_mut() {
         *sample = 0.0;
     }
-    abi::dispatch_range::<Synth>(state, output, events, sample_rate);
-    Synth::finish(state, output, sample_rate);
+    abi::dispatch_range::<Synth>(state, output, events);
+    Synth::finish(state, output);
 }
 
 // ---- The device ABI: shared with the engine, called wasm-to-wasm. ----
@@ -140,5 +143,6 @@ pub extern "C" fn kind() -> u32 {
 #[no_mangle]
 pub extern "C" fn process(desc_ptr: u32) {
     let ports = unsafe { Ports::<SynthState>::from_descriptor(desc_ptr) };
+    ports.state.sample_rate = ports.sample_rate; // stash the device's rate before the SDK dispatches
     abi::render_instrument::<Synth>(ports);
 }

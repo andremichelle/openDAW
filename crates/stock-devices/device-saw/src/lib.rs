@@ -82,7 +82,8 @@ impl Voice {
 // carved at render. `delay_pos` (the write head) persists across quanta.
 pub struct SynthState {
     voices: [Voice; MAX_VOICES],
-    delay_pos: u32
+    delay_pos: u32,
+    sample_rate: f32 // the device's own rate, stashed from `Ports::sample_rate` each `process`
 }
 
 /// The device's DSP, plugged into the SDK's `Instrument` template ([`abi::render_instrument`]), which
@@ -93,7 +94,7 @@ pub struct Synth;
 impl abi::Instrument for Synth {
     type State = SynthState;
 
-    fn process_audio(state: &mut SynthState, output: &mut [f32], _sample_rate: f32) {
+    fn process_audio(state: &mut SynthState, output: &mut [f32]) {
         for voice in state.voices.iter_mut() {
             if voice.active != 0 {
                 voice.render(output);
@@ -101,8 +102,9 @@ impl abi::Instrument for Synth {
         }
     }
 
-    fn handle_event(state: &mut SynthState, event: &EventRecord, sample_rate: f32) {
+    fn handle_event(state: &mut SynthState, event: &EventRecord) {
         if event.kind == EVENT_NOTE_ON {
+            let sample_rate = state.sample_rate;
             if let Some(slot) = state.voices.iter_mut().find(|voice| voice.active == 0) {
                 slot.start(event, sample_rate);
             }
@@ -115,7 +117,7 @@ impl abi::Instrument for Synth {
         }
     }
 
-    fn finish(state: &mut SynthState, output: &mut [f32], sample_rate: f32) {
+    fn finish(state: &mut SynthState, output: &mut [f32]) {
         for voice in state.voices.iter_mut() {
             if voice.active != 0 && voice.env.is_idle() {
                 voice.active = 0;
@@ -125,7 +127,7 @@ impl abi::Instrument for Synth {
         // (state_size reserved it from the sample rate) and trails the voice header in the same state
         // block, so the ring's length IS the delay. SAFETY: the buffer follows `SynthState` in the block
         // and does not overlap it.
-        let length = delay_samples(sample_rate);
+        let length = delay_samples(state.sample_rate);
         unsafe {
             let header = state as *mut SynthState;
             let delay = core::slice::from_raw_parts_mut(header.add(1) as *mut f32, length);
@@ -160,5 +162,6 @@ pub extern "C" fn kind() -> u32 {
 #[no_mangle]
 pub extern "C" fn process(desc_ptr: u32) {
     let ports = unsafe { Ports::<SynthState>::from_descriptor(desc_ptr) };
+    ports.state.sample_rate = ports.sample_rate; // stash the device's rate before the SDK dispatches
     abi::render_instrument::<Synth>(ports);
 }

@@ -18,7 +18,7 @@ use alloc::rc::Rc;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
-use abi::{DEVICE_KIND_EFFECT, DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT};
+use abi::{DEVICE_KIND_AUDIO_EFFECT, DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT, PARAM_KIND_BOOL, PARAM_KIND_FLOAT, PARAM_KIND_INT};
 use bindings::indexed_collection::IndexedCollection;
 use bindings::note_collection::NoteCollection;
 use bindings::value_collection::ValueCollection;
@@ -483,7 +483,7 @@ impl Engine {
         for device_uuid in unit.audio.sorted() {
             let resolved = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
             let device = match resolved {
-                Some(device) if device.kind == DEVICE_KIND_EFFECT => device,
+                Some(device) if device.kind == DEVICE_KIND_AUDIO_EFFECT => device,
                 _ => continue
             };
             let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
@@ -544,12 +544,25 @@ impl Engine {
         let mut collections = Vec::new();
         let mut armed = false;
         for (index, path) in paths.iter().enumerate() {
+            let address = Address::of(device_uuid, path.clone());
+            // A parameter field carries its real primitive type — Float32 (a cutoff), Int32 (semitones), or
+            // Boolean (a toggle), fixed by the schema. Read it once so the wire can tag the un-automated value
+            // with its kind; the device then receives a typed `ParamValue` and never inspects a tag.
+            let kind = self.graph.field_value(&address).map_or(PARAM_KIND_FLOAT, |value| {
+                if value.as_int32().is_some() { PARAM_KIND_INT }
+                else if value.as_bool().is_some() { PARAM_KIND_BOOL }
+                else { PARAM_KIND_FLOAT }
+            });
             let field = Rc::new(core::cell::Cell::new(0.0f32));
             let cell = field.clone();
-            let sub = self.graph.catchup_and_subscribe(Address::of(device_uuid, path.clone()), move |value| {
-                // A parameter field is Float32 (e.g. a cutoff) or Int32 (e.g. semitones); read either as f32.
-                if let Some(value) = value.as_float32().or_else(|| value.as_int32().map(|value| value as f32)) {
-                    cell.set(value);
+            let sub = self.graph.catchup_and_subscribe(address, move |value| {
+                // Read whichever primitive the field holds into the f32 transport (the kind tag, captured
+                // above, tells the device how to read it back).
+                let real = value.as_float32()
+                    .or_else(|| value.as_int32().map(|value| value as f32))
+                    .or_else(|| value.as_bool().map(|value| if value {1.0} else {0.0}));
+                if let Some(real) = real {
+                    cell.set(real);
                 }
             });
             field_subs.push(sub);
@@ -558,7 +571,7 @@ impl Engine {
                 armed = true;
             }
             collections.append(&mut track_collections);
-            handles.push(ParamHandle {id: index as u32, field, track, last: Rc::new(core::cell::Cell::new(f32::NAN))});
+            handles.push(ParamHandle {id: index as u32, field, kind, track, last: Rc::new(core::cell::Cell::new(f32::NAN))});
         }
         (handles, field_subs, collections, armed)
     }
@@ -614,15 +627,17 @@ fn bind_paths(reg: DeviceReg, state_ptr: u32) -> Vec<FieldPath> {
     core::mem::take(unsafe { BIND.get() })
 }
 
-/// Push each parameter's resolved value (its automation at `position`, else its field value) to the device
-/// via its `parameter_changed` export, but only when it CHANGED since the last push (the TS `updateAutomation`
-/// compare). Called at build (every param, `last` is NaN) and on a runtime edit. Never during render.
+/// Push each parameter's resolved value (its automation at `position`, else its real field value) to the
+/// device via its `parameter_changed` export, but only when it CHANGED since the last push (the TS
+/// `updateAutomation` compare). The `kind` tag tells the device how to read the value (uniform automation to
+/// map, or a real Int / Float / Bool field value). Called at build (every param, `last` is NaN) and on a
+/// runtime edit / field change. Never during render.
 fn refresh_params(handles: &[ParamHandle], reg: DeviceReg, state_ptr: u32, position: f64) {
     for handle in handles {
-        let value = handle.resolve(position);
+        let (value, kind) = handle.resolve(position);
         if value != handle.last.get() {
             handle.last.set(value);
-            call_device_parameter_changed(reg.parameter_changed_index, state_ptr, handle.id, value);
+            call_device_parameter_changed(reg.parameter_changed_index, state_ptr, handle.id, kind, value);
         }
     }
 }

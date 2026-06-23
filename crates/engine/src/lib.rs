@@ -52,7 +52,7 @@ use transport::transport::{Transport, RENDER_QUANTUM};
 struct DeviceReg {
     process_index: u32,            // slot in the shared function table holding the device's `process`
     state_size: u32,               // bytes the engine must allocate (zeroed) per instance
-    kind: u32,                     // DEVICE_KIND_INSTRUMENT / DEVICE_KIND_EFFECT (from the `kind` export)
+    kind: u32,                     // DEVICE_KIND_INSTRUMENT / DEVICE_KIND_AUDIO_EFFECT (from the `kind` export)
     init_index: u32,               // slot of the device's `init` export (binds params); 0 if it has none
     parameter_changed_index: u32   // slot of the device's `parameter_changed` export; 0 if it has none
 }
@@ -101,15 +101,15 @@ fn call_device_init(_init_index: u32, _state_ptr: u32) {}
 // state the render path borrows).
 #[cfg(target_family = "wasm")]
 #[inline]
-fn call_device_parameter_changed(parameter_changed_index: u32, state_ptr: u32, id: u32, value: f32) {
+fn call_device_parameter_changed(parameter_changed_index: u32, state_ptr: u32, id: u32, kind: u32, value: f32) {
     if parameter_changed_index == 0 {
         return; // the device exports no `parameter_changed`; index 0 is the "none" sentinel
     }
-    let parameter_changed: extern "C" fn(u32, u32, f32) = unsafe { core::mem::transmute(parameter_changed_index as usize) };
-    parameter_changed(state_ptr, id, value);
+    let parameter_changed: extern "C" fn(u32, u32, u32, f32) = unsafe { core::mem::transmute(parameter_changed_index as usize) };
+    parameter_changed(state_ptr, id, kind, value);
 }
 #[cfg(not(target_family = "wasm"))]
-fn call_device_parameter_changed(_parameter_changed_index: u32, _state_ptr: u32, _id: u32, _value: f32) {}
+fn call_device_parameter_changed(_parameter_changed_index: u32, _state_ptr: u32, _id: u32, _kind: u32, _value: f32) {}
 
 const DEVICE_MAX_EVENTS: usize = 256; // per-quantum event scratch the device pulls into
 const DEVICE_INDEX_KEY: u16 = 2; // device box `index` field (DeviceFactory): the chain order within a host
@@ -166,9 +166,9 @@ static ENGINE_STATE: Shared<[u8; ENGINE_STATE_LEN]> = Shared::new([0; ENGINE_STA
 // the device's re-entrant `host_pull_events` call never aliases the `&mut Engine` the render path holds.
 // The node scopes its `PULL.get()` borrows so none is live across the device call (single-threaded).
 static PULL: Shared<PullContext> = Shared::new(PullContext::new());
-// The bind recorder the `host_bind_parameter` export appends to. The engine clears it, calls a device's
-// `init` (which binds its params), then drains the recorded paths and observes each. Held in its OWN cell
-// (NOT `ENGINE`), so the device's re-entrant `host_bind_parameter` call never aliases the `&mut Engine`.
+// The bind recorder the `host_bind_parameter` export appends to: each parameter's field path. The engine
+// clears it, calls a device's `init` (which binds its params), then drains it and observes each. Held in its
+// OWN cell (NOT `ENGINE`), so the re-entrant `host_bind_parameter` call never aliases the `&mut Engine`.
 static BIND: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
 
 /// One link in a unit's event PULL CHAIN (the `NoteEventSource` chain, sequencer -> fx -> ... -> the
@@ -265,10 +265,25 @@ pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32,
     }
 }
 
-/// Host import a device's render template calls to get the next parameter-update position strictly after
+/// Host import a render template calls to SEED its fragment loop: the first update position at or AFTER `at`
+/// (INCLUSIVE), so a grid point exactly on a block's start fires (mirrors TS `Fragmentor`'s `ceil`). Returns
+/// `f64::INFINITY` when the CURRENT device has no automated parameter. Reads only `PULL`.
+#[no_mangle]
+pub extern "C" fn host_first_update_position(at: f64) -> f64 {
+    let pull = unsafe { PULL.get() };
+    if !pull.clock_armed {
+        return f64::INFINITY;
+    }
+    // The smallest grid multiple at or above `at` (no libm: truncate toward zero, then step up if below).
+    let floored = ((at / UPDATE_CLOCK_RATE) as i64) as f64 * UPDATE_CLOCK_RATE;
+    if floored < at { floored + UPDATE_CLOCK_RATE } else { floored }
+}
+
+/// Host import a render template calls to ADVANCE its fragment loop: the next update position STRICTLY after
 /// `after` — the engine's update-clock policy (a fixed grid today; the one place to make it tempo-aware).
-/// Returns `f64::INFINITY` when the CURRENT device has no automated parameter, so its render simply does not
-/// fragment. Reads only `PULL` (the current device's clock-armed state, set by its node / the fx descent).
+/// Strict so the loop always moves forward. Returns `f64::INFINITY` when the CURRENT device has no automated
+/// parameter, so its render simply does not fragment. Reads only `PULL` (the current device's clock-armed
+/// state, set by its node / the fx descent).
 #[no_mangle]
 pub extern "C" fn host_next_update_position(after: f64) -> f64 {
     let pull = unsafe { PULL.get() };
@@ -284,9 +299,10 @@ pub extern "C" fn host_next_update_position(after: f64) -> f64 {
 }
 
 /// Host import a device calls from its `init` to register a parameter by its FIELD-KEY PATH (`path_ptr`/
-/// `path_len`, a `u16` slice in the device's memory) — the stable schema keys, no encoding. It only RECORDS
-/// the path (into `BIND`) and returns the id (the path's index); the engine observes the field + track after
-/// `init` returns. Touches no graph and no `&mut Engine`, so it is safe to call re-entrantly from `init`.
+/// `path_len`, a `u16` slice in the device's memory — the stable schema keys, no encoding). It only RECORDS
+/// the path (into `BIND`) and returns the id (the index); the engine observes the field + track after `init`
+/// returns. The host stays mapping-agnostic. Touches no graph and no `&mut Engine`, so it is safe to call
+/// re-entrantly from `init`.
 #[no_mangle]
 pub extern "C" fn host_bind_parameter(path_ptr: u32, path_len: u32) -> u32 {
     let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
@@ -309,13 +325,13 @@ pub extern "C" fn host_update_parameters(position: f64, out_ptr: u32, max: u32) 
         if param.track.is_none() {
             continue; // static params are not clock-driven; their value is pushed at build / edit
         }
-        let value = param.resolve(position);
+        let (value, kind) = param.resolve(position);
         if value != param.last.get() {
             param.last.set(value);
             if count >= out.len() {
                 break;
             }
-            out[count] = ParamChange {id: param.id, value};
+            out[count] = ParamChange {id: param.id, kind, value};
             count += 1;
         }
     }

@@ -8,6 +8,7 @@
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
+use abi::PARAM_KIND_UNIT;
 use bindings::value_collection::ValueCurve;
 use value::region::{global_to_local, RegionCollection, Span};
 
@@ -17,24 +18,28 @@ use value::region::{global_to_local, RegionCollection, Span};
 pub(crate) type FieldPath = Vec<u16>;
 
 /// One bound device parameter (the engine's side of `bind_parameter`): the device-assigned `id`, the box
-/// field's current unit value (`field`, observed so it stays live), the automation `track` when connected,
-/// and the `last` value handed to the device (for change detection). Cheap to clone (all `Rc`), so the node
-/// can swap a set of these into the pull context for `host_update_parameters`.
+/// field's current real value (`field`, observed so it stays live) and its primitive `kind` (`PARAM_KIND_INT`
+/// / `_FLOAT` / `_BOOL`, fixed by the field's type), the automation `track` when connected, and the `last`
+/// value handed to the device (for change detection). Cheap to clone (the `field` / `last` are `Rc`), so the
+/// node can swap a set of these into the pull context for `host_update_parameters`.
 #[derive(Clone)]
 pub(crate) struct ParamHandle {
     pub(crate) id: u32,
-    pub(crate) field: Rc<Cell<f32>>,
+    pub(crate) field: Rc<Cell<f32>>, // the box field's current real value (Hz, semitones, bool 0/1) as an f32
+    pub(crate) kind: u32,            // the field's primitive type, used when the parameter is NOT automated
     pub(crate) track: Option<ParamCurve>,
     pub(crate) last: Rc<Cell<f32>>
 }
 
 impl ParamHandle {
-    /// The parameter's value at `position`: its automation curve when connected, else the box field value
-    /// (the default / un-automated value). Mirrors TS `AutomatableParameterFieldAdapter.valueAt`.
-    pub(crate) fn resolve(&self, position: f64) -> f32 {
+    /// Resolve the parameter at `position`, returning `(value, kind)` for the wire: when a track is connected,
+    /// the uniform `0..1` curve value tagged `PARAM_KIND_UNIT` (the device maps it); else the box field's
+    /// already-real value tagged with the field's primitive `kind` (the device uses it directly). The host
+    /// stays mapping-agnostic — the device owns the mapping. Mirrors TS `track ? track.valueAt(...) : getValue()`.
+    pub(crate) fn resolve(&self, position: f64) -> (f32, u32) {
         match &self.track {
-            Some(curve) => curve.value_at(position, self.field.get()),
-            None => self.field.get()
+            Some(curve) => (curve.value_at(position, 0.0), PARAM_KIND_UNIT),
+            None => (self.field.get(), self.kind)
         }
     }
 }

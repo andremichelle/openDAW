@@ -30,9 +30,11 @@ type DeviceExports = {
     state_size: (sampleRate: number) => number
     kind: () => number // DEVICE_KIND_INSTRUMENT (0) / EFFECT (1) / MIDI_EFFECT (2); tells the host how to wire it
     // Route D parameter hooks (optional): `init` binds the device's parameters with the host; the engine
-    // calls `parameter_changed` to push a resolved value (initial / edit / automation).
+    // calls `parameter_changed` to push a resolved value (initial / edit / automation). `kind` tags how the
+    // f32 `value` is read (uniform 0..1 to map, or a real int / float / bool field value). Engine calls these
+    // wasm-to-wasm through the shared table; JS only installs the function pointers, never invokes them.
     init?: (statePtr: number) => void
-    parameter_changed?: (statePtr: number, id: number, value: number) => void
+    parameter_changed?: (statePtr: number, id: number, kind: number, value: number) => void
     __wasm_apply_data_relocs?: () => void
     __wasm_call_ctors?: () => void
 }
@@ -63,12 +65,13 @@ type EngineExports = {
     // its emitted events with it.
     host_pulse_to_offset: (pulse: number) => number
     // Route D parameter hooks. `host_bind_parameter` registers a parameter by its field-key path (a u16
-    // slice in the device's memory) from `init`, returning its id. `host_update_parameters` pulls the
-    // device's parameters that changed at a position into a ParamChange scratch, returning the count.
-    // `host_next_update_position` returns the next update-clock position after a pulse (or +Infinity when
-    // the device has no automation), so the render template fragments at it.
+    // slice in the device's memory) from `init`, returning its id (the host is mapping-agnostic — the device
+    // maps). `host_update_parameters` pulls the device's parameters that changed at a position into a
+    // ParamChange scratch, returning the count. `host_next_update_position` returns the next update-clock
+    // position after a pulse (or +Infinity when the device has no automation), so the render fragments at it.
     host_bind_parameter: (pathPtr: number, pathLen: number) => number
     host_update_parameters: (position: number, outPtr: number, max: number) => number
+    host_first_update_position: (at: number) => number
     host_next_update_position: (after: number) => number
 }
 
@@ -159,6 +162,7 @@ class EngineProcessor extends AudioWorkletProcessor {
                 host_pulse_to_offset: engine.host_pulse_to_offset,
                 host_bind_parameter: engine.host_bind_parameter,
                 host_update_parameters: engine.host_update_parameters,
+                host_first_update_position: engine.host_first_update_position,
                 host_next_update_position: engine.host_next_update_position
             }
         }).exports as unknown as DeviceExports
