@@ -680,6 +680,24 @@ mod tests {
         assert!(mono.is_active());
     }
 
+    #[test]
+    fn mono_unison_glides_back_through_a_chord() {
+        // A unison voice on a monophonic stack: three notes start (a held chord glides up), then release from
+        // the top, and the voice should glide BACK down the still-held notes (the project.od behaviour). This
+        // checks the glide-back survives the VoiceUnison wrapper, not just a bare voice.
+        let mut mono = MonophonicStrategy::<VoiceUnison<FreqMock, 3>, 8>::new();
+        mono.start(&note(1), 100.0, 1.0, GLIDE, 3, &());
+        mono.start(&note(2), 200.0, 1.0, GLIDE, 3, &());
+        mono.start(&note(3), 300.0, 1.0, GLIDE, 3, &());
+        assert!((mono.current_frequency() - 300.0).abs() < 1.0e-6, "voice sits at the top of the chord");
+        mono.stop(3, GLIDE);
+        assert!((mono.current_frequency() - 200.0).abs() < 1.0e-6, "releasing the top glides back to the held note");
+        mono.stop(2, GLIDE);
+        assert!((mono.current_frequency() - 100.0).abs() < 1.0e-6, "and back again to the lowest held note");
+        assert!(mono.is_active(), "still sounding while the last note is held");
+        mono.stop(1, GLIDE);
+    }
+
     // ---- Voicing dispatcher ----
 
     fn dispatch_render(voicing: &mut Voicing<MockVoice, 4, 8>) -> f32 {

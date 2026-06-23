@@ -37,6 +37,16 @@ Still open within memory/composition (deferred, not blocking):
 
 - **Box sync granularity:** full project reload vs incremental deltas to the Rust-side graph. [04]
 
+## 🟡 Binary size
+
+- **`engine.wasm` is 208 KB raw with no plugins** (59 KB brotli) vs the 193 KB TS bundle that holds all
+  devices. Investigated in `06`: not apples-to-apples (wasm ships its own allocator/collections/libm
+  that JS gets from V8; compare gzip/brotli), but real levers exist. Decide how far to push:
+  (1) install binaryen so the already-wired `wasm-opt -Oz` actually runs (~10–20 %); (2) replace the
+  23 KB generated `studio_boxes::registry()` imperative builder with a static data blob and/or register
+  only engine-read box types so device-box schemas are not baked into the engine; (3) cut the
+  BTreeMap/BTreeSet/sort monomorphisation explosion (~41 KB). What is the acceptable engine floor? [06]
+
 ## 🟡 Testing
 
 - **Tolerance thresholds** per category — decide empirically as primitives land. [07]
