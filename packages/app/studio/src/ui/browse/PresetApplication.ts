@@ -1,6 +1,7 @@
 import {DefaultObservableValue, isDefined, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {InstrumentFactories, PresetDecoder} from "@opendaw/studio-adapters"
-import {OpenPresetAPI, PresetSource, PresetStorage, Project} from "@opendaw/studio-core"
+import {PresetSource, PresetStorage, Project} from "@opendaw/studio-core"
+import {OpenPresetAPI} from "@/opendaw-api"
 
 export namespace PresetApplication {
     export const loadBytes = (uuid: UUID.String, source: PresetSource): Promise<ArrayBuffer> => {

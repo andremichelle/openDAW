@@ -1,10 +1,9 @@
 import {asDefined, Lazy, Procedure, RuntimeNotifier, unitValue, UUID} from "@opendaw/lib-std"
 import {Soundfont, SoundfontMetaData} from "@opendaw/studio-adapters"
-import {OpenDAWHeaders} from "../OpenDAWHeaders"
+import {OpenDAWHeaders} from "./OpenDAWHeaders"
 import {network, Promises} from "@opendaw/lib-runtime"
 import {z} from "zod"
 
-/** @internal */
 export class OpenSoundfontAPI {
     static readonly ApiRoot = "https://api.opendaw.studio/soundfonts"
     static readonly FileRoot = "https://assets.opendaw.studio/soundfonts"

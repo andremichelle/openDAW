@@ -25,7 +25,6 @@ import {
     InstrumentPresetMeta,
     MidiEffectChainPresetMeta,
     MidiEffectPresetMeta,
-    OpenPresetAPI,
     PresetBundle,
     PresetCategory,
     PresetEntry,
@@ -34,6 +33,7 @@ import {
     Project,
     RackPresetMeta
 } from "@opendaw/studio-core"
+import {OpenPresetAPI} from "@/opendaw-api"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {DefaultInstrumentFactory} from "@/ui/defaults/DefaultInstrumentFactory"
 import {AnyDragData} from "@/ui/AnyDragData"

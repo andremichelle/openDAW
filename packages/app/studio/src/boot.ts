@@ -15,13 +15,13 @@ import {
     BufferUnderrunDetector,
     CloudAuthManager,
     ContextMenu,
+    FactoryCatalog,
     GlobalSampleLoaderManager,
     GlobalSoundfontLoaderManager,
     OfflineEngineRenderer,
-    OpenSampleAPI,
-    OpenSoundfontAPI,
     Workers
 } from "@opendaw/studio-core"
+import {OpenPresetAPI, OpenSampleAPI, OpenSoundfontAPI} from "@/opendaw-api"
 import {testFeatures} from "@/features.ts"
 import {MissingFeature} from "@/ui/MissingFeature.tsx"
 import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
@@ -83,6 +83,11 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
                 console.debug(`AudioContext resumed (${context.state})`)), {capture: true, once: true})
     }
     const audioDevices = await AudioOutputDevice.create(context)
+    FactoryCatalog.install({
+        samples: () => OpenSampleAPI.get().all(),
+        soundfonts: () => OpenSoundfontAPI.get().all(),
+        presets: () => OpenPresetAPI.get().list()
+    })
     const chainedSampleProvider = new ChainedSampleProvider({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[AudioData, SampleMetaData]> =>
             OpenSampleAPI.get().load(uuid, progress)
