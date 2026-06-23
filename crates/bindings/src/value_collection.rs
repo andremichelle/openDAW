@@ -26,7 +26,7 @@ use boxgraph::graph::BoxGraph;
 use boxgraph::subscription::{HubEvent, SubscriptionId};
 use boxgraph::updates::Update;
 use value::event::EventCollection;
-use value::value::ValueEvent;
+use value::value::{value_at, ValueEvent};
 use crate::value_events::{event_of_curve, read_value_event, COLLECTION_EVENTS};
 
 pub struct ValueCollection {
@@ -111,6 +111,13 @@ impl ValueCollection {
         Ref::map(self.state.borrow(), |state| &state.events)
     }
 
+    /// A cheap, cloneable read handle onto this collection's curve, decoupled from the subscriptions. The
+    /// engine hands clones of these to its device-facing pull context (`host_automation` evaluates them),
+    /// while this `ValueCollection` keeps owning the observers; cloning is just an `Rc` bump.
+    pub fn curve(&self) -> ValueCurve {
+        ValueCurve(self.state.clone())
+    }
+
     pub fn len(&self) -> usize {
         self.state.borrow().events.len()
     }
@@ -126,6 +133,21 @@ impl ValueCollection {
         for id in self.subscriptions {
             graph.unsubscribe(id);
         }
+    }
+}
+
+/// A cloneable read-only handle onto a `ValueCollection`'s curve: it shares the same `Rc<RefCell<State>>`
+/// the observers keep current, but owns no subscriptions, so cloning it is free and dropping it costs
+/// nothing. `value_at` reads the live curve at evaluation time (the automation pull on a clock event), so
+/// it always reflects the latest synced edits without any rebuild.
+#[derive(Clone)]
+pub struct ValueCurve(Rc<RefCell<State>>);
+
+impl ValueCurve {
+    /// The curve's value (the unit 0..1 the plugin maps) at `position`, or `fallback` when the curve is
+    /// empty. Mirrors `AutomatableParameterFieldAdapter.valueAt` reading `track.valueAt`.
+    pub fn value_at(&self, position: f64, fallback: f32) -> f32 {
+        value_at(&self.0.borrow().events, position, fallback)
     }
 }
 

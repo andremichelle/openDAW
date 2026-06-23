@@ -138,6 +138,12 @@ impl<R: Span> RegionCollection<R> {
         self.regions.partition_point(|region| region.position() <= position) as isize - 1
     }
 
+    /// The region at `index`, or `None` if out of range (mirrors `optAt`). Used with `floor_last_index` to
+    /// read the region covering a position.
+    pub fn get(&self, index: usize) -> Option<&R> {
+        self.regions.get(index)
+    }
+
     /// Iterate the regions overlapping `[from, to)`: start at the region at/before `from` (binary search),
     /// skip it if it already ended (`position + duration <= from`), then yield forward while
     /// `position < to`. Mirrors lib-dsp `RegionCollection.iterateRange`.

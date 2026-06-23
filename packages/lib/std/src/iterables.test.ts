@@ -13,6 +13,42 @@ describe("Iterables helpers", () => {
         expect(Array.from(Iterables.one("x"))).toStrictEqual(["x"])
     })
 
+    it("range() yields 0..count-1 with a single argument", () => {
+        expect(Array.from(Iterables.range(4))).toStrictEqual([0, 1, 2, 3])
+        expect(Array.from(Iterables.range(0))).toStrictEqual([])
+    })
+
+    it("range() yields start..end-1 with two arguments", () => {
+        expect(Array.from(Iterables.range(2, 5))).toStrictEqual([2, 3, 4])
+        expect(Array.from(Iterables.range(5, 5))).toStrictEqual([]) // empty when start >= end
+        expect(Array.from(Iterables.range(7, 2))).toStrictEqual([]) // no countdown without a negative step
+    })
+
+    it("range() steps by step while staying short of end", () => {
+        expect(Array.from(Iterables.range(0, 320, 80))).toStrictEqual([0, 80, 160, 240])
+        expect(Array.from(Iterables.range(0, 10, 3))).toStrictEqual([0, 3, 6, 9])
+    })
+
+    it("range() counts down with a negative step", () => {
+        expect(Array.from(Iterables.range(3, 0, -1))).toStrictEqual([3, 2, 1])
+        expect(Array.from(Iterables.range(10, 0, -4))).toStrictEqual([10, 6, 2])
+    })
+
+    it("range() yields nothing for a zero step rather than looping forever", () => {
+        expect(Array.from(Iterables.range(0, 5, 0))).toStrictEqual([])
+    })
+
+    it("range() supports a negative start when an end is given", () => {
+        expect(Array.from(Iterables.range(-3, 2))).toStrictEqual([-3, -2, -1, 0, 1])
+        expect(Array.from(Iterables.range(-2, 3, 2))).toStrictEqual([-2, 0, 2])
+        expect(Array.from(Iterables.range(2, -2, -1))).toStrictEqual([2, 1, 0, -1])
+    })
+
+    it("range() rejects a negative count (single argument)", () => {
+        expect(() => Array.from(Iterables.range(-1))).toThrow()
+        expect(() => Array.from(Iterables.range(-100))).toThrow()
+    })
+
     /* ------------------------------------------------------------------
      * aggregate helpers
      * ------------------------------------------------------------------ */

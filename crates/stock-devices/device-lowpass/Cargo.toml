@@ -9,4 +9,4 @@ crate-type = ["cdylib", "lib"]
 
 [dependencies]
 abi = {path = "../../abi"}
-dsp = {path = "../../dsp"}
+math = {path = "../../math"}

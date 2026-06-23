@@ -1,9 +1,21 @@
-import {Func, int, isDefined, Maybe, Nullable, Predicate, Procedure} from "./lang"
+import {assert, Func, int, isDefined, Maybe, Nullable, Predicate, Procedure} from "./lang"
 
 export class Iterables {
     static* empty<T>(): Iterable<T> {}
 
     static one<T>(value: T): Iterable<T> { return [value] }
+
+    static* range(startOrCount: number, end?: number, step: number = 1): IterableIterator<number> {
+        assert(isDefined(end) || startOrCount >= 0, () => `range count must be non-negative, got ${startOrCount}`)
+        const start = isDefined(end) ? startOrCount : 0
+        const stop = isDefined(end) ? end : startOrCount
+        if (step === 0) {return}
+        if (step > 0) {
+            for (let value = start; value < stop; value += step) {yield value}
+        } else {
+            for (let value = start; value > stop; value += step) {yield value}
+        }
+    }
 
     static count<T>(iterable: Iterable<T>): int {
         let count: int = 0 | 0

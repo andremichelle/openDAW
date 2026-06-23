@@ -8,6 +8,7 @@
 
 use alloc::boxed::Box;
 use alloc::vec;
+use alloc::vec::Vec;
 use abi::EventRecord;
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_generator::AudioGenerator;
@@ -16,6 +17,7 @@ use engine_env::event_receiver::EventReceiver;
 use engine_env::process_info::ProcessInfo;
 use engine_env::processor::Processor;
 use transport::transport::RENDER_QUANTUM;
+use crate::param_automation::{AutomationTarget, FieldPath, ParamCurve};
 use crate::{call_device_process, DeviceReg, PullLink, DEVICE_MAX_EVENTS, PULL};
 
 /// A graph node that voices its notes through a loaded instrument device (e.g. `device_sine.wasm`). It
@@ -28,6 +30,10 @@ pub(crate) struct PluginInstrument {
     process_index: u32, // the device's `process` slot in the shared function table
     sample_rate: f32,
     pull_chain: Option<PullLink>, // the top of this unit's event pull chain (sequencer, or a midi-fx over it)
+    // This device's automated parameters (packed field key -> curve), swapped into `PULL` for the device
+    // call so `host_automation` resolves them; `clock_armed` follows whether there are any.
+    automation: Vec<(FieldPath, ParamCurve)>,
+    clock_armed: bool,
     events: EventBuffer,
     output: SharedAudioBuffer,
     device_output: Box<[f32]>,
@@ -71,6 +77,8 @@ impl PluginInstrument {
             process_index: device.process_index,
             sample_rate,
             pull_chain: None,
+            automation: Vec::new(),
+            clock_armed: false,
             events: EventBuffer::new(),
             output: shared_audio_buffer(),
             device_output,
@@ -83,6 +91,16 @@ impl PluginInstrument {
 
     pub(crate) fn set_pull_chain(&mut self, chain: PullLink) {
         self.pull_chain = Some(chain);
+    }
+
+}
+
+impl AutomationTarget for PluginInstrument {
+    /// A non-empty set arms the global clock for this device, so its pulled stream carries the update events
+    /// that drive `Instrument::automate`; an empty set disarms it.
+    fn set_automation(&mut self, automation: Vec<(FieldPath, ParamCurve)>) {
+        self.clock_armed = !automation.is_empty();
+        self.automation = automation;
     }
 }
 
@@ -118,6 +136,8 @@ impl Processor for PluginInstrument {
             pull.blocks = info.blocks.as_ptr();
             pull.block_count = info.blocks.len();
             pull.sample_rate = self.sample_rate;
+            pull.clock_armed = self.clock_armed;
+            core::mem::swap(&mut self.automation, &mut pull.automation); // move our curves in (no alloc)
         }
         call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
         {
@@ -125,6 +145,8 @@ impl Processor for PluginInstrument {
             pull.current = None;
             pull.blocks = core::ptr::null();
             pull.block_count = 0;
+            pull.clock_armed = false;
+            core::mem::swap(&mut self.automation, &mut pull.automation); // and take them back
         }
         let mut output = self.output.borrow_mut();
         for index in 0..RENDER_QUANTUM {

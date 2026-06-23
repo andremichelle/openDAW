@@ -58,6 +58,10 @@ type EngineExports = {
     // Maps a pulse position to its sample offset in the current quantum; a generative device (arp) times
     // its emitted events with it.
     host_pulse_to_offset: (pulse: number) => number
+    // Pulls a device's parameter automation value (unit 0..1) at a pulse position; the parameter is named by
+    // its field-key path (a u16 slice in the device's memory). A device calls it from its `automate` hook on
+    // each global clock event (Route D).
+    host_automation: (pathPtr: number, pathLen: number, position: number) => number
 }
 
 // Read a varuint32 (LEB128) at `pos`; returns [value, nextPos].
@@ -141,9 +145,11 @@ class EngineProcessor extends AudioWorkletProcessor {
                 __memory_base: new WebAssembly.Global({value: "i32", mutable: false}, memoryBase),
                 __table_base: new WebAssembly.Global({value: "i32", mutable: false}, tableBase),
                 __stack_pointer: new WebAssembly.Global({value: "i32", mutable: true}, stackBase + DEVICE_STACK_SIZE),
-                // wasm-to-wasm: the device calls the engine's event-pull / timing exports directly (Route A).
+                // wasm-to-wasm: the device calls the engine's event-pull / timing / automation exports
+                // directly (Route A pull + Route D automation).
                 host_pull_events: engine.host_pull_events,
-                host_pulse_to_offset: engine.host_pulse_to_offset
+                host_pulse_to_offset: engine.host_pulse_to_offset,
+                host_automation: engine.host_automation
             }
         }).exports as unknown as DeviceExports
         device.__wasm_apply_data_relocs?.()

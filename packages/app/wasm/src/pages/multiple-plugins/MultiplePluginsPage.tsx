@@ -1,35 +1,18 @@
 import {createElement, PageFactory} from "@opendaw/lib-jsx"
-import {ByteArrayInput, MutableObservableOption, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, Iterables, MutableObservableOption, UUID} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {Synchronization, SyncSource, UpdateTask} from "@opendaw/lib-box"
 import {
     ArpeggioDeviceBox, AudioUnitBox, BoxIO, GrooveShuffleBox, NanoDeviceBox, NoteEventBox, NoteEventCollectionBox,
-    NoteRegionBox, PitchDeviceBox, RevampDeviceBox, TrackBox, VaporisateurDeviceBox, ZeitgeistDeviceBox
+    NoteRegionBox, PitchDeviceBox, RevampDeviceBox, TrackBox, ValueEventBox, ValueEventCollectionBox, ValueRegionBox,
+    VaporisateurDeviceBox, ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
-import {EngineStateSchema, ProjectSkeleton} from "@opendaw/studio-adapters"
+import {EngineStateSchema, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {PPQN} from "@opendaw/lib-dsp"
 import {Env} from "../../Env"
 import {serializeUpdateTasks} from "../../sync/serialize-update-tasks"
 import {createEngineMemory, loadEngineModules} from "../../engine-modules"
 import workletURL from "../metronome/engine-worklet.ts?worker&url"
-
-// Two audio units, each with its real DEVICE BOXES in the box graph; the engine reads each unit's `input`
-// instrument, `midi-effects` and `audio-effects` chains (ordered by each device's `index`) and instantiates
-// the matching plugin through the device table (box type -> wasm). No load-order or slot stopgaps — the
-// graph is the source of truth, and editing a chain (add / remove / reorder a device) re-wires that unit
-// live. The bass unit: a NanoDeviceBox (sawtooth) into a RevampDeviceBox (an LFO-swept low-pass SYNCED TO
-// THE TEMPO — one cutoff sweep per half-note from the song position, coefficient from the sample rate, a
-// tempo-locked auto-wah). instrument -> audio-fx -> bus. The lead unit: a VaporisateurDeviceBox (sine)
-// behind a 3-stage MIDI-fx pull chain ordered by index — ArpeggioDeviceBox (0) -> ZeitgeistDeviceBox (1) ->
-// PitchDeviceBox (2) — i.e. sequencer <- arp <- zeitgeist <- transpose <- instrument. The lead part is a
-// single HELD CHORD; the arp holds it in its state block and emits a 1/16 stepped sequence (a few held
-// notes become a stream — not one-to-one), Zeitgeist SHUFFLES it (a swing groove, pulling its upstream over
-// an un-warped range and warping positions back), and transpose shifts every step up an octave. Each unit
-// runs through its CHANNEL STRIP (volume / panning / mute, reactive to the box): the bass is panned hard
-// LEFT, the lead hard RIGHT. So you hear an auto-wah sawtooth bass on the left and a shuffled, octave-up
-// arpeggiated sine chord on the right, proving the whole device model — instruments, audio-fx, a
-// multi-stage MIDI-fx pull chain, and the per-unit strip — driven entirely from the box graph. The MIDI
-// chain works in pulse positions; the instrument resolves sample offsets.
 
 type Note = readonly [number, number] // [position in pulses, MIDI pitch]
 
@@ -42,6 +25,13 @@ const BASS: ReadonlyArray<Note> = [
 const LEAD: ReadonlyArray<Note> = [
     [0, 72], [0, 76], [0, 79]
 ]
+
+// The bass low-pass cutoff AUTOMATION (Route D). A 0..1 unit curve sampled every 1/32 triplet
+// (Quarter / 12 = 80 pulses), one sine sweep per half-note: value = (sin + 1) / 2. The lowpass device maps
+// 0..1 EXPONENTIALLY to 80..1120 Hz; the auto-wah is data read on the global update clock, not computed in
+// the device.
+const CUTOFF_STEP = PPQN.Quarter / 12   // 1/32 triplet
+const CUTOFF_PERIOD = 2 * PPQN.Quarter  // one sweep per half-note
 
 const TIMELINE = `unit A (bass)  C2 E2 G2 E2     quarter notes,  loop = 1 bar -> SAWTOOTH -> TEMPO-SYNC LOW-PASS
 unit B (lead)  C5+E5+G5 held chord, loop = 1 bar -> ARP (1/16) -> SHUFFLE -> TRANSPOSE +12 -> SINE
@@ -102,14 +92,45 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
         }))
     }
 
+    // Automate the Revamp low-pass cutoff: a Value track bound 1:1 to its `lowPass.frequency` field, holding
+    // a region whose ValueEventCollection traces the sine sweep. The engine evaluates this curve on the
+    // global update clock and the device pulls the 0..1 value per tick (see CUTOFF_* above).
+    const automateLowpassCutoff = (unit: AudioUnitBox, revamp: RevampDeviceBox): void => {
+        const loopLength = 2 * PPQN.Bar
+        const track = TrackBox.create(boxGraph, UUID.generate(), box => {
+            box.tracks.refer(unit.tracks)
+            box.type.setValue(TrackType.Value)
+            box.target.refer(revamp.lowPass.frequency) // the 1:1 parameter <-> automation-track binding
+        })
+        const collection = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+        ValueRegionBox.create(boxGraph, UUID.generate(), box => {
+            box.regions.refer(track.regions)
+            box.position.setValue(0)
+            box.duration.setValue(loopLength)
+            box.loopOffset.setValue(0)
+            box.loopDuration.setValue(loopLength)
+            box.events.refer(collection.owners)
+        })
+        Iterables.forEach(Iterables.range(0, loopLength, CUTOFF_STEP), position => {
+            const unitValue = (Math.sin((2 * Math.PI * position) / CUTOFF_PERIOD) + 1.0) / 2.0
+            ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                box.position.setValue(position)
+                box.value.setValue(unitValue)
+                box.events.refer(collection.events)
+            })
+        })
+    }
+
     boxGraph.beginTransaction()
-    // Bass: a sawtooth instrument (Nano) into a low-pass audio effect (Revamp), panned hard LEFT.
+    // Bass: a sawtooth instrument (Nano) into a low-pass audio effect (Revamp) with an AUTOMATED cutoff,
+    // panned hard LEFT.
     addPart(1, -1.0, BASS, PPQN.Bar, PPQN.Quarter / 2, unit => {
         NanoDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(unit.input))
-        RevampDeviceBox.create(boxGraph, UUID.generate(), box => {
+        const revamp = RevampDeviceBox.create(boxGraph, UUID.generate(), box => {
             box.host.refer(unit.audioEffects)
             box.index.setValue(0)
         })
+        automateLowpassCutoff(unit, revamp)
     })
     // Lead: a sine instrument (Vaporisateur) behind a 3-stage MIDI-fx chain ordered by index:
     // arp (0) -> zeitgeist (1) -> transpose (2), panned hard RIGHT. The chord is held a full bar.
@@ -204,11 +225,14 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
                     <strong>sine</strong> lead (<code>device_sine.wasm</code>, <code>device_saw.wasm</code>)
                     load as position-independent side modules at host-assigned bases in the shared memory;
                     the engine calls each unit's device through the shared function table.</li>
-                <li><strong>Audio effect (bass only).</strong> An <strong>LFO-swept low-pass</strong>
-                    (<code>device_lowpass.wasm</code>) is inserted after the bass:
-                    instrument&nbsp;→&nbsp;effect&nbsp;→&nbsp;bus. It is a <strong>tempo-synced</strong>
-                    auto-wah whose LFO locks to the song position (one sweep per half-note), with the
-                    coefficient derived from the sample rate.</li>
+                <li><strong>Audio effect with an automated parameter (bass only).</strong> A
+                    <strong>low-pass</strong> (<code>device_lowpass.wasm</code>) is inserted after the bass:
+                    instrument&nbsp;→&nbsp;effect&nbsp;→&nbsp;bus. Its cutoff is a <strong>real parameter
+                    driven by automation</strong>: a sine curve (one sweep per half-note, points every 1/32
+                    triplet) is bound 1:1 to the device's cutoff field. On the <strong>global update
+                    clock</strong> the engine evaluates the curve and the device pulls the 0..1 value, maps it
+                    to 80–1120&nbsp;Hz, and breaks each block at the clock to refresh it — so the auto-wah is
+                    now data, not a hard-coded LFO.</li>
                 <li><strong>MIDI-fx pull chain (lead only).</strong> A three-stage chain sits before the lead:
                     sequencer&nbsp;←&nbsp;<code>arp</code>&nbsp;←&nbsp;<code>zeitgeist</code>&nbsp;←&nbsp;<code>transpose</code>&nbsp;←&nbsp;instrument.
                     The lead part is a single held C-E-G chord.</li>

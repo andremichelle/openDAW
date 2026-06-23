@@ -142,6 +142,7 @@ pub struct Block {
 extern "C" {
     fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32;
     fn host_pulse_to_offset(pulse: f64) -> u32;
+    fn host_automation(path_ptr: u32, path_len: u32, position: f64) -> f32;
 }
 
 /// Pull this device's resolved input events for the pulse range `[from, to)` into `out`, returning the
@@ -164,6 +165,21 @@ pub fn pulse_to_offset(pulse: f64) -> u32 {
     { unsafe { host_pulse_to_offset(pulse) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = pulse; 0 }
+}
+
+/// Pull the automation value (a UNIT 0..1, the plugin maps it to its own range) for one of THIS device's
+/// parameters at pulse `position`. The parameter is named by its stable FIELD-KEY PATH on the device box
+/// (`path`) — e.g. `[16, 10]` for a `lowPass.frequency` field, the same keys the box schema uses; the host
+/// matches it against the automation track's target field path. No encoding: the path is passed as field
+/// keys, never a packed integer, so it stays valid however the host stores its tables. A device calls this
+/// from its `automate` hook on each clock event. Returns 0.5 (mid) when the field has no automation. Native
+/// stub returns 0.5.
+#[inline]
+pub fn pull_automation(path: &[u16], position: f64) -> f32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_automation(path.as_ptr() as u32, path.len() as u32, position) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (path, position); 0.5 }
 }
 
 /// Read-only view over a device's input ports.
@@ -284,6 +300,11 @@ pub trait Instrument {
     fn process_audio(state: &mut Self::State, output: &mut [f32], sample_rate: f32);
     /// Apply one note event (on / off) at its sample offset.
     fn handle_event(state: &mut Self::State, event: &EventRecord, sample_rate: f32);
+    /// Refresh this device's automated parameters at a clock event's pulse `position` (the TS
+    /// `updateParameters`): pull each via [`pull_automation`] and apply. Default: nothing (no params).
+    fn automate(state: &mut Self::State, position: f64) {
+        let _ = (state, position);
+    }
     /// Once per quantum, after all blocks. Default: nothing.
     fn finish(state: &mut Self::State, output: &mut [f32], sample_rate: f32) {
         let _ = (state, output, sample_rate);
@@ -303,7 +324,12 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: &mut [f32], e
             I::process_audio(state, &mut output[cursor..offset], sample_rate);
             cursor = offset;
         }
-        I::handle_event(state, event, sample_rate);
+        // A clock event (Route D) refreshes the automated parameters at this offset; a note event voices.
+        if event.kind == EVENT_PARAM {
+            I::automate(state, event.position);
+        } else {
+            I::handle_event(state, event, sample_rate);
+        }
     }
     if cursor < frames {
         I::process_audio(state, &mut output[cursor..frames], sample_rate);
@@ -338,21 +364,27 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
 }
 
 /// The device-SDK template for an AUDIO EFFECT (the TS `AudioEffectDeviceProcessor` analog). It reads one
-/// input buffer and writes one output buffer over the whole quantum. Parameter automation and sub-block
-/// timing are a later route (the device sees only `process_audio` for now), so a no-param effect needs no
-/// blocks or event pull. `State` is the effect's instance state (e.g. a filter's history).
+/// input buffer and writes one output buffer, going block to block AND breaking each block at its clock
+/// events: render up to the event, refresh the automated parameters (`automate`), then continue (the TS
+/// `AudioProcessor` split loop). `State` is the effect's instance state (e.g. a filter's history).
 pub trait AudioEffect {
     type State;
-    /// Transform `input` into `output` (same length) for ONE block. `bpm` and `position` (the pulse
-    /// position at the block's start) let an effect lock to tempo and the song timeline (e.g. a
-    /// tempo-synced LFO); effects that need no timing ignore them.
+    /// Transform `input` into `output` (same length) for one inter-event sub-chunk. `bpm` and `position`
+    /// (the pulse position at the chunk's start) let an effect lock to tempo; effects driven purely by
+    /// automated parameters ignore them and read the parameters `automate` set.
     fn process_audio(state: &mut Self::State, input: &[f32], output: &mut [f32], sample_rate: f32, bpm: f32, position: f64);
+    /// Refresh this device's automated parameters at a clock event's pulse `position` (the TS
+    /// `updateParameters`): pull each via [`pull_automation`] and apply. Default: nothing (no params).
+    fn automate(state: &mut Self::State, position: f64) {
+        let _ = (state, position);
+    }
 }
 
-/// The per-quantum effect path a device calls from `process`: run input 0 through the effect's
-/// `process_audio` PER BLOCK, slicing each block's sample range and handing it the block's `bpm` and start
-/// `position` so the effect can sync to tempo. With no input it outputs silence; with no transport blocks
-/// (not playing) it passes the input through unchanged.
+/// The per-quantum effect path a device calls from `process`: run input 0 through the effect PER BLOCK,
+/// and within each block PULL the clock events (Route D) and split the block's sample range at them —
+/// `process_audio` for the chunk before each event, `automate` at the event — exactly the TS
+/// `AudioProcessor` loop. With no input it outputs silence; with no transport blocks (not playing) it
+/// passes the input through unchanged. A device with no automation pulls nothing and runs whole blocks.
 pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
     let frames = ports.output.len();
     if ports.inputs.is_empty() {
@@ -369,8 +401,29 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
     for block in ports.blocks {
         let s0 = (block.s0 as usize).min(frames);
         let s1 = (block.s1 as usize).min(frames);
-        if s1 > s0 {
-            E::process_audio(ports.state, &input[s0..s1], &mut ports.output[s0..s1], ports.sample_rate, block.bpm, block.p0);
+        if s1 <= s0 {
+            continue;
+        }
+        // Pull this block's clock events into the scratch and resolve each to its sample offset. With no
+        // automation the host injects none, so `pulled` is 0 and the block runs as one chunk.
+        let pulled = pull_events(block.p0, block.p1, block.flags.0, ports.event_scratch);
+        for record in &mut ports.event_scratch[..pulled] {
+            record.offset = pulse_to_offset(record.position);
+        }
+        let mut cursor = s0;
+        for index in 0..pulled {
+            let record = ports.event_scratch[index];
+            let offset = (record.offset as usize).clamp(s0, s1);
+            if offset > cursor {
+                E::process_audio(ports.state, &input[cursor..offset], &mut ports.output[cursor..offset], ports.sample_rate, block.bpm, block.p0);
+                cursor = offset;
+            }
+            if record.kind == EVENT_PARAM {
+                E::automate(ports.state, record.position);
+            }
+        }
+        if cursor < s1 {
+            E::process_audio(ports.state, &input[cursor..s1], &mut ports.output[cursor..s1], ports.sample_rate, block.bpm, block.p0);
         }
     }
 }

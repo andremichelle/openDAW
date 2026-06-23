@@ -17,10 +17,11 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use abi::{DEVICE_KIND_EFFECT, DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT};
 use bindings::indexed_collection::IndexedCollection;
 use bindings::note_collection::NoteCollection;
+use bindings::value_collection::ValueCollection;
 use boxgraph::address::{Address, Uuid};
 use boxgraph::graph::BoxGraph;
 use boxgraph::subscription::{HubEvent, SubscriptionId};
@@ -37,6 +38,7 @@ use engine_env::note_sequencer::NoteSequencer;
 use value::event::EventCollection;
 use value::note::NoteEvent;
 use value::region::{RegionCollection, Span};
+use crate::param_automation::{AutomationTarget, FieldPath, ParamCurve, ValueBoundRegion};
 use crate::plugin_audio_effect::PluginAudioEffect;
 use crate::plugin_instrument::PluginInstrument;
 use crate::plugin_midi_effect::PluginMidiEffect;
@@ -163,7 +165,14 @@ struct TrackBinding {
 struct WiredCluster {
     nodes: Vec<NodeId>,
     edges: Vec<(NodeId, NodeId)>,
-    output_buffer: SharedAudioBuffer
+    output_buffer: SharedAudioBuffer,
+    // The device automation observations of this cluster (one per automated parameter, across the
+    // instrument + audio-fx). Owned here so a rewire / teardown unsubscribes them with `&mut graph`; the
+    // nodes hold only cheap `ParamCurve` read handles onto these.
+    automation: Vec<ValueCollection>,
+    // The automatable device nodes by box uuid (instrument + audio-fx), so a runtime automation change can
+    // re-push fresh curves into a device WITHOUT rewiring the audio graph (`rebind_automation`).
+    automation_targets: Vec<(Uuid, Rc<RefCell<dyn AutomationTarget>>)>
 }
 
 /// A live audio-unit BINDING. The RootBox `audio-units` membership drives create / destroy. Beneath it:
@@ -185,7 +194,14 @@ pub(crate) struct AudioUnitBinding {
     input: IndexedCollection,
     midi: IndexedCollection,
     audio: IndexedCollection,
-    wired: Option<WiredCluster>
+    wired: Option<WiredCluster>,
+    // Runtime automation reactivity. `device_uuids` is the unit's automatable device boxes (instrument +
+    // audio-fx), kept in sync by `rewire_unit`; `automation_sub` is an all-updates observer that sets
+    // `automation_dirty` when a Value track attaches / detaches a parameter of one of them, or a value
+    // region's track membership changes. `reconcile_units` then re-binds the unit's curves (no rewire).
+    device_uuids: Rc<RefCell<Vec<Uuid>>>,
+    automation_dirty: Rc<Cell<bool>>,
+    automation_sub: SubscriptionId
 }
 
 impl Engine {
@@ -285,7 +301,10 @@ impl Engine {
             reconcile_tracks(&mut self.graph, unit);
             let dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty();
             if dirty {
-                self.rewire_unit(unit);
+                self.rewire_unit(unit); // a full rewire re-gathers automation, so it also clears the flag
+            } else if unit.automation_dirty.get() {
+                self.rebind_automation(unit); // automation attached / detached: re-bind curves, no rewire
+                unit.automation_dirty.set(false);
             }
         }
         self.audio_units = units;
@@ -294,10 +313,14 @@ impl Engine {
     /// Remove a unit entirely: drop its wired cluster (edges, nodes, bus source), unsubscribe its tracks
     /// membership + track cascade, and terminate its three device-chain collections.
     fn teardown_unit(&mut self, mut binding: AudioUnitBinding) {
-        if let Some(wired) = &binding.wired {
-            self.teardown_wired(wired);
+        if let Some(wired) = binding.wired.take() {
+            self.teardown_wired(&wired);
+            for collection in wired.automation {
+                collection.terminate(&mut self.graph);
+            }
         }
         self.graph.unsubscribe(binding.track_sub);
+        self.graph.unsubscribe(binding.automation_sub);
         for sub in &binding.strip_subs {
             self.graph.unsubscribe(*sub);
         }
@@ -357,10 +380,25 @@ impl Engine {
         let mute_sub = self.graph.catchup_and_subscribe(Address::of(uuid, vec![14]), move |value| {
             if let Some(value) = value.as_bool() { mute.mute.set(value) }
         });
+        // Runtime automation observer: flag when a structural automation change touches one of this unit's
+        // devices (filled by `rewire_unit`). Once flagged it short-circuits until `reconcile_units` re-binds.
+        let device_uuids: Rc<RefCell<Vec<Uuid>>> = Rc::new(RefCell::new(Vec::new()));
+        let automation_dirty = Rc::new(Cell::new(false));
+        let dirty_flag = automation_dirty.clone();
+        let observed = device_uuids.clone();
+        let automation_sub = self.graph.subscribe_all(Box::new(move |graph, update| {
+            if dirty_flag.get() {
+                return;
+            }
+            let devices = observed.borrow();
+            if touches_unit_automation(graph, update, &devices) {
+                dirty_flag.set(true);
+            }
+        }));
         AudioUnitBinding {
             unit: uuid, track_sets, collections: CollectionCache::default(), tracks: Vec::new(),
             track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub],
-            input, midi, audio, wired: None
+            input, midi, audio, wired: None, device_uuids, automation_dirty, automation_sub
         }
     }
 
@@ -372,13 +410,21 @@ impl Engine {
     fn rewire_unit(&mut self, unit: &mut AudioUnitBinding) {
         if let Some(wired) = unit.wired.take() {
             self.teardown_wired(&wired);
+            for collection in wired.automation {
+                collection.terminate(&mut self.graph);
+            }
         }
-        let instrument_device = match unit.input.sorted().first()
-            .and_then(|uuid| self.graph.find_box(uuid))
-            .and_then(|device_box| self.device_for_type(&device_box.name)) {
-            Some(device) if device.kind == DEVICE_KIND_INSTRUMENT => device,
-            _ => return // no instrument yet: the unit stays silent until its `input` device box appears
+        let instrument_uuid = match unit.input.sorted().first().copied() {
+            Some(uuid) => uuid,
+            None => return // no instrument yet: the unit stays silent until its `input` device box appears
         };
+        let instrument_device = match self.graph.find_box(&instrument_uuid).and_then(|device_box| self.device_for_type(&device_box.name)) {
+            Some(device) if device.kind == DEVICE_KIND_INSTRUMENT => device,
+            _ => return
+        };
+        // The cluster's automation observations (instrument + audio-fx), accumulated as nodes are built and
+        // stored in the WiredCluster so the next rewire / teardown unsubscribes them.
+        let mut automation: Vec<ValueCollection> = Vec::new();
         // The pull chain: sequencer (over the unit's per-track region collections) at the leaf, each midi-fx
         // folded on top in index order, so the instrument pulls the highest-index fx, which pulls the next,
         // down to the sequencer. The sequencer reads `track_sets` live, so track / region changes need no rewire.
@@ -394,9 +440,16 @@ impl Engine {
                 _ => {}
             }
         }
+        let instrument_curves = gather_automation(&mut self.graph, instrument_uuid, &mut automation);
         let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, instrument_device)));
+        instrument.borrow_mut().set_automation(instrument_curves);
         instrument.borrow_mut().set_pull_chain(chain);
         let mut output = instrument.borrow().audio_output();
+        // Keep automatable nodes by uuid (instrument + audio-fx) so a runtime automation change re-binds them
+        // in place; the typed clone coerces to the trait object before the concrete Rc is moved into the graph.
+        let instrument_target: Rc<RefCell<dyn AutomationTarget>> = instrument.clone();
+        let mut automation_targets: Vec<(Uuid, Rc<RefCell<dyn AutomationTarget>>)> = vec![(instrument_uuid, instrument_target)];
+        let mut device_uuids: Vec<Uuid> = vec![instrument_uuid];
         let instrument_id = self.context.register_processor(instrument);
         let mut nodes = vec![instrument_id];
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
@@ -408,9 +461,14 @@ impl Engine {
                 Some(device) if device.kind == DEVICE_KIND_EFFECT => device,
                 _ => continue
             };
+            let fx_curves = gather_automation(&mut self.graph, device_uuid, &mut automation);
             let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
+            node.borrow_mut().set_automation(fx_curves);
             node.borrow_mut().set_audio_source(output);
             output = node.borrow().audio_output();
+            let node_target: Rc<RefCell<dyn AutomationTarget>> = node.clone();
+            automation_targets.push((device_uuid, node_target));
+            device_uuids.push(device_uuid);
             let node_id = self.context.register_processor(node);
             self.context.register_edge(output_node, node_id);
             edges.push((output_node, node_id));
@@ -430,7 +488,34 @@ impl Engine {
         master.borrow_mut().add_audio_source(strip_output.clone());
         self.context.register_edge(strip_id, self.master_id);
         edges.push((strip_id, self.master_id));
-        unit.wired = Some(WiredCluster {nodes, edges, output_buffer: strip_output});
+        // Publish the automatable devices to the runtime observer and clear any pending flag (we just
+        // gathered fresh curves), then store the cluster with its re-bind handles.
+        *unit.device_uuids.borrow_mut() = device_uuids;
+        unit.automation_dirty.set(false);
+        unit.wired = Some(WiredCluster {nodes, edges, output_buffer: strip_output, automation, automation_targets});
+    }
+
+    /// Re-bind a unit's device automation after a runtime attach / detach (or a region change), WITHOUT
+    /// rewiring the audio graph: terminate the old curve observations, re-gather each automatable device's
+    /// automation, and push the fresh curves into its node (which re-arms or disarms the device's update
+    /// clock). Mirrors TS `bindParameter` reacting to its parameter's automation pointer hub.
+    fn rebind_automation(&mut self, unit: &mut AudioUnitBinding) {
+        if unit.wired.is_none() {
+            return;
+        }
+        let targets = {
+            let wired = unit.wired.as_mut().unwrap();
+            for collection in core::mem::take(&mut wired.automation) {
+                collection.terminate(&mut self.graph);
+            }
+            wired.automation_targets.clone()
+        };
+        let mut automation: Vec<ValueCollection> = Vec::new();
+        for (device_uuid, node) in &targets {
+            let curves = gather_automation(&mut self.graph, *device_uuid, &mut automation);
+            node.borrow_mut().set_automation(curves);
+        }
+        unit.wired.as_mut().unwrap().automation = automation;
     }
 }
 
@@ -453,6 +538,9 @@ fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding) {
     for track_uuid in changes.added {
         if unit.tracks.iter().any(|track| track.track_uuid == track_uuid) {
             continue;
+        }
+        if track_type(graph, track_uuid) == TRACK_TYPE_VALUE {
+            continue; // a Value (automation) track is read per-device by `device_automation`, not the note cascade
         }
         let track = build_track(graph, track_uuid);
         unit.track_sets.borrow_mut().push(track.regions_set.clone());
@@ -560,19 +648,130 @@ fn region_pulses(graph: &BoxGraph, uuid: Uuid, key: u16) -> f64 {
     graph.field_value(&Address::of(uuid, vec![key])).and_then(|value| value.as_int32()).unwrap_or(0) as f64
 }
 
+// ---- Device parameter automation (Route D). A device's automated parameter is a Value `TrackBox` whose
+// `target` points at the parameter field; the engine observes its curve and hands the device a read handle,
+// and the device pulls the value on each global clock event. Discovered per device at rewire (mirroring TS
+// `bindParameter` connecting a parameter's automation track), independent of the note-region cascade. ----
+
+// TrackBox.type (field 11) values mirror studio-adapters `TrackType`; only a Value track carries parameter
+// automation (Note / Audio tracks and the unset default go through the note cascade).
+const TRACK_TYPE_VALUE: i32 = 3;
+const TRACK_TYPE_KEY: u16 = 11;
+const TRACK_TARGET_KEY: u16 = 2;        // TrackBox.target -> the automated parameter field (Automation pointer)
+const VALUE_REGION_TRACK_KEY: u16 = 1;  // ValueRegionBox.regions -> the track's region collection
+const VALUE_REGION_EVENTS_KEY: u16 = 2; // ValueRegionBox.events -> the ValueEventCollectionBox
+
+/// Observe a device's automated parameters, append every curve observation to `sink` (kept for teardown),
+/// and return a read handle (packed field key -> `ParamCurve`) per parameter for the device's node. A
+/// parameter binds 1:1 to a Value track; the handle wraps ALL of that track's value regions (sorted), not
+/// one, so `host_automation` evaluates the region covering the position.
+fn gather_automation(graph: &mut BoxGraph, device_uuid: Uuid, sink: &mut Vec<ValueCollection>) -> Vec<(FieldPath, ParamCurve)> {
+    // Under an immutable borrow, gather each automated parameter's (field-key path, region specs); then
+    // observe the curves (which needs `&mut graph`). The path is the track's target field keys verbatim.
+    let mut params: Vec<(FieldPath, Vec<RegionSpec>)> = Vec::new();
+    for track in graph.find_all_by_name("TrackBox") {
+        let path = match graph.target_of(&Address::of(track.uuid, vec![TRACK_TARGET_KEY])) {
+            Some(target) if target.uuid == device_uuid => target.field_keys.clone(),
+            _ => continue
+        };
+        params.push((path, value_regions_of_track(graph, track.uuid)));
+    }
+    params.into_iter().map(|(path, specs)| {
+        let mut regions = RegionCollection::new();
+        for spec in specs {
+            let collection = ValueCollection::observe(graph, spec.collection);
+            regions.add(ValueBoundRegion {
+                position: spec.position, duration: spec.duration,
+                loop_offset: spec.loop_offset, loop_duration: spec.loop_duration,
+                curve: collection.curve()
+            });
+            sink.push(collection);
+        }
+        (path, ParamCurve::new(regions))
+    }).collect()
+}
+
+/// One value region of an automation track: its `events` collection and loopable span.
+struct RegionSpec {
+    collection: Uuid,
+    position: f64,
+    duration: f64,
+    loop_offset: f64,
+    loop_duration: f64
+}
+
+/// Every value region of an automation track: the `ValueRegionBox`es whose `regions` points at `track_uuid`,
+/// with their `events` collection and span (position 10, duration 11, loopOffset 12, loopDuration 13).
+fn value_regions_of_track(graph: &BoxGraph, track_uuid: Uuid) -> Vec<RegionSpec> {
+    let mut specs = Vec::new();
+    for region in graph.find_all_by_name("ValueRegionBox") {
+        let on_track = graph.target_of(&Address::of(region.uuid, vec![VALUE_REGION_TRACK_KEY]))
+            .map(|address| address.uuid) == Some(track_uuid);
+        if !on_track {
+            continue;
+        }
+        if let Some(collection) = graph.target_of(&Address::of(region.uuid, vec![VALUE_REGION_EVENTS_KEY])).map(|address| address.uuid) {
+            specs.push(RegionSpec {
+                collection,
+                position: region_pulses(graph, region.uuid, 10),
+                duration: region_pulses(graph, region.uuid, 11),
+                loop_offset: region_pulses(graph, region.uuid, 12),
+                loop_duration: region_pulses(graph, region.uuid, 13)
+            });
+        }
+    }
+    specs
+}
+
+/// A track's `type` (field 11), defaulting to 0 (Undefined) when unset.
+fn track_type(graph: &BoxGraph, track_uuid: Uuid) -> i32 {
+    graph.field_value(&Address::of(track_uuid, vec![TRACK_TYPE_KEY])).and_then(|value| value.as_int32()).unwrap_or(0)
+}
+
+/// Whether an update is a STRUCTURAL automation change for a unit whose automatable devices are `devices`:
+/// a pointer attaching to / detaching from one of those device boxes' parameter fields (automation
+/// attach / detach), or a value region's `regions` pointer joining / leaving a track that targets one of
+/// them. Value-event edits within an already-bound curve are NOT structural (the `ValueCollection` keeps
+/// them live), so they never match — only membership does, which is what needs a re-bind.
+fn touches_unit_automation(graph: &BoxGraph, update: &Update, devices: &[Uuid]) -> bool {
+    let Update::Pointer {address, old, new} = update else {
+        return false;
+    };
+    // (a) attach / detach: a pointer whose target is (or was) a field of one of our device boxes.
+    if [old, new].into_iter().flatten().any(|target| devices.contains(&target.uuid)) {
+        return true;
+    }
+    // (b) a value region's track membership changed: follow its `regions` pointer to the track, then the
+    // track's `target` to a device of this unit.
+    if address.field_keys.len() == 1 && address.field_keys[0] == VALUE_REGION_TRACK_KEY {
+        return [old, new].into_iter().flatten().any(|track_regions| {
+            graph.target_of(&Address::of(track_regions.uuid, vec![TRACK_TARGET_KEY]))
+                .map(|device| devices.contains(&device.uuid)).unwrap_or(false)
+        });
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     //! Mirrored regions: a NoteEventCollectionBox is observed ONCE by the cache and shared by every region
     //! that references it; the observation survives until the last region leaves. Two regions sharing a
     //! collection both read the same events, and removing one leaves the other reading it.
-    use super::CollectionCache;
+    use super::{gather_automation, touches_unit_automation, CollectionCache};
     use boxgraph::address::{Address, Uuid};
     use boxgraph::boxes::GraphBox;
     use boxgraph::field::{FieldValue, Fields};
     use boxgraph::graph::BoxGraph;
+    use boxgraph::updates::Update;
 
     const COLLECTION: Uuid = [1u8; 16];
     const NOTE: Uuid = [2u8; 16];
+    const DEVICE: Uuid = [9u8; 16];
+    const TRACK: Uuid = [8u8; 16];
+    const REGION: Uuid = [7u8; 16];
+    const OTHER: Uuid = [5u8; 16];
+    const VCOLLECTION: Uuid = [6u8; 16];
+    const EVENT: Uuid = [4u8; 16];
 
     fn graph_box(uuid: Uuid, name: &str, fields: &[(u16, FieldValue)]) -> GraphBox {
         let mut map = Fields::new();
@@ -624,5 +823,72 @@ mod tests {
         cache.release(&mut graph, COLLECTION);
         assert!(cache.entries.is_empty());
         assert_eq!(graph.subscription_count(), base, "the last release unsubscribes the observation");
+    }
+
+    #[test]
+    fn automation_attach_detach_is_structural_but_a_value_edit_is_not() {
+        // Branch (a) needs no graph: a pointer whose new/old target is one of the unit's device boxes.
+        let graph = BoxGraph::from_boxes(vec![]);
+        let devices = [DEVICE];
+        let device_field = Address::of(DEVICE, vec![16, 10]); // the device's cutoff parameter field
+        let attach = Update::Pointer {address: Address::of(TRACK, vec![2]), old: None, new: Some(device_field.clone())};
+        let detach = Update::Pointer {address: Address::of(TRACK, vec![2]), old: Some(device_field), new: None};
+        let unrelated = Update::Pointer {address: Address::of(TRACK, vec![2]), old: None, new: Some(Address::of(OTHER, vec![3]))};
+        let value_edit = Update::Primitive {address: Address::of(REGION, vec![13]), old: FieldValue::Float32(0.0), new: FieldValue::Float32(0.5)};
+        assert!(touches_unit_automation(&graph, &attach, &devices), "attaching automation to a device param");
+        assert!(touches_unit_automation(&graph, &detach, &devices), "detaching it");
+        assert!(!touches_unit_automation(&graph, &unrelated, &devices), "a pointer to another box is irrelevant");
+        assert!(!touches_unit_automation(&graph, &value_edit, &devices), "editing a curve value is not structural");
+    }
+
+    #[test]
+    fn value_region_joining_a_targeting_track_is_structural() {
+        // Branch (b): a value region's `regions` pointer joins a track whose `target` is our device.
+        let graph = BoxGraph::from_boxes(vec![
+            graph_box(TRACK, "TrackBox", &[(2, FieldValue::Pointer(Some(Address::of(DEVICE, vec![16, 10]))))])
+        ]);
+        let devices = [DEVICE];
+        let join = Update::Pointer {address: Address::of(REGION, vec![1]), old: None, new: Some(Address::of(TRACK, vec![3]))};
+        assert!(touches_unit_automation(&graph, &join, &devices), "a region under a track that targets our device");
+        // A region joining a track that targets some other box is ignored.
+        let other_join = Update::Pointer {address: Address::of(REGION, vec![1]), old: None, new: Some(Address::of(OTHER, vec![3]))};
+        assert!(!touches_unit_automation(&graph, &other_join, &devices));
+    }
+
+    // A full automation chain (Value track -> region -> ValueEventCollection -> one event) whose track
+    // `target` reaches a parameter at `path` on the device. Used to prove the key is the path at any depth.
+    fn deep_automation_graph(path: &[u16]) -> BoxGraph {
+        BoxGraph::from_boxes(vec![
+            graph_box(DEVICE, "RevampDeviceBox", &[]),
+            graph_box(TRACK, "TrackBox", &[
+                (2, FieldValue::Pointer(Some(Address::of(DEVICE, path.to_vec())))), // target -> the deep field
+                (3, FieldValue::Hook)                                               // regions hub
+            ]),
+            graph_box(REGION, "ValueRegionBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![3])))),         // regions -> track.regions
+                (2, FieldValue::Pointer(Some(Address::of(VCOLLECTION, vec![2])))),   // events -> collection.owners
+                (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+                (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+            ]),
+            graph_box(VCOLLECTION, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+            graph_box(EVENT, "ValueEventBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(VCOLLECTION, vec![1])))),   // events -> collection.events
+                (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.7))
+            ])
+        ])
+    }
+
+    #[test]
+    fn gather_automation_keys_by_the_full_field_path_at_any_depth() {
+        // A three-level path — deeper than the old packed u32 key could ever represent — must survive
+        // verbatim as the relationship key, neither truncated nor encoded.
+        let deep = [16u16, 5, 10];
+        let mut graph = deep_automation_graph(&deep);
+        let mut sink = Vec::new();
+        let params = gather_automation(&mut graph, DEVICE, &mut sink);
+        assert_eq!(params.len(), 1, "the device's one automated parameter is found");
+        let (path, curve) = &params[0];
+        assert_eq!(path.as_slice(), &deep, "the full field-key path is the key, untruncated and unpacked");
+        assert_eq!(curve.value_at(0.0, -1.0), 0.7, "and the curve reads its event through that path");
     }
 }

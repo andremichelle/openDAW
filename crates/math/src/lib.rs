@@ -1,6 +1,6 @@
 //! Shared math primitives and constants (the lib-std equivalent for the engine crates): clamp, lerp,
-//! fabs, PI, a parabolic sine approximation, and the `curve` module. `no_std`; libm-backed where it
-//! needs transcendentals, so host tests and the wasm build compute identically.
+//! exp_lerp, fabs, PI, TAU, a parabolic sine approximation, and the `curve` module. `no_std`; libm-backed
+//! where it needs transcendentals, so host tests and the wasm build compute identically.
 
 #![cfg_attr(not(test), no_std)]
 
@@ -8,6 +8,9 @@ pub mod curve;
 
 /// Pi as f32, re-exported from core (what the feature crates use).
 pub use core::f32::consts::PI;
+
+/// Tau (`2*PI`) as f32, re-exported from core — for full-cycle phase math (one period = TAU).
+pub use core::f32::consts::TAU;
 
 #[inline]
 pub fn fabs(x: f32) -> f32 {
@@ -45,6 +48,13 @@ pub fn clamp<T: PartialOrd>(value: T, min: T, max: T) -> T {
 /// worth it yet, so this stays f32 (the signal-path precision); add `lerp64` only if a caller needs it.
 pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
+}
+
+/// Exponential (geometric) interpolation from `a` to `b` by `t`: `a * (b/a)^t`. For `a, b > 0`, equal `t`
+/// steps are equal RATIOS, the right curve for frequencies and other perceptually-logarithmic ranges
+/// (`lerp` is the linear counterpart). libm-backed for no_std + host/wasm parity.
+pub fn exp_lerp(a: f32, b: f32, t: f32) -> f32 {
+    a * libm::powf(b / a, t)
 }
 
 /// Decibels to a linear gain (`10^(db/20)`), mirroring lib-dsp `dbToGain`. libm-backed for no_std +

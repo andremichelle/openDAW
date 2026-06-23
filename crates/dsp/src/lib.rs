@@ -5,6 +5,7 @@
 #![cfg_attr(not(test), no_std)]
 
 pub mod adsr;
+pub mod biquad;
 
 pub use math::{fabs, fast_sin, PI};
 

@@ -30,7 +30,7 @@ use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
 use boxgraph::updates::decode_forward;
-use abi::{EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON};
+use abi::{EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON, EVENT_PARAM};
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::block::Block;
@@ -91,6 +91,8 @@ mod plugin_midi_effect;
 use plugin_midi_effect::PluginMidiEffect; // named in the PullLink::MidiFx variant defined here
 mod audio_unit;
 use audio_unit::{AudioUnitBinding, Members};
+mod param_automation;
+use param_automation::{FieldPath, ParamCurve};
 
 const INPUT_CAPACITY: usize = 1 << 20; // initial input scratch (1 MiB); grows on demand, keeps the high-water mark
 
@@ -154,12 +156,23 @@ struct PullContext {
     blocks: *const Block,
     block_count: usize,
     sample_rate: f32,
-    scratch: Vec<Event>
+    scratch: Vec<Event>,
+    // Route D automation. `automation` is the CURRENT device's automated parameters (field key -> its
+    // curve), swapped in by the node before its `process` so `host_automation` can read them with no alloc.
+    // `clock_armed` is set when that device has automation, so the OUTERMOST pull injects the global update
+    // clock; `pull_depth` tracks re-entrancy (a MIDI-fx descent pulls again), so only the top-level pull
+    // injects, not the fx's own upstream pulls.
+    automation: Vec<(FieldPath, ParamCurve)>,
+    clock_armed: bool,
+    pull_depth: u32
 }
 
 impl PullContext {
     const fn new() -> Self {
-        Self {current: None, blocks: core::ptr::null(), block_count: 0, sample_rate: 0.0, scratch: Vec::new()}
+        Self {
+            current: None, blocks: core::ptr::null(), block_count: 0, sample_rate: 0.0, scratch: Vec::new(),
+            automation: Vec::new(), clock_armed: false, pull_depth: 0
+        }
     }
 }
 
@@ -190,16 +203,17 @@ fn lifecycle_rank(event: &Event) -> u8 {
 /// so it is safe to call re-entrantly from inside `render`.
 #[no_mangle]
 pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
-    let link = {
+    // Track re-entrancy: a MIDI-fx descent pulls again from inside this call, so only the OUTERMOST pull
+    // (the consumer device's) injects the global clock — never the fx's own upstream pulls.
+    let (link, armed) = {
         let pull = unsafe { PULL.get() };
-        match &pull.current {
-            Some(link) => link.clone(),
-            None => return 0
-        }
+        pull.pull_depth += 1;
+        let armed = pull.clock_armed && pull.pull_depth == 1;
+        (pull.current.clone(), armed)
     };
-    match link {
-        PullLink::Source(ref source) => pull_from_source(source, from, to, flags, out_ptr, max),
-        PullLink::MidiFx {effect, upstream} => {
+    let mut count = match link {
+        Some(PullLink::Source(ref source)) => pull_from_source(source, from, to, flags, out_ptr, max),
+        Some(PullLink::MidiFx {effect, upstream}) => {
             // Descend: point the CURRENT link at the fx's upstream so the fx device's own `host_pull_events`
             // resolves it, run the fx, then restore this link so the next (per-block) pull from downstream
             // still goes through the fx. Scope each `PULL.get()` so none is held across the device call (it
@@ -209,6 +223,81 @@ pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32,
             { unsafe { PULL.get() }.current = Some(PullLink::MidiFx {effect, upstream}); }
             count
         }
+        None => 0
+    };
+    // Merge the global update clock into the resolved stream (gated to automated devices, only while
+    // transporting). Done AFTER the fx chain so the clock ticks are the consumer's, never transformed by it.
+    if armed && BlockFlags(flags).transporting() {
+        count = inject_clock(from, to, out_ptr, max, count);
+    }
+    { unsafe { PULL.get() }.pull_depth -= 1; }
+    count
+}
+
+/// Host import a device calls (from its `automate` hook on a clock event) to pull one parameter's automation
+/// value at `position` — a UNIT 0..1 the device maps to its own range. The parameter is named by its
+/// FIELD-KEY PATH (`path_ptr`/`path_len`, a `u16` slice in the device's memory) — the stable schema keys, so
+/// the lookup never depends on a storage encoding. Reads only `PULL` (the current device's automation
+/// handles, keyed by path, swapped in by its node), so it is safe to call from inside `process`. Returns 0.5
+/// (mid) for a field with no automation curve.
+#[no_mangle]
+pub extern "C" fn host_automation(path_ptr: u32, path_len: u32, position: f64) -> f32 {
+    let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
+    let pull = unsafe { PULL.get() };
+    for (key, curve) in &pull.automation {
+        if key.as_slice() == path {
+            return curve.value_at(position, 0.5);
+        }
+    }
+    0.5
+}
+
+// WASM CONTRACT: the global update-clock grid, mirror of lib-dsp `UpdateClockRate = PPQN.fromSignature(1,
+// 384)` = floor(3840 / 384) = 10 pulses. Every automated device samples its parameters on this one grid, so
+// all parameters switch at identical positions (and identical sample offsets) across the whole graph.
+const UPDATE_CLOCK_RATE: f64 = 10.0;
+
+/// Inject the GLOBAL update clock (Route D) into a device's pulled stream: append an `EVENT_PARAM` record at
+/// every `UPDATE_CLOCK_RATE` grid position in `[from, to)` (mirroring `Fragmentor.iterate`), then
+/// lifecycle-sort the whole stream so each tick lands between a note-off and a note-on at its position. The
+/// grid is computed from absolute pulses, so it is identical for every device.
+fn inject_clock(from: f64, to: f64, out_ptr: u32, max: u32, count: u32) -> u32 {
+    let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
+    let mut n = count as usize;
+    // Smallest grid multiple >= `from` (ceil(from/rate) without libm: truncate toward zero, bump if below).
+    let mut index = (from / UPDATE_CLOCK_RATE) as i64;
+    let mut position = index as f64 * UPDATE_CLOCK_RATE;
+    if position < from {
+        index += 1;
+        position = index as f64 * UPDATE_CLOCK_RATE;
+    }
+    while position < to {
+        if n >= out.len() {
+            break;
+        }
+        out[n] = EventRecord {position, offset: 0, kind: EVENT_PARAM, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+        n += 1;
+        index += 1;
+        position = index as f64 * UPDATE_CLOCK_RATE;
+    }
+    out[..n].sort_by(compare_record_lifecycle);
+    n as u32
+}
+
+/// Order resolved `EventRecord`s like `compare_lifecycle` does for `Event`s: by position, then at an equal
+/// position note-off -> param-update -> note-on, so a note starting at a tick sees the updated parameter.
+fn compare_record_lifecycle(a: &EventRecord, b: &EventRecord) -> core::cmp::Ordering {
+    match a.position.partial_cmp(&b.position) {
+        Some(core::cmp::Ordering::Equal) | None => record_rank(a.kind).cmp(&record_rank(b.kind)),
+        Some(order) => order
+    }
+}
+
+fn record_rank(kind: u32) -> u8 {
+    match kind {
+        EVENT_NOTE_OFF => 0,
+        EVENT_PARAM => 1,
+        _ => 2 // EVENT_NOTE_ON
     }
 }
 
