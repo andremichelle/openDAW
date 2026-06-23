@@ -7,7 +7,7 @@
 
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use bindings::value_collection::ValueCurve;
 use value::region::{global_to_local, RegionCollection, Span};
 
@@ -15,6 +15,29 @@ use value::region::{global_to_local, RegionCollection, Span};
 /// `lowPass.frequency`). The same keys the box schema and the device use — never a packed encoding — so it
 /// keys the device <-> curve relationship table without coupling to how anything is stored.
 pub(crate) type FieldPath = Vec<u16>;
+
+/// One bound device parameter (the engine's side of `bind_parameter`): the device-assigned `id`, the box
+/// field's current unit value (`field`, observed so it stays live), the automation `track` when connected,
+/// and the `last` value handed to the device (for change detection). Cheap to clone (all `Rc`), so the node
+/// can swap a set of these into the pull context for `host_update_parameters`.
+#[derive(Clone)]
+pub(crate) struct ParamHandle {
+    pub(crate) id: u32,
+    pub(crate) field: Rc<Cell<f32>>,
+    pub(crate) track: Option<ParamCurve>,
+    pub(crate) last: Rc<Cell<f32>>
+}
+
+impl ParamHandle {
+    /// The parameter's value at `position`: its automation curve when connected, else the box field value
+    /// (the default / un-automated value). Mirrors TS `AutomatableParameterFieldAdapter.valueAt`.
+    pub(crate) fn resolve(&self, position: f64) -> f32 {
+        match &self.track {
+            Some(curve) => curve.value_at(position, self.field.get()),
+            None => self.field.get()
+        }
+    }
+}
 
 /// One value region on a parameter's track: its loopable span plus a read handle onto its curve. Sorted by
 /// `position` within the parameter's `RegionCollection`, so `floor_last_index` finds the covering region.
@@ -47,12 +70,15 @@ impl ValueBoundRegion {
     }
 }
 
-/// A graph node whose automated parameters can be (re)set after wiring — the instrument and audio-effect
-/// bridges. The engine pushes fresh `ParamCurve`s here when a unit's automation changes at runtime (attach /
-/// detach / region edit), which also re-arms or disarms the device's update clock. Held behind
-/// `Rc<RefCell<dyn AutomationTarget>>` so a unit can re-bind a device's curves without rewiring its graph.
-pub(crate) trait AutomationTarget {
-    fn set_automation(&mut self, automation: Vec<(FieldPath, ParamCurve)>);
+/// A graph node (the instrument and audio-effect bridges) whose bound parameters the engine sets after
+/// wiring and re-sets when automation attaches / detaches at runtime. Held behind `Rc<RefCell<dyn
+/// ParamSink>>` so a unit can re-bind a device's parameters without rewiring its audio graph.
+pub(crate) trait ParamSink {
+    /// Replace this device's bound parameters; `clock_armed` is true iff at least one has an automation
+    /// track. The node swaps `params` into the pull context each `process` for `host_update_parameters`.
+    fn set_params(&mut self, params: Vec<ParamHandle>, clock_armed: bool);
+    /// The address of this device's state block, for the engine's `init` / `parameter_changed` calls.
+    fn state_ptr(&self) -> u32;
 }
 
 /// A cheap, cloneable read handle onto a parameter's automation: the track's value regions, sorted. Built

@@ -30,7 +30,7 @@ use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
 use boxgraph::updates::decode_forward;
-use abi::{EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON, EVENT_PARAM};
+use abi::{EventRecord, ParamChange, EVENT_NOTE_OFF, EVENT_NOTE_ON, EVENT_PARAM};
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::block::Block;
@@ -50,9 +50,11 @@ use transport::transport::{Transport, RENDER_QUANTUM};
 // `device_register` export and allocates device data + stacks through `device_alloc`.
 #[derive(Clone, Copy)]
 struct DeviceReg {
-    process_index: u32, // slot in the shared function table holding the device's `process`
-    state_size: u32,    // bytes the engine must allocate (zeroed) per instance
-    kind: u32           // DEVICE_KIND_INSTRUMENT / DEVICE_KIND_EFFECT (read from the device's `kind` export)
+    process_index: u32,            // slot in the shared function table holding the device's `process`
+    state_size: u32,               // bytes the engine must allocate (zeroed) per instance
+    kind: u32,                     // DEVICE_KIND_INSTRUMENT / DEVICE_KIND_EFFECT (from the `kind` export)
+    init_index: u32,               // slot of the device's `init` export (binds params); 0 if it has none
+    parameter_changed_index: u32   // slot of the device's `parameter_changed` export; 0 if it has none
 }
 
 // Call a device's `process` through the shared function table: a wasm function pointer IS a table index,
@@ -80,6 +82,35 @@ fn call_device_process_events(process_index: u32, from: f64, to: f64, flags: u32
 #[cfg(not(target_family = "wasm"))]
 fn call_device_process_events(_process_index: u32, _from: f64, _to: f64, _flags: u32, _state_ptr: u32, _out_ptr: u32, _max: u32) -> u32 { 0 }
 
+// Call a device's `init(state_ptr)` export (it binds its parameters via `host_bind_parameter`). Same
+// table-index-is-fn-pointer trick. Called once when the device is wired, NOT during render.
+#[cfg(target_family = "wasm")]
+#[inline]
+fn call_device_init(init_index: u32, state_ptr: u32) {
+    if init_index == 0 {
+        return; // the device exports no `init` (it has no parameters); index 0 is the "none" sentinel
+    }
+    let init: extern "C" fn(u32) = unsafe { core::mem::transmute(init_index as usize) };
+    init(state_ptr);
+}
+#[cfg(not(target_family = "wasm"))]
+fn call_device_init(_init_index: u32, _state_ptr: u32) {}
+
+// Call a device's `parameter_changed(state_ptr, id, value)` export to push a resolved parameter value. The
+// engine calls this at build / edit time (never during the device's `process`, so it never aliases the
+// state the render path borrows).
+#[cfg(target_family = "wasm")]
+#[inline]
+fn call_device_parameter_changed(parameter_changed_index: u32, state_ptr: u32, id: u32, value: f32) {
+    if parameter_changed_index == 0 {
+        return; // the device exports no `parameter_changed`; index 0 is the "none" sentinel
+    }
+    let parameter_changed: extern "C" fn(u32, u32, f32) = unsafe { core::mem::transmute(parameter_changed_index as usize) };
+    parameter_changed(state_ptr, id, value);
+}
+#[cfg(not(target_family = "wasm"))]
+fn call_device_parameter_changed(_parameter_changed_index: u32, _state_ptr: u32, _id: u32, _value: f32) {}
+
 const DEVICE_MAX_EVENTS: usize = 256; // per-quantum event scratch the device pulls into
 const DEVICE_INDEX_KEY: u16 = 2; // device box `index` field (DeviceFactory): the chain order within a host
 
@@ -92,7 +123,7 @@ use plugin_midi_effect::PluginMidiEffect; // named in the PullLink::MidiFx varia
 mod audio_unit;
 use audio_unit::{AudioUnitBinding, Members};
 mod param_automation;
-use param_automation::{FieldPath, ParamCurve};
+use param_automation::ParamHandle;
 
 const INPUT_CAPACITY: usize = 1 << 20; // initial input scratch (1 MiB); grows on demand, keeps the high-water mark
 
@@ -135,6 +166,10 @@ static ENGINE_STATE: Shared<[u8; ENGINE_STATE_LEN]> = Shared::new([0; ENGINE_STA
 // the device's re-entrant `host_pull_events` call never aliases the `&mut Engine` the render path holds.
 // The node scopes its `PULL.get()` borrows so none is live across the device call (single-threaded).
 static PULL: Shared<PullContext> = Shared::new(PullContext::new());
+// The bind recorder the `host_bind_parameter` export appends to. The engine clears it, calls a device's
+// `init` (which binds its params), then drains the recorded paths and observes each. Held in its OWN cell
+// (NOT `ENGINE`), so the device's re-entrant `host_bind_parameter` call never aliases the `&mut Engine`.
+static BIND: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
 
 /// One link in a unit's event PULL CHAIN (the `NoteEventSource` chain, sequencer -> fx -> ... -> the
 /// instrument that consumes it). A leaf `Source` is the note sequencer; a `MidiFx` wraps a
@@ -157,12 +192,11 @@ struct PullContext {
     block_count: usize,
     sample_rate: f32,
     scratch: Vec<Event>,
-    // Route D automation. `automation` is the CURRENT device's automated parameters (field key -> its
-    // curve), swapped in by the node before its `process` so `host_automation` can read them with no alloc.
-    // `clock_armed` is set when that device has automation, so the OUTERMOST pull injects the global update
-    // clock; `pull_depth` tracks re-entrancy (a MIDI-fx descent pulls again), so only the top-level pull
-    // injects, not the fx's own upstream pulls.
-    automation: Vec<(FieldPath, ParamCurve)>,
+    // Route D automation. `params` is the CURRENT device's bound parameters, swapped in by the node before
+    // its `process` so `host_update_parameters` can resolve + diff them with no alloc. `clock_armed` is set
+    // when that device has an automated parameter, so the OUTERMOST pull injects the global update clock;
+    // `pull_depth` tracks re-entrancy (a MIDI-fx descent pulls again), so only the top-level pull injects.
+    params: Vec<ParamHandle>,
     clock_armed: bool,
     pull_depth: u32
 }
@@ -171,7 +205,7 @@ impl PullContext {
     const fn new() -> Self {
         Self {
             current: None, blocks: core::ptr::null(), block_count: 0, sample_rate: 0.0, scratch: Vec::new(),
-            automation: Vec::new(), clock_armed: false, pull_depth: 0
+            params: Vec::new(), clock_armed: false, pull_depth: 0
         }
     }
 }
@@ -234,22 +268,43 @@ pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32,
     count
 }
 
-/// Host import a device calls (from its `automate` hook on a clock event) to pull one parameter's automation
-/// value at `position` — a UNIT 0..1 the device maps to its own range. The parameter is named by its
-/// FIELD-KEY PATH (`path_ptr`/`path_len`, a `u16` slice in the device's memory) — the stable schema keys, so
-/// the lookup never depends on a storage encoding. Reads only `PULL` (the current device's automation
-/// handles, keyed by path, swapped in by its node), so it is safe to call from inside `process`. Returns 0.5
-/// (mid) for a field with no automation curve.
+/// Host import a device calls from its `init` to register a parameter by its FIELD-KEY PATH (`path_ptr`/
+/// `path_len`, a `u16` slice in the device's memory) — the stable schema keys, no encoding. It only RECORDS
+/// the path (into `BIND`) and returns the id (the path's index); the engine observes the field + track after
+/// `init` returns. Touches no graph and no `&mut Engine`, so it is safe to call re-entrantly from `init`.
 #[no_mangle]
-pub extern "C" fn host_automation(path_ptr: u32, path_len: u32, position: f64) -> f32 {
+pub extern "C" fn host_bind_parameter(path_ptr: u32, path_len: u32) -> u32 {
     let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
+    let bind = unsafe { BIND.get() };
+    bind.push(path.to_vec());
+    (bind.len() - 1) as u32
+}
+
+/// Host import a device calls (on a clock event) to pull its AUTOMATED parameters that changed at `position`.
+/// For each parameter with an automation track, the engine resolves its value, diffs against the last value
+/// it handed out, and writes the changed `(id, value)` into `out` (a `ParamChange` scratch in the device's
+/// memory), returning the count. Static parameters are pushed at build / edit time, not here. Reads only
+/// `PULL` (the current device's params, swapped in by its node), so it is safe to call from inside `process`.
+#[no_mangle]
+pub extern "C" fn host_update_parameters(position: f64, out_ptr: u32, max: u32) -> u32 {
     let pull = unsafe { PULL.get() };
-    for (key, curve) in &pull.automation {
-        if key.as_slice() == path {
-            return curve.value_at(position, 0.5);
+    let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut ParamChange, max as usize) };
+    let mut count = 0;
+    for param in &pull.params {
+        if param.track.is_none() {
+            continue; // static params are not clock-driven; their value is pushed at build / edit
+        }
+        let value = param.resolve(position);
+        if value != param.last.get() {
+            param.last.set(value);
+            if count >= out.len() {
+                break;
+            }
+            out[count] = ParamChange {id: param.id, value};
+            count += 1;
         }
     }
-    0.5
+    count as u32
 }
 
 // WASM CONTRACT: the global update-clock grid, mirror of lib-dsp `UpdateClockRate = PPQN.fromSignature(1,
@@ -469,9 +524,9 @@ impl Engine {
 
     /// Register a loaded device: the table slot holding its `process` and the bytes its state block needs.
     /// Returns the device id (its index). The host calls this once per device, before `bind`.
-    fn device_register(&mut self, process_index: u32, state_size: u32, kind: u32) -> u32 {
+    fn device_register(&mut self, process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32) -> u32 {
         let id = self.devices.len() as u32;
-        self.devices.push(DeviceReg {process_index, state_size, kind});
+        self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index});
         id
     }
 
@@ -803,13 +858,14 @@ pub extern "C" fn device_alloc(size: u32) -> u32 {
 }
 
 /// Register a loaded device: `process_index` is its `process` slot in the shared function table,
-/// `state_size` the bytes per instance state block, `kind` its `kind` export (instrument / effect).
+/// `state_size` the bytes per instance state block, `kind` its `kind` export (instrument / effect), and
+/// `init_index` / `parameter_changed_index` its parameter-hook slots (0 when the device exports none).
 /// Returns the device id. Call once per device, before `bind` (which builds the graph and wires devices).
 #[no_mangle]
-pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32) -> u32 {
+pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32) -> u32 {
     unsafe {
         match ENGINE.get().as_mut() {
-            Some(engine) => engine.device_register(process_index, state_size, kind),
+            Some(engine) => engine.device_register(process_index, state_size, kind, init_index, parameter_changed_index),
             None => 0
         }
     }

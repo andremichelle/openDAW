@@ -142,7 +142,8 @@ pub struct Block {
 extern "C" {
     fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32;
     fn host_pulse_to_offset(pulse: f64) -> u32;
-    fn host_automation(path_ptr: u32, path_len: u32, position: f64) -> f32;
+    fn host_bind_parameter(path_ptr: u32, path_len: u32) -> u32;
+    fn host_update_parameters(position: f64, out_ptr: u32, max: u32) -> u32;
 }
 
 /// Pull this device's resolved input events for the pulse range `[from, to)` into `out`, returning the
@@ -167,19 +168,64 @@ pub fn pulse_to_offset(pulse: f64) -> u32 {
     { let _ = pulse; 0 }
 }
 
-/// Pull the automation value (a UNIT 0..1, the plugin maps it to its own range) for one of THIS device's
-/// parameters at pulse `position`. The parameter is named by its stable FIELD-KEY PATH on the device box
-/// (`path`) — e.g. `[16, 10]` for a `lowPass.frequency` field, the same keys the box schema uses; the host
-/// matches it against the automation track's target field path. No encoding: the path is passed as field
-/// keys, never a packed integer, so it stays valid however the host stores its tables. A device calls this
-/// from its `automate` hook on each clock event. Returns 0.5 (mid) when the field has no automation. Native
-/// stub returns 0.5.
+/// One resolved parameter change the host hands back from [`update_parameters`]: the parameter's `id` (the
+/// value [`bind_parameter`] returned for it) and its new UNIT value (`0..1`, the plugin maps it). `#[repr(C)]`
+/// so the host can write it straight into the device's scratch.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ParamChange {
+    pub id: u32,
+    pub value: f32
+}
+
+/// Register one of THIS device's parameters with the host by its stable FIELD-KEY PATH on the device box
+/// (`path`) — e.g. `[16, 10]` for `lowPass.frequency`, the same keys the box schema uses (no encoding).
+/// Returns an opaque `id` the device keeps and matches in `parameter_changed`. A device calls this from its
+/// `init` hook, once per parameter; the host then observes that field's value and any automation track.
+/// Native stub returns 0.
 #[inline]
-pub fn pull_automation(path: &[u16], position: f64) -> f32 {
+pub fn bind_parameter(path: &[u16]) -> u32 {
     #[cfg(target_family = "wasm")]
-    { unsafe { host_automation(path.as_ptr() as u32, path.len() as u32, position) } }
+    { unsafe { host_bind_parameter(path.as_ptr() as u32, path.len() as u32) } }
     #[cfg(not(target_family = "wasm"))]
-    { let _ = (path, position); 0.5 }
+    { let _ = path; 0 }
+}
+
+/// Pull THIS device's parameters that CHANGED at pulse `position` into `out` (the host resolves each — its
+/// automation curve, else its field value — and diffs against the last value it handed out), returning the
+/// number written. The device applies each via its `parameter_changed`. Called by the SDK on a clock event.
+/// Native stub returns 0.
+#[inline]
+pub fn update_parameters(position: f64, out: &mut [ParamChange]) -> usize {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_update_parameters(position, out.as_mut_ptr() as u32, out.len() as u32) as usize } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (position, out.len()); 0 }
+}
+
+/// The most parameter changes [`update_parameters`] returns per call (a device's whole param set, comfortably).
+const MAX_PARAM_CHANGES: usize = 32;
+
+/// Pull the parameters changed at `position` and apply each through `apply` (the device's `parameter_changed`).
+/// The scratch is on the stack, so no device-global buffer.
+#[inline]
+fn apply_param_changes<S>(state: &mut S, position: f64, apply: fn(&mut S, u32, f32)) {
+    let mut changes = [ParamChange {id: 0, value: 0.0}; MAX_PARAM_CHANGES];
+    let count = update_parameters(position, &mut changes);
+    for change in &changes[..count] {
+        apply(state, change.id, change.value);
+    }
+}
+
+/// Run `body` with the device's typed state, parsed from the raw `state_ptr` the host passes to the `init`
+/// and `parameter_changed` exports. The one `unsafe` deref, kept here in the ABI shim.
+///
+/// # Safety
+/// `state_ptr` must point at a live, uniquely-borrowed `S` (the engine's per-instance state block); nothing
+/// else may alias it for the call. The engine guarantees this (it calls these exports outside `process`).
+#[inline]
+pub unsafe fn with_state<S>(state_ptr: u32, body: impl FnOnce(&mut S)) {
+    body(&mut *(state_ptr as *mut S))
 }
 
 /// Read-only view over a device's input ports.
@@ -300,10 +346,16 @@ pub trait Instrument {
     fn process_audio(state: &mut Self::State, output: &mut [f32], sample_rate: f32);
     /// Apply one note event (on / off) at its sample offset.
     fn handle_event(state: &mut Self::State, event: &EventRecord, sample_rate: f32);
-    /// Refresh this device's automated parameters at a clock event's pulse `position` (the TS
-    /// `updateParameters`): pull each via [`pull_automation`] and apply. Default: nothing (no params).
-    fn automate(state: &mut Self::State, position: f64) {
-        let _ = (state, position);
+    /// Register this device's automatable parameters with the host via [`bind_parameter`], stashing the
+    /// returned ids in `state`. Called once when the device is wired. Default: nothing (no params).
+    fn init(state: &mut Self::State) {
+        let _ = state;
+    }
+    /// Apply a parameter's new UNIT value (`0..1`): map it to the device's range and store it in `state`.
+    /// `id` is the value `bind_parameter` returned. Called for the initial value, on edits, and on
+    /// automation (clock). Default: nothing (no params).
+    fn parameter_changed(state: &mut Self::State, id: u32, value: f32) {
+        let _ = (state, id, value);
     }
     /// Once per quantum, after all blocks. Default: nothing.
     fn finish(state: &mut Self::State, output: &mut [f32], sample_rate: f32) {
@@ -324,9 +376,9 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: &mut [f32], e
             I::process_audio(state, &mut output[cursor..offset], sample_rate);
             cursor = offset;
         }
-        // A clock event (Route D) refreshes the automated parameters at this offset; a note event voices.
+        // A clock event (Route D) pulls the parameters changed at this position; a note event voices.
         if event.kind == EVENT_PARAM {
-            I::automate(state, event.position);
+            apply_param_changes::<I::State>(state, event.position, I::parameter_changed);
         } else {
             I::handle_event(state, event, sample_rate);
         }
@@ -365,18 +417,24 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
 
 /// The device-SDK template for an AUDIO EFFECT (the TS `AudioEffectDeviceProcessor` analog). It reads one
 /// input buffer and writes one output buffer, going block to block AND breaking each block at its clock
-/// events: render up to the event, refresh the automated parameters (`automate`), then continue (the TS
-/// `AudioProcessor` split loop). `State` is the effect's instance state (e.g. a filter's history).
+/// events: render up to the event, pull the parameters changed there (`parameter_changed`), then continue
+/// (the TS `AudioProcessor` split loop). `State` is the effect's instance state (e.g. a filter's history).
 pub trait AudioEffect {
     type State;
     /// Transform `input` into `output` (same length) for one inter-event sub-chunk. `bpm` and `position`
     /// (the pulse position at the chunk's start) let an effect lock to tempo; effects driven purely by
-    /// automated parameters ignore them and read the parameters `automate` set.
+    /// automated parameters ignore them and read the parameters `parameter_changed` set.
     fn process_audio(state: &mut Self::State, input: &[f32], output: &mut [f32], sample_rate: f32, bpm: f32, position: f64);
-    /// Refresh this device's automated parameters at a clock event's pulse `position` (the TS
-    /// `updateParameters`): pull each via [`pull_automation`] and apply. Default: nothing (no params).
-    fn automate(state: &mut Self::State, position: f64) {
-        let _ = (state, position);
+    /// Register this device's automatable parameters with the host via [`bind_parameter`], stashing the
+    /// returned ids in `state`. Called once when the device is wired. Default: nothing (no params).
+    fn init(state: &mut Self::State) {
+        let _ = state;
+    }
+    /// Apply a parameter's new UNIT value (`0..1`): map it to the device's range and store it in `state`.
+    /// `id` is the value `bind_parameter` returned. Called for the initial value, on edits, and on
+    /// automation (clock). Default: nothing (no params).
+    fn parameter_changed(state: &mut Self::State, id: u32, value: f32) {
+        let _ = (state, id, value);
     }
 }
 
@@ -419,7 +477,7 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
                 cursor = offset;
             }
             if record.kind == EVENT_PARAM {
-                E::automate(ports.state, record.position);
+                apply_param_changes::<E::State>(ports.state, record.position, E::parameter_changed);
             }
         }
         if cursor < s1 {

@@ -26,10 +26,10 @@ const LEAD: ReadonlyArray<Note> = [
     [0, 72], [0, 76], [0, 79]
 ]
 
-// The bass low-pass cutoff AUTOMATION (Route D). A 0..1 unit curve sampled every 1/32 triplet
+// The bass low-pass cutoff AUTOMATION curve (Route D). A 0..1 unit curve sampled every 1/32 triplet
 // (Quarter / 12 = 80 pulses), one sine sweep per half-note: value = (sin + 1) / 2. The lowpass device maps
 // 0..1 EXPONENTIALLY to 80..1120 Hz; the auto-wah is data read on the global update clock, not computed in
-// the device.
+// the device. (Resonance is a second automated parameter, built inline below.)
 const CUTOFF_STEP = PPQN.Quarter / 12   // 1/32 triplet
 const CUTOFF_PERIOD = 2 * PPQN.Quarter  // one sweep per half-note
 
@@ -92,15 +92,16 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
         }))
     }
 
-    // Automate the Revamp low-pass cutoff: a Value track bound 1:1 to its `lowPass.frequency` field, holding
-    // a region whose ValueEventCollection traces the sine sweep. The engine evaluates this curve on the
-    // global update clock and the device pulls the 0..1 value per tick (see CUTOFF_* above).
-    const automateLowpassCutoff = (unit: AudioUnitBox, revamp: RevampDeviceBox): void => {
+    // One value-automation track bound 1:1 to a device parameter `target` (TS `TrackType.Value`): a region
+    // over the 2-bar loop whose ValueEventCollection holds `points` ([position, 0..1 unit value]). The engine
+    // reads it on the global update clock and pushes the unit value to the device, which maps it to its range.
+    const addParamAutomation = (unit: AudioUnitBox, target: RevampDeviceBox["lowPass"]["frequency"],
+                                points: Iterable<readonly [number, number]>): void => {
         const loopLength = 2 * PPQN.Bar
         const track = TrackBox.create(boxGraph, UUID.generate(), box => {
             box.tracks.refer(unit.tracks)
             box.type.setValue(TrackType.Value)
-            box.target.refer(revamp.lowPass.frequency) // the 1:1 parameter <-> automation-track binding
+            box.target.refer(target) // the 1:1 parameter <-> automation-track binding
         })
         const collection = ValueEventCollectionBox.create(boxGraph, UUID.generate())
         ValueRegionBox.create(boxGraph, UUID.generate(), box => {
@@ -111,26 +112,35 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
             box.loopDuration.setValue(loopLength)
             box.events.refer(collection.owners)
         })
-        Iterables.forEach(Iterables.range(0, loopLength, CUTOFF_STEP), position => {
-            const unitValue = (Math.sin((2 * Math.PI * position) / CUTOFF_PERIOD) + 1.0) / 2.0
+        Iterables.forEach(points, ([position, value]) => {
             ValueEventBox.create(boxGraph, UUID.generate(), box => {
                 box.position.setValue(position)
-                box.value.setValue(unitValue)
+                box.value.setValue(value)
                 box.events.refer(collection.events)
             })
         })
     }
 
     boxGraph.beginTransaction()
-    // Bass: a sawtooth instrument (Nano) into a low-pass audio effect (Revamp) with an AUTOMATED cutoff,
+    // Bass: a sawtooth instrument (Nano) into a low-pass audio effect (Revamp) with TWO automated parameters,
     // panned hard LEFT.
     addPart(1, -1.0, BASS, PPQN.Bar, PPQN.Quarter / 2, unit => {
         NanoDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(unit.input))
         const revamp = RevampDeviceBox.create(boxGraph, UUID.generate(), box => {
             box.host.refer(unit.audioEffects)
             box.index.setValue(0)
+            // Box-field defaults (unit 0..1; the device maps): the value used when a parameter is NOT
+            // automated. Cutoff mid, resonance at the bottom (Butterworth).
+            box.lowPass.frequency.setValue(0.5)
+            box.lowPass.q.setValue(0.0)
         })
-        automateLowpassCutoff(unit, revamp)
+        // Cutoff: an exponential sine auto-wah, points every 1/32 triplet (see CUTOFF_* above).
+        addParamAutomation(unit, revamp.lowPass.frequency,
+            Iterables.map(Iterables.range(0, 2 * PPQN.Bar, CUTOFF_STEP),
+                position => [position, (Math.sin((2 * Math.PI * position) / CUTOFF_PERIOD) + 1.0) / 2.0] as const))
+        // Resonance: flat at the default through the first bar, then opening up to a sharp peak by the loop
+        // end (and resetting on the loop) — "starts at default, goes up at the end".
+        addParamAutomation(unit, revamp.lowPass.q, [[0, 0.0], [PPQN.Bar, 0.0], [2 * PPQN.Bar, 1.0]] as const)
     })
     // Lead: a sine instrument (Vaporisateur) behind a 3-stage MIDI-fx chain ordered by index:
     // arp (0) -> zeitgeist (1) -> transpose (2), panned hard RIGHT. The chord is held a full bar.
@@ -225,14 +235,17 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
                     <strong>sine</strong> lead (<code>device_sine.wasm</code>, <code>device_saw.wasm</code>)
                     load as position-independent side modules at host-assigned bases in the shared memory;
                     the engine calls each unit's device through the shared function table.</li>
-                <li><strong>Audio effect with an automated parameter (bass only).</strong> A
-                    <strong>low-pass</strong> (<code>device_lowpass.wasm</code>) is inserted after the bass:
-                    instrument&nbsp;→&nbsp;effect&nbsp;→&nbsp;bus. Its cutoff is a <strong>real parameter
-                    driven by automation</strong>: a sine curve (one sweep per half-note, points every 1/32
-                    triplet) is bound 1:1 to the device's cutoff field. On the <strong>global update
-                    clock</strong> the engine evaluates the curve and the device pulls the 0..1 value, maps it
-                    to 80–1120&nbsp;Hz, and breaks each block at the clock to refresh it — so the auto-wah is
-                    now data, not a hard-coded LFO.</li>
+                <li><strong>Audio effect with two automated parameters (bass only).</strong> A
+                    <strong>biquad low-pass</strong> (<code>device_lowpass.wasm</code>) is inserted after the
+                    bass: instrument&nbsp;→&nbsp;effect&nbsp;→&nbsp;bus. Its <strong>cutoff</strong> and
+                    <strong>resonance</strong> are <strong>real parameters driven by automation</strong>,
+                    bound 1:1 to the device's <code>lowPass.frequency</code> and <code>lowPass.q</code> fields.
+                    The cutoff follows a sine sweep (points every 1/32 triplet, mapped exponentially to
+                    80–1120&nbsp;Hz); the resonance sits at its default through the first bar then opens up to
+                    a sharp peak by the loop end. On the <strong>global update clock</strong> the engine
+                    resolves each parameter (its curve, or its box-field default when un-automated), pushes
+                    only the changed ones to the device, and the device recomputes the filter — the auto-wah
+                    is data, not a hard-coded LFO.</li>
                 <li><strong>MIDI-fx pull chain (lead only).</strong> A three-stage chain sits before the lead:
                     sequencer&nbsp;←&nbsp;<code>arp</code>&nbsp;←&nbsp;<code>zeitgeist</code>&nbsp;←&nbsp;<code>transpose</code>&nbsp;←&nbsp;instrument.
                     The lead part is a single held C-E-G chord.</li>

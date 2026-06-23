@@ -29,6 +29,10 @@ type DeviceExports = {
     process_events?: (from: number, to: number, flags: number, statePtr: number, outPtr: number, max: number) => number
     state_size: (sampleRate: number) => number
     kind: () => number // DEVICE_KIND_INSTRUMENT (0) / EFFECT (1) / MIDI_EFFECT (2); tells the host how to wire it
+    // Route D parameter hooks (optional): `init` binds the device's parameters with the host; the engine
+    // calls `parameter_changed` to push a resolved value (initial / edit / automation).
+    init?: (statePtr: number) => void
+    parameter_changed?: (statePtr: number, id: number, value: number) => void
     __wasm_apply_data_relocs?: () => void
     __wasm_call_ctors?: () => void
 }
@@ -36,7 +40,7 @@ type DeviceExports = {
 type EngineExports = {
     init: (sampleRate: number) => void
     device_alloc: (size: number) => number
-    device_register: (processIndex: number, stateSize: number, kind: number) => number
+    device_register: (processIndex: number, stateSize: number, kind: number, initIndex: number, parameterChangedIndex: number) => number
     // Map a device-box type to the just-registered device: the box-type UTF-8 name is written into the
     // input buffer (nameLen bytes) first. This is the device table the engine instantiates boxes through.
     device_set_box_type: (deviceId: number, nameLen: number) => void
@@ -58,10 +62,11 @@ type EngineExports = {
     // Maps a pulse position to its sample offset in the current quantum; a generative device (arp) times
     // its emitted events with it.
     host_pulse_to_offset: (pulse: number) => number
-    // Pulls a device's parameter automation value (unit 0..1) at a pulse position; the parameter is named by
-    // its field-key path (a u16 slice in the device's memory). A device calls it from its `automate` hook on
-    // each global clock event (Route D).
-    host_automation: (pathPtr: number, pathLen: number, position: number) => number
+    // Route D parameter hooks. `host_bind_parameter` registers a parameter by its field-key path (a u16
+    // slice in the device's memory) from `init`, returning its id. `host_update_parameters` pulls the
+    // device's parameters that changed at a position into a ParamChange scratch, returning the count.
+    host_bind_parameter: (pathPtr: number, pathLen: number) => number
+    host_update_parameters: (position: number, outPtr: number, max: number) => number
 }
 
 // Read a varuint32 (LEB128) at `pos`; returns [value, nextPos].
@@ -145,11 +150,12 @@ class EngineProcessor extends AudioWorkletProcessor {
                 __memory_base: new WebAssembly.Global({value: "i32", mutable: false}, memoryBase),
                 __table_base: new WebAssembly.Global({value: "i32", mutable: false}, tableBase),
                 __stack_pointer: new WebAssembly.Global({value: "i32", mutable: true}, stackBase + DEVICE_STACK_SIZE),
-                // wasm-to-wasm: the device calls the engine's event-pull / timing / automation exports
-                // directly (Route A pull + Route D automation).
+                // wasm-to-wasm: the device calls the engine's event-pull / timing / parameter exports
+                // directly (Route A pull + Route D parameters).
                 host_pull_events: engine.host_pull_events,
                 host_pulse_to_offset: engine.host_pulse_to_offset,
-                host_automation: engine.host_automation
+                host_bind_parameter: engine.host_bind_parameter,
+                host_update_parameters: engine.host_update_parameters
             }
         }).exports as unknown as DeviceExports
         device.__wasm_apply_data_relocs?.()
@@ -160,7 +166,11 @@ class EngineProcessor extends AudioWorkletProcessor {
         // An audio device installs `process`; a MIDI-fx device installs `process_events` (its pull responder).
         const entry = device.process_events ?? device.process
         table.set(processIndex, entry as unknown as () => void)
-        const deviceId = engine.device_register(processIndex, device.state_size(sampleRate), device.kind())
+        // Route D: install the parameter hooks into the table if the device has them (index 0 = none — device
+        // slots are grown above the engine's own functions, so a real hook is never at 0).
+        const initIndex = this.#installOptional(device.init)
+        const parameterChangedIndex = this.#installOptional(device.parameter_changed)
+        const deviceId = engine.device_register(processIndex, device.state_size(sampleRate), device.kind(), initIndex, parameterChangedIndex)
         // Register the device table entry: write the box-type name into the input buffer, then map it.
         // Box-type names are ASCII identifiers, so encode byte-per-char (no TextEncoder in the worklet scope).
         const length = boxType.length
@@ -168,6 +178,16 @@ class EngineProcessor extends AudioWorkletProcessor {
         const bytes = new Uint8Array(this.#memory.buffer, pointer, length)
         for (let index = 0; index < length; index++) {bytes[index] = boxType.charCodeAt(index) & 0xff}
         engine.device_set_box_type(deviceId, length)
+    }
+
+    // Install an optional device export into a fresh table slot and return its index, or 0 ("none") when the
+    // device does not export it. Device slots are grown above the engine's own table functions, so 0 is never
+    // a real device hook.
+    #installOptional(fn: ((...args: Array<number>) => unknown) | undefined): number {
+        if (fn === undefined) {return 0}
+        const index = this.#table.grow(1)
+        this.#table.set(index, fn as unknown as () => void)
+        return index
     }
 
     #applyUpdates(bytes: ArrayBuffer): void {

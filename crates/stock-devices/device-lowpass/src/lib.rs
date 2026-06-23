@@ -1,24 +1,24 @@
-//! An AUDIO-EFFECT device with one AUTOMATED parameter (Route D), wired AFTER an instrument (instrument
-//! output -> this effect's input -> the bus). It reads its one input buffer and writes its one output buffer
-//! through a one-pole low-pass whose cutoff is a real parameter, driven by automation: on each global clock
-//! event the SDK calls `automate`, which PULLS the cutoff's unit value (0..1) at that position and maps it
-//! to a frequency. The coefficient is derived from that frequency and the SAMPLE RATE, so it behaves the
-//! same at any rate. Proves the host's `PluginAudioEffect` bridge AND the clock-driven parameter pull: the
-//! device sees its block split at every clock event, refreshes the cutoff, and renders the chunk between.
+//! An AUDIO-EFFECT device with TWO automated parameters (Route D, push model), wired AFTER an instrument
+//! (instrument output -> this effect's input -> the bus). It runs its input through a biquad low-pass
+//! (`dsp::biquad`) whose cutoff and resonance are real parameters: `init` binds them with the host and gets
+//! back an id each; the engine pushes a value through `parameter_changed` for the initial (box-field)
+//! value, on edits, and on automation (the global clock). The plugin maps each 0..1 unit value to its range
+//! and recomputes the biquad coefficients.
 //!
-//! The cutoff parameter is named by its field-key PATH on the box: `RevampDeviceBox.lowPass` (key 16) ->
-//! `frequency` (key 10), i.e. `[16, 10]` — the stable schema keys, passed as-is to the host (no encoding).
-//! The plugin maps the 0..1 unit value EXPONENTIALLY to 80..1120 Hz (equal steps = equal frequency ratios,
-//! the musically correct curve for a cutoff).
+//! The parameters are named by their field-key PATH on the box (the stable schema keys, no encoding):
+//! cutoff = `RevampDeviceBox.lowPass.frequency` = `[16, 10]`, resonance = `lowPass.q` = `[16, 12]`. Cutoff
+//! maps exponentially to 80..1120 Hz, resonance exponentially to a Q of 0.707 (Butterworth) .. 12.
 //!
-//! Exports: `kind()` (effect), `state_size()`, `process(desc_ptr)`.
+//! Exports: `kind()` (effect), `state_size()`, `process(desc_ptr)`, `init(state_ptr)`,
+//! `parameter_changed(state_ptr, id, value)`.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
-use abi::Ports;
-use math::{exp_lerp, TAU};
+use abi::{AudioEffect, Ports};
+use dsp::biquad::{BiquadCoeff, BiquadMono, BiquadProcessor};
+use math::exp_lerp;
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
@@ -26,51 +26,70 @@ fn panic(_: &PanicInfo) -> ! {
     loop {}
 }
 
-const MAX_COEFF: f32 = 0.99; // clamp the one-pole coefficient below 1 for stability
-// The cutoff parameter's field-key PATH on the box: RevampDeviceBox.lowPass (16) -> frequency (10). The
-// stable schema keys, passed to the host as-is — not an encoding of how the host stores them.
+// The parameter field-key PATHs on the box (stable schema keys, passed to the host as-is). RevampDeviceBox
+// .lowPass is field 16; within a RevampPass, frequency is 10 and q is 12.
 const CUTOFF_FIELD: [u16; 2] = [16, 10];
+const RESONANCE_FIELD: [u16; 2] = [16, 12];
 const CUTOFF_MIN_HZ: f32 = 80.0;
 const CUTOFF_MAX_HZ: f32 = 1120.0;
+const Q_MIN: f32 = core::f32::consts::FRAC_1_SQRT_2; // 0.707, Butterworth (the un-resonant default)
+const Q_MAX: f32 = 12.0;
 
-/// The effect's per-instance state, interpreted from the engine-allocated (zeroed) block: the filter's last
-/// output sample (`z1`) and the current cutoff in Hz, both carried across quanta. `cutoff_hz` is refreshed
-/// by `automate` on each clock event (the first tick at a transport start sets it before any audio).
-pub struct LowpassState {
-    z1: f32,
-    cutoff_hz: f32
-}
-
-/// Map a parameter's unit value (0..1) to the cutoff frequency in Hz, exponentially over 80..1120 Hz. The
-/// mapping is the plugin's; the automation curve carries only the 0..1 unit value.
+/// Map the cutoff's unit value (0..1) to a frequency in Hz, exponentially (equal steps = equal ratios).
 fn cutoff_hz(unit: f32) -> f32 {
     exp_lerp(CUTOFF_MIN_HZ, CUTOFF_MAX_HZ, unit)
+}
+
+/// Map the resonance's unit value (0..1) to a biquad Q, exponentially from Butterworth up to a sharp peak.
+fn resonance_q(unit: f32) -> f32 {
+    exp_lerp(Q_MIN, Q_MAX, unit)
+}
+
+/// The effect's per-instance state, interpreted from the engine-allocated (zeroed) block: the biquad's
+/// second-order section state + its coefficients, the current cutoff (Hz) and resonance (Q) the host pushed,
+/// a `dirty` flag set when either changed (so the coefficients are recomputed on the next chunk), and the
+/// parameter ids `bind_parameter` returned. Valid when zeroed (silent until the engine pushes the defaults).
+pub struct LowpassState {
+    biquad: BiquadMono,
+    coeff: BiquadCoeff,
+    cutoff_hz: f32,
+    resonance_q: f32,
+    dirty: bool,
+    cutoff_id: u32,
+    resonance_id: u32
 }
 
 /// The DSP, plugged into the SDK's `AudioEffect` template ([`abi::render_effect`]).
 pub struct Lowpass;
 
-impl abi::AudioEffect for Lowpass {
+impl AudioEffect for Lowpass {
     type State = LowpassState;
 
-    fn process_audio(state: &mut LowpassState, input: &[f32], output: &mut [f32], sample_rate: f32, _bpm: f32, _position: f64) {
-        // One-pole low-pass `y += a*(x - y)`, coefficient from the cutoff and the SAMPLE RATE
-        // (`a = 2*PI*fc/fs`). The cutoff is the automated parameter `automate` set (held across the chunk).
-        let coeff = (TAU * state.cutoff_hz / sample_rate).min(MAX_COEFF);
-        let mut z1 = state.z1;
-        for (sample, target) in input.iter().zip(output.iter_mut()) {
-            z1 += coeff * (*sample - z1);
-            *target = z1;
-        }
-        state.z1 = z1;
+    fn init(state: &mut LowpassState) {
+        state.cutoff_id = abi::bind_parameter(&CUTOFF_FIELD);
+        state.resonance_id = abi::bind_parameter(&RESONANCE_FIELD);
     }
 
-    fn automate(state: &mut LowpassState, position: f64) {
-        // Pull the cutoff's unit value (0..1) at this clock position and map it to a frequency. The mapping
-        // is the plugin's: the curve carries only 0..1.
-        let path = CUTOFF_FIELD; // a stack copy, so the host reads a stable address during the call
-        let unit = abi::pull_automation(&path, position);
-        state.cutoff_hz = cutoff_hz(unit);
+    fn parameter_changed(state: &mut LowpassState, id: u32, value: f32) {
+        // Map the 0..1 unit value to this parameter's range and mark the coefficients stale. The mapping is
+        // the plugin's; the host only ever hands over the unit value.
+        if id == state.cutoff_id {
+            state.cutoff_hz = cutoff_hz(value);
+        } else if id == state.resonance_id {
+            state.resonance_q = resonance_q(value);
+        }
+        state.dirty = true;
+    }
+
+    fn process_audio(state: &mut LowpassState, input: &[f32], output: &mut [f32], sample_rate: f32, _bpm: f32, _position: f64) {
+        // Recompute the coefficients only when a parameter changed. The biquad's cutoff is a NORMALISED
+        // frequency (Hz / sample_rate), so the filter behaves the same at any rate.
+        if state.dirty {
+            let normalized = (state.cutoff_hz / sample_rate) as f64;
+            state.coeff.set_lowpass_params(normalized, state.resonance_q as f64);
+            state.dirty = false;
+        }
+        state.biquad.process(&state.coeff, input, output, 0, input.len());
     }
 }
 
@@ -80,9 +99,7 @@ pub extern "C" fn kind() -> u32 {
     abi::DEVICE_KIND_EFFECT
 }
 
-/// Bytes the engine must allocate (zeroed) for one instance's state block. The state is two floats, so the
-/// size does not depend on `sample_rate`; the parameter keeps the ABI uniform with devices whose state IS
-/// rate-sized.
+/// Bytes the engine must allocate (zeroed) for one instance's state block.
 #[no_mangle]
 pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
     core::mem::size_of::<LowpassState>() as u32
@@ -94,79 +111,85 @@ pub extern "C" fn process(desc_ptr: u32) {
     abi::render_effect::<Lowpass>(ports);
 }
 
+/// Bind this device's parameters with the host (it records their field-paths and returns an id each).
+#[no_mangle]
+pub extern "C" fn init(state_ptr: u32) {
+    unsafe { abi::with_state(state_ptr, <Lowpass as AudioEffect>::init) }
+}
+
+/// Apply a parameter value the host resolved (initial / edit / automation), by the id `init` got back.
+#[no_mangle]
+pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, value: f32) {
+    unsafe { abi::with_state(state_ptr, |state| <Lowpass as AudioEffect>::parameter_changed(state, id, value)) }
+}
+
 #[cfg(test)]
 mod tests {
-    //! The one-pole low-pass core (driven via the ABI's `AudioEffect`): it strongly attenuates a
-    //! Nyquist-rate signal, settles toward a constant, and its cutoff is the automated PARAMETER (an
-    //! exponential 0..1 -> Hz map), not an internal LFO. In-crate so it can set the private `cutoff_hz`.
-    use super::{cutoff_hz, Lowpass, LowpassState, CUTOFF_MAX_HZ, CUTOFF_MIN_HZ};
+    //! The biquad low-pass core (driven via the ABI's `AudioEffect`): its cutoff + resonance are automated
+    //! PARAMETERS the engine pushes through `parameter_changed`, mapped to Hz / Q here. In-crate so it can
+    //! reach the private state.
+    use super::{cutoff_hz, resonance_q, Lowpass, LowpassState, CUTOFF_MAX_HZ, CUTOFF_MIN_HZ, Q_MAX, Q_MIN};
     use abi::AudioEffect;
 
     const SR: f32 = 48_000.0;
-    const BPM: f32 = 120.0;
 
-    fn state_with(hz: f32) -> LowpassState {
-        LowpassState {z1: 0.0, cutoff_hz: hz}
+    fn empty_state() -> LowpassState {
+        unsafe { core::mem::zeroed() }
+    }
+
+    fn state_at(cutoff_unit: f32, resonance_unit: f32) -> LowpassState {
+        let mut state = empty_state();
+        state.cutoff_hz = cutoff_hz(cutoff_unit);
+        state.resonance_q = resonance_q(resonance_unit);
+        state.dirty = true;
+        state
     }
 
     fn energy(samples: &[f32]) -> f32 {
         samples.iter().map(|sample| sample * sample).sum()
     }
 
-    #[test]
-    fn unit_value_maps_exponentially_over_the_cutoff_range() {
-        assert!((cutoff_hz(0.0) - CUTOFF_MIN_HZ).abs() < 1.0e-3, "0 -> min");
-        assert!((cutoff_hz(1.0) - CUTOFF_MAX_HZ).abs() < 1.0e-2, "1 -> max");
-        // Exponential: the midpoint is the GEOMETRIC mean, below the arithmetic midpoint (600).
-        let geometric_mean = (CUTOFF_MIN_HZ * CUTOFF_MAX_HZ).sqrt();
-        assert!((cutoff_hz(0.5) - geometric_mean).abs() < 0.5, "0.5 -> geometric mean");
-        assert!(cutoff_hz(0.5) < (CUTOFF_MIN_HZ + CUTOFF_MAX_HZ) / 2.0, "the exponential midpoint sits below the linear one");
+    fn nyquist(len: usize) -> Vec<f32> {
+        (0..len).map(|index| if index % 2 == 0 {1.0} else {-1.0}).collect()
     }
 
     #[test]
-    fn attenuates_nyquist() {
-        let input: Vec<f32> = (0..128).map(|index| if index % 2 == 0 {1.0} else {-1.0}).collect();
-        let mut output = [0.0f32; 128];
-        Lowpass::process_audio(&mut state_with(cutoff_hz(0.5)), &input, &mut output, SR, BPM, 0.0);
-        assert!(energy(&output) < energy(&input) * 0.1, "the highest frequency is strongly attenuated");
+    fn unit_values_map_exponentially_over_their_ranges() {
+        assert!((cutoff_hz(0.0) - CUTOFF_MIN_HZ).abs() < 1.0e-3);
+        assert!((cutoff_hz(1.0) - CUTOFF_MAX_HZ).abs() < 1.0e-2);
+        assert!(cutoff_hz(0.5) < (CUTOFF_MIN_HZ + CUTOFF_MAX_HZ) / 2.0, "exponential midpoint sits below linear");
+        assert!((resonance_q(0.0) - Q_MIN).abs() < 1.0e-3, "resonance starts at the Butterworth Q");
+        assert!((resonance_q(1.0) - Q_MAX).abs() < 1.0e-2);
     }
 
     #[test]
-    fn settles_toward_dc() {
-        let input = [1.0f32; 512];
-        let mut output = [0.0f32; 512];
-        Lowpass::process_audio(&mut state_with(cutoff_hz(0.5)), &input, &mut output, SR, BPM, 0.0);
-        assert!(output[511] > 0.9, "a constant input settles toward its level");
-        assert!(output[0] < output[511], "and approaches it gradually, not instantly");
-    }
-
-    #[test]
-    fn cutoff_tracks_the_sample_rate() {
-        // Same cutoff frequency, higher sample rate -> smaller per-sample coefficient -> slower settling.
-        let input = [1.0f32; 64];
-        let mut at_48 = [0.0f32; 64];
-        let mut at_96 = [0.0f32; 64];
-        Lowpass::process_audio(&mut state_with(300.0), &input, &mut at_48, 48_000.0, BPM, 0.0);
-        Lowpass::process_audio(&mut state_with(300.0), &input, &mut at_96, 96_000.0, BPM, 0.0);
-        assert!(at_96[63] < at_48[63], "a higher sample rate settles slower for the same cutoff");
+    fn attenuates_nyquist_at_a_low_cutoff() {
+        let input = nyquist(512);
+        let mut output = vec![0.0f32; 512];
+        Lowpass::process_audio(&mut state_at(0.5, 0.0), &input, &mut output, SR, 120.0, 0.0);
+        assert!(energy(&output) < energy(&input) * 0.05, "the Nyquist tone is strongly attenuated");
     }
 
     #[test]
     fn cutoff_parameter_drives_the_filter() {
-        // A higher cutoff passes far more of a Nyquist tone than a lower one; the parameter sets it.
-        let input: Vec<f32> = (0..2048).map(|index| if index % 2 == 0 {1.0} else {-1.0}).collect();
+        let input = nyquist(2048);
         let mut high = vec![0.0f32; 2048];
         let mut low = vec![0.0f32; 2048];
-        Lowpass::process_audio(&mut state_with(cutoff_hz(1.0)), &input, &mut high, SR, BPM, 0.0);
-        Lowpass::process_audio(&mut state_with(cutoff_hz(0.0)), &input, &mut low, SR, BPM, 0.0);
+        Lowpass::process_audio(&mut state_at(1.0, 0.0), &input, &mut high, SR, 120.0, 0.0);
+        Lowpass::process_audio(&mut state_at(0.0, 0.0), &input, &mut low, SR, 120.0, 0.0);
         assert!(energy(&high) > energy(&low) * 2.0, "a higher cutoff passes more of the Nyquist tone");
     }
 
     #[test]
-    fn automate_pulls_and_maps_the_cutoff() {
-        // The native `pull_automation` stub returns 0.5; `automate` maps it through `cutoff_hz`.
-        let mut state = state_with(0.0);
-        Lowpass::automate(&mut state, 0.0);
-        assert_eq!(state.cutoff_hz, cutoff_hz(0.5));
+    fn parameter_changed_routes_by_id_and_marks_dirty() {
+        let mut state = empty_state();
+        // Mirror what `init` does natively (the bind stub returns 0, so assign distinct ids by hand here).
+        state.cutoff_id = 0;
+        state.resonance_id = 1;
+        Lowpass::parameter_changed(&mut state, 0, 1.0);
+        assert_eq!(state.cutoff_hz, cutoff_hz(1.0), "id 0 sets the cutoff");
+        Lowpass::parameter_changed(&mut state, 1, 1.0);
+        assert_eq!(state.resonance_q, resonance_q(1.0), "id 1 sets the resonance");
+        assert!(state.dirty, "a parameter change marks the coefficients stale");
     }
 }

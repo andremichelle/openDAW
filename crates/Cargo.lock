@@ -37,6 +37,7 @@ name = "device-lowpass"
 version = "0.0.0"
 dependencies = [
  "abi",
+ "dsp",
  "math",
 ]
 

@@ -20,7 +20,7 @@ use engine_env::event_receiver::EventReceiver;
 use engine_env::process_info::ProcessInfo;
 use engine_env::processor::Processor;
 use transport::transport::RENDER_QUANTUM;
-use crate::param_automation::{AutomationTarget, FieldPath, ParamCurve};
+use crate::param_automation::{ParamHandle, ParamSink};
 use crate::{call_device_process, DeviceReg, DEVICE_MAX_EVENTS, PULL};
 
 /// A graph node that runs an audio-EFFECT device after an upstream node (Route B). It reads its single
@@ -32,10 +32,10 @@ pub(crate) struct PluginAudioEffect {
     process_index: u32,
     sample_rate: f32,
     events: EventBuffer, // unused here (the device PULLS its events) but required by `Processor: EventReceiver`
-    // This effect's automated parameters (packed field key -> curve), swapped into `PULL` for the device
-    // call so `host_automation` resolves them; `clock_armed` follows whether there are any. When armed, the
-    // device's per-block pull carries the global update clock, which `AudioEffect::automate` reads.
-    automation: Vec<(FieldPath, ParamCurve)>,
+    // This effect's bound parameters, swapped into `PULL` for the device call so `host_update_parameters`
+    // resolves + diffs them; `clock_armed` is true iff one is automated. When armed, the device's per-block
+    // pull carries the global update clock, which the SDK turns into `parameter_changed` applies.
+    params: Vec<ParamHandle>,
     clock_armed: bool,
     output: SharedAudioBuffer,
     // The upstream output buffer, kept alive; its `left` address is captured into `in_offsets[0]`. The
@@ -51,7 +51,7 @@ pub(crate) struct PluginAudioEffect {
     #[allow(dead_code)]
     out_offsets: Box<[u32]>,
     #[allow(dead_code)]
-    device_state: Box<[u32]>,
+    device_state: Box<[u64]>,
     descriptor: Box<[u32]>
 }
 
@@ -59,7 +59,9 @@ impl PluginAudioEffect {
     pub(crate) fn new(sample_rate: f32, device: DeviceReg) -> Self {
         let device_output = vec![0.0f32; RENDER_QUANTUM].into_boxed_slice();
         let state_size = device.state_size as usize;
-        let device_state = vec![0u32; state_size.div_ceil(4)].into_boxed_slice();
+        // u64-backed so the block is 8-aligned for any device state struct (e.g. a biquad's f64 fields); a
+        // 4-aligned block would be misaligned for those.
+        let device_state = vec![0u64; state_size.div_ceil(8)].into_boxed_slice();
         let in_offsets = vec![0u32].into_boxed_slice(); // input buffer ptr, set by set_audio_source
         let out_offsets = vec![device_output.as_ptr() as u32].into_boxed_slice();
         let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
@@ -82,7 +84,7 @@ impl PluginAudioEffect {
             process_index: device.process_index,
             sample_rate,
             events: EventBuffer::new(),
-            automation: Vec::new(),
+            params: Vec::new(),
             clock_armed: false,
             output: shared_audio_buffer(),
             input: None,
@@ -94,15 +96,16 @@ impl PluginAudioEffect {
             descriptor
         }
     }
-
 }
 
-impl AutomationTarget for PluginAudioEffect {
-    /// A non-empty set arms the global clock for this device, so its per-block pull carries the update
-    /// events that drive `AudioEffect::automate`; an empty set disarms it.
-    fn set_automation(&mut self, automation: Vec<(FieldPath, ParamCurve)>) {
-        self.clock_armed = !automation.is_empty();
-        self.automation = automation;
+impl ParamSink for PluginAudioEffect {
+    fn set_params(&mut self, params: Vec<ParamHandle>, clock_armed: bool) {
+        self.params = params;
+        self.clock_armed = clock_armed;
+    }
+
+    fn state_ptr(&self) -> u32 {
+        self.device_state.as_ptr() as u32
     }
 }
 
@@ -136,8 +139,8 @@ impl Processor for PluginAudioEffect {
         self.descriptor[12] = info.blocks.len() as u32;
         self.descriptor[13] = info.blocks.as_ptr() as u32;
         // Hand the device its pull context: no note source (an effect has none), but the blocks and — when
-        // it has automation — the armed global clock + this device's curves, so its per-block pull returns
-        // the update events that drive `automate`. Scope the borrows so none is held across the device call.
+        // it has automation — the armed global clock + this device's params, so its per-block pull returns
+        // the update events that drive `parameter_changed`. Scope the borrows so none is held across the call.
         {
             let pull = unsafe { PULL.get() };
             pull.current = None;
@@ -145,7 +148,7 @@ impl Processor for PluginAudioEffect {
             pull.block_count = info.blocks.len();
             pull.sample_rate = self.sample_rate;
             pull.clock_armed = self.clock_armed;
-            core::mem::swap(&mut self.automation, &mut pull.automation);
+            core::mem::swap(&mut self.params, &mut pull.params);
         }
         call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
         {
@@ -153,7 +156,7 @@ impl Processor for PluginAudioEffect {
             pull.blocks = core::ptr::null();
             pull.block_count = 0;
             pull.clock_armed = false;
-            core::mem::swap(&mut self.automation, &mut pull.automation);
+            core::mem::swap(&mut self.params, &mut pull.params);
         }
         let mut output = self.output.borrow_mut();
         for index in 0..RENDER_QUANTUM {

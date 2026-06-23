@@ -38,11 +38,11 @@ use engine_env::note_sequencer::NoteSequencer;
 use value::event::EventCollection;
 use value::note::NoteEvent;
 use value::region::{RegionCollection, Span};
-use crate::param_automation::{AutomationTarget, FieldPath, ParamCurve, ValueBoundRegion};
+use crate::param_automation::{FieldPath, ParamCurve, ParamHandle, ParamSink, ValueBoundRegion};
 use crate::plugin_audio_effect::PluginAudioEffect;
 use crate::plugin_instrument::PluginInstrument;
 use crate::plugin_midi_effect::PluginMidiEffect;
-use crate::{Engine, PullLink, DEVICE_INDEX_KEY};
+use crate::{call_device_init, call_device_parameter_changed, DeviceReg, Engine, PullLink, BIND, DEVICE_INDEX_KEY};
 
 /// One bound note region: its loopable span plus a shared handle to its `NoteEventCollection` (the cache's
 /// canonical observation — see `CollectionCache`). Keyed by uuid so the region cascade can remove it.
@@ -166,13 +166,25 @@ struct WiredCluster {
     nodes: Vec<NodeId>,
     edges: Vec<(NodeId, NodeId)>,
     output_buffer: SharedAudioBuffer,
-    // The device automation observations of this cluster (one per automated parameter, across the
-    // instrument + audio-fx). Owned here so a rewire / teardown unsubscribes them with `&mut graph`; the
-    // nodes hold only cheap `ParamCurve` read handles onto these.
-    automation: Vec<ValueCollection>,
-    // The automatable device nodes by box uuid (instrument + audio-fx), so a runtime automation change can
-    // re-push fresh curves into a device WITHOUT rewiring the audio graph (`rebind_automation`).
-    automation_targets: Vec<(Uuid, Rc<RefCell<dyn AutomationTarget>>)>
+    // The bound parameters of each device in this cluster (instrument + audio-fx). Owned here so a rewire /
+    // teardown unsubscribes the field observers + terminates the curve collections, and so a runtime
+    // automation change can re-observe + re-push WITHOUT rewiring the audio graph (`rebind_automation`).
+    device_params: Vec<DeviceParams>
+}
+
+/// One device's bound parameters: enough to re-observe and re-push them on a runtime automation change. The
+/// `handles` are clones the engine reads for the build / edit push (sharing the node's `Rc<Cell>`s, so the
+/// `last`-value diff stays consistent with the clock pull); `field_subs` + `collections` are the graph
+/// observations to drop on teardown / re-bind.
+struct DeviceParams {
+    device_uuid: Uuid,
+    reg: DeviceReg,
+    state_ptr: u32,
+    sink: Rc<RefCell<dyn ParamSink>>, // the node, to re-set params on a re-bind
+    paths: Vec<FieldPath>,            // the parameter field-paths the device declared in `init`
+    handles: Vec<ParamHandle>,
+    field_subs: Vec<SubscriptionId>,
+    collections: Vec<ValueCollection>
 }
 
 /// A live audio-unit BINDING. The RootBox `audio-units` membership drives create / destroy. Beneath it:
@@ -315,9 +327,7 @@ impl Engine {
     fn teardown_unit(&mut self, mut binding: AudioUnitBinding) {
         if let Some(wired) = binding.wired.take() {
             self.teardown_wired(&wired);
-            for collection in wired.automation {
-                collection.terminate(&mut self.graph);
-            }
+            self.teardown_device_params(wired.device_params);
         }
         self.graph.unsubscribe(binding.track_sub);
         self.graph.unsubscribe(binding.automation_sub);
@@ -410,9 +420,7 @@ impl Engine {
     fn rewire_unit(&mut self, unit: &mut AudioUnitBinding) {
         if let Some(wired) = unit.wired.take() {
             self.teardown_wired(&wired);
-            for collection in wired.automation {
-                collection.terminate(&mut self.graph);
-            }
+            self.teardown_device_params(wired.device_params);
         }
         let instrument_uuid = match unit.input.sorted().first().copied() {
             Some(uuid) => uuid,
@@ -422,9 +430,8 @@ impl Engine {
             Some(device) if device.kind == DEVICE_KIND_INSTRUMENT => device,
             _ => return
         };
-        // The cluster's automation observations (instrument + audio-fx), accumulated as nodes are built and
-        // stored in the WiredCluster so the next rewire / teardown unsubscribes them.
-        let mut automation: Vec<ValueCollection> = Vec::new();
+        let mut device_params: Vec<DeviceParams> = Vec::new();
+        let mut device_uuids: Vec<Uuid> = Vec::new();
         // The pull chain: sequencer (over the unit's per-track region collections) at the leaf, each midi-fx
         // folded on top in index order, so the instrument pulls the highest-index fx, which pulls the next,
         // down to the sequencer. The sequencer reads `track_sets` live, so track / region changes need no rewire.
@@ -440,16 +447,12 @@ impl Engine {
                 _ => {}
             }
         }
-        let instrument_curves = gather_automation(&mut self.graph, instrument_uuid, &mut automation);
         let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, instrument_device)));
-        instrument.borrow_mut().set_automation(instrument_curves);
+        let instrument_state = instrument.borrow().state_ptr();
+        device_params.push(self.bind_device(instrument_uuid, instrument_device, instrument_state, instrument.clone()));
+        device_uuids.push(instrument_uuid);
         instrument.borrow_mut().set_pull_chain(chain);
         let mut output = instrument.borrow().audio_output();
-        // Keep automatable nodes by uuid (instrument + audio-fx) so a runtime automation change re-binds them
-        // in place; the typed clone coerces to the trait object before the concrete Rc is moved into the graph.
-        let instrument_target: Rc<RefCell<dyn AutomationTarget>> = instrument.clone();
-        let mut automation_targets: Vec<(Uuid, Rc<RefCell<dyn AutomationTarget>>)> = vec![(instrument_uuid, instrument_target)];
-        let mut device_uuids: Vec<Uuid> = vec![instrument_uuid];
         let instrument_id = self.context.register_processor(instrument);
         let mut nodes = vec![instrument_id];
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
@@ -461,14 +464,12 @@ impl Engine {
                 Some(device) if device.kind == DEVICE_KIND_EFFECT => device,
                 _ => continue
             };
-            let fx_curves = gather_automation(&mut self.graph, device_uuid, &mut automation);
             let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
-            node.borrow_mut().set_automation(fx_curves);
+            let node_state = node.borrow().state_ptr();
+            device_params.push(self.bind_device(device_uuid, device, node_state, node.clone()));
+            device_uuids.push(device_uuid);
             node.borrow_mut().set_audio_source(output);
             output = node.borrow().audio_output();
-            let node_target: Rc<RefCell<dyn AutomationTarget>> = node.clone();
-            automation_targets.push((device_uuid, node_target));
-            device_uuids.push(device_uuid);
             let node_id = self.context.register_processor(node);
             self.context.register_edge(output_node, node_id);
             edges.push((output_node, node_id));
@@ -488,35 +489,150 @@ impl Engine {
         master.borrow_mut().add_audio_source(strip_output.clone());
         self.context.register_edge(strip_id, self.master_id);
         edges.push((strip_id, self.master_id));
-        // Publish the automatable devices to the runtime observer and clear any pending flag (we just
-        // gathered fresh curves), then store the cluster with its re-bind handles.
+        // Now that every device node exists and its params are bound, push each parameter's initial value
+        // (the box-field default, or its automation at the current position) to the device.
+        let position = self.transport.position();
+        for params in &device_params {
+            refresh_params(&params.handles, params.reg, params.state_ptr, position);
+        }
+        // Publish the automatable devices to the runtime observer and clear any pending flag.
         *unit.device_uuids.borrow_mut() = device_uuids;
         unit.automation_dirty.set(false);
-        unit.wired = Some(WiredCluster {nodes, edges, output_buffer: strip_output, automation, automation_targets});
+        unit.wired = Some(WiredCluster {nodes, edges, output_buffer: strip_output, device_params});
     }
 
-    /// Re-bind a unit's device automation after a runtime attach / detach (or a region change), WITHOUT
-    /// rewiring the audio graph: terminate the old curve observations, re-gather each automatable device's
-    /// automation, and push the fresh curves into its node (which re-arms or disarms the device's update
-    /// clock). Mirrors TS `bindParameter` reacting to its parameter's automation pointer hub.
-    fn rebind_automation(&mut self, unit: &mut AudioUnitBinding) {
-        if unit.wired.is_none() {
-            return;
+    /// Bind one device's parameters: call its `init` (which records its parameter field-paths via
+    /// `host_bind_parameter`), observe each path's field value + automation track, hand the node its
+    /// parameter set, and return the bookkeeping for teardown / re-bind.
+    fn bind_device(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, sink: Rc<RefCell<dyn ParamSink>>) -> DeviceParams {
+        let paths = bind_paths(reg, state_ptr);
+        let (handles, field_subs, collections, armed) = self.observe_params(device_uuid, &paths);
+        sink.borrow_mut().set_params(handles.clone(), armed);
+        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections}
+    }
+
+    /// Observe each parameter field's value (a reactive `Rc<Cell>`) and its automation track, returning the
+    /// per-parameter handles, the field subscriptions + curve collections (for teardown), and whether ANY
+    /// parameter is automated (so the node arms the clock). The id is the parameter's index, matching the
+    /// id `host_bind_parameter` returned the device.
+    fn observe_params(&mut self, device_uuid: Uuid, paths: &[FieldPath]) -> (Vec<ParamHandle>, Vec<SubscriptionId>, Vec<ValueCollection>, bool) {
+        let mut handles = Vec::new();
+        let mut field_subs = Vec::new();
+        let mut collections = Vec::new();
+        let mut armed = false;
+        for (index, path) in paths.iter().enumerate() {
+            let field = Rc::new(core::cell::Cell::new(0.0f32));
+            let cell = field.clone();
+            let sub = self.graph.catchup_and_subscribe(Address::of(device_uuid, path.clone()), move |value| {
+                if let Some(value) = value.as_float32() { cell.set(value); }
+            });
+            field_subs.push(sub);
+            let (track, mut track_collections) = build_param_track(&mut self.graph, device_uuid, path);
+            if track.is_some() {
+                armed = true;
+            }
+            collections.append(&mut track_collections);
+            handles.push(ParamHandle {id: index as u32, field, track, last: Rc::new(core::cell::Cell::new(f32::NAN))});
         }
-        let targets = {
-            let wired = unit.wired.as_mut().unwrap();
-            for collection in core::mem::take(&mut wired.automation) {
+        (handles, field_subs, collections, armed)
+    }
+
+    /// Unsubscribe each device's field observers and terminate its curve collections (a rewire / teardown).
+    fn teardown_device_params(&mut self, device_params: Vec<DeviceParams>) {
+        for params in device_params {
+            for sub in params.field_subs {
+                self.graph.unsubscribe(sub);
+            }
+            for collection in params.collections {
                 collection.terminate(&mut self.graph);
             }
-            wired.automation_targets.clone()
-        };
-        let mut automation: Vec<ValueCollection> = Vec::new();
-        for (device_uuid, node) in &targets {
-            let curves = gather_automation(&mut self.graph, *device_uuid, &mut automation);
-            node.borrow_mut().set_automation(curves);
         }
-        unit.wired.as_mut().unwrap().automation = automation;
     }
+
+    /// Re-bind a unit's device automation after a runtime attach / detach / field edit, WITHOUT rewiring the
+    /// audio graph: for each device re-observe its parameters (the field-paths it declared are kept), re-set
+    /// them on the node (re-arming or disarming the clock), and push the resolved values. Mirrors TS
+    /// `bindParameter` reacting to a parameter's automation pointer hub.
+    fn rebind_automation(&mut self, unit: &mut AudioUnitBinding) {
+        let mut wired = match unit.wired.take() {
+            Some(wired) => wired,
+            None => return
+        };
+        let position = self.transport.position();
+        let mut rebound: Vec<DeviceParams> = Vec::new();
+        for params in core::mem::take(&mut wired.device_params) {
+            for sub in params.field_subs {
+                self.graph.unsubscribe(sub);
+            }
+            for collection in params.collections {
+                collection.terminate(&mut self.graph);
+            }
+            let (handles, field_subs, collections, armed) = self.observe_params(params.device_uuid, &params.paths);
+            params.sink.borrow_mut().set_params(handles.clone(), armed);
+            refresh_params(&handles, params.reg, params.state_ptr, position);
+            rebound.push(DeviceParams {
+                device_uuid: params.device_uuid, reg: params.reg, state_ptr: params.state_ptr,
+                sink: params.sink, paths: params.paths, handles, field_subs, collections
+            });
+        }
+        wired.device_params = rebound;
+        unit.wired = Some(wired);
+    }
+}
+
+/// Call a device's `init` to collect the parameter field-paths it declares (it binds them via
+/// `host_bind_parameter`, which records into `BIND`). Touches no graph, so it is a free fn.
+fn bind_paths(reg: DeviceReg, state_ptr: u32) -> Vec<FieldPath> {
+    unsafe { BIND.get() }.clear();
+    call_device_init(reg.init_index, state_ptr);
+    core::mem::take(unsafe { BIND.get() })
+}
+
+/// Push each parameter's resolved value (its automation at `position`, else its field value) to the device
+/// via its `parameter_changed` export, but only when it CHANGED since the last push (the TS `updateAutomation`
+/// compare). Called at build (every param, `last` is NaN) and on a runtime edit. Never during render.
+fn refresh_params(handles: &[ParamHandle], reg: DeviceReg, state_ptr: u32, position: f64) {
+    for handle in handles {
+        let value = handle.resolve(position);
+        if value != handle.last.get() {
+            handle.last.set(value);
+            call_device_parameter_changed(reg.parameter_changed_index, state_ptr, handle.id, value);
+        }
+    }
+}
+
+/// The automation curve for a device parameter, if a Value track targets `(device_uuid, path)`: build a
+/// `ParamCurve` over that track's value regions and return it with the collections to terminate. `None` (and
+/// no collections) when the parameter has no automation track.
+fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &[u16]) -> (Option<ParamCurve>, Vec<ValueCollection>) {
+    let track_uuid = {
+        let mut found = None;
+        for track in graph.find_all_by_name("TrackBox") {
+            if let Some(target) = graph.target_of(&Address::of(track.uuid, vec![TRACK_TARGET_KEY])) {
+                if target.uuid == device_uuid && target.field_keys.as_slice() == path {
+                    found = Some(track.uuid);
+                    break;
+                }
+            }
+        }
+        found
+    };
+    let track_uuid = match track_uuid {
+        Some(uuid) => uuid,
+        None => return (None, Vec::new())
+    };
+    let mut regions = RegionCollection::new();
+    let mut collections = Vec::new();
+    for spec in value_regions_of_track(graph, track_uuid) {
+        let collection = ValueCollection::observe(graph, spec.collection);
+        regions.add(ValueBoundRegion {
+            position: spec.position, duration: spec.duration,
+            loop_offset: spec.loop_offset, loop_duration: spec.loop_duration,
+            curve: collection.curve()
+        });
+        collections.push(collection);
+    }
+    (Some(ParamCurve::new(regions)), collections)
 }
 
 // ---- The track / region cascade beneath an audio unit. Free functions taking `&mut BoxGraph`: they only
@@ -661,36 +777,6 @@ const TRACK_TARGET_KEY: u16 = 2;        // TrackBox.target -> the automated para
 const VALUE_REGION_TRACK_KEY: u16 = 1;  // ValueRegionBox.regions -> the track's region collection
 const VALUE_REGION_EVENTS_KEY: u16 = 2; // ValueRegionBox.events -> the ValueEventCollectionBox
 
-/// Observe a device's automated parameters, append every curve observation to `sink` (kept for teardown),
-/// and return a read handle (packed field key -> `ParamCurve`) per parameter for the device's node. A
-/// parameter binds 1:1 to a Value track; the handle wraps ALL of that track's value regions (sorted), not
-/// one, so `host_automation` evaluates the region covering the position.
-fn gather_automation(graph: &mut BoxGraph, device_uuid: Uuid, sink: &mut Vec<ValueCollection>) -> Vec<(FieldPath, ParamCurve)> {
-    // Under an immutable borrow, gather each automated parameter's (field-key path, region specs); then
-    // observe the curves (which needs `&mut graph`). The path is the track's target field keys verbatim.
-    let mut params: Vec<(FieldPath, Vec<RegionSpec>)> = Vec::new();
-    for track in graph.find_all_by_name("TrackBox") {
-        let path = match graph.target_of(&Address::of(track.uuid, vec![TRACK_TARGET_KEY])) {
-            Some(target) if target.uuid == device_uuid => target.field_keys.clone(),
-            _ => continue
-        };
-        params.push((path, value_regions_of_track(graph, track.uuid)));
-    }
-    params.into_iter().map(|(path, specs)| {
-        let mut regions = RegionCollection::new();
-        for spec in specs {
-            let collection = ValueCollection::observe(graph, spec.collection);
-            regions.add(ValueBoundRegion {
-                position: spec.position, duration: spec.duration,
-                loop_offset: spec.loop_offset, loop_duration: spec.loop_duration,
-                curve: collection.curve()
-            });
-            sink.push(collection);
-        }
-        (path, ParamCurve::new(regions))
-    }).collect()
-}
-
 /// One value region of an automation track: its `events` collection and loopable span.
 struct RegionSpec {
     collection: Uuid,
@@ -728,28 +814,32 @@ fn track_type(graph: &BoxGraph, track_uuid: Uuid) -> i32 {
     graph.field_value(&Address::of(track_uuid, vec![TRACK_TYPE_KEY])).and_then(|value| value.as_int32()).unwrap_or(0)
 }
 
-/// Whether an update is a STRUCTURAL automation change for a unit whose automatable devices are `devices`:
-/// a pointer attaching to / detaching from one of those device boxes' parameter fields (automation
-/// attach / detach), or a value region's `regions` pointer joining / leaving a track that targets one of
-/// them. Value-event edits within an already-bound curve are NOT structural (the `ValueCollection` keeps
-/// them live), so they never match — only membership does, which is what needs a re-bind.
+/// Whether an update requires a unit (whose automatable devices are `devices`) to re-bind its parameters:
+/// an automation pointer attaching to / detaching from a device's parameter field, a value region's
+/// `regions` pointer joining / leaving a track that targets one of them, or a device's own field VALUE
+/// being edited (a static parameter's new value must be pushed). Value-event edits within an already-bound
+/// curve are NOT included — the `ValueCollection` keeps those live and the clock pull picks them up.
 fn touches_unit_automation(graph: &BoxGraph, update: &Update, devices: &[Uuid]) -> bool {
-    let Update::Pointer {address, old, new} = update else {
-        return false;
-    };
-    // (a) attach / detach: a pointer whose target is (or was) a field of one of our device boxes.
-    if [old, new].into_iter().flatten().any(|target| devices.contains(&target.uuid)) {
-        return true;
+    match update {
+        Update::Pointer {address, old, new} => {
+            // (a) attach / detach: a pointer whose target is (or was) a field of one of our device boxes.
+            if [old, new].into_iter().flatten().any(|target| devices.contains(&target.uuid)) {
+                return true;
+            }
+            // (b) a value region's track membership changed: follow its `regions` pointer to the track, then
+            // the track's `target` to a device of this unit.
+            if address.field_keys.len() == 1 && address.field_keys[0] == VALUE_REGION_TRACK_KEY {
+                return [old, new].into_iter().flatten().any(|track_regions| {
+                    graph.target_of(&Address::of(track_regions.uuid, vec![TRACK_TARGET_KEY]))
+                        .map(|device| devices.contains(&device.uuid)).unwrap_or(false)
+                });
+            }
+            false
+        }
+        // (c) a device's own field value edited: a static parameter's new value must be re-pushed.
+        Update::Primitive {address, ..} => devices.contains(&address.uuid),
+        _ => false
     }
-    // (b) a value region's track membership changed: follow its `regions` pointer to the track, then the
-    // track's `target` to a device of this unit.
-    if address.field_keys.len() == 1 && address.field_keys[0] == VALUE_REGION_TRACK_KEY {
-        return [old, new].into_iter().flatten().any(|track_regions| {
-            graph.target_of(&Address::of(track_regions.uuid, vec![TRACK_TARGET_KEY]))
-                .map(|device| devices.contains(&device.uuid)).unwrap_or(false)
-        });
-    }
-    false
 }
 
 #[cfg(test)]
@@ -757,7 +847,7 @@ mod tests {
     //! Mirrored regions: a NoteEventCollectionBox is observed ONCE by the cache and shared by every region
     //! that references it; the observation survives until the last region leaves. Two regions sharing a
     //! collection both read the same events, and removing one leaves the other reading it.
-    use super::{gather_automation, touches_unit_automation, CollectionCache};
+    use super::{build_param_track, touches_unit_automation, CollectionCache};
     use boxgraph::address::{Address, Uuid};
     use boxgraph::boxes::GraphBox;
     use boxgraph::field::{FieldValue, Fields};
@@ -879,16 +969,16 @@ mod tests {
     }
 
     #[test]
-    fn gather_automation_keys_by_the_full_field_path_at_any_depth() {
-        // A three-level path — deeper than the old packed u32 key could ever represent — must survive
-        // verbatim as the relationship key, neither truncated nor encoded.
+    fn build_param_track_resolves_the_full_field_path_at_any_depth() {
+        // A three-level path — deeper than the old packed u32 key could ever represent — resolves the track.
         let deep = [16u16, 5, 10];
         let mut graph = deep_automation_graph(&deep);
-        let mut sink = Vec::new();
-        let params = gather_automation(&mut graph, DEVICE, &mut sink);
-        assert_eq!(params.len(), 1, "the device's one automated parameter is found");
-        let (path, curve) = &params[0];
-        assert_eq!(path.as_slice(), &deep, "the full field-key path is the key, untruncated and unpacked");
+        let (curve, collections) = build_param_track(&mut graph, DEVICE, &deep);
+        let curve = curve.expect("the parameter at the deep path has an automation track");
+        assert_eq!(collections.len(), 1, "its one value region's collection is observed");
         assert_eq!(curve.value_at(0.0, -1.0), 0.7, "and the curve reads its event through that path");
+        // A different path on the same device has no track.
+        let (none, _) = build_param_track(&mut graph, DEVICE, &[16, 5, 11]);
+        assert!(none.is_none(), "an unbound path has no automation track");
     }
 }
