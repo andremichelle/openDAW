@@ -92,11 +92,13 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
         }))
     }
 
-    // One value-automation track bound 1:1 to a device parameter `target` (TS `TrackType.Value`): a region
-    // over the 2-bar loop whose ValueEventCollection holds `points` ([position, 0..1 unit value]). The engine
-    // reads it on the global update clock and pushes the unit value to the device, which maps it to its range.
-    const addParamAutomation = (unit: AudioUnitBox, target: RevampDeviceBox["lowPass"]["frequency"],
-                                points: Iterable<readonly [number, number]>): void => {
+    // One value-automation track bound 1:1 to a device parameter `target` (TS `TrackType.Value`, any field
+    // that accepts an Automation pointer): a region over the 2-bar loop whose ValueEventCollection holds
+    // `points` ([position, value]). The engine reads it on the global update clock and pushes the value to
+    // the device, which interprets it (the lowpass maps 0..1, the transpose reads semitones). `interpolation`
+    // (0 = none / step, 1 = linear) defaults to the box default (linear) when omitted.
+    const addParamAutomation = (unit: AudioUnitBox, target: Parameters<TrackBox["target"]["refer"]>[0],
+                                points: Iterable<readonly [number, number]>, interpolation?: number): void => {
         const loopLength = 2 * PPQN.Bar
         const track = TrackBox.create(boxGraph, UUID.generate(), box => {
             box.tracks.refer(unit.tracks)
@@ -116,6 +118,7 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
             ValueEventBox.create(boxGraph, UUID.generate(), box => {
                 box.position.setValue(position)
                 box.value.setValue(value)
+                if (interpolation !== undefined) {box.interpolation.setValue(interpolation)}
                 box.events.refer(collection.events)
             })
         })
@@ -158,10 +161,14 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
             box.index.setValue(1)
             box.groove.refer(groove)
         })
-        PitchDeviceBox.create(boxGraph, UUID.generate(), box => {
+        const pitch = PitchDeviceBox.create(boxGraph, UUID.generate(), box => {
             box.host.refer(unit.midiEffects)
             box.index.setValue(2)
         })
+        // Transpose (a MIDI-fx parameter, automated): 0 semitones through the first bar, then a STEP up to
+        // +12 (an octave) for the second bar, repeating each loop. The value IS the semitone count, and with
+        // NO interpolation on both events it jumps at the bar rather than gliding.
+        addParamAutomation(unit, pitch.semiTones, [[0, 0], [PPQN.Bar, 12]] as const, 0)
     })
     timelineBox.loopArea.from.setValue(0)
     timelineBox.loopArea.to.setValue(2 * PPQN.Bar)
@@ -201,7 +208,7 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
             }
         })
         await ctx.suspend()
-        append(`booted @ ${ctx.sampleRate} Hz — suspended; auto-wah sawtooth bass (left) + shuffled octave-up arpeggiated sine chord (right), six device plugins`)
+        append(`booted @ ${ctx.sampleRate} Hz — suspended; auto-wah sawtooth bass (left) + shuffled arpeggiated sine chord, transposing +12 every other bar (right), six device plugins`)
     }
 
     const play = async (): Promise<void> => {
@@ -254,7 +261,11 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
                     blocks with no new input.</li>
                 <li><strong>Zeitgeist.</strong> Shuffles the stream with a swing groove: it pulls its upstream
                     over an un-warped range and warps the positions back.</li>
-                <li><strong>Transpose.</strong> Shifts every step up an octave.</li>
+                <li><strong>Transpose with an automated parameter.</strong> Shifts every step by its
+                    <code>semiTones</code> parameter, which is <strong>automated</strong>: 0 through the first
+                    bar, then a stepped jump to +12 (an octave) for the second bar, repeating. This is a
+                    <strong>MIDI-fx</strong> parameter — the fx splits its pull at the update clock and
+                    refreshes the value per sub-range, so a midi effect automates just like an audio one.</li>
                 <li><strong>Pull model.</strong> Each pull cascades up the chain; the MIDI fx are not audio
                     nodes, they produce events on demand, working in pulse positions while the instrument
                     resolves sample offsets.</li>

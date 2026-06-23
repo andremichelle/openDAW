@@ -65,8 +65,11 @@ type EngineExports = {
     // Route D parameter hooks. `host_bind_parameter` registers a parameter by its field-key path (a u16
     // slice in the device's memory) from `init`, returning its id. `host_update_parameters` pulls the
     // device's parameters that changed at a position into a ParamChange scratch, returning the count.
+    // `host_next_update_position` returns the next update-clock position after a pulse (or +Infinity when
+    // the device has no automation), so the render template fragments at it.
     host_bind_parameter: (pathPtr: number, pathLen: number) => number
     host_update_parameters: (position: number, outPtr: number, max: number) => number
+    host_next_update_position: (after: number) => number
 }
 
 // Read a varuint32 (LEB128) at `pos`; returns [value, nextPos].
@@ -155,7 +158,8 @@ class EngineProcessor extends AudioWorkletProcessor {
                 host_pull_events: engine.host_pull_events,
                 host_pulse_to_offset: engine.host_pulse_to_offset,
                 host_bind_parameter: engine.host_bind_parameter,
-                host_update_parameters: engine.host_update_parameters
+                host_update_parameters: engine.host_update_parameters,
+                host_next_update_position: engine.host_next_update_position
             }
         }).exports as unknown as DeviceExports
         device.__wasm_apply_data_relocs?.()

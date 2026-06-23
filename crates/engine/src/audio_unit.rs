@@ -180,11 +180,28 @@ struct DeviceParams {
     device_uuid: Uuid,
     reg: DeviceReg,
     state_ptr: u32,
-    sink: Rc<RefCell<dyn ParamSink>>, // the node, to re-set params on a re-bind
-    paths: Vec<FieldPath>,            // the parameter field-paths the device declared in `init`
+    sink: ParamNode,       // the node, to re-set params on a re-bind
+    paths: Vec<FieldPath>, // the parameter field-paths the device declared in `init`
     handles: Vec<ParamHandle>,
     field_subs: Vec<SubscriptionId>,
     collections: Vec<ValueCollection>
+}
+
+/// Where bound parameters are pushed: an audio node (instrument / audio-fx, mutated through its
+/// `Rc<RefCell>`) or a MIDI-fx (shared behind a bare `Rc`, mutated through its interior cells). Both expose
+/// "replace this device's params + clock-armed state"; this dispatches to whichever it holds.
+enum ParamNode {
+    Audio(Rc<RefCell<dyn ParamSink>>),
+    Midi(Rc<PluginMidiEffect>)
+}
+
+impl ParamNode {
+    fn set_params(&self, params: Vec<ParamHandle>, clock_armed: bool) {
+        match self {
+            ParamNode::Audio(node) => node.borrow_mut().set_params(params, clock_armed),
+            ParamNode::Midi(effect) => effect.set_params(params, clock_armed)
+        }
+    }
 }
 
 /// A live audio-unit BINDING. The RootBox `audio-units` membership drives create / destroy. Beneath it:
@@ -435,6 +452,7 @@ impl Engine {
         // The pull chain: sequencer (over the unit's per-track region collections) at the leaf, each midi-fx
         // folded on top in index order, so the instrument pulls the highest-index fx, which pulls the next,
         // down to the sequencer. The sequencer reads `track_sets` live, so track / region changes need no rewire.
+        // Each midi-fx binds its parameters too, so a midi-fx parameter is automatable like an audio device's.
         let sequencer: SharedNoteEventSource =
             Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: unit.track_sets.clone()}))));
         let mut chain = PullLink::Source(sequencer);
@@ -442,14 +460,18 @@ impl Engine {
             let device = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
             match device {
                 Some(device) if device.kind == DEVICE_KIND_MIDI_EFFECT => {
-                    chain = PullLink::MidiFx {effect: Rc::new(PluginMidiEffect::new(device)), upstream: Rc::new(chain)};
+                    let effect = Rc::new(PluginMidiEffect::new(device));
+                    device_params.push(self.bind_device(device_uuid, device, effect.state_ptr(), ParamNode::Midi(effect.clone())));
+                    device_uuids.push(device_uuid);
+                    chain = PullLink::MidiFx {effect, upstream: Rc::new(chain)};
                 }
                 _ => {}
             }
         }
         let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, instrument_device)));
         let instrument_state = instrument.borrow().state_ptr();
-        device_params.push(self.bind_device(instrument_uuid, instrument_device, instrument_state, instrument.clone()));
+        let instrument_sink: Rc<RefCell<dyn ParamSink>> = instrument.clone();
+        device_params.push(self.bind_device(instrument_uuid, instrument_device, instrument_state, ParamNode::Audio(instrument_sink)));
         device_uuids.push(instrument_uuid);
         instrument.borrow_mut().set_pull_chain(chain);
         let mut output = instrument.borrow().audio_output();
@@ -466,7 +488,8 @@ impl Engine {
             };
             let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
             let node_state = node.borrow().state_ptr();
-            device_params.push(self.bind_device(device_uuid, device, node_state, node.clone()));
+            let node_sink: Rc<RefCell<dyn ParamSink>> = node.clone();
+            device_params.push(self.bind_device(device_uuid, device, node_state, ParamNode::Audio(node_sink)));
             device_uuids.push(device_uuid);
             node.borrow_mut().set_audio_source(output);
             output = node.borrow().audio_output();
@@ -504,10 +527,10 @@ impl Engine {
     /// Bind one device's parameters: call its `init` (which records its parameter field-paths via
     /// `host_bind_parameter`), observe each path's field value + automation track, hand the node its
     /// parameter set, and return the bookkeeping for teardown / re-bind.
-    fn bind_device(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, sink: Rc<RefCell<dyn ParamSink>>) -> DeviceParams {
+    fn bind_device(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, sink: ParamNode) -> DeviceParams {
         let paths = bind_paths(reg, state_ptr);
         let (handles, field_subs, collections, armed) = self.observe_params(device_uuid, &paths);
-        sink.borrow_mut().set_params(handles.clone(), armed);
+        sink.set_params(handles.clone(), armed);
         DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections}
     }
 
@@ -524,7 +547,10 @@ impl Engine {
             let field = Rc::new(core::cell::Cell::new(0.0f32));
             let cell = field.clone();
             let sub = self.graph.catchup_and_subscribe(Address::of(device_uuid, path.clone()), move |value| {
-                if let Some(value) = value.as_float32() { cell.set(value); }
+                // A parameter field is Float32 (e.g. a cutoff) or Int32 (e.g. semitones); read either as f32.
+                if let Some(value) = value.as_float32().or_else(|| value.as_int32().map(|value| value as f32)) {
+                    cell.set(value);
+                }
             });
             field_subs.push(sub);
             let (track, mut track_collections) = build_param_track(&mut self.graph, device_uuid, path);
@@ -568,7 +594,7 @@ impl Engine {
                 collection.terminate(&mut self.graph);
             }
             let (handles, field_subs, collections, armed) = self.observe_params(params.device_uuid, &params.paths);
-            params.sink.borrow_mut().set_params(handles.clone(), armed);
+            params.sink.set_params(handles.clone(), armed);
             refresh_params(&handles, params.reg, params.state_ptr, position);
             rebound.push(DeviceParams {
                 device_uuid: params.device_uuid, reg: params.reg, state_ptr: params.state_ptr,

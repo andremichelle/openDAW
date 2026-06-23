@@ -11,7 +11,6 @@
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
-use abi::EventRecord;
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_generator::AudioGenerator;
 use engine_env::audio_input::AudioInput;
@@ -21,7 +20,7 @@ use engine_env::process_info::ProcessInfo;
 use engine_env::processor::Processor;
 use transport::transport::RENDER_QUANTUM;
 use crate::param_automation::{ParamHandle, ParamSink};
-use crate::{call_device_process, DeviceReg, DEVICE_MAX_EVENTS, PULL};
+use crate::{call_device_process, DeviceReg, PULL};
 
 /// A graph node that runs an audio-EFFECT device after an upstream node (Route B). It reads its single
 /// input buffer (the upstream's mono output, taken from its `left` channel) through the device, into the
@@ -44,10 +43,6 @@ pub(crate) struct PluginAudioEffect {
     input: Option<SharedAudioBuffer>,
     device_output: Box<[f32]>,
     in_offsets: Box<[u32]>,
-    // The event scratch the device pulls its clock (update) events into; referenced by the descriptor, so it
-    // must stay alive even though Rust sees no direct read.
-    #[allow(dead_code)]
-    device_events: Box<[EventRecord]>,
     #[allow(dead_code)]
     out_offsets: Box<[u32]>,
     #[allow(dead_code)]
@@ -64,18 +59,16 @@ impl PluginAudioEffect {
         let device_state = vec![0u64; state_size.div_ceil(8)].into_boxed_slice();
         let in_offsets = vec![0u32].into_boxed_slice(); // input buffer ptr, set by set_audio_source
         let out_offsets = vec![device_output.as_ptr() as u32].into_boxed_slice();
-        let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
-        let device_events = vec![blank; DEVICE_MAX_EVENTS].into_boxed_slice();
-        // descriptor (see `abi`): frames, in_count/ptr (1), out_count/ptr (1), no params, state, the event
-        // scratch the effect pulls its clock into, no out events, block_count/ptr (set per quantum from the
-        // ProcessInfo so the effect gets transport for tempo sync), sample_rate.
+        // descriptor (see `abi`): frames, in_count/ptr (1), out_count/ptr (1), no params, state, NO event
+        // scratch (the effect no longer pulls notes; it fragments at the engine's update positions), no out
+        // events, block_count/ptr (set per quantum from the ProcessInfo for tempo sync), sample_rate.
         let descriptor = vec![
             RENDER_QUANTUM as u32,
             1, in_offsets.as_ptr() as u32,
             1, out_offsets.as_ptr() as u32,
             0, 0,
             device_state.as_ptr() as u32,
-            DEVICE_MAX_EVENTS as u32, device_events.as_ptr() as u32,
+            0, 0,
             0, 0,
             0, 0,
             sample_rate.to_bits()
@@ -90,7 +83,6 @@ impl PluginAudioEffect {
             input: None,
             device_output,
             in_offsets,
-            device_events,
             out_offsets,
             device_state,
             descriptor

@@ -144,6 +144,7 @@ extern "C" {
     fn host_pulse_to_offset(pulse: f64) -> u32;
     fn host_bind_parameter(path_ptr: u32, path_len: u32) -> u32;
     fn host_update_parameters(position: f64, out_ptr: u32, max: u32) -> u32;
+    fn host_next_update_position(after: f64) -> f64;
 }
 
 /// Pull this device's resolved input events for the pulse range `[from, to)` into `out`, returning the
@@ -201,6 +202,19 @@ pub fn update_parameters(position: f64, out: &mut [ParamChange]) -> usize {
     { unsafe { host_update_parameters(position, out.as_mut_ptr() as u32, out.len() as u32) as usize } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (position, out.len()); 0 }
+}
+
+/// The engine's next parameter-update position strictly after `after`, per its update-clock policy (a fixed
+/// grid today, tempo-aware later) — the single place that owns the rate. Returns `f64::INFINITY` when THIS
+/// device has no automated parameter, so the SDK's fragmentation loop simply doesn't split. A device's
+/// render template walks these to fragment its work and refresh parameters; it never computes a grid itself.
+/// Native stub returns `INFINITY` (no fragmentation off-engine).
+#[inline]
+pub fn next_update_position(after: f64) -> f64 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_next_update_position(after) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = after; f64::INFINITY }
 }
 
 /// The most parameter changes [`update_parameters`] returns per call (a device's whole param set, comfortably).
@@ -388,10 +402,21 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: &mut [f32], e
     }
 }
 
-/// The full per-quantum instrument path a device calls from `process`: clear the output, PULL each
-/// block's events into the scratch (Route A), dispatch the whole quantum (block offsets do not overlap
-/// and the host lifecycle-sorts each block, so the accumulated run is already offset-ordered), then run
-/// the once-per-quantum `finish`.
+/// Order resolved records for `dispatch_range`: by sample offset, then at an equal offset note-off ->
+/// param-update -> note-on, so a note starting at an update position sees the refreshed parameter.
+fn record_rank(kind: u32) -> u8 {
+    match kind {
+        EVENT_NOTE_OFF => 0,
+        EVENT_PARAM => 1,
+        _ => 2 // EVENT_NOTE_ON
+    }
+}
+
+/// The full per-quantum instrument path a device calls from `process`: clear the output, PULL each block's
+/// notes into the scratch (Route A) AND append a param-update marker at each `next_update_position` in the
+/// block (Route D — generated here from the engine's update clock, not injected into the stream), resolve
+/// every record's sample offset, sort, dispatch the quantum (`dispatch_range` voices notes and refreshes
+/// parameters at the markers), then run the once-per-quantum `finish`.
 pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
     let sample_rate = ports.sample_rate;
     for sample in ports.output.iter_mut() {
@@ -403,14 +428,23 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
             break;
         }
         let pulled = pull_events(block.p0, block.p1, block.flags.0, &mut ports.event_scratch[count..]);
-        // The pull chain works in pulse positions; this consumer resolves each to its sample offset for the
-        // DSP (the block containing the position maps it). Positions are block-monotonic, so the result
-        // stays offset-sorted for `dispatch_range`.
-        for record in &mut ports.event_scratch[count..count + pulled] {
-            record.offset = pulse_to_offset(record.position);
-        }
         count += pulled;
+        // Param-update markers at the engine's update positions in this block (none when the device has no
+        // automation — `next_update_position` returns INFINITY). They carry the pulse position; the offset is
+        // resolved with the notes below.
+        let mut position = next_update_position(block.p0);
+        while position < block.p1 && count < ports.event_scratch.len() {
+            ports.event_scratch[count] = EventRecord {position, offset: 0, kind: EVENT_PARAM, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+            count += 1;
+            position = next_update_position(position);
+        }
     }
+    // The pull chain works in pulse positions; resolve each record's sample offset, then sort the merged
+    // notes + markers into offset order (off -> param -> on at a tie) for `dispatch_range`.
+    for record in &mut ports.event_scratch[..count] {
+        record.offset = pulse_to_offset(record.position);
+    }
+    ports.event_scratch[..count].sort_unstable_by(|a, b| a.offset.cmp(&b.offset).then(record_rank(a.kind).cmp(&record_rank(b.kind))));
     dispatch_range::<I>(ports.state, ports.output, &ports.event_scratch[..count], sample_rate);
     I::finish(ports.state, ports.output, sample_rate);
 }
@@ -439,10 +473,11 @@ pub trait AudioEffect {
 }
 
 /// The per-quantum effect path a device calls from `process`: run input 0 through the effect PER BLOCK,
-/// and within each block PULL the clock events (Route D) and split the block's sample range at them —
-/// `process_audio` for the chunk before each event, `automate` at the event — exactly the TS
-/// `AudioProcessor` loop. With no input it outputs silence; with no transport blocks (not playing) it
-/// passes the input through unchanged. A device with no automation pulls nothing and runs whole blocks.
+/// and within each block split the sample range at the engine's update positions (Route D) — `process_audio`
+/// for the chunk before each, refresh the parameters there — the TS `AudioProcessor` loop, with the split
+/// points generated from `next_update_position` rather than injected events. With no input it outputs
+/// silence; with no transport blocks (not playing) it passes the input through. A device with no automation
+/// gets no update positions (INFINITY) and runs whole blocks.
 pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
     let frames = ports.output.len();
     if ports.inputs.is_empty() {
@@ -462,23 +497,16 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
         if s1 <= s0 {
             continue;
         }
-        // Pull this block's clock events into the scratch and resolve each to its sample offset. With no
-        // automation the host injects none, so `pulled` is 0 and the block runs as one chunk.
-        let pulled = pull_events(block.p0, block.p1, block.flags.0, ports.event_scratch);
-        for record in &mut ports.event_scratch[..pulled] {
-            record.offset = pulse_to_offset(record.position);
-        }
         let mut cursor = s0;
-        for index in 0..pulled {
-            let record = ports.event_scratch[index];
-            let offset = (record.offset as usize).clamp(s0, s1);
+        let mut position = next_update_position(block.p0);
+        while position < block.p1 {
+            let offset = (pulse_to_offset(position) as usize).clamp(s0, s1);
             if offset > cursor {
                 E::process_audio(ports.state, &input[cursor..offset], &mut ports.output[cursor..offset], ports.sample_rate, block.bpm, block.p0);
                 cursor = offset;
             }
-            if record.kind == EVENT_PARAM {
-                apply_param_changes::<E::State>(ports.state, record.position, E::parameter_changed);
-            }
+            apply_param_changes::<E::State>(ports.state, position, E::parameter_changed);
+            position = next_update_position(position);
         }
         if cursor < s1 {
             E::process_audio(ports.state, &input[cursor..s1], &mut ports.output[cursor..s1], ports.sample_rate, block.bpm, block.p0);
@@ -501,6 +529,16 @@ pub trait MidiEffect {
     /// arpeggiator emits a stream from a held chord). Offsets are absolute within the quantum; preserve
     /// them unless the fx warps time.
     fn transform(state: &mut Self::State, input: &[EventRecord], output: &mut [EventRecord]) -> usize;
+    /// Register this device's automatable parameters with the host via [`bind_parameter`], stashing the
+    /// returned ids in `state`. Called once when the device is wired. Default: nothing (no params).
+    fn init(state: &mut Self::State) {
+        let _ = state;
+    }
+    /// Apply a parameter's new UNIT value (`0..1`). `id` is the value `bind_parameter` returned. A midi-fx
+    /// with automated params is pulled per update sub-range, so this is called at each. Default: nothing.
+    fn parameter_changed(state: &mut Self::State, id: u32, value: f32) {
+        let _ = (state, id, value);
+    }
 }
 
 // The on-stack scratch a MIDI fx pulls its upstream into before transforming. Stack-resident (the device
@@ -508,15 +546,29 @@ pub trait MidiEffect {
 const MIDI_PULL_SCRATCH: usize = 256;
 
 /// The pull-response path a MIDI-fx device calls from `process_events(from, to, flags, state_ptr, out_ptr,
-/// max)`: PULL the upstream stream for `[from, to)` into an on-stack scratch, then `transform` it (with the
-/// instance state) into the host-provided output buffer. The upstream range need not equal `[from, to)` (a
-/// time warp chooses its own), but this template pulls the same range, which suits pitch/velocity/arp
-/// transforms that do not move events in time.
+/// max)`: split `[from, to)` at the engine's update positions (Route D) and, per sub-range, PULL the upstream
+/// into an on-stack scratch and `transform` it into the host-provided output, refreshing the device's
+/// parameters at each boundary. A device with no automation gets no update positions (INFINITY), so this is
+/// ONE pull over `[from, to)` — the previous behaviour. The upstream range equals each sub-range, which suits
+/// pitch / velocity / arp transforms that do not move events in time.
 pub fn render_midi_effect<M: MidiEffect>(from: f64, to: f64, flags: u32, state_ptr: u32, out_ptr: u32, max: u32) -> u32 {
     let state = unsafe { &mut *(state_ptr as *mut M::State) };
-    let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
-    let mut scratch = [blank; MIDI_PULL_SCRATCH];
-    let pulled = pull_events(from, to, flags, &mut scratch);
     let out = unsafe { slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
-    M::transform(state, &scratch[..pulled], out) as u32
+    let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+    let mut count = 0;
+    let mut sub_from = from;
+    loop {
+        let next = next_update_position(sub_from);
+        let sub_to = if next < to {next} else {to};
+        let mut scratch = [blank; MIDI_PULL_SCRATCH];
+        let pulled = pull_events(sub_from, sub_to, flags, &mut scratch);
+        count += M::transform(state, &scratch[..pulled], &mut out[count..]);
+        if sub_to >= to {
+            break;
+        }
+        // refresh this fx's parameters at the update boundary, before the next sub-range transforms.
+        apply_param_changes::<M::State>(state, next, M::parameter_changed);
+        sub_from = sub_to;
+    }
+    count as u32
 }
