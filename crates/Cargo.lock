@@ -193,3 +193,11 @@ version = "0.0.0"
 dependencies = [
  "math",
 ]
+
+[[package]]
+name = "voicing"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "libm",
+]

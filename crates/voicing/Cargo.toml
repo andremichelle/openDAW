@@ -1,0 +1,9 @@
+[package]
+name = "voicing"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+abi = {path = "../abi"}
+libm = "0.2"
